@@ -1,17 +1,18 @@
 import numpy as np
 
-class psp(object):
+class psparam(object):
     """
     psp == "power spectrum parameter"
     """
 
-    def __init__(self, name, required=True, value=None, form=(),
+    def __init__(self, name, required=True, value=None, form=(), units=None,
                 description='', expected_type=None, tols=(1e-5, 1e-08)):
         """Init power spectrum parameter object."""
         self.name = name
         self.required = required
         self.value = value
         self.description = description
+        self.units = units
         self.form = form
         if self.form == 'str':
             self.expected_type = str

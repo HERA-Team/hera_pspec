@@ -19,7 +19,7 @@ class pspecBase(object):
         param_list = []
         for a in attribute_list:
             attr = getattr(self, a)
-            if isinstance(attr, prm.psp):
+            if isinstance(attr, prm.psparam):
                 param_list.append(a)
         for a in param_list:
             yield a
