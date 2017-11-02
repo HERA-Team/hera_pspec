@@ -3,7 +3,7 @@ Tests for pspec power spectrum object.
 """
 import nose.tools as nt
 import numpy as np
-import pspecx as pspec
+import pspec
 
 def setup_package():
     """
