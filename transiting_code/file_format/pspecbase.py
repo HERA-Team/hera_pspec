@@ -10,6 +10,7 @@ class pspecBase(object):
             attr_name = this_param.name
             setattr(self.__class__, attr_name, property(self.prop_fget(p),self.prop_fset(p)))
 
+    
 
             
     def __iter__(self):
@@ -23,16 +24,16 @@ class pspecBase(object):
                 param_list.append(a)
         for a in param_list:
             yield a
-        
+
     def prop_fget(self, param_name):
-        """Getter method for UVParameter properties."""
+        """Getter method for PspecParameter properties."""
         def fget(self):
             this_param = getattr(self, param_name)
             return this_param.value
         return fget
 
     def prop_fset(self, param_name):
-        """Setter method for UVParameter properties."""
+        """Setter method for PspecParameter properties."""
         def fset(self, value):
             this_param = getattr(self, param_name)
             this_param.value = value
