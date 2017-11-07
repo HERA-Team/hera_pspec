@@ -1,0 +1,12 @@
+# compiled code
+*.pyc
+*__pycache__/
+
+# build
+build/
+env/
+dist/
+eggs/
+*.eggs/
+
+
