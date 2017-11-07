@@ -248,7 +248,9 @@ class DataSet:
     def gen_gps(self, bls, ngps=5):
         random.shuffle(bls)
         gps = [bls[i::ngps] for i in range(ngps)]
-        gps = [[random.choice(gp) for bl in gp] for gp in gps] #sample w/replacement inside each group
+        #gps = [[random.choice(gp) for bl in gp] for gp in gps] #sample w/replacement inside each group
+        # All independent baselines within a group, except the last one which is sampled randomly
+        gps = [[gps[gp][i] for i in np.append(np.arange(0,len(gps[gp])-1), random.choice(np.arange(0,len(gps[gp]))))] for gp,G in enumerate(gps)]
         return gps
     def group_data(self, keys, gps, use_cov=True): #XXX keys have format (k,bl,POL)
         # XXX avoid duplicate code for use_cov=True vs False (i.e. no separate dsC & dsI)
@@ -262,13 +264,26 @@ class DataSet:
             for gp in range(len(gps)):
                 newkey = (s,gp)
                 newkeys.append(newkey)
+                """ # Jack-Knife Test: change sign of baselines going into each group
+                gps[gp] = gps[gp][:(len(gps[gp])/2)*2] # ensure even number of baselines per group
+                factors = []
+                for b in range(len(gps[gp])): 
+                    if b < len(gps[gp])/2: #for half of the baselines
+                        #self.add_data(dsets={(s,gps[gp][b],POL): -1*self.x[(s,gps[gp][b],POL)].T})
+                        factors.append(-1)
+                    else: factors.append(1)
+                iCsum[newkey] = sum([self.iC((s,bl,POL)) for bl in gps[gp]])
+                iCxsum[newkey] = sum([np.dot(self.iC((s,bl,POL)),factors[i]*self.x[(s,bl,POL)]) for i,bl in enumerate(gps[gp])])
+                Isum[newkey] = sum([np.identity(nchan) for bl in gps[gp]])
+                Ixsum[newkey] = sum([factors[i]*self.x[(s,bl,POL)] for i,bl in enumerate(gps[gp])])
+                """
                 iCsum[newkey] = sum([self.iC((s,bl,POL)) for bl in gps[gp]])
                 iCxsum[newkey] = sum([np.dot(self.iC((s,bl,POL)),self.x[(s,bl,POL)]) for bl in gps[gp]])
                 Isum[newkey] = sum([np.identity(nchan) for bl in gps[gp]])
                 Ixsum[newkey] = sum([self.x[(s,bl,POL)] for bl in gps[gp]])
                 dsC_data[newkey] = np.dot(np.linalg.inv(iCsum[newkey]),iCxsum[newkey]).T #finding effective summed up x based on iCsum and iCxsum
                 dsI_data[newkey] = np.dot(np.linalg.inv(Isum[newkey]),Ixsum[newkey]).T #finding effective summed up x based on Isum and Ixsum
-        dsC = DataSet(); dsC.add_data(dsets=dsC_data)
+        dsC = DataSet(); dsC.set_data(dsets=dsC_data)
         dsI = DataSet(); dsI.set_data(dsets=dsI_data) #I has to be a separate dataset because it has different x's populated into it
         dsC.set_iC(iCsum) #override since if they're computed from x, they're incorrect
         dsI.set_I(Isum)
