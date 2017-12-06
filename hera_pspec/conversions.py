@@ -28,7 +28,7 @@ class SIunits:
     w21 : 21cm wavelength in meters
     """
     c = 2.99792458e8  # speed of light in m s-1
-    ckm = c * 1e3  # speed of light in km s-1
+    ckm = c / 1e3  # speed of light in km s-1
     G = 6.67408e-11  # Newton constant m3 kg-1 s-2
     kb = 1.38064852e-23  # boltzmann constant m2 kg s-2 K-1
     hp = 6.62607004e-34  # planck constant m2 kg s-1
@@ -201,7 +201,7 @@ class Cosmo(object):
 
     def dr2df(self, dr, z):
         """
-        convert line-of-sight distance at redshift z
+        convert line-of-sight distance in Mpc at redshift z
         to a frequency bandwidth in Hz for the 21cm line
         Furlanetto06 Eqn. 2
 
@@ -215,7 +215,7 @@ class Cosmo(object):
     def df2dr(self, df, z):
         """
         convert frequency bandwidth in Hz to line-of-sight
-        comoving distance at redshift z
+        comoving distance at redshift z in Mpc
         Furlanetto06 Eqn. 2
 
         Parameters:
@@ -238,6 +238,7 @@ class Cosmo(object):
 
         """
         pass
+
 
 
 class Misc(object):
