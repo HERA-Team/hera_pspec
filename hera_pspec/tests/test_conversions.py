@@ -1,10 +1,9 @@
 import unittest
 import nose.tools as nt
-from hera_qm import ant_metrics
 import numpy as np
-from hera_pspec.data import DATA_PATH
 import os
 import sys
+from hera_pspec.data import DATA_PATH
 from hera_pspec import conversions
 
 
