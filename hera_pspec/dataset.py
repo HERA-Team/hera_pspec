@@ -1,6 +1,7 @@
 import numpy as np
-import aipy, random, md5
+import aipy
 from utils import hash, noise, cov
+
 
 class DataSet(object):
     
