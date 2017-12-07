@@ -1,6 +1,6 @@
 import numpy as np
 import aipy
-from utils import hash, noise, cov
+from .utils import hash, cov
 
 
 class DataSet(object):
