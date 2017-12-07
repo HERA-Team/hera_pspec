@@ -1,8 +1,10 @@
 import numpy as np
+import aipy
+
+"""
 import aipy, random, md5
 from utils import hash, noise, cov, get_Q
 
-"""
 DELAY = False
 
 def hash(w):
