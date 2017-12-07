@@ -1,4 +1,6 @@
 '''Units in mK, GHz, Mpc unless stated otherwise'''
+#XXX: This code is provided for legacy purposes only.
+
 import numpy as n, aipy as a
 #from binning import LST_RES, UV_RES, uv2bin, bin2uv, rebin_log
 
