@@ -1,119 +1,6 @@
 import numpy as np
 import aipy, random, md5
-from utils import hash, noise, cov, get_Q
-
-"""
-DELAY = False
-
-def hash(w):
-    return md5.md5(w.copy(order='C')).digest()
-
-def noise(size):
-    sig = 1./np.sqrt(2)
-    return np.random.normal(scale=sig, size=size) + 1j*np.random.normal(scale=sig, size=size)
-
-def cov(d1, w1, d2=None, w2=None):
-    if d2 is None: d2,w2 = d1.conj(),w1
-    d1sum,d1wgt = (w1*d1).sum(axis=1), w1.sum(axis=1)
-    d2sum,d2wgt = (w2*d2).sum(axis=1), w2.sum(axis=1)
-    x1,x2 = d1sum / np.where(d1wgt > 0,d1wgt,1), d2sum / np.where(d2wgt > 0,d2wgt,1)
-    x1.shape = (-1,1)
-    x2.shape = (-1,1)
-    d1x = d1 - x1
-    d2x = d2 - x2
-    C = np.dot(w1*d1x,(w2*d2x).T)
-    W = np.dot(w1,w2.T)
-    return C / np.where(W > 1, W-1, 1)
-
-def get_Q(mode, n_k, window='none'): #encodes the fourier transform from freq to delay
-    if not DELAY:
-        _m = np.zeros((n_k,), dtype=np.complex)
-        _m[mode] = 1. #delta function at specific delay mode
-        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, window) #FFT it to go to freq
-        Q = np.einsum('i,j', m, m.conj()) #dot it with its conjugate
-        return Q
-    else:
-        # XXX need to have this depend on window
-        Q = np.zeros_like(C)
-        Q[mode,mode] = 1
-        return Q
-
-def lst_grid(lsts, data, wgts=None, lstbins=6300, wgtfunc=lambda dt,res: np.exp(-dt**2/(2*res**2))):
-    lstgrid = np.linspace(0, 2*np.pi, lstbins)
-    lstres = lstgrid[1]-lstgrid[0]
-    if wgts is None: wgts = np.where(np.abs(data) == 0, 0, 1.)
-    sumgrid,wgtgrid = 0, 0
-    for lst,d,w in zip(lsts,data,wgts):
-        dt = lstgrid - lst
-        wf = wgtfunc(dt,lstres); wf.shape = (-1,) + (1,)*(data.ndim-1)
-        d.shape, w.shape = (1,-1), (1,-1)
-        wgtgrid += w * wf
-        sumgrid += d * w * wf 
-    datgrid = np.where(wgtgrid > 1e-10, sumgrid/wgtgrid, 0)
-    return lstgrid, datgrid, wgtgrid
-
-def lst_grid_cheap(lsts, data, wgts=None, lstbins=6300, wgtfunc=lambda dt,res: np.exp(-dt**2/(2*res**2))):
-    lstgrid = np.linspace(0, 2*np.pi, lstbins)
-    lstres = lstgrid[1]-lstgrid[0]
-    if wgts is None: wgts = np.where(np.abs(data) == 0, 0, 1.)
-    sumgrid = np.zeros((lstbins,)+data.shape[1:], dtype=data.dtype)
-    wgtgrid = np.zeros(sumgrid.shape, dtype=wgts.dtype)
-    for lst,d,w in zip(lsts,data,wgts):
-        i,j = int(np.floor(lst/lstres)), int(np.ceil(lst/lstres))
-        wi,wj = wgtfunc(lst-lstgrid[i],lstres), wgtfunc(lst-lstgrid[j],lstres)
-        sumgrid[i] += d * w * wi; wgtgrid[i] += w * wi
-        sumgrid[j] += d * w * wj; wgtgrid[j] += w * wj
-    datgrid = np.where(wgtgrid > 1e-10, sumgrid/wgtgrid, 0)
-    return lstgrid, datgrid, wgtgrid
-
-def lst_align(lsts, lstres=.001, interpolation='none'):
-    lstgrid = np.arange(0, 2*np.pi, lstres)
-    lstr, order = {}, {}
-    for k in lsts: #orders LSTs to find overlap
-        order[k] = np.argsort(lsts[k])
-        lstr[k] = np.around(lsts[k][order[k]] / lstres) * lstres
-    lsts_final = None
-    for i,k1 in enumerate(lstr.keys()):
-        for k2 in lstr.keys()[i:]:
-            if lsts_final is None: lsts_final = np.intersect1d(lstr[k1],lstr[k2]) #XXX LSTs much match exactly
-            else: lsts_final = np.intersect1d(lsts_final,lstr[k2])
-    inds = {}
-    for k in lstr: #selects correct LSTs from data
-        inds[k] = order[k].take(lstr[k].searchsorted(lsts_final))
-    return inds
-
-def lst_align_data(inds, dsets, wgts=None, lsts=None):
-    for k in dsets:
-        k0 = k[0]
-        dsets[k] = dsets[k][inds[k0]]
-        if not wgts is None: wgts[k] = wgts[k][inds[k0]]
-    if not lsts is None:
-        for k0 in lsts: lsts[k0] = lsts[k0][inds[k0]]
-    return [d for d in [dsets,wgts,lsts] if not d is None]
-
-def boot_waterfall(p, axis=1, nsamples=None, nboots=1000, usemedian=True, verbose=False):
-    boots = []
-    dim = p.shape[axis]
-    if nsamples is None: nsamples = dim
-    for i in xrange(nboots):
-        if verbose and i % 10 == 0: print '    ', i, '/', nboots
-        inds = np.random.randint(0,dim,size=nsamples)
-        if usemedian: pi = np.median(p.take(inds,axis=axis), axis=1)
-        else: pi = np.average(p.take(inds,axis=axis), axis=1)
-        boots.append(pi)
-    # XXX deal with folding
-    boots = np.array(boots)
-    if verbose: print 'Sorting bootstraps...'
-    pk = np.average(boots, axis=0) #average over all boots
-    #this is excluding imag component in noise estimate `
-    boots = np.sort(boots.real, axis=0) #dropping imag component here
-    up_thresh = int(np.around(0.975 * boots.shape[0])) #2 sigma, single tail
-    dn_thresh = int(np.around(0.025 * boots.shape[0])) #2 sigma, single tail
-    #important to only include real component in estimation of error
-    err_up = (boots[up_thresh] - pk.real) / 2 #effective "1 sigma" derived from actual 2 sigma
-    err_dn = -(boots[dn_thresh] - pk.real) / 2 #effective "1 sigma" derived from actual 2 sigma
-    return pk, (err_up,err_dn), boots
-"""
+from utils import hash, noise, cov
 
 class DataSet(object):
     
@@ -319,8 +206,9 @@ class DataSet(object):
         
         Parameters
         ----------
-        d : TODO
-            TODO.
+        d : dict
+            Dictionary of values that should be inserted along the diagonal of 
+            the identity covariance, I.
         """
         for k in d: self._I[k] = d[k]
     
@@ -346,10 +234,12 @@ class DataSet(object):
             C = self.C(k)
             U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if self.lmin != None: S += self.lmin # ensure invertibility
-            if self.lmode != None: 
-                S += S[self.lmode-1]
+            if self.lmode != None: S += S[self.lmode-1]
             self.set_iC({k:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
-        if t is None: return self._iC[k]
+        
+        if t is None:
+            return self._iC[k]
+        
         # If t is provided, calculate iC for the provided time index, including flagging
         # XXX this does not respect manual setting of iC with ds.set_iC
         UserWarning("This does not respect manual setting of iC with ds.set_iC")
@@ -417,7 +307,7 @@ class DataSet(object):
     
     def gen_bl_boots(self, nboots, ngroups=5, ngps=None):
         """
-        TODO.
+        TODO. This function will be moved elsewhere.
         
         Parameters
         ----------
@@ -442,7 +332,7 @@ class DataSet(object):
     
     def gen_gps(self, bls, ngroups=5, ngps=None):
         """
-        TODO.
+        TODO. This function will be moved elsewhere.
         
         Parameters
         ----------
@@ -610,7 +500,7 @@ class DataSet(object):
             # XXX make this work with k1,k2 being lists
             q = []
             for i in xrange(nchan):
-                Q = get_Q(i, nchan)
+                Q = self.get_Q(i, nchan)
                 iCQiC = np.einsum('ab,bc,cd', iC1.T.conj(), Q, iC2) # C^-1 Q C^-1
                 qi = np.sum(self.x[k1].conj() * np.dot(iCQiC,self.x[k2]), axis=0)
                 q.append(qi)
@@ -667,7 +557,7 @@ class DataSet(object):
                         F[(k1,m1,k2,m2)] = np.zeros((nchan,nchan), dtype=np.complex)
                         iCQ1,iCQ2 = {}, {}
                         for ch in xrange(nchan): # this loop is nchan^3
-                            Q = get_Q(ch,nchan) 
+                            Q = self.get_Q(ch,nchan) 
                             iCQ1[ch] = np.dot(self._iCt[k1][m1],Q) #C^-1 Q # If ERROR: Compute q_hat first
                             iCQ2[ch] = np.dot(self._iCt[k2][m2],Q) #C^-1 Q
                         for i in xrange(nchan): # this loop goes as nchan^4
@@ -694,7 +584,7 @@ class DataSet(object):
             CE1, CE2 = {}, {}
             
             for ch in xrange(nchan):
-                Q = get_Q(ch,nchan)
+                Q = self.get_Q(ch,nchan)
                 # C1 Cbar1^-1 Q Cbar2^-1, C2 Cbar2^-1 Q Cbar1^-1
                 CE1[ch] = np.dot(Cemp1, np.dot(iC1, np.dot(Q, iC2)))
                 CE2[ch] = np.dot(Cemp2, np.dot(iC2, np.dot(Q, iC1)))
@@ -707,7 +597,7 @@ class DataSet(object):
             iCQ1, iCQ2 = {}, {}
             
             for ch in xrange(nchan): # this loop is nchan^3
-                Q = get_Q(ch, nchan)
+                Q = self.get_Q(ch, nchan)
                 iCQ1[ch] = np.dot(iC1, Q) #C^-1 Q
                 iCQ2[ch] = np.dot(iC2, Q) #C^-1 Q
             
@@ -764,6 +654,45 @@ class DataSet(object):
         norm  = W.sum(axis=-1); norm.shape += (1,)
         M /= norm; W = np.dot(M, F)
         return M,W
+    
+    def get_Q(self, mode, n_k, window='none', delay=False):
+        """
+        Response of the covariance to a given bandpower, dC / dp_alpha. This 
+        currently assumes that Q will operate on a visibility vector in frequency 
+        space.
+        
+        Parameters
+        ----------
+        mode : float
+            Central wavenumber of the bandpower.
+        n_k : int
+            Number of k bins that will be .
+        window : str, optional
+            TODO. Default: 'none'.
+        delay : bool, optional
+            TODO. Default: False.
+        
+        Returns
+        -------
+        Q : array_like
+            Matrix operator that encodes the response of the data covariance C to a 
+            change in bandpower p_alpha.
+        """
+        if delay:
+            # XXX need to have this depend on window
+            if window is not 'none':
+                raise NotImplementedError("Window function not yet supported in delay mode.")
+            Q = np.zeros_like(C)
+            Q[mode,mode] = 1
+        else:
+            _m = np.zeros((n_k,), dtype=np.complex)
+            _m[mode] = 1. # delta function at specified delay mode
+            
+            # FFT to convert to frequency domain
+            m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, window)
+            Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
+        return Q
+
     
     def p_hat(self, M, q, scalar=1.):
         """
