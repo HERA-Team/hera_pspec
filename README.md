@@ -1,6 +1,7 @@
 # hera_pspec
 
 [![Build Status](https://travis-ci.org/HERA-Team/hera_pspec.svg?branch=master)](https://travis-ci.org/HERA-Team/hera_pspec)
+[![Coverage Status](https://coveralls.io/repos/github/HERA-Team/hera_pspec/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/hera_pspec?branch=master)
 
 **hera_pspec description**
 
