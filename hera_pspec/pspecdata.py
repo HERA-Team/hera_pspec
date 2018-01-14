@@ -23,7 +23,7 @@ class PSpecData(object):
         """
         self.clear_cov_cache() # Covariance matrix cache
         self.dsets = []; self.wgts = []
-        self.Nfreq = None
+        self.Nfreqs = None
         
         # Store the input UVData objects if specified
         if len(dsets) > 0:
@@ -68,7 +68,7 @@ class PSpecData(object):
         self.wgts += wgts
         
         # Store no. frequencies
-        self.Nfreq = self.dsets[0].Nfreq
+        self.Nfreqs = self.dsets[0].Nfreqs
     
     def validate_datasets(self):
         """
@@ -80,9 +80,8 @@ class PSpecData(object):
         assert len(self.dsets) == len(self.wgts)
         
         # Check if data are all the same shape
-        if dsets is not None:
-            nfreqs = [d.Nfreqs for d in dsets]
-            assert np.all_equal(nfreqs)
+        Nfreqs = [d.Nfreqs for d in self.dsets]
+        assert np.unique(Nfreqs).size == 1
     
     def clear_cov_cache(self, keys=None):
         """
@@ -148,7 +147,7 @@ class PSpecData(object):
         dset = key[0]; bl = key[1:]
         return self.wgts[dset].get_data(bl)
     
-    def C(self, k, t=None):
+    def C(self, k):
         """
         Estimate covariance matrices from the data.
         
@@ -164,10 +163,6 @@ class PSpecData(object):
         C : array_like
             (Weighted) empirical covariance of data for baseline 'bl'.
         """
-        # FIXME: Make it so that LST index t can be pulled from covmat
-        if t is not None:
-            raise NotImplementedError("Doesn't support 't' at the moment.")
-        
         # Set covariance if it's not in the cache
         if not self._C.has_key(k):
             self.set_C( {k : cov(self.x(k), self.w(k))} )
@@ -175,12 +170,6 @@ class PSpecData(object):
         
         # Return cached covariance
         return self._C[k]
-        
-        #if t is None: return self._C[k]
-        # If t is provided, Calculate C for the provided time index, including 
-        # flagging (FIXME)
-        #w = self.w[k][:,t:t+1]
-        #return self._C[k] * (w * w.T)
     
     def set_C(self, cov):
         """
@@ -194,7 +183,7 @@ class PSpecData(object):
             being the ID (index) of the dataset, and subsequent items being the 
             baseline indices.
         """
-        self.clear_cache(cov.keys())
+        self.clear_cov_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
     
     def C_empirical(self, k):
@@ -211,7 +200,7 @@ class PSpecData(object):
         
         Returns
         -------
-        C_empirical : TODO
+        C_empirical : array_like
             Empirical covariance for the specified key.
         """
         # Check cache for empirical covariance
@@ -233,10 +222,10 @@ class PSpecData(object):
         Returns
         -------
         I : array_like
-            Identity covariance matrix, dimension (Nfreq, Nfreq).
+            Identity covariance matrix, dimension (Nfreqs, Nfreqs).
         """
         if not self._I.has_key(k):
-            self._I[k] = np.identity(self.Nfreq)
+            self._I[k] = np.identity(self.Nfreqs)
         return self._I[k]
         
     def iC(self, k):
@@ -331,8 +320,8 @@ class PSpecData(object):
         else:
             # Slow method, used to explicitly cross-check FFT code
             q = []
-            for i in xrange(self.Nfreq):
-                Q = self.get_Q(i, self.Nfreq)
+            for i in xrange(self.Nfreqs):
+                Q = self.get_Q(i, self.Nfreqs)
                 iCQiC = np.einsum('ab,bc,cd', iC1.T.conj(), Q, iC2) # C^-1 Q C^-1
                 qi = np.sum(self.x(k1).conj() * np.dot(iCQiC, self.x(k2)), axis=0)
                 q.append(qi)
@@ -362,9 +351,9 @@ class PSpecData(object):
         Returns
         -------
         F : array_like, complex
-            Fisher matrix, with dimensions (Nfreq, Nfreq).
+            Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        F = np.zeros((self.Nfreq, self.Nfreq), dtype=np.complex)
+        F = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
         
         # Whether to use look-up fn. for identity or inverse covariance matrix
         icov_fn = self.I if use_identity else self.iC
@@ -381,26 +370,26 @@ class PSpecData(object):
             CE1, CE2 = {}, {}
             Cemp1, Cemp2 = self.I(k1), self.I(k2)
             
-            for ch in xrange(self.Nfreq):
-                Q = self.get_Q(ch, self.Nfreq)
+            for ch in xrange(self.Nfreqs):
+                Q = self.get_Q(ch, self.Nfreqs)
                 # C1 Cbar1^-1 Q Cbar2^-1; C2 Cbar2^-1 Q Cbar1^-1
                 CE1[ch] = np.dot(Cemp1, np.dot(iC1, np.dot(Q, iC2)))
                 CE2[ch] = np.dot(Cemp2, np.dot(iC2, np.dot(Q, iC1)))
             
-            for i in xrange(self.Nfreq):
-                for j in xrange(self.Nfreq):
+            for i in xrange(self.Nfreqs):
+                for j in xrange(self.Nfreqs):
                     F[i,j] += np.einsum('ij,ji', CE1[i], CE2[j]) # C E C E
         else:
             # This is for the "effective" matrix s.t. W=MF and p=Mq
             iCQ1, iCQ2 = {}, {}
             
-            for ch in xrange(self.Nfreq): # this loop is nchan^3
-                Q = self.get_Q(ch, self.Nfreq)
+            for ch in xrange(self.Nfreqs): # this loop is nchan^3
+                Q = self.get_Q(ch, self.Nfreqs)
                 iCQ1[ch] = np.dot(iC1, Q) #C^-1 Q
                 iCQ2[ch] = np.dot(iC2, Q) #C^-1 Q
             
-            for i in xrange(self.Nfreq): # this loop goes as nchan^4
-                for j in xrange(self.Nfreq):
+            for i in xrange(self.Nfreqs): # this loop goes as nchan^4
+                for j in xrange(self.Nfreqs):
                     F[i,j] += np.einsum('ij,ji', iCQ1[i], iCQ2[j]) #C^-1 Q C^-1 Q 
         return F
     
@@ -425,7 +414,7 @@ class PSpecData(object):
         Parameters
         ----------
         F : array_like or dict of array_like
-            Fisher matrix for the bandpowers, with dimensions (Nfreq, Nfreq).
+            Fisher matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
             If a dict is specified, M and W will be calculated for each F 
             matrix in the dict.
             
