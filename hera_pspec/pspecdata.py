@@ -41,11 +41,13 @@ class PSpecData(object):
         
         wgts : UVData or list
             UVData object or list of UVData objects containing weights to add 
-            to the collection. Must be the same length as dsets.
+            to the collection. Must be the same length as dsets. If a weight is 
+            set to None, the flags of the corresponding 
         """
         # Convert input args to lists if possible
         if isinstance(dsets, pyuvdata.UVData): dsets = [dsets,]
         if isinstance(wgts, pyuvdata.UVData): wgts = [wgts,]
+        if wgts is None: wgts = [wgts,]
         if isinstance(dsets, tuple): dsets = list(dsets)
         if isinstance(wgts, tuple): wgts = list(wgts)
         
@@ -58,11 +60,12 @@ class PSpecData(object):
         
         # Check that everything is a UVData object
         for d, w in zip(dsets, wgts):
-            if not isinstance(d, pyuvdata.UVData) \
-            or not isinstance(w, pyuvdata.UVData):
-                raise TypeError("Only UVData objects can be used as datasets "
-                                "or weights.")
-        
+            if not isinstance(d, pyuvdata.UVData):
+                raise TypeError("Only UVData objects can be used as datasets.")
+            if not isinstance(w, pyuvdata.UVData) and w is not None:
+                raise TypeError("Only UVData objects (or None) can be used as "
+                                "weights.")
+            
         # Append to list
         self.dsets += dsets
         self.wgts += wgts
@@ -125,7 +128,7 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         dset = key[0]; bl = key[1:]
-        return self.dsets[dset].get_data(bl)
+        return self.dsets[dset].get_data(bl).T # FIXME: Transpose?
         
     def w(self, key):
         """
@@ -145,7 +148,12 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         dset = key[0]; bl = key[1:]
-        return self.wgts[dset].get_data(bl)
+        if self.wgts[dset] is not None:
+            return self.wgts[dset].get_data(bl).T # FIXME: Transpose?
+        else:
+            # If weights were not specified, use the flags built in to the 
+            # UVData dataset object
+            return self.dsets[dset].get_flags(bl).astype(float).T # FIXME: Transpose?
     
     def C(self, k):
         """
