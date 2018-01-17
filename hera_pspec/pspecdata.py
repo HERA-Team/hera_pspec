@@ -1,8 +1,8 @@
 import numpy as np
 import aipy
 import pyuvdata
-from .utils import hash, cov
-#from utils import hash, cov
+#from .utils import hash, cov
+from utils import hash, cov
 
 class PSpecData(object):
     
@@ -482,11 +482,10 @@ class PSpecData(object):
         # FIXME: Surely more efficient to just divide W by norm?
         return M, W
     
-    def get_Q(self, mode, n_k, window='none', delay=False):
+    def get_Q(self, mode, n_k, window='none'):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha. 
-        (Currently assumes that Q will operate on a visibility vector in 
-        frequency space.)
+        Assumes that Q will operate on a visibility vector in frequency space.
         
         Parameters
         ----------
@@ -499,31 +498,18 @@ class PSpecData(object):
         window : str, optional
             Type of window function to use. Valid options are any window 
             function supported by aipy.dsp.gen_window(). Default: 'none'.
-            
-        delay : bool, optional
-            Whether to calculate Q for delay modes (True) or Fourier modes 
-            (False). Default: False.
         
         Returns
         -------
         Q : array_like
             Response matrix for bandpower p_alpha.
         """
-        # Whether to calculate Q assuming bandpowers in delay or Fourier space
-        if delay:
-            if window is not 'none':
-                raise NotImplementedError("Window function not yet supported "
-                                          "in delay mode.")
-            Q = np.zeros_like(C)
-            Q[mode,mode] = 1
-        else:
-            _m = np.zeros((n_k,), dtype=np.complex)
-            _m[mode] = 1. # delta function at specified delay mode
-            
-            # FFT to convert to frequency domain
-            m = np.fft.fft(np.fft.ifftshift(_m)) \
-              * aipy.dsp.gen_window(n_k, window)
-            Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
+        _m = np.zeros((n_k,), dtype=np.complex)
+        _m[mode] = 1. # delta function at specified delay mode
+        
+        # FFT to convert to frequency domain
+        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, window)
+        Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
         return Q
 
     def p_hat(self, M, q):
