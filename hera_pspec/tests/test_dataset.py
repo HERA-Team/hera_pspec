@@ -34,6 +34,7 @@ class Test_dataset(unittest.dataset):
     def test_get_F(self):
         # Don't quite understand the += self.iC(k1i) bits. Is this just an averaging over, say, time?
         # Need to "fix" the "if False" statements
+        # --For white noise with covariance amplitude alpha and nchans, F should be nchans^2/(2*alpha^2)*IDENTITY
 
     def test_get_MW(self):
         # ---MF should be correctly normalized.
@@ -43,3 +44,6 @@ class Test_dataset(unittest.dataset):
         # ---For I mode, M should be diagonal.
         # ---For Cholesky mode, M should be upper (or lower?) triangular.
         # ---Tests for specific numerical examples.
+        # ---W For white noise is the identity
+        # ---For mode=F^-1, M for white noise with variance amplitude alpha should be 2*alpha^2/nchans^2*IDENTITY
+        # ---For node=F^-1/2, M for white noise with variance amplitude alpha should be 2*alpha^2/nchans^2*IDENTITY
