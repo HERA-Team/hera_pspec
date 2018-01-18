@@ -52,3 +52,20 @@ class Test_OQE(unittest.OQE):
     def test_lst_grid_cheap(self):
         #0) !!!I'm not sure if we want this function in oqe.py
         #1) same tests for test_lst_grid. Test equivalence of lst_grid_cheap and lst_grid
+
+    def test_lst_align(self):
+        #0) Document. Does this belong in oqe?
+        #1) test on four lst lists which are overlapping, offset by less then resolution,
+        #2) and one is larger then the other. Should give indices of intersection of lst values
+        #3) (within lst resolution).
+
+
+    def test_lst_align_data(self):
+        #0) Document. Does this belong in oqe.py?
+        #1) Should give same answer with unity weights.
+        #2) 
+        
+    def test_boot_waterfall(self):
+        #0) Document. Does this belong in oqe?
+    
+        
