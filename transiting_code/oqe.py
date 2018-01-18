@@ -427,6 +427,10 @@ class DataSet:
         else:
             #Cholesky decomposition to get M
             order = np.array([10,11,9,12,8,20,0,13,7,14,6,15,5,16,4,17,3,18,2,19,1]) # XXX needs generalizing
+            order=np.arange(F.shape[0])-np.ceil((F.shape[0]-1)/2.)
+            order[order<0]=order[order<0]-.1
+            order=(np.abs(order)).argsort()
+            order=np.hstack([order[:5],order[-2:],order[5:-2]])# XXX generalized for even and odd channels
             iorder = np.argsort(order)
             F_o = np.take(np.take(F,order, axis=0), order, axis=1)
             L_o = np.linalg.cholesky(F_o)
