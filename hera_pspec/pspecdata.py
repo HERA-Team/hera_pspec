@@ -92,8 +92,8 @@ class PSpecData(object):
         
         Parameters
         ----------
-        keys : list, optional
-            List of keys to remove from covariance matrix cache. If 'None', all 
+        keys : list of tuples, optional
+            List of keys to remove from covariance matrix cache. If None, all 
             keys will be removed. Default: None.
         """
         if keys is None:
@@ -127,6 +127,8 @@ class PSpecData(object):
         x : array_like
             Array of data from the requested UVData dataset and baseline.
         """
+        assert isinstance(key, tuple)
+        
         dset = key[0]; bl = key[1:]
         return self.dsets[dset].get_data(bl).T # FIXME: Transpose?
         
@@ -147,6 +149,8 @@ class PSpecData(object):
         x : array_like
             Array of weights for the requested UVData dataset and baseline.
         """
+        assert isinstance(key, tuple)
+        
         dset = key[0]; bl = key[1:]
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T # FIXME: Transpose?
@@ -155,13 +159,13 @@ class PSpecData(object):
             # UVData dataset object
             return self.dsets[dset].get_flags(bl).astype(float).T # FIXME: Transpose?
     
-    def C(self, k):
+    def C(self, key):
         """
         Estimate covariance matrices from the data.
         
         Parameters
         ----------
-        k : tuple
+        key : tuple
             Tuple containing indices of dataset and baselines. The first item 
             specifies the index (ID) of a dataset in the collection, while 
             subsequent indices specify the baseline index, in _key2inds format.
@@ -171,13 +175,15 @@ class PSpecData(object):
         C : array_like
             (Weighted) empirical covariance of data for baseline 'bl'.
         """
+        assert isinstance(key, tuple)
+        
         # Set covariance if it's not in the cache
-        if not self._C.has_key(k):
-            self.set_C( {k : cov(self.x(k), self.w(k))} )
-            self._Cempirical[k] = self._C[k]
+        if not self._C.has_key(key):
+            self.set_C( {key : cov(self.x(key), self.w(key))} )
+            self._Cempirical[key] = self._C[key]
         
         # Return cached covariance
-        return self._C[k]
+        return self._C[key]
     
     def set_C(self, cov):
         """
@@ -194,14 +200,14 @@ class PSpecData(object):
         self.clear_cov_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
     
-    def C_empirical(self, k):
+    def C_empirical(self, key):
         """
         Calculate empirical covariance from the data (with appropriate 
         weighting).
         
         Parameters
         ----------
-        k : tuple
+        key : tuple
             Tuple containing indices of dataset and baselines. The first item 
             specifies the index (ID) of a dataset in the collection, while 
             subsequent indices specify the baseline index, in _key2inds format.
@@ -211,18 +217,20 @@ class PSpecData(object):
         C_empirical : array_like
             Empirical covariance for the specified key.
         """
+        assert isinstance(key, tuple)
+        
         # Check cache for empirical covariance
-        if not self._Cempirical.has_key(k):
-            self._Cempirical[k] = cov(self.x(k), self.w(k))
-        return self._Cempirical[k]
+        if not self._Cempirical.has_key(key):
+            self._Cempirical[key] = cov(self.x(key), self.w(key))
+        return self._Cempirical[key]
     
-    def I(self, k):
+    def I(self, key):
         """
         Return identity covariance matrix.
         
         Parameters
         ----------
-        k : tuple
+        key : tuple
             Tuple containing indices of dataset and baselines. The first item 
             specifies the index (ID) of a dataset in the collection, while 
             subsequent indices specify the baseline index, in _key2inds format.
@@ -232,17 +240,19 @@ class PSpecData(object):
         I : array_like
             Identity covariance matrix, dimension (Nfreqs, Nfreqs).
         """
-        if not self._I.has_key(k):
-            self._I[k] = np.identity(self.Nfreqs)
-        return self._I[k]
+        assert isinstance(key, tuple)
         
-    def iC(self, k):
+        if not self._I.has_key(key):
+            self._I[key] = np.identity(self.Nfreqs)
+        return self._I[key]
+        
+    def iC(self, key):
         """
         Return the inverse covariance matrix, C^-1.
         
         Parameters
         ----------
-        k : tuple
+        key : tuple
             Tuple containing indices of dataset and baselines. The first item 
             specifies the index (ID) of a dataset in the collection, while 
             subsequent indices specify the baseline index, in _key2inds format.
@@ -252,9 +262,11 @@ class PSpecData(object):
         iC : array_like
             Inverse covariance matrix for specified dataset and baseline.
         """
+        assert isinstance(key, tuple)
+        
         # Calculate inverse covariance if not in cache
-        if not self._iC.has_key(k):
-            C = self.C(k)
+        if not self._iC.has_key(key):
+            C = self.C(key)
             U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             
             # FIXME: Not sure what these are supposed to do
@@ -262,8 +274,8 @@ class PSpecData(object):
             #if self.lmode is not None: S += S[self.lmode-1]
             
             # FIXME: Is series of dot products quicker?
-            self.set_iC({k:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
-        return self._iC[k]
+            self.set_iC({key:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
+        return self._iC[key]
     
     def set_iC(self, d):
         """
@@ -280,7 +292,7 @@ class PSpecData(object):
         """
         for k in d: self._iC[k] = d[k]
     
-    def q_hat(self, k1, k2, use_identity=True, use_fft=True):
+    def q_hat(self, key1, key2, use_identity=False, use_fft=True):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of 
         visibility vectors. Returns the following quantity:
@@ -292,7 +304,7 @@ class PSpecData(object):
         
         Parameters
         ----------
-        k1, k2 : tuples
+        key1, key2 : tuples
             Tuples containing indices of dataset and baselines for the two 
             input datavectors.
             
@@ -310,13 +322,18 @@ class PSpecData(object):
         q_hat : array_like
             Unnormalized bandpowers
         """
+        assert isinstance(key1, tuple)
+        assert isinstance(key2, tuple)
+        
         # Whether to use look-up fn. for identity or inverse covariance matrix
         icov_fn = self.I if use_identity else self.iC
         
         # Calculate C^-1 x_1 and C^-1 x_2
-        iC1x, iC2x = 0, 0
-        for _k in k1: iC1x += np.dot(icov_fn(_k), self.x(_k))
-        for _k in k2: iC2x += np.dot(icov_fn(_k), self.x(_k))
+        #iC1x, iC2x = 0, 0
+        #for _k in k1: iC1x += np.dot(icov_fn(_k), self.x(_k))
+        #for _k in k2: iC2x += np.dot(icov_fn(_k), self.x(_k))
+        iC1x = np.dot(icov_fn(key1), self.x(key1))
+        iC2x = np.dot(icov_fn(key2), self.x(key2))
             
         # Whether to use FFT or slow direct method
         if use_fft:
@@ -339,7 +356,7 @@ class PSpecData(object):
                 q.append(qi)
             return np.array(q)
     
-    def get_F(self, k1, k2, use_identity=False, true_fisher=False):
+    def get_F(self, key1, key2, use_identity=False, true_fisher=False):
         """
         Calculate the Fisher matrix for the power spectrum bandpowers, p_alpha. 
         The Fisher matrix is defined as:
@@ -348,7 +365,7 @@ class PSpecData(object):
         
         Parameters
         ----------
-        k1, k2 : tuples
+        key1, key2 : tuples
             Tuples containing indices of dataset and baselines for the two 
             input datavectors.
         
@@ -365,14 +382,19 @@ class PSpecData(object):
         F : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
+        assert isinstance(key1, tuple)
+        assert isinstance(key2, tuple)
         F = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
         
         # Whether to use look-up fn. for identity or inverse covariance matrix
         icov_fn = self.I if use_identity else self.iC
         
-        iC1, iC2 = 0, 0
-        for _k in k1: iC1 += icov_fn(_k)
-        for _k in k2: iC2 += icov_fn(_k)
+        # FIXME: k1,2 aren't allowed to be lists any more
+        #iC1, iC2 = 0, 0
+        #for _k in k1: iC1 += icov_fn(_k)
+        #for _k in k2: iC2 += icov_fn(_k)
+        iC1 = icov_fn(key1)
+        iC2 = icov_fn(key2)
         
         # Multiply terms to get the true or effective Fisher matrix
         # FIXME: I think effective <=> true have been mixed up here
@@ -380,7 +402,7 @@ class PSpecData(object):
             # This is for the "true" Fisher matrix
             # FIXME: What is this for?
             CE1, CE2 = {}, {}
-            Cemp1, Cemp2 = self.I(k1), self.I(k2)
+            Cemp1, Cemp2 = self.I(key1), self.I(key2)
             
             for ch in xrange(self.Nfreqs):
                 Q = self.get_Q(ch, self.Nfreqs)
@@ -468,6 +490,8 @@ class PSpecData(object):
             M = np.identity(F.shape[0], dtype=F.dtype)
             
         else:
+            pass
+            """
             # Cholesky decomposition to get M (XXX: Needs generalizing)
             #order = np.array([10, 11, 9, 12, 8, 20, 0, 
             #                  13, 7, 14, 6, 15, 5, 16, 
@@ -488,6 +512,7 @@ class PSpecData(object):
             U,S,V = np.linalg.svd(L_o.conj())
             M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
             M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
+            """
         
         # Calculate (normalized) W given Fisher matrix and choice of M
         W = np.dot(M, F)
@@ -495,13 +520,17 @@ class PSpecData(object):
         M /= norm; W = np.dot(M, F)
         return M, W
     
-    def get_Q(mode, n_k, window='none'): #encodes the fourier transform from freq to delay
+    def get_Q(self, mode, n_k, window='none'):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha. 
+        
         Assumes that Q will operate on a visibility vector in frequency space.
-        In other words, produces a matrix Q that performs a two-sided Fourier transform and extracts a particular
-        Fourier mode. Computing x^t Q y is equivalent to Fourier transforming
-        x and y separately, extracting one element of the Fourier transformed vectors, and then multiplying them
+        In other words, produces a matrix Q that performs a two-sided Fourier 
+        transform and extracts a particular Fourier mode. 
+        
+        (Computing x^t Q y is equivalent to Fourier transforming x and y 
+        separately, extracting one element of the Fourier transformed vectors, 
+        and then multiplying them.)
 
         Parameters
         ----------
@@ -521,9 +550,11 @@ class PSpecData(object):
             Response matrix for bandpower p_alpha.
         """
         _m = np.zeros((n_k,), dtype=np.complex)
-        _m[mode] = 1. #delta function at specific delay mode
-        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, window) #FFT it to go to freq
-        Q = np.einsum('i,j', m, m.conj()) #dot it with its conjugate
+        _m[mode] = 1. # delta function at specific delay mode
+        
+        # FFT to transform to frequency space, and apply window function
+        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, window)
+        Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
         return Q
 
 
@@ -546,25 +577,33 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
-    def pspec(self, keys, weights='none'):
+    def pspec(self, bls, weights='none', verbose=False):
         """
         Estimate the power spectrum from the datasets contained in this object, 
         using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
         
         Parameters
         ----------
-        keys : list
-            TODO.
+        bls : list of tuples
+            List of baselines to include in the power spectrum calculation. 
+            Each baseline is specified as a tuple of antenna IDs.
             
         weights : str, optional
             String specifying how to choose the normalization matrix, M. See 
             the 'mode' argument of get_MW() for options.
         
+        verbose : bool, optional
+            If True, print progress/debugging information.
+        
         Returns
         -------
-        pspec : list
+        pspec : list of np.ndarray
             Optimal quadratic estimate of the power spectrum for the datasets 
-            and baselines specified in 'keys'.
+            stored in this PSpecData and baselines specified in 'keys'.
+        
+        pairs : list of tuples
+            List of the pairs of datasets and baselines that were used to 
+            calculate each element of the 'pspec' list.
         """
         #FIXME: Define sensible grouping behaviors.
         #FIXME: Check that requested keys exist in all datasets
@@ -572,24 +611,35 @@ class PSpecData(object):
         # Validate the input data to make sure it's sensible
         self.validate_datasets()
         
-        pvs = []
-        for k, key1 in enumerate(keys):
-            if k == 1 and len(keys) == 2: 
-                # NGPS = 1 (skip 'odd' with 'even' if we already did 'even' 
-                # with 'odd')
-                continue
-            
-            for key2 in keys[k:]:
-                if len(keys) > 2 and (key1[0] == key2[0] or key1[1] == key2[1]):
-                    # NGPS > 1
-                    continue
-                if key1[0] == key2[0]: # don't do 'even' with 'even', for example
-                    continue
-                else:
+        pvs = []; pairs = []
+        # Loop over pairs of datasets
+        for m in xrange(len(self.dsets)):
+            for n in xrange(m+1, len(self.dsets)):
+                # Datasets should not be cross-correlated with themselves, and 
+                # dataset pair (m, n) gives the same result as (n, m)
+                
+                # Loop over baselines
+                for bl in bls:
+                    key1 = (m,) + bl
+                    key2 = (n,) + bl
+                    
+                    if verbose: print("Baselines:", key1, key2)
+                    
+                    # Build Fisher matrix
+                    if verbose: print("  Building F...")
                     Fv = self.get_F(key1, key2)
+                    
+                    # Calculate unnormalized bandpowers
+                    if verbose: print("  Building q_hat...")
                     qv = self.q_hat(key1, key2)
+                    
+                    # Apply weights and return power spectrum estimate
+                    if verbose: print("  Applying weights...")
                     Mv, Wv = self.get_MW(Fv, mode=weights)  
                     pv = self.p_hat(Mv, qv)
+                    
+                    # Save power spectra and dataset/baseline pairs
                     pvs.append(pv)
-        return pvs
+                    pairs.append((key1, key2))
+        return np.array(pvs).real, pairs
         
