@@ -485,11 +485,14 @@ class PSpecData(object):
         M /= norm; W = np.dot(M, F)
         return M, W
     
-    def get_Q(self, mode, n_k, window='none'):
+    def get_Q(mode, n_k, window='none'): #encodes the fourier transform from freq to delay
         """
         Response of the covariance to a given bandpower, dC / dp_alpha. 
         Assumes that Q will operate on a visibility vector in frequency space.
-        
+        In other words, produces a matrix Q that performs a two-sided Fourier transform and extracts a particular
+        Fourier mode. Computing x^t Q y is equivalent to Fourier transforming
+        x and y separately, extracting one element of the Fourier transformed vectors, and then multiplying them
+
         Parameters
         ----------
         mode : int
@@ -508,12 +511,11 @@ class PSpecData(object):
             Response matrix for bandpower p_alpha.
         """
         _m = np.zeros((n_k,), dtype=np.complex)
-        _m[mode] = 1. # delta function at specified delay mode
-        
-        # FFT to convert to frequency domain
-        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, window)
-        Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
+        _m[mode] = 1. #delta function at specific delay mode
+        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, window) #FFT it to go to freq
+        Q = np.einsum('i,j', m, m.conj()) #dot it with its conjugate
         return Q
+
 
     def p_hat(self, M, q):
         """
