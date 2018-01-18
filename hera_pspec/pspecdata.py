@@ -533,9 +533,8 @@ class PSpecData(object):
         
         Parameters
         ----------
-        M : array_like or dict of array_like
-            Normalization matrix, M. If different M's were chosen for different 
-            times, 'M' can be passed as a dict where the keys are (FIXME).
+        M : array_like
+            Normalization matrix, M.
             
         q : array_like
             Unnormalized bandpowers, \hat{q}.
@@ -545,26 +544,7 @@ class PSpecData(object):
         p_hat : array_like
             Optimal estimate of bandpower, \hat{p}.
         """
-        if type(M) is dict:
-            # Specified different M's for different times
-            (k1, m1, k2, m2) = M.keys()[0]
-            
-            w1, w2 = self.w(k1), self.w(k2)
-            m1s = [hash(w1[:,i]) for i in xrange(w1.shape[1])]
-            m2s = [hash(w2[:,i]) for i in xrange(w2.shape[1])]
-            
-            inds = {}
-            for i, (m1,m2) in enumerate(zip(m1s, m2s)):
-                inds[(k1,m1,k2,m2)] = inds.get((k1,m1,k2,m2),[]) + [i]
-            
-            p = np.zeros_like(q)
-            for key in inds:
-                qi = q[:,inds[key]]
-                p[:,inds[key]] = np.dot(M[key], qi)
-            return p
-        else:
-            # Simple case where M is the same for all times
-            return np.dot(M, q)
+        return np.dot(M, q)
 
     def pspec(self, keys, weights='none'):
         """
