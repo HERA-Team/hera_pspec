@@ -469,9 +469,19 @@ class PSpecData(object):
             
         else:
             # Cholesky decomposition to get M (XXX: Needs generalizing)
-            order = np.array([10, 11, 9, 12, 8, 20, 0, 
-                              13, 7, 14, 6, 15, 5, 16, 
-                              4, 17, 3, 18, 2, 19, 1])
+            #order = np.array([10, 11, 9, 12, 8, 20, 0, 
+            #                  13, 7, 14, 6, 15, 5, 16, 
+            #                  4, 17, 3, 18, 2, 19, 1])
+            order=np.arange(F.shape[0])-np.ceil((F.shape[0]-1.)2.)
+            order[order<0]=order[order<0]-.1
+            #negative integers have larger absolute value so they are sorted
+            #after positive integers. 
+            order=(np.abs(order)).argsort()
+            if np.mod(F.shape[0],2)==1:
+                endindex=-2
+            else:
+                endindex=-1
+            order=np.hstack([order[:5],order[endindex:],order[5:endindex]])
             iorder = np.argsort(order)
             F_o = np.take(np.take(F,order, axis=0), order, axis=1)
             L_o = np.linalg.cholesky(F_o)
