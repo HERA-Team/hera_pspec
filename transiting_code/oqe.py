@@ -430,7 +430,10 @@ class DataSet:
             order=np.arange(F.shape[0])-np.ceil((F.shape[0]-1)/2.)
             order[order<0]=order[order<0]-.1
             order=(np.abs(order)).argsort()
-            order=np.hstack([order[:5],order[-2:],order[5:-2]])# XXX generalized for even and odd channels
+            if np.mod(F.shape[0],2)==1:
+                order=np.hstack([order[:5],order[-2:],order[5:-2]])# XXX odd channel count
+            else:
+                order=np.hstack([order[:5],order[-1:],order[5:-1]])# XXX even channel count
             iorder = np.argsort(order)
             F_o = np.take(np.take(F,order, axis=0), order, axis=1)
             L_o = np.linalg.cholesky(F_o)
