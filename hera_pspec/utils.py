@@ -11,49 +11,68 @@ def hash(w):
     """
     return md5.md5(w.copy(order='C')).digest()
 
-
-def cov(d1, w1, d2=None, w2=None):
+def noise(size,amp=1.):
     """
-    Calculate empirical covariance of data vectors with weights.
+    Generates Gaussian random complex noise. Real and complex components each get half
+    the variance so that the magnitude of the complex number has the full variance.
     
     Parameters
     ----------
-    d1, w1 : array_like
-        Data vector and weight vector, which should be the same shape. If only 
-        these are specified, the covariance of d1 with itself (conjugated) will 
-        be calculated.
-    
-    d2, w2 : array_like, optional
-        Second data vector and weight vector. If specified, the covariance of 
-        d1 with d2 will be calculated.
-        
+    size : integer
+        Length of output noise vector
+    amp (optional) : float
+        Amplitude (standard deviation) of the random noise
+
+    Returns
+    -------
+    Random noise whose magnitude has a standard deviation of amp
+    """
+    sig = amp/np.sqrt(2)
+    return np.random.normal(scale=sig, size=size) + 1j*np.random.normal(scale=sig, size=size)
+
+def cov(d1, w1, d2=None, w2=None):
+    """
+    Computes an empirical covariance matrix from data vectors. If d1 is of size (M,N),
+    then the output is M x M. In other words, the second axis is the axis that is
+    averaged over in forming the covariance. (E.g., a time axis).
+
+    If d2 is provided and d1 != d2, then this computes the cross-variance, i.e., <d1 d2^dagger>
+
+    Parameters
+    ----------
+    d1 : array_like
+        data vector of size (M,N), where N is the length of the "averaging axis"
+    w1 : integer
+        weights for averaging d1
+    d2 : array_like
+        data vector of size (M,N), where N is the length of the "averaging axis"
+    w2 : integer
+        weights for averaging d1
+
     Returns
     -------
     cov : array_like
-        Empirical covariance matrix of the weighted data vector(s).
+        covariance (or cross-variance) matrix of size (M,M)
     """
-    if d2 is None: d2, w2 = d1.conj(), w1
-    
-    # Weighted data vectors
-    d1sum, d1wgt = (w1*d1).sum(axis=1), w1.sum(axis=1)
-    d2sum, d2wgt = (w2*d2).sum(axis=1), w2.sum(axis=1)
-    
-    # Weighted means
-    x1 = d1sum / np.where(d1wgt > 0, d1wgt, 1)
-    x2 = d2sum / np.where(d2wgt > 0, d2wgt, 1)
-    x1.shape = (-1,1); x2.shape = (-1,1)
-    d1x = d1 - x1
-    d2x = d2 - x2
-    
-    # Calculate covariance and weight matrices
-    C = np.dot(w1*d1x, (w2*d2x).T)
-    W = np.dot(w1, w2.T)
-    return C / np.where(W > 1, W-1, 1)
+    if d2 is None: d2,w2 = d1,w1
+    if not np.isreal(w1).all(): raise TypeError("Weight matrices must be real")
+    if not np.isreal(w2).all(): raise TypeError("Weight matrices must be real")
+    if np.less(w1, 0.).any() or np.less(w2, 0.).any(): raise ValueError("Weight matrices must be positive")
+    d1sum,d1wgt = (w1*d1).sum(axis=1), w1.sum(axis=1)
+    d2sum,d2wgt = (w2*d2).sum(axis=1), w2.sum(axis=1)
+    x1,x2 = d1sum / np.where(d1wgt > 0,d1wgt,1), d2sum / np.where(d2wgt > 0,d2wgt,1)
+    x1.shape = (-1,1)
+    x2.shape = (-1,1)
+    # d1x = d1 - x1
+    # d2x = d2 - x2
+    C = np.dot(w1*d1,(w2*d2).conj().T)
+    #print "hey hey", C
+    W = np.dot(w1,w2.T)
+    C /= np.where(W > 0, W, 1)
+    C -= np.outer(x1,x2.conj())
+    return C
 
 """
-def noise(size):
-    sig = 1./np.sqrt(2)
-    return np.random.normal(scale=sig, size=size) + 1j*np.random.normal(scale=sig, size=size)
 
 def lst_grid(lsts, data, wgts=None, lstbins=6300, wgtfunc=lambda dt,res: np.exp(-dt**2/(2*res**2))):
     lstgrid = np.linspace(0, 2*np.pi, lstbins)
