@@ -1,8 +1,8 @@
 import numpy as np
 import aipy
 import pyuvdata
-#from .utils import hash, cov
-from utils import hash, cov
+from .utils import hash, cov
+#from utils import hash, cov
 
 class PSpecData(object):
     
