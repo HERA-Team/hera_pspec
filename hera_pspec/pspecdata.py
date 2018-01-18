@@ -268,7 +268,8 @@ class PSpecData(object):
     def set_iC(self, d):
         """
         Set the cached inverse covariance matrix for a given dataset and 
-        baseline to a specified value.
+        baseline to a specified value. For now, you should already have applied 
+        weights to this matrix.
         
         Parameters
         ----------
@@ -287,6 +288,7 @@ class PSpecData(object):
             \hat{q}_a = conj(x_1) C^-1 Q_a C^-1 x_2 (arXiv:1502.06016, Eq. 13)
         
         (Note the missing factor of 1/2.)
+        N.B. The inverse covariance should already include the weights.
         
         Parameters
         ----------
@@ -301,7 +303,7 @@ class PSpecData(object):
         use_fft : bool, optional
             Whether to use a fast FFT summation trick to construct q_hat, or 
             a simpler brute-force matrix multiplication. The FFT method assumes 
-            a delta-fn bin in delay space (CHECK THIS). Default: True.
+            a delta-fn bin in delay space. Default: True.
         
         Returns
         -------
@@ -320,6 +322,8 @@ class PSpecData(object):
         if use_fft:
             _iC1x = np.fft.fft(iC1x.conj(), axis=0)
             _iC2x = np.fft.fft(iC2x.conj(), axis=0)
+            
+            # FIXME: Should include window function (see get_Q)
             
             # Conjugated because inconsistent with pspec_cov_v003 otherwise
             # FIXME: Check that this should actually be conjugated
@@ -415,9 +419,9 @@ class PSpecData(object):
         choices for M are supported:
         
             'F^-1':   Set M = F^-1, the (pseudo)inverse Fisher matrix.
-            'F^-1/2': Set M = F^-1/2, the root-inverse Fisher matrix.
+            'F^-1/2': Set M = F^-1/2, the root-inverse Fisher matrix (using SVD).
             'I':      Set M = I, the identity matrix.
-            'L^-1':   Set M = L^-1, 
+            'L^-1':   Set M = L^-1, Cholesky decomposition.
         
         Parameters
         ----------
@@ -479,7 +483,6 @@ class PSpecData(object):
         W = np.dot(M, F)
         norm = W.sum(axis=-1); norm.shape += (1,)
         M /= norm; W = np.dot(M, F)
-        # FIXME: Surely more efficient to just divide W by norm?
         return M, W
     
     def get_Q(self, mode, n_k, window='none'):
