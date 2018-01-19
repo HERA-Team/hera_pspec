@@ -291,27 +291,56 @@ class PSpecData(object):
             self.iC().
         """
         for k in d: self._iC[k] = d[k]
-    
-    def q_hat(self, key1, key2, use_identity=False, use_fft=True, 
-              taper='none'):
+
+    def set_R(self, R_matrix):
+        """
+        Set the weighting matrix R for later use in q_hat.
+
+        Parameters
+        ----------
+        R_matrix : string or matrix
+            If set to "identity", sets R = I
+            If set to "iC", sets R = C^-1
+            Otherwise, accepts a user inputted dictionary
+        """
+
+        if R_matrix == "identity":
+            self._R = self.I
+        elif R_matrix == "iC":
+            self._R = self._iC
+        else:
+            self._R = R_matrix
+
+    def set_Qs(self, taper='none'):
+        """
+        Set the cached Q matrices.
+
+        Parameters
+        ----------
+        taper : str, optional
+            Tapering (window) function to apply to the data. Takes the same 
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
+        """
+        self._Q = {}
+        for i in xrange(self.Nfreqs):
+            self._Q[i] = self.get_Q(i, self.Nfreqs, taper=taper)
+        
+
+    def q_hat(self, key1, key2, use_fft=True, taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of 
         visibility vectors. Returns the following quantity:
             
-            \hat{q}_a = conj(x_1) C^-1 Q_a C^-1 x_2 (arXiv:1502.06016, Eq. 13)
+            \hat{q}_a = (1/2) conj(x_1) R_1 Q_a R_2 x_2 (arXiv:1502.06016, Eq. 13)
         
-        (Note the missing factor of 1/2.)
-        N.B. The inverse covariance should already include the weights.
+        Note that the R matrix need not be set to C^-1. This is something that
+        is set by the user in the set_R method.
         
         Parameters
         ----------
         key1, key2 : tuples
             Tuples containing indices of dataset and baselines for the two 
             input datavectors.
-            
-        use_identity : bool, optional
-            Use the identity matrix to weight the data, instead of the 
-            covariance matrix. Default: False.
             
         use_fft : bool, optional
             Whether to use a fast FFT summation trick to construct q_hat, or 
@@ -330,44 +359,52 @@ class PSpecData(object):
         assert isinstance(key1, tuple)
         assert isinstance(key2, tuple)
         
-        # Whether to use look-up fn. for identity or inverse covariance matrix
-        icov_fn = self.I if use_identity else self.iC
-        
-        # Calculate C^-1 x_1 and C^-1 x_2
+        # Calculate R x_1 and R x_2
         #iC1x, iC2x = 0, 0
         #for _k in k1: iC1x += np.dot(icov_fn(_k), self.x(_k))
         #for _k in k2: iC2x += np.dot(icov_fn(_k), self.x(_k))
-        iC1x = np.dot(icov_fn(key1), self.x(key1))
-        iC2x = np.dot(icov_fn(key2), self.x(key2))
+        Rx1 = np.dot(self._R(key1), self.x(key1))
+        Rx2 = np.dot(self._R(key2), self.x(key2))
             
         # Whether to use FFT or slow direct method
         if use_fft:
-            _iC1x = np.fft.fft(iC1x.conj(), axis=0)
-            _iC2x = np.fft.fft(iC2x.conj(), axis=0)
-            
-            # FIXME: Should include window function (see get_Q)
-            # win = aipy.dsp.gen_window(nk, taper)
-            
+
+            if not taper == 'none':
+                tapering_fct = aipy.dsp.gen_window(self.Nfreqs, taper)
+                Rx1 *= tapering_fct
+                Rx2 *= tapering_fct
+
+            _Rx1 = np.fft.fft(Rx1.conj(), axis=0)
+            _Rx2 = np.fft.fft(Rx2.conj(), axis=0)
+          
             # Conjugated because inconsistent with pspec_cov_v003 otherwise
             # FIXME: Check that this should actually be conjugated
-            return np.conj(  np.fft.fftshift(_iC1x, axes=0).conj() 
-                           * np.fft.fftshift(_iC2x, axes=0) )
+            return np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
+                           * np.fft.fftshift(_Rx2, axes=0) )
         else:
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.Nfreqs):
-                Q = self.get_Q(i, self.Nfreqs, taper=taper)
-                iCQiC = np.einsum('ab,bc,cd', iC1.T.conj(), Q, iC2) # C^-1 Q C^-1
-                qi = np.sum(self.x(k1).conj() * np.dot(iCQiC, self.x(k2)), axis=0)
+                RQR = np.einsum('ab,bc,cd', self._R(key1).T.conj(), self._Q[i], \
+                                                        self._R(key2)) # R Q R
+                qi = np.sum(self.x(k1).conj()*np.dot(RQR, self.x(k2)), axis=0)
                 q.append(qi)
             return np.array(q)
-    
-    def get_F(self, key1, key2, use_identity=False, true_fisher=False, 
-              taper='none'):
+
+    def get_G(self, key1, key2):
         """
-        Calculate the Fisher matrix for the power spectrum bandpowers, p_alpha. 
-        The Fisher matrix is defined as:
-        
+        Calculates the response matrix G of the unnormalized band powers q
+        to the true band powers p, i.e.,
+
+            <q_a> = \sum_b G_{ab} p_b
+
+        This is given by
+
+            G_ab = (1/2) Tr[R_1 Q_a R_2 Q_b]
+
+        Note that in the limit that R_1 = R_2 = C^-1, this reduces to the Fisher
+        matrix
+
             F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
         
         Parameters
@@ -376,129 +413,117 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two 
             input datavectors.
         
-        use_identity : bool, optional
-            Use the identity matrix to weight the data, instead of the 
-            covariance matrix. Default: False.
-        
-        true_fisher : bool, optional
-            Whether to calculate the "true" Fisher matrix, or the "effective" 
-            matrix s.t. W=MF and p=Mq. Default: False. (FIXME)
-        
-        taper : str, optional
-            Tapering (window) function used when calculating Q. Takes the same 
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
-        
         Returns
         -------
-        F : array_like, complex
+        G : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
         assert isinstance(key1, tuple)
         assert isinstance(key2, tuple)
-        F = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
+        G = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
+
+        R1 = self._R(key1)
+        R2 = self._R(key2)
         
-        # Whether to use look-up fn. for identity or inverse covariance matrix
-        icov_fn = self.I if use_identity else self.iC
+        iR1Q, iR2Q = {}, {}
+        for ch in xrange(self.Nfreqs): # this loop is nchan^3
+            iR1Q[ch] = np.dot(R1, Q) # R_1 Q
+            iR2Q[ch] = np.dot(R2, Q) # R_2 Q
+
+        for i in xrange(self.Nfreqs): # this loop goes as nchan^4
+            for j in xrange(self.Nfreqs):
+                # tr(R_2 Q_i R_1 Q_j)
+                G[i,j] += np.einsum('ij,ji', iR1Q[i], iR2Q[j])
+
+        return G / 2.
+
+    def get_V_gaussian(self, key1, key2):
+        """
+        Calculates the bandpower covariance matrix
+        V_ab = tr(C E_a C E_b)
+        # FIXME: Must check factor of 2 with Wick's thm for complex vectors
+        # and also check expression for when x_1 != x_2.
         
-        # FIXME: k1,2 aren't allowed to be lists any more
-        #iC1, iC2 = 0, 0
-        #for _k in k1: iC1 += icov_fn(_k)
-        #for _k in k2: iC2 += icov_fn(_k)
-        iC1 = icov_fn(key1)
-        iC2 = icov_fn(key2)
+        Parameters
+        ----------
+        key1, key2 : tuples
+            Tuples containing indices of dataset and baselines for the two 
+            input datavectors.
         
-        # Multiply terms to get the true or effective Fisher matrix
-        # FIXME: I think effective <=> true have been mixed up here
-        if true_fisher:
-            # This is for the "true" Fisher matrix
-            # FIXME: What is this for?
-            CE1, CE2 = {}, {}
-            Cemp1, Cemp2 = self.I(key1), self.I(key2)
-            
-            for ch in xrange(self.Nfreqs):
-                Q = self.get_Q(ch, self.Nfreqs, taper=taper)
-                # C1 Cbar1^-1 Q Cbar2^-1; C2 Cbar2^-1 Q Cbar1^-1
-                CE1[ch] = np.dot(Cemp1, np.dot(iC1, np.dot(Q, iC2)))
-                CE2[ch] = np.dot(Cemp2, np.dot(iC2, np.dot(Q, iC1)))
-            
-            for i in xrange(self.Nfreqs):
-                for j in xrange(self.Nfreqs):
-                    F[i,j] += np.einsum('ij,ji', CE1[i], CE2[j]) # C E C E
-        else:
-            # This is for the "effective" matrix s.t. W=MF and p=Mq
-            iCQ1, iCQ2 = {}, {}
-            
-            for ch in xrange(self.Nfreqs): # this loop is nchan^3
-                Q = self.get_Q(ch, self.Nfreqs, taper=taper)
-                iCQ1[ch] = np.dot(iC1, Q) #C^-1 Q
-                iCQ2[ch] = np.dot(iC2, Q) #C^-1 Q
-            
-            for i in xrange(self.Nfreqs): # this loop goes as nchan^4
-                for j in xrange(self.Nfreqs):
-                    F[i,j] += np.einsum('ij,ji', iCQ1[i], iCQ2[j]) #C^-1 Q C^-1 Q 
-        return F
-    
-    def get_MW(self, F, mode='F^-1'):
+        Returns
+        -------
+        V : array_like, complex
+            bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
+        """
+        raise NotImplementedError()
+   
+    def get_MW(self, G, mode='I'):
         """
         Construct the normalization matrix M and window function matrix W for 
         the power spectrum estimator. These are defined through Eqs. 14-16 of 
         arXiv:1502.06016:
             
             \hat{p} = M \hat{q}
-            \hat{p} = W p
-            W = M F,
+            <\hat{p}> = W p
+            W = M G,
         
-        where p is the true band power and F is the Fisher matrix. Several 
-        choices for M are supported:
+        where p is the true band power and G is the response matrix (defined above
+        in get_G) of unnormalized bandpowers to normed bandpowers. The G matrix
+        is the Fisher matrix when R = C^-1
+
+        Several choices for M are supported:
         
-            'F^-1':   Set M = F^-1, the (pseudo)inverse Fisher matrix.
-            'F^-1/2': Set M = F^-1/2, the root-inverse Fisher matrix (using SVD).
+            'G^-1':   Set M = G^-1, the (pseudo)inverse response matrix.
+            'G^-1/2': Set M = G^-1/2, the root-inverse response matrix (using SVD).
             'I':      Set M = I, the identity matrix.
             'L^-1':   Set M = L^-1, Cholesky decomposition.
+
+        Note that when we say (e.g., M = I), we mean this before normalization.
+        The M matrix needs to be normalized such that each row of W sums to 1.
         
         Parameters
         ----------
-        F : array_like or dict of array_like
-            Fisher matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
-            If a dict is specified, M and W will be calculated for each F 
+        G : array_like or dict of array_like
+            Response matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
+            If a dict is specified, M and W will be calculated for each G 
             matrix in the dict.
             
         mode : str, optional
             Definition to use for M. Must be one of the options listed above. 
-            Default: 'F^-1'.
+            Default: 'I'.
         
         Returns
         -------
         M : array_like
-            Normalization matrix, M. (If F was passed in as a dict, a dict of 
+            Normalization matrix, M. (If G was passed in as a dict, a dict of 
             array_like will be returned.)
         
         W : array_like
-            Window function matrix, W. (If F was passed in as a dict, a dict of 
+            Window function matrix, W. (If G was passed in as a dict, a dict of 
             array_like will be returned.)
         """
         # Recursive case, if many F's were specified at once
-        if type(F) is dict:
+        if type(G) is dict:
             M,W = {}, {}
-            for key in F: M[key],W[key] = self.get_MW(F[key], mode=mode)
+            for key in G: M[key],W[key] = self.get_MW(G[key], mode=mode)
             return M, W
         
         # Check that mode is supported
-        modes = ['F^-1', 'F^-1/2', 'I', 'L^-1']
+        modes = ['G^-1', 'G^-1/2', 'I', 'L^-1']
         assert(mode in modes)
         
         # Build M matrix according to specified mode
-        if mode == 'F^-1':
-            M = np.linalg.pinv(F, rcond=1e-12)
+        if mode == 'G^-1':
+            M = np.linalg.pinv(G, rcond=1e-12)
             #U,S,V = np.linalg.svd(F)
             #M = np.einsum('ij,j,jk', V.T, 1./S, U.T)
             
-        elif mode == 'F^-1/2':
-            U,S,V = np.linalg.svd(F)
+        elif mode == 'G^-1/2':
+            U,S,V = np.linalg.svd(G)
             M = np.einsum('ij,j,jk', V.T, 1./np.sqrt(S), U.T)
             
         elif mode == 'I':
-            M = np.identity(F.shape[0], dtype=F.dtype)
+            M = np.identity(G.shape[0], dtype=G.dtype)
             
         else:
             pass
@@ -526,9 +551,9 @@ class PSpecData(object):
             """
         
         # Calculate (normalized) W given Fisher matrix and choice of M
-        W = np.dot(M, F)
+        W = np.dot(M, G)
         norm = W.sum(axis=-1); norm.shape += (1,)
-        M /= norm; W = np.dot(M, F)
+        M /= norm; W = np.dot(M, G)
         return M, W
     
     def get_Q(self, mode, n_k, taper='none'):
