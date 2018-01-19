@@ -1,4 +1,4 @@
-
+import random
 
 def fold_kparallel(pspec_list):
     """
@@ -42,7 +42,58 @@ def collapse_over_lsts(pspec_list):
     # 1. Take a set of power spectra for many bootstrap samples
     # 2. Average over time for each bootstrap sample
     NotImplementedError()
+
+
+def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False):
+    """
+    Group baselines together into equal-sized sets.
     
+    These groups can be passed into PSpecData.pspec(), where the corresponding 
+    baselines will be averaged together (grouping reduces the number of 
+    cross-spectra that need to be computed).
+    
+    Parameters
+    ----------
+    bls : list of tuples
+        Set of unique baselines tuples.
+    
+    Ngroups : int
+        Number of groups to create. The groups will be equal in size, except 
+        the last group (if there are remainder baselines).
+    
+    keep_remainder : bool, optional
+        Whether to keep remainder baselines that don't fit exactly into the 
+        number of specified groups. If True, a group containing the remainder 
+        baselines is appended to the output list. Otherwise, the remainder 
+        baselines are discarded. Default: False.
+    
+    randomize : bool, optional
+        Whether baselines should be added to groups in the order they appear in 
+        'bls', or if they should be assigned at random. Default: False.
+    
+    Returns
+    -------
+    grouped_bls : list of lists of tuples
+        List of grouped baselines.
+    """
+    Nbls = len(bls) # Total baselines
+    n = Nbls / Ngroups # Baselines per group
+    rem = Nbls % n
+    
+    # Make sure only tuples were provided (can't have groups of groups)
+    for bl in bls: assert isinstance(bl, tuple)
+    
+    grouped_bls = []
+    if randomize:
+        # Randomly select members of each group
+        for i in range(Ngroups): grouped_bls.append( random.sample(bls, n) )
+        if keep_remainder and rem > 0: grouped_bls.append(bls)
+    else:
+        # Assign to groups sequentially
+        for i in range(Ngroups): grouped_bls.append(bls[i*n:(i+1)*n])
+        if keep_remainder and rem > 0: grouped_bls.append(bls[-rem:])
+    return grouped_bls
+
 
 def sample_baselines(bls):
     """
@@ -51,13 +102,18 @@ def sample_baselines(bls):
     
     Parameters
     ----------
-    bls : list of tuples
-        Set of unique baselines to be sampled from.
+    bls : list of either tuples or lists of tuples
+        Set of unique baselines to be sampled from. If groups of baselines 
+        (contained in lists) are provided, each group will be treated as a 
+        single object by the sampler; its members will not be sampled 
+        separately.
     
     Returns
     -------
-    bl_sample : list of tuples
+    sampled_bls : list of tuples or lists of tuples
         Bootstrap-sampled set of baselines (will include multiple instances of 
         some baselines).
     """
-    NotImplementedError()
+    # Sample with replacement; return as many baselines/groups as were input
+    return [random.choice(bls) for i in range(len(bls))]
+    
