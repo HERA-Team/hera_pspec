@@ -128,7 +128,6 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         assert isinstance(key, tuple)
-        
         dset = key[0]; bl = key[1:]
         return self.dsets[dset].get_data(bl).T # FIXME: Transpose?
         
@@ -152,12 +151,14 @@ class PSpecData(object):
         assert isinstance(key, tuple)
         
         dset = key[0]; bl = key[1:]
+        
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T # FIXME: Transpose?
         else:
             # If weights were not specified, use the flags built in to the 
             # UVData dataset object
-            return self.dsets[dset].get_flags(bl).astype(float).T # FIXME: Transpose?
+            return self.dsets[dset].get_flags(bl).astype(float).T
+            # FIXME: Transpose?
     
     def C(self, key):
         """
@@ -276,6 +277,7 @@ class PSpecData(object):
             # FIXME: Is series of dot products quicker?
             self.set_iC({key:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
         return self._iC[key]
+                
     
     def set_iC(self, d):
         """
@@ -304,9 +306,10 @@ class PSpecData(object):
         
         Parameters
         ----------
-        key1, key2 : tuples
+        key1, key2 : tuples or lists of tuples
             Tuples containing indices of dataset and baselines for the two 
-            input datavectors.
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
             
         use_identity : bool, optional
             Use the identity matrix to weight the data, instead of the 
@@ -322,18 +325,21 @@ class PSpecData(object):
         q_hat : array_like
             Unnormalized bandpowers
         """
-        assert isinstance(key1, tuple)
-        assert isinstance(key2, tuple)
-        
         # Whether to use look-up fn. for identity or inverse covariance matrix
         icov_fn = self.I if use_identity else self.iC
         
-        # Calculate C^-1 x_1 and C^-1 x_2
-        #iC1x, iC2x = 0, 0
-        #for _k in k1: iC1x += np.dot(icov_fn(_k), self.x(_k))
-        #for _k in k2: iC2x += np.dot(icov_fn(_k), self.x(_k))
-        iC1x = np.dot(icov_fn(key1), self.x(key1))
-        iC2x = np.dot(icov_fn(key2), self.x(key2))
+        # Calculate C^-1 x_1
+        iC1x, iC2x = 0, 0
+        if isinstance(key1, list):
+            for _key in key1: iC1x += np.dot(icov_fn(_key), self.x(_key))
+        else:
+            iC1x = np.dot(icov_fn(key1), self.x(key1))
+        
+        # Calculate C^-1 x_2
+        if isinstance(key2, list):
+            for _key in key2: iC2x += np.dot(icov_fn(_key), self.x(_key))
+        else:
+            iC2x = np.dot(icov_fn(key2), self.x(key2))
             
         # Whether to use FFT or slow direct method
         if use_fft:
@@ -365,9 +371,10 @@ class PSpecData(object):
         
         Parameters
         ----------
-        key1, key2 : tuples
+        key1, key2 : tuples or lists of tuples
             Tuples containing indices of dataset and baselines for the two 
-            input datavectors.
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
         
         use_identity : bool, optional
             Use the identity matrix to weight the data, instead of the 
@@ -382,23 +389,31 @@ class PSpecData(object):
         F : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        assert isinstance(key1, tuple)
-        assert isinstance(key2, tuple)
         F = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
         
         # Whether to use look-up fn. for identity or inverse covariance matrix
         icov_fn = self.I if use_identity else self.iC
         
-        # FIXME: k1,2 aren't allowed to be lists any more
-        #iC1, iC2 = 0, 0
-        #for _k in k1: iC1 += icov_fn(_k)
-        #for _k in k2: iC2 += icov_fn(_k)
-        iC1 = icov_fn(key1)
-        iC2 = icov_fn(key2)
+        # Calculate inverse noise covariance (sum inverses if a group of 
+        # baselines was provided)
+        iC1, iC2 = 0, 0
+        if isinstance(key1, list):
+            for _key in key1: iC1 += icov_fn(_key)
+        else:
+            iC1 = icov_fn(key1)
+        
+        if isinstance(key2, list):
+            for _key in key2: iC2 += icov_fn(_key)
+        else:
+            iC2 = icov_fn(key2)
         
         # Multiply terms to get the true or effective Fisher matrix
         # FIXME: I think effective <=> true have been mixed up here
         if true_fisher:
+            if not isinstance(key1, tuple) or not isinstance(key2, tuple):
+                raise TypeError("Lists of tuples not currently supported by "
+                                "the 'true_fisher' option.")
+                
             # This is for the "true" Fisher matrix
             # FIXME: What is this for?
             CE1, CE2 = {}, {}
@@ -468,8 +483,8 @@ class PSpecData(object):
         """
         # Recursive case, if many F's were specified at once
         if type(F) is dict:
-            M,W = {}, {}
-            for key in F: M[key],W[key] = self.get_MW(F[key], mode=mode)
+            M, W = {}, {}
+            for key in F: M[key], W[key] = self.get_MW(F[key], mode=mode)
             return M, W
         
         # Check that mode is supported
@@ -490,7 +505,7 @@ class PSpecData(object):
             M = np.identity(F.shape[0], dtype=F.dtype)
             
         else:
-            pass
+            raise NotImplementedError("L^-1 option not currently supported.")
             """
             # Cholesky decomposition to get M (XXX: Needs generalizing)
             #order = np.array([10, 11, 9, 12, 8, 20, 0, 
@@ -584,9 +599,14 @@ class PSpecData(object):
         
         Parameters
         ----------
-        bls : list of tuples
+        bls : list of tuples (or lists of tuples)
             List of baselines to include in the power spectrum calculation. 
             Each baseline is specified as a tuple of antenna IDs.
+            
+            If an element of the list is another list, containing several 
+            tuples, the baselines in that list will be averaged together in the 
+            power spectrum calculation. This can be used to reduce the number 
+            of cross-correlations that are needed.
             
         weights : str, optional
             String specifying how to choose the normalization matrix, M. See 
@@ -605,7 +625,6 @@ class PSpecData(object):
             List of the pairs of datasets and baselines that were used to 
             calculate each element of the 'pspec' list.
         """
-        #FIXME: Define sensible grouping behaviors.
         #FIXME: Check that requested keys exist in all datasets
         
         # Validate the input data to make sure it's sensible
@@ -620,8 +639,12 @@ class PSpecData(object):
                 
                 # Loop over baselines
                 for bl in bls:
-                    key1 = (m,) + bl
-                    key2 = (n,) + bl
+                    if isinstance(bl, list):
+                        key1 = [(m,) + _bl for _bl in bl]
+                        key2 = [(n,) + _bl for _bl in bl]
+                    else:
+                        key1 = (m,) + bl
+                        key2 = (n,) + bl
                     
                     if verbose: print("Baselines:", key1, key2)
                     
