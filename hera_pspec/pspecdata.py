@@ -292,7 +292,8 @@ class PSpecData(object):
         """
         for k in d: self._iC[k] = d[k]
     
-    def q_hat(self, key1, key2, use_identity=False, use_fft=True):
+    def q_hat(self, key1, key2, use_identity=False, use_fft=True, 
+              taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of 
         visibility vectors. Returns the following quantity:
@@ -316,6 +317,10 @@ class PSpecData(object):
             Whether to use a fast FFT summation trick to construct q_hat, or 
             a simpler brute-force matrix multiplication. The FFT method assumes 
             a delta-fn bin in delay space. Default: True.
+        
+        taper : str, optional
+            Tapering (window) function to apply to the data. Takes the same 
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
         
         Returns
         -------
@@ -341,6 +346,7 @@ class PSpecData(object):
             _iC2x = np.fft.fft(iC2x.conj(), axis=0)
             
             # FIXME: Should include window function (see get_Q)
+            # win = aipy.dsp.gen_window(nk, taper)
             
             # Conjugated because inconsistent with pspec_cov_v003 otherwise
             # FIXME: Check that this should actually be conjugated
@@ -350,13 +356,14 @@ class PSpecData(object):
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.Nfreqs):
-                Q = self.get_Q(i, self.Nfreqs)
+                Q = self.get_Q(i, self.Nfreqs, taper=taper)
                 iCQiC = np.einsum('ab,bc,cd', iC1.T.conj(), Q, iC2) # C^-1 Q C^-1
                 qi = np.sum(self.x(k1).conj() * np.dot(iCQiC, self.x(k2)), axis=0)
                 q.append(qi)
             return np.array(q)
     
-    def get_F(self, key1, key2, use_identity=False, true_fisher=False):
+    def get_F(self, key1, key2, use_identity=False, true_fisher=False, 
+              taper='none'):
         """
         Calculate the Fisher matrix for the power spectrum bandpowers, p_alpha. 
         The Fisher matrix is defined as:
@@ -376,6 +383,10 @@ class PSpecData(object):
         true_fisher : bool, optional
             Whether to calculate the "true" Fisher matrix, or the "effective" 
             matrix s.t. W=MF and p=Mq. Default: False. (FIXME)
+        
+        taper : str, optional
+            Tapering (window) function used when calculating Q. Takes the same 
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
         
         Returns
         -------
@@ -405,7 +416,7 @@ class PSpecData(object):
             Cemp1, Cemp2 = self.I(key1), self.I(key2)
             
             for ch in xrange(self.Nfreqs):
-                Q = self.get_Q(ch, self.Nfreqs)
+                Q = self.get_Q(ch, self.Nfreqs, taper=taper)
                 # C1 Cbar1^-1 Q Cbar2^-1; C2 Cbar2^-1 Q Cbar1^-1
                 CE1[ch] = np.dot(Cemp1, np.dot(iC1, np.dot(Q, iC2)))
                 CE2[ch] = np.dot(Cemp2, np.dot(iC2, np.dot(Q, iC1)))
@@ -418,7 +429,7 @@ class PSpecData(object):
             iCQ1, iCQ2 = {}, {}
             
             for ch in xrange(self.Nfreqs): # this loop is nchan^3
-                Q = self.get_Q(ch, self.Nfreqs)
+                Q = self.get_Q(ch, self.Nfreqs, taper=taper)
                 iCQ1[ch] = np.dot(iC1, Q) #C^-1 Q
                 iCQ2[ch] = np.dot(iC2, Q) #C^-1 Q
             
@@ -520,7 +531,7 @@ class PSpecData(object):
         M /= norm; W = np.dot(M, F)
         return M, W
     
-    def get_Q(self, mode, n_k, window='none'):
+    def get_Q(self, mode, n_k, taper='none'):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha. 
         
@@ -540,9 +551,9 @@ class PSpecData(object):
         n_k : int
             Number of k bins that will be .
             
-        window : str, optional
-            Type of window function to use. Valid options are any window 
-            function supported by aipy.dsp.gen_window(). Default: 'none'.
+        taper : str, optional
+            Type of tapering (window) function to use. Valid options are any 
+            window function supported by aipy.dsp.gen_window(). Default: 'none'.
         
         Returns
         -------
@@ -553,7 +564,7 @@ class PSpecData(object):
         _m[mode] = 1. # delta function at specific delay mode
         
         # FFT to transform to frequency space, and apply window function
-        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, window)
+        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, taper)
         Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
         return Q
 
@@ -577,7 +588,7 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
-    def pspec(self, bls, weights='none', verbose=False):
+    def pspec(self, bls, weights='none', taper='none', verbose=False):
         """
         Estimate the power spectrum from the datasets contained in this object, 
         using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
@@ -591,6 +602,10 @@ class PSpecData(object):
         weights : str, optional
             String specifying how to choose the normalization matrix, M. See 
             the 'mode' argument of get_MW() for options.
+        
+        taper : str, optional
+            Tapering (window) function to apply to the data. Takes the same 
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
         
         verbose : bool, optional
             If True, print progress/debugging information.
@@ -627,15 +642,15 @@ class PSpecData(object):
                     
                     # Build Fisher matrix
                     if verbose: print("  Building F...")
-                    Fv = self.get_F(key1, key2)
+                    Fv = self.get_F(key1, key2, taper=taper)
                     
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2)
+                    qv = self.q_hat(key1, key2, taper=taper)
                     
                     # Apply weights and return power spectrum estimate
                     if verbose: print("  Applying weights...")
-                    Mv, Wv = self.get_MW(Fv, mode=weights)  
+                    Mv, Wv = self.get_MW(Fv, mode=weights)
                     pv = self.p_hat(Mv, qv)
                     
                     # Save power spectra and dataset/baseline pairs
