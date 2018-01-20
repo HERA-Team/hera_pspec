@@ -310,22 +310,7 @@ class PSpecData(object):
             self._R = self._iC
         else:
             self._R = R_matrix
-
-    def set_Qs(self, taper='none'):
-        """
-        Set the cached Q matrices.
-
-        Parameters
-        ----------
-        taper : str, optional
-            Tapering (window) function to apply to the data. Takes the same 
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
-        """
-        self._Q = {}
-        for i in xrange(self.Nfreqs):
-            self._Q[i] = self.get_Q(i, self.Nfreqs, taper=taper)
-        
-
+      
     def q_hat(self, key1, key2, use_fft=True, taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of 
@@ -385,13 +370,13 @@ class PSpecData(object):
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.Nfreqs):
-                RQR = np.einsum('ab,bc,cd', self._R(key1).T.conj(), self._Q[i], \
-                                                        self._R(key2)) # R Q R
+                Q = self.get_Q(i, self.Nfreqs, taper=taper)
+                RQR = np.einsum('ab,bc,cd', self._R(key1).T.conj(), Q, self._R(key2)) # R Q R
                 qi = np.sum(self.x(k1).conj()*np.dot(RQR, self.x(k2)), axis=0)
                 q.append(qi)
-            return np.array(q)
+            return 0.5 * np.array(q)
 
-    def get_G(self, key1, key2):
+    def get_G(self, key1, key2, taper='none'):
         """
         Calculates the response matrix G of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -412,6 +397,10 @@ class PSpecData(object):
         key1, key2 : tuples
             Tuples containing indices of dataset and baselines for the two 
             input datavectors.
+
+        taper : str, optional
+            Tapering (window) function used when calculating Q. Takes the same 
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
         
         Returns
         -------
@@ -427,6 +416,7 @@ class PSpecData(object):
         
         iR1Q, iR2Q = {}, {}
         for ch in xrange(self.Nfreqs): # this loop is nchan^3
+            Q = self.get_Q(ch, self.Nfreqs, taper=taper)
             iR1Q[ch] = np.dot(R1, Q) # R_1 Q
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
 
@@ -613,7 +603,7 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
-    def pspec(self, bls, weights='none', taper='none', verbose=False):
+    def pspec(self, bls, input_data_weight='identity',norm='I', taper='none', verbose=False):
         """
         Estimate the power spectrum from the datasets contained in this object, 
         using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
@@ -623,8 +613,12 @@ class PSpecData(object):
         bls : list of tuples
             List of baselines to include in the power spectrum calculation. 
             Each baseline is specified as a tuple of antenna IDs.
+
+        input_data_weight : str, optional
+            String specifying what weighting matrix to apply to the input
+            data. See the options in the set_R method for details.
             
-        weights : str, optional
+        norm : str, optional
             String specifying how to choose the normalization matrix, M. See 
             the 'mode' argument of get_MW() for options.
         
@@ -664,18 +658,22 @@ class PSpecData(object):
                     key2 = (n,) + bl
                     
                     if verbose: print("Baselines:", key1, key2)
+
+                    # Set covariance weighting scheme for input data
+                    if verbose: print (" Setting weighting matrix for input data...")
+                    self.set_R(input_data_weight)
                     
                     # Build Fisher matrix
-                    if verbose: print("  Building F...")
-                    Fv = self.get_F(key1, key2, taper=taper)
+                    if verbose: print("  Building G...")
+                    Gv = self.get_G(key1, key2, taper=taper)
                     
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
                     qv = self.q_hat(key1, key2, taper=taper)
                     
-                    # Apply weights and return power spectrum estimate
-                    if verbose: print("  Applying weights...")
-                    Mv, Wv = self.get_MW(Fv, mode=weights)
+                    # Normalize power spectrum estimate
+                    if verbose: print("  Normalizing power spectrum...")
+                    Mv, Wv = self.get_MW(Gv, mode=norm)
                     pv = self.p_hat(Mv, qv)
                     
                     # Save power spectra and dataset/baseline pairs
