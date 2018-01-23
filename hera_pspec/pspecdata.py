@@ -516,7 +516,7 @@ class PSpecData(object):
             M = np.identity(G.shape[0], dtype=G.dtype)
             
         else:
-            pass
+            M = np.identity(G.shape[0], dtype=G.dtype) # FIXME: just a placeholder for now
             """
             # Cholesky decomposition to get M (XXX: Needs generalizing)
             #order = np.array([10, 11, 9, 12, 8, 20, 0, 
