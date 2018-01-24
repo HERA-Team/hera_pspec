@@ -1,6 +1,7 @@
 import unittest
 import nose.tools as nt
 import numpy as np
+import pyuvdata as uv
 import os
 import sys
 from hera_pspec.data import DATA_PATH
@@ -66,6 +67,9 @@ def diagonal_or_not(mat,places=7):
     diag = (round(mat_norm-diag_mat_norm, places) == 0)
     return diag
 
+taper_selection = ['blackman'] #,'blackman-harris','gaussian0.4','kaiser2',\
+                            #'kaiser3','hamming','hanning','parzen']
+
 class Test_DataSet(unittest.TestCase):
 
     def setUp(self):
@@ -116,6 +120,8 @@ class Test_DataSet(unittest.TestCase):
 
         for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
             M, W = self.ds.get_MW(random_G, mode=mode)
+            self.assertEqual(M.shape,(n,n))
+            self.assertEqual(W.shape,(n,n))
             test_norm = np.sum(W, axis=1)
             for norm in test_norm:
                 self.assertAlmostEqual(norm, 1.)
@@ -131,9 +137,92 @@ class Test_DataSet(unittest.TestCase):
                 # Test that the norm matrix is diagonal
                 self.assertEqual(diagonal_or_not(M),True)
 
+    def test_q_hat(self):
+        dfiles = [
+            'tests/zen.2458042.12552.xx.HH.uvXAA',
+            'tests/zen.2458042.12552.xx.HH.uvXAA'
+        ]
+        d = []
+        for dfile in dfiles:
+            _d = uv.UVData()
+            _d.read_miriad(dfile)
+            d.append(_d)
+        w = [None for _d in dfiles]
+        self.ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        Nfreq = self.ds.Nfreqs
+        Ntime = self.ds.Ntimes
+
+        for input_data_weight in ['identity', 'iC']:
+            for taper in taper_selection:
+
+                self.ds.set_R(input_data_weight)
+                key1 = (0, 24, 38)
+                key2 = (1, 25, 38)
+
+                q_hat_a = self.ds.q_hat(key1, key2)
+                self.assertEqual(q_hat_a.shape,(Nfreq,Ntime)) # Test shape
+                q_hat_b = self.ds.q_hat(key2, key1)
+                q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
+
+                # Check that swapping x_1 and x_2 results in just a complex conjugation
+                for i in range(Nfreq):
+                    for j in range(Ntime):
+                        self.assertAlmostEqual(q_hat_diff[i,j].real,q_hat_diff[i,j].real)
+                        self.assertAlmostEqual(q_hat_diff[i,j].imag,q_hat_diff[i,j].imag)
+
+                # Check that the slow method is the same as the FFT method
+                q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False)
+                vector_scale = np.min([np.min(abs(q_hat_a_slow.real)),np.min(abs(q_hat_a_slow.imag))])
+                for i in range(Nfreq):
+                    for j in range(Ntime):
+                        self.assertLessEqual(abs((q_hat_a[i,j]-q_hat_a_slow[i,j]).real),vector_scale*10**-6)
+                        self.assertLessEqual(abs((q_hat_a[i,j]-q_hat_a_slow[i,j]).imag),vector_scale*10**-6)
+
+
     def test_get_G(self):
-        # Need to test that all elements of G are positive
-        pass
+        dfiles = [
+            'tests/zen.2458042.12552.xx.HH.uvXAA',
+            'tests/zen.2458042.12552.xx.HH.uvXAA'
+        ]
+        d = []
+        for dfile in dfiles:
+            _d = uv.UVData()
+            _d.read_miriad(dfile)
+            d.append(_d)
+        w = [None for _d in dfiles]
+        self.ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        Nfreq = self.ds.Nfreqs
+
+        for input_data_weight in ['identity','iC']:
+            for taper in taper_selection:
+                self.ds.set_R(input_data_weight)
+                key1 = (0, 24, 38)
+                key2 = (1, 25, 38)
+
+                G = self.ds.get_G(key1, key2, taper=taper)
+                self.assertEqual(G.shape,(Nfreq,Nfreq)) # Test shape
+                matrix_scale = np.min([np.min(abs(G)),np.min(abs(np.linalg.eigvalsh(G)))])
+                anti_sym_norm = np.linalg.norm(G - G.T)
+                self.assertLessEqual(anti_sym_norm, matrix_scale*10**-10) # Test symmetry
+
+                # Test cyclic property of trace, where key1 and key2 can be
+                # swapped without changing the matrix. This is secretly the
+                # same test as the symmetry test, but perhaps there are
+                # creative ways to break the code to break one test but not
+                # the other.
+                G_swapped = self.ds.get_G(key2, key1, taper=taper)
+                G_diff_norm = np.linalg.norm(G - G_swapped)
+                self.assertLessEqual(G_diff_norm, matrix_scale*10**-10)
+
+
+                min_diagonal = np.min(np.diagonal(G))
+                # Test that all elements of G are positive up to numerical noise
+                # with the threshold set to 10 orders of magnitude down from
+                # the smallest value on the diagonal
+                for i in range(Nfreq):
+                    for j in range(Nfreq):
+                        self.assertGreaterEqual(G[i,j], -min_diagonal*10**-10)
+            
 
 if __name__ == "__main__":
     unittest.main()

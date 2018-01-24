@@ -70,8 +70,9 @@ class PSpecData(object):
         self.dsets += dsets
         self.wgts += wgts
         
-        # Store no. frequencies
+        # Store no. frequencies and no. times
         self.Nfreqs = self.dsets[0].Nfreqs
+        self.Ntimes = self.dsets[0].Ntimes
     
     def validate_datasets(self):
         """
@@ -305,11 +306,11 @@ class PSpecData(object):
         """
 
         if R_matrix == "identity":
-            self._R = self.I
+            self.R = self.I
         elif R_matrix == "iC":
-            self._R = self._iC
+            self.R = self.iC
         else:
-            self._R = R_matrix
+            self.R = R_matrix
       
     def q_hat(self, key1, key2, use_fft=True, taper='none'):
         """
@@ -348,8 +349,8 @@ class PSpecData(object):
         #iC1x, iC2x = 0, 0
         #for _k in k1: iC1x += np.dot(icov_fn(_k), self.x(_k))
         #for _k in k2: iC2x += np.dot(icov_fn(_k), self.x(_k))
-        Rx1 = np.dot(self._R(key1), self.x(key1))
-        Rx2 = np.dot(self._R(key2), self.x(key2))
+        Rx1 = np.dot(self.R(key1), self.x(key1))
+        Rx2 = np.dot(self.R(key2), self.x(key2))
             
         # Whether to use FFT or slow direct method
         if use_fft:
@@ -364,15 +365,15 @@ class PSpecData(object):
           
             # Conjugated because inconsistent with pspec_cov_v003 otherwise
             # FIXME: Check that this should actually be conjugated
-            return np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
+            return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
                            * np.fft.fftshift(_Rx2, axes=0) )
         else:
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.Nfreqs):
                 Q = self.get_Q(i, self.Nfreqs, taper=taper)
-                RQR = np.einsum('ab,bc,cd', self._R(key1).T.conj(), Q, self._R(key2)) # R Q R
-                qi = np.sum(self.x(k1).conj()*np.dot(RQR, self.x(k2)), axis=0)
+                RQR = np.einsum('ab,bc,cd', self.R(key1).T.conj(), Q, self.R(key2)) # R Q R
+                qi = np.sum(self.x(key1).conj()*np.dot(RQR, self.x(key2)), axis=0)
                 q.append(qi)
             return 0.5 * np.array(q)
 
@@ -411,8 +412,8 @@ class PSpecData(object):
         assert isinstance(key2, tuple)
         G = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
 
-        R1 = self._R(key1)
-        R2 = self._R(key2)
+        R1 = self.R(key1)
+        R2 = self.R(key2)
         
         iR1Q, iR2Q = {}, {}
         for ch in xrange(self.Nfreqs): # this loop is nchan^3
@@ -425,7 +426,7 @@ class PSpecData(object):
                 # tr(R_2 Q_i R_1 Q_j)
                 G[i,j] += np.einsum('ij,ji', iR1Q[i], iR2Q[j])
 
-        return G / 2.
+        return G.real / 2.
 
     def get_V_gaussian(self, key1, key2):
         """
