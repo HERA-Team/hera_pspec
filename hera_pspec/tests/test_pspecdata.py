@@ -54,21 +54,25 @@ class Test_DataSet(unittest.TestCase):
         # 3) Sending in pure tones/sinusoids for x and y should give delta functions
 
     def test_get_F(self):
-        NDATA=100#must average many data sets for convergence. 
+        '''
+        This test currently failes because the analytic solutions it is comparing too do not 
+        account from bias in covariance estimates arising from finite samples. 
+        '''
+        NDATA=100#must average many data sets for convergence.
+        NCHAN=8
         dpath=os.path.join(DATA_PATH,'zen.2458042.12552.xx.HH.uvXAA')
-        print dpath
         data=uv.UVData()
         wghts=uv.UVData()
         data.read_miriad(dpath)
         wghts.read_miriad(dpath)
         #only use 8 channels
-        data.select(freq_chans=range(8))
-        wghts.select(freq_chans=range(8))
+        data.select(freq_chans=range(NCHAN))
+        wghts.select(freq_chans=range(NCHAN))
         #add times
 
 
         #set data to random white noise with a random variance and mean
-        test_mean=0.#*np.abs(np.random.randn())
+        test_mean=np.abs(np.random.randn())#*np.abs(np.random.randn())
         test_std=np.abs(np.random.randn())
         data.flag_array[:]=False#Make sure that all of the flags are set too true for analytic case.
         wghts.data_array[:]=1.
@@ -93,7 +97,7 @@ class Test_DataSet(unittest.TestCase):
                 for k in range(j):
                     pspec=pspecdata.PSpecData()
                     data.data_array=test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)\
-                    +1j*test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)
+                    +1j*test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)+(1.+1j)*test_mean
                     pspec.add([data],[wghts])
                     pair2=bllist[k]
                     k1=(0,pair1[0],pair1[1],-5)
@@ -141,7 +145,27 @@ class Test_DataSet(unittest.TestCase):
         #TODO: Need a test case for some kind of taper.
             
 
-        
+    def test_get_MW(self):
+        '''
+        Test get_MW with analytical case.
+        '''
+        test_std=np.abs(np.random.randn())
+        nchans=20
+        f_mat=np.identity(nchans).astype(complex)/test_std**4.*nchans**2.
+        pspec=pspecdata.PSpecData()
+        m,w=pspec.get_MW(f_mat,mode='F^-1')
+        #test M/W matrices are close to analytic solutions
+        #check that rows in W sum to unity. 
+        self.assertTrue(np.all(np.abs(w.sum(axis=1)-1.)<=1e-12))
+        #check that W is analytic soluton (identity)
+        self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
+        #check that M.F = W
+        self.assertTrue(np.allclose(np.dot(m,f_mat),w))
+        m,w=pspec.get_MW(f_mat,mode='F^-1/2')
+        #check W is identity
+        self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
+        self.assertTrue(np.allclose(np.dot(m,f_mat),w))
+            
 
 if __name__ == "__main__":
     unittest.main()
