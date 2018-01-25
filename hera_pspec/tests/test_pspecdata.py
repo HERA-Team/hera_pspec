@@ -185,8 +185,10 @@ class Test_DataSet(unittest.TestCase):
 
 
         #set data to random white noise with a random variance and mean
-        test_mean=0.#p.abs(np.random.randn())#*np.abs(np.random.randn())
-        test_std=1.#np.abs(np.random.randn())
+        #q_hat does not subtract a mean so I will set it to zero for
+        #the test.
+        test_mean=0.*np.abs(np.random.randn())#*np.abs(np.random.randn())
+        test_std=np.abs(np.random.randn())
 
         data.flag_array[:]=False#Make sure that all of the flags are set too true for analytic case.
         wghts.data_array[:]=1.
@@ -195,7 +197,7 @@ class Test_DataSet(unittest.TestCase):
         q_hat=np.zeros(NCHAN).astype(complex)
         q_hat_id=np.zeros_like(q_hat)
         q_hat_fft=np.zeros_like(q_hat)
-        nsamples=1
+        nsamples=0
         for datanum in range(NDATA):
             pspec=pspecdata.PSpecData()
             data.data_array=test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)\
@@ -214,16 +216,18 @@ class Test_DataSet(unittest.TestCase):
                 axis=1)
                 q_hat_fft=q_hat_fft+np.mean(pspec.q_hat(k1,k2),axis=1)
                 nsamples=nsamples+1
-
-
             del pspec
-        nfactor=test_std**2./data.Nfreqs/nsamples/data.Nbls
+
+
+
+        #print nsamples
+        nfactor=test_std**2./data.Nfreqs/nsamples
         q_hat=q_hat*nfactor
         q_hat_id=q_hat_id*nfactor/test_std**4.
         q_hat_fft=q_hat_fft*nfactor
-        print q_hat
-        print q_hat_id
-        print q_hat_fft
+        #print q_hat
+        #print q_hat_id
+        #print q_hat_fft
 
         self.assertTrue(np.allclose(q_hat,
         np.identity(data.Nfreqs).astype(complex)))
