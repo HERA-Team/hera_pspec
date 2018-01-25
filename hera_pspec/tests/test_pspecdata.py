@@ -132,14 +132,14 @@ class Test_DataSet(unittest.TestCase):
         plt.show()
         '''
         self.assertTrue(np.allclose(f_mat,
-                        np.identity(pspec.dsets[0].Nfreqs).astype(complex),
-                        rtol=2./pspec.dsets[0].Ntimes,
-                        atol=test_std*2./pspec.dsets[0].Ntimes))
+                        np.identity(data.Nfreqs).astype(complex),
+                        rtol=2./data.Ntimes,
+                        atol=test_std*2./data.Ntimes))
         #test for true fisher
         self.assertTrue(np.allclose(f_mat_true,
-                                    np.identity(pspec.dsets[0].Nfreqs).astype(complex),
-                                    rtol=2./pspec.dsets[0].Ntimes,
-                                    atol=test_std*2./pspec.dsets[0].Ntimes))
+                                    np.identity(data.Nfreqs).astype(complex),
+                                    rtol=2./data.Ntimes,
+                                    atol=test_std*2./data.Ntimes))
 
 
         #TODO: Need a test case for some kind of taper.
@@ -165,6 +165,8 @@ class Test_DataSet(unittest.TestCase):
         #check W is identity
         self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
         self.assertTrue(np.allclose(np.dot(m,f_mat),w))
+        #check that L^-1 runs.
+        m,w=pspec.get_MW(f_mat,mode='L^-1')
 
     def test_q_hat(self):
         '''

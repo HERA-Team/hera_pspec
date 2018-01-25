@@ -503,13 +503,13 @@ class PSpecData(object):
             M = np.identity(F.shape[0], dtype=F.dtype)
 
         else:
-            pass
             """
             # Cholesky decomposition to get M (XXX: Needs generalizing)
             #order = np.array([10, 11, 9, 12, 8, 20, 0,
             #                  13, 7, 14, 6, 15, 5, 16,
             #                  4, 17, 3, 18, 2, 19, 1])
-            order=np.arange(F.shape[0])-np.ceil((F.shape[0]-1.)2.)
+            """
+            order=np.arange(F.shape[0])-np.ceil((F.shape[0]-1.)/2.)
             order[order<0]=order[order<0]-.1
             #negative integers have larger absolute value so they are sorted
             #after positive integers.
@@ -525,7 +525,6 @@ class PSpecData(object):
             U,S,V = np.linalg.svd(L_o.conj())
             M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
             M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
-            """
 
         # Calculate (normalized) W given Fisher matrix and choice of M
         W = np.dot(M, F)
