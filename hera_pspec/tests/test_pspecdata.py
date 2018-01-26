@@ -3,9 +3,13 @@ import nose.tools as nt
 import numpy as np
 import pyuvdata as uv
 import os
+import copy
 import sys
-from hera_pspec.data import DATA_PATH
 from hera_pspec import pspecdata
+from hera_pspec import oqe
+from hera_pspec.data import DATA_PATH
+import pyuvdata as uv
+import pylab as plt
 
 def generate_pos_def(n):
     """
@@ -83,7 +87,7 @@ class Test_DataSet(unittest.TestCase):
         pass
 
     def test_init(self):
-        
+
         # Test creating empty DataSet
         ds = pspecdata.PSpecData()
         #self.assertAlmostEqual(C.H0, 25.5)
