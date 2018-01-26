@@ -1,6 +1,7 @@
 import unittest
 import nose.tools as nt
 import numpy as np
+import pyuvdata as uv
 import os
 import copy
 import sys
@@ -10,6 +11,68 @@ from hera_pspec.data import DATA_PATH
 import pyuvdata as uv
 import pylab as plt
 
+def generate_pos_def(n):
+    """
+    Generate a random positive definite Hermitian matrix.
+    
+    Parameters
+    ----------
+    n : integer
+        Size of desired matrix
+
+    Returns
+    -------
+    A : array_like
+        Positive definite matrix
+    """
+    A = np.random.normal(size=(n,n)) + 1j * np.random.normal(size=(n,n))
+    A += np.conjugate(A).T
+    # Add just enough of an identity matrix to make all eigenvalues positive
+    A += -1.01*np.min(np.linalg.eigvalsh(A))*np.identity(n) 
+    return A
+
+def generate_pos_def_all_pos(n):
+    """
+    Generate a random positive definite symmetric matrix, with all entries positive.
+    
+    Parameters
+    ----------
+    n : integer
+        Size of desired matrix
+
+    Returns
+    -------
+    A : array_like
+        Positive definite matrix
+    """
+    A = np.random.uniform(size=(n,n))
+    A += A.T
+    # Add just enough of an identity matrix to make all eigenvalues positive
+    A += -1.01*np.min(np.linalg.eigvalsh(A))*np.identity(n) 
+    return A
+
+def diagonal_or_not(mat,places=7):
+    """
+    Tests whether a matrix is diagonal or not
+    
+    Parameters
+    ----------
+    n : array_like
+        Matrix to be tested
+
+    Returns
+    -------
+    diag : bool
+        True if matrix is diagonal
+    """
+
+    mat_norm = np.linalg.norm(mat)
+    diag_mat_norm = np.linalg.norm(np.diag(np.diag(mat)))
+    diag = (round(mat_norm-diag_mat_norm, places) == 0)
+    return diag
+
+taper_selection = ['blackman'] #,'blackman-harris','gaussian0.4','kaiser2',\
+                            #'kaiser3','hamming','hanning','parzen']
 
 class Test_DataSet(unittest.TestCase):
 
@@ -39,7 +102,7 @@ class Test_DataSet(unittest.TestCase):
         y_vect = np.random.normal(size=vect_length) + 1j * np.random.normal(size=vect_length)
 
         for i in range(vect_length):
-            Q_matrix = oqe.get_Q(i, vect_length)
+            Q_matrix = self.ds.get_Q(i, vect_length)
             xQy = np.dot(np.conjugate(x_vect),np.dot(Q_matrix,y_vect))
             yQx = np.dot(np.conjugate(y_vect),np.dot(Q_matrix,x_vect))
             xQx = np.dot(np.conjugate(x_vect),np.dot(Q_matrix,x_vect))
@@ -48,200 +111,122 @@ class Test_DataSet(unittest.TestCase):
             self.assertAlmostEqual(np.imag(xQx), 0.) # x^t Q x should be real
 
         x_vect = np.ones(vect_length)
-        Q_matrix = oqe.get_Q(0, vect_length)
+        Q_matrix = self.ds.get_Q(vect_length/2, vect_length)
         xQx = np.dot(np.conjugate(x_vect),np.dot(Q_matrix,x_vect))
-        self.assertAlmostEqual(xQx,1.)
+        self.assertAlmostEqual(xQx,abs(vect_length**2))
         # 3) Sending in pure tones/sinusoids for x and y should give delta functions
 
-    def test_get_F(self):
-        '''
-        This test currently failes because the analytic solutions it is comparing too do not
-        account from bias in covariance estimates arising from finite samples.
-        '''
-        NDATA=100#must average many data sets for convergence.
-        NCHAN=8
-        dpath=os.path.join(DATA_PATH,'zen.2458042.12552.xx.HH.uvXAA')
-        data=uv.UVData()
-        wghts=uv.UVData()
-        data.read_miriad(dpath)
-        wghts.read_miriad(dpath)
-        #only use 8 channels
-        data.select(freq_chans=range(NCHAN))
-        wghts.select(freq_chans=range(NCHAN))
-        #add times
-
-
-        #set data to random white noise with a random variance and mean
-        test_mean=np.abs(np.random.randn())#*np.abs(np.random.randn())
-        test_std=np.abs(np.random.randn())
-        data.flag_array[:]=False#Make sure that all of the flags are set too true for analytic case.
-        wghts.data_array[:]=1.
-        wghts.flag_array[:]=False
-        #pspec=pspecdata.PSpecData()
-        #pspec.add([data],
-        #          [wghts])#create pspec data set from data.
-
-        #for data in pspec.dsets:
-        bllist=data.get_antpairs()
-        f_mat=np.zeros((data.Nfreqs,data.Nfreqs),dtype=complex)
-        f_mat_true=np.zeros((data.Nfreqs,data.Nfreqs),dtype=complex)
-        nsamples=0
-        icvals=[]
-        icvals_true=[]
-        cvals=[]
-        cvals_true=[]
-        for datanum in range(NDATA):
-            for j in range(1,data.Nbls):
-                #get baseline index
-                pair1=bllist[j]
-                for k in range(j):
-                    pspec=pspecdata.PSpecData()
-                    data.data_array=test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)\
-                    +1j*test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)+(1.+1j)*test_mean
-                    pspec.add([data],[wghts])
-                    pair2=bllist[k]
-                    k1=(0,pair1[0],pair1[1],-5)
-                    k2=(0,pair2[0],pair2[1],-5)
-                    icvals=icvals+list(pspec.iC(k1).diagonal()*test_std**2.)
-                    icvals_true=icvals_true+list(pspec.iC(k2).diagonal()*test_std**2.)
-                    cvals=cvals+list(pspec.C(k1).diagonal()/test_std**2.)
-                    cvals_true=cvals_true+list(pspec.C(k2).diagonal()/test_std**2.)
-                    f_mat_true=f_mat_true+pspec.get_F(k1,k2,true_fisher=True)
-                    f_mat=f_mat+pspec.get_F(k1,k2)
-                    nsamples=nsamples+1
-                    #test identity
-                    self.assertTrue(np.allclose(pspec.get_F(k1,k2,use_identity=True)/data.Nfreqs**2.,
-                                    np.identity(data.Nfreqs).astype(complex)))
-                    del pspec
-
-        f_mat=f_mat/nsamples/data.Nfreqs**2.*test_std**4.
-        f_mat_true=f_mat_true/nsamples/data.Nfreqs**2.*test_std**4.
-        '''
-        #make diagnostic histograms for testing purposes
-        print f_mat.diagonal()
-        print f_mat_true.diagonal()
-        plt.pcolor(f_mat.astype(float))
-        plt.colorbar()
-        plt.show()
-
-        plt.figure()
-        plt.hist(np.abs(np.array(icvals))**2.,100)
-        plt.show()
-        plt.figure()
-        plt.hist(1./np.abs(np.array(cvals))**2.,100)
-        plt.show()
-        '''
-        self.assertTrue(np.allclose(f_mat,
-                        np.identity(data.Nfreqs).astype(complex),
-                        rtol=2./data.Ntimes,
-                        atol=test_std*2./data.Ntimes))
-        #test for true fisher
-        self.assertTrue(np.allclose(f_mat_true,
-                                    np.identity(data.Nfreqs).astype(complex),
-                                    rtol=2./data.Ntimes,
-                                    atol=test_std*2./data.Ntimes))
-
-
-        #TODO: Need a test case for some kind of taper.
-
-
     def test_get_MW(self):
-        '''
-        Test get_MW with analytical case.
-        '''
-        test_std=np.abs(np.random.randn())
-        nchans=20
-        f_mat=np.identity(nchans).astype(complex)/test_std**4.*nchans**2.
-        pspec=pspecdata.PSpecData()
-        m,w=pspec.get_MW(f_mat,mode='F^-1')
-        #test M/W matrices are close to analytic solutions
-        #check that rows in W sum to unity.
-        self.assertTrue(np.all(np.abs(w.sum(axis=1)-1.)<=1e-12))
-        #check that W is analytic soluton (identity)
-        self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
-        #check that M.F = W
-        self.assertTrue(np.allclose(np.dot(m,f_mat),w))
-        m,w=pspec.get_MW(f_mat,mode='F^-1/2')
-        #check W is identity
-        self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
-        self.assertTrue(np.allclose(np.dot(m,f_mat),w))
-        #check that L^-1 runs.
-        m,w=pspec.get_MW(f_mat,mode='L^-1')
+        n = 17
+        random_G = generate_pos_def_all_pos(n)
+
+        nt.assert_raises(AssertionError, self.ds.get_MW, random_G, mode='L^3')
+
+        for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
+            M, W = self.ds.get_MW(random_G, mode=mode)
+            self.assertEqual(M.shape,(n,n))
+            self.assertEqual(W.shape,(n,n))
+            test_norm = np.sum(W, axis=1)
+            for norm in test_norm:
+                self.assertAlmostEqual(norm, 1.)
+
+            if mode == 'G^-1':
+                # Test that the window functions are delta functions
+                self.assertEqual(diagonal_or_not(W),True)
+            elif mode == 'G^-1/2':
+                # Test that the error covariance is diagonal
+                error_covariance = np.dot(M, np.dot(random_G, M.T)) # FIXME: We should be decorrelating V, not G. See Issue 21
+                self.assertEqual(diagonal_or_not(error_covariance),True)
+            elif mode == 'I':
+                # Test that the norm matrix is diagonal
+                self.assertEqual(diagonal_or_not(M),True)
 
     def test_q_hat(self):
-        '''
-        This test currently failes because the analytic solutions it is comparing too do not
-        account from bias in covariance estimates arising from finite samples.
-        '''
-        NDATA=1000#must average many data sets for convergence.
-        NCHAN=8
-        dpath=os.path.join(DATA_PATH,'zen.2458042.12552.xx.HH.uvXAA')
-        data=uv.UVData()
-        wghts=uv.UVData()
-        data.read_miriad(dpath)
-        wghts.read_miriad(dpath)
-        #only use 8 channels
-        data.select(freq_chans=range(NCHAN))
-        wghts.select(freq_chans=range(NCHAN))
-        #add times
+        dfiles = [
+            'tests/zen.2458042.12552.xx.HH.uvXAA',
+            'tests/zen.2458042.12552.xx.HH.uvXAA'
+        ]
+        d = []
+        for dfile in dfiles:
+            _d = uv.UVData()
+            _d.read_miriad(dfile)
+            d.append(_d)
+        w = [None for _d in dfiles]
+        self.ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        Nfreq = self.ds.Nfreqs
+        Ntime = self.ds.Ntimes
+
+        for input_data_weight in ['identity', 'iC']:
+            for taper in taper_selection:
+
+                self.ds.set_R(input_data_weight)
+                key1 = (0, 24, 38)
+                key2 = (1, 25, 38)
+
+                q_hat_a = self.ds.q_hat(key1, key2)
+                self.assertEqual(q_hat_a.shape,(Nfreq,Ntime)) # Test shape
+                q_hat_b = self.ds.q_hat(key2, key1)
+                q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
+
+                # Check that swapping x_1 and x_2 results in just a complex conjugation
+                for i in range(Nfreq):
+                    for j in range(Ntime):
+                        self.assertAlmostEqual(q_hat_diff[i,j].real,q_hat_diff[i,j].real)
+                        self.assertAlmostEqual(q_hat_diff[i,j].imag,q_hat_diff[i,j].imag)
+
+                # Check that the slow method is the same as the FFT method
+                q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False)
+                vector_scale = np.min([np.min(abs(q_hat_a_slow.real)),np.min(abs(q_hat_a_slow.imag))])
+                for i in range(Nfreq):
+                    for j in range(Ntime):
+                        self.assertLessEqual(abs((q_hat_a[i,j]-q_hat_a_slow[i,j]).real),vector_scale*10**-6)
+                        self.assertLessEqual(abs((q_hat_a[i,j]-q_hat_a_slow[i,j]).imag),vector_scale*10**-6)
 
 
-        #set data to random white noise with a random variance and mean
-        #q_hat does not subtract a mean so I will set it to zero for
-        #the test.
-        test_mean=0.*np.abs(np.random.randn())#*np.abs(np.random.randn())
-        test_std=np.abs(np.random.randn())
+    def test_get_G(self):
+        dfiles = [
+            'tests/zen.2458042.12552.xx.HH.uvXAA',
+            'tests/zen.2458042.12552.xx.HH.uvXAA'
+        ]
+        d = []
+        for dfile in dfiles:
+            _d = uv.UVData()
+            _d.read_miriad(dfile)
+            d.append(_d)
+        w = [None for _d in dfiles]
+        self.ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        Nfreq = self.ds.Nfreqs
 
-        data.flag_array[:]=False#Make sure that all of the flags are set too true for analytic case.
-        wghts.data_array[:]=1.
-        wghts.flag_array[:]=False
-        bllist=data.get_antpairs()
-        q_hat=np.zeros(NCHAN).astype(complex)
-        q_hat_id=np.zeros_like(q_hat)
-        q_hat_fft=np.zeros_like(q_hat)
-        nsamples=0
-        for datanum in range(NDATA):
-            pspec=pspecdata.PSpecData()
-            data.data_array=test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)\
-            +1j*test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)+(1.+1j)*test_mean
-            pspec.add([data],[wghts])
-            for j in range(data.Nbls):
-                #get baseline index
-                pair1=bllist[j]
-                k1=(0,pair1[0],pair1[1],-5)
-                k2=(0,pair1[0],pair1[1],-5)
-                #get q
-                #test identity
-                q_hat=q_hat+np.mean(pspec.q_hat(k1,k2,use_fft=False),
-                axis=1)
-                q_hat_id=q_hat_id+np.mean(pspec.q_hat(k1,k2,use_identity=True),
-                axis=1)
-                q_hat_fft=q_hat_fft+np.mean(pspec.q_hat(k1,k2),axis=1)
-                nsamples=nsamples+1
-            del pspec
+        for input_data_weight in ['identity','iC']:
+            for taper in taper_selection:
+                self.ds.set_R(input_data_weight)
+                key1 = (0, 24, 38)
+                key2 = (1, 25, 38)
 
+                G = self.ds.get_G(key1, key2, taper=taper)
+                self.assertEqual(G.shape,(Nfreq,Nfreq)) # Test shape
+                matrix_scale = np.min([np.min(abs(G)),np.min(abs(np.linalg.eigvalsh(G)))])
+                anti_sym_norm = np.linalg.norm(G - G.T)
+                self.assertLessEqual(anti_sym_norm, matrix_scale*10**-10) # Test symmetry
 
-
-        #print nsamples
-        nfactor=test_std**2./data.Nfreqs/nsamples
-        q_hat=q_hat*nfactor
-        q_hat_id=q_hat_id*nfactor/test_std**4.
-        q_hat_fft=q_hat_fft*nfactor
-        #print q_hat
-        #print q_hat_id
-        #print q_hat_fft
-
-        self.assertTrue(np.allclose(q_hat,
-        np.identity(data.Nfreqs).astype(complex)))
-        self.assertTrue(np.allclose(q_hat_id,
-        np.identity(data.Nfreqs).astype(complex)))
-        self.assertTrue(np.allclose(q_hat_fft,
-        np.identity(data.Nfreqs).astype(complex)))
+                # Test cyclic property of trace, where key1 and key2 can be
+                # swapped without changing the matrix. This is secretly the
+                # same test as the symmetry test, but perhaps there are
+                # creative ways to break the code to break one test but not
+                # the other.
+                G_swapped = self.ds.get_G(key2, key1, taper=taper)
+                G_diff_norm = np.linalg.norm(G - G_swapped)
+                self.assertLessEqual(G_diff_norm, matrix_scale*10**-10)
 
 
-
-
-
+                min_diagonal = np.min(np.diagonal(G))
+                # Test that all elements of G are positive up to numerical noise
+                # with the threshold set to 10 orders of magnitude down from
+                # the smallest value on the diagonal
+                for i in range(Nfreq):
+                    for j in range(Nfreq):
+                        self.assertGreaterEqual(G[i,j], -min_diagonal*10**-10)
+            
 
 if __name__ == "__main__":
     unittest.main()
