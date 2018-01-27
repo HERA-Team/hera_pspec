@@ -143,8 +143,8 @@ class Test_DataSet(unittest.TestCase):
 
     def test_q_hat(self):
         dfiles = [
-            'tests/zen.2458042.12552.xx.HH.uvXAA',
-            'tests/zen.2458042.12552.xx.HH.uvXAA'
+            'data/zen.2458042.12552.xx.HH.uvXAA',
+            'data/zen.2458042.12552.xx.HH.uvXAA'
         ]
         d = []
         for dfile in dfiles:
@@ -185,8 +185,8 @@ class Test_DataSet(unittest.TestCase):
 
     def test_get_G(self):
         dfiles = [
-            'tests/zen.2458042.12552.xx.HH.uvXAA',
-            'tests/zen.2458042.12552.xx.HH.uvXAA'
+            'data/zen.2458042.12552.xx.HH.uvXAA',
+            'data/zen.2458042.12552.xx.HH.uvXAA'
         ]
         d = []
         for dfile in dfiles:
