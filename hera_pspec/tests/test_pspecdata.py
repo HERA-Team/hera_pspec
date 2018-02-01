@@ -87,10 +87,8 @@ class Test_DataSet(unittest.TestCase):
         pass
 
     def test_init(self):
-
         # Test creating empty DataSet
         ds = pspecdata.PSpecData()
-        #self.assertAlmostEqual(C.H0, 25.5)
         pass
 
     def test_add_data(self):
@@ -226,7 +224,30 @@ class Test_DataSet(unittest.TestCase):
                 for i in range(Nfreq):
                     for j in range(Nfreq):
                         self.assertGreaterEqual(G[i,j], -min_diagonal*10**-10)
-            
+
+    def test_scalar(self):
+        dfiles = [
+            'data/zen.2458042.12552.xx.HH.uvXAA',
+            'data/zen.2458042.12552.xx.HH.uvXAA'
+        ]
+        beamfile = 'data/NF_HERA_Beams.beamfits'
+        d = []
+        for dfile in dfiles:
+            _d = uv.UVData()
+            _d.read_miriad(dfile)
+            d.append(_d)
+        w = [None for _d in dfiles]
+        self.ds = pspecdata.PSpecData(dsets=d, wgts=w,beam=beamfile)
+
+        scalar = self.ds.scalar()
+        scalar_double_steps = self.ds.scalar(num_steps=20000) # convergence of integral
+        scalar /= 10**9 # assertAlmostEqual does absolute comparisons, so we want to put things on a sensible scale
+        scalar_double_steps /= 10**9
+
+        self.assertAlmostEqual(scalar,scalar_double_steps)
+
+        
+        self.assertAlmostEqual(scalar,3713166143.88 / 10**9) 
 
 if __name__ == "__main__":
     unittest.main()

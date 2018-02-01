@@ -1,12 +1,16 @@
-import numpy as np
+import numpy as np, healpy as hp
 import aipy
 import pyuvdata
+from sklearn.gaussian_process import GaussianProcessRegressor
+from scipy import integrate
 from .utils import hash, cov
-#from utils import hash, cov
+import conversions
+
+conversion = conversions.Cosmo_Conversions()
 
 class PSpecData(object):
 
-    def __init__(self, dsets=[], wgts=[]):
+    def __init__(self, dsets=[], wgts=[], beam=None):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -20,14 +24,31 @@ class PSpecData(object):
         wgts : List of UVData objects, optional
             List of UVData objects containing weights for the input data.
             Default: Empty list.
+
+        beam : str, optional
+            Path to primary beam file, assumed to be in pyuvdata's UVBeam
+            format. If None, then the pspec are computed without the
+            conversion from "telescope units" to cosmological units.
+            Default: None.
+            Example: beam='data/NF_HERA_Beams.beamfits'
         """
         self.clear_cov_cache() # Covariance matrix cache
         self.dsets = []; self.wgts = []
-        self.Nfreqs = None
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
             self.add(dsets, wgts)
+
+        # Store a primary beam
+        if beam == None:
+            self.primary_beam = None
+        else:
+            self.primary_beam = pyuvdata.UVBeam()
+            self.primary_beam.read_beamfits(beam)
+            self.beam_model_npols = self.primary_beam.data_array.shape[-3]
+            self.beam_model_nfreqs = self.primary_beam.data_array.shape[-2]
+            self.beam_model_npix = self.primary_beam.data_array.shape[-1]
+            self.beam_freqs = self.primary_beam.freq_array
 
     def add(self, dsets, wgts):
         """
@@ -73,6 +94,9 @@ class PSpecData(object):
         # Store no. frequencies and no. times
         self.Nfreqs = self.dsets[0].Nfreqs
         self.Ntimes = self.dsets[0].Ntimes
+
+        # Store the actual frequencies
+        self.freqs = self.dsets[0].freq_array[0]
         
     def validate_datasets(self):
         """
@@ -606,8 +630,79 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
+    def scalar(self, taper='none', little_h=True, num_steps=10000):
+        """
+        Computes the scalar function to convert a power spectrum estimate
+        in "telescope units" to cosmological units
+
+        See arxiv:1304.4991 and HERA memo #27 for details.
+
+        Currently this is only for Stokes I.
+
+        Parameters
+        ----------
+        taper : str, optional
+                Whether a tapering function (e.g. Blackman-Harris) is being
+                used in the power spectrum estimation.
+                Default 
+
+        little_h : boolean, options
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+
+        Returns
+        -------
+        scalar: float
+                [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
+                in h^-3 Mpc^3 or Mpc^3.
+        """
+
+        # Get \Omega_p = \int dOmega beam and \Omega_pp = \int dOmega beam**2
+        power_beam = np.zeros((self.beam_model_nfreqs,self.beam_model_npix))
+        power_beam_Cl = []
+        power_beam_int = np.zeros(self.beam_model_nfreqs)
+        for i in range(self.beam_model_nfreqs):
+            # FIXME: Should the line below (the sum over polarization) be a sum
+            # or an average?
+            power_beam[i] = np.sum(self.primary_beam.data_array[0,0,:,i], axis=0)
+            power_beam_int[i] = np.sum(power_beam[i]) # Integral of power beam
+            power_beam_Cl.append(hp.anafast(power_beam[i])) # Angular power spectra
+        power_beam_int *= 4.*np.pi / self.beam_model_npix
+        two_ell_plus_one = 2 * np.arange(3*int(np.sqrt(self.beam_model_npix/12))) + 1
+        sq_beam_integral = np.einsum('i,ji', two_ell_plus_one, power_beam_Cl)
+
+        lower_freq = self.freqs[0]
+        upper_freq = self.freqs[-1]
+        integration_freqs = np.linspace(lower_freq,upper_freq,num_steps)
+        integration_freqs_MHz = integration_freqs / 10**6 # The GP fitting below is more stable in MHz
+        redshifts = conversion.f2z(integration_freqs).flatten()
+        X2Y = np.array(map(conversion.X2Y,redshifts))
+
+        # Use a Gaussian Process to interpolate the frequency-dependent quantities
+        # derived from the beam model to the same frequency grid as the power spectrum
+        # estimation
+        beam_model_freqs_MHz = self.beam_freqs.T/(1.*10**6)
+        gp = GaussianProcessRegressor()
+        gp.fit(beam_model_freqs_MHz, sq_beam_integral/power_beam_int**2)
+        dOpp_over_Op2 = gp.predict(np.atleast_2d(integration_freqs_MHz).T)
+
+        # Get B_pp = \int dnu taper^2 and Bp = \int dnu
+        if taper == 'none':
+            dBpp_over_BpSq = np.ones_like(integration_freqs)
+        else:
+            dBpp_over_BpSq = aipy.dsp.gen_window(self.Nfreqs,'blackman-harris')**2
+        dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
+
+        d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 /  X2Y
+
+        scalar = 1 / integrate.trapz(d_inv_scalar, integration_freqs)
+        if little_h == True:
+            scalar *= conversion.h**3
+
+        return scalar
+
     def pspec(self, bls, input_data_weight='identity', norm='I', 
-              taper='none', verbose=False):
+              taper='none', little_h=True, verbose=False):
         """
         Estimate the power spectrum from the datasets contained in this object,
         using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
@@ -630,6 +725,10 @@ class PSpecData(object):
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
 
+        little_h : boolean, options
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+
         verbose : bool, optional
             If True, print progress/debugging information.
 
@@ -648,6 +747,11 @@ class PSpecData(object):
 
         # Validate the input data to make sure it's sensible
         self.validate_datasets()
+
+        # Compute the scalar to convert from "telescope units" to "cosmo units"
+        # once and for all
+        if self.primary_beam != None:
+            scalar = self.scalar(taper=taper, little_h=True)
 
         pvs = []; pairs = []
         # Loop over pairs of datasets
@@ -679,6 +783,10 @@ class PSpecData(object):
                     if verbose: print("  Normalizing power spectrum...")
                     Mv, Wv = self.get_MW(Gv, mode=norm)
                     pv = self.p_hat(Mv, qv)
+
+                    # Multiply by scalar
+                    if verbose: print("  Computing and multiplying scalar...")
+                    pv *= scalar
 
                     # Save power spectra and dataset/baseline pairs
                     pvs.append(pv)
