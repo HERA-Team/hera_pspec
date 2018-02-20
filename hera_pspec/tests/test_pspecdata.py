@@ -11,6 +11,9 @@ from hera_pspec.data import DATA_PATH
 import pyuvdata as uv
 import pylab as plt
 
+# Get absolute path to data directory
+DATADIR = os.path.dirname( os.path.realpath(__file__) ) + "/../data/"
+
 def generate_pos_def(n):
     """
     Generate a random positive definite Hermitian matrix.
@@ -141,13 +144,13 @@ class Test_DataSet(unittest.TestCase):
 
     def test_q_hat(self):
         dfiles = [
-            'data/zen.2458042.12552.xx.HH.uvXAA',
-            'data/zen.2458042.12552.xx.HH.uvXAA'
+            'zen.2458042.12552.xx.HH.uvXAA',
+            'zen.2458042.12552.xx.HH.uvXAA'
         ]
         d = []
         for dfile in dfiles:
             _d = uv.UVData()
-            _d.read_miriad(dfile)
+            _d.read_miriad(DATADIR + dfile)
             d.append(_d)
         w = [None for _d in dfiles]
         self.ds = pspecdata.PSpecData(dsets=d, wgts=w)
@@ -183,13 +186,13 @@ class Test_DataSet(unittest.TestCase):
 
     def test_get_G(self):
         dfiles = [
-            'data/zen.2458042.12552.xx.HH.uvXAA',
-            'data/zen.2458042.12552.xx.HH.uvXAA'
+            'zen.2458042.12552.xx.HH.uvXAA',
+            'zen.2458042.12552.xx.HH.uvXAA'
         ]
         d = []
         for dfile in dfiles:
             _d = uv.UVData()
-            _d.read_miriad(dfile)
+            _d.read_miriad(DATADIR + dfile)
             d.append(_d)
         w = [None for _d in dfiles]
         self.ds = pspecdata.PSpecData(dsets=d, wgts=w)
