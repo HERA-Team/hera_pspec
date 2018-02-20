@@ -230,17 +230,17 @@ class Test_DataSet(unittest.TestCase):
 
     def test_scalar(self):
         dfiles = [
-            'data/zen.2458042.12552.xx.HH.uvXAA',
-            'data/zen.2458042.12552.xx.HH.uvXAA'
+            'zen.2458042.12552.xx.HH.uvXAA',
+            'zen.2458042.12552.xx.HH.uvXAA'
         ]
-        beamfile = 'data/NF_HERA_Beams.beamfits'
+        beamfile = DATADIR + 'NF_HERA_Beams.beamfits'
         d = []
         for dfile in dfiles:
             _d = uv.UVData()
-            _d.read_miriad(dfile)
+            _d.read_miriad(DATADIR + dfile)
             d.append(_d)
         w = [None for _d in dfiles]
-        self.ds = pspecdata.PSpecData(dsets=d, wgts=w,beam=beamfile)
+        self.ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=beamfile)
 
         scalar = self.ds.scalar()
         scalar_double_steps = self.ds.scalar(num_steps=20000) # convergence of integral
