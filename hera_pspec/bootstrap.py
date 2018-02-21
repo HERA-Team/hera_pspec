@@ -1,4 +1,5 @@
 import random
+import copy
 
 def fold_kparallel(pspec_list):
     """
@@ -44,7 +45,8 @@ def collapse_over_lsts(pspec_list):
     NotImplementedError()
 
 
-def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False):
+def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False, 
+                    seed=None):
     """
     Group baselines together into equal-sized sets.
     
@@ -63,13 +65,17 @@ def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False):
     
     keep_remainder : bool, optional
         Whether to keep remainder baselines that don't fit exactly into the 
-        number of specified groups. If True, a group containing the remainder 
-        baselines is appended to the output list. Otherwise, the remainder 
+        number of specified groups. If True, the remainder baselines are 
+        appended to the last group in the output list. Otherwise, the remainder 
         baselines are discarded. Default: False.
     
     randomize : bool, optional
         Whether baselines should be added to groups in the order they appear in 
         'bls', or if they should be assigned at random. Default: False.
+    
+    seed : int, optional
+        Random seed to use if randomize=True. If None, no random seed will be 
+        set. Default: None.
     
     Returns
     -------
@@ -78,24 +84,27 @@ def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False):
     """
     Nbls = len(bls) # Total baselines
     n = Nbls / Ngroups # Baselines per group
-    rem = Nbls % n
+    rem = Nbls - n*Ngroups
+    
+    # Sanity check on number of groups
+    if Nbls < Ngroups: raise ValueError("Can't have more groups than baselines.")
     
     # Make sure only tuples were provided (can't have groups of groups)
     for bl in bls: assert isinstance(bl, tuple)
     
-    grouped_bls = []
+    # Randomize baseline order if requested
     if randomize:
-        # Randomly select members of each group
-        for i in range(Ngroups): grouped_bls.append( random.sample(bls, n) )
-        if keep_remainder and rem > 0: grouped_bls.append(bls)
-    else:
-        # Assign to groups sequentially
-        for i in range(Ngroups): grouped_bls.append(bls[i*n:(i+1)*n])
-        if keep_remainder and rem > 0: grouped_bls.append(bls[-rem:])
+        if seed is not None: random.seed(seed)
+        bls = copy.deepcopy(bls)
+        random.shuffle(bls)
+    
+    # Assign to groups sequentially
+    grouped_bls = [bls[i*n:(i+1)*n] for i in range(Ngroups)]
+    if keep_remainder and rem > 0: grouped_bls[-1] += bls[-rem:]
     return grouped_bls
 
 
-def sample_baselines(bls):
+def sample_baselines(bls, seed=None):
     """
     Sample a set of baselines with replacement (to be used to generate a 
     bootstrap sample).
@@ -108,12 +117,18 @@ def sample_baselines(bls):
         single object by the sampler; its members will not be sampled 
         separately.
     
+    seed : int, optional
+        Random seed to use if randomize=True. If None, no random seed will be 
+        set. Default: None.
+    
     Returns
     -------
     sampled_bls : list of tuples or lists of tuples
         Bootstrap-sampled set of baselines (will include multiple instances of 
         some baselines).
     """
+    if seed is not None: random.seed(seed)
+    
     # Sample with replacement; return as many baselines/groups as were input
     return [random.choice(bls) for i in range(len(bls))]
     
