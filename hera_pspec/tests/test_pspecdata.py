@@ -84,7 +84,7 @@ def diagonal_or_not(mat,places=7):
     diag = (round(mat_norm-diag_mat_norm, places) == 0)
     return diag
 
-class Test_DataSet(unittest.TestCase):
+class Test_PSpecData(unittest.TestCase):
 
     def setUp(self):
         
