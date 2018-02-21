@@ -24,6 +24,9 @@ class PSpecData(object):
         self.clear_cov_cache() # Covariance matrix cache
         self.dsets = []; self.wgts = []
         self.Nfreqs = None
+        
+        # Set R to identity by default
+        self.R = self.I
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
@@ -129,7 +132,6 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         assert isinstance(key, tuple)
-
         dset = key[0]; bl = key[1:]
         return self.dsets[dset].get_data(bl).T # FIXME: Transpose?
 
@@ -292,7 +294,7 @@ class PSpecData(object):
             self.iC().
         """
         for k in d: self._iC[k] = d[k]
-
+    
     def set_R(self, R_matrix):
         """
         Set the weighting matrix R for later use in q_hat.
