@@ -8,7 +8,6 @@ import sys
 from hera_pspec import pspecdata
 from hera_pspec import oqe
 from hera_pspec.data import DATA_PATH
-import pyuvdata as uv
 import pylab as plt
 
 # Get absolute path to data directory
@@ -109,9 +108,26 @@ class Test_PSpecData(unittest.TestCase):
         pass
 
     def test_init(self):
-        # Test creating empty DataSet
+        # Test creating empty PSpecData
         ds = pspecdata.PSpecData()
-        pass
+        
+        # Test whether unequal no. of weights is picked up
+        self.assertRaises( AssertionError, 
+                           pspecdata.PSpecData, 
+                           [uv.UVData(), uv.UVData(), uv.UVData()], 
+                           [uv.UVData(), uv.UVData()] )
+        
+        # Test passing data and weights of the wrong type
+        d_arr = np.ones((6, 8))
+        d_lst = [[0,1,2] for i in range(5)]
+        d_float = 12.
+        d_dict = {'(0,1)':np.arange(5), '(0,2)':np.arange(5)}
+        
+        self.assertRaises(TypeError, pspecdata.PSpecData, d_arr, d_arr)
+        self.assertRaises(TypeError, pspecdata.PSpecData, d_lst, d_lst)
+        self.assertRaises(TypeError, pspecdata.PSpecData, d_float, d_float)
+        self.assertRaises(TypeError, pspecdata.PSpecData, d_dict, d_dict)
+        
 
     def test_add_data(self):
         pass
