@@ -117,15 +117,31 @@ if __name__ == '__main__':
     pI_new, p_new = run_new_oqe(fname, _key1, _key2, freqrange)
     print("New:", p_new.shape)
     
+    # Calculate fractional difference of means (averaged over LST)
+    frac_I = np.mean(pI_new, axis=1).real / np.mean(pI_old, axis=1).real - 1.
+    frac_iC = np.mean(p_new, axis=1).real / np.mean(p_old, axis=1).real - 1.
+    
     # Plot results (averaging over LST bins)
-    plt.subplot(111)
+    plt.subplot(221)
     plt.plot(np.mean(pI_old, axis=1).real, 'k-', lw=1.8, label="capo (I)")
     plt.plot(np.mean(pI_new, axis=1).real, 'r--', lw=1.8, label="hera_pspec (I)")
-    
-    plt.plot(np.mean(p_old, axis=1).real, 'b-', lw=1.8, label="capo (iC)")
-    plt.plot(np.mean(p_new, axis=1).real, 'y--', lw=1.8, label="hera_pspec (iC)")
-    
     plt.legend(loc='lower right')
+    plt.ylabel(r"$\hat{p}$", fontsize=18)
+    
+    plt.subplot(222)
+    plt.plot(frac_I, 'k-', lw=1.8)
+    plt.ylabel(r"$P_{\rm pspec}/P_{\rm capo} - 1$ $(I)$", fontsize=18)
+    
+    plt.subplot(223)
+    plt.plot(np.mean(p_old, axis=1).real, 'k-', lw=1.8, label="capo (iC)")
+    plt.plot(np.mean(p_new, axis=1).real, 'r--', lw=1.8, label="hera_pspec (iC)")
+    plt.legend(loc='lower right')
+    plt.ylabel(r"$\hat{p}$", fontsize=18)
+    
+    plt.subplot(224)
+    plt.plot(frac_iC, 'k-', lw=1.8)
+    plt.ylabel(r"$P_{\rm pspec}/P_{\rm capo} - 1$ $(C^{-1})$", fontsize=18)
+    
     plt.tight_layout()
     plt.show()
     
