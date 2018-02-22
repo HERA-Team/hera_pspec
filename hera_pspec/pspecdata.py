@@ -160,7 +160,8 @@ class PSpecData(object):
         else:
             # If weights were not specified, use the flags built in to the
             # UVData dataset object
-            return self.dsets[dset].get_flags(bl).astype(float).T # FIXME: Transpose?
+            flags = self.dsets[dset].get_flags(bl).astype(float).T # FIXME: .T?
+            return 1. - flags # Flag=1 => weight=0
 
     def C(self, key):
         """
