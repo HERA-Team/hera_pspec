@@ -5,7 +5,7 @@ import pyuvdata as uv
 import os
 import copy
 import sys
-from hera_pspec import pspecdata
+from hera_pspec import pspecdata, pspecbeam
 from hera_pspec import oqe
 from hera_pspec.data import DATA_PATH
 import pyuvdata as uv
@@ -81,6 +81,9 @@ class Test_DataSet(unittest.TestCase):
 
     def setUp(self):
         self.ds = pspecdata.PSpecData()
+
+        beamfile = DATADIR + 'NF_HERA_Beams.beamfits'
+        self.bm = pspecbeam.PSpecBeamUV(beamfile)
         pass
 
     def tearDown(self):
@@ -233,24 +236,17 @@ class Test_DataSet(unittest.TestCase):
             'zen.2458042.12552.xx.HH.uvXAA',
             'zen.2458042.12552.xx.HH.uvXAA'
         ]
-        beamfile = DATADIR + 'NF_HERA_Beams.beamfits'
+
         d = []
         for dfile in dfiles:
             _d = uv.UVData()
             _d.read_miriad(DATADIR + dfile)
             d.append(_d)
         w = [None for _d in dfiles]
-        self.ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=beamfile)
+        self.ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=self.bm)
 
-        scalar = self.ds.scalar()
-        scalar_double_steps = self.ds.scalar(num_steps=20000) # convergence of integral
-        scalar /= 10**9 # assertAlmostEqual does absolute comparisons, so we want to put things on a sensible scale
-        scalar_double_steps /= 10**9
-
-        self.assertAlmostEqual(scalar,scalar_double_steps)
-
-        
-        self.assertAlmostEqual(scalar,3713166143.88 / 10**9) 
+        scalar = self.ds.scalar()       
+        self.assertAlmostEqual(scalar,3732415176.85 / 10**9) 
 
 if __name__ == "__main__":
     unittest.main()
