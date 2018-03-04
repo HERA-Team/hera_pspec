@@ -2,13 +2,11 @@ import unittest
 import nose.tools as nt
 import numpy as np
 import pyuvdata as uv
-import os
-import copy
-import sys
+import os, copy, sys
+from scipy.integrate import simps
 from hera_pspec import pspecdata
 from hera_pspec import oqe
 from hera_pspec.data import DATA_PATH
-import pylab as plt
 
 # Get absolute path to data directory
 DATADIR = os.path.dirname( os.path.realpath(__file__) ) + "/../data/"
@@ -99,7 +97,6 @@ class Test_PSpecData(unittest.TestCase):
         
         # Set trivial weights
         self.w = [None for _d in dfiles]
-        pass
 
     def tearDown(self):
         pass
@@ -188,7 +185,9 @@ class Test_PSpecData(unittest.TestCase):
                 self.assertEqual(diagonal_or_not(M), True)
 
     def test_q_hat(self):
-        
+        """
+        Test that q_hat has right shape and accepts keys in the right format.
+        """
         # Set weights and pack data into PSpecData
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.Nfreqs
@@ -247,7 +246,9 @@ class Test_PSpecData(unittest.TestCase):
                                 vector_scale*1e-6 )
 
     def test_get_G(self):
-        
+        """
+        Test Fisher/weight matrix calculation.
+        """
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.Nfreqs
 
@@ -273,9 +274,8 @@ class Test_PSpecData(unittest.TestCase):
                 G_swapped = self.ds.get_G(key2, key1, taper=taper)
                 G_diff_norm = np.linalg.norm(G - G_swapped)
                 self.assertLessEqual(G_diff_norm, matrix_scale*1e-10)
-
-
                 min_diagonal = np.min(np.diagonal(G))
+                
                 # Test that all elements of G are positive up to numerical noise
                 # with the threshold set to 10 orders of magnitude down from
                 # the smallest value on the diagonal
@@ -283,6 +283,83 @@ class Test_PSpecData(unittest.TestCase):
                     for j in range(Nfreq):
                         self.assertGreaterEqual(G[i,j], -min_diagonal*1e-10)
             
+    def test_parseval(self):
+        """
+        Test that output power spectrum respects Parseval's theorem.
+        """
+        np.random.seed(10)
+        variance_in = 1.
+        Nfreq = self.d[0].Nfreqs
+        data = self.d[0]
+
+        # Use only the requested number of channels
+        data.select(freq_chans=range(Nfreq), ant_pairs_nums=[(24,24),])
+
+        # Make it so that the test data is unflagged everywhere
+        data.flag_array[:] = False
+
+        # Get list of available baselines and LSTs
+        bls = data.get_antpairs()
+        nlsts = data.Ntimes
+
+        # Simulate data given a Fourier-space power spectrum
+        pk = variance_in * np.ones(Nfreq)
+
+        # Make realisation of (complex) white noise in real space
+        g = 1.0 * np.random.normal(size=(nlsts,Nfreq)) \
+          + 1.j * np.random.normal(size=(nlsts,Nfreq))
+        g /= np.sqrt(2.) # Since Re(C) = Im(C) = C/2
+        x = data.freq_array[0]
+        dx = x[1] - x[0]
+
+        # Fourier transform along freq. direction in each LST bin
+        gnew = np.zeros(g.shape).astype(complex)
+        fnew = np.zeros(g.shape).astype(complex)
+        for i in range(nlsts):
+            f = np.fft.fft(g[i]) * np.sqrt(pk)
+            fnew[i] = f
+            gnew[i] = np.fft.ifft(f)
+
+        # Parseval's theorem test: integral of F^2(k) dk = integral of f^2(x) dx
+        k = np.fft.fftshift( np.fft.fftfreq(Nfreq, d=(x[1]-x[0])) )
+        fsq = np.fft.fftshift( np.mean(fnew * fnew.conj(), axis=0) )
+        gsq = np.mean(gnew * gnew.conj(), axis=0)
+
+        # Realize set of Gaussian random datasets and pack into PSpecData
+        data.data_array = np.expand_dims(np.expand_dims(gnew, axis=1), axis=3)
+        ds = pspecdata.PSpecData()
+        ds.add([data, data], [None, None])
+
+        # Use true covariance instead
+        exact_cov = {
+            (0,24,24): np.eye(Nfreq),
+            (1,24,24): np.eye(Nfreq)
+        }
+        ds.set_C(exact_cov)
+        
+        # Calculate OQE power spectrum using true covariance matrix
+        tau = np.fft.fftshift( ds.delays() )
+        ps, _ = ds.pspec(bls, input_data_weight='iC', norm='I')
+        ps_avg = np.fft.fftshift( np.mean(ps[0], axis=1) )
+        
+        # Calculate integrals for Parseval's theorem
+        parseval_real = simps(gsq, x)
+        parseval_ft = dx**2. * simps(fsq, k)
+        parseval_phat = simps(ps_avg, tau)
+        
+        # Report on results for different ways of calculating Parseval integrals
+        print "Parseval's theorem:"
+        print "  \int [g(x)]^2 dx = %3.6e, %3.6e" % (parseval_real.real, 
+                                                     parseval_real.imag)
+        print "  \int [f(k)]^2 dk = %3.6e, %3.6e" % (parseval_ft.real, 
+                                                     parseval_ft.imag)
+        print "  \int p_hat(k) dk = %3.6e, %3.6e" % (parseval_phat.real, 
+                                                     parseval_phat.imag)
+        
+        # Perform approx. equality test (this is a stochastic quantity, so we 
+        # only expect equality to ~10^-2 to 10^-3
+        np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
+
 
 if __name__ == "__main__":
     unittest.main()

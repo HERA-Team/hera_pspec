@@ -369,9 +369,6 @@ class PSpecData(object):
 
             _Rx1 = np.fft.fft(Rx1.conj(), axis=0)
             _Rx2 = np.fft.fft(Rx2.conj(), axis=0)
-          
-            # Conjugated because inconsistent with pspec_cov_v003 otherwise
-            # FIXME: Check that this should actually be conjugated
             return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
                            * np.fft.fftshift(_Rx2, axes=0) )
         else:
@@ -610,12 +607,59 @@ class PSpecData(object):
             Optimal estimate of bandpower, \hat{p}.
         """
         return np.dot(M, q)
+    
+    
+    def units(self):
+        """
+        Return the units of the power spectrum. These are inferred from the 
+        units reported by the input visibilities (UVData objects).
 
+        Returns
+        -------
+        pspec_units : str
+            Units of the power spectrum that is returned by pspec().
+        
+        delay_units : str
+            Units of the delays (wavenumbers) returned by pspec().
+        """
+        # Frequency units of UVData are always Hz => always convert to ns
+        delay_units = 'ns'
+        
+        # Work out the power spectrum units
+        if len(self.dsets) == 0:
+            raise IndexError("No datasets have been added yet; cannot "
+                             "calculate power spectrum units.")
+        else:
+            pspec_units = "(%s)^2 (ns)^-1" % self.dsets[0].vis_units
+        
+        return pspec_units, delay_units
+        
+    
+    def delays(self):
+        """
+        Return an array of delays, tau, corresponding to the bins of the delay 
+        power spectrum output by pspec().
+        
+        Returns
+        -------
+        delays : array_like
+            Delays, tau. Units: ns.
+        """
+        # Calculate the delays
+        if len(self.dsets) == 0:
+            raise IndexError("No datasets have been added yet; cannot "
+                             "calculate delays.")
+        else:
+            nu = self.dsets[0].freq_array[0] # always in Hz
+            delay = np.fft.fftfreq(nu.size, d=nu[1]-nu[0])
+            return delay * 1e9 # convert to ns
+    
+    
     def pspec(self, bls, input_data_weight='identity', norm='I', 
               taper='none', verbose=False):
         """
-        Estimate the power spectrum from the datasets contained in this object,
-        using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
+        Estimate the delay power spectrum from the datasets contained in this 
+        object, using the optimal quadratic estimator from arXiv:1502.06016.
 
         Parameters
         ----------
@@ -647,9 +691,10 @@ class PSpecData(object):
         Returns
         -------
         pspec : list of np.ndarray
-            Optimal quadratic estimate of the power spectrum for the datasets
-            stored in this PSpecData and baselines specified in 'keys'.
-
+            Optimal quadratic estimate of the delay power spectrum for the 
+            datasets stored in this PSpecData and baselines specified in 
+            'keys'. Units: given by the units() method.
+        
         pairs : list of tuples
             List of the pairs of datasets and baselines that were used to
             calculate each element of the 'pspec' list.
@@ -692,9 +737,16 @@ class PSpecData(object):
                     if verbose: print("  Normalizing power spectrum...")
                     Mv, Wv = self.get_MW(Gv, mode=norm)
                     pv = self.p_hat(Mv, qv)
+                    
+                    # Apply rescaling to account for discrete -> continuous FT
+                    # convention, and convert to ns^-1 units (input freqs are 
+                    # always in Hz)
+                    dnu = self.dsets[0].freq_array[0,1] \
+                        - self.dsets[0].freq_array[0,0]
+                    pv *= (dnu * self.Nfreqs)**2. * 1e-9 # Hz -> ns^-1
 
                     # Save power spectra and dataset/baseline pairs
                     pvs.append(pv)
                     pairs.append((key1, key2))
                     
-        return np.array(pvs).real, pairs
+        return np.array(pvs), pairs
