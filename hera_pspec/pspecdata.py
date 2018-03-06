@@ -682,7 +682,7 @@ class PSpecData(object):
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
 
-        little_h : boolean, options
+        little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
 

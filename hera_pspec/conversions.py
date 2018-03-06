@@ -60,7 +60,7 @@ class Cosmo_Conversions(object):
     # astropy load attribute
     _astropy = _astropy
 
-    def __init__(self, Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=100.0,
+    def __init__(self, Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=67.27,
                  Om_M=None, Om_k=None):
         """
 

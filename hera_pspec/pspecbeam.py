@@ -2,95 +2,112 @@ import numpy as np, pyuvdata, os, conversions
 from scipy import integrate
 from scipy.interpolate import interp1d
 
-conversion = conversions.Cosmo_Conversions()
 
-class PSpecBeam(object):
+class PSpecBeamBase(object):
 
-    def __init__(self):
+    def __init__(self, cosmo=None):
+        if cosmo != None:
+            self.conversion = cosmo
+        else:
+            self.conversion = conversions.Cosmo_Conversions()
+
+    def power_beam_int(self, stokes='pseudo_I'):
         pass
 
-    def power_beam_int(self, stokes='I'):
+    def power_beam_sq_int(self, stokes='pseudo_I'):
         pass
 
-    def power_beam_sq_int(self, stokes='I'):
+    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='pseudo_I', taper='none', little_h=True, num_steps=10000):
         pass
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='I', taper='none', little_h=True, num_steps=10000):
-        pass
+class PSpecBeamGauss(PSpecBeamBase):
 
-class PSpecBeamGauss(PSpecBeam):
-
-    def __init__(self, FWHM, beam_freqs):
+    def __init__(self, fwhm, beam_freqs, cosmo=None):
         """
-        Object to store a toy (frequency independent) Gaussian beam in a PspecBeam object
+        Object to store a toy (frequency independent) Gaussian beam in a PspecBeamBase object
 
         Parameters
         ----------
-        FWHM: float, in radians
+        fwhm: float, in radians
                 Full width half max of the beam
 
         beam_freqs: float, array-like
-                Frequencies over which this Gaussian beam is to be created
+                Frequencies over which this Gaussian beam is to be created. Units assumed to be Hz.
         """
-        self.FWHM = FWHM
+        self.fwhm = fwhm
         self.beam_freqs = beam_freqs
+        if cosmo != None:
+            self.conversion = cosmo
+        else:
+            self.conversion = conversions.Cosmo_Conversions()
 
-    def power_beam_int(self, stokes='I'):
+
+    def power_beam_int(self, stokes='pseudo_I'):
         """
         Computes the integral of the beam over solid angle to give
-        a beam area (in str). Uses analytic formula that the answer
-        is 2 * pi * FWHM**2 / 8 ln 2.
+        a beam area (in sr). Uses analytic formula that the answer
+        is 2 * pi * fwhm**2 / 8 ln 2.
 
         Trivially this returns an array (i.e., a function of frequency),
         but the results are frequency independent.
+
+        Currently, only the "pseudo Stokes I" beam is supported.
+        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
+        or arxiv:1502.05072 for details.
 
         Parameters
         ----------
         stokes: str, optional
                 Which Stokes parameter's beam to compute the scalar for.
-                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
-                Default: 'I'
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
         Returns
         -------
         primary beam area: float, array-like
         """
-        if stokes != 'I':
-            raise NotImplementedError()
+        if stokes != 'pseudo_I':
+            raise NotImplementedError("Only stokes='pseudo_I' is currently supported.")
         else:
-            return np.ones_like(self.beam_freqs) * 2. * np.pi * self.FWHM**2 / (8. * np.log(2.))
+            return np.ones_like(self.beam_freqs) * 2. * np.pi * self.fwhm**2 / (8. * np.log(2.))
 
-    def power_beam_sq_int(self, stokes='I'):
+    def power_beam_sq_int(self, stokes='pseudo_I'):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam area (in str). Uses analytic formula that the answer
-        is pi * FWHM**2 / 8 ln 2.
+        is pi * fwhm**2 / 8 ln 2.
 
         Trivially this returns an array (i.e., a function of frequency),
         but the results are frequency independent.
+
+        Currently, only the "pseudo Stokes I" beam is supported.
+        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
+        or arxiv:1502.05072 for details.
 
         Parameters
         ----------
         stokes: str, optional
                 Which Stokes parameter's beam to compute the scalar for.
-                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
-                Default: 'I'
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
         Returns
         -------
         primary beam area: float, array-like
         """
-        if stokes != 'I':
-            raise NotImplementedError()
+        if stokes != 'pseudo_I':
+            raise NotImplementedError("Only stokes='pseudo_I' is currently supported.")
         else:
-            return np.ones_like(self.beam_freqs) * np.pi * self.FWHM**2 / (8. * np.log(2.))
+            return np.ones_like(self.beam_freqs) * np.pi * self.fwhm**2 / (8. * np.log(2.))
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='I', taper='none', little_h=True, num_steps=10000):
+    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='pseudo_I', taper='none', little_h=True, num_steps=10000):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
-        Currently this is only for Stokes I.
+        Currently, only the "pseudo Stokes I" beam is supported.
+        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
+        or arxiv:1502.05072 for details.
 
         Parameters
         ----------
@@ -107,8 +124,8 @@ class PSpecBeamGauss(PSpecBeam):
 
         stokes: str, optional
                 Which Stokes parameter's beam to compute the scalar for.
-                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
-                Default: 'I'
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
 
         taper : str, optional
                 Whether a tapering function (e.g. Blackman-Harris) is being
@@ -117,6 +134,7 @@ class PSpecBeamGauss(PSpecBeam):
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Value of h is obtained from conversion object stored in pspecbeam
                 Default: h^-1 Mpc
 
         num_steps : int, optional
@@ -133,8 +151,8 @@ class PSpecBeamGauss(PSpecBeam):
 
         integration_freqs = np.linspace(lower_freq,upper_freq,num_steps)
         integration_freqs_MHz = integration_freqs / 10**6 # The interpolations are generally more stable in MHz
-        redshifts = conversion.f2z(integration_freqs).flatten()
-        X2Y = np.array(map(conversion.X2Y,redshifts))
+        redshifts = self.conversion.f2z(integration_freqs).flatten()
+        X2Y = np.array(map(self.conversion.X2Y,redshifts))
 
         # Use linear interpolation to interpolate the frequency-dependent quantities
         # derived from the beam model to the same frequency grid as the power spectrum
@@ -155,18 +173,18 @@ class PSpecBeamGauss(PSpecBeam):
 
         scalar = 1 / integrate.trapz(d_inv_scalar, integration_freqs)
         if little_h == True:
-            scalar *= conversion.h**3
+            scalar *= self.conversion.h**3
 
         return scalar
 
 
 
-class PSpecBeamUV(PSpecBeam):
+class PSpecBeamUV(PSpecBeamBase):
 
-    def __init__(self, beam_fname):
+    def __init__(self, beam_fname, cosmo=None):
         """
         Object to store the primary beam for a pspec observation.
-        This is subclassed from PSpecBeam to take in a pyuvdata
+        This is subclassed from PSpecBeamBase to take in a pyuvdata
         UVBeam object.
 
         Parameters
@@ -177,51 +195,71 @@ class PSpecBeamUV(PSpecBeam):
         self.primary_beam = pyuvdata.UVBeam()
         self.primary_beam.read_beamfits(beam_fname)
         self.beam_freqs = self.primary_beam.freq_array[0]
+        if cosmo != None:
+            self.conversion = cosmo
+        else:
+            self.conversion = conversions.Cosmo_Conversions()
 
-    def power_beam_int(self, stokes='I'):
+    def power_beam_int(self, stokes='pseudo_I'):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency. Uses function
         in pyuvdata.
 
+        Currently, only the "pseudo Stokes I" beam is supported.
+        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
+        or arxiv:1502.05072 for details.
+
         Parameters
         ----------
         stokes: str, optional
                 Which Stokes parameter's beam to compute the scalar for.
-                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
-                Default: 'I'
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
         Returns
         -------
         primary beam area: float, array-like
         """
-        return self.primary_beam.get_beam_area(stokes)
+        try:
+            return self.primary_beam.get_beam_area(stokes)
+        except NotImplementedError:
+            print "Outdated version of pyuvdata"
 
-    def power_beam_sq_int(self, stokes='I'):
+    def power_beam_sq_int(self, stokes='pseudo_I'):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam**2 area (in str) as a function of frequency. Uses function
         in pyuvdata.
 
+        Currently, only the "pseudo Stokes I" beam is supported.
+        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
+        or arxiv:1502.05072 for details.
+
         Parameters
         ----------
         stokes: str, optional
                 Which Stokes parameter's beam to compute the scalar for.
-                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
-                Default: 'I'
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
         Returns
         -------
         primary beam area: float, array-like
         """
-        return self.primary_beam.get_beam_sq_area(stokes)
+        try:
+            return self.primary_beam.get_beam_sq_area(stokes)
+        except NotImplementedError:
+            print "Outdated version of pyuvdata"
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='I', taper='none', little_h=True, num_steps=10000):
+    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='pseudo_I', taper='none', little_h=True, num_steps=10000):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
-        Currently this is only for Stokes I.
+        Currently, only the "pseudo Stokes I" beam is supported.
+        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
+        or arxiv:1502.05072 for details.
 
         Parameters
         ----------
@@ -238,8 +276,8 @@ class PSpecBeamUV(PSpecBeam):
 
         stokes: str, optional
                 Which Stokes parameter's beam to compute the scalar for.
-                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
-                Default: 'I'
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
 
         taper : str, optional
                 Whether a tapering function (e.g. Blackman-Harris) is being
@@ -248,6 +286,7 @@ class PSpecBeamUV(PSpecBeam):
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Value of h is obtained from conversion object stored in pspecbeam
                 Default: h^-1 Mpc
 
         num_steps : int, optional
@@ -264,8 +303,8 @@ class PSpecBeamUV(PSpecBeam):
 
         integration_freqs = np.linspace(lower_freq,upper_freq,num_steps)
         integration_freqs_MHz = integration_freqs / 10**6 # The interpolations are generally more stable in MHz
-        redshifts = conversion.f2z(integration_freqs).flatten()
-        X2Y = np.array(map(conversion.X2Y,redshifts))
+        redshifts = self.conversion.f2z(integration_freqs).flatten()
+        X2Y = np.array(map(self.conversion.X2Y,redshifts))
 
         # Use linear interpolation to interpolate the frequency-dependent quantities
         # derived from the beam model to the same frequency grid as the power spectrum
@@ -285,7 +324,7 @@ class PSpecBeamUV(PSpecBeam):
 
         scalar = 1 / integrate.trapz(d_inv_scalar, integration_freqs)
         if little_h == True:
-            scalar *= conversion.h**3
+            scalar *= self.conversion.h**3
 
         return scalar
 

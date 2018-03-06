@@ -245,6 +245,8 @@ class Test_DataSet(unittest.TestCase):
         w = [None for _d in dfiles]
         self.ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=self.bm)
 
+        # Precomputed results in the following test were done  "by hand" using iPython
+        # notebook "Scalar_dev2.ipynb" in tests directory
         scalar = self.ds.scalar()       
         self.assertAlmostEqual(scalar,3732415176.85 / 10**9) 
 

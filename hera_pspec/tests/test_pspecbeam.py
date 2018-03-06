@@ -29,6 +29,8 @@ class Test_DataSet(unittest.TestCase):
         pass
 
     def test_UVbeam(self):
+        # Precomputed results in the following tests were done  "by hand" using iPython
+        # notebook "Scalar_dev2.ipynb" in tests directory
         Om_p = self.bm.power_beam_int()
         Om_pp = self.bm.power_beam_sq_int()
         lower_freq = 120.*10**6
