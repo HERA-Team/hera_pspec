@@ -194,6 +194,7 @@ class PSpecBeamUV(PSpecBeamBase):
         """
         self.primary_beam = pyuvdata.UVBeam()
         self.primary_beam.read_beamfits(beam_fname)
+
         self.beam_freqs = self.primary_beam.freq_array[0]
         if cosmo != None:
             self.conversion = cosmo
@@ -220,10 +221,10 @@ class PSpecBeamUV(PSpecBeamBase):
         -------
         primary beam area: float, array-like
         """
-        try:
+        if hasattr(self.primary_beam, 'get_beam_area'):
             return self.primary_beam.get_beam_area(stokes)
-        except NotImplementedError:
-            print "Outdated version of pyuvdata"
+        else:
+            raise NotImplementedError("Outdated version of pyuvdata.")
 
     def power_beam_sq_int(self, stokes='pseudo_I'):
         """
@@ -245,10 +246,10 @@ class PSpecBeamUV(PSpecBeamBase):
         -------
         primary beam area: float, array-like
         """
-        try:
+        if hasattr(self.primary_beam, 'get_beam_area'):
             return self.primary_beam.get_beam_sq_area(stokes)
-        except NotImplementedError:
-            print "Outdated version of pyuvdata"
+        else:
+            raise NotImplementedError("Outdated version of pyuvdata.")
 
     def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='pseudo_I', taper='none', little_h=True, num_steps=10000):
         """

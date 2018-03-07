@@ -36,7 +36,7 @@ class Test_DataSet(unittest.TestCase):
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
         num_freqs = 50
-        scalar = self.bm.compute_pspec_scalar(lower_freq,upper_freq,num_freqs,stokes='I')
+        scalar = self.bm.compute_pspec_scalar(lower_freq,upper_freq,num_freqs,stokes='pseudo_I')
 
         # Check array dimensionality
         self.assertEqual(Om_p.ndim,1)
@@ -69,7 +69,7 @@ class Test_DataSet(unittest.TestCase):
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
         num_freqs = 50
-        scalar = self.gauss.compute_pspec_scalar(lower_freq,upper_freq,num_freqs,stokes='I')
+        scalar = self.gauss.compute_pspec_scalar(lower_freq,upper_freq,num_freqs,stokes='pseudo_I')
 
         # Check array dimensionality
         self.assertEqual(Om_p.ndim,1)
