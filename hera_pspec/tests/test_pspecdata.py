@@ -251,37 +251,58 @@ class Test_PSpecData(unittest.TestCase):
         """
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
 
         for input_data_weight in ['identity','iC']:
             for taper in taper_selection:
+                print 'input_data_weight', input_data_weight, 'taper', taper
                 self.ds.set_R(input_data_weight)
                 key1 = (0, 24, 38)
                 key2 = (1, 25, 38)
 
                 G = self.ds.get_G(key1, key2, taper=taper)
                 self.assertEqual(G.shape, (Nfreq,Nfreq)) # Test shape
-                matrix_scale = np.min( [np.min(np.abs(G)),
-                                        np.min(np.abs(np.linalg.eigvalsh(G)))] )
-                # Test symmetry
-                anti_sym_norm = np.linalg.norm(G - G.T)
-                self.assertLessEqual(anti_sym_norm, matrix_scale*1e-10)
+                print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
+                matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
+                #np.min( [np.min(np.abs(G)),
+                #                        np.min(np.abs(np.linalg.eigvalsh(G)))] )
 
-                # Test cyclic property of trace, where key1 and key2 can be
-                # swapped without changing the matrix. This is secretly the
-                # same test as the symmetry test, but perhaps there are
-                # creative ways to break the code to break one test but not
-                # the other.
-                G_swapped = self.ds.get_G(key2, key1, taper=taper)
-                G_diff_norm = np.linalg.norm(G - G_swapped)
-                self.assertLessEqual(G_diff_norm, matrix_scale*1e-10)
-                min_diagonal = np.min(np.diagonal(G))
-                
-                # Test that all elements of G are positive up to numerical noise
-                # with the threshold set to 10 orders of magnitude down from
-                # the smallest value on the diagonal
-                for i in range(Nfreq):
-                    for j in range(Nfreq):
-                        self.assertGreaterEqual(G[i,j], -min_diagonal*1e-10)
+                if input_data_weight == 'identity':
+                    # In the identity case, there are three special properties
+                    # that are respected:
+                    # i) Symmetry: G_ab = G_ba
+                    # ii) Cylic property: G = (1/2) tr[R1 Q_a R2 Q_b]
+                    #                       = (1/2) tr[R2 Q_b R1 Q_a]
+                    # iii) All elements of G are positive.
+
+                    # Test symmetry
+                    anti_sym_norm = np.linalg.norm(G - G.T)
+                    self.assertLessEqual(anti_sym_norm, matrix_scale*multiplicative_tolerance)
+
+                    # Test cyclic property of trace, where key1 and key2 can be
+                    # swapped without changing the matrix. This is secretly the
+                    # same test as the symmetry test, but perhaps there are
+                    # creative ways to break the code to break one test but not
+                    # the other.
+                    G_swapped = self.ds.get_G(key2, key1, taper=taper)
+                    G_diff_norm = np.linalg.norm(G - G_swapped)
+                    self.assertLessEqual(G_diff_norm, matrix_scale*multiplicative_tolerance)
+                    min_diagonal = np.min(np.diagonal(G))
+                    
+                    # Test that all elements of G are positive up to numerical noise
+                    # with the threshold set to 10 orders of magnitude down from
+                    # the smallest value on the diagonal
+                    for i in range(Nfreq):
+                        for j in range(Nfreq):
+                            self.assertGreaterEqual(G[i,j], -min_diagonal*multiplicative_tolerance)
+                else:
+                    # In general, when R_1 != R_2, there is a more restricted symmetry
+                    # where swapping R_1 and R_2 *and* taking the transpose gives the
+                    # same result
+                    G_swapped = self.ds.get_G(key2, key1, taper=taper)
+                    G_diff_norm = np.linalg.norm(G - G_swapped.T)
+                    self.assertLessEqual(G_diff_norm, matrix_scale*multiplicative_tolerance)
+
             
     def test_parseval(self):
         """

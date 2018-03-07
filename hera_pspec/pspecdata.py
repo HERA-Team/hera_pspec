@@ -427,9 +427,9 @@ class PSpecData(object):
         for i in xrange(self.Nfreqs): # this loop goes as nchan^4
             for j in xrange(self.Nfreqs):
                 # tr(R_2 Q_i R_1 Q_j)
-                G[i,j] += np.einsum('ij,ji', iR1Q[i], iR2Q[j])
+                G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
 
-        return G.real / 2.
+        return G / 2.
     
     
     def get_V_gaussian(self, key1, key2):
