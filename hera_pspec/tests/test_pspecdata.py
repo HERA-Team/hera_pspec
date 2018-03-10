@@ -80,8 +80,12 @@ taper_selection = ['blackman'] #,'blackman-harris','gaussian0.4','kaiser2',\
 class Test_DataSet(unittest.TestCase):
 
     def setUp(self):
+        # setup empty PSpecData
         self.ds = pspecdata.PSpecData()
-        pass
+
+        # read in miriad file
+        self.uvd = uv.UVData()
+        self.uvd.read_miriad(os.path.join(DATA_PATH, 'zen.2458042.12552.xx.HH.uvXAA'))
 
     def tearDown(self):
         pass
@@ -98,6 +102,16 @@ class Test_DataSet(unittest.TestCase):
 
     def test_add_data(self):
         pass
+
+    def test_validate_datasets(self):
+        # test freq exception
+        uvd2 = self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:10], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[self.uvd, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds.validate_datasets)
+        # test time exception
+        uvd2 = self.uvd.select(times=np.unique(self.uvd.time_array)[:10], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[self.uvd, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds.validate_datasets)
 
     def test_get_Q(self):
         vect_length = 50
