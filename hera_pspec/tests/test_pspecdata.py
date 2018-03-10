@@ -312,11 +312,11 @@ class Test_DataSet(unittest.TestCase):
         self.assertTrue(np.allclose(f_mat,
                         np.identity(data.Nfreqs).astype(complex),
                         rtol=tolerance,
-                        atol=tolerance)
+                        atol=tolerance))
         self.assertTrue(np.allclose(f_mat_true,
                                     np.identity(data.Nfreqs).astype(complex),
                                     rtol=tolerance,
-                                    atol=tolerance)
+                                    atol=tolerance))
         #TODO: Need a test case for some kind of taper.
 
 
