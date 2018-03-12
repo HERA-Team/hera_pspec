@@ -455,7 +455,7 @@ class Test_DataSet(unittest.TestCase):
         # generate two uvd objects w/ different LST grids
         uvd2 = copy.copy(self.uvd2)
         uvd1 = uv.UVData()
-        uvd1.read_miriad("/Users/nkern/Desktop/Research/EoR/NoteBooks/HERA_Data/data/zen.2458042.17772.xx.HH.uvXA")
+        uvd1.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
         # setup dataset
         ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None])
         # get normal pspec
@@ -467,6 +467,15 @@ class Test_DataSet(unittest.TestCase):
         # check coherence has increased
         nt.assert_true(np.mean(np.abs(pspecs2[0] / pspecs1[0])) > 1.01)
 
+        # null test: check nothing changes when dsets contain same UVData object
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd1], wgts=[None, None])
+        # get normal pspec
+        bls = [(37, 39)]
+        pspecs1, pairs1 = ds.pspec(bls)
+        # rephase and get pspec
+        ds.rephase_to_dset(0)
+        pspecs2, pairs2 = ds.pspec(bls)
+        nt.assert_true(np.isclose(np.abs(pspecs2/pspecs1), 1.0).min())
 
 
 if __name__ == "__main__":
