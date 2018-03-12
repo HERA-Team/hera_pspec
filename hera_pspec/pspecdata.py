@@ -5,7 +5,7 @@ from .utils import hash, cov
 
 class PSpecData(object):
 
-    def __init__(self, dsets=[], wgts=[]):
+    def __init__(self, dsets=[], wgts=[], beam=None):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -19,6 +19,10 @@ class PSpecData(object):
         wgts : List of UVData objects, optional
             List of UVData objects containing weights for the input data.
             Default: Empty list.
+
+        beam : PspecBeam object, optional
+            PspecBeam object containing information about the primary beam
+            Default: None.
         """
         self.clear_cov_cache() # Covariance matrix cache
         self.dsets = []; self.wgts = []
@@ -30,6 +34,9 @@ class PSpecData(object):
         # Store the input UVData objects if specified
         if len(dsets) > 0:
             self.add(dsets, wgts)
+
+        # Store a primary beam
+        self.primary_beam = beam
 
     def add(self, dsets, wgts):
         """
@@ -71,10 +78,13 @@ class PSpecData(object):
         # Append to list
         self.dsets += dsets
         self.wgts += wgts
-        
+
         # Store no. frequencies and no. times
         self.Nfreqs = self.dsets[0].Nfreqs
         self.Ntimes = self.dsets[0].Ntimes
+        
+        # Store the actual frequencies
+        self.freqs = self.dsets[0].freq_array[0]
         
     def validate_datasets(self):
         """
@@ -314,17 +324,17 @@ class PSpecData(object):
             self.R = self.iC
         else:
             self.R = R_matrix
-      
+
     def q_hat(self, key1, key2, use_fft=True, taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
-            
+
           \hat{q}_a = (1/2) conj(x_1) R_1 Q_a R_2 x_2 (arXiv:1502.06016, Eq. 13)
-        
+
         Note that the R matrix need not be set to C^-1. This is something that
         is set by the user in the set_R method.
-        
+
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
@@ -359,7 +369,7 @@ class PSpecData(object):
             for _key in key2: Rx2 += np.dot(self.R(_key), self.x(_key))
         else:
             Rx2 = np.dot(self.R(key2), self.x(key2))
-            
+        
         # Whether to use FFT or slow direct method
         if use_fft:
             if taper != 'none':
@@ -369,14 +379,15 @@ class PSpecData(object):
 
             _Rx1 = np.fft.fft(Rx1.conj(), axis=0)
             _Rx2 = np.fft.fft(Rx2.conj(), axis=0)
+            
             return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
-                           * np.fft.fftshift(_Rx2, axes=0) )
+                                 * np.fft.fftshift(_Rx2, axes=0) )
         else:
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.Nfreqs):
                 Q = self.get_Q(i, self.Nfreqs, taper=taper)
-                RQR = np.einsum('ab,bc,cd', 
+                RQR = np.einsum('ab,bc,cd',
                                 self.R(key1).T.conj(), Q, self.R(key2))
                 qi = np.sum(self.x(key1).conj()*np.dot(RQR, self.x(key2)), axis=0)
                 q.append(qi)
@@ -417,7 +428,7 @@ class PSpecData(object):
         G = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
-        
+
         iR1Q, iR2Q = {}, {}
         for ch in xrange(self.Nfreqs): # this loop is nchan^3
             Q = self.get_Q(ch, self.Nfreqs, taper=taper)
@@ -465,13 +476,13 @@ class PSpecData(object):
             \hat{p} = M \hat{q}
             <\hat{p}> = W p
             W = M G,
-        
+g
         where p is the true band power and G is the response matrix (defined above
         in get_G) of unnormalized bandpowers to normed bandpowers. The G matrix
         is the Fisher matrix when R = C^-1
 
         Several choices for M are supported:
-        
+
             'G^-1':   Set M = G^-1, the (pseudo)inverse response matrix.
             'G^-1/2': Set M = G^-1/2, the root-inverse response matrix (using SVD).
             'I':      Set M = I, the identity matrix.
@@ -479,26 +490,26 @@ class PSpecData(object):
 
         Note that when we say (e.g., M = I), we mean this before normalization.
         The M matrix needs to be normalized such that each row of W sums to 1.
-        
+
         Parameters
         ----------
         G : array_like or dict of array_like
             Response matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
-            If a dict is specified, M and W will be calculated for each G 
+            If a dict is specified, M and W will be calculated for each G
             matrix in the dict.
 
         mode : str, optional
-            Definition to use for M. Must be one of the options listed above. 
+            Definition to use for M. Must be one of the options listed above.
             Default: 'I'.
-        
+
         Returns
         -------
         M : array_like
-            Normalization matrix, M. (If G was passed in as a dict, a dict of 
+            Normalization matrix, M. (If G was passed in as a dict, a dict of
             array_like will be returned.)
 
         W : array_like
-            Window function matrix, W. (If G was passed in as a dict, a dict of 
+            Window function matrix, W. (If G was passed in as a dict, a dict of
             array_like will be returned.)
         """
         # Recursive case, if many G's were specified at once
@@ -516,19 +527,19 @@ class PSpecData(object):
             M = np.linalg.pinv(G, rcond=1e-12)
             #U,S,V = np.linalg.svd(F)
             #M = np.einsum('ij,j,jk', V.T, 1./S, U.T)
-            
+
         elif mode == 'G^-1/2':
             U,S,V = np.linalg.svd(G)
             M = np.einsum('ij,j,jk', V.T, 1./np.sqrt(S), U.T)
 
         elif mode == 'I':
             M = np.identity(G.shape[0], dtype=G.dtype)
-            
+
         else:
             # Cholesky decomposition
             order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
             order[order < 0] = order[order < 0] - 0.1
-            
+
             # Negative integers have larger absolute value so they are sorted
             # after positive integers.
             order = (np.abs(order)).argsort()
@@ -538,7 +549,7 @@ class PSpecData(object):
                 endindex = -1
             order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
             iorder = np.argsort(order)
-            
+
             G_o = np.take(np.take(G, order, axis=0), order, axis=1)
             L_o = np.linalg.cholesky(G_o)
             U,S,V = np.linalg.svd(L_o.conj())
@@ -655,8 +666,49 @@ class PSpecData(object):
             return delay * 1e9 # convert to ns
     
     
-    def pspec(self, bls, input_data_weight='identity', norm='I', 
-              taper='none', verbose=False):
+    def scalar(self, stokes='I', taper='none', little_h=True, num_steps=10000):
+        """
+        Computes the scalar function to convert a power spectrum estimate
+        in "telescope units" to cosmological units
+
+        See arxiv:1304.4991 and HERA memo #27 for details.
+
+        Currently this is only for Stokes I.
+
+        Parameters
+        ----------
+        stokes: str, optional
+                Which Stokes parameter's beam to compute the scalar for.
+                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
+                Default: 'I'
+
+        taper : str, optional
+                Whether a tapering function (e.g. Blackman-Harris) is being
+                used in the power spectrum estimation.
+                Default: none
+
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+
+        num_steps : int, optional
+                Number of steps to use when interpolating primary beams for
+                numerical integral
+                Default: 10000
+
+        Returns
+        -------
+        scalar: float
+                [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
+                in h^-3 Mpc^3 or Mpc^3.
+        """
+        scalar = self.primary_beam.compute_pspec_scalar(\
+                self.freqs[0],self.freqs[-1],self.Nfreqs,\
+                stokes,taper,little_h,num_steps)
+        return scalar
+
+    def pspec(self, bls, beam=None, input_data_weight='identity', norm='I', 
+              taper='none', little_h=True, verbose=False):
         """
         Estimate the delay power spectrum from the datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
@@ -672,6 +724,9 @@ class PSpecData(object):
             calculation, reducing the number of cross-correlations that are 
             needed.
 
+        beam : PspecBeam object
+            Primary beam information for the input data.
+
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
             data. See the options in the set_R() method for details. 
@@ -684,6 +739,10 @@ class PSpecData(object):
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
+
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
 
         verbose : bool, optional
             If True, print progress/debugging information. Default: False.
@@ -704,6 +763,11 @@ class PSpecData(object):
         # Validate the input data to make sure it's sensible
         self.validate_datasets()
 
+        # Compute the scalar to convert from "telescope units" to "cosmo units"
+        # once and for all
+        if self.primary_beam != None:
+            scalar = self.scalar(taper=taper, little_h=True)
+
         pvs = []; pairs = []
         # Loop over pairs of datasets
         for m in xrange(len(self.dsets)):
@@ -720,19 +784,19 @@ class PSpecData(object):
                         key1 = (m,) + bl
                         key2 = (n,) + bl
                     if verbose: print("Baselines:", key1, key2)
-                    
+
                     # Set covariance weighting scheme for input data
                     if verbose: print("  Setting weight matrix for input data...")
                     self.set_R(input_data_weight)
-                    
+
                     # Build Fisher matrix
                     if verbose: print("  Building G...")
                     Gv = self.get_G(key1, key2, taper=taper)
-                    
+
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
                     qv = self.q_hat(key1, key2, taper=taper)
-                    
+
                     # Normalize power spectrum estimate
                     if verbose: print("  Normalizing power spectrum...")
                     Mv, Wv = self.get_MW(Gv, mode=norm)
@@ -744,6 +808,11 @@ class PSpecData(object):
                     dnu = self.dsets[0].freq_array[0,1] \
                         - self.dsets[0].freq_array[0,0]
                     pv *= (dnu * self.Nfreqs)**2. * 1e-9 # Hz -> ns^-1
+
+                    # Multiply by scalar
+                    if self.primary_beam != None:
+                        if verbose: print("  Computing and multiplying scalar...")
+                        pv *= scalar
 
                     # Save power spectra and dataset/baseline pairs
                     pvs.append(pv)
