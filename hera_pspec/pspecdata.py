@@ -2,7 +2,9 @@ import numpy as np
 import aipy
 import pyuvdata
 from .utils import hash, cov
+import itertools
 #from utils import hash, cov
+
 
 class PSpecData(object):
 
@@ -617,7 +619,7 @@ class PSpecData(object):
         return np.dot(M, q)
 
     def pspec(self, bls, input_data_weight='identity', norm='I',
-              taper='none', verbose=False):
+              taper='none', rev_bl_pair=False, verbose=False):
         """
         Estimate the power spectrum from the datasets contained in this object,
         using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
@@ -626,7 +628,13 @@ class PSpecData(object):
         ----------
         bls : list of tuples
             List of baselines to include in the power spectrum calculation.
-            Each baseline is specified as a tuple of antenna IDs.
+            Each baseline is specified as a tuple of antenna numbers.
+            Ex. [(0, 1), (1, 2)]
+
+            Optionally, this can be a list of redundant baseline groups to
+            take cross-power between, each baseline group being a list of 
+            (ant1_num, ant2_num) pairs.
+            Ex. [[(0, 1), (1, 2)], [(0, 3), (1, 4)]]
 
         input_data_weight : str, optional
             String specifying what weighting matrix to apply to the input
@@ -640,6 +648,12 @@ class PSpecData(object):
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
 
+        rev_bl_pair : bool, optional
+            Adds extra baselines having reversed the baseline pairing. 
+            In other words, if True, solve for both (ant1, ant2) * conj(ant3, ant4) 
+            and (ant3, ant4) * conj(ant1, ant2). Only has effect if 'bls' is fed 
+            as a list of redundant baseline groups.
+ 
         verbose : bool, optional
             If True, print progress/debugging information.
 
@@ -659,17 +673,39 @@ class PSpecData(object):
         # Validate the input data to make sure it's sensible
         self.validate_datasets()
 
+        # Setup empty lists
         pvs = []; pairs = []
+
+        # Setup baseline groupings
+        bl_pairs = []
+        if isinstance(bls[0], tuple) and isinstance(bls[0][0], int):
+            # assume bls is a list of tuple antenna pairs
+            bls = map(lambda bl: (bl, bl), bls)
+
+        elif isinstance(bls[0], list) and isinstance(bls[0][0], tuple) \
+             and isinstance(bls[0][0][0], int):
+            # assume bls is a list of redundant baseline groups
+            red_bls = map(lambda bl_group: \
+                          list(itertools.combinations_with_replacement(bl_group, 2)), bls)
+            bls = [item for sublist in red_bls for item in sublist]
+
+        # adds extra bls having reversed baseline ordering
+        if rev_bl_pair:
+            extra_bl_pairs = []
+            for bl_pair in bls:
+                if bl_pair[0] != bl_pair[1]:
+                    extra_bl_pairs.append(bl_pair[::-1])
+            bls.extend(extra_bl_pairs)
+
         # Loop over pairs of datasets
         for m in xrange(len(self.dsets)):
             for n in xrange(m+1, len(self.dsets)):
-                # Datasets should not be cross-correlated with themselves, and
-                # dataset pair (m, n) gives the same result as (n, m)
+                # Datasets should not be cross-correlated with themselves
 
                 # Loop over baselines
-                for bl in bls:
-                    key1 = (m,) + bl
-                    key2 = (n,) + bl
+                for bl_pair in bls:
+                    key1 = (m,) + bl_pair[0]
+                    key2 = (n,) + bl_pair[1]
 
                     if verbose: print("Baselines:", key1, key2)
 
@@ -693,4 +729,5 @@ class PSpecData(object):
                     # Save power spectra and dataset/baseline pairs
                     pvs.append(pv)
                     pairs.append((key1, key2))
-        return np.array(pvs).real, pairs
+
+        return np.array(pvs), pairs
