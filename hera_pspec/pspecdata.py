@@ -78,11 +78,11 @@ class PSpecData(object):
         # Append to list
         self.dsets += dsets
         self.wgts += wgts
-        
+
         # Store no. frequencies and no. times
         self.Nfreqs = self.dsets[0].Nfreqs
         self.Ntimes = self.dsets[0].Ntimes
-
+        
         # Store the actual frequencies
         self.freqs = self.dsets[0].freq_array[0]
         
@@ -323,17 +323,17 @@ class PSpecData(object):
             self.R = self.iC
         else:
             self.R = R_matrix
-      
+
     def q_hat(self, key1, key2, use_fft=True, taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
-            
+
           \hat{q}_a = (1/2) conj(x_1) R_1 Q_a R_2 x_2 (arXiv:1502.06016, Eq. 13)
-        
+
         Note that the R matrix need not be set to C^-1. This is something that
         is set by the user in the set_R method.
-        
+
         Parameters
         ----------
         key1, key2 : tuples
@@ -356,14 +356,14 @@ class PSpecData(object):
         """
         assert isinstance(key1, tuple)
         assert isinstance(key2, tuple)
-        
+
         # Calculate R x_1 and R x_2
         #iC1x, iC2x = 0, 0
         #for _k in k1: iC1x += np.dot(icov_fn(_k), self.x(_k))
         #for _k in k2: iC2x += np.dot(icov_fn(_k), self.x(_k))
         Rx1 = np.dot(self.R(key1), self.x(key1))
         Rx2 = np.dot(self.R(key2), self.x(key2))
-            
+
         # Whether to use FFT or slow direct method
         if use_fft:
 
@@ -374,17 +374,17 @@ class PSpecData(object):
 
             _Rx1 = np.fft.fft(Rx1.conj(), axis=0)
             _Rx2 = np.fft.fft(Rx2.conj(), axis=0)
-          
+
             # Conjugated because inconsistent with pspec_cov_v003 otherwise
             # FIXME: Check that this should actually be conjugated
-            return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
+            return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj()
                            * np.fft.fftshift(_Rx2, axes=0) )
         else:
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.Nfreqs):
                 Q = self.get_Q(i, self.Nfreqs, taper=taper)
-                RQR = np.einsum('ab,bc,cd', 
+                RQR = np.einsum('ab,bc,cd',
                                 self.R(key1).T.conj(), Q, self.R(key2))
                 qi = np.sum(self.x(key1).conj()*np.dot(RQR, self.x(key2)), axis=0)
                 q.append(qi)
@@ -423,11 +423,11 @@ class PSpecData(object):
         """
         assert isinstance(key1, tuple)
         assert isinstance(key2, tuple)
-        
+
         G = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
-        
+
         iR1Q, iR2Q = {}, {}
         for ch in xrange(self.Nfreqs): # this loop is nchan^3
             Q = self.get_Q(ch, self.Nfreqs, taper=taper)
@@ -447,20 +447,20 @@ class PSpecData(object):
         V_ab = tr(C E_a C E_b)
         # FIXME: Must check factor of 2 with Wick's thm for complex vectors
         # and also check expression for when x_1 != x_2.
-        
+
         Parameters
         ----------
         key1, key2 : tuples
-            Tuples containing indices of dataset and baselines for the two 
+            Tuples containing indices of dataset and baselines for the two
             input datavectors.
-        
+
         Returns
         -------
         V : array_like, complex
             bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         raise NotImplementedError()
-   
+
     def get_MW(self, G, mode='I'):
         """
         Construct the normalization matrix M and window function matrix W for
@@ -470,13 +470,13 @@ class PSpecData(object):
             \hat{p} = M \hat{q}
             <\hat{p}> = W p
             W = M G,
-        
+
         where p is the true band power and G is the response matrix (defined above
         in get_G) of unnormalized bandpowers to normed bandpowers. The G matrix
         is the Fisher matrix when R = C^-1
 
         Several choices for M are supported:
-        
+
             'G^-1':   Set M = G^-1, the (pseudo)inverse response matrix.
             'G^-1/2': Set M = G^-1/2, the root-inverse response matrix (using SVD).
             'I':      Set M = I, the identity matrix.
@@ -484,26 +484,26 @@ class PSpecData(object):
 
         Note that when we say (e.g., M = I), we mean this before normalization.
         The M matrix needs to be normalized such that each row of W sums to 1.
-        
+
         Parameters
         ----------
         G : array_like or dict of array_like
             Response matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
-            If a dict is specified, M and W will be calculated for each G 
+            If a dict is specified, M and W will be calculated for each G
             matrix in the dict.
 
         mode : str, optional
-            Definition to use for M. Must be one of the options listed above. 
+            Definition to use for M. Must be one of the options listed above.
             Default: 'I'.
-        
+
         Returns
         -------
         M : array_like
-            Normalization matrix, M. (If G was passed in as a dict, a dict of 
+            Normalization matrix, M. (If G was passed in as a dict, a dict of
             array_like will be returned.)
 
         W : array_like
-            Window function matrix, W. (If G was passed in as a dict, a dict of 
+            Window function matrix, W. (If G was passed in as a dict, a dict of
             array_like will be returned.)
         """
         # Recursive case, if many F's were specified at once
@@ -521,14 +521,14 @@ class PSpecData(object):
             M = np.linalg.pinv(G, rcond=1e-12)
             #U,S,V = np.linalg.svd(F)
             #M = np.einsum('ij,j,jk', V.T, 1./S, U.T)
-            
+
         elif mode == 'G^-1/2':
             U,S,V = np.linalg.svd(G)
             M = np.einsum('ij,j,jk', V.T, 1./np.sqrt(S), U.T)
 
         elif mode == 'I':
             M = np.identity(G.shape[0], dtype=G.dtype)
-            
+
         else:
             """
             # Cholesky decomposition to get M (XXX: Needs generalizing)
@@ -538,7 +538,7 @@ class PSpecData(object):
             """
             order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
             order[order < 0] = order[order < 0] - 0.1
-            
+
             # Negative integers have larger absolute value so they are sorted
             # after positive integers.
             order = (np.abs(order)).argsort()
@@ -548,7 +548,7 @@ class PSpecData(object):
                 endindex = -1
             order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
             iorder = np.argsort(order)
-            
+
             G_o = np.take(np.take(G, order, axis=0), order, axis=1)
             L_o = np.linalg.cholesky(G_o)
             U,S,V = np.linalg.svd(L_o.conj())
@@ -677,9 +677,9 @@ class PSpecData(object):
         input_data_weight : str, optional
             String specifying what weighting matrix to apply to the input
             data. See the options in the set_R method for details.
-            
+
         norm : str, optional
-            String specifying how to choose the normalization matrix, M. See 
+            String specifying how to choose the normalization matrix, M. See
             the 'mode' argument of get_MW() for options.
 
         taper : str, optional
@@ -727,19 +727,19 @@ class PSpecData(object):
                     key2 = (n,) + bl
 
                     if verbose: print("Baselines:", key1, key2)
-                    
+
                     # Set covariance weighting scheme for input data
                     if verbose: print (" Setting weighting matrix for input data...")
                     self.set_R(input_data_weight)
-                    
+
                     # Build Fisher matrix
                     if verbose: print("  Building G...")
                     Gv = self.get_G(key1, key2, taper=taper)
-                    
+
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
                     qv = self.q_hat(key1, key2, taper=taper)
-                    
+
                     # Normalize power spectrum estimate
                     if verbose: print("  Normalizing power spectrum...")
                     Mv, Wv = self.get_MW(Gv, mode=norm)

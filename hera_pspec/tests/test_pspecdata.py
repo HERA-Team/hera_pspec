@@ -17,7 +17,7 @@ DATADIR = os.path.dirname( os.path.realpath(__file__) ) + "/../data/"
 def generate_pos_def(n):
     """
     Generate a random positive definite Hermitian matrix.
-    
+
     Parameters
     ----------
     n : integer
@@ -31,13 +31,13 @@ def generate_pos_def(n):
     A = np.random.normal(size=(n,n)) + 1j * np.random.normal(size=(n,n))
     A += np.conjugate(A).T
     # Add just enough of an identity matrix to make all eigenvalues positive
-    A += -1.01*np.min(np.linalg.eigvalsh(A))*np.identity(n) 
+    A += -1.01*np.min(np.linalg.eigvalsh(A))*np.identity(n)
     return A
 
 def generate_pos_def_all_pos(n):
     """
     Generate a random positive definite symmetric matrix, with all entries positive.
-    
+
     Parameters
     ----------
     n : integer
@@ -51,13 +51,13 @@ def generate_pos_def_all_pos(n):
     A = np.random.uniform(size=(n,n))
     A += A.T
     # Add just enough of an identity matrix to make all eigenvalues positive
-    A += -1.01*np.min(np.linalg.eigvalsh(A))*np.identity(n) 
+    A += -1.01*np.min(np.linalg.eigvalsh(A))*np.identity(n)
     return A
 
 def diagonal_or_not(mat,places=7):
     """
     Tests whether a matrix is diagonal or not
-    
+
     Parameters
     ----------
     n : array_like
@@ -245,10 +245,181 @@ class Test_DataSet(unittest.TestCase):
         w = [None for _d in dfiles]
         self.ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=self.bm)
 
-        # Precomputed results in the following test were done  "by hand" using iPython
-        # notebook "Scalar_dev2.ipynb" in tests directory
+        # Precomputed results in the following test were done "by hand" 
+        # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         scalar = self.ds.scalar()       
         self.assertAlmostEqual(scalar,3732415176.85 / 10**9) 
+
+
+"""
+
+    def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):
+        '''
+        Test get_G where we interpret G in this case to be the Fisher Matrix.
+        Args:
+            tolerance, required max fractional difference from analytical
+                       solution to pass.
+            NDRAWS, number of random data sets to sample frome.
+            NCHAN, number of channels. Must be less than test data sets.
+        '''
+        #read in data.
+        dpath=os.path.join(DATA_PATH,'zen.2458042.12552.xx.HH.uvXAA')
+        data=uv.UVData()
+        wghts=uv.UVData()
+        data.read_miriad(dpath)
+        wghts.read_miriad(dpath)
+        assert(NCHAN<data.Nfreqs)
+        #make sure we use fewer channels.
+        data.select(freq_chans=range(NCHAN))
+        wghts.select(freq_chans=range(NCHAN))
+        #********************************************************************
+        #set data to random white noise with a random variance and mean.
+        ##!!!Set mean to zero for now since analyitic solutions assumed mean
+        ##!!!Subtracted data which oqe isn't actually doing.
+        #*******************************************************************
+        test_mean=0.*np.abs(np.random.randn())
+        test_std=np.abs(np.random.randn())
+        #*******************************************************************
+        #Make sure that all of the flags are set too true for analytic case.
+        #*******************************************************************
+        data.flag_array[:]=False
+        wghts.data_array[:]=1.
+        wghts.flag_array[:]=False
+        bllist=data.get_antpairs()
+        #*******************************************************************
+        #These are the averaged "fisher matrices"
+        #*******************************************************************
+        f_mat=np.zeros((data.Nfreqs,data.Nfreqs),dtype=complex)
+        f_mat_true=np.zeros((data.Nfreqs,data.Nfreqs),dtype=complex)
+        nsamples=0
+        for datanum in range(NDATA):
+            #for each data draw, generate a random data set.
+            pspec=pspecdata.PSpecData()
+            data.data_array=test_std\
+            *np.random.standard_normal(size=data.data_array.shape)\
+            /np.sqrt(2.)+1j*test_std\
+            *np.random.standard_normal(size=data.data_array.shape)\
+            /np.sqrt(2.)+(1.+1j)*test_mean
+            pspec.add([data],[wghts])
+            #get empirical Fisher matrix for baselines 0 and 1.
+            pair1=bllist[0]
+            pair2=bllist[1]
+            k1=(0,pair1[0],pair1[1],-5)
+            k2=(0,pair2[0],pair2[1],-5)
+            #add to fisher averages.
+            f_mat_true=f_mat_true+pspec.get_F(k1,k2,true_fisher=True)
+            f_mat=f_mat+pspec.get_F(k1,k2)
+            #test identity
+            self.assertTrue(np.allclose(pspec.get_F(k1,k2,use_identity=True)/data.Nfreqs**2.,
+                            np.identity(data.Nfreqs).astype(complex)))
+            del pspec
+        #divide out empirical Fisher matrices by analytic solutions.
+        f_mat=f_mat/NDATA/data.Nfreqs**2.*test_std**4.
+        f_mat_true=f_mat_true/NDATA/data.Nfreqs**2.*test_std**4.
+        #test equality to analytic solutions
+        self.assertTrue(np.allclose(f_mat,
+                        np.identity(data.Nfreqs).astype(complex),
+                        rtol=tolerance,
+                        atol=tolerance)
+        self.assertTrue(np.allclose(f_mat_true,
+                                    np.identity(data.Nfreqs).astype(complex),
+                                    rtol=tolerance,
+                                    atol=tolerance)
+        #TODO: Need a test case for some kind of taper.
+
+
+    def validate_get_MW(self,NCHANS=20):
+        '''
+        Test get_MW with analytical case.
+        Args:
+            NCHANS, number of channels to validate.
+        '''
+        ###
+        test_std=np.abs(np.random.randn())
+        f_mat=np.identity(NCHANS).astype(complex)/test_std**4.*nchans**2.
+        pspec=pspecdata.PSpecData()
+        m,w=pspec.get_MW(f_mat,mode='G^-1')
+        #test M/W matrices are close to analytic solutions
+        #check that rows in W sum to unity.
+        self.assertTrue(np.all(np.abs(w.sum(axis=1)-1.)<=tolerance))
+        #check that W is analytic soluton (identity)
+        self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
+        #check that M.F = W
+        self.assertTrue(np.allclose(np.dot(m,f_mat),w))
+        m,w=pspec.get_MW(f_mat,mode='G^-1/2')
+        #check W is identity
+        self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
+        self.assertTrue(np.allclose(np.dot(m,f_mat),w))
+        #check that L^-1 runs.
+        m,w=pspec.get_MW(f_mat,mode='G^-1')
+
+    def validate_q_hat(self,NCHAN=8,NDATA=1000,):
+        '''
+        validate q_hat calculation by drawing random white noise data sets
+        '''
+        dpath=os.path.join(DATA_PATH,'zen.2458042.12552.xx.HH.uvXAA')
+        data=uv.UVData()
+        wghts=uv.UVData()
+        data.read_miriad(dpath)
+        wghts.read_miriad(dpath)
+        assert(NCHAN<=data.Nfreqs)
+        data.select(freq_chans=range(NCHAN))
+        wghts.select(freq_chans=range(NCHAN))
+        #***************************************************************
+        #set data to random white noise with a random variance and mean
+        #q_hat does not subtract a mean so I will set it to zero for
+        #the test.
+        #****************************************************************
+        test_mean=0.*np.abs(np.random.randn())#*np.abs(np.random.randn())
+        test_std=np.abs(np.random.randn())
+
+        data.flag_array[:]=False#Make sure that all of the flags are set too true for analytic case.
+        wghts.data_array[:]=1.
+        wghts.flag_array[:]=False
+        bllist=data.get_antpairs()
+        q_hat=np.zeros(NCHAN).astype(complex)
+        q_hat_id=np.zeros_like(q_hat)
+        q_hat_fft=np.zeros_like(q_hat)
+        nsamples=0
+        for datanum in range(NDATA):
+            pspec=pspecdata.PSpecData()
+            data.data_array=test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)\
+            +1j*test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)+(1.+1j)*test_mean
+            pspec.add([data],[wghts])
+            for j in range(data.Nbls):
+                #get baseline index
+                pair1=bllist[j]
+                k1=(0,pair1[0],pair1[1],-5)
+                k2=(0,pair1[0],pair1[1],-5)
+                #get q
+                #test identity
+                q_hat=q_hat+np.mean(pspec.q_hat(k1,k2,use_fft=False),
+                axis=1)
+                q_hat_id=q_hat_id+np.mean(pspec.q_hat(k1,k2,use_identity=True),
+                axis=1)
+                q_hat_fft=q_hat_fft+np.mean(pspec.q_hat(k1,k2),axis=1)
+                nsamples=nsamples+1
+            del pspec
+
+
+
+        #print nsamples
+        nfactor=test_std**2./data.Nfreqs/nsamples
+        q_hat=q_hat*nfactor
+        q_hat_id=q_hat_id*nfactor/test_std**4.
+        q_hat_fft=q_hat_fft*nfactor
+        #print q_hat
+        #print q_hat_id
+        #print q_hat_fft
+
+        self.assertTrue(np.allclose(q_hat,
+        np.identity(data.Nfreqs).astype(complex)))
+        self.assertTrue(np.allclose(q_hat_id,
+        np.identity(data.Nfreqs).astype(complex)))
+        self.assertTrue(np.allclose(q_hat_fft,
+        np.identity(data.Nfreqs).astype(complex)))
+
+"""
 
 if __name__ == "__main__":
     unittest.main()
