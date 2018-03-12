@@ -5,7 +5,7 @@ import pyuvdata as uv
 import os
 import copy
 import sys
-from hera_pspec import pspecdata
+from hera_pspec import pspecdata, pspecbeam
 from hera_pspec import oqe
 from hera_pspec.data import DATA_PATH
 import pyuvdata as uv
@@ -81,6 +81,9 @@ class Test_DataSet(unittest.TestCase):
 
     def setUp(self):
         self.ds = pspecdata.PSpecData()
+
+        beamfile = DATADIR + 'NF_HERA_Beams.beamfits'
+        self.bm = pspecbeam.PSpecBeamUV(beamfile)
         pass
 
     def tearDown(self):
@@ -90,10 +93,8 @@ class Test_DataSet(unittest.TestCase):
         pass
 
     def test_init(self):
-
         # Test creating empty DataSet
         ds = pspecdata.PSpecData()
-        #self.assertAlmostEqual(C.H0, 25.5)
         pass
 
     def test_add_data(self):
@@ -230,6 +231,27 @@ class Test_DataSet(unittest.TestCase):
                     for j in range(Nfreq):
                         self.assertGreaterEqual(G[i,j], -min_diagonal*10**-10)
 
+    def test_scalar(self):
+        dfiles = [
+            'zen.2458042.12552.xx.HH.uvXAA',
+            'zen.2458042.12552.xx.HH.uvXAA'
+        ]
+
+        d = []
+        for dfile in dfiles:
+            _d = uv.UVData()
+            _d.read_miriad(DATADIR + dfile)
+            d.append(_d)
+        w = [None for _d in dfiles]
+        self.ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=self.bm)
+
+        # Precomputed results in the following test were done "by hand" 
+        # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
+        scalar = self.ds.scalar()       
+        self.assertAlmostEqual(scalar,3732415176.85 / 10**9) 
+
+
+"""
 
     def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):
         '''
@@ -397,8 +419,7 @@ class Test_DataSet(unittest.TestCase):
         self.assertTrue(np.allclose(q_hat_fft,
         np.identity(data.Nfreqs).astype(complex)))
 
-
-
+"""
 
 if __name__ == "__main__":
     unittest.main()

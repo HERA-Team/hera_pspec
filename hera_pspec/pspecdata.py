@@ -2,11 +2,10 @@ import numpy as np
 import aipy
 import pyuvdata
 from .utils import hash, cov
-#from utils import hash, cov
 
 class PSpecData(object):
 
-    def __init__(self, dsets=[], wgts=[]):
+    def __init__(self, dsets=[], wgts=[], beam=None):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -20,6 +19,10 @@ class PSpecData(object):
         wgts : List of UVData objects, optional
             List of UVData objects containing weights for the input data.
             Default: Empty list.
+
+        beam : PspecBeam object, optional
+            PspecBeam object containing information about the primary beam
+            Default: None.
         """
         self.clear_cov_cache() # Covariance matrix cache
         self.dsets = []; self.wgts = []
@@ -31,6 +34,9 @@ class PSpecData(object):
         # Store the input UVData objects if specified
         if len(dsets) > 0:
             self.add(dsets, wgts)
+
+        # Store a primary beam
+        self.primary_beam = beam
 
     def add(self, dsets, wgts):
         """
@@ -76,7 +82,10 @@ class PSpecData(object):
         # Store no. frequencies and no. times
         self.Nfreqs = self.dsets[0].Nfreqs
         self.Ntimes = self.dsets[0].Ntimes
-
+        
+        # Store the actual frequencies
+        self.freqs = self.dsets[0].freq_array[0]
+        
     def validate_datasets(self):
         """
         Validate stored datasets and weights to make sure they are consistent
@@ -609,8 +618,49 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
-    def pspec(self, bls, input_data_weight='identity', norm='I',
-              taper='none', verbose=False):
+    def scalar(self, stokes='I', taper='none', little_h=True, num_steps=10000):
+        """
+        Computes the scalar function to convert a power spectrum estimate
+        in "telescope units" to cosmological units
+
+        See arxiv:1304.4991 and HERA memo #27 for details.
+
+        Currently this is only for Stokes I.
+
+        Parameters
+        ----------
+        stokes: str, optional
+                Which Stokes parameter's beam to compute the scalar for.
+                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
+                Default: 'I'
+
+        taper : str, optional
+                Whether a tapering function (e.g. Blackman-Harris) is being
+                used in the power spectrum estimation.
+                Default: none
+
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+
+        num_steps : int, optional
+                Number of steps to use when interpolating primary beams for
+                numerical integral
+                Default: 10000
+
+        Returns
+        -------
+        scalar: float
+                [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
+                in h^-3 Mpc^3 or Mpc^3.
+        """
+        scalar = self.primary_beam.compute_pspec_scalar(\
+                self.freqs[0],self.freqs[-1],self.Nfreqs,\
+                stokes,taper,little_h,num_steps)
+        return scalar
+
+    def pspec(self, bls, beam=None, input_data_weight='identity', norm='I', 
+              taper='none', little_h=True, verbose=False):
         """
         Estimate the power spectrum from the datasets contained in this object,
         using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
@@ -620,6 +670,9 @@ class PSpecData(object):
         bls : list of tuples
             List of baselines to include in the power spectrum calculation.
             Each baseline is specified as a tuple of antenna IDs.
+
+        beam : PspecBeam object
+            Primary beam information for the data being inputted.
 
         input_data_weight : str, optional
             String specifying what weighting matrix to apply to the input
@@ -632,6 +685,10 @@ class PSpecData(object):
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
+
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
 
         verbose : bool, optional
             If True, print progress/debugging information.
@@ -651,6 +708,11 @@ class PSpecData(object):
 
         # Validate the input data to make sure it's sensible
         self.validate_datasets()
+
+        # Compute the scalar to convert from "telescope units" to "cosmo units"
+        # once and for all
+        if self.primary_beam != None:
+            scalar = self.scalar(taper=taper, little_h=True)
 
         pvs = []; pairs = []
         # Loop over pairs of datasets
@@ -682,6 +744,11 @@ class PSpecData(object):
                     if verbose: print("  Normalizing power spectrum...")
                     Mv, Wv = self.get_MW(Gv, mode=norm)
                     pv = self.p_hat(Mv, qv)
+
+                    # Multiply by scalar
+                    if self.primary_beam != None:
+                        if verbose: print("  Computing and multiplying scalar...")
+                        pv *= scalar
 
                     # Save power spectra and dataset/baseline pairs
                     pvs.append(pv)
