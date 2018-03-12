@@ -812,4 +812,3 @@ class PSpecData(object):
             return dsets
 
 
->>>>>>> added lst_rephase to pspecdata
