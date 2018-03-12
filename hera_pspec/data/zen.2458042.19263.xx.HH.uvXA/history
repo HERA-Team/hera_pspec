@@ -1,0 +1,4 @@
+CORR-DACQ: created file.
+  Read/written with pyuvdata version: 1.1.  Git origin: https://github.com/HERA-Team/pyuvdata.git.  Git hash: 8c65e5432ad70a38102b6c09ad5851e4de10f76a.  Git branch: h1c.  Git description: v1.1-533-g8c65e54.  Downselected to specific antennas using pyuvdata. Hera Hex antennas selected with hera_cal/scripts/extract_hh.py, hera_cal version: {'git_hash': '8de90f0f2afe01adec5a5e317716af5a8e7811b4', 'version': '1.0', 'git_description': 'v1.0', 'git_branch': 'h1c', 'git_origin': 'https://github.com/HERA-Team/hera_cal.git'}.
+  Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.  Git hash: 2d13758764f389385aefcf83958eb65c96d4f8d8.  Git branch: master.  Git description: v1.2-118-g2d13758.
+  Downselected to specific antennas using pyuvdata.  Downselected to specific frequencies using pyuvdata.  Downselected to specific times using pyuvdata.
