@@ -2,16 +2,9 @@ import unittest
 import nose.tools as nt
 import numpy as np
 import pyuvdata as uv
-<<<<<<< HEAD
 import os, copy, sys
 from scipy.integrate import simps
-from hera_pspec import pspecdata
-=======
-import os
-import copy
-import sys
 from hera_pspec import pspecdata, pspecbeam
->>>>>>> pspec_graduation
 from hera_pspec import oqe
 from hera_pspec.data import DATA_PATH
 
@@ -94,7 +87,6 @@ class Test_PSpecData(unittest.TestCase):
         
         # Instantiate empty PSpecData
         self.ds = pspecdata.PSpecData()
-<<<<<<< HEAD
         
         # Load datafiles
         self.d = []
@@ -105,12 +97,10 @@ class Test_PSpecData(unittest.TestCase):
         
         # Set trivial weights
         self.w = [None for _d in dfiles]
-=======
-
+        
+        # Load beam file
         beamfile = DATADIR + 'NF_HERA_Beams.beamfits'
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
-        pass
->>>>>>> pspec_graduation
 
     def tearDown(self):
         pass
@@ -119,7 +109,6 @@ class Test_PSpecData(unittest.TestCase):
         pass
 
     def test_init(self):
-<<<<<<< HEAD
         # Test creating empty PSpecData
         ds = pspecdata.PSpecData()
         
@@ -139,12 +128,6 @@ class Test_PSpecData(unittest.TestCase):
         self.assertRaises(TypeError, pspecdata.PSpecData, d_lst, d_lst)
         self.assertRaises(TypeError, pspecdata.PSpecData, d_float, d_float)
         self.assertRaises(TypeError, pspecdata.PSpecData, d_dict, d_dict)
-        
-=======
-        # Test creating empty DataSet
-        ds = pspecdata.PSpecData()
-        pass
->>>>>>> pspec_graduation
 
     def test_add_data(self):
         pass
@@ -281,12 +264,9 @@ class Test_PSpecData(unittest.TestCase):
                 key2 = (1, 25, 38)
 
                 G = self.ds.get_G(key1, key2, taper=taper)
-<<<<<<< HEAD
                 self.assertEqual(G.shape, (Nfreq,Nfreq)) # Test shape
                 print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
-                #np.min( [np.min(np.abs(G)),
-                #                        np.min(np.abs(np.linalg.eigvalsh(G)))] )
 
                 if input_data_weight == 'identity':
                     # In the identity case, there are three special properties
@@ -298,7 +278,8 @@ class Test_PSpecData(unittest.TestCase):
 
                     # Test symmetry
                     anti_sym_norm = np.linalg.norm(G - G.T)
-                    self.assertLessEqual(anti_sym_norm, matrix_scale*multiplicative_tolerance)
+                    self.assertLessEqual(anti_sym_norm, 
+                                        matrix_scale * multiplicative_tolerance)
 
                     # Test cyclic property of trace, where key1 and key2 can be
                     # swapped without changing the matrix. This is secretly the
@@ -307,7 +288,8 @@ class Test_PSpecData(unittest.TestCase):
                     # the other.
                     G_swapped = self.ds.get_G(key2, key1, taper=taper)
                     G_diff_norm = np.linalg.norm(G - G_swapped)
-                    self.assertLessEqual(G_diff_norm, matrix_scale*multiplicative_tolerance)
+                    self.assertLessEqual(G_diff_norm, 
+                                        matrix_scale * multiplicative_tolerance)
                     min_diagonal = np.min(np.diagonal(G))
                     
                     # Test that all elements of G are positive up to numerical noise
@@ -315,7 +297,8 @@ class Test_PSpecData(unittest.TestCase):
                     # the smallest value on the diagonal
                     for i in range(Nfreq):
                         for j in range(Nfreq):
-                            self.assertGreaterEqual(G[i,j], -min_diagonal*multiplicative_tolerance)
+                            self.assertGreaterEqual(G[i,j], 
+                                       -min_diagonal * multiplicative_tolerance)
                 else:
                     # In general, when R_1 != R_2, there is a more restricted symmetry
                     # where swapping R_1 and R_2 *and* taking the transpose gives the
@@ -402,51 +385,16 @@ class Test_PSpecData(unittest.TestCase):
         # only expect equality to ~10^-2 to 10^-3
         np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
 
-=======
-                self.assertEqual(G.shape,(Nfreq,Nfreq)) # Test shape
-                matrix_scale = np.min([np.min(abs(G)),np.min(abs(np.linalg.eigvalsh(G)))])
-                anti_sym_norm = np.linalg.norm(G - G.T)
-                self.assertLessEqual(anti_sym_norm, matrix_scale*10**-10) # Test symmetry
-
-                # Test cyclic property of trace, where key1 and key2 can be
-                # swapped without changing the matrix. This is secretly the
-                # same test as the symmetry test, but perhaps there are
-                # creative ways to break the code to break one test but not
-                # the other.
-                G_swapped = self.ds.get_G(key2, key1, taper=taper)
-                G_diff_norm = np.linalg.norm(G - G_swapped)
-                self.assertLessEqual(G_diff_norm, matrix_scale*10**-10)
-
-
-                min_diagonal = np.min(np.diagonal(G))
-                # Test that all elements of G are positive up to numerical noise
-                # with the threshold set to 10 orders of magnitude down from
-                # the smallest value on the diagonal
-                for i in range(Nfreq):
-                    for j in range(Nfreq):
-                        self.assertGreaterEqual(G[i,j], -min_diagonal*10**-10)
-
     def test_scalar(self):
-        dfiles = [
-            'zen.2458042.12552.xx.HH.uvXAA',
-            'zen.2458042.12552.xx.HH.uvXAA'
-        ]
-
-        d = []
-        for dfile in dfiles:
-            _d = uv.UVData()
-            _d.read_miriad(DATADIR + dfile)
-            d.append(_d)
-        w = [None for _d in dfiles]
-        self.ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=self.bm)
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
 
         # Precomputed results in the following test were done "by hand" 
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         scalar = self.ds.scalar()       
-        self.assertAlmostEqual(scalar,3732415176.85 / 10**9) 
-
+        self.assertAlmostEqual(scalar, 3732415176.85 / 10.**9)
 
 """
+# LEGACY MONTE CARLO TESTS
 
     def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):
         '''
