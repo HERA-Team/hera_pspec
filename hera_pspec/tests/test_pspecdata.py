@@ -10,6 +10,7 @@ from hera_pspec import oqe
 from hera_pspec.data import DATA_PATH
 import pyuvdata as uv
 import pylab as plt
+from hera_cal import redcal
 
 # Get absolute path to data directory
 DATADIR = os.path.dirname( os.path.realpath(__file__) ) + "/../data/"
@@ -80,8 +81,24 @@ taper_selection = ['blackman'] #,'blackman-harris','gaussian0.4','kaiser2',\
 class Test_DataSet(unittest.TestCase):
 
     def setUp(self):
+        # setup empty PSpecData
         self.ds = pspecdata.PSpecData()
-        pass
+
+        # read in miriad file
+        self.uvd1 = uv.UVData()
+        self.uvd1.read_miriad(os.path.join(DATA_PATH, 'zen.2458042.12552.xx.HH.uvXAA'))
+
+        # read in another miriad file
+        self.uvd2 = uv.UVData()
+        self.uvd2.read_miriad(os.path.join(DATA_PATH, 'zen.2458042.19263.xx.HH.uvXA'))
+        self.antpos, self.ants = self.uvd2.get_ENU_antpos(pick_data_ants=True)
+        self.antpos -= np.median(self.antpos, axis=0)
+        self.antpos_dict = dict(zip(self.ants, self.antpos))
+        red_bls = redcal.get_reds(self.antpos_dict, low_hi=True)
+        for i, blg in enumerate(red_bls):
+            for j, bl in enumerate(blg):
+                red_bls[i][j] = red_bls[i][j][:2]
+        self.red_bls = red_bls
 
     def tearDown(self):
         pass
@@ -98,6 +115,43 @@ class Test_DataSet(unittest.TestCase):
 
     def test_add_data(self):
         pass
+
+    def test_validate_datasets(self):
+        # test freq exception
+        uvd2 = self.uvd1.select(frequencies=np.unique(self.uvd1.freq_array)[:10], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[self.uvd1, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds.validate_datasets)
+        # test time exception
+        uvd2 = self.uvd1.select(times=np.unique(self.uvd1.time_array)[:10], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[self.uvd1, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds.validate_datasets)
+
+
+    def test_pspec(self):
+        # generate two uvd objects w/ adjacent integrations stripped out
+        uvd1 = self.uvd2.select(times=np.unique(self.uvd2.time_array)[0::2], inplace=False)
+        uvd2 = self.uvd2.select(times=np.unique(self.uvd2.time_array)[1::2], inplace=False)
+
+        # test basic setup
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None])
+        nt.assert_equal(uvd1, ds.dsets[0])
+        nt.assert_equal(uvd2, ds.dsets[1])
+
+        # basic execution
+        pspecs, pairs = ds.pspec(self.red_bls[0], input_data_weight='identity', norm='I', 
+                                 rev_bl_pair=False, verbose=False)
+        # assert shapes
+        nt.assert_equal(pspecs.shape, (4, 64, 30))
+        nt.assert_equal(len(pairs), 4)
+        # assert auto-baseline pspec
+        nt.assert_equal(pairs[0][0][1:], pairs[0][1][1:])
+
+        # execution w/ red_bl_group
+        pspecs, pairs = ds.pspec(self.red_bls, input_data_weight='identity', norm='I', 
+                                 rev_bl_pair=True, verbose=False)
+        # assert shapes
+        nt.assert_equal(pspecs.shape, (63, 64, 30))
+
 
     def test_get_Q(self):
         vect_length = 50
@@ -298,11 +352,11 @@ class Test_DataSet(unittest.TestCase):
         self.assertTrue(np.allclose(f_mat,
                         np.identity(data.Nfreqs).astype(complex),
                         rtol=tolerance,
-                        atol=tolerance)
+                        atol=tolerance))
         self.assertTrue(np.allclose(f_mat_true,
                                     np.identity(data.Nfreqs).astype(complex),
                                     rtol=tolerance,
-                                    atol=tolerance)
+                                    atol=tolerance))
         #TODO: Need a test case for some kind of taper.
 
 
@@ -397,7 +451,31 @@ class Test_DataSet(unittest.TestCase):
         self.assertTrue(np.allclose(q_hat_fft,
         np.identity(data.Nfreqs).astype(complex)))
 
+    def test_rephase_to_dst(self):
+        # generate two uvd objects w/ different LST grids
+        uvd2 = copy.copy(self.uvd2)
+        uvd1 = uv.UVData()
+        uvd1.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+        # setup dataset
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None])
+        # get normal pspec
+        bls = [(37, 39)]
+        pspecs1, pairs1 = ds.pspec(bls)
+        # rephase and get pspec
+        ds.rephase_to_dset(0)
+        pspecs2, pairs2 = ds.pspec(bls)
+        # check coherence has increased
+        nt.assert_true(np.mean(np.abs(pspecs2[0] / pspecs1[0])) > 1.01)
 
+        # null test: check nothing changes when dsets contain same UVData object
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd1], wgts=[None, None])
+        # get normal pspec
+        bls = [(37, 39)]
+        pspecs1, pairs1 = ds.pspec(bls)
+        # rephase and get pspec
+        ds.rephase_to_dset(0)
+        pspecs2, pairs2 = ds.pspec(bls)
+        nt.assert_true(np.isclose(np.abs(pspecs2/pspecs1), 1.0).min())
 
 
 if __name__ == "__main__":

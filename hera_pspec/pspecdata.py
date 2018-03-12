@@ -2,7 +2,11 @@ import numpy as np
 import aipy
 import pyuvdata
 from .utils import hash, cov
+import itertools
+import hera_cal as hc
+import copy
 #from utils import hash, cov
+
 
 class PSpecData(object):
 
@@ -86,9 +90,16 @@ class PSpecData(object):
         assert len(self.dsets) > 1
         assert len(self.dsets) == len(self.wgts)
 
-        # Check if data are all the same shape
+        # Check if data are all the same shape along freq axis
         Nfreqs = [d.Nfreqs for d in self.dsets]
-        assert np.unique(Nfreqs).size == 1
+        if np.unique(Nfreqs).size > 1:
+            raise ValueError("all dsets must have the same Nfreqs")
+
+        # Check shape along time axis
+        Ntimes = [d.Ntimes for d in self.dsets]
+        if np.unique(Ntimes).size > 1:
+            raise ValueError("all dsets must have the same Ntimes")
+
 
     def clear_cov_cache(self, keys=None):
         """
@@ -610,7 +621,7 @@ class PSpecData(object):
         return np.dot(M, q)
 
     def pspec(self, bls, input_data_weight='identity', norm='I',
-              taper='none', verbose=False):
+              taper='none', rev_bl_pair=False, verbose=False):
         """
         Estimate the power spectrum from the datasets contained in this object,
         using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
@@ -619,7 +630,13 @@ class PSpecData(object):
         ----------
         bls : list of tuples
             List of baselines to include in the power spectrum calculation.
-            Each baseline is specified as a tuple of antenna IDs.
+            Each baseline is specified as a tuple of antenna numbers.
+            Ex. [(0, 1), (1, 2)]
+
+            Optionally, this can be a list of redundant baseline groups to
+            take cross-power between, each baseline group being a list of 
+            (ant1_num, ant2_num) pairs.
+            Ex. [[(0, 1), (1, 2)], [(0, 3), (1, 4)]]
 
         input_data_weight : str, optional
             String specifying what weighting matrix to apply to the input
@@ -633,6 +650,12 @@ class PSpecData(object):
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
 
+        rev_bl_pair : bool, optional
+            Adds extra baselines having reversed the baseline pairing. 
+            In other words, if True, solve for both (ant1, ant2) * conj(ant3, ant4) 
+            and (ant3, ant4) * conj(ant1, ant2). Only has effect if 'bls' is fed 
+            as a list of redundant baseline groups.
+ 
         verbose : bool, optional
             If True, print progress/debugging information.
 
@@ -652,17 +675,39 @@ class PSpecData(object):
         # Validate the input data to make sure it's sensible
         self.validate_datasets()
 
+        # Setup empty lists
         pvs = []; pairs = []
+
+        # Setup baseline groupings
+        bl_pairs = []
+        if isinstance(bls[0], tuple) and isinstance(bls[0][0], int):
+            # assume bls is a list of tuple antenna pairs
+            bls = map(lambda bl: (bl, bl), bls)
+
+        elif isinstance(bls[0], list) and isinstance(bls[0][0], tuple) \
+             and isinstance(bls[0][0][0], int):
+            # assume bls is a list of redundant baseline groups
+            red_bls = map(lambda bl_group: \
+                          list(itertools.combinations_with_replacement(bl_group, 2)), bls)
+            bls = [item for sublist in red_bls for item in sublist]
+
+        # adds extra bls having reversed baseline ordering
+        if rev_bl_pair:
+            extra_bl_pairs = []
+            for bl_pair in bls:
+                if bl_pair[0] != bl_pair[1]:
+                    extra_bl_pairs.append(bl_pair[::-1])
+            bls.extend(extra_bl_pairs)
+
         # Loop over pairs of datasets
         for m in xrange(len(self.dsets)):
             for n in xrange(m+1, len(self.dsets)):
-                # Datasets should not be cross-correlated with themselves, and
-                # dataset pair (m, n) gives the same result as (n, m)
+                # Datasets should not be cross-correlated with themselves
 
                 # Loop over baselines
-                for bl in bls:
-                    key1 = (m,) + bl
-                    key2 = (n,) + bl
+                for bl_pair in bls:
+                    key1 = (m,) + bl_pair[0]
+                    key2 = (n,) + bl_pair[1]
 
                     if verbose: print("Baselines:", key1, key2)
 
@@ -686,4 +731,84 @@ class PSpecData(object):
                     # Save power spectra and dataset/baseline pairs
                     pvs.append(pv)
                     pairs.append((key1, key2))
-        return np.array(pvs).real, pairs
+
+        return np.array(pvs), pairs
+
+
+    def rephase_to_dset(self, dset_index, inplace=True):
+        """
+        Rephase data in dsets to the LST grid of dset[dset_index] using
+        hera_cal.lstbin.lst_rephase.
+
+        Parameters
+        ----------
+        dset_index : int
+            index of dataset in self.dset to phase other datasets to.
+
+        inplace : bool, optional
+            If True, edits data in dsets in-memory. Else, makes a copy of
+            dsets, edits data in the copy and returns to user.
+
+        Returns
+        -------
+        if inplace:
+            return new_dsets
+        else:
+            return None
+        """
+        # run dataset validation
+        self.validate_datasets()
+
+        # assign dsets
+        if inplace:
+            dsets = self.dsets
+        else:
+            dsets = copy.deepcopy(self.dsets)
+
+        # get LST grid we are phasing to
+        lst_grid = []
+        lst_array = dsets[dset_index].lst_array.ravel()
+        for l in lst_array:
+            if l not in lst_grid:
+                lst_grid.append(l)
+        lst_grid = np.array(lst_grid)
+
+        # get polarization list
+        pol_list = dsets[dset_index].polarization_array.tolist()
+
+        # iterate over dsets
+        for i, dset in enumerate(dsets):
+            # don't rephase dataset we are using as our LST anchor
+            if i == dset_index:
+                continue
+
+            # convert UVData to DataContainers. Note this doesn't make
+            # a copy of the data
+            (data, flgs, antpos, ants, freqs, times, lsts, 
+             pols) = hc.io.load_vis(dset, return_meta=True)
+
+            # make bls dictionary
+            bls = dict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
+
+            # Get dlst array
+            dlst = lst_grid - lsts
+
+            # get telescope latitude
+            lat = dset.telescope_location_lat_lon_alt_degrees[0]
+
+            # rephase
+            hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=lat)
+
+            # re-insert into dataset
+            for j, k in enumerate(data.keys()):
+                indices = dset.antpair2ind(*k[:2])
+                polind = pol_list.index(hc.io.polstr2num[k[-1]])
+                dset.data_array[indices, 0, :, polind] = data[k]
+
+            # set phasing to unknown
+            dset.phase_type = 'unknown'
+
+        if inplace is False:
+            return dsets
+
+
