@@ -10,6 +10,7 @@ from hera_pspec import oqe
 from hera_pspec.data import DATA_PATH
 import pyuvdata as uv
 import pylab as plt
+from hera_cal import redcal
 
 # Get absolute path to data directory
 DATADIR = os.path.dirname( os.path.realpath(__file__) ) + "/../data/"
@@ -84,8 +85,20 @@ class Test_DataSet(unittest.TestCase):
         self.ds = pspecdata.PSpecData()
 
         # read in miriad file
-        self.uvd = uv.UVData()
-        self.uvd.read_miriad(os.path.join(DATA_PATH, 'zen.2458042.12552.xx.HH.uvXAA'))
+        self.uvd1 = uv.UVData()
+        self.uvd1.read_miriad(os.path.join(DATA_PATH, 'zen.2458042.12552.xx.HH.uvXAA'))
+
+        # read in another miriad file
+        self.uvd2 = uv.UVData()
+        self.uvd2.read_miriad(os.path.join(DATA_PATH, 'zen.2458042.19263.xx.HH.uvXA'))
+        self.antpos, self.ants = self.uvd2.get_ENU_antpos(pick_data_ants=True)
+        self.antpos -= np.median(self.antpos, axis=0)
+        self.antpos_dict = dict(zip(self.ants, self.antpos))
+        red_bls = redcal.get_reds(self.antpos_dict, low_hi=True)
+        for i, blg in enumerate(red_bls):
+            for j, bl in enumerate(blg):
+                red_bls[i][j] = red_bls[i][j][:2]
+        self.red_bls = red_bls
 
     def tearDown(self):
         pass
@@ -105,13 +118,40 @@ class Test_DataSet(unittest.TestCase):
 
     def test_validate_datasets(self):
         # test freq exception
-        uvd2 = self.uvd.select(frequencies=np.unique(self.uvd.freq_array)[:10], inplace=False)
-        ds = pspecdata.PSpecData(dsets=[self.uvd, uvd2], wgts=[None, None])
+        uvd2 = self.uvd1.select(frequencies=np.unique(self.uvd1.freq_array)[:10], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[self.uvd1, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
         # test time exception
-        uvd2 = self.uvd.select(times=np.unique(self.uvd.time_array)[:10], inplace=False)
-        ds = pspecdata.PSpecData(dsets=[self.uvd, uvd2], wgts=[None, None])
+        uvd2 = self.uvd1.select(times=np.unique(self.uvd1.time_array)[:10], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[self.uvd1, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
+
+
+    def test_pspec(self):
+        # generate two uvd objects w/ adjacent integrations stripped out
+        uvd1 = self.uvd2.select(times=np.unique(self.uvd2.time_array)[0::2], inplace=False)
+        uvd2 = self.uvd2.select(times=np.unique(self.uvd2.time_array)[1::2], inplace=False)
+
+        # test basic setup
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None])
+        nt.assert_equal(uvd1, ds.dsets[0])
+        nt.assert_equal(uvd2, ds.dsets[1])
+
+        # basic execution
+        pspecs, pairs = ds.pspec(self.red_bls[0], input_data_weight='identity', norm='I', 
+                                 rev_bl_pair=False, verbose=False)
+        # assert shapes
+        nt.assert_equal(pspecs.shape, (4, 64, 30))
+        nt.assert_equal(len(pairs), 4)
+        # assert auto-baseline pspec
+        nt.assert_equal(pairs[0][0][1:], pairs[0][1][1:])
+
+        # execution w/ red_bl_group
+        pspecs, pairs = ds.pspec(self.red_bls, input_data_weight='identity', norm='I', 
+                                 rev_bl_pair=True, verbose=False)
+        # assert shapes
+        nt.assert_equal(pspecs.shape, (63, 64, 30))
+
 
     def test_get_Q(self):
         vect_length = 50
