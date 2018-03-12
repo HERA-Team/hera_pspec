@@ -544,8 +544,6 @@ class Test_PSpecData(unittest.TestCase):
                 nsamples=nsamples+1
             del pspec
 
-
-
         #print nsamples
         nfactor=test_std**2./data.Nfreqs/nsamples
         q_hat=q_hat*nfactor
@@ -561,9 +559,7 @@ class Test_PSpecData(unittest.TestCase):
         np.identity(data.Nfreqs).astype(complex)))
         self.assertTrue(np.allclose(q_hat_fft,
         np.identity(data.Nfreqs).astype(complex)))
-
 """
->>>>>>> pspec_graduation
 
 if __name__ == "__main__":
     unittest.main()
