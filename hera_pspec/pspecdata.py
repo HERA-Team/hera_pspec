@@ -164,12 +164,13 @@ class PSpecData(object):
         assert isinstance(key, tuple)
 
         dset = key[0]; bl = key[1:]
+        
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T # FIXME: Transpose?
         else:
             # If weights were not specified, use the flags built in to the
             # UVData dataset object
-            flags = self.dsets[dset].get_flags(bl).astype(float).T # FIXME: .T?
+            flags = self.dsets[dset].get_flags(bl).astype(float).T
             return 1. - flags # Flag=1 => weight=0
 
     def C(self, key):
@@ -336,10 +337,11 @@ class PSpecData(object):
 
         Parameters
         ----------
-        key1, key2 : tuples
-            Tuples containing indices of dataset and baselines for the two
-            input datavectors.
-
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two 
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
+            
         use_fft : bool, optional
             Whether to use a fast FFT summation trick to construct q_hat, or
             a simpler brute-force matrix multiplication. The FFT method assumes
@@ -354,19 +356,22 @@ class PSpecData(object):
         q_hat : array_like
             Unnormalized bandpowers
         """
-        assert isinstance(key1, tuple)
-        assert isinstance(key2, tuple)
-
-        # Calculate R x_1 and R x_2
-        #iC1x, iC2x = 0, 0
-        #for _k in k1: iC1x += np.dot(icov_fn(_k), self.x(_k))
-        #for _k in k2: iC2x += np.dot(icov_fn(_k), self.x(_k))
-        Rx1 = np.dot(self.R(key1), self.x(key1))
-        Rx2 = np.dot(self.R(key2), self.x(key2))
-
+        Rx1, Rx2 = 0, 0
+        
+        # Calculate R x_1
+        if isinstance(key1, list):
+            for _key in key1: Rx1 += np.dot(self.R(_key), self.x(_key))
+        else:
+            Rx1 = np.dot(self.R(key1), self.x(key1))
+        
+        # Calculate R x_2
+        if isinstance(key2, list):
+            for _key in key2: Rx2 += np.dot(self.R(_key), self.x(_key))
+        else:
+            Rx2 = np.dot(self.R(key2), self.x(key2))
+        
         # Whether to use FFT or slow direct method
         if use_fft:
-
             if taper != 'none':
                 tapering_fct = aipy.dsp.gen_window(self.Nfreqs, taper)
                 Rx1 *= tapering_fct
@@ -374,11 +379,9 @@ class PSpecData(object):
 
             _Rx1 = np.fft.fft(Rx1.conj(), axis=0)
             _Rx2 = np.fft.fft(Rx2.conj(), axis=0)
-
-            # Conjugated because inconsistent with pspec_cov_v003 otherwise
-            # FIXME: Check that this should actually be conjugated
-            return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj()
-                           * np.fft.fftshift(_Rx2, axes=0) )
+            
+            return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
+                                 * np.fft.fftshift(_Rx2, axes=0) )
         else:
             # Slow method, used to explicitly cross-check FFT code
             q = []
@@ -408,9 +411,10 @@ class PSpecData(object):
 
         Parameters
         ----------
-        key1, key2 : tuples
-            Tuples containing indices of dataset and baselines for the two
-            input datavectors.
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two 
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
 
         taper : str, optional
             Tapering (window) function used when calculating Q. Takes the same
@@ -421,9 +425,6 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        assert isinstance(key1, tuple)
-        assert isinstance(key2, tuple)
-
         G = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
@@ -437,30 +438,35 @@ class PSpecData(object):
         for i in xrange(self.Nfreqs): # this loop goes as nchan^4
             for j in xrange(self.Nfreqs):
                 # tr(R_2 Q_i R_1 Q_j)
-                G[i,j] += np.einsum('ij,ji', iR1Q[i], iR2Q[j])
+                G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
 
-        return G.real / 2.
-
+        return G / 2.
+    
+    
     def get_V_gaussian(self, key1, key2):
         """
-        Calculates the bandpower covariance matrix
-        V_ab = tr(C E_a C E_b)
-        # FIXME: Must check factor of 2 with Wick's thm for complex vectors
-        # and also check expression for when x_1 != x_2.
-
+        Calculates the bandpower covariance matrix,
+        
+            V_ab = tr(C E_a C E_b)
+            
+        FIXME: Must check factor of 2 with Wick's theorem for complex vectors,
+        and also check expression for when x_1 != x_2.
+        
         Parameters
         ----------
-        key1, key2 : tuples
-            Tuples containing indices of dataset and baselines for the two
-            input datavectors.
-
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two 
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
+        
         Returns
         -------
         V : array_like, complex
-            bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
+            Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         raise NotImplementedError()
-
+    
+    
     def get_MW(self, G, mode='I'):
         """
         Construct the normalization matrix M and window function matrix W for
@@ -470,7 +476,7 @@ class PSpecData(object):
             \hat{p} = M \hat{q}
             <\hat{p}> = W p
             W = M G,
-
+g
         where p is the true band power and G is the response matrix (defined above
         in get_G) of unnormalized bandpowers to normed bandpowers. The G matrix
         is the Fisher matrix when R = C^-1
@@ -506,10 +512,10 @@ class PSpecData(object):
             Window function matrix, W. (If G was passed in as a dict, a dict of
             array_like will be returned.)
         """
-        # Recursive case, if many F's were specified at once
+        # Recursive case, if many G's were specified at once
         if type(G) is dict:
             M,W = {}, {}
-            for key in G: M[key],W[key] = self.get_MW(G[key], mode=mode)
+            for key in G: M[key], W[key] = self.get_MW(G[key], mode=mode)
             return M, W
 
         # Check that mode is supported
@@ -530,12 +536,7 @@ class PSpecData(object):
             M = np.identity(G.shape[0], dtype=G.dtype)
 
         else:
-            """
-            # Cholesky decomposition to get M (XXX: Needs generalizing)
-            #order = np.array([10, 11, 9, 12, 8, 20, 0,
-            #                  13, 7, 14, 6, 15, 5, 16,
-            #                  4, 17, 3, 18, 2, 19, 1])
-            """
+            # Cholesky decomposition
             order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
             order[order < 0] = order[order < 0] - 0.1
 
@@ -617,7 +618,54 @@ class PSpecData(object):
             Optimal estimate of bandpower, \hat{p}.
         """
         return np.dot(M, q)
+    
+    
+    def units(self):
+        """
+        Return the units of the power spectrum. These are inferred from the 
+        units reported by the input visibilities (UVData objects).
 
+        Returns
+        -------
+        pspec_units : str
+            Units of the power spectrum that is returned by pspec().
+        
+        delay_units : str
+            Units of the delays (wavenumbers) returned by pspec().
+        """
+        # Frequency units of UVData are always Hz => always convert to ns
+        delay_units = 'ns'
+        
+        # Work out the power spectrum units
+        if len(self.dsets) == 0:
+            raise IndexError("No datasets have been added yet; cannot "
+                             "calculate power spectrum units.")
+        else:
+            pspec_units = "(%s)^2 (ns)^-1" % self.dsets[0].vis_units
+        
+        return pspec_units, delay_units
+        
+    
+    def delays(self):
+        """
+        Return an array of delays, tau, corresponding to the bins of the delay 
+        power spectrum output by pspec().
+        
+        Returns
+        -------
+        delays : array_like
+            Delays, tau. Units: ns.
+        """
+        # Calculate the delays
+        if len(self.dsets) == 0:
+            raise IndexError("No datasets have been added yet; cannot "
+                             "calculate delays.")
+        else:
+            nu = self.dsets[0].freq_array[0] # always in Hz
+            delay = np.fft.fftfreq(nu.size, d=nu[1]-nu[0])
+            return delay * 1e9 # convert to ns
+    
+    
     def scalar(self, stokes='I', taper='none', little_h=True, num_steps=10000):
         """
         Computes the scalar function to convert a power spectrum estimate
@@ -662,25 +710,31 @@ class PSpecData(object):
     def pspec(self, bls, beam=None, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, verbose=False):
         """
-        Estimate the power spectrum from the datasets contained in this object,
-        using the optimal quadratic estimator (OQE) from arXiv:1502.06016.
+        Estimate the delay power spectrum from the datasets contained in this 
+        object, using the optimal quadratic estimator from arXiv:1502.06016.
 
         Parameters
         ----------
-        bls : list of tuples
-            List of baselines to include in the power spectrum calculation.
+        bls : list of tuples (or lists of tuples)
+            List of baselines to include in the power spectrum calculation. 
             Each baseline is specified as a tuple of antenna IDs.
+            
+            If an element of the list is a list of tuples, the baselines in 
+            that list will be averaged together in the power spectrum 
+            calculation, reducing the number of cross-correlations that are 
+            needed.
 
         beam : PspecBeam object
-            Primary beam information for the data being inputted.
+            Primary beam information for the input data.
 
         input_data_weight : str, optional
-            String specifying what weighting matrix to apply to the input
-            data. See the options in the set_R method for details.
-
+            String specifying which weighting matrix to apply to the input
+            data. See the options in the set_R() method for details. 
+            Default: 'identity'.
+            
         norm : str, optional
-            String specifying how to choose the normalization matrix, M. See
-            the 'mode' argument of get_MW() for options.
+            String specifying how to choose the normalization matrix, M. See 
+            the 'mode' argument of get_MW() for options. Default: 'I'.
 
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
@@ -691,19 +745,19 @@ class PSpecData(object):
                 Default: h^-1 Mpc
 
         verbose : bool, optional
-            If True, print progress/debugging information.
+            If True, print progress/debugging information. Default: False.
 
         Returns
         -------
         pspec : list of np.ndarray
-            Optimal quadratic estimate of the power spectrum for the datasets
-            stored in this PSpecData and baselines specified in 'keys'.
-
+            Optimal quadratic estimate of the delay power spectrum for the 
+            datasets stored in this PSpecData and baselines specified in 
+            'keys'. Units: given by the units() method.
+        
         pairs : list of tuples
             List of the pairs of datasets and baselines that were used to
             calculate each element of the 'pspec' list.
         """
-        #FIXME: Define sensible grouping behaviors.
         #FIXME: Check that requested keys exist in all datasets
 
         # Validate the input data to make sure it's sensible
@@ -723,13 +777,16 @@ class PSpecData(object):
 
                 # Loop over baselines
                 for bl in bls:
-                    key1 = (m,) + bl
-                    key2 = (n,) + bl
-
+                    if isinstance(bl, list):
+                        key1 = [(m,) + _bl for _bl in bl]
+                        key2 = [(n,) + _bl for _bl in bl]
+                    else:
+                        key1 = (m,) + bl
+                        key2 = (n,) + bl
                     if verbose: print("Baselines:", key1, key2)
 
                     # Set covariance weighting scheme for input data
-                    if verbose: print (" Setting weighting matrix for input data...")
+                    if verbose: print("  Setting weight matrix for input data...")
                     self.set_R(input_data_weight)
 
                     # Build Fisher matrix
@@ -744,6 +801,13 @@ class PSpecData(object):
                     if verbose: print("  Normalizing power spectrum...")
                     Mv, Wv = self.get_MW(Gv, mode=norm)
                     pv = self.p_hat(Mv, qv)
+                    
+                    # Apply rescaling to account for discrete -> continuous FT
+                    # convention, and convert to ns^-1 units (input freqs are 
+                    # always in Hz)
+                    dnu = self.dsets[0].freq_array[0,1] \
+                        - self.dsets[0].freq_array[0,0]
+                    pv *= (dnu * self.Nfreqs)**2. * 1e-9 # Hz -> ns^-1
 
                     # Multiply by scalar
                     if self.primary_beam != None:
@@ -753,4 +817,5 @@ class PSpecData(object):
                     # Save power spectra and dataset/baseline pairs
                     pvs.append(pv)
                     pairs.append((key1, key2))
-        return np.array(pvs).real, pairs
+                    
+        return np.array(pvs), pairs
