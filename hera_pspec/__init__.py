@@ -8,6 +8,6 @@ import bootstrap
 from pspecdata import PSpecData
 
 # XXX: This will eventually be deprecated
-import pspec as legacy
+import legacy_pspec as legacy
 
 __version__ = version.version
