@@ -801,12 +801,12 @@ class PSpecData(object):
 
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
-                indices = dset.antpair2ind(k)
+                indices = dset.antpair2ind(*k[:2])
                 polind = pol_list.index(hc.io.polstr2num[k[-1]])
-                dset.data_array[indices, 0, :, polind]
+                dset.data_array[indices, 0, :, polind] = data[k]
 
             # set phasing to unknown
-            dset[i].phase_type = 'unknown'
+            dset.phase_type = 'unknown'
 
         if inplace is False:
             return dsets
