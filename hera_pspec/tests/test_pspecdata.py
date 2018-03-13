@@ -155,7 +155,7 @@ class Test_PSpecData(unittest.TestCase):
             self.assertAlmostEqual(np.imag(xQx), 0.)
 
         x_vect = np.ones(vect_length)
-        Q_matrix = self.ds.get_Q(vect_length/2., vect_length)
+        Q_matrix = self.ds.get_Q(vect_length/2, vect_length)
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
         # Sending in sinusoids for x and y should give delta functions
