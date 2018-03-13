@@ -5,7 +5,6 @@ import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps
 from hera_pspec import pspecdata, pspecbeam
-from hera_pspec import oqe
 from hera_pspec.data import DATA_PATH
 
 # Get absolute path to data directory
