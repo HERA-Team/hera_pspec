@@ -44,7 +44,8 @@ def generate_pos_def(n):
 
 def generate_pos_def_all_pos(n):
     """
-    Generate a random positive definite symmetric matrix, with all entries positive.
+    Generate a random positive definite symmetric matrix, with all entries 
+    positive.
 
     Parameters
     ----------
@@ -62,9 +63,9 @@ def generate_pos_def_all_pos(n):
     A += -1.01*np.min(np.linalg.eigvalsh(A))*np.identity(n)
     return A
 
-def diagonal_or_not(mat,places=7):
+def diagonal_or_not(mat, places=7):
     """
-    Tests whether a matrix is diagonal or not
+    Tests whether a matrix is diagonal or not.
 
     Parameters
     ----------
@@ -155,10 +156,10 @@ class Test_PSpecData(unittest.TestCase):
             self.assertAlmostEqual(np.imag(xQx), 0.)
 
         x_vect = np.ones(vect_length)
-        Q_matrix = self.ds.get_Q(vect_length/2, vect_length)
+        Q_matrix = self.ds.get_Q(vect_length/2., vect_length)
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
-        # 3) Sending in pure tones/sinusoids for x and y should give delta functions
+        # Sending in sinusoids for x and y should give delta functions
 
     def test_get_MW(self):
         n = 17
@@ -166,7 +167,6 @@ class Test_PSpecData(unittest.TestCase):
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, mode='L^3')
         
-        # 
         for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
             M, W = self.ds.get_MW(random_G, mode=mode)
             self.assertEqual(M.shape, (n,n))
@@ -292,20 +292,21 @@ class Test_PSpecData(unittest.TestCase):
                                         matrix_scale * multiplicative_tolerance)
                     min_diagonal = np.min(np.diagonal(G))
                     
-                    # Test that all elements of G are positive up to numerical noise
-                    # with the threshold set to 10 orders of magnitude down from
-                    # the smallest value on the diagonal
+                    # Test that all elements of G are positive up to numerical 
+                    # noise with the threshold set to 10 orders of magnitude 
+                    # down from the smallest value on the diagonal
                     for i in range(Nfreq):
                         for j in range(Nfreq):
                             self.assertGreaterEqual(G[i,j], 
                                        -min_diagonal * multiplicative_tolerance)
                 else:
-                    # In general, when R_1 != R_2, there is a more restricted symmetry
-                    # where swapping R_1 and R_2 *and* taking the transpose gives the
-                    # same result
+                    # In general, when R_1 != R_2, there is a more restricted 
+                    # symmetry where swapping R_1 and R_2 *and* taking the 
+                    # transpose gives the same result
                     G_swapped = self.ds.get_G(key2, key1, taper=taper)
                     G_diff_norm = np.linalg.norm(G - G_swapped.T)
-                    self.assertLessEqual(G_diff_norm, matrix_scale*multiplicative_tolerance)
+                    self.assertLessEqual(G_diff_norm, 
+                                         matrix_scale * multiplicative_tolerance)
 
             
     def test_parseval(self):
@@ -390,8 +391,12 @@ class Test_PSpecData(unittest.TestCase):
 
         # Precomputed results in the following test were done "by hand" 
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
-        scalar = self.ds.scalar()       
-        self.assertAlmostEqual(scalar, 3732415176.85 / 10.**9)
+        # FIXME: Uncomment when pyuvdata support for this is ready
+        #scalar = self.ds.scalar()
+        #self.assertAlmostEqual(scalar, 3732415176.85 / 10.**9)
+        
+        # FIXME: Remove this when pyuvdata support for the above is ready
+        self.assertRaises(NotImplementedError, self.ds.scalar)
 
 """
 # LEGACY MONTE CARLO TESTS
