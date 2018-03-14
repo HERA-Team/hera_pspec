@@ -235,11 +235,16 @@ class pspec(pspecBase):
         elif 'h' not in self._lengthunits and 'h' in length_units:
             pspec *= (cosmo_units.Ho)**3
 
+        if 'g' in self._lengthunits and 'g' not in length_units:
+            pspec *= (1000.)**3
+        elif 'g' not in self._lengthunits and 'g' in length_units:
+            pspec /= (1000.)**3
+
         micro_old = False
-        if ('m' in self._lengthunits) or ('u' in self._lengthunits):
+        if ('m' in self._tempunits) or ('u' in self._tempunits):
             micro_old = True
         micro_new = False
-        if ('m' in length_units) or ('u' in length_units):
+        if ('m' in temp_units) or ('u' in temp_units):
             micro_new = True
 
         if micro_old and not micro_new:

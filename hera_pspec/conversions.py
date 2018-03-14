@@ -53,14 +53,11 @@ class Cosmo_Conversions(object):
     Hogg 1999 (astro-ph/9905116)
     Furlanetto 2006 (2006PhR...433..181F)
 
-    Note that all distance measures are by default in h-1 Mpc,
-    because the default H0 = 100 km / sec / Mpc. If the user
-    changes the input H0, distance measures are in Mpc.
     """
     # astropy load attribute
     _astropy = _astropy
 
-    def __init__(self, Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=100.0,
+    def __init__(self, Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=67.27,
                  Om_M=None, Om_k=None):
         """
 
@@ -87,11 +84,6 @@ class Cosmo_Conversions(object):
         Om_k : float, Omega curvature naught, default=None [optional]
             curvature energy density at z=0
 
-        Notes:
-        ------
-        Note that all distance measures are by default in h-1 Mpc,
-        because the default H0 = 100 km / sec / Mpc. If the user
-        changes the input H0, the distance measures are in Mpc.
         """
         # Setup parameters
         if Om_M is not None:
@@ -168,7 +160,7 @@ class Cosmo_Conversions(object):
         """
         return np.sqrt(self.Om_M*(1+z)**3 + self.Om_k*(1+z)**2 + self.Om_L)
 
-    def DC(self, z):
+    def DC(self, z, little_h=True):
         """
         line-of-sight comoving distance in Mpc
         Hogg99 Eqn. 15
@@ -176,10 +168,17 @@ class Cosmo_Conversions(object):
         Parameters:
         -----------
         z : redshift, type=float
-        """
-        return integrate.quad(lambda z: 1/self.E(z), 0, z)[0] * units.ckm / self.H0 
 
-    def DM(self, z):
+        little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
+        """
+        if little_h:
+            return integrate.quad(lambda z: 1/self.E(z), 0, z)[0] * units.ckm / 100.
+        else:
+            return integrate.quad(lambda z: 1/self.E(z), 0, z)[0] * units.ckm / self.H0 
+
+    def DM(self, z, little_h=True):
         """
         transverse comoving distance in Mpc
         Hogg99 Eqn. 16
@@ -187,18 +186,26 @@ class Cosmo_Conversions(object):
         Parameters:
         -----------
         z : redshift, type=float
+
+        little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
         """
-        DH = units.ckm / self.H0
-        if self.Om_k > 0:
-            DM = DH * np.sinh(np.sqrt(self.Om_k) * self.DC(z) / DH) / np.sqrt(self.Om_k)
-        elif self.Om_k < 0:
-            DM = DH * np.sin(np.sqrt(np.abs(self.Om_k)) * self.DC(z) / DH) / np.sqrt(np.abs(self.Om_k))
+        if little_h:
+            DH = units.ckm / 100.
         else:
-            DM = self.DC(z)
+            DH = units.ckm / self.H0
+
+        if self.Om_k > 0:
+            DM = DH * np.sinh(np.sqrt(self.Om_k) * self.DC(z, little_h=little_h) / DH) / np.sqrt(self.Om_k)
+        elif self.Om_k < 0:
+            DM = DH * np.sin(np.sqrt(np.abs(self.Om_k)) * self.DC(z, little_h=little_h) / DH) / np.sqrt(np.abs(self.Om_k))
+        else:
+            DM = self.DC(z, little_h=little_h)
 
         return DM
 
-    def DA(self, z):
+    def DA(self, z, little_h=True):
         """
         angular diameter (proper) distance in Mpc
         Hogg99 Eqn. 18
@@ -206,10 +213,14 @@ class Cosmo_Conversions(object):
         Parameters:
         -----------
         z : redshift, type=float
-        """
-        return self.DM(z) / (1 + z)
 
-    def dRperp_dtheta(self, z):
+        little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
+        """
+        return self.DM(z, little_h=little_h) / (1 + z)
+
+    def dRperp_dtheta(self, z, little_h=True):
         """
         conversion factor from angular size (radian) to transverse
         comoving distance (Mpc) at a specific redshift: [Mpc / radians]
@@ -217,10 +228,14 @@ class Cosmo_Conversions(object):
         Parameters:
         -----------
         z : float, redshift
-        """
-        return self.DM(z) 
 
-    def dRpara_df(self, z, ghz=False):
+        little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
+        """
+        return self.DM(z, little_h=little_h) 
+
+    def dRpara_df(self, z, ghz=False, little_h=True):
         """
         conversion from frequency bandwidth to radial
         comoving distance at a specific redshift: [Mpc / Hz]
@@ -229,14 +244,21 @@ class Cosmo_Conversions(object):
         -----------
         z : float, redshift
         ghz : convert output to [Mpc / GHz]
+
+        little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
         """
-        y = (1 + z)**2.0 / self.E(z) * units.ckm / self.H0 / units.f21
+        if little_h:
+            y = (1 + z)**2.0 / self.E(z) * units.ckm / 100. / units.f21
+        else:
+            y = (1 + z)**2.0 / self.E(z) * units.ckm / self.H0 / units.f21
         if ghz:
             return y * 1e9
         else:
             return y
 
-    def X2Y(self, z):
+    def X2Y(self, z, little_h=True):
         """
         Conversion from radians^2 Hz -> Mpc^3
         at a specific redshift.
@@ -245,11 +267,15 @@ class Cosmo_Conversions(object):
         -----------
         z : float, redshift
 
+        little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
+
         Notes:
         ------
         Calls Cosmo_Conversions.dRperp_dtheta() and Cosmo_Conversions.dRpara_df().
         """
-        return self.dRperp_dtheta(z)**2 * self.dRpara_df(z)
+        return self.dRperp_dtheta(z, little_h=little_h)**2 * self.dRpara_df(z, little_h=little_h)
 
 
 
