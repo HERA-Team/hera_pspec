@@ -149,10 +149,10 @@ class PSpecBeamGauss(PSpecBeamBase):
                 in h^-3 Mpc^3 or Mpc^3.
         """
 
-        integration_freqs = np.linspace(lower_freq,upper_freq,num_steps)
+        integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=True)
         integration_freqs_MHz = integration_freqs / 10**6 # The interpolations are generally more stable in MHz
         redshifts = self.conversion.f2z(integration_freqs).flatten()
-        X2Y = np.array(map(self.conversion.X2Y,redshifts))
+        X2Y = np.array(map(lambda z: self.conversion.X2Y(z,little_h=little_h),redshifts))
 
         # Use linear interpolation to interpolate the frequency-dependent quantities
         # derived from the beam model to the same frequency grid as the power spectrum
@@ -172,9 +172,6 @@ class PSpecBeamGauss(PSpecBeamBase):
         d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 /  X2Y
 
         scalar = 1 / integrate.trapz(d_inv_scalar, integration_freqs)
-        if little_h == True:
-            scalar *= self.conversion.h**3
-
         return scalar
 
 
@@ -302,10 +299,10 @@ class PSpecBeamUV(PSpecBeamBase):
                 in h^-3 Mpc^3 or Mpc^3.
         """
 
-        integration_freqs = np.linspace(lower_freq,upper_freq,num_steps)
+        integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=True)
         integration_freqs_MHz = integration_freqs / 10**6 # The interpolations are generally more stable in MHz
         redshifts = self.conversion.f2z(integration_freqs).flatten()
-        X2Y = np.array(map(self.conversion.X2Y,redshifts))
+        X2Y = np.array(map(lambda z: self.conversion.X2Y(z,little_h=little_h),redshifts))
 
         # Use linear interpolation to interpolate the frequency-dependent quantities
         # derived from the beam model to the same frequency grid as the power spectrum
@@ -324,8 +321,5 @@ class PSpecBeamUV(PSpecBeamBase):
         d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 /  X2Y
 
         scalar = 1 / integrate.trapz(d_inv_scalar, integration_freqs)
-        if little_h == True:
-            scalar *= self.conversion.h**3
-
         return scalar
 
