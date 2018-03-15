@@ -1,6 +1,95 @@
-import numpy as np, pyuvdata, os, conversions
+import numpy as np
+import pyuvdata
+import os
+from hera_pspec import conversions
 from scipy import integrate
 from scipy.interpolate import interp1d
+import aipy
+
+
+def compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq, 
+                         num_steps=50000, stokes='pseudo_I', taper='none', little_h=True):
+    """
+    Computes the scalar function to convert a power spectrum estimate
+    in "telescope units" to cosmological units
+
+    See arxiv:1304.4991 and HERA memo #27 for details.
+
+    Currently, only the "pseudo Stokes I" beam is supported.
+    See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
+    or arxiv:1502.05072 for details.
+
+    Parameters
+    ----------
+    cosmo : hera_pspec.conversions.Cosmo_Conversions instance
+            Instance of the cosmological conversion object 
+            conversions.Cosmo_Conversions()
+
+    beam_freqs : array of floats
+            Frequency of beam integrals in omega_ratio in units of Hz.
+
+    omega_ratio : array of floats
+            Ratio of the integrated squared-beam power over the square of the integrated beam power
+            for each frequency in beam_freqs. i.e. Omega_pp(nu) / Omega_p(nu)^2
+
+    lower_freq: float
+            Bottom edge of frequency band over which power spectrum is
+            being estimated. Assumed to be in Hz.
+
+    upper_freq: float
+            Top edge of frequency band over which power spectrum is
+            being estimated. Assumed to be in Hz.
+
+    num_steps : int, optional
+            Number of steps to use when interpolating primary beams for
+            numerical integral
+
+    stokes: str, optional
+            Which Stokes parameter's beam to compute the scalar for.
+            'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+            Default: 'pseudo_I'
+
+    taper : str, optional
+            Whether a tapering function (e.g. Blackman-Harris) is being
+            used in the power spectrum estimation.
+            Default: none
+
+    little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Value of h is obtained from conversion object stored in pspecbeam
+            Default: h^-1 Mpc
+
+    Returns
+    -------
+    scalar: float
+            [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
+            in h^-3 Mpc^3 or Mpc^3.
+    """
+    # get integration freqs, redshift and cosmological scalars
+    integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=False)
+    integration_freqs_MHz = integration_freqs / 1e6 # The interpolations are generally more stable in MHz
+    redshifts = cosmo.f2z(integration_freqs).flatten()
+    X2Y = np.array(map(lambda z: cosmo.X2Y(z, little_h=little_h), redshifts))
+
+    # Use linear interpolation to interpolate the frequency-dependent quantities
+    # derived from the beam model to the same frequency grid as the power spectrum
+    # estimation
+    beam_model_freqs_MHz = beam_freqs / 1e6
+    dOpp_over_Op2_fit = interp1d(beam_model_freqs_MHz, omega_ratio, kind='quadratic')
+    dOpp_over_Op2 = dOpp_over_Op2_fit(integration_freqs_MHz)
+
+    # Get B_pp = \int dnu taper^2 and Bp = \int dnu
+    if taper == 'none':
+        dBpp_over_BpSq = np.ones_like(integration_freqs)
+    else:
+        dBpp_over_BpSq = aipy.dsp.gen_window(num_steps, taper)**2
+    dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
+
+    # integrate to get scalar
+    d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 / X2Y
+    scalar = 1.0 / integrate.trapz(d_inv_scalar, x=integration_freqs)
+
+    return scalar
 
 
 class PSpecBeamBase(object):
@@ -11,14 +100,63 @@ class PSpecBeamBase(object):
         else:
             self.conversion = conversions.Cosmo_Conversions()
 
-    def power_beam_int(self, stokes='pseudo_I'):
-        pass
+    def compute_pspec_scalar(self, lower_freq, upper_freq, num_steps=100000, stokes='pseudo_I', 
+                             taper='none', little_h=True):
+        """
+        Computes the scalar function to convert a power spectrum estimate
+        in "telescope units" to cosmological units
 
-    def power_beam_sq_int(self, stokes='pseudo_I'):
-        pass
+        See arxiv:1304.4991 and HERA memo #27 for details.
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='pseudo_I', taper='none', little_h=True, num_steps=10000):
-        pass
+        Currently, only the "pseudo Stokes I" beam is supported.
+        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
+        or arxiv:1502.05072 for details.
+
+        Parameters
+        ----------
+        lower_freq: float
+                Bottom edge of frequency band over which power spectrum is
+                being estimated. Assumed to be in Hz.
+
+        upper_freq: float
+                Top edge of frequency band over which power spectrum is
+                being estimated. Assumed to be in Hz.
+
+        num_steps : int, optional
+                Number of steps to use when interpolating primary beams for
+                numerical integral
+                Default: 10000
+
+        stokes: str, optional
+                Which Stokes parameter's beam to compute the scalar for.
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
+
+        taper : str, optional
+                Whether a tapering function (e.g. Blackman-Harris) is being
+                used in the power spectrum estimation.
+                Default: none
+
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Value of h is obtained from conversion object stored in pspecbeam
+                Default: h^-1 Mpc
+
+        Returns
+        -------
+        scalar: float
+                [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
+                in h^-3 Mpc^3 or Mpc^3.
+        """
+        # Get omega_ratio
+        omega_ratio = self.power_beam_sq_int(stokes) / self.power_beam_int(stokes)**2
+
+        # Get scalar
+        scalar = compute_pspec_scalar(self.conversion, self.beam_freqs, omega_ratio, lower_freq, upper_freq,
+                                      num_steps=num_steps, stokes=stokes, taper=taper, little_h=little_h)
+
+        return scalar
+
 
 class PSpecBeamGauss(PSpecBeamBase):
 
@@ -98,83 +236,6 @@ class PSpecBeamGauss(PSpecBeamBase):
         else:
             return np.ones_like(self.beam_freqs) * np.pi * self.fwhm**2 / (8. * np.log(2.))
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='pseudo_I', taper='none', little_h=True, num_steps=10000):
-        """
-        Computes the scalar function to convert a power spectrum estimate
-        in "telescope units" to cosmological units
-
-        See arxiv:1304.4991 and HERA memo #27 for details.
-
-        Currently, only the "pseudo Stokes I" beam is supported.
-        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
-        or arxiv:1502.05072 for details.
-
-        Parameters
-        ----------
-        lower_freq: float
-                Bottom edge of frequency band over which power spectrum is
-                being estimated. Assumed to be in Hz.
-
-        upper_freq: float
-                Top edge of frequency band over which power spectrum is
-                being estimated. Assumed to be in Hz.
-
-        num_freqs: int
-                Number of frequency channels in the data.
-
-        stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
-                Default: 'pseudo_I'
-
-        taper : str, optional
-                Whether a tapering function (e.g. Blackman-Harris) is being
-                used in the power spectrum estimation.
-                Default: none
-
-        little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Value of h is obtained from conversion object stored in pspecbeam
-                Default: h^-1 Mpc
-
-        num_steps : int, optional
-                Number of steps to use when interpolating primary beams for
-                numerical integral
-                Default: 10000
-
-        Returns
-        -------
-        scalar: float
-                [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
-                in h^-3 Mpc^3 or Mpc^3.
-        """
-
-        integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=False)
-        integration_freqs_MHz = integration_freqs / 10**6 # The interpolations are generally more stable in MHz
-        redshifts = self.conversion.f2z(integration_freqs).flatten()
-        X2Y = np.array(map(lambda z: self.conversion.X2Y(z,little_h=little_h),redshifts))
-
-        # Use linear interpolation to interpolate the frequency-dependent quantities
-        # derived from the beam model to the same frequency grid as the power spectrum
-        # estimation
-        beam_model_freqs_MHz = self.beam_freqs/(1.*10**6)
-        dOpp_over_Op2_fit = interp1d(beam_model_freqs_MHz, self.power_beam_sq_int(stokes)/self.power_beam_int(stokes)**2)
-        dOpp_over_Op2 = dOpp_over_Op2_fit(integration_freqs_MHz)
-
-
-        # Get B_pp = \int dnu taper^2 and Bp = \int dnu
-        if taper == 'none':
-            dBpp_over_BpSq = np.ones_like(integration_freqs)
-        else:
-            dBpp_over_BpSq = aipy.dsp.gen_window(num_freqs,taper)**2
-        dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
-
-        d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 /  X2Y
-
-        scalar = 1 / integrate.trapz(d_inv_scalar, integration_freqs)
-        return scalar
-
-
 
 class PSpecBeamUV(PSpecBeamBase):
 
@@ -247,79 +308,4 @@ class PSpecBeamUV(PSpecBeamBase):
             return self.primary_beam.get_beam_sq_area(stokes)
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
-
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, stokes='pseudo_I', taper='none', little_h=True, num_steps=10000):
-        """
-        Computes the scalar function to convert a power spectrum estimate
-        in "telescope units" to cosmological units
-
-        See arxiv:1304.4991 and HERA memo #27 for details.
-
-        Currently, only the "pseudo Stokes I" beam is supported.
-        See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
-        or arxiv:1502.05072 for details.
-
-        Parameters
-        ----------
-        lower_freq: float
-                Bottom edge of frequency band over which power spectrum is
-                being estimated. Assumed to be in Hz.
-
-        upper_freq: float
-                Top edge of frequency band over which power spectrum is
-                being estimated. Assumed to be in Hz.
-
-        num_freqs: int
-                Number of frequency channels in the data.
-
-        stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
-                Default: 'pseudo_I'
-
-        taper : str, optional
-                Whether a tapering function (e.g. Blackman-Harris) is being
-                used in the power spectrum estimation.
-                Default: none
-
-        little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Value of h is obtained from conversion object stored in pspecbeam
-                Default: h^-1 Mpc
-
-        num_steps : int, optional
-                Number of steps to use when interpolating primary beams for
-                numerical integral
-                Default: 10000
-
-        Returns
-        -------
-        scalar: float
-                [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
-                in h^-3 Mpc^3 or Mpc^3.
-        """
-
-        integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=False)
-        integration_freqs_MHz = integration_freqs / 10**6 # The interpolations are generally more stable in MHz
-        redshifts = self.conversion.f2z(integration_freqs).flatten()
-        X2Y = np.array(map(lambda z: self.conversion.X2Y(z,little_h=little_h),redshifts))
-
-        # Use linear interpolation to interpolate the frequency-dependent quantities
-        # derived from the beam model to the same frequency grid as the power spectrum
-        # estimation
-        beam_model_freqs_MHz = self.beam_freqs/(1.*10**6)
-        dOpp_over_Op2_fit = interp1d(beam_model_freqs_MHz, self.power_beam_sq_int(stokes)/self.power_beam_int(stokes)**2)
-        dOpp_over_Op2 = dOpp_over_Op2_fit(integration_freqs_MHz)
-
-        # Get B_pp = \int dnu taper^2 and Bp = \int dnu
-        if taper == 'none':
-            dBpp_over_BpSq = np.ones_like(integration_freqs)
-        else:
-            dBpp_over_BpSq = aipy.dsp.gen_window(num_freqs,taper)**2
-        dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
-
-        d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 /  X2Y
-
-        scalar = 1 / integrate.trapz(d_inv_scalar, integration_freqs)
-        return scalar
 
