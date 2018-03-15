@@ -99,6 +99,10 @@ class Test_PSpecData(unittest.TestCase):
         beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
 
+        # load another data file
+        uvd = uv.UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+
     def tearDown(self):
         pass
 
@@ -419,9 +423,10 @@ class Test_PSpecData(unittest.TestCase):
 
     def test_rephase_to_dst(self):
         # generate two uvd objects w/ different LST grids
-        uvd2 = copy.copy(self.uvd2)
-        uvd1 = uv.UVData()
-        uvd1.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+        uvd1 = copy.copy(self.uvd)
+        uvd2 = uv.UVData()
+        uvd2.read_miriad(os.path.join(DATA_PATH, "zen.2458042.19263.xx.HH.uvXA"))
+
         # setup dataset
         ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None])
         # get normal pspec
@@ -430,7 +435,7 @@ class Test_PSpecData(unittest.TestCase):
         # rephase and get pspec
         ds.rephase_to_dset(0)
         pspecs2, pairs2 = ds.pspec(bls)
-        # check coherence has increased
+        # check overall coherence has increased
         nt.assert_true(np.mean(np.abs(pspecs2[0] / pspecs1[0])) > 1.01)
 
         # null test: check nothing changes when dsets contain same UVData object
