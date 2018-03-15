@@ -666,7 +666,7 @@ g
             return delay * 1e9 # convert to ns
     
     
-    def scalar(self, stokes='I', taper='none', little_h=True, num_steps=10000):
+    def scalar(self, stokes='I', taper='none', little_h=True, num_steps=20000):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -702,9 +702,9 @@ g
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
                 in h^-3 Mpc^3 or Mpc^3.
         """
-        scalar = self.primary_beam.compute_pspec_scalar(\
-                self.freqs[0],self.freqs[-1],self.Nfreqs,\
-                stokes,taper,little_h,num_steps)
+        scalar = self.primary_beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], stokes=stokes,
+                                                        taper=taper, little_h=litle_h, num_steps=num_steps)
+
         return scalar
 
     def pspec(self, bls, beam=None, input_data_weight='identity', norm='I', 
