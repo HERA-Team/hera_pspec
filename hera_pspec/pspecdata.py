@@ -703,7 +703,7 @@ g
                 in h^-3 Mpc^3 or Mpc^3.
         """
         scalar = self.primary_beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], stokes=stokes,
-                                                        taper=taper, little_h=litle_h, num_steps=num_steps)
+                                                        taper=taper, little_h=little_h, num_steps=num_steps)
 
         return scalar
 
