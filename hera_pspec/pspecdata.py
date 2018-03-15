@@ -7,7 +7,6 @@ import copy
 import hera_cal as hc
 
 
-
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=[], beam=None):
@@ -844,14 +843,11 @@ class PSpecData(object):
                     
         return np.array(pvs), pairs
 
-    def rephase_to_dset(self, dset_index=0, inplace=True):
+
+    def rephase_to_dset(self, dset_index, inplace=True):
         """
-        Rephase visibility data in self.dsets to the LST grid of dset[dset_index] 
-        using hera_cal.utils.lst_rephase. 
-
-        Each integration in all other dsets are phased to the center of the 
-        corresponding LST bin (by index) in dset[dset_index].
-
+        Rephase data in dsets to the LST grid of dset[dset_index] using
+        hera_cal.lstbin.lst_rephase.
         Parameters
         ----------
         dset_index : int
