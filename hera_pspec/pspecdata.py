@@ -1,7 +1,11 @@
 import numpy as np
 import aipy
 import pyuvdata
-from .utils import hash, cov
+from hera_pspec.utils import hash, cov
+import itertools
+import copy
+import hera_cal as hc
+
 
 
 class PSpecData(object):
@@ -845,9 +849,80 @@ class PSpecData(object):
                     
         return np.array(pvs), pairs
 
+    def rephase_to_dset(self, dset_index, inplace=True):
+        """
+        Rephase data in dsets to the LST grid of dset[dset_index] using
+        hera_cal.lstbin.lst_rephase.
+        Parameters
+        ----------
+        dset_index : int
+            index of dataset in self.dset to phase other datasets to.
+        inplace : bool, optional
+            If True, edits data in dsets in-memory. Else, makes a copy of
+            dsets, edits data in the copy and returns to user.
+        Returns
+        -------
+        if inplace:
+            return new_dsets
+        else:
+            return None
+        """
+        # run dataset validation
+        self.validate_datasets()
 
+        # assign dsets
+        if inplace:
+            dsets = self.dsets
+        else:
+            dsets = copy.deepcopy(self.dsets)
+
+        # get LST grid we are phasing to
+        lst_grid = []
+        lst_array = dsets[dset_index].lst_array.ravel()
+        for l in lst_array:
+            if l not in lst_grid:
+                lst_grid.append(l)
+        lst_grid = np.array(lst_grid)
+
+        # get polarization list
+        pol_list = dsets[dset_index].polarization_array.tolist()
+
+        # iterate over dsets
+        for i, dset in enumerate(dsets):
+            # don't rephase dataset we are using as our LST anchor
+            if i == dset_index:
+                continue
+
+            # convert UVData to DataContainers. Note this doesn't make
+            # a copy of the data
+            (data, flgs, antpos, ants, freqs, times, lsts, 
+             pols) = hc.io.load_vis(dset, return_meta=True)
+
+            # make bls dictionary
+            bls = dict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
+
+            # Get dlst array
+            dlst = lst_grid - lsts
+
+            # get telescope latitude
+            lat = dset.telescope_location_lat_lon_alt_degrees[0]
+
+            # rephase
+            hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=lat)
+
+            # re-insert into dataset
+            for j, k in enumerate(data.keys()):
+                indices = dset.antpair2ind(*k[:2])
+                polind = pol_list.index(hc.io.polstr2num[k[-1]])
+                dset.data_array[indices, 0, :, polind] = data[k]
+
+            # set phasing to unknown
+            dset.phase_type = 'unknown'
+
+        if inplace is False:
+            return dsets
+            
 def raise_warning(warning, verbose=True):
     '''warning function'''
     if verbose:
         print(warning)
-
