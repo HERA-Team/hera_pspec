@@ -14,6 +14,7 @@
 * aipy (```conda install -c conda-forge aipy```)
 * scipy >= 0.19
 * astropy >= 2.0
+* hera_cal (https://github.com/HERA-Team/hera_cal.git)
 
 For anaconda users, we suggest using conda to install astropy, numpy and scipy.
 
