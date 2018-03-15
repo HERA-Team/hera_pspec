@@ -100,8 +100,8 @@ class Test_PSpecData(unittest.TestCase):
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
 
         # load another data file
-        uvd = uv.UVData()
-        uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+        self.uvd = uv.UVData()
+        self.uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
 
     def tearDown(self):
         pass
