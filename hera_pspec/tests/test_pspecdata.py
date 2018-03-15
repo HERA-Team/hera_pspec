@@ -397,6 +397,18 @@ class Test_PSpecData(unittest.TestCase):
         # FIXME: Remove this when pyuvdata support for the above is ready
         self.assertRaises(NotImplementedError, self.ds.scalar)
 
+    def test_validate_datasets(self):
+        # test freq exception
+        uvd = copy.copy(self.d[0])
+        uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds.validate_datasets)
+        # test time exception
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds.validate_datasets)
+
+
 """
 # LEGACY MONTE CARLO TESTS
 

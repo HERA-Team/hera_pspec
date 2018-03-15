@@ -91,13 +91,19 @@ class PSpecData(object):
         Validate stored datasets and weights to make sure they are consistent
         with one another (e.g. have the same shape, baselines etc.).
         """
-        # Sanity checks on input data
-        assert len(self.dsets) > 1
-        assert len(self.dsets) == len(self.wgts)
+        # check dsets and wgts have same number of elements
+        if len(self.dsets) != len(self.wgts):
+            raise ValueError("self.wgts does not have same length as self.dsets")
 
-        # Check if data are all the same shape
+        # Check if dsets are all the same shape along freq axis
         Nfreqs = [d.Nfreqs for d in self.dsets]
-        assert np.unique(Nfreqs).size == 1
+        if np.unique(Nfreqs).size > 1:
+            raise ValueError("all dsets must have the same Nfreqs")
+
+        # Check shape along time axis
+        Ntimes = [d.Ntimes for d in self.dsets]
+        if np.unique(Ntimes).size > 1:
+            raise ValueError("all dsets must have the same Ntimes")
 
     def clear_cov_cache(self, keys=None):
         """
