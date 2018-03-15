@@ -149,7 +149,7 @@ class PSpecBeamGauss(PSpecBeamBase):
                 in h^-3 Mpc^3 or Mpc^3.
         """
 
-        integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=True)
+        integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=False)
         integration_freqs_MHz = integration_freqs / 10**6 # The interpolations are generally more stable in MHz
         redshifts = self.conversion.f2z(integration_freqs).flatten()
         X2Y = np.array(map(lambda z: self.conversion.X2Y(z,little_h=little_h),redshifts))
@@ -299,7 +299,7 @@ class PSpecBeamUV(PSpecBeamBase):
                 in h^-3 Mpc^3 or Mpc^3.
         """
 
-        integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=True)
+        integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=False)
         integration_freqs_MHz = integration_freqs / 10**6 # The interpolations are generally more stable in MHz
         redshifts = self.conversion.f2z(integration_freqs).flatten()
         X2Y = np.array(map(lambda z: self.conversion.X2Y(z,little_h=little_h),redshifts))
