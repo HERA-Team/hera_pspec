@@ -443,7 +443,8 @@ class Test_PSpecData(unittest.TestCase):
         # rephase and get pspec
         ds.rephase_to_dset(0)
         pspecs2, pairs2 = ds.pspec(bls)
-        # check overall coherence has increased
+
+        # check coherence has increased
         nt.assert_true(np.mean(np.abs(pspecs2[0] / pspecs1[0])) > 1.01)
 
         # null test: check nothing changes when dsets contain same UVData object
