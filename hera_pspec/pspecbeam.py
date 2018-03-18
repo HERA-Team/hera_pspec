@@ -7,10 +7,10 @@ from scipy.interpolate import interp1d
 import aipy
 
 
-def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq, 
-                         num_steps=50000, stokes='pseudo_I', taper='none', little_h=True):
+def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps=20000,
+                          stokes='pseudo_I', taper='none', little_h=True):
     """
-    This is not to be used by the novice user to calculate a pspec scalar. 
+    This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
 
     Computes the scalar function to convert a power spectrum estimate
@@ -25,7 +25,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq
     Parameters
     ----------
     cosmo : hera_pspec.conversions.Cosmo_Conversions instance
-            Instance of the cosmological conversion object 
+            Instance of the cosmological conversion object
             conversions.Cosmo_Conversions()
 
     beam_freqs : array of floats
@@ -35,13 +35,8 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq
             Ratio of the integrated squared-beam power over the square of the integrated beam power
             for each frequency in beam_freqs. i.e. Omega_pp(nu) / Omega_p(nu)^2
 
-    lower_freq: float
-            Bottom edge of frequency band over which power spectrum is
-            being estimated. Assumed to be in Hz.
-
-    upper_freq: float
-            Top edge of frequency band over which power spectrum is
-            being estimated. Assumed to be in Hz.
+    pspec_freqs : array of floats
+            Array of frequencies over which power spectrum is estimated in Hz.
 
     num_steps : int, optional
             Number of steps to use when interpolating primary beams for
@@ -69,8 +64,8 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq
             in h^-3 Mpc^3 or Mpc^3.
     """
     # get integration freqs, redshift and cosmological scalars
-    integration_freqs = np.linspace(lower_freq, upper_freq, num_steps, endpoint=False)
-    integration_freqs_MHz = integration_freqs / 1e6 # The interpolations are generally more stable in MHz
+    integration_freqs = np.linspace(pspec_freqs.min(), pspec_freqs.max(), num_steps, endpoint=True, dtype=np.float)
+    integration_freqs_MHz = integration_freqs / 1e6  # The interpolations are generally more stable in MHz
     redshifts = cosmo.f2z(integration_freqs).flatten()
     X2Y = np.array(map(lambda z: cosmo.X2Y(z, little_h=little_h), redshifts))
 
@@ -78,16 +73,15 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq
     # derived from the beam model to the same frequency grid as the power spectrum
     # estimation
     beam_model_freqs_MHz = beam_freqs / 1e6
-    num_freqs = len(beam_freqs)
     dOpp_over_Op2_fit = interp1d(beam_model_freqs_MHz, omega_ratio, kind='quadratic')
     dOpp_over_Op2 = dOpp_over_Op2_fit(integration_freqs_MHz)
 
     # Get B_pp = \int dnu taper^2 and Bp = \int dnu
     if taper == 'none':
-        dBpp_over_BpSq = np.ones_like(num_steps)
+        dBpp_over_BpSq = np.ones_like(integration_freqs, np.float)
     else:
-        dBpp_over_BpSq = aipy.dsp.gen_window(num_freqs, taper)**2
-        dBpp_over_BpSq = intper1d(beam_freqs, dBpp_over_BpSq)(integration_freqs, kind='nearest')
+        dBpp_over_BpSq = aipy.dsp.gen_window(len(pspec_freqs), taper)**2
+        dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest')(integration_freqs)
     dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
 
     # integrate to get scalar
@@ -100,12 +94,12 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq
 class PSpecBeamBase(object):
 
     def __init__(self, cosmo=None):
-        if cosmo != None:
+        if cosmo is not None:
             self.conversion = cosmo
         else:
             self.conversion = conversions.Cosmo_Conversions()
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_steps=100000, stokes='pseudo_I', 
+    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, num_steps=5000, stokes='pseudo_I',
                              taper='none', little_h=True):
         """
         Computes the scalar function to convert a power spectrum estimate
@@ -126,6 +120,9 @@ class PSpecBeamBase(object):
         upper_freq: float
                 Top edge of frequency band over which power spectrum is
                 being estimated. Assumed to be in Hz.
+
+        num_freqs : int, optional
+                Number of frequencies used in estimating power spectrum.
 
         num_steps : int, optional
                 Number of steps to use when interpolating primary beams for
@@ -153,12 +150,15 @@ class PSpecBeamBase(object):
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
                 in h^-3 Mpc^3 or Mpc^3.
         """
+        # get pspec_Freqs
+        pspec_freqs = np.linspace(lower_freq, upper_freq, num_freqs, endpoint=False)
+
         # Get omega_ratio
         omega_ratio = self.power_beam_sq_int(stokes) / self.power_beam_int(stokes)**2
 
         # Get scalar
-        scalar = _compute_pspec_scalar(self.conversion, self.beam_freqs, omega_ratio, lower_freq, upper_freq,
-                                      num_steps=num_steps, stokes=stokes, taper=taper, little_h=little_h)
+        scalar = _compute_pspec_scalar(self.conversion, self.beam_freqs, omega_ratio, pspec_freqs,
+                                       num_steps=num_steps, stokes=stokes, taper=taper, little_h=little_h)
 
         return scalar
 
@@ -179,11 +179,10 @@ class PSpecBeamGauss(PSpecBeamBase):
         """
         self.fwhm = fwhm
         self.beam_freqs = beam_freqs
-        if cosmo != None:
+        if cosmo is not None:
             self.conversion = cosmo
         else:
             self.conversion = conversions.Cosmo_Conversions()
-
 
     def power_beam_int(self, stokes='pseudo_I'):
         """
@@ -259,7 +258,7 @@ class PSpecBeamUV(PSpecBeamBase):
         self.primary_beam.read_beamfits(beam_fname)
 
         self.beam_freqs = self.primary_beam.freq_array[0]
-        if cosmo != None:
+        if cosmo is not None:
             self.conversion = cosmo
         else:
             self.conversion = conversions.Cosmo_Conversions()
@@ -313,4 +312,3 @@ class PSpecBeamUV(PSpecBeamBase):
             return self.primary_beam.get_beam_sq_area(stokes)
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
-

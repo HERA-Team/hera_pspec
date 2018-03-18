@@ -43,7 +43,8 @@ class Test_DataSet(unittest.TestCase):
         Om_pp = self.bm.power_beam_sq_int()
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
-        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, stokes='pseudo_I', num_steps=50000)
+        num_freqs = 20
+        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000)
 
         # Check array dimensionality
         self.assertEqual(Om_p.ndim, 1)
@@ -54,7 +55,7 @@ class Test_DataSet(unittest.TestCase):
             nt.assert_raises(NotImplementedError, self.bm.power_beam_int, stokes=stokes)
             nt.assert_raises(NotImplementedError, self.bm.power_beam_sq_int, stokes=stokes)
             nt.assert_raises(NotImplementedError, self.bm.compute_pspec_scalar, 
-                             lower_freq, upper_freq, stokes=stokes)
+                             lower_freq, upper_freq, num_freqs, stokes=stokes)
 
         self.assertAlmostEqual(Om_p[0], 0.078694909518866998)
         self.assertAlmostEqual(Om_p[18], 0.065472512282419112)
@@ -64,21 +65,22 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(Om_pp[24], 0.024137903003171767)
         self.assertAlmostEqual(Om_pp[-1], 0.013178952686690554)
 
-        self.assertAlmostEqual(scalar/567862539.59197414, 1.0, delta=1e-4)
+        self.assertAlmostEqual(scalar/544745630.76776004, 1.0, delta=1e-4)
         
         # convergence of integral
-        scalar_large_Nsteps = self.bm.compute_pspec_scalar(lower_freq, upper_freq, stokes='pseudo_I', num_steps=100000) 
+        scalar_large_Nsteps = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=10000) 
         self.assertAlmostEqual(scalar / scalar_large_Nsteps, 1.0, delta=1e-5)
 
         # test taper execution
-        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, taper='blackman')
+        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
 
     def test_Gaussbeam(self):
         Om_p = self.gauss.power_beam_int()
         Om_pp = self.gauss.power_beam_sq_int()
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
-        scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, stokes='pseudo_I', num_steps=50000)
+        num_freqs = 20
+        scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000)
 
         # Check array dimensionality
         self.assertEqual(Om_p.ndim,1)
@@ -92,7 +94,7 @@ class Test_DataSet(unittest.TestCase):
                              self.gauss.power_beam_sq_int, stokes=stokes)
             nt.assert_raises(NotImplementedError, 
                              self.gauss.compute_pspec_scalar, 
-                             lower_freq, upper_freq, stokes=stokes)
+                             lower_freq, upper_freq, num_freqs, stokes=stokes)
 
         self.assertAlmostEqual(Om_p[4], 0.7251776226923511)
         self.assertAlmostEqual(Om_p[4], Om_p[0])
@@ -100,12 +102,12 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(Om_pp[4], 0.36258881134617554)
         self.assertAlmostEqual(Om_pp[4], Om_pp[0])
 
-        self.assertAlmostEqual(scalar/6392626346.1433468, 1.0, delta=1e-4)
+        self.assertAlmostEqual(scalar/6082814757.7556648, 1.0, delta=1e-4)
         
         # convergence of integral
-        scalar_large_Nsteps = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_steps=100000)
+        scalar_large_Nsteps = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000)
         self.assertAlmostEqual(scalar / scalar_large_Nsteps, 1.0, delta=1e-5)
 
         # test taper execution
-        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, taper='blackman')
+        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=2000, taper='blackman')
 
