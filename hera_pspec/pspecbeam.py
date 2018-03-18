@@ -7,9 +7,12 @@ from scipy.interpolate import interp1d
 import aipy
 
 
-def compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq, 
+def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq, 
                          num_steps=50000, stokes='pseudo_I', taper='none', little_h=True):
     """
+    This is not to be used by the novice user to calculate a pspec scalar. 
+    Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
+
     Computes the scalar function to convert a power spectrum estimate
     in "telescope units" to cosmological units
 
@@ -75,14 +78,16 @@ def compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, lower_freq, upper_freq,
     # derived from the beam model to the same frequency grid as the power spectrum
     # estimation
     beam_model_freqs_MHz = beam_freqs / 1e6
+    num_freqs = len(beam_freqs)
     dOpp_over_Op2_fit = interp1d(beam_model_freqs_MHz, omega_ratio, kind='quadratic')
     dOpp_over_Op2 = dOpp_over_Op2_fit(integration_freqs_MHz)
 
     # Get B_pp = \int dnu taper^2 and Bp = \int dnu
     if taper == 'none':
-        dBpp_over_BpSq = np.ones_like(integration_freqs)
+        dBpp_over_BpSq = np.ones_like(num_steps)
     else:
-        dBpp_over_BpSq = aipy.dsp.gen_window(num_steps, taper)**2
+        dBpp_over_BpSq = aipy.dsp.gen_window(num_freqs, taper)**2
+        dBpp_over_BpSq = intper1d(beam_freqs, dBpp_over_BpSq)(integration_freqs, kind='nearest')
     dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
 
     # integrate to get scalar
@@ -152,7 +157,7 @@ class PSpecBeamBase(object):
         omega_ratio = self.power_beam_sq_int(stokes) / self.power_beam_int(stokes)**2
 
         # Get scalar
-        scalar = compute_pspec_scalar(self.conversion, self.beam_freqs, omega_ratio, lower_freq, upper_freq,
+        scalar = _compute_pspec_scalar(self.conversion, self.beam_freqs, omega_ratio, lower_freq, upper_freq,
                                       num_steps=num_steps, stokes=stokes, taper=taper, little_h=little_h)
 
         return scalar
