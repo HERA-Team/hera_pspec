@@ -73,6 +73,7 @@ class Test_DataSet(unittest.TestCase):
 
         # test taper execution
         scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
+        self.assertAlmostEqual(scalar / 1793248694.8873105, 1.0, delta=1e-8)
 
     def test_Gaussbeam(self):
         Om_p = self.gauss.power_beam_int()
@@ -109,5 +110,6 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(scalar / scalar_large_Nsteps, 1.0, delta=1e-5)
 
         # test taper execution
-        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=2000, taper='blackman')
+        scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
+        self.assertAlmostEqual(scalar / 19974901797.178055, 1.0, delta=1e-8)
 

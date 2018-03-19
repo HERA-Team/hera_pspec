@@ -7,7 +7,7 @@ from scipy.interpolate import interp1d
 import aipy
 
 
-def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps=20000,
+def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps=5000,
                           stokes='pseudo_I', taper='none', little_h=True):
     """
     This is not to be used by the novice user to calculate a pspec scalar.
