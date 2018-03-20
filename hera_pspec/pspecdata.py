@@ -122,6 +122,10 @@ class PSpecData(object):
             if np.max(np.abs(lst_diffs)) > 0.1e6:
                 print("Warning: taking power spectra between frequency bins misaligned by more than 0.1 MHz")
 
+        # Check for the same polarizations
+        pols = set(map(lambda dset: tuple(sorted(dset.polarization_array)), self.dsets))
+        if np.unique(pols).size > 1:
+            raise ValueError("all dsets must have the same number and kind of polarizations")
 
     def clear_cov_cache(self, keys=None):
         """
