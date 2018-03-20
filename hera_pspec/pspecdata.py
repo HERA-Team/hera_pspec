@@ -5,7 +5,7 @@ from .utils import hash, cov
 
 class PSpecData(object):
 
-    def __init__(self, dsets=[], wgts=[], beam=None):
+    def __init__(self, dsets=[], wgts=[], beam=None, warn=True):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -23,7 +23,11 @@ class PSpecData(object):
         beam : PspecBeam object, optional
             PspecBeam object containing information about the primary beam
             Default: None.
+
+        warn : boolean, optional
+            If True, print warnings raised by PSpecData object.
         """
+        self.warn = warn
         self.clear_cov_cache() # Covariance matrix cache
         self.dsets = []; self.wgts = []
         self.Nfreqs = None
@@ -37,6 +41,7 @@ class PSpecData(object):
 
         # Store a primary beam
         self.primary_beam = beam
+
 
     def add(self, dsets, wgts):
         """
@@ -104,6 +109,19 @@ class PSpecData(object):
         Ntimes = [d.Ntimes for d in self.dsets]
         if np.unique(Ntimes).size > 1:
             raise ValueError("all dsets must have the same Ntimes")
+
+        # raise warnings if times don't match
+        if self.warn:
+            lst_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].lst_array) - np.unique(dset.lst_array), self.dsets[1:]))
+            if np.max(np.abs(lst_diffs)) > 0.001:
+                print("Warning: taking power spectra between LST bins misaligned by more than 15 seconds")
+
+        # raise warning if frequencies don't match       
+        if self.warn:
+            freq_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].freq_array) - np.unique(dset.freq_array), self.dsets[1:]))
+            if np.max(np.abs(lst_diffs)) > 0.1e6:
+                print("Warning: taking power spectra between frequency bins misaligned by more than 0.1 MHz")
+
 
     def clear_cov_cache(self, keys=None):
         """
@@ -482,7 +500,7 @@ class PSpecData(object):
             \hat{p} = M \hat{q}
             <\hat{p}> = W p
             W = M G,
-g
+
         where p is the true band power and G is the response matrix (defined above
         in get_G) of unnormalized bandpowers to normed bandpowers. The G matrix
         is the Fisher matrix when R = C^-1
