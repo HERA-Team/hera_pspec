@@ -849,17 +849,23 @@ class PSpecData(object):
                     
         return np.array(pvs), pairs
 
-    def rephase_to_dset(self, dset_index, inplace=True):
+    def rephase_to_dset(self, dset_index=0, inplace=True):
         """
-        Rephase data in dsets to the LST grid of dset[dset_index] using
-        hera_cal.lstbin.lst_rephase.
+        Rephase visibility data in self.dsets to the LST grid of dset[dset_index] 
+        using hera_cal.lstbin.lst_rephase. 
+
+        Each integration in all other dsets are phased to the center of the 
+        corresponding LST bin (by index) in dset[dset_index].
+
         Parameters
         ----------
         dset_index : int
             index of dataset in self.dset to phase other datasets to.
+
         inplace : bool, optional
             If True, edits data in dsets in-memory. Else, makes a copy of
             dsets, edits data in the copy and returns to user.
+
         Returns
         -------
         if inplace:
@@ -912,11 +918,15 @@ class PSpecData(object):
 
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
+                # get blts indices of basline
                 indices = dset.antpair2ind(*k[:2])
+                # get index in polarization_array for this polarization
                 polind = pol_list.index(hc.io.polstr2num[k[-1]])
+                # insert into dset
                 dset.data_array[indices, 0, :, polind] = data[k]
 
-            # set phasing to unknown
+            # set phasing in UVData object to unknown b/c there isn't a single
+            # consistent phasing for the entire data set.
             dset.phase_type = 'unknown'
 
         if inplace is False:
