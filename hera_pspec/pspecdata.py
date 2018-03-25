@@ -3,9 +3,15 @@ import aipy
 import pyuvdata
 from .utils import hash, cov
 
+def raise_warning(warning, verbose=True):
+    '''warning function'''
+    if verbose:
+        print(warning)
+
+
 class PSpecData(object):
 
-    def __init__(self, dsets=[], wgts=[], beam=None, warn=True):
+    def __init__(self, dsets=[], wgts=[], beam=None):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -23,12 +29,8 @@ class PSpecData(object):
         beam : PspecBeam object, optional
             PspecBeam object containing information about the primary beam
             Default: None.
-
-        warn : boolean, optional
-            If True, print warnings raised by PSpecData object.
         """
-        self.warn = warn
-        self.clear_cov_cache() # Covariance matrix cache
+        self.clear_cov_cache()  # Covariance matrix cache
         self.dsets = []; self.wgts = []
         self.Nfreqs = None
         
@@ -91,7 +93,7 @@ class PSpecData(object):
         # Store the actual frequencies
         self.freqs = self.dsets[0].freq_array[0]
         
-    def validate_datasets(self):
+    def validate_datasets(self, verbose=True):
         """
         Validate stored datasets and weights to make sure they are consistent
         with one another (e.g. have the same shape, baselines etc.).
@@ -111,21 +113,21 @@ class PSpecData(object):
             raise ValueError("all dsets must have the same Ntimes")
 
         # raise warnings if times don't match
-        if self.warn:
-            lst_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].lst_array) - np.unique(dset.lst_array), self.dsets[1:]))
-            if np.max(np.abs(lst_diffs)) > 0.001:
-                print("Warning: taking power spectra between LST bins misaligned by more than 15 seconds")
+        lst_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].lst_array) - np.unique(dset.lst_array), self.dsets[1:]))
+        if np.max(np.abs(lst_diffs)) > 0.001:
+            raise_warnings("Warning: taking power spectra between LST bins misaligned by more than 15 seconds",
+                            verbose=verbose)
 
         # raise warning if frequencies don't match       
-        if self.warn:
-            freq_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].freq_array) - np.unique(dset.freq_array), self.dsets[1:]))
-            if np.max(np.abs(lst_diffs)) > 0.1e6:
-                print("Warning: taking power spectra between frequency bins misaligned by more than 0.1 MHz")
+        freq_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].freq_array) - np.unique(dset.freq_array), self.dsets[1:]))
+        if np.max(np.abs(lst_diffs)) > 0.001e6:
+            raise_warning("Warning: taking power spectra between frequency bins misaligned by more than 0.1 MHz",
+                          verbose=verbose)
 
         # Check for the same polarizations
         pols = set(map(lambda dset: tuple(sorted(dset.polarization_array)), self.dsets))
         if np.unique(pols).size > 1:
-            raise ValueError("all dsets must have the same number and kind of polarizations")
+            raise ValueError("all dsets must have the same number and kind of polarizations: \n{}".format(pols))
 
     def clear_cov_cache(self, keys=None):
         """
@@ -736,7 +738,7 @@ class PSpecData(object):
         return scalar
 
     def pspec(self, bls, beam=None, input_data_weight='identity', norm='I', 
-              taper='none', little_h=True, verbose=False):
+              taper='none', little_h=True, verbose=True):
         """
         Estimate the delay power spectrum from the datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
@@ -773,7 +775,7 @@ class PSpecData(object):
                 Default: h^-1 Mpc
 
         verbose : bool, optional
-            If True, print progress/debugging information. Default: False.
+            If True, print progress, warnings and debugging info to stdout.
 
         Returns
         -------
@@ -789,7 +791,7 @@ class PSpecData(object):
         #FIXME: Check that requested keys exist in all datasets
 
         # Validate the input data to make sure it's sensible
-        self.validate_datasets()
+        self.validate_datasets(verbose=verbose)
 
         # Compute the scalar to convert from "telescope units" to "cosmo units"
         # once and for all
