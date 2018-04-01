@@ -110,7 +110,7 @@ class PSpecData(object):
         # raise warnings if times don't match
         lst_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].lst_array) - np.unique(dset.lst_array), self.dsets[1:]))
         if np.max(np.abs(lst_diffs)) > 0.001:
-            raise_warnings("Warning: taking power spectra between LST bins misaligned by more than 15 seconds",
+            raise_warning("Warning: taking power spectra between LST bins misaligned by more than 15 seconds",
                             verbose=verbose)
 
         # raise warning if frequencies don't match       
