@@ -3,11 +3,6 @@ import aipy
 import pyuvdata
 from .utils import hash, cov
 
-def raise_warning(warning, verbose=True):
-    '''warning function'''
-    if verbose:
-        print(warning)
-
 
 class PSpecData(object):
 
@@ -121,7 +116,7 @@ class PSpecData(object):
         # raise warning if frequencies don't match       
         freq_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].freq_array) - np.unique(dset.freq_array), self.dsets[1:]))
         if np.max(np.abs(lst_diffs)) > 0.001e6:
-            raise_warning("Warning: taking power spectra between frequency bins misaligned by more than 0.1 MHz",
+            raise_warning("Warning: taking power spectra between frequency bins misaligned by more than 0.001 MHz",
                           verbose=verbose)
 
         # Check for the same polarizations
@@ -849,3 +844,10 @@ class PSpecData(object):
                     pairs.append((key1, key2))
                     
         return np.array(pvs), pairs
+
+
+def raise_warning(warning, verbose=True):
+    '''warning function'''
+    if verbose:
+        print(warning)
+
