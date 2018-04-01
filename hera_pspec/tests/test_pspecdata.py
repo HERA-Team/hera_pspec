@@ -7,9 +7,6 @@ from scipy.integrate import simps
 from hera_pspec import pspecdata, pspecbeam
 from hera_pspec.data import DATA_PATH
 
-# Get absolute path to data directory
-DATADIR = os.path.dirname( os.path.realpath(__file__) ) + "/../data/"
-
 # Data files to use in tests
 dfiles = [
     'zen.2458042.12552.xx.HH.uvXAA',
@@ -92,14 +89,14 @@ class Test_PSpecData(unittest.TestCase):
         self.d = []
         for dfile in dfiles:
             _d = uv.UVData()
-            _d.read_miriad(DATADIR + dfile)
+            _d.read_miriad(os.path.join(DATA_PATH, dfile))
             self.d.append(_d)
         
         # Set trivial weights
         self.w = [None for _d in dfiles]
         
         # Load beam file
-        beamfile = DATADIR + 'NF_HERA_Beams.beamfits'
+        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
 
     def tearDown(self):
@@ -130,7 +127,8 @@ class Test_PSpecData(unittest.TestCase):
         self.assertRaises(TypeError, pspecdata.PSpecData, d_dict, d_dict)
 
     def test_add_data(self):
-        pass
+        # test adding non UVData object
+        nt.assert_raises(TypeError, self.ds.add, 1, 1)
 
     def test_get_Q(self):
         vect_length = 50
@@ -399,7 +397,7 @@ class Test_PSpecData(unittest.TestCase):
 
     def test_validate_datasets(self):
         # test freq exception
-        uvd = copy.copy(self.d[0])
+        uvd = copy.deepcopy(self.d[0])
         uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10], inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
@@ -407,7 +405,17 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
-
+        # test wgt exception
+        ds.wgts = ds.wgts[:1]
+        nt.assert_raises(ValueError, ds.validate_datasets)
+        # test warnings
+        uvd = copy.deepcopy(self.d[0])
+        uvd2 = copy.deepcopy(self.d[0])
+        uvd.select(frequencies=np.unique(uvd.freq_array)[:10], times=np.unique(uvd.time_array)[:10])
+        uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], times=np.unique(uvd2.time_array)[10:20])
+        uvd2.polarization_array = -7
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
+        ds.validate_datasets()
 
 """
 # LEGACY MONTE CARLO TESTS
