@@ -413,7 +413,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = copy.deepcopy(self.d[0])
         uvd.select(frequencies=np.unique(uvd.freq_array)[:10], times=np.unique(uvd.time_array)[:10])
         uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], times=np.unique(uvd2.time_array)[10:20])
-        uvd2.polarization_array = -7
+        uvd2.polarization_array = np.array([-7])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         ds.validate_datasets()
 
