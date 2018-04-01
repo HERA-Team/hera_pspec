@@ -852,7 +852,7 @@ class PSpecData(object):
     def rephase_to_dset(self, dset_index=0, inplace=True):
         """
         Rephase visibility data in self.dsets to the LST grid of dset[dset_index] 
-        using hera_cal.lstbin.lst_rephase. 
+        using hera_cal.utils.lst_rephase. 
 
         Each integration in all other dsets are phased to the center of the 
         corresponding LST bin (by index) in dset[dset_index].
@@ -914,7 +914,7 @@ class PSpecData(object):
             lat = dset.telescope_location_lat_lon_alt_degrees[0]
 
             # rephase
-            hc.lstbin.lst_rephase(data, bls, freqs, dlst, lat=lat)
+            hc.utils.lst_rephase(data, bls, freqs, dlst, lat=lat)
 
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
