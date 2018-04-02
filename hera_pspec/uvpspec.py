@@ -39,8 +39,6 @@ class UVPSpec(object):
         self._lst_2_array = PSpecParam("lst_2_array", description="LST array of the second bl in the bl-pair [radians].", form="(Nblpairts,)")
         self._time_1_array = PSpecParam("time_1_array", description="Time array of the first bl in the bl-pair [Julian Date].", form="(Nblpairts,)")
         self._time_1_array = PSpecParam("time_2_array", description="Time array of the second bl in the bl-pair [Julian Date].", form="(Nblpairts,)")
-        self._bl_1_array = PSpecParam("bl_1_array", description="Baseline integer for the first baseline in the bl-pair.", form="(Nblpairs,)")
-        self._bl_2_array = PSpecParam("bl_2_array", description="Baseline integer for the second baseline in the bl-pair.", form="(Nblpairs,)")
         self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)")
 
         # Baseline attributes
@@ -161,34 +159,6 @@ class UVPSpec(object):
         """
         return _antnums_to_blpair(antnums)
 
-    def bl_to_antnums(self, bl):
-        """
-        Convert baseline integer to antenna-pair tuple.
-
-        Parameters
-        ----------
-        bl : i6 int, baseline integer
-
-        Return
-        ------
-        antnums : tuple, containing antenna integer numbers Ex. (24, 25)
-        """
-        return _bl_to_antnums(bl)
-
-    def antnums_to_bl(self, antnums):
-        """
-        Convert antenna-pair tuple to baseline integer.
-
-        Parameters
-        ----------
-        antnums : tuple, antenna-integer tuple Ex. (24, 25)
-
-        Return
-        ------
-        bl : i6 int, baseline integer
-        """
-        return _antnums_to_bl(antnums)
-
     def key_to_indices(self, key):
         """
         Convert a data key into relevant slice arrays. A data key takes the form
@@ -298,7 +268,6 @@ class UVPSpec(object):
         assert np.min(map(lambda k: self.integration_array[k].dtype in (np.float, float, np.float64), self.integration_array.keys())), "self.integration_array values must be float type"
 
 
-
 def _blpair_to_antnums(blpair):
     """
     Convert baseline-pair integer to nested tuple of antenna numbers.
@@ -350,49 +319,6 @@ def _antnums_to_blpair(antnums):
 
     return blpair
 
-def _bl_to_antnums(bl):
-    """
-    Convert baseline integer to nested tuple of antenna numbers.
-
-    Parameters
-    ----------
-    bl : i6 integer
-        baseline integer
-
-    Return
-    ------
-    antnums : tuple, tuple containing baseline antenna numbers. Ex. (ant1, ant2)
-    """
-    # get antennas
-    ant1 = int(np.floor(blpair / 1e3))
-    ant2 = int(np.floor(blpair - ant1*1e3))
-
-    # form antnums tuple
-    antnums = (ant1, ant2)
-
-    return antnums
-
-def _antnums_to_bl(antnums):
-    """
-    Convert tuple of antenna numbers to baseline integer.
-
-    Parameters
-    ----------
-    antnums : tuple, containing antenna-pair integers. Ex. (24, 25)
-
-    Return
-    ------
-    bl : i6 integer, baseline integer
-    """
-    # get antennas
-    ant1 = antnums[0]
-    ant2 = antnums[1]
-
-    # form blpair
-    blpair = int(ant1*1e3 + ant2)
-
-    return blpair
-
 def _conj_blpair_int(blpair):
     """
     Conjugate a baseline-pair integer
@@ -441,13 +367,6 @@ def _conj_blpair(blpair, which='both'):
         raise ValueError("didn't recognize {}".format(which))
 
     return conj_blpair
-
-
-
-
-
-
-
 
 
 
