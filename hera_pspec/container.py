@@ -72,7 +72,7 @@ class PSpecContainer(object):
             pspec.attrs[key] = attrs[key]
     
     
-    self _load_pspec(self, grp):
+    def _load_pspec(self, grp):
         """
         Load a new UVPSpec object from a HDF5 group.
         
