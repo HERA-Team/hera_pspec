@@ -310,6 +310,9 @@ class Test_PSpecData(unittest.TestCase):
                                          matrix_scale * multiplicative_tolerance)
 
             
+    '''
+    Under Construction
+
     def test_parseval(self):
         """
         Test that output power spectrum respects Parseval's theorem.
@@ -386,6 +389,7 @@ class Test_PSpecData(unittest.TestCase):
         # Perform approx. equality test (this is a stochastic quantity, so we 
         # only expect equality to ~10^-2 to 10^-3
         np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
+    '''
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
