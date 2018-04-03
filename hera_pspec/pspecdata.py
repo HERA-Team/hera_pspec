@@ -7,7 +7,6 @@ import copy
 import hera_cal as hc
 
 
-
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=[], beam=None):
@@ -95,7 +94,7 @@ class PSpecData(object):
     def validate_datasets(self, verbose=True):
         """
         Validate stored datasets and weights to make sure they are consistent
-        with one another (e.g. have the same shape, baselines etc.).
+        with one another (e.g. have the same Ntimes, Nfreqs, Npols etc.).
         """
         # check dsets and wgts have same number of elements
         if len(self.dsets) != len(self.wgts):
@@ -129,6 +128,46 @@ class PSpecData(object):
         pols = np.unique(pols)
         if np.unique(pols).size > 1:
             raise ValueError("all dsets must have the same number and kind of polarizations: \n{}".format(pols))
+
+    def check_key_in_dsets(self, key):
+        """
+        Check 'key' exists in all UVData objects in self.dsets
+
+        Parameters
+        ----------
+        key : tuple
+            if length 1: assumed to be polarization number or string
+            elif length 2: assumed to be antenna-number tuple (ant1, ant2)
+            elif length 3: assuemd ot be antenna-number-polarization tuple (ant1, ant2, pol)
+
+        Returns
+        -------
+        exists : bool
+            True if the key exists in all dsets, False otherwise
+        """
+        # get iterable
+        key = pyuvdata.utils.get_iterable(key)
+        if isinstance(key, str):
+            key = (key,)
+
+        # check key is a tuple
+        if isinstance(key, tuple) == False or len(key) not in (1, 2, 3):
+            raise KeyError("key {} must be a length 1, 2 or 3 tuple".format(key))
+
+        # start exists as False in case len(self.dsets) == 0
+        exists = False
+        # loop over all dsets
+        for i, dset in enumerate(self.dsets):
+            try:
+                _ = dset._key2inds(key)
+            except KeyError:
+                break
+
+            # if loop survived all dsets, the key exists in all dsets
+            if i+1 == len(self.dsets):
+                exists = True
+
+        return exists
 
     def clear_cov_cache(self, keys=None):
         """
@@ -697,7 +736,7 @@ class PSpecData(object):
             return delay * 1e9 # convert to ns
     
     
-    def scalar(self, stokes='I', taper='none', little_h=True, num_steps=2000):
+    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -710,8 +749,9 @@ class PSpecData(object):
         ----------
         stokes: str, optional
                 Which Stokes parameter's beam to compute the scalar for.
-                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
-                Default: 'I'
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently 
+                only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
 
         taper : str, optional
                 Whether a tapering function (e.g. Blackman-Harris) is being
@@ -727,36 +767,39 @@ class PSpecData(object):
                 numerical integral
                 Default: 10000
 
+        beam : PSpecBeam object
+            Option to use a manually-fed PSpecBeam object instead of using self.primary_beam.
+
         Returns
         -------
         scalar: float
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
                 in h^-3 Mpc^3 or Mpc^3.
         """
-        scalar = self.primary_beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], len(self.freqs), stokes=stokes,
-                                                        taper=taper, little_h=little_h, num_steps=num_steps)
+        if beam is None:
+            scalar = self.primary_beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], len(self.freqs), stokes=stokes,
+                                                            taper=taper, little_h=little_h, num_steps=num_steps)
+        else:
+            scalar = beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], len(self.freqs), stokes=stokes,
+                                               taper=taper, little_h=little_h, num_steps=num_steps)
 
         return scalar
 
-    def pspec(self, bls, beam=None, input_data_weight='identity', norm='I', 
-              taper='none', little_h=True, verbose=True):
+    def pspec(self, bls, input_data_weight='identity', norm='I', taper='none', little_h=True, 
+              reverse_bl_pairing=False, enforce_cross_bl=True, verbose=True):
         """
         Estimate the delay power spectrum from the datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
 
         Parameters
         ----------
-        bls : list of tuples (or lists of tuples)
-            List of baselines to include in the power spectrum calculation. 
-            Each baseline is specified as a tuple of antenna IDs.
+        bls : list of tuples (or list of lists of tuples)
+            List of baseline tuples to use in the power spectrum calculation. 
+            Each baseline is specified as a tuple of antenna numbers: (ant1_num, ant2_num)
             
-            If an element of the list is a list of tuples, the baselines in 
-            that list will be averaged together in the power spectrum 
-            calculation, reducing the number of cross-correlations that are 
-            needed.
-
-        beam : PspecBeam object
-            Primary beam information for the input data.
+            Alternatively, bls can contain multiple lists of baselines, which are each interpreted
+            as a redundant baseline group. In this case, pspec will calculate all N_choose_2 
+            cross-spectra between basline pairs in each redundant baseline group.
 
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
@@ -775,82 +818,147 @@ class PSpecData(object):
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
 
+        reverse_bl_pairing : bool, optional
+            If True and if bls is a list of redundant baseline groups, find 
+            power spectrum between dset1[(ant1, ant2)] & conj_dset2[(ant3, ant4)] 
+            as well as dset1[(ant3, ant4)] & conj_dset2[(ant1, ant2)], unless 
+            ant1 == ant3 and ant2 == ant4.
+
+        enforce_cross_bl : bool, optional
+            If True, remove from bl_pairs all power spectra where dset[(ant1, ant2)] is 
+            crossed with conj_dset2[(ant1, ant2)]. Only appropriate when bls contains redundant
+            baseline groups.
+
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
         Returns
         -------
-        pspec : list of np.ndarray
-            Optimal quadratic estimate of the delay power spectrum for the 
+        pspecs : list of np.ndarrays
+            Optimal quadratic estimate of the delay power spectra for the 
             datasets stored in this PSpecData and baselines specified in 
-            'keys'. Units: given by the units() method.
+            'bls'. Units: given by the units() method.
         
         pairs : list of tuples
             List of the pairs of datasets and baselines that were used to
             calculate each element of the 'pspec' list.
         """
-        #FIXME: Check that requested keys exist in all datasets
-
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
 
+        # get polarization array from zero'th dset
+        pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), self.dsets[0].polarization_array)
+
         # Compute the scalar to convert from "telescope units" to "cosmo units"
         # once and for all
-        if self.primary_beam != None:
+        if self.primary_beam is not None:
             scalar = self.scalar(taper=taper, little_h=True)
+        else: raise_warning("Warning: self.primary_beam is not defined, so pspectra are not properly normalized", verbose=verbose)
 
-        pvs = []; pairs = []
+        # construct list of baseline pairs
+        bl_pairs = []
+        if isinstance(bls[0], tuple) and isinstance(bls[0][0], (int, np.int, np.int32)):
+            # assume bls is a list of tuple antenna pairs
+            # in which case we take a bl crossed with itself
+            bls = map(lambda bl: (bl, bl), bls)
+            fed_redundant_bls = False
+
+        elif isinstance(bls[0], list) and isinstance(bls[0][0], tuple) and isinstance(bls[0][0][0], (int, np.int, np.int32)):
+            # assume bls is a list of redundant baseline groups, in which case
+            # we take all N choose 2 combinations with replacement within each baseline group.
+            # this includes a baseline being crossed with itself, which will lead to a bias
+            # unless the data in each dset is from a different night / LST, or the
+            # enforce_cross_bl option is set (by default).
+            red_bls = copy.copy(bls)
+            bls = map(lambda bl_group: list(itertools.combinations_with_replacement(bl_group, 2)), bls)
+            bls = [item for sublist in bls for item in sublist]
+            fed_redundant_bls = True
+        else:
+            raise ValueError("could not parse format of bls. must be fed as a list of tuples, " \
+                             "or a list of lists of tuples.")
+
+        # iterate through all bl_groups and ensure bl_pair exists in all dsets, else remove bl_pair
+        new_bls = []
+        for i, bl_pair in enumerate(bls):
+            if self.check_key_in_dsets(bl_pair[0]) and self.check_key_in_dsets(bl_pair[1]):
+                new_bls.append(bl_pair)
+        bls = new_bls
+
+        if reverse_bl_pairing:
+            # adds extra bl_pairs having reversed baseline pair ordering
+            new_bls = copy.copy(bls)
+            for i, bl_pair in enumerate(bls):
+                if bl_pair[0] != bl_pair[1]:
+                    new_bls.append(bl_pair[::-1])
+            bls = new_bls
+
+        if enforce_cross_bl and fed_redundant_bls:
+            # eliminate all instances of a bl paired w/ itself
+            new_bls = []
+            for i, bl_pair in enumerate(bls):
+                if bl_pair[0] != bl_pair[1]:
+                    new_bls.append(bl_pair)
+            bls = new_bls
+
+        # construct empty output lists
+        pspecs = []
+        pairs = []
+
         # Loop over pairs of datasets
         for m in xrange(len(self.dsets)):
+            # Datasets should not be cross-correlated with themselves
             for n in xrange(m+1, len(self.dsets)):
-                # Datasets should not be cross-correlated with themselves, and
-                # dataset pair (m, n) gives the same result as (n, m)
 
-                # Loop over baselines
-                for bl in bls:
-                    if isinstance(bl, list):
-                        key1 = [(m,) + _bl for _bl in bl]
-                        key2 = [(n,) + _bl for _bl in bl]
-                    else:
-                        key1 = (m,) + bl
-                        key2 = (n,) + bl
-                    if verbose: print("Baselines:", key1, key2)
+                # Loop over baseline pairs
+                for blp in bls:
+                    # Loop over polarizations
+                    for p in pol_arr:
 
-                    # Set covariance weighting scheme for input data
-                    if verbose: print("  Setting weight matrix for input data...")
-                    self.set_R(input_data_weight)
+                        # assign keys
+                        key1 = (m,) + blp[0] + (p,)
+                        key2 = (n,) + blp[1] + (p,)
+                        if verbose: print("Baselines:", key1, key2)
 
-                    # Build Fisher matrix
-                    if verbose: print("  Building G...")
-                    Gv = self.get_G(key1, key2, taper=taper)
+                        # Set covariance weighting scheme for input data
+                        if verbose: print("  Setting weight matrix for input data...")
+                        self.set_R(input_data_weight)
 
-                    # Calculate unnormalized bandpowers
-                    if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, taper=taper)
+                        # Build Fisher matrix
+                        if verbose: print("  Building G...")
+                        Gv = self.get_G(key1, key2, taper=taper)
 
-                    # Normalize power spectrum estimate
-                    if verbose: print("  Normalizing power spectrum...")
-                    Mv, Wv = self.get_MW(Gv, mode=norm)
-                    pv = self.p_hat(Mv, qv)
-                    
-                    # Multiply by scalar
-                    if self.primary_beam != None:
-                        if verbose: print("  Computing and multiplying scalar...")
-                        pv *= scalar
+                        # Calculate unnormalized bandpowers
+                        if verbose: print("  Building q_hat...")
+                        qv = self.q_hat(key1, key2, taper=taper)
 
-                    # Save power spectra and dataset/baseline pairs
-                    pvs.append(pv)
-                    pairs.append((key1, key2))
-                    
-        return np.array(pvs), pairs
+                        # Normalize power spectrum estimate
+                        if verbose: print("  Normalizing power spectrum...")
+                        Mv, Wv = self.get_MW(Gv, mode=norm)
+                        pv = self.p_hat(Mv, qv)
 
-    def rephase_to_dset(self, dset_index=0, inplace=True):
+                        # Apply rescaling to account for discrete -> continuous FT
+                        # convention, and convert to ns^-1 units (input freqs are 
+                        # always in Hz)
+                        dnu = self.dsets[0].freq_array[0,1] \
+                            - self.dsets[0].freq_array[0,0]
+                        pv *= (dnu * self.Nfreqs)**2. * 1e-9 # Hz -> ns^-1
+
+                        # Multiply by scalar
+                        if self.primary_beam is not None:
+                            if verbose: print("  Multiplying scalar...")
+                            pv *= scalar
+
+                        # Save power spectra and dataset/baseline pairs
+                        pspecs.append(pv)
+                        pairs.append((key1, key2))
+
+        return np.array(pspecs), pairs
+
+
+    def rephase_to_dset(self, dset_index, inplace=True):
         """
-        Rephase visibility data in self.dsets to the LST grid of dset[dset_index] 
-        using hera_cal.utils.lst_rephase. 
-
-        Each integration in all other dsets are phased to the center of the 
-        corresponding LST bin (by index) in dset[dset_index].
+        Rephase data in dsets to the LST grid of dset[dset_index] using
+        hera_cal.lstbin.lst_rephase.
 
         Parameters
         ----------
