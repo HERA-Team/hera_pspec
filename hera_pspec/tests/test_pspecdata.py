@@ -334,7 +334,7 @@ class Test_PSpecData(unittest.TestCase):
         data.flag_array[:] = False
 
         # Get list of available baselines and LSTs
-        bls = data.get_G_antpairs()
+        bls = data.get_antpairs()
         nlsts = data.Ntimes
 
         # Simulate data given a Fourier-space power spectrum
