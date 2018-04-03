@@ -54,6 +54,9 @@ class PSpecContainer(object):
         ps : UVPSpec
             Object containing power spectrum and related data.
         """
+        if self.mode == 'r':
+            raise IOError("HDF5 file was opened read-only; cannot write to file.")
+        
         # Get data and attributes from UVPSpec object (stored in dicts)
         data, attrs = ps.serialize()
         
@@ -103,6 +106,9 @@ class PSpecContainer(object):
         ps : UVPSpec
             Power spectrum object to store in the container.
         """
+        if self.mode == 'r':
+            raise IOError("HDF5 file was opened read-only; cannot write to file.")
+            
         key1 = "%s" % group
         key2 = "%s" % pspec
         
