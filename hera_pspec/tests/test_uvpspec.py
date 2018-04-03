@@ -4,13 +4,17 @@ import numpy as np
 import os
 import sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import UVPSpec
+from hera_pspec import uvpspec
 from hera_pspec import parameter
+import copy
+import h5py
+from collections import OrderedDict as odict
 
-class Test_uvpspec(unittest.TestCase):
+
+class Test_UVPSpec(unittest.TestCase):
 
     def setUp(self):
-        uvp = UVPSpec()
+        uvp = uvpspec.UVPSpec()
 
         Ntimes = 10
         Nfreqs = 50
@@ -27,9 +31,9 @@ class Test_uvpspec(unittest.TestCase):
 
         blpair_array = np.tile(blpairs, Ntimes)
         bl_array = np.array(bls)
-        bl_vecs = np.array([[  2.96372145e+00,   3.10408473e+06,   8.34928223e+06],
-                            [ -3.10411538e+06,  -6.33088145e+00,   5.24518137e+06],
-                            [ -8.34927222e+06,  -5.24518578e+06,  -8.38190317e-09]])
+        bl_vecs = np.array([[  5.33391548e+00,  -1.35907816e+01,  -7.91624188e-09],
+                            [ -8.67982998e+00,   4.43554478e+00,  -1.08695203e+01],
+                            [ -3.34591450e+00,  -9.15523687e+00,  -1.08695203e+01]])
         time_array = np.repeat(np.linspace(2458042.1, 2458042.2, Ntimes), Nblpairs)
         time_1_array = time_array
         time_2_array = time_array
@@ -43,27 +47,28 @@ class Test_uvpspec(unittest.TestCase):
         pol_array = np.array([-5])
         Npols = len(pol_array)
         units = 'unknown'
+        weighting = 'identity'
         channel_width = np.median(np.diff(freq_array))
+        history = 'example'
 
         telescope_location = np.array([5109325.85521063, 2005235.09142983, -3239928.42475397])
 
         data_array, flag_array, integration_array = {}, {}, {}
         for s in spws:
             data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) * blpair_array[:, None, None] / 1e9
-            flag_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.bool)
+            flag_array[s] = np.zeros((Nblpairts, Ndlys, Npols), dtype=np.bool)
             integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
 
         params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys',
-                  'blpair_array', 'time_1_array', 'time_2_array', 'lst_1_array', 'lst_2_array',
+                  'Nbls', 'blpair_array', 'time_1_array', 'time_2_array', 'lst_1_array', 'lst_2_array',
                   'spw_array', 'dly_array', 'freq_array', 'pol_array', 'data_array', 'flag_array',
                   'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 'units',
-                  'channel_width']
+                  'channel_width', 'weighting', 'history']
 
         for p in params:
             setattr(uvp, p, locals()[p])
 
         self.uvp = uvp
-
 
     def tearDown(self):
         pass
@@ -72,9 +77,120 @@ class Test_uvpspec(unittest.TestCase):
         pass
 
     def test_param(self):
-        a = parameter.PSpecParam("example", description="example", expected_form=int)
+        a = parameter.PSpecParam("example", description="example", expected_type=int)
 
+    def test_get_funcs(self):
+        # get_data
+        d = self.uvp.get_data((0, ((1, 2), (1, 2)), 'xx'))
+        nt.assert_equal(d.shape, (10, 50))
+        nt.assert_true(d.dtype == np.complex)
+        nt.assert_almost_equal(d[0,0], (1.0020010020000001+0j))
+        d = self.uvp.get_data((0, ((1, 2), (1, 2)), -5))
+        nt.assert_almost_equal(d[0,0], (1.0020010020000001+0j))
+        d = self.uvp.get_data((0, 1002001002, -5))
+        nt.assert_almost_equal(d[0,0], (1.0020010020000001+0j))
+        # get_flags
+        f = self.uvp.get_flags((0, ((1, 2), (1, 2)), 'xx'))
+        nt.assert_equal(f.shape, (10, 50))
+        nt.assert_true(f.dtype == np.bool)
+        nt.assert_equal(f[0,0], False)
+        # get_integrations
+        i = self.uvp.get_integrations((0, ((1, 2), (1, 2)), 'xx'))
+        nt.assert_equal(i.shape, (10,))
+        nt.assert_true(i.dtype == np.float)
+        nt.assert_almost_equal(i[0], 1.0)
 
+    def test_blpair_conversions(self):
+        # test blpair -> antnums
+        an = self.uvp.blpair_to_antnums(1002001002)
+        nt.assert_equal(an, ((1, 2), (1, 2)))
+        # test antnums -> blpair
+        bp = self.uvp.antnums_to_blpair(((1, 2), (1, 2)))
+        nt.assert_equal(bp, 1002001002)
+        # test bl -> antnums
+        an = self.uvp.bl_to_antnums(1002)
+        nt.assert_equal(an, (1, 2))
+        # test antnums -> bl
+        bp = self.uvp.antnums_to_bl((1, 2))
+        nt.assert_equal(bp, 1002)
+        # test blpair to indices
+        inds = self.uvp.blpair_to_indices(1002001002)
+        nt.assert_true(np.isclose(inds, np.array([0,3,6,9,12,15,18,21,24,27])).min())
+        inds = self.uvp.blpair_to_indices(((1,2),(1,2)))
+        nt.assert_true(np.isclose(inds, np.array([0,3,6,9,12,15,18,21,24,27])).min())
+
+    def test_key_to_indices(self):
+        spw, blpairts, pol = self.uvp.key_to_indices( (0, ((1,2),(1,2)), -5) )
+        nt.assert_equal(spw, 0)
+        nt.assert_equal(pol, 0)
+        nt.assert_true(np.isclose(blpairts, np.array([0,3,6,9,12,15,18,21,24,27])).min())
+        spw, blpairts, pol = self.uvp.key_to_indices( (0, 1002001002, 'xx') )
+        nt.assert_equal(spw, 0)
+        nt.assert_equal(pol, 0)
+        nt.assert_true(np.isclose(blpairts, np.array([0,3,6,9,12,15,18,21,24,27])).min())
+
+    def test_select(self):
+        nt.assert_raises(NotImplementedError, self.uvp.select)
+
+    def test_get_ENU_bl_vecs(self):
+        bl_vecs = self.uvp.get_ENU_bl_vecs()
+        nt.assert_true(np.isclose(bl_vecs[0], np.array([-14.6, 0.0, 0.0]), atol=1e-6).min())
+
+    def test_check(self):
+        uvp = copy.deepcopy(self.uvp)
+        uvp.check()
+        # test failure modes
+        del uvp.Ntimes
+        nt.assert_raises(AssertionError, uvp.check)
+        uvp.Ntimes = self.uvp.Ntimes
+        uvp.data_array = uvp.data_array.values()[0]
+        nt.assert_raises(AssertionError, uvp.check)
+        uvp.data_array = copy.deepcopy(self.uvp.data_array)
+
+    def test_clear(self):
+        uvp = copy.deepcopy(self.uvp)
+        uvp._clear()
+        nt.assert_false(hasattr(uvp, 'Ntimes'))
+        nt.assert_false(hasattr(uvp, 'data_array'))
+
+    def test_write_read_hdf5(self):
+        # test basic write execution
+        uvp = copy.deepcopy(self.uvp)
+        uvp.write_hdf5('./ex.hdf5', overwrite=True)
+        nt.assert_true(os.path.exists('./ex.hdf5'))
+        # test basic read
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5('./ex.hdf5')
+        nt.assert_true(uvp, uvp2)
+        # test just meta
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5('./ex.hdf5', just_meta=True)
+        nt.assert_true(hasattr(uvp2, 'Ntimes'))
+        nt.assert_false(hasattr(uvp2, 'data_array'))
+        # test exception
+        nt.assert_raises(IOError, uvp.write_hdf5, './ex.hdf5', overwrite=False)
+        nt.assert_raises(NotImplementedError, uvp.read_hdf5, './ex.hdf5', spws=[0])
+        nt.assert_raises(NotImplementedError, uvp.read_hdf5, './ex.hdf5', bls=[(1, 2)])
+        nt.assert_raises(NotImplementedError, uvp.read_hdf5, './ex.hdf5', blpairs=[((1,2),(1,2))])
+        nt.assert_raises(NotImplementedError, uvp.read_hdf5, './ex.hdf5', times=[2458042.1000000001])
+        if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
+
+def test_conj_blpair_int():
+    conj_blpair = uvpspec._conj_blpair_int(1002003004)
+    nt.assert_equal(conj_blpair, 3004001002)
+
+def test_conj_bl_int():
+    conj_bl = uvpspec._conj_bl_int(1002)
+    nt.assert_equal(conj_bl, 2001)
+
+def test_conj_blpair():
+    blpair = uvpspec._conj_blpair(1002003004, which='first')
+    nt.assert_equal(blpair, 2001003004)
+    blpair = uvpspec._conj_blpair(1002003004, which='second')
+    nt.assert_equal(blpair, 1002004003)
+    blpair = uvpspec._conj_blpair(1002003004, which='both')
+    nt.assert_equal(blpair, 2001004003)
+    nt.assert_raises(ValueError, uvpspec._conj_blpair, 2001003004, which='foo')
 
 
 

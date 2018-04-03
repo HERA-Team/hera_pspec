@@ -3,8 +3,10 @@ from collections import OrderedDict as odict
 from hera_pspec import conversions
 from hera_pspec.parameter import PSpecParam
 import os
-from pyuvdata import uvutils as utils
-
+from pyuvdata import uvutils as uvutils
+import h5py
+import shutil
+import copy
 
 class UVPSpec(object):
     """
@@ -52,6 +54,19 @@ class UVPSpec(object):
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.ndarray)
         self._weighting = PSpecParam("weighting", description="form of data weighting used when forming power spectra.", expected_type=str)
         self._units = PSpecParam("units", description="units of the power spectra.", expected_type=str)
+
+        # collect required parameters
+        self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
+                            "data_array", "flag_array", "integration_array", "spw_array", "freq_array", "dly_array",
+                            "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
+                            "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units"]
+        self._all_params = copy.copy(self._req_params)
+        self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
+                                 "Nbls", "channel_width", "weighting", "units"]
+        self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 
+                          "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
+                          "bl_vecs", "bl_array", "telescope_location"]
+        self._dicts = ["data_array", "flag_array", "integration_array"]
 
     def get_data(self, key):
         """
@@ -103,7 +118,7 @@ class UVPSpec(object):
 
         return self.flag_array[spw][blpairts, :, pol]
 
-    def get_integration(self, key):
+    def get_integrations(self, key):
         """
         Slice into integration_array with a specified data key in the format
 
@@ -209,7 +224,6 @@ class UVPSpec(object):
 
         return np.arange(self.Nblpairts)[np.isclose(self.blpair_array, blpair)]
 
-
     def key_to_indices(self, key):
         """
         Convert a data key into relevant slice arrays. A data key takes the form
@@ -248,7 +262,7 @@ class UVPSpec(object):
             blpair = self.antnums_to_blpair(blpair)
         # convert pol to int if str
         if type(pol) in (str, np.str):
-            pol = polstr2num(pol)
+            pol = uvutils.polstr2num(pol)
         # check attribuets exists in data
         assert spw in self.spw_array, "spw {} not found in data".format(spw)
         assert blpair in self.blpair_array, "blpair {} not found in data".format(blpair)
@@ -260,8 +274,9 @@ class UVPSpec(object):
 
         return spw, blpairts, pol
 
-    def select(self):
+    def select(self, bls=None, spws=None, times=None, blpairs=None, inplace=True):
         """
+        Select function
         """
         raise NotImplementedError
 
@@ -269,52 +284,149 @@ class UVPSpec(object):
         """
         return baseline vector array in TOPO (ENU) frame in meters, with matched ordering of self.bl_vecs.
         """
-        return uvutils.ENU_from_ECEF(self.bl_vecs + self.telescope_location, *uvutils.LatLonAlt_from_XYZ(self.telescope_location))
-
+        return uvutils.ENU_from_ECEF((self.bl_vecs + self.telescope_location).T, *uvutils.LatLonAlt_from_XYZ(self.telescope_location)).T
 
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None, blpairs=None, times=None):
         """
+        Clear current UVPSpec object and load in data from an HDF5 file.
+
+        Parameters
+        ----------
+        filepath : str, path to HDF5 file
+
+        just_meta : boolean, read-in only metadata and no data, flags or integration arrays
+
+        spws : NotImplemented
+
+        bls : NotImplementedError
+
+        blpairs : NotImplemented
+
+        times : NotImplemented
         """
-        raise NotImplementedError
+        # clear object
+        self._clear()
 
-        # load-in meta data
+        # open file descriptor
+        with h5py.File(filepath, 'r') as f:
+            # load-in meta data
+            self.Ntimes = f.attrs['Ntimes']
+            self.Nfreqs = f.attrs['Nfreqs']
+            self.Nspws = f.attrs['Nspws']
+            self.Nspwdlys = f.attrs['Nspwdlys']
+            self.Ndlys = f.attrs['Ndlys']
+            self.Nblpairs = f.attrs['Nblpairs']
+            self.Nblpairts = f.attrs['Nblpairts']
+            self.Npols = f.attrs['Npols']
+            self.bl_array = f.attrs['bl_array']
+            self.spw_array = f.attrs['spw_array']
+            self.dly_array = f.attrs['dly_array']
+            self.freq_array = f.attrs['freq_array']
+            self.pol_array = f.attrs['pol_array']
+            self.telescope_location = f.attrs['telescope_location']
+            self.units = f.attrs['units']
+            self.weighting = f.attrs['weighting']
+            self.channel_width = f.attrs['channel_width']
+            self.history = f.attrs['history']
+            self.blpair_array = f['blpair_array'][:]
+            self.time_1_array = f['time_1_array'][:]
+            self.time_2_array = f['time_2_array'][:]
+            self.lst_1_array = f['lst_1_array'][:]
+            self.lst_2_array = f['lst_2_array'][:]
+            self.bl_vecs = f['bl_vecs'][:]
+
+            # edit metadata given selection
+            if spws is not None:
+                raise NotImplementedError
+
+            if blpairs is not None:
+                raise NotImplementedError
+
+            if bls is not None:
+                raise NotImplementedError
+
+            if times is not None:
+                raise NotImplementedError
+
+            # return if just_meta == True
+            if just_meta == True:
+                return
+
+            # load in data if desired
+            self.data_array = odict()
+            self.flag_array = odict()
+            self.integration_array = odict()
+            # iterate over spectral windows
+            for i in np.unique(self.spw_array):
+                self.data_array[i] = f['data_spw{}'.format(i)][:]
+                self.flag_array[i] = f['flag_spw{}'.format(i)][:]
+                self.integration_array[i] = f['integration_spw{}'.format(i)][:]
 
 
-        # edit metadata given selection
-        if spws is not None:
-            pass
-
-        if blpairs is not None:
-            pass
-
-        if bls is not None:
-            pass
-
-        if times is not None:
-            pass
-
-        # return if just_meta == True
-        if just_meta == True:
-            return
-
-        # create empty data arrays given meta data
-        self.data_array = odict()
-        self.flag_array = odict()
-        self.integration_array = odict()
-        for i, Ndlys in enumerate(dlys):
-            self.data_array[i] = np.empty((Nblpairs, Ndlys, Npols), dtype=np.complex)
-            self.flag_array[i] = np.empty((Nblpairs, Ndlys, Npols), dtype=np.bool)
-            self.integration_array[i] = np.empty((Nblpairs, Ndlys, Npols), dtype=np.float)
-
-    def write_hdf5(self, filepath, overwrite=False):
+    def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
+        Write a UVPSpec object to HDF5 file.
+
+        Parameters
+        ----------
+        filepath : str, filepath for output file
+
+        overwrite : boolean, overwrite output file if it exists
+
+        run_check : boolean, run UVPSpec check before writing to file
         """
-        raise NotImplementedError
+        # check output
+        if os.path.exists(filepath) and overwrite is False:
+            raise IOError("{} exists, not overwriting...".format(filepath))
+        elif os.path.exists(filepath) and overwrite is True:
+            print "{} exists, overwriting...".format(filepath)
+            os.remove(filepath)
+
+        # run check
+        if run_check:
+            self.check()
+
+        # write file
+        with h5py.File(filepath, 'w') as f:
+            # write meta data
+            f.attrs['Ntimes'] = self.Ntimes
+            f.attrs['Nfreqs'] = self.Nfreqs
+            f.attrs['Nspws'] = self.Nspws
+            f.attrs['Nspwdlys'] = self.Nspwdlys
+            f.attrs['Ndlys'] = self.Ndlys
+            f.attrs['Nblpairs'] = self.Nblpairs
+            f.attrs['Nblpairts'] = self.Nblpairts
+            f.attrs['Npols'] = self.Npols
+            f.attrs['bl_array'] = self.bl_array
+            f.attrs['spw_array'] = self.spw_array
+            f.attrs['dly_array'] = self.dly_array
+            f.attrs['freq_array'] = self.freq_array
+            f.attrs['pol_array'] = self.pol_array
+            f.attrs['telescope_location'] = self.telescope_location
+            f.attrs['units'] = self.units
+            f.attrs['weighting'] = self.weighting
+            f.attrs['channel_width'] = self.channel_width
+            f.attrs['history'] = self.history
+            f.create_dataset('blpair_array', data=self.blpair_array, dtype=np.int)
+            f.create_dataset('time_1_array', data=self.time_1_array, dtype=np.float)
+            f.create_dataset('time_2_array', data=self.time_2_array, dtype=np.float)
+            f.create_dataset('lst_1_array', data=self.lst_1_array, dtype=np.float)
+            f.create_dataset('lst_2_array', data=self.lst_2_array, dtype=np.float)
+            f.create_dataset('bl_vecs', data=self.bl_vecs, dtype=np.float)
+
+            # iterate over spectral windows and create datasets
+            for i in np.unique(self.spw_array):
+                f.create_dataset("data_spw{}".format(i), data=self.data_array[i], dtype=np.complex)
+                f.create_dataset("flag_spw{}".format(i), data=self.flag_array[i], dtype=np.bool)
+                f.create_dataset("integration_spw{}".format(i), data=self.integration_array[i], dtype=np.float)
 
     def check(self):
         """
-        Run checks for required parameters.
+        Run checks
         """
+        # check required parameters exist
+        for p in self._req_params:
+            assert hasattr(self, p), "required parameter {} hasn't been defined".format(p)
         # check data
         assert type(self.data_array) in (dict, odict), "self.data_array must be a dictionary type"
         assert np.min(map(lambda k: self.data_array[k].dtype in (np.complex, complex, np.complex128), self.data_array.keys())), "self.data_array values must be complex type"
@@ -325,6 +437,30 @@ class UVPSpec(object):
         assert type(self.integration_array) in (dict, odict), "self.integration_array must be a dictionary type"
         assert np.min(map(lambda k: self.integration_array[k].dtype in (np.float, float, np.float64), self.integration_array.keys())), "self.integration_array values must be float type"
 
+    def _clear(self):
+        """
+        Clear UVPSpec of all parameters. Warning: this cannot be undone.
+        """
+        for p in self._all_params:
+            if hasattr(self, p):
+                delattr(self, p)
+
+
+    def __eq__(self, other):
+        """ Check equivalence between attributes of two UVPSpec objects """
+        try:
+            for p in self._all_params:
+                if p in self._immutable_params:
+                    assert getattr(self, p) == getattr(other, p)
+                elif p in self._ndarrays:
+                    assert np.isclose(getattr(self, p), getattr(other, p)).min()
+                elif p in self._dicts:
+                    for i in getattr(self, p):
+                        assert np.isclose(getattr(self, p)[i], getattr(other, p)[i]).min()
+        except AssertionError:
+            return False
+
+        return True
 
 def _blpair_to_antnums(blpair):
     """
@@ -393,7 +529,7 @@ def _bl_to_antnums(bl):
     """
     # get antennas
     ant1 = int(np.floor(bl / 1e3))
-    ant2 = int(np.floor(bl - ant1))
+    ant2 = int(np.floor(bl - ant1*1e3))
 
     # form antnums tuple
     antnums = (ant1, ant2)
@@ -416,13 +552,32 @@ def _antnums_to_bl(antnums):
         baseline integer
     """
     # get antennas
-    ant1 = antnums[0][0]
-    ant2 = antnums[0][1]
+    ant1 = antnums[0]
+    ant2 = antnums[1]
 
     # form blpair
     blpair = int(ant1*1e3 + ant2)
 
     return blpair
+
+def _blpair_to_bls(blpair):
+    """
+    Convert a blpair integer or nested tuple of antenna pairs
+    into a tuple of baseline integers
+
+    Parameters
+    ----------
+    blpair : baseline-pair integer or nested antenna-pair tuples
+    """
+    # convert to antnums if fed as ints
+    if isinstance(blpair, int):
+        blpair = _antnums_to_blpair(blpair)
+
+    # convert first and second baselines to baseline ints
+    bl1 = _antnums_to_bl(blpair[0])
+    bl2 = _antnums_to_bl(blpair[1])
+
+    return bl1, bl2
 
 def _conj_blpair_int(blpair):
     """
@@ -444,7 +599,7 @@ def _conj_blpair_int(blpair):
     return conj_blpair
 
 
-def _conj_bl_int(blpair):
+def _conj_bl_int(bl):
     """
     Conjugate a baseline integer
 
