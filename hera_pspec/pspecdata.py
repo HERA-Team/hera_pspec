@@ -831,13 +831,6 @@ class PSpecData(object):
                     Mv, Wv = self.get_MW(Gv, mode=norm)
                     pv = self.p_hat(Mv, qv)
                     
-                    # Apply rescaling to account for discrete -> continuous FT
-                    # convention, and convert to ns^-1 units (input freqs are 
-                    # always in Hz)
-                    dnu = self.dsets[0].freq_array[0,1] \
-                        - self.dsets[0].freq_array[0,0]
-                    pv *= (dnu * self.Nfreqs)**2. * 1e-9 # Hz -> ns^-1
-
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
