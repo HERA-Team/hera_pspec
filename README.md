@@ -15,6 +15,7 @@
 * scipy >= 0.19
 * astropy >= 2.0
 * hera_cal (https://github.com/HERA-Team/hera_cal.git)
+* h5py >= 2.7.0
 
 For anaconda users, we suggest using conda to install astropy, numpy and scipy.
 
