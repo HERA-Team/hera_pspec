@@ -3,6 +3,7 @@ from collections import OrderedDict as odict
 from hera_pspec import conversions
 from hera_pspec.parameter import PSpecParam
 import os
+from pyuvdata import uvutils as utils
 
 
 class UVPSpec(object):
@@ -42,12 +43,13 @@ class UVPSpec(object):
         self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)")
 
         # Baseline attributes
-        self._bl_vecs = PSpecParam("bl_vecs", description="ndarray of baseline separation vectors in the ITRF frame.")
-        self._bls = PSpecParam("bls", description="list of antenna-pair baseline tuples.", expected_type=list)
+        self._Nbls = PSpecParam("Nbls", description="Number of unique baseline integers.", expected_type=int)
+        self._bl_vecs = PSpecParam("bl_vecs", description="ndarray of baseline separation vectors in the ITRF frame [meters]. To get it in ENU frame see self.get_ENU_bl_vecs().", expected_type=np.ndarray, form="(Nbls,)")
+        self._bl_array = PSpecParam("bl_array", description="All unique baseline (antenna-pair) integers.", expected_type=np.ndarray, form="(Nbls,)")
 
         # Misc Attributes
         self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", expected_type=float)
-        self._telescope_location = PSpecParam("telescope_location", description="telescope location in ITRF frame.", expected_type=np.ndarray)
+        self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.ndarray)
         self._weighting = PSpecParam("weighting", description="form of data weighting used when forming power spectra.", expected_type=str)
         self._units = PSpecParam("units", description="units of the power spectra.", expected_type=str)
 
@@ -159,6 +161,55 @@ class UVPSpec(object):
         """
         return _antnums_to_blpair(antnums)
 
+    def bl_to_antnums(self, bl):
+        """
+        Convert baseline (anntenna-pair) integer to nested tuple of antenna numbers.
+
+        Parameters
+        ----------
+        bl : i6 int
+            baseline integer ID
+
+        Return
+        ------
+        antnums : tuple
+            tuple containing baseline antenna numbers. Ex. (ant1, ant2)
+        """
+        return _bl_to_antnums(bl)
+
+    def antnums_to_bl(self, antnums):
+        """
+        Convert tuple of antenna numbers to baseline integer.
+
+        Parameters
+        ----------
+        antnums : tuple
+            tuple containing integer antenna numbers for a baseline.
+            Ex. (ant1, ant2)
+
+        Return
+        ------
+        bl : i6 integer
+            baseline integer
+        """
+        return _antnums_to_bl(antnums)
+
+    def blpair_to_indices(self, blpair):
+        """
+        Convert a baseline-pair nested tuple ((ant1, ant2), (ant3, ant4)) or
+        a baseline-pair integer into indices to index the blpairts axis of data_array.
+
+        Parameters
+        ----------
+        blpair : nested tuple or blpair i12 integer
+        """
+        # convert blpair to integer if fed as tuple
+        if isinstance(blpair, tuple):
+            blpair = self.antnums_to_blpair(blpair)
+
+        return np.arange(self.Nblpairts)[np.isclose(self.blpair_array, blpair)]
+
+
     def key_to_indices(self, key):
         """
         Convert a data key into relevant slice arrays. A data key takes the form
@@ -205,7 +256,7 @@ class UVPSpec(object):
         # index polarization array
         pol = self.pol_array.tolist().index(pol)
         # index blpairts
-        blpairts = np.arange(self.Nblpairts)[np.isclose(self.blpair_array, blpair)]
+        blpairts = self.blpair_to_indices(blpair)
 
         return spw, blpairts, pol
 
@@ -213,6 +264,13 @@ class UVPSpec(object):
         """
         """
         raise NotImplementedError
+
+    def get_ENU_bl_vecs(self):
+        """
+        return baseline vector array in TOPO (ENU) frame in meters, with matched ordering of self.bl_vecs.
+        """
+        return uvutils.ENU_from_ECEF(self.bl_vecs + self.telescope_location, *uvutils.LatLonAlt_from_XYZ(self.telescope_location))
+
 
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None, blpairs=None, times=None):
         """
@@ -319,6 +377,53 @@ def _antnums_to_blpair(antnums):
 
     return blpair
 
+def _bl_to_antnums(bl):
+    """
+    Convert baseline integer to tuple of antenna numbers.
+
+    Parameters
+    ----------
+    blpair : <i6 integer
+        baseline integer
+
+    Return
+    ------
+    antnums : tuple
+        tuple containing baseline antenna numbers. Ex. (ant1, ant2)
+    """
+    # get antennas
+    ant1 = int(np.floor(bl / 1e3))
+    ant2 = int(np.floor(bl - ant1))
+
+    # form antnums tuple
+    antnums = (ant1, ant2)
+
+    return antnums
+
+def _antnums_to_bl(antnums):
+    """
+    Convert tuple of antenna numbers to baseline integer.
+
+    Parameters
+    ----------
+    antnums : tuple
+        tuple containing integer antenna numbers for a baseline.
+        Ex. (ant1, ant2)
+
+    Return
+    ------
+    blpair : <i6 integer
+        baseline integer
+    """
+    # get antennas
+    ant1 = antnums[0][0]
+    ant2 = antnums[0][1]
+
+    # form blpair
+    blpair = int(ant1*1e3 + ant2)
+
+    return blpair
+
 def _conj_blpair_int(blpair):
     """
     Conjugate a baseline-pair integer
@@ -337,6 +442,27 @@ def _conj_blpair_int(blpair):
     antnums = _blpair_to_antnums(blpair)
     conj_blpair = _antnums_to_blpair(antnums[::-1])
     return conj_blpair
+
+
+def _conj_bl_int(blpair):
+    """
+    Conjugate a baseline integer
+
+    Parameters
+    ----------
+    blpair : i6 int
+        baseline integer
+
+    Return
+    -------
+    conj_bl : i6 int
+        conjugated baseline integer. 
+        Ex: (ant1, ant2) --> (ant2, ant1)
+    """
+    antnums = _bl_to_antnums(bl)
+    conj_bl = _antnums_to_bl(antnums[::-1])
+    return conj_bl
+
 
 def _conj_blpair(blpair, which='both'):
     """
