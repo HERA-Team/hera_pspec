@@ -2,7 +2,7 @@ import numpy as np
 import h5py
 from uvpspec import UVPSpec
 
-class PSContainer(object):
+class PSpecContainer(object):
     """
     Container class for managing multiple UVPSpec objects.
     """

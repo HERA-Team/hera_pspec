@@ -6,6 +6,7 @@ import conversions
 import bootstrap
 
 from pspecdata import PSpecData
+from container import PSpecContainer
 
 # XXX: This will eventually be deprecated
 import legacy_pspec as legacy
