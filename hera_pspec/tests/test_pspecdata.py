@@ -130,6 +130,9 @@ class Test_PSpecData(unittest.TestCase):
         self.assertRaises(TypeError, pspecdata.PSpecData, d_float, d_float)
         self.assertRaises(TypeError, pspecdata.PSpecData, d_dict, d_dict)
 
+        # Test exception when not a UVData instance
+        self.assertRaises(TypeError, ds.add, [1], [None])
+
     def test_add_data(self):
         # test adding non UVData object
         nt.assert_raises(TypeError, self.ds.add, 1, 1)
@@ -421,9 +424,10 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = copy.deepcopy(self.d[0])
         uvd.select(frequencies=np.unique(uvd.freq_array)[:10], times=np.unique(uvd.time_array)[:10])
         uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], times=np.unique(uvd2.time_array)[10:20])
-        uvd2.polarization_array = np.array([-7])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         ds.validate_datasets()
+        uvd2.polarization_array = np.array([-7])
+        nt.assert_raises(ValueError, ds.validate_datasets)
 
     def test_rephase_to_dst(self):
         # generate two uvd objects w/ different LST grids
@@ -452,6 +456,23 @@ class Test_PSpecData(unittest.TestCase):
         pspecs2, pairs2 = ds.pspec(bls)
         nt.assert_true(np.isclose(np.abs(pspecs2/pspecs1), 1.0).min())
 
+    def test_units(self):
+        ds = pspecdata.PSpecData()
+        # test exception
+        nt.assert_raises(IndexError, ds.units)
+        ds.add(self.uvd, None)
+        # test basic execution
+        psu, dlu = ds.units()
+        nt.assert_equal(dlu, 'ns')
+        nt.assert_equal(psu, "(%s)^2 (ns)^-1"%ds.dsets[0].vis_units)
+
+    def test_delays(self):
+        ds = pspecdata.PSpecData()
+        # test exception
+        nt.assert_raises(IndexError, ds.delays)
+        ds.add([self.uvd, self.uvd], [None, None])
+        d = ds.delays()
+        nt.assert_true(len(d), ds.dsets[0].Nfreqs)
 
 """
 # LEGACY MONTE CARLO TESTS

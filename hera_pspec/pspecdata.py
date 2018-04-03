@@ -119,12 +119,14 @@ class PSpecData(object):
 
         # raise warning if frequencies don't match       
         freq_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].freq_array) - np.unique(dset.freq_array), self.dsets[1:]))
-        if np.max(np.abs(lst_diffs)) > 0.001e6:
+        if np.max(np.abs(freq_diffs)) > 0.001e6:
             raise_warning("Warning: taking power spectra between frequency bins misaligned by more than 0.001 MHz",
                           verbose=verbose)
 
         # Check for the same polarizations
-        pols = set(map(lambda dset: tuple(sorted(dset.polarization_array)), self.dsets))
+        pols = []
+        for d in self.dsets: pols.extend(d.polarization_array)
+        pols = np.unique(pols)
         if np.unique(pols).size > 1:
             raise ValueError("all dsets must have the same number and kind of polarizations: \n{}".format(pols))
 
