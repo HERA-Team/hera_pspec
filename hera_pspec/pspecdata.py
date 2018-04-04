@@ -737,7 +737,7 @@ class PSpecData(object):
             return delay * 1e9 # convert to ns
     
     
-    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000):
+    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -767,36 +767,45 @@ class PSpecData(object):
                 numerical integral
                 Default: 10000
 
+        beam : PSpecBeam object
+            Option to use a manually-fed PSpecBeam object instead of using self.primary_beam.
+
         Returns
         -------
         scalar: float
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
                 in h^-3 Mpc^3 or Mpc^3.
         """
-        scalar = self.primary_beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], len(self.freqs), stokes=stokes,
-                                                        taper=taper, little_h=little_h, num_steps=num_steps)
+        if beam is None:
+            scalar = self.primary_beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], len(self.freqs), stokes=stokes,
+                                                            taper=taper, little_h=little_h, num_steps=num_steps)
+        else:
+            scalar = beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], len(self.freqs), stokes=stokes,
+                                                            taper=taper, little_h=little_h, num_steps=num_steps)
 
         return scalar
 
-    def pspec(self, bls, beam=None, input_data_weight='identity', norm='I', 
-              taper='none', little_h=True, verbose=True):
+    def pspec(self, bls, input_data_weight='identity', norm='I', taper='none', little_h=True, 
+              add_reverse_bl_pairs=False, enforce_bl_cross=True, average_bl_group=False, verbose=True):
         """
         Estimate the delay power spectrum from the datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
 
         Parameters
         ----------
-        bls : list of tuples (or lists of tuples)
-            List of baselines to include in the power spectrum calculation. 
-            Each baseline is specified as a tuple of antenna IDs.
+        bls : list of tuples (or list of lists of tuples)
+            List of baseline tuples to use in the power spectrum calculation. 
+            Each baseline is specified as a tuple of antenna numbers: (ant1_num, ant2_num)
             
-            If an element of the list is a list of tuples, the baselines in 
-            that list will be averaged together in the power spectrum 
-            calculation, reducing the number of cross-correlations that are 
-            needed.
+            Alternatively, bls can contain multiple lists of baselines, which are each interpreted
+            as a redundant baseline group. In this case, pspec will do one of two things:
 
-        beam : PspecBeam object
-            Primary beam information for the input data.
+                1) The bl in each baseline-group are averaged together before squaring (average_bl_group=True),
+                   reducing the number of cross-correlations needed.
+                2) All N_choose_2 cross-spectra between bls in a group are calculated (average_bl_group=False)
+
+            If add_reverse_bl_pairs == True, bl-pairs with conjugated baseline pair is added to the bl group.
+            If enforce_bl_cross == True, all baselines crossed with itself are eliminated.
 
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
@@ -815,6 +824,15 @@ class PSpecData(object):
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
 
+        add_reverse_bl_pairs : boolean, optional
+            If bls is a list of redundant bl groups, conjugated bl-pairs are added to each group.
+
+        enforce_bl_cross : boolean, optional
+            If bls is a list of redundant bl groups, enforces that a bl is never paired with itself.
+
+        average_bl_group : boolean, optional
+            If bls is a list of redundant bl groups, average data in each group before squaring.
+
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -829,17 +847,68 @@ class PSpecData(object):
             List of the pairs of datasets and baselines that were used to
             calculate each element of the 'pspec' list.
         """
-        #FIXME: Check that requested keys exist in all datasets
-
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
 
+        # get polarization array from zero'th dset
+        pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), self.dsets[0].polarization_array)
+
+
         # Compute the scalar to convert from "telescope units" to "cosmo units"
         # once and for all
-        if self.primary_beam != None:
+        if self.primary_beam is not None:
             scalar = self.scalar(taper=taper, little_h=True)
+        else: raise_warning("Warning: self.primary_beam is not defined, so pspectra are not properly normalized", verbose=verbose)
 
-        pvs = []; pairs = []
+        # construct list of baseline pairs
+        bl_pairs = []
+        if isinstance(bls[0], tuple) and isinstance(bls[0][0], (int, np.int, np.int32)):
+            # assume bls is a list of tuple antenna pairs
+            # in which case we take a bl crossed with itself
+            bls = map(lambda bl: (bl, bl), bls)
+            fed_redundant_bls = False
+
+        elif isinstance(bls[0], list) and isinstance(bls[0][0], tuple) and isinstance(bls[0][0][0], (int, np.int, np.int32)):
+            # assume bls is a list of redundant baseline groups, in which case
+            # we take all N choose 2 combinations with replacement within each baseline group.
+            # this includes a baseline being crossed with itself, which will lead to a bias
+            # unless the data in each dset is from a different night / LST, or the
+            # enforce_cross_bl option is set (by default).
+            red_bls = copy.copy(bls)
+            bls = map(lambda bl_group: list(itertools.combinations_with_replacement(bl_group, 2)), bls)
+            bls = [item for sublist in bls for item in sublist]
+            fed_redundant_bls = True
+        else:
+            raise ValueError("could not parse format of bls. must be fed as a list of tuples, " \
+                             "or a list of lists of tuples.")
+
+        # iterate through all bl_groups and ensure bl_pair exists in all dsets, else remove bl_pair
+        new_bls = []
+        for i, bl_pair in enumerate(bls):
+            if self.check_key_in_dsets(bl_pair[0]) and self.check_key_in_dsets(bl_pair[1]):
+                new_bls.append(bl_pair)
+        bls = new_bls
+
+        if reverse_bl_pairing:
+            # adds extra bl_pairs having reversed baseline pair ordering
+            new_bls = copy.copy(bls)
+            for i, bl_pair in enumerate(bls):
+                if bl_pair[0] != bl_pair[1]:
+                    new_bls.append(bl_pair[::-1])
+            bls = new_bls
+
+        if enforce_cross_bl and fed_redundant_bls:
+            # eliminate all instances of a bl paired w/ itself
+            new_bls = []
+            for i, bl_pair in enumerate(bls):
+                if bl_pair[0] != bl_pair[1]:
+                    new_bls.append(bl_pair)
+            bls = new_bls
+
+        # construct empty output lists
+        pspecs = []
+        pairs = []
+
         # Loop over pairs of datasets
         for m in xrange(len(self.dsets)):
             for n in xrange(m+1, len(self.dsets)):
