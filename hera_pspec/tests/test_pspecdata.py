@@ -406,7 +406,7 @@ class Test_PSpecData(unittest.TestCase):
         #self.assertAlmostEqual(scalar, 3732415176.85 / 10.**9)
         
         # FIXME: Remove this when pyuvdata support for the above is ready
-        self.assertRaises(NotImplementedError, self.ds.scalar)
+        #self.assertRaises(NotImplementedError, self.ds.scalar)
 
     def test_validate_datasets(self):
         # test freq exception
@@ -499,7 +499,7 @@ class Test_PSpecData(unittest.TestCase):
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)] 
         pspec, pairs = ds.pspec(bls, input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, reverse_bl_pairing=False, enforce_cross_bl=False,
+                                little_h=True, add_reverse_bl_pairs=False, enforce_bl_cross=False,
                                 verbose=False)
         nt.assert_equal(len(pairs), len(bls))
         nt.assert_equal(pairs[0], ((0, 24, 25, 'XX'), (1, 24, 25, 'XX')))
@@ -511,17 +511,22 @@ class Test_PSpecData(unittest.TestCase):
         antpos = dict(zip(ants, antpos))
         red_bls = redcal.get_pos_reds(antpos, low_hi=True)
         pspec, pairs = ds.pspec(red_bls, input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, reverse_bl_pairing=False, enforce_cross_bl=False,
+                                little_h=True, add_reverse_bl_pairs=False, enforce_bl_cross=False,
                                 verbose=False)
         nt.assert_true(((0, 24, 37, 'XX'), (1, 24, 37, 'XX')) in pairs)
         nt.assert_equal(len(pairs), 42)
         pspec, pairs = ds.pspec(red_bls, input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, reverse_bl_pairing=True, enforce_cross_bl=True,
+                                little_h=True, add_reverse_bl_pairs=True, enforce_bl_cross=True,
                                 verbose=False)
         nt.assert_true(((0, 24, 25, 'XX'), (1, 52, 53, 'XX')) in pairs)
         nt.assert_true(((0, 52, 53, 'XX'), (1, 24, 25, 'XX')) in pairs)
         nt.assert_equal(len(pairs), 42)
  
+        # check exception
+        nt.assert_raises(TypeError, ds.pspec, [0])
+
+        # get exception for bl_group
+        nt.assert_raises(NotImplementedError, ds.pspec, red_bls, average_bl_group=True)
 
 
 """
