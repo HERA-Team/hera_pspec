@@ -130,6 +130,46 @@ class PSpecData(object):
         if np.unique(pols).size > 1:
             raise ValueError("all dsets must have the same number and kind of polarizations: \n{}".format(pols))
 
+    def check_key_in_dsets(self, key):
+        """
+        Check 'key' exists in all UVData objects in self.dsets
+
+        Parameters
+        ----------
+        key : tuple
+            if length 1: assumed to be polarization number or string
+            elif length 2: assumed to be antenna-number tuple (ant1, ant2)
+            elif length 3: assuemd ot be antenna-number-polarization tuple (ant1, ant2, pol)
+
+        Returns
+        -------
+        exists : bool
+            True if the key exists in all dsets, False otherwise
+        """
+        # get iterable
+        key = pyuvdata.utils.get_iterable(key)
+        if isinstance(key, str):
+            key = (key,)
+
+        # check key is a tuple
+        if isinstance(key, tuple) == False or len(key) not in (1, 2, 3):
+            raise KeyError("key {} must be a length 1, 2 or 3 tuple".format(key))
+
+        # start exists as False in case len(self.dsets) == 0
+        exists = False
+        # loop over all dsets
+        for i, dset in enumerate(self.dsets):
+            try:
+                _ = dset._key2inds(key)
+            except KeyError:
+                break
+
+            # if loop survived all dsets, the key exists in all dsets
+            if i+1 == len(self.dsets):
+                exists = True
+
+        return exists
+
     def clear_cov_cache(self, keys=None):
         """
         Clear stored covariance data (or some subset of it).
@@ -697,7 +737,7 @@ class PSpecData(object):
             return delay * 1e9 # convert to ns
     
     
-    def scalar(self, stokes='I', taper='none', little_h=True, num_steps=2000):
+    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
