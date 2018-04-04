@@ -872,12 +872,12 @@ class PSpecData(object):
             # we take all N choose 2 combinations with replacement within each baseline group.
             # this includes a baseline being crossed with itself, which will lead to a bias
             # unless the data in each dset is from a different night / LST, or the
-            # enforce_cross_bl option is set (by default).
+            # enforce_bl_cross option is set (by default).
             red_bls = copy.copy(bls)
             bls = map(lambda bl_group: list(itertools.combinations_with_replacement(bl_group, 2)), bls)
             fed_bl_group = True
         else:
-            raise ValueError("could not parse format of bls. must be fed as a list of tuples, " \
+            raise TypeError("could not parse format of bls. must be fed as a list of tuples, " \
                              "or a list of lists of tuples.")
 
         # iterate through all bls and ensure bl pair exists in all dsets, else remove
@@ -901,7 +901,7 @@ class PSpecData(object):
             for i, blg in enumerate(bls):
                 new_blg = []
                 for blp in blg:
-                    if enforce_cross_bl:
+                    if enforce_bl_cross:
                         if blp[0] == blp[1]:
                             continue
                     new_blg.append(blp)
@@ -962,10 +962,10 @@ class PSpecData(object):
                         pv *= scalar
 
                     # Save power spectra and dataset/baseline pairs
-                    pvs.append(pv)
+                    pspecs.append(pv)
                     pairs.append((key1, key2))
                     
-        return np.array(pvs), pairs
+        return np.array(pspecs), pairs
 
     def rephase_to_dset(self, dset_index=0, inplace=True):
         """
