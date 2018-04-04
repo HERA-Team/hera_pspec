@@ -6,6 +6,8 @@ import os, copy, sys
 from scipy.integrate import simps
 from hera_pspec import pspecdata, pspecbeam
 from hera_pspec.data import DATA_PATH
+from pyuvdata import UVData
+from hera_cal import redcal
 
 # Data files to use in tests
 dfiles = [
@@ -473,6 +475,54 @@ class Test_PSpecData(unittest.TestCase):
         ds.add([self.uvd, self.uvd], [None, None])
         d = ds.delays()
         nt.assert_true(len(d), ds.dsets[0].Nfreqs)
+
+    def test_check_in_dsets(self):
+        # generate ds
+        uvd = copy.deepcopy(self.d[0])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        # check for existing key
+        nt.assert_true(ds.check_key_in_dsets('xx'))
+        nt.assert_true(ds.check_key_in_dsets((24, 25)))
+        nt.assert_true(ds.check_key_in_dsets((24, 25, 'xx')))
+        # check for non-existing key
+        nt.assert_false(ds.check_key_in_dsets('yy'))
+        nt.assert_false(ds.check_key_in_dsets((24, 26)))
+        nt.assert_false(ds.check_key_in_dsets((24, 26, 'yy')))
+        # check exception
+        nt.assert_raises(KeyError, ds.check_key_in_dsets, (1,2,3,4,5))
+
+    def test_pspec(self):
+        # generate ds
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+
+        # check basic execution with baseline list
+        bls = [(24, 25), (37, 38), (38, 39), (52, 53)] 
+        pspec, pairs = ds.pspec(bls, input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, reverse_bl_pairing=False, enforce_cross_bl=False,
+                                verbose=False)
+        nt.assert_equal(len(pairs), len(bls))
+        nt.assert_equal(pairs[0], ((0, 24, 25, 'XX'), (1, 24, 25, 'XX')))
+        nt.assert_equal(pspec.dtype, np.complex128)
+        nt.assert_equal(pspec.shape, (4, 64, 60))
+
+        # check with redundant baseline group list
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos = dict(zip(ants, antpos))
+        red_bls = redcal.get_pos_reds(antpos, low_hi=True)
+        pspec, pairs = ds.pspec(red_bls, input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, reverse_bl_pairing=False, enforce_cross_bl=False,
+                                verbose=False)
+        nt.assert_true(((0, 24, 37, 'XX'), (1, 24, 37, 'XX')) in pairs)
+        nt.assert_equal(len(pairs), 42)
+        pspec, pairs = ds.pspec(red_bls, input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, reverse_bl_pairing=True, enforce_cross_bl=True,
+                                verbose=False)
+        nt.assert_true(((0, 24, 25, 'XX'), (1, 52, 53, 'XX')) in pairs)
+        nt.assert_true(((0, 52, 53, 'XX'), (1, 24, 25, 'XX')) in pairs)
+        nt.assert_equal(len(pairs), 42)
+ 
+
 
 """
 # LEGACY MONTE CARLO TESTS

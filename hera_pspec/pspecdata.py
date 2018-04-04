@@ -853,7 +853,6 @@ class PSpecData(object):
         # get polarization array from zero'th dset
         pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), self.dsets[0].polarization_array)
 
-
         # Compute the scalar to convert from "telescope units" to "cosmo units"
         # once and for all
         if self.primary_beam is not None:
@@ -866,7 +865,7 @@ class PSpecData(object):
             # assume bls is a list of tuple antenna pairs
             # in which case we take a bl crossed with itself
             bls = map(lambda bl: (bl, bl), bls)
-            fed_redundant_bls = False
+            fed_bl_group = False
 
         elif isinstance(bls[0], list) and isinstance(bls[0][0], tuple) and isinstance(bls[0][0][0], (int, np.int, np.int32)):
             # assume bls is a list of redundant baseline groups, in which case
@@ -876,34 +875,47 @@ class PSpecData(object):
             # enforce_cross_bl option is set (by default).
             red_bls = copy.copy(bls)
             bls = map(lambda bl_group: list(itertools.combinations_with_replacement(bl_group, 2)), bls)
-            bls = [item for sublist in bls for item in sublist]
-            fed_redundant_bls = True
+            fed_bl_group = True
         else:
             raise ValueError("could not parse format of bls. must be fed as a list of tuples, " \
                              "or a list of lists of tuples.")
 
-        # iterate through all bl_groups and ensure bl_pair exists in all dsets, else remove bl_pair
+        # iterate through all bls and ensure bl pair exists in all dsets, else remove
         new_bls = []
-        for i, bl_pair in enumerate(bls):
-            if self.check_key_in_dsets(bl_pair[0]) and self.check_key_in_dsets(bl_pair[1]):
-                new_bls.append(bl_pair)
+        for i, blg in enumerate(bls):
+            if fed_bl_group:
+                new_blg = []
+                for blp in blg:
+                    if self.check_key_in_dsets(blp[0]) and self.check_key_in_dsets(blp[1]):
+                        new_blg.append(blp)
+                if len(new_blg) > 0:
+                    new_bls.append(new_blg)
+            else:
+                if self.check_key_in_dsets(blg[0]) and self.check_key_in_dsets(blg[1]):
+                    new_bls.append(blg)
         bls = new_bls
 
-        if reverse_bl_pairing:
-            # adds extra bl_pairs having reversed baseline pair ordering
-            new_bls = copy.copy(bls)
-            for i, bl_pair in enumerate(bls):
-                if bl_pair[0] != bl_pair[1]:
-                    new_bls.append(bl_pair[::-1])
+        # enforce cross or add reverse pairings if desired
+        if fed_bl_group:
+            new_bls = []
+            for i, blg in enumerate(bls):
+                new_blg = []
+                for blp in blg:
+                    if enforce_cross_bl:
+                        if blp[0] == blp[1]:
+                            continue
+                    new_blg.append(blp)
+                    if add_reverse_bl_pairs and blp[0] != blp[1]:
+                        new_blg.append((blp[1], blp[0]))
+                if len(new_blg) > 0:
+                    new_bls.append(new_blg)
             bls = new_bls
 
-        if enforce_cross_bl and fed_redundant_bls:
-            # eliminate all instances of a bl paired w/ itself
-            new_bls = []
-            for i, bl_pair in enumerate(bls):
-                if bl_pair[0] != bl_pair[1]:
-                    new_bls.append(bl_pair)
-            bls = new_bls
+        if average_bl_group == False and fed_bl_group:
+            bls = [item for sublist in bls for item in sublist]
+
+        if average_bl_group:
+            raise NotImplementedError
 
         # construct empty output lists
         pspecs = []
@@ -911,18 +923,20 @@ class PSpecData(object):
 
         # Loop over pairs of datasets
         for m in xrange(len(self.dsets)):
+            # Datasets should not be cross-correlated with themselves
             for n in xrange(m+1, len(self.dsets)):
-                # Datasets should not be cross-correlated with themselves, and
-                # dataset pair (m, n) gives the same result as (n, m)
-
-                # Loop over baselines
-                for bl in bls:
-                    if isinstance(bl, list):
-                        key1 = [(m,) + _bl for _bl in bl]
-                        key2 = [(n,) + _bl for _bl in bl]
-                    else:
-                        key1 = (m,) + bl
-                        key2 = (n,) + bl
+                # Loop over baseline pairs
+                for blp in bls:
+                    # Loop over polarizations
+                    for p in pol_arr:
+                        # assign keys
+                        if average_bl_group and fed_bl_group:
+                            key1 = [(m,) + _bl[0] + (p,) for _bl in blp]
+                            key2 = [(m,) + _bl[1] + (p,) for _bl in blp]
+                        else:
+                            key1 = (m,) + blp[0] + (p,)
+                            key2 = (n,) + blp[1] + (p,)
+                            
                     if verbose: print("Baselines:", key1, key2)
 
                     # Set covariance weighting scheme for input data
