@@ -1,7 +1,7 @@
 import numpy as np
 import aipy
 import pyuvdata
-from hera_pspec.utils import cov
+from hera_pspec import utils
 import itertools
 import copy
 import hera_cal as hc
@@ -259,7 +259,7 @@ class PSpecData(object):
 
         # Set covariance if it's not in the cache
         if not self._C.has_key(key):
-            self.set_C( {key : cov(self.x(key), self.w(key))} )
+            self.set_C( {key : utils.cov(self.x(key), self.w(key))} )
             self._Cempirical[key] = self._C[key]
 
         # Return cached covariance
@@ -301,7 +301,7 @@ class PSpecData(object):
 
         # Check cache for empirical covariance
         if not self._Cempirical.has_key(key):
-            self._Cempirical[key] = cov(self.x(key), self.w(key))
+            self._Cempirical[key] = utils.cov(self.x(key), self.w(key))
         return self._Cempirical[key]
 
     def I(self, key):
@@ -711,31 +711,31 @@ class PSpecData(object):
         
         return pspec_units, delay_units
     
-    def delays(self, spw_select=None):
+    def delays(self, spw_range=None):
         """
         Return an array of delays, tau, corresponding to the bins of the delay 
         power spectrum output by pspec().
         
         Parameters
         ----------
-        spw_select : tuple, contains start and stop channels to use in freq_array. 
-            default is all channels.
+        spw_range : len-2 tuple, contains start and stop channel indices used to index self.freq_array. 
+            default is to use all channels.
 
         Returns
         -------
         delays : array_like
             Delays, tau. Units: ns.
         """
-        if spw_select is None:
-            spw_select = (0, self.dsets[0].freq_array.shape[1])
+        if spw_range is None:
+            spw_range = (0, self.dsets[0].freq_array.shape[1])
         # Calculate the delays
         if len(self.dsets) == 0:
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate delays.")
         else:
-            return get_delays(self.dsets[0].freq_array.flatten()[spw_select[0]:spw_select[1]]) * 1e9 # convert to ns    
+            return utils.get_delays(self.dsets[0].freq_array.flatten()[spw_range[0]:spw_range[1]]) * 1e9 # convert to ns    
     
-    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, spw_select=None, beam=None):
+    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, spw_range=None, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -765,7 +765,7 @@ class PSpecData(object):
                 numerical integral
                 Default: 10000
 
-        spw_select : tuple, Example: (200, 300)
+        spw_range : tuple, Example: (200, 300)
             tuple containing a start and stop channel used to index the `freq_array` of the datasets.
             The default (None) is to use the entire band provided in the dataset.
 
@@ -778,10 +778,10 @@ class PSpecData(object):
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
                 in h^-3 Mpc^3 or Mpc^3.
         """
-        # set spw_select and get freqs
-        if spw_select is None:
-            spw_select = (0, self.freqs.shape[1])
-        freqs = self.freqs[spw_select[0]:spw_select[1]]
+        # set spw_range and get freqs
+        if spw_range is None:
+            spw_range = (0, self.freqs.shape[1])
+        freqs = self.freqs[spw_range[0]:spw_range[1]]
 
         # calculate scalar
         if beam is None:
@@ -795,7 +795,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, input_data_weight='identity', norm='I', taper='none', 
               little_h=True, avg_group=False, exclude_auto_bls=False, exclude_conjugated_blpairs=False,
-              spw_select=None, verbose=True, history=''):
+              spw_range=None, verbose=True, history=''):
         """
         Estimate the delay power spectrum from a pair of datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
@@ -972,10 +972,10 @@ class PSpecData(object):
             raise NotImplementedError
 
         # configure spectral window selections
-        if spw_select is None:
-            spw_select = [(0, dset1.freq_array.shape[1])]
+        if spw_range is None:
+            spw_range = [(0, dset1.freq_array.shape[1])]
         else:
-            assert np.isclose(map(lambda t: len(t), spw_select), 2).all(), "spw_select must be fed as a list of length-2 tuples"
+            assert np.isclose(map(lambda t: len(t), spw_range), 2).all(), "spw_range must be fed as a list of length-2 tuples"
 
         # initialize empty lists
         data_array = odict()
@@ -987,19 +987,19 @@ class PSpecData(object):
         spws = []
         dlys = []
         freqs = []
-        sclr_arr = np.ones((len(spw_select), len(pol_arr)), np.float)
+        sclr_arr = np.ones((len(spw_range), len(pol_arr)), np.float)
         blp_arr = []
         bls_arr = []
 
         # Loop over spectral windows
-        for i in range(len(spw_select)):
+        for i in range(len(spw_range)):
             spw_data = []
             spw_ints = []
 
-            d = self.delays(spw_select=spw_select[i]) * 1e-9
+            d = self.delays(spw_range=spw_range[i]) * 1e-9
             dlys.extend(d)
             spws.extend(np.ones_like(d, np.int) * i)
-            freqs.extend(dset1.freq_array.flatten()[spw_select[i][0]:spw_select[i][1]])
+            freqs.extend(dset1.freq_array.flatten()[spw_range[i][0]:spw_range[i][1]])
 
             # Loop over polarizations
             for j, p in enumerate(pol_arr):
@@ -1008,7 +1008,7 @@ class PSpecData(object):
 
                 # Compute the scalar to convert from "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
-                    scalar = self.scalar(taper=taper, little_h=True, spw_select=spw_select[i])
+                    scalar = self.scalar(taper=taper, little_h=True, spw_range=spw_range[i])
                 else: 
                     raise_warning("Warning: self.primary_beam is not defined, so pspectra are not properly normalized", verbose=verbose)
                     scalar = 1.0
@@ -1225,25 +1225,6 @@ class PSpecData(object):
 
         if inplace is False:
             return dsets
-
-
-def get_delays(freqs):
-    """
-    Return an array of delays, tau, corresponding to the bins of the delay 
-    power spectrum given by frequency array.
-    
-    Parameters
-    ----------
-    freqs : ndarray of frequency array in Hz
-
-    Returns
-    -------
-    delays : array_like
-        Delays, tau. Units: seconds.
-    """
-    # Calculate the delays
-    delay = np.fft.fftshift(np.fft.fftfreq(freqs.size, d=np.median(np.diff(freqs))))
-    return delay
 
 
 def raise_warning(warning, verbose=True):
