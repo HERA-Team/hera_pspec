@@ -1,6 +1,7 @@
 import numpy as np
 import h5py
-from uvpspec import UVPSpec
+from hera_pspec.uvpspec import UVPSpec
+import hera_pspec.version as version
 
 class PSpecContainer(object):
     """
@@ -40,6 +41,8 @@ class PSpecContainer(object):
         # allow non-destructive operations!
         mode = 'a' if self.mode == 'rw' else 'r'
         self.data = h5py.File(self.filename, mode)
+        if self.mode == 'rw':
+            self._update_header()
     
     
     def _store_pspec(self, pspec, ps):
@@ -62,9 +65,25 @@ class PSpecContainer(object):
         
         # Store data into HDF5 file
         for key in data.keys():
-            ds = pspec.create_dataset("%s" % key, 
-                                      data[key].shape, 
-                                      data[key].dtype)
+            if not isinstance(data[key], np.ndarray):
+                raise TypeError("UVPSpec object 'ps' returned data that was not "
+                                "a numpy array.")
+            
+            # Check if dataset exists
+            if "%s" % key not in pspec.keys():
+                ds = pspec.create_dataset("%s" % key, 
+                                          data[key].shape, 
+                                          data[key].dtype)
+            else:
+                # Check that existing dataset has the right shape
+                if ds.shape != data[key].shape:
+                    raise ValueError("Power spectrum '%s' already exists with "
+                                     "a different shape.")
+                if ds.dtype != data[key].dtype:
+                    raise ValueError("Power spectrum '%s' already exists with "
+                                     "a different dtype.")
+                ds = pspec["%s" % key]
+            
             ds[:] = data[key][:]
         
         # Store attributes into HDF5 file
@@ -90,6 +109,24 @@ class PSpecContainer(object):
         pspec = UVPSpec(data_dict=data, attr_dict=attrs)
         return pspec
     
+    
+    def _update_header(self):
+        """
+        Update the header in the HDF5 file with useful metadata, including the 
+        git version of hera_pspec.
+        """
+        if 'header' not in self.data.keys():
+            hdr = self.data.create_group('header')
+        else:
+            hdr = self.data['header']
+        
+        # Check if versions of hera_pspec are the same
+        if 'hera_pspec.git_hash' in hdr.attrs.keys():
+            if hdr.attrs['hera_pspec.git_hash'] != version.git_hash:
+                print("WARNING: HDF5 file was created by a different version "
+                      "of hera_pspec.")
+        hdr.attrs['hera_pspec.git_hash'] = version.git_hash
+        
     
     def set_pspec(self, group, pspec, ps):
         """
@@ -161,4 +198,15 @@ class PSpecContainer(object):
             return self._load_pspec(grp[key2])
         else:
             raise KeyError("No pspec named '%s' in group '%s'" % (key2, key1))
-        
+    
+    def save(self):
+        """
+        Force HDF5 file to flush to disk.
+        """
+        self.data.flush()
+    
+    def __del__(self):
+        """
+        Make sure that HDF5 file is closed on destruct.
+        """
+        self.data.close()
