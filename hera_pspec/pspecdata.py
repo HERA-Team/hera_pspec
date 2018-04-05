@@ -1116,6 +1116,8 @@ class PSpecData(object):
         uvp.integration_array = integration_array
         uvp.flag_array = odict(map(lambda s: (s, np.zeros_like(data_array[s], np.bool)), data_array.keys()))
         uvp.history = dset1.history + dset2.history + history
+        uvp.taper = taper
+        uvp.norm = norm
         if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
         if hasattr(dset2.extra_keywords, 'filename'): uvp.filename2 = dset2.extra_keywords['filename']
         if hasattr(dset1.extra_keywords, 'tag'): uvp.tag1 = dset1.extra_keywords['tag']
