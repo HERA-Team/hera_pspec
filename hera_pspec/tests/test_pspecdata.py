@@ -476,20 +476,20 @@ class Test_PSpecData(unittest.TestCase):
         d = ds.delays()
         nt.assert_true(len(d), ds.dsets[0].Nfreqs)
 
-    def test_check_in_dsets(self):
+    def test_check_in_dset(self):
         # generate ds
         uvd = copy.deepcopy(self.d[0])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
         # check for existing key
-        nt.assert_true(ds.check_key_in_dsets('xx'))
-        nt.assert_true(ds.check_key_in_dsets((24, 25)))
-        nt.assert_true(ds.check_key_in_dsets((24, 25, 'xx')))
+        nt.assert_true(ds.check_key_in_dset(('xx'), 0))
+        nt.assert_true(ds.check_key_in_dset((24, 25), 0))
+        nt.assert_true(ds.check_key_in_dset((24, 25, 'xx'), 0))
         # check for non-existing key
-        nt.assert_false(ds.check_key_in_dsets('yy'))
-        nt.assert_false(ds.check_key_in_dsets((24, 26)))
-        nt.assert_false(ds.check_key_in_dsets((24, 26, 'yy')))
+        nt.assert_false(ds.check_key_in_dset('yy', 0))
+        nt.assert_false(ds.check_key_in_dset((24, 26), 0))
+        nt.assert_false(ds.check_key_in_dset((24, 26, 'yy'), 0))
         # check exception
-        nt.assert_raises(KeyError, ds.check_key_in_dsets, (1,2,3,4,5))
+        nt.assert_raises(KeyError, ds.check_key_in_dset, (1,2,3,4,5), 0)
 
     def test_pspec(self):
         # generate ds
@@ -498,8 +498,8 @@ class Test_PSpecData(unittest.TestCase):
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)] 
-        pspec, pairs = ds.pspec(bls, input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, add_reverse_bl_pairs=False, enforce_bl_cross=False,
+        pspec, pairs = ds.pspec(bls, bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
                                 verbose=False)
         nt.assert_equal(len(pairs), len(bls))
         nt.assert_equal(pairs[0], ((0, 24, 25, 'XX'), (1, 24, 25, 'XX')))
@@ -510,23 +510,23 @@ class Test_PSpecData(unittest.TestCase):
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
         red_bls = redcal.get_pos_reds(antpos, low_hi=True)
-        pspec, pairs = ds.pspec(red_bls, input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, add_reverse_bl_pairs=False, enforce_bl_cross=False,
+        pspec, pairs = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
                                 verbose=False)
         nt.assert_true(((0, 24, 37, 'XX'), (1, 24, 37, 'XX')) in pairs)
-        nt.assert_equal(len(pairs), 42)
-        pspec, pairs = ds.pspec(red_bls, input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, add_reverse_bl_pairs=True, enforce_bl_cross=True,
+        nt.assert_equal(len(pairs), 62)
+        pspec, pairs = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, exclude_conjugated_blpairs=True, exclude_auto_bls=True,
                                 verbose=False)
         nt.assert_true(((0, 24, 25, 'XX'), (1, 52, 53, 'XX')) in pairs)
-        nt.assert_true(((0, 52, 53, 'XX'), (1, 24, 25, 'XX')) in pairs)
-        nt.assert_equal(len(pairs), 42)
+        nt.assert_true(((0, 52, 53, 'XX'), (1, 24, 25, 'XX')) not in pairs)
+        nt.assert_equal(len(pairs), 21)
  
         # check exception
-        nt.assert_raises(TypeError, ds.pspec, [0])
+        nt.assert_raises(TypeError, ds.pspec, [0], [0], 0, 1)
 
         # get exception for bl_group
-        nt.assert_raises(NotImplementedError, ds.pspec, red_bls, average_bl_group=True)
+        nt.assert_raises(NotImplementedError, ds.pspec, red_bls, red_bls, 0, 1, avg_groups=True)
 
 
 """
