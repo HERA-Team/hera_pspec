@@ -27,9 +27,9 @@ def test_cov():
     nt.assert_equal(cov.shape, (60, 60))
     nt.assert_equal(cov.dtype, np.complex)
     # test exception
-    nt.assert_raises(TypeError, cov, d1, w1.astype(np.complex))
-    nt.assert_raises(TypeError, cov, d1, w1, d2=d2, w2=w2.astype(np.real))
+    nt.assert_raises(TypeError, utils.cov, d1, w1*1j)
+    nt.assert_raises(TypeError, utils.cov, d1, w1, d2=d2, w2=w2*1j)
     w1 *= -1.0
-    nt.assert_raises(TypeError, cov, d1, w1)
+    nt.assert_raises(ValueError, utils.cov, d1, w1)
 
 
