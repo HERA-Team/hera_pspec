@@ -498,29 +498,29 @@ class Test_PSpecData(unittest.TestCase):
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)] 
-        pspec, pairs = ds.pspec(bls, bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls, bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
                                 verbose=False)
-        nt.assert_equal(len(pairs), len(bls))
-        nt.assert_equal(pairs[0], ((0, 24, 25, 'XX'), (1, 24, 25, 'XX')))
-        nt.assert_equal(pspec.dtype, np.complex128)
-        nt.assert_equal(pspec.shape, (4, 64, 60))
+        nt.assert_equal(len(uvp.bl_array), len(bls))
+        nt.assert_true(uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
+        nt.assert_equal(uvp.data_array[0].dtype, np.complex128)
+        nt.assert_equal(uvp.data_array[0].shape, (240, 64, 1)) 
 
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
         red_bls = redcal.get_pos_reds(antpos, low_hi=True)
-        pspec, pairs = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
                                 verbose=False)
-        nt.assert_true(((0, 24, 37, 'XX'), (1, 24, 37, 'XX')) in pairs)
-        nt.assert_equal(len(pairs), 63)
-        pspec, pairs = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+        nt.assert_true(uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array)
+        nt.assert_equal(uvp.Nblpairs, 63)
+        uvp = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, exclude_conjugated_blpairs=True, exclude_auto_bls=True,
                                 verbose=False)
-        nt.assert_true(((0, 24, 25, 'XX'), (1, 52, 53, 'XX')) in pairs)
-        nt.assert_true(((0, 52, 53, 'XX'), (1, 24, 25, 'XX')) not in pairs)
-        nt.assert_equal(len(pairs), 21)
+        nt.assert_true(uvp.antnums_to_blpair(((24, 25), (52, 53))) in uvp.blpair_array)
+        nt.assert_true(uvp.antnums_to_blpair(((52, 53), (24, 25))) not in uvp.blpair_array)
+        nt.assert_equal(uvp.Nblpairs, 21)
  
         # check exception
         nt.assert_raises(TypeError, ds.pspec, [0], [0], 0, 1)
