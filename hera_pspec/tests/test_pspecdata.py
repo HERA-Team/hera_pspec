@@ -445,6 +445,7 @@ class Test_PSpecData(unittest.TestCase):
         # rephase and get pspec
         ds.rephase_to_dset(0)
         uvp2 = ds.pspec(bls, bls, 0, 1, verbose=False)
+        blp = (0, ((37,39),(37,39)), 'XX')
         nt.assert_true(np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min())
 
     def test_units(self):
