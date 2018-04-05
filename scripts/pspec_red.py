@@ -4,56 +4,37 @@ Run HERA OQE power spectrum estimation code on sets of redundant baselines.
 """
 import numpy as np
 import hera_pspec as hp
+from hera_pspec.utils import log, load_config
+from hera_cal import redcal
 import pyuvdata as uv
 import os, sys, glob, time
-
-
-def log(msg, lvl=0):
-    """
-    Add a message to the log (just prints to the terminal for now).
     
-    Parameters
-    ----------
-    lvl : int, optional
-        Indent level of the message. Each level adds two extra spaces. 
-        Default: 0.
-    """
-    print("%s%s" % ("  "*lvl, msg))
-
-
 #-------------------------------------------------------------------------------
 # Settings
 #-------------------------------------------------------------------------------
 
-"""
-DATA_DIR = "/lustre/aoc/projects/hera/H1C_IDR2/IDR2_1/"
-SUBDIRS = [2458098, 2458099, 2458101, 2458102, 2458103, 2458104, 2458105, 
-           2458106, 2458107, 2458108, 2458109, 2458110, 2458111, 2458112, 
-           2458113, 2458114, 2458115, 2458116, 2458140]
-NAME_TEMPLATE = "zen.*.yy.HH.uvOCRSD"
-"""
+# Get configuration filename from cmdline argument
+if len(sys.argv) > 1:
+    cfg_file = str(sys.argv[1])
+else:
+    print("Command takes one argument: config_file")
+    sys.exit(1)
 
-# Input data and beams
-DATA_DIR = "../hera_pspec/"
-SUBDIRS = ["data",]
-NAME_TEMPLATE = "zen.*.xx.HH.uvXA"
-BEAM_FILE = "data/NF_HERA_Beams.beamfits"
-#FLAG_FILE = "zen.2458098.66239.yy.HH.uv.vis.uvfits.flags.npz"
+# Load configuration file
+cfg = load_config(cfg_file)
+data_cfg = cfg['data']
+pspec_cfg = cfg['pspec']
 
-# Power spectrum settings
-PSPEC_OUTPUT = "hera_red.hdf5"
-PSPEC_DATA_WEIGHT = 'iC' # 'identity'
-PSPEC_NORM = 'I'
-PSPEC_TAPER = 'blackman-harris' #'none'
 
 #-------------------------------------------------------------------------------
 # Prepare list of data files
 #-------------------------------------------------------------------------------
 
 files = []
-for i in range(len(SUBDIRS)):
-    files += glob.glob( os.path.join(DATA_DIR, SUBDIRS[i], NAME_TEMPLATE) )
-
+for i in range(len(data_cfg['subdirs'])):
+    files += glob.glob( os.path.join(data_cfg['root'], 
+                                     data_cfg['subdirs'][i], 
+                                     data_cfg['template']) )
 for f in files:
     print(f)
 
@@ -78,7 +59,7 @@ log("Loaded data in %1.1f sec." % (time.time() - t0), lvl=1)
 #-------------------------------------------------------------------------------
 
 # Load beam file
-beamfile = os.path.join(DATA_DIR, BEAM_FILE)
+beamfile = os.path.join(data_cfg['root'], data_cfg['beam'])
 beam = hp.pspecbeam.PSpecBeamUV(beamfile)
 log("Loaded beam file: %s" % beamfile)
 
@@ -95,26 +76,44 @@ ds = hp.PSpecData(dsets=dsets, wgts=wgts, beam=beam)
 
 # Set-up which baselines to cross-correlate
 # TODO: Need to find available redundant baseline sets
-bls = [(37, 39),]
+#bls = [(37, 39),]
+
+antpos, ants = dsets[0].get_ENU_antpos(pick_data_ants=True)
+antpos = dict(zip(ants, antpos))
+red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0, low_hi=True)
+
+# FIXME
+bls = red_bls[0]
+print("Baselines:", bls)
 
 # Calculate power spectra for all baseline pairs
+# pspecs: (N_bls, N_freq, N_LST)
 pspecs, blpairs = ds.pspec(bls, 
-                           input_data_weight=PSPEC_DATA_WEIGHT, 
-                           norm=PSPEC_NORM, 
-                           taper=PSPEC_TAPER, 
+                           input_data_weight=pspec_cfg['weight'], 
+                           norm=pspec_cfg['norm'], 
+                           taper=pspec_cfg['taper'], 
                            little_h=True)
 
 # Create new PSpecContainer to store output power spectra
-ps_store = PSpecContainer(PSPEC_OUTPUT, mode='rw')
+ps_store = hp.PSpecContainer(pspec_cfg['output'], mode='rw')
 
 # FIXME: Placeholder for proper UVPSpec implementation
-ps = UVPSpec(data_dict={'pspec': }, 
-             attr_dict={'bls': })
+for i in range(pspecs.shape[0]):
+    pair_name = "(%s).(%s)" % (",".join(str(n) for n in blpairs[i][0]), 
+                               ",".join(str(n) for n in blpairs[i][1]))
+    print pair_name
+    ps = hp.UVPSpec(data_dict={'pspec.%s' % pair_name : pspecs[i]}, 
+                    attr_dict={'bls.%s' % pair_name : blpairs[i]})
 
-# Add power spectra to container
-GROUP_NAME = "test"
-ps_store.set_pspec(group=GROUP_NAME, pspec="something", ps)
+    # Add power spectrum to container
+    ps_store.set_pspec(group=pspec_cfg['groupname'], pspec="something", ps=ps)
 
+
+# Open file for reading
+px = hp.PSpecContainer(pspec_cfg['output'], mode='r')
+print(px.data[pspec_cfg['groupname']])
+
+#dset["FieldA"]
 
 #-------------------------------------------------------------------------------
 # Output empirical covariance matrix diagnostics
