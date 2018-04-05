@@ -1,11 +1,13 @@
 import numpy as np
 import aipy
 import pyuvdata
-from hera_pspec.utils import hash, cov
+from hera_pspec.utils import cov
 import itertools
 import copy
 import hera_cal as hc
-
+from hera_pspec import uvpspec
+from collections import OrderedDict as odict
+from pyuvdata import utils as uvutils
 
 
 class PSpecData(object):
@@ -708,29 +710,32 @@ class PSpecData(object):
             pspec_units = "(%s)^2 (ns)^-1" % self.dsets[0].vis_units
         
         return pspec_units, delay_units
-        
     
-    def delays(self):
+    def delays(self, spw_select=None):
         """
         Return an array of delays, tau, corresponding to the bins of the delay 
         power spectrum output by pspec().
         
+        Parameters
+        ----------
+        spw_select : tuple, contains start and stop channels to use in freq_array. 
+            default is all channels.
+
         Returns
         -------
         delays : array_like
             Delays, tau. Units: ns.
         """
+        if spw_select is None:
+            spw_select = (0, self.dsets[0].freq_array.shape[1])
         # Calculate the delays
         if len(self.dsets) == 0:
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate delays.")
         else:
-            nu = self.dsets[0].freq_array[0] # always in Hz
-            delay = np.fft.fftfreq(nu.size, d=nu[1]-nu[0])
-            return delay * 1e9 # convert to ns
+            return get_delays(self.dsets[0].freq_array.flatten()[spw_select[0]:spw_select[1]]) * 1e9 # convert to ns    
     
-    
-    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, beam=None):
+    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, spw_select=None, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -760,6 +765,10 @@ class PSpecData(object):
                 numerical integral
                 Default: 10000
 
+        spw_select : tuple, Example: (200, 300)
+            tuple containing a start and stop channel used to index the `freq_array` of the datasets.
+            The default (None) is to use the entire band provided in the dataset.
+
         beam : PSpecBeam object
             Option to use a manually-fed PSpecBeam object instead of using self.primary_beam.
 
@@ -769,18 +778,24 @@ class PSpecData(object):
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
                 in h^-3 Mpc^3 or Mpc^3.
         """
+        # set spw_select and get freqs
+        if spw_select is None:
+            spw_select = (0, self.freqs.shape[1])
+        freqs = self.freqs[spw_select[0]:spw_select[1]]
+
+        # calculate scalar
         if beam is None:
-            scalar = self.primary_beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], len(self.freqs), stokes=stokes,
+            scalar = self.primary_beam.compute_pspec_scalar(freqs[0], freqs[-1], len(freqs), stokes=stokes,
                                                             taper=taper, little_h=little_h, num_steps=num_steps)
         else:
-            scalar = beam.compute_pspec_scalar(self.freqs[0], self.freqs[-1], len(self.freqs), stokes=stokes,
+            scalar = beam.compute_pspec_scalar(freqs[0], freqs[-1], len(freqs), stokes=stokes,
                                                             taper=taper, little_h=little_h, num_steps=num_steps)
 
         return scalar
 
     def pspec(self, bls1, bls2, dset1_ind, dset2_ind, input_data_weight='identity', norm='I', taper='none', 
               little_h=True, avg_groups=False, exclude_auto_bls=False, exclude_conjugated_blpairs=False,
-              verbose=True):
+              spw_select=None, verbose=True, history=''):
         """
         Estimate the delay power spectrum from the datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
@@ -854,31 +869,30 @@ class PSpecData(object):
         avg_groups : boolean, optional
             If bls1 and bls2 are a list of bl groups, average data in each group before squaring.
 
+        spw_select : list of tuples, optional. Example: [(220, 320), (650, 775)]
+            A list of spectral window channel ranges to select within the bandwidth of the datasets. 
+            Each tuple should contain a start and stop channel used to index the `freq_array` of each dataset.
+            The default (None) is to use the entire band provided in each dataset.
+
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
-        Returns
-        -------  
-        pspec : list of np.ndarray
-            Optimal quadratic estimate of the delay power spectrum for the 
-            datasets stored in this PSpecData and baselines specified in 
-            'keys'. Units: given by the units() method.
+        history : str, optional
+            history string to attach to UVPSpec object
 
-        pairs : list of tuples
-            List of the pairs of datasets and baselines that were used to
-            calculate each element of the 'pspec' list.
+        Returns
+        -------
+        uvp : instance of UVPSpec object holding power spectrum data
         """
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
 
-        # get polarization array from zero'th dset
-        pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), self.dsets[0].polarization_array)
+        # set dsets
+        dset1 = self.dsets[dset1_ind]
+        dset2 = self.dsets[dset2_ind]
 
-        # Compute the scalar to convert from "telescope units" to "cosmo units"
-        # once and for all
-        if self.primary_beam is not None:
-            scalar = self.scalar(taper=taper, little_h=True)
-        else: raise_warning("Warning: self.primary_beam is not defined, so pspectra are not properly normalized", verbose=verbose)
+        # get polarization array from zero'th dset
+        pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), dset1.polarization_array)
 
         # ensure both bls1 and bls2 are the same type
         if isinstance(bls1[0], tuple) and isinstance(bls1[0][0], (int, np.int)) \
@@ -939,57 +953,177 @@ class PSpecData(object):
                     new_bl_pairs.append(new_blg)
             bl_pairs = new_bl_pairs
 
+        # flatten bl_pairs list if bls fed as bl groups but no averaging is desired
         if avg_groups == False and fed_bl_group:
             bl_pairs = [item for sublist in bl_pairs for item in sublist]
 
         if avg_groups:
+            # bl group averaging currently fails at self.get_G() function
             raise NotImplementedError
 
-        # construct empty output lists
-        pspecs = []
-        pairs = []
+        # configure spectral window selections
+        if spw_select is None:
+            spw_select = [(0, dset1.freq_array.shape[1])]
+        else:
+            assert np.isclose(map(lambda t: len(t), spw_select), 2).all(), "spw_select must be fed as a list of length-2 tuples"
 
-        # Loop over baseline pairs
-        for blp in bl_pairs:
+        # initialize empty lists
+        data_array = odict()
+        integration_array = odict()
+        time1 = []
+        time2 = []
+        lst1 = []
+        lst2 = []
+        spws = []
+        dlys = []
+        freqs = []
+        sclr_arr = np.ones((len(spw_select), len(pol_arr)), np.float)
+        blp_arr = []
+        bls_arr = []
+
+        # Loop over spectral windows
+        for i in range(len(spw_select)):
+            spw_data = []
+            spw_ints = []
+
+            d = self.delays(spw_select=spw_select[i]) * 1e-9
+            dlys.extend(d)
+            spws.extend(np.ones_like(d, np.int) * i)
+            freqs.extend(dset1.freq_array.flatten()[spw_select[i][0]:spw_select[i][1]])
+
             # Loop over polarizations
-            for p in pol_arr:
-                # assign keys
-                if avg_groups and fed_bl_group:
-                    key1 = [(dset1_ind,) + _blp[0] + (p,) for _blp in blp]
-                    key2 = [(dset2_ind,) + _blp[1] + (p,) for _blp in blp]
-                else:
-                    key1 = (dset1_ind,) + blp[0] + (p,)
-                    key2 = (dset2_ind,) + blp[1] + (p,)
-                    
-            if verbose: print("Baselines:", key1, key2)
+            for j, p in enumerate(pol_arr):
+                pol_data = []
+                pol_ints = []
 
-            # Set covariance weighting scheme for input data
-            if verbose: print("  Setting weight matrix for input data...")
-            self.set_R(input_data_weight)
+                # Compute the scalar to convert from "telescope units" to "cosmo units"
+                if self.primary_beam is not None:
+                    scalar = self.scalar(taper=taper, little_h=True, spw_select=spw_select[i])
+                else: 
+                    raise_warning("Warning: self.primary_beam is not defined, so pspectra are not properly normalized", verbose=verbose)
+                    scalar = 1.0
+                sclr_arr[i, j] = scalar
 
-            # Build Fisher matrix
-            if verbose: print("  Building G...")
-            Gv = self.get_G(key1, key2, taper=taper)
+                # Loop over baseline pairs
+                for blp in bl_pairs:
 
-            # Calculate unnormalized bandpowers
-            if verbose: print("  Building q_hat...")
-            qv = self.q_hat(key1, key2, taper=taper)
+                    # assign keys
+                    if avg_groups and fed_bl_group:
+                        key1 = [(dset1_ind,) + _blp[0] + (p,) for _blp in blp]
+                        key2 = [(dset2_ind,) + _blp[1] + (p,) for _blp in blp]
+                    else:
+                        key1 = (dset1_ind,) + blp[0] + (p,)
+                        key2 = (dset2_ind,) + blp[1] + (p,)
+                        
+                    if verbose: print("Baselines:", key1, key2)
 
-            # Normalize power spectrum estimate
-            if verbose: print("  Normalizing power spectrum...")
-            Mv, Wv = self.get_MW(Gv, mode=norm)
-            pv = self.p_hat(Mv, qv)
-            
-            # Multiply by scalar
-            if self.primary_beam != None:
-                if verbose: print("  Computing and multiplying scalar...")
-                pv *= scalar
+                    # Set covariance weighting scheme for input data
+                    if verbose: print("  Setting weight matrix for input data...")
+                    self.set_R(input_data_weight)
 
-            # Save power spectra and dataset/baseline pairs
-            pspecs.append(pv)
-            pairs.append((key1, key2))
-            
-        return np.array(pspecs), pairs
+                    # Build Fisher matrix
+                    if verbose: print("  Building G...")
+                    Gv = self.get_G(key1, key2, taper=taper)
+
+                    # Calculate unnormalized bandpowers
+                    if verbose: print("  Building q_hat...")
+                    qv = self.q_hat(key1, key2, taper=taper)
+
+                    # Normalize power spectrum estimate
+                    if verbose: print("  Normalizing power spectrum...")
+                    Mv, Wv = self.get_MW(Gv, mode=norm)
+                    pv = self.p_hat(Mv, qv)
+
+                    # Multiply by scalar
+                    if self.primary_beam != None:
+                        if verbose: print("  Computing and multiplying scalar...")
+                        pv *= scalar
+
+                    # Get baseline keys
+                    if avg_groups and fed_bl_group:
+                        bl1 = blp[0][0]
+                        bl2 = blp[0][1]
+                    else:
+                        bl1 = blp[0]
+                        bl2 = blp[1]
+
+                    # append bls
+                    bls_arr.extend([bl1, bl2])
+
+                    # insert pspectra
+                    pol_data.extend(pv.T)
+
+                    # insert integration info
+                    wgts1 = (~dset1.get_flags(bl1)).astype(np.float)
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1) * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
+                    wgts2 = (~dset2.get_flags(bl2)).astype(np.float)
+                    nsamp2 = np.sum(dset2.get_nsamples(bl2) * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+                    pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0))
+
+                    # insert time and blpair info only once
+                    if i < 1 and j < 1:
+                        # insert time info
+                        inds1 = dset1.antpair2ind(*bl1)
+                        inds2 = dset1.antpair2ind(*bl2)
+                        time1.extend(dset1.time_array[inds1])
+                        time2.extend(dset2.time_array[inds2])
+                        lst1.extend(dset1.lst_array[inds1])
+                        lst2.extend(dset2.lst_array[inds2])
+
+                        # insert blpair info
+                        blp_arr.extend(np.ones_like(inds1, np.int) * uvpspec._antnums_to_blpair(blp))
+
+                # insert into data and integrations dictionaries
+                spw_data.append(pol_data)
+                spw_ints.append(pol_ints)
+
+            # insert into data and integration dictionaries
+            spw_data = np.moveaxis(np.array(spw_data), 0, -1)
+            spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
+            data_array[i] = spw_data
+            integration_array[i] = spw_ints
+
+        # fill uvp object
+        uvp = uvpspec.UVPSpec()
+        uvp.time_1_array = np.array(time1)
+        uvp.time_2_array = np.array(time2)
+        uvp.lst_1_array = np.array(lst1)
+        uvp.lst_2_array = np.array(lst2)
+        uvp.blpair_array = np.array(blp_arr)
+        uvp.Nblpairs = len(np.unique(blp_arr))
+        uvp.Ntimes = len(np.unique(time1))
+        uvp.Nblpairts = len(time1)
+        bls_arr = sorted(set(bls_arr))
+        uvp.bl_array = np.array(map(lambda bl: uvp.antnums_to_bl(bl), bls_arr))
+        antpos = dict(zip(dset1.antenna_numbers, dset1.antenna_positions))
+        uvp.bl_vecs = np.array(map(lambda bl: antpos[bl[0]] - antpos[bl[1]], bls_arr))
+        uvp.Nbls = len(uvp.bl_array)
+        uvp.spw_array = np.array(spws)
+        uvp.freq_array = np.array(freqs)
+        uvp.dly_array = np.array(dlys)
+        uvp.Nspws = len(np.unique(spws))
+        uvp.Ndlys = len(np.unique(dlys))
+        uvp.Nspwdlys = len(spws)
+        uvp.Nfreqs = len(np.unique(freqs))
+        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p), pol_arr))
+        uvp.Npols = len(pol_arr)
+        uvp.scalar_array = np.array(sclr_arr)
+        uvp.channel_width = dset1.channel_width
+        uvp.weighting = input_data_weight
+        uvp.units = self.units()[0]
+        uvp.telescope_location = dset1.telescope_location
+        uvp.data_array = data_array
+        uvp.integration_array = integration_array
+        uvp.flag_array = odict(map(lambda s: (s, np.zeros_like(data_array[s], np.bool)), data_array.keys()))
+        uvp.history = dset1.history + dset2.history + history
+        if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
+        if hasattr(dset2.extra_keywords, 'filename'): uvp.filename2 = dset2.extra_keywords['filename']
+        if hasattr(dset1.extra_keywords, 'tag'): uvp.tag1 = dset1.extra_keywords['tag']
+        if hasattr(dset2.extra_keywords, 'tag'): uvp.tag2 = dset2.extra_keywords['tag']
+
+        uvp.check()
+
+        return uvp
 
     def rephase_to_dset(self, dset_index=0, inplace=True):
         """
@@ -998,6 +1132,8 @@ class PSpecData(object):
 
         Each integration in all other dsets are phased to the center of the 
         corresponding LST bin (by index) in dset[dset_index].
+
+        Will only phase if the dataset's phase type is 'drift'.
 
         Parameters
         ----------
@@ -1041,6 +1177,10 @@ class PSpecData(object):
             if i == dset_index:
                 continue
 
+            # skip if dataset is not drift phased
+            if dset.phase_type != 'drift':
+                print "skipping dataset {} b/c it isn't drift phased".format(i)
+
             # convert UVData to DataContainers. Note this doesn't make
             # a copy of the data
             (data, flgs, antpos, ants, freqs, times, lsts, 
@@ -1073,7 +1213,27 @@ class PSpecData(object):
 
         if inplace is False:
             return dsets
-            
+
+
+def get_delays(freqs):
+    """
+    Return an array of delays, tau, corresponding to the bins of the delay 
+    power spectrum given by frequency array.
+    
+    Parameters
+    ----------
+    freqs : ndarray of frequency array in Hz
+
+    Returns
+    -------
+    delays : array_like
+        Delays, tau. Units: seconds.
+    """
+    # Calculate the delays
+    delay = np.fft.fftshift(np.fft.fftfreq(freqs.size, d=np.median(np.diff(freqs))))
+    return delay
+
+
 def raise_warning(warning, verbose=True):
     '''warning function'''
     if verbose:

@@ -54,18 +54,23 @@ class UVPSpec(object):
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.ndarray)
         self._weighting = PSpecParam("weighting", description="form of data weighting used when forming power spectra.", expected_type=str)
         self._units = PSpecParam("units", description="units of the power spectra.", expected_type=str)
+        self._scalar_array = PSpecParam("scalar_array", description="power spectrum scalar from pspecbeam module.", expected_type=np.ndarray, form="(Nspws, Npols)")
+        self._filename1 = PSpecParam("filename1", description="filename of data from first dataset", expected_type=str)
+        self._filename2 = PSpecParam("filename1", description="filename of data from second dataset", expected_type=str)
+        self._tag1 = PSpecParam("tag1", description="tag of data from first dataset", expected_type=str)
+        self._tag2 = PSpecParam("tag2", description="tag of data from second dataset", expected_type=str)
 
         # collect required parameters
         self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
                             "data_array", "flag_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units"]
-        self._all_params = copy.copy(self._req_params)
+        self._all_params = copy.copy(self._req_params) + ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
         self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
-                                 "Nbls", "channel_width", "weighting", "units"]
+                                 "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
-                          "bl_vecs", "bl_array", "telescope_location"]
+                          "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
         self._dicts = ["data_array", "flag_array", "integration_array"]
 
     def get_data(self, key):
@@ -222,7 +227,26 @@ class UVPSpec(object):
         if isinstance(blpair, tuple):
             blpair = self.antnums_to_blpair(blpair)
 
-        return np.arange(self.Nblpairts)[np.isclose(self.blpair_array, blpair)]
+        return np.arange(self.Nblpairts)[self.blpair_array == blpair]
+
+    def pol_to_index(self, pol):
+        """
+        Map a polarization integer or str to its index in pol_array
+
+        Parameters
+        ----------
+        pol : str or int, polarization string (ex. 'XX') or integer (ex. -5)
+
+        Returns
+        -------
+        index : int, index of pol in pol_array
+        """
+        # convert pol to int if str
+        if type(pol) in (str, np.str):
+            pol = uvutils.polstr2num(pol)
+
+        index = self.pol_array.tolist().index(pol)
+        return index
 
     def key_to_indices(self, key):
         """
@@ -268,7 +292,7 @@ class UVPSpec(object):
         assert blpair in self.blpair_array, "blpair {} not found in data".format(blpair)
         assert pol in self.pol_array, "pol {} not found in data".format(pol)
         # index polarization array
-        pol = self.pol_array.tolist().index(pol)
+        pol = self.pol_to_index(pol)
         # index blpairts
         blpairts = self.blpair_to_indices(blpair)
 
