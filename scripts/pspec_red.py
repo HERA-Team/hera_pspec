@@ -113,8 +113,6 @@ for i in range(pspecs.shape[0]):
 px = hp.PSpecContainer(pspec_cfg['output'], mode='r')
 print(px.data[pspec_cfg['groupname']])
 
-#dset["FieldA"]
-
 #-------------------------------------------------------------------------------
 # Output empirical covariance matrix diagnostics
 #-------------------------------------------------------------------------------
