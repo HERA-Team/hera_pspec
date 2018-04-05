@@ -53,6 +53,8 @@ class UVPSpec(object):
         self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", expected_type=float)
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.ndarray)
         self._weighting = PSpecParam("weighting", description="form of data weighting used when forming power spectra.", expected_type=str)
+        self._norm = PSpecParam("norm", description="normalization method", expected_type=str)
+        self._taper = PSpecParam("taper", description='taper function applied to data before FFT"', expected_type=str)
         self._units = PSpecParam("units", description="units of the power spectra.", expected_type=str)
         self._scalar_array = PSpecParam("scalar_array", description="power spectrum scalar from pspecbeam module.", expected_type=np.ndarray, form="(Nspws, Npols)")
         self._filename1 = PSpecParam("filename1", description="filename of data from first dataset", expected_type=str)
@@ -67,7 +69,8 @@ class UVPSpec(object):
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units"]
         self._all_params = copy.copy(self._req_params) + ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
         self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
-                                 "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2"]
+                                 "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
+                                 "norm", "taper"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
