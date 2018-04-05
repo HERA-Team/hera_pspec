@@ -441,10 +441,10 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None])
         # get normal pspec
         bls = [(37, 39)]
-        pspecs1, pairs1 = ds.pspec(bls)
+        pspecs1, pairs1 = ds.pspec(bls, bls, 0, 1)
         # rephase and get pspec
         ds.rephase_to_dset(0)
-        pspecs2, pairs2 = ds.pspec(bls)
+        pspecs2, pairs2 = ds.pspec(bls, bls, 0, 1)
         # check overall coherence has increased
         nt.assert_true(np.mean(np.abs(pspecs2[0] / pspecs1[0])) > 1.01)
 
@@ -452,10 +452,10 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd1, uvd1], wgts=[None, None])
         # get normal pspec
         bls = [(37, 39)]
-        pspecs1, pairs1 = ds.pspec(bls)
+        pspecs1, pairs1 = ds.pspec(bls, bls, 0, 1)
         # rephase and get pspec
         ds.rephase_to_dset(0)
-        pspecs2, pairs2 = ds.pspec(bls)
+        pspecs2, pairs2 = ds.pspec(bls, bls, 0, 1)
         nt.assert_true(np.isclose(np.abs(pspecs2/pspecs1), 1.0).min())
 
     def test_units(self):
@@ -514,7 +514,7 @@ class Test_PSpecData(unittest.TestCase):
                                 little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
                                 verbose=False)
         nt.assert_true(((0, 24, 37, 'XX'), (1, 24, 37, 'XX')) in pairs)
-        nt.assert_equal(len(pairs), 62)
+        nt.assert_equal(len(pairs), 63)
         pspec, pairs = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, exclude_conjugated_blpairs=True, exclude_auto_bls=True,
                                 verbose=False)
