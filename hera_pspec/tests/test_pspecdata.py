@@ -441,10 +441,10 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd1)], wgts=[None, None])
         # get normal pspec
         bls = [(37, 39)]
-        uvp1 = ds.pspec(bls, bls, 0, 1, verbose=False)
+        uvp1 = ds.pspec(bls, bls, (0, 1), verbose=False)
         # rephase and get pspec
         ds.rephase_to_dset(0)
-        uvp2 = ds.pspec(bls, bls, 0, 1, verbose=False)
+        uvp2 = ds.pspec(bls, bls, (0, 1), verbose=False)
         blp = (0, ((37,39),(37,39)), 'XX')
         nt.assert_true(np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min())
 
@@ -488,7 +488,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)] 
-        uvp = ds.pspec(bls, bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls, bls, (0, 1), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
                                 verbose=False)
         nt.assert_equal(len(uvp.bl_array), len(bls))
@@ -500,12 +500,12 @@ class Test_PSpecData(unittest.TestCase):
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
         red_bls = redcal.get_pos_reds(antpos, low_hi=True)
-        uvp = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(red_bls, red_bls, (0, 1), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
                                 verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array)
         nt.assert_equal(uvp.Nblpairs, 63)
-        uvp = ds.pspec(red_bls, red_bls, 0, 1, input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(red_bls, red_bls, (0, 1), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, exclude_conjugated_blpairs=True, exclude_auto_bls=True,
                                 verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (52, 53))) in uvp.blpair_array)
@@ -513,10 +513,10 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Nblpairs, 21)
  
         # check exception
-        nt.assert_raises(TypeError, ds.pspec, [0], [0], 0, 1)
+        nt.assert_raises(TypeError, ds.pspec, [0], [0], (0, 1))
 
         # get exception for bl_group
-        nt.assert_raises(NotImplementedError, ds.pspec, red_bls, red_bls, 0, 1, avg_groups=True)
+        nt.assert_raises(NotImplementedError, ds.pspec, red_bls, red_bls, (0, 1), avg_group=True)
 
 
 """
