@@ -546,7 +546,7 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec(bls, bls, (0, 1), spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
         nt.assert_equal(uvp.Nspws, 3)
         nt.assert_equal(uvp.Nspwdlys, 43)
-        nt.assert_equal(uvp.data_array[0], (240, 14, 1))
+        nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
         nt.assert_equal(uvp.get_data(0, 24025024025, 'xx').shape, (60, 14))
 
         # check select

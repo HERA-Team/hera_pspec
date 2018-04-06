@@ -50,6 +50,9 @@ class Test_UVPSpec(unittest.TestCase):
         weighting = 'identity'
         channel_width = np.median(np.diff(freq_array))
         history = 'example'
+        taper = "none"
+        norm = "I"
+        git_hash = "random"
 
         telescope_location = np.array([5109325.85521063, 2005235.09142983, -3239928.42475397])
 
@@ -63,7 +66,7 @@ class Test_UVPSpec(unittest.TestCase):
                   'Nbls', 'blpair_array', 'time_1_array', 'time_2_array', 'lst_1_array', 'lst_2_array',
                   'spw_array', 'dly_array', 'freq_array', 'pol_array', 'data_array', 'flag_array',
                   'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 'units',
-                  'channel_width', 'weighting', 'history']
+                  'channel_width', 'weighting', 'history', 'taper', 'norm', 'git_hash']
 
         for p in params:
             setattr(uvp, p, locals()[p])

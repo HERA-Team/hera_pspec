@@ -1149,7 +1149,7 @@ class PSpecData(object):
         uvp.history = dset1.history + dset2.history + history
         uvp.taper = taper
         uvp.norm = norm
-        uvp.hash = version.git_hash
+        uvp.git_hash = version.git_hash
         if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
         if hasattr(dset2.extra_keywords, 'filename'): uvp.filename2 = dset2.extra_keywords['filename']
         if hasattr(dset1.extra_keywords, 'tag'): uvp.tag1 = dset1.extra_keywords['tag']
