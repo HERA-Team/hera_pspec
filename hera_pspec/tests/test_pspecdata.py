@@ -430,6 +430,14 @@ class Test_PSpecData(unittest.TestCase):
         ds.validate_datasets()
         uvd2.polarization_array = np.array([-7])
         nt.assert_raises(ValueError, ds.validate_datasets)
+        # test phasing
+        uvd = copy.deepcopy(self.d[0])
+        uvd2 = copy.deepcopy(self.d[0])
+        uvd.phase_to_time(2458042)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds.validate_datasets)
+        uvd.phase_to_time(2458042.5)
+        ds.validate_datasets()
 
     def test_rephase_to_dst(self):
         # generate two uvd objects w/ different LST grids
