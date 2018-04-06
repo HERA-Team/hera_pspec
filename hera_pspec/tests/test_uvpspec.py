@@ -129,8 +129,30 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(pol, 0)
         nt.assert_true(np.isclose(blpairts, np.array([0,3,6,9,12,15,18,21,24,27])).min())
 
+    def test_spw_to_indices(self):
+        spw = self.uvp.spw_to_indices(0)
+        nt.assert_equal(len(spw), self.uvp.Ndlys)
+
+    def test_pol_to_indices(self):
+        pol = self.uvp.pol_to_indices('xx')
+        nt.assert_equal(len(pol), 1)
+        pol = self.uvp.pol_to_indices(-5)
+        nt.assert_equal(len(pol), 1)
+        pol = self.uvp.pol_to_indices(['xx', 'xx'])
+        nt.assert_equal(len(pol), 1)
+
     def test_select(self):
-        nt.assert_raises(NotImplementedError, self.uvp.select)
+        uvp = copy.deepcopy(self.uvp)
+        uvp.select(bls=[(1, 2)], inplace=True)
+        nt.assert_equal(uvp.Nblpairs, 1)
+        nt.assert_equal(uvp.data_array[0].shape, (10, 50, 1))
+        nt.assert_almost_equal(uvp.data_array[0][0,0,0], (1.0020010020000001+0j))
+        uvp = copy.deepcopy(self.uvp)
+        uvp2 = uvp.select(spws=0, inplace=False)
+        uvp2 = uvp.select(bls=[(1, 2)], inplace=False)
+        nt.assert_equal(uvp2.Nblpairs, 1)
+        nt.assert_equal(uvp2.data_array[0].shape, (10, 50, 1))
+        nt.assert_almost_equal(uvp2.data_array[0][0,0,0], (1.0020010020000001+0j))
 
     def test_get_ENU_bl_vecs(self):
         bl_vecs = self.uvp.get_ENU_bl_vecs()
@@ -156,6 +178,7 @@ class Test_UVPSpec(unittest.TestCase):
     def test_write_read_hdf5(self):
         # test basic write execution
         uvp = copy.deepcopy(self.uvp)
+        if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
         uvp.write_hdf5('./ex.hdf5', overwrite=True)
         nt.assert_true(os.path.exists('./ex.hdf5'))
         # test basic read
@@ -169,10 +192,14 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_false(hasattr(uvp2, 'data_array'))
         # test exception
         nt.assert_raises(IOError, uvp.write_hdf5, './ex.hdf5', overwrite=False)
-        nt.assert_raises(NotImplementedError, uvp.read_hdf5, './ex.hdf5', spws=[0])
-        nt.assert_raises(NotImplementedError, uvp.read_hdf5, './ex.hdf5', bls=[(1, 2)])
-        nt.assert_raises(NotImplementedError, uvp.read_hdf5, './ex.hdf5', blpairs=[((1,2),(1,2))])
-        nt.assert_raises(NotImplementedError, uvp.read_hdf5, './ex.hdf5', times=[2458042.1000000001])
+        # test partial I/O
+        uvp.read_hdf5("./ex.hdf5", bls=[(1, 2)])
+        nt.assert_equal(uvp.Nblpairs, 1)
+        nt.assert_equal(uvp.data_array[0].shape, (10, 50, 1))
+        # test just meta
+        uvp.read_hdf5("./ex.hdf5", just_meta=True)
+        nt.assert_equal(uvp.Nblpairs, 3)
+        nt.assert_false(hasattr(uvp, 'data_array'))
         if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
 
 def test_conj_blpair_int():

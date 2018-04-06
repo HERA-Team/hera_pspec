@@ -63,17 +63,19 @@ class UVPSpec(object):
         self._filename2 = PSpecParam("filename1", description="filename of data from second dataset", expected_type=str)
         self._tag1 = PSpecParam("tag1", description="tag of data from first dataset", expected_type=str)
         self._tag2 = PSpecParam("tag2", description="tag of data from second dataset", expected_type=str)
+        self._hash = PSpecParam("hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
 
         # collect required parameters
         self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
                             "data_array", "flag_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
-                            "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units"]
+                            "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units",
+                            "taper", "norm", "hash"]
         self._all_params = copy.copy(self._req_params) + \
                             ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
         self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
                                  "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
-                                 "norm", "taper"]
+                                 "norm", "taper", "hash"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
@@ -83,7 +85,7 @@ class UVPSpec(object):
         self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets))
         self._meta = sorted(set(self._meta_dsets).union(set(self._meta_attrs)))
 
-    def get_data(self, key):
+    def get_data(self, key, *args):
         """
         Slice into data_array with a specified data key in the format
 
@@ -104,11 +106,11 @@ class UVPSpec(object):
         ------
         data : complex ndarray with shape (Ntimes, Ndlys)
         """
-        spw, blpairts, pol = self.key_to_indices(key)
+        spw, blpairts, pol = self.key_to_indices(key, *args)
 
         return self.data_array[spw][blpairts, :, pol]
 
-    def get_flags(self, key):
+    def get_flags(self, key, *args):
         """
         Slice into flag_array with a specified data key in the format
 
@@ -129,11 +131,11 @@ class UVPSpec(object):
         ------
         data : boolean ndarray with shape (Ntimes, Ndlys)
         """
-        spw, blpairts, pol = self.key_to_indices(key)
+        spw, blpairts, pol = self.key_to_indices(key, *args)
 
         return self.flag_array[spw][blpairts, :, pol]
 
-    def get_integrations(self, key):
+    def get_integrations(self, key, *args):
         """
         Slice into integration_array with a specified data key in the format
 
@@ -154,7 +156,7 @@ class UVPSpec(object):
         ------
         data : float ndarray with shape (Ntimes,)
         """
-        spw, blpairts, pol = self.key_to_indices(key)
+        spw, blpairts, pol = self.key_to_indices(key, *args)
 
         return self.integration_array[spw][blpairts, pol]
 
@@ -285,8 +287,7 @@ class UVPSpec(object):
         elif isinstance(pol, (list, tuple)):
             for i in range(len(pol)):
                 if isinstance(pol[i], (np.str, str)):
-                    pol[i] = uvutils.polstr2num(p)
-                pol = map(lambda p: uvutils.polstr2num(p), pol)
+                    pol[i] = uvutils.polstr2num(pol[i])
 
         # ensure all pols exist in data
         assert np.array(map(lambda p: p in self.pol_array, pol)).all(), "pols {} not all found in data".format(pol)
@@ -294,7 +295,7 @@ class UVPSpec(object):
         indices = np.arange(self.Npols)[reduce(operator.add, map(lambda p: self.pol_array == p, pol))]
         return indices
 
-    def key_to_indices(self, key):
+    def key_to_indices(self, key, *args):
         """
         Convert a data key into relevant slice arrays. A data key takes the form
 
@@ -306,6 +307,8 @@ class UVPSpec(object):
 
         where spw is the spectral window integer, ant1 etc. are integers, 
         and pol is either a polarization string (ex. 'XX') or integer (ex. -5).
+
+        One can also expand this key into the kwarg slots, such that key=spw, key2=blpair, and key3=pol.
     
         Parameters
         ----------
@@ -318,7 +321,11 @@ class UVPSpec(object):
         pol : integer
         """
         # assert key length
-        assert len(key) == 3, "length of key must be 3."
+        if len(args) == 0: assert len(key) == 3, "length of key must be 3."
+        elif len(args) > 0:
+            assert isinstance(key, (int, np.int)) and len(args) == 2, "length of key must be 3."
+            key = (key, args[0], args[1])
+
         # assign key elements
         spw = key[0]
         blpair = key[1]
@@ -547,7 +554,7 @@ def _select(uvp, spws=None, bls=None, and_bls=True, h5file=None):
         blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int).T
         # ensure bls is in integer form
         if isinstance(bls, tuple):
-            assert ininstance(tuple[0], (int, np.int)), "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
+            assert isinstance(bls[0], (int, np.int)), "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
             bls = [uvp.antnums_to_bl(bls)]
         elif isinstance(bls, list):
             if isinstance(bls[0], tuple):
@@ -572,7 +579,7 @@ def _select(uvp, spws=None, bls=None, and_bls=True, h5file=None):
         bl_select = reduce(operator.add, map(lambda b: uvp.bl_array==b, bl_array))
         uvp.bl_array = uvp.bl_array[bl_select]
         uvp.bl_vecs = uvp.bl_vecs[bl_select]
-        uvp.Nbls = len(uvp.bl_array)
+        uvp.Nbls = len(uvp.bl_array)        
 
     # select data arrays
     try:
@@ -593,9 +600,15 @@ def _select(uvp, spws=None, bls=None, and_bls=True, h5file=None):
                     flags[s] = h5file['flag_spw{}'.format(s)][:]
                     ints[s] = h5file['integration_spw{}'.format(s)][:]
             else:
-                data[s] = uvp.data_array[s]
-                flags[s] = uvp.flag_array[s]
-                ints[s] = uvp.integration_array[s]
+                if bls is not None:
+                    data[s] = uvp.data_array[s][blp_select]
+                    flags[s] = uvp.flag_array[s][blp_select]
+                    ints[s] = uvp.integration_array[s][blp_select]
+                else:
+                    data[s] = uvp.data_array[s]
+                    flags[s] = uvp.flag_array[s]
+                    ints[s] = uvp.integration_array[s]
+ 
         uvp.data_array = data
         uvp.flag_array = flags
         uvp.integration_array = ints
