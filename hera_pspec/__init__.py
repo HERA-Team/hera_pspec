@@ -4,6 +4,7 @@ __init__.py file for hera_pspec
 import version
 import conversions
 import bootstrap
+import pspecbeam
 from uvpspec import UVPSpec
 from pspecdata import PSpecData
 from parameter import PSpecParam

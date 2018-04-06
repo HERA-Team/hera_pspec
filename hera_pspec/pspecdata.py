@@ -467,8 +467,8 @@ class PSpecData(object):
         if use_fft:
             if taper != 'none':
                 tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
-                Rx1 *= tapering_fct
-                Rx2 *= tapering_fct
+                Rx1 *= tapering_fct[:, None]
+                Rx2 *= tapering_fct[:, None]
 
             _Rx1 = np.fft.fft(Rx1.conj(), axis=0)
             _Rx2 = np.fft.fft(Rx2.conj(), axis=0)
