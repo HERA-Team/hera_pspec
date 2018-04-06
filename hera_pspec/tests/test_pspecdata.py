@@ -520,12 +520,42 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(uvp.antnums_to_blpair(((52, 53), (24, 25))) not in uvp.blpair_array)
         nt.assert_equal(uvp.Nblpairs, 21)
  
+        # test select
+        red_bls = [[(24, 25), (37, 38), (38, 39), (52, 53)]]
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        uvp = ds.pspec(red_bls, red_bls, (0, 1), spw_ranges=[(20,30), (30,40)], exclude_conjugated_blpairs=False, exclude_auto_bls=False, verbose=False)
+        nt.assert_equal(uvp.Nblpairs, 16)
+        nt.assert_equal(uvp.Nspws, 2)
+        uvp2 = uvp.select(spws=[0], bls=[(24, 25)], and_bls=True, inplace=False)
+        nt.assert_equal(uvp2.Nspws, 1)
+        nt.assert_equal(uvp2.Nblpairs, 7)
+        uvp.select(spws=0, bls=(24, 25), and_bls=False, inplace=True)
+        nt.assert_equal(uvp.Nspws, 1)
+        nt.assert_equal(uvp.Nblpairs, 1)
+
         # check exception
         nt.assert_raises(TypeError, ds.pspec, [0], [0], (0, 1))
 
         # get exception for bl_group
         nt.assert_raises(NotImplementedError, ds.pspec, red_bls, red_bls, (0, 1), avg_group=True)
 
+        # check w/ multiple spectral ranges
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        uvp = ds.pspec(bls, bls, (0, 1), spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
+        nt.assert_equal(uvp.Nspws, 3)
+        nt.assert_equal(uvp.Nspwdlys, 43)
+        nt.assert_equal(uvp.data_array[0], (240, 14, 1))
+        nt.assert_equal(uvp.get_data(0, 24025024025, 'xx').shape, (60, 14))
+
+        # check select
+        uvp.select(spws=[1])
+        nt.assert_equal(uvp.Nspws, 1)
+        nt.assert_equal(uvp.Ndlys, 10)
+        nt.assert_equal(len(uvp.data_array), 1)
+
+        # check
 
     def test_validate_bls(self):
         # test exceptions

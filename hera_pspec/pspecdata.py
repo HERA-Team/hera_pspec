@@ -5,7 +5,7 @@ from hera_pspec import utils
 import itertools
 import copy
 import hera_cal as hc
-from hera_pspec import uvpspec
+from hera_pspec import uvpspec, version
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
 import operator
@@ -535,7 +535,6 @@ class PSpecData(object):
 
         return G / 2.
     
-    
     def get_V_gaussian(self, key1, key2):
         """
         Calculates the bandpower covariance matrix,
@@ -558,7 +557,6 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         raise NotImplementedError()
-    
     
     def get_MW(self, G, mode='I'):
         """
@@ -691,7 +689,6 @@ class PSpecData(object):
         m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, taper)
         Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
         return Q
-
 
     def p_hat(self, M, q):
         """
@@ -1152,6 +1149,7 @@ class PSpecData(object):
         uvp.history = dset1.history + dset2.history + history
         uvp.taper = taper
         uvp.norm = norm
+        uvp.hash = version.git_hash
         if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
         if hasattr(dset2.extra_keywords, 'filename'): uvp.filename2 = dset2.extra_keywords['filename']
         if hasattr(dset1.extra_keywords, 'tag'): uvp.tag1 = dset1.extra_keywords['tag']
