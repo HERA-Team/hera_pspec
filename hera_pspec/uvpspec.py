@@ -7,6 +7,8 @@ from pyuvdata import uvutils as uvutils
 import h5py
 import shutil
 import copy
+import operator
+
 
 class UVPSpec(object):
     """
@@ -76,7 +78,10 @@ class UVPSpec(object):
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
         self._dicts = ["data_array", "flag_array", "integration_array"]
-        self._non_dicts = sorted(set(self._all_params) - set(self._dicts))
+        self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array", 
+                            "bl_vecs", "bl_array"]
+        self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets))
+        self._meta = sorted(set(self._meta_dsets).union(set(self._meta_attrs)))
 
     def get_data(self, key):
         """
@@ -226,13 +231,20 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        blpair : nested tuple or blpair i12 integer
+        blpair : nested tuple or blpair i12 integer, Ex. ((1, 2), (3, 4))
+            or list of blpairs
         """
         # convert blpair to integer if fed as tuple
         if isinstance(blpair, tuple):
-            blpair = self.antnums_to_blpair(blpair)
-
-        return np.arange(self.Nblpairts)[self.blpair_array == blpair]
+            blpair = [self.antnums_to_blpair(blpair)]
+        elif isinstance(blpair, (np.int, int)):
+            blpair = [blpair]
+        elif isinstance(blpair, list):
+            if isinstance(blpair[0], tuple):
+                blpair = map(lambda blp: self.antnums_to_blpair(blp), blpair)
+        # assert exists in data
+        assert np.array(map(lambda b: b in self.blpair_array, blpair)).all(), "blpairs {} not all found in data".format(blpair)
+        return np.arange(self.Nblpairts)[reduce(operator.add, map(lambda b: self.blpair_array == b, blpair))]
 
     def spw_to_indices(self, spw):
         """
@@ -241,28 +253,46 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        spw : int, spectral window index
+        spw : int, spectral window index or list of indices
         """
-        return np.arange(self.Nspwdlys)[self.spw_array == spw]
+        # convert to list if int
+        if isinstance(spw, (np.int, int)):
+            spw = [spw]
 
-    def pol_to_index(self, pol):
+        # assert exists in data
+        assert np.array(map(lambda s: s in self.spw_array, spw)).all(), "spws {} not all found in data".format(spw)
+
+        return np.arange(self.Nspwdlys)[reduce(operator.add, map(lambda s: self.spw_array == s, spw))]
+
+    def pol_to_indices(self, pol):
         """
         Map a polarization integer or str to its index in pol_array
 
         Parameters
         ----------
         pol : str or int, polarization string (ex. 'XX') or integer (ex. -5)
+            or list of strs or ints
 
         Returns
         -------
-        index : int, index of pol in pol_array
+        indices : int, index of pol in pol_array
         """
         # convert pol to int if str
-        if type(pol) in (str, np.str):
-            pol = uvutils.polstr2num(pol)
+        if isinstance(pol, (str, np.str)):
+            pol = [uvutils.polstr2num(pol)]
+        elif isinstance(pol, (int, np.int)):
+            pol = [pol]
+        elif isinstance(pol, (list, tuple)):
+            for i in range(len(pol)):
+                if isinstance(pol[i], (np.str, str)):
+                    pol[i] = uvutils.polstr2num(p)
+                pol = map(lambda p: uvutils.polstr2num(p), pol)
 
-        index = self.pol_array.tolist().index(pol)
-        return index
+        # ensure all pols exist in data
+        assert np.array(map(lambda p: p in self.pol_array, pol)).all(), "pols {} not all found in data".format(pol)
+
+        indices = np.arange(self.Npols)[reduce(operator.add, map(lambda p: self.pol_array == p, pol))]
+        return indices
 
     def key_to_indices(self, key):
         """
@@ -308,17 +338,38 @@ class UVPSpec(object):
         assert blpair in self.blpair_array, "blpair {} not found in data".format(blpair)
         assert pol in self.pol_array, "pol {} not found in data".format(pol)
         # index polarization array
-        pol = self.pol_to_index(pol)
+        pol = self.pol_to_indices(pol)
         # index blpairts
         blpairts = self.blpair_to_indices(blpair)
 
         return spw, blpairts, pol
 
-    def select(self, bls=None, spws=None, times=None, blpairs=None, inplace=True):
+    def select(self, spws=None, bls=None, and_bls=True, inplace=True):
         """
-        Select function
+        Select function for selecting out certain slices of the data.
+
+        Parameters
+        ----------
+        spws : list of spectral window integers to select
+
+        bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
+            Select all baseline-pairs whose first _or_ second baseline are in bls list.
+            This changes if and_bls == True.
+
+        and_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
+            are found in bls list.
+
+        inplace : boolean, if True edit and overwrite arrays in self, else make a copy of self and return
         """
-        raise NotImplementedError
+        if inplace:
+            uvp = self
+        else:
+            uvp = copy.deepcopy(self)
+
+        _select(uvp, spws=spws, bls=bls, and_bls=and_bls)
+
+        if inplace == False:
+            return uvp
 
     def get_ENU_bl_vecs(self):
         """
@@ -326,7 +377,7 @@ class UVPSpec(object):
         """
         return uvutils.ENU_from_ECEF((self.bl_vecs + self.telescope_location).T, *uvutils.LatLonAlt_from_XYZ(self.telescope_location)).T
 
-    def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None, blpairs=None, times=None):
+    def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None, and_bls=True):
         """
         Clear current UVPSpec object and load in data from an HDF5 file.
 
@@ -336,13 +387,14 @@ class UVPSpec(object):
 
         just_meta : boolean, read-in only metadata and no data, flags or integration arrays
 
-        spws : NotImplemented
+        spws : list of spectral window integers to select
 
-        bls : NotImplementedError
+        bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
+            Select all baseline-pairs whose first _or_ second baseline are in bls list.
+            This changes if and_bls == True.
 
-        blpairs : NotImplemented
-
-        times : NotImplemented
+        and_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
+            are found in bls list.
         """
         # clear object
         self._clear()
@@ -351,36 +403,30 @@ class UVPSpec(object):
         with h5py.File(filepath, 'r') as f:
             # load-in meta data
             for k in f.attrs:
-                if k in self._all_params:
+                if k in self._meta_attrs:
                     setattr(self, k, f.attrs[k])
+            for k in f:
+                if k in self._meta_dsets:
+                    setattr(self, k, f[k][:])
 
-            # edit metadata given selection
-            if spws is not None:
-                raise NotImplementedError
-
-            if blpairs is not None:
-                raise NotImplementedError
-
-            if bls is not None:
-                raise NotImplementedError
-
-            if times is not None:
-                raise NotImplementedError
-
-            # return if just_meta == True
-            if just_meta == True:
+            if spws is not None or bls is not None:
+                if just_meta:
+                    _select(self, spws=spws, bls=bls, and_bls=and_bls)
+                else:
+                    _select(self, spws=spws, bls=bls, and_bls=and_bls, h5file=f)
+                return 
+            elif just_meta:
                 return
-
-            # load in data if desired
-            self.data_array = odict()
-            self.flag_array = odict()
-            self.integration_array = odict()
-            # iterate over spectral windows
-            for i in np.unique(self.spw_array):
-                self.data_array[i] = f['data_spw{}'.format(i)][:]
-                self.flag_array[i] = f['flag_spw{}'.format(i)][:]
-                self.integration_array[i] = f['integration_spw{}'.format(i)][:]
-
+            else:
+                # load in all data if desired
+                self.data_array = odict()
+                self.flag_array = odict()
+                self.integration_array = odict()
+                # iterate over spectral windows
+                for i in np.arange(self.Nspws):
+                    self.data_array[i] = f['data_spw{}'.format(i)][:]
+                    self.flag_array[i] = f['flag_spw{}'.format(i)][:]
+                    self.integration_array[i] = f['integration_spw{}'.format(i)][:]
 
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
@@ -408,9 +454,12 @@ class UVPSpec(object):
         # write file
         with h5py.File(filepath, 'w') as f:
             # write meta data
-            for k in self._non_dicts:
+            for k in self._meta_attrs:
                 if hasattr(self, k):
                     f.attrs[k] = getattr(self, k)
+            for k in self._meta_dsets:
+                if hasattr(self, k):
+                    f.create_dataset(k, data=getattr(self, k))
 
             # iterate over spectral windows and create datasets
             for i in np.unique(self.spw_array):
@@ -459,6 +508,100 @@ class UVPSpec(object):
             return False
 
         return True
+
+def _select(uvp, spws=None, bls=None, and_bls=True, h5file=None):
+    """
+    Select function for selecting out certain slices of the data.
+
+    Parameters
+    ----------
+    uvp : UVPSpec object with at least meta-data in required params loaded in.
+        If only meta-data is loaded in then h5file must be specified.
+
+    spws : list of spectral window integers to select
+
+    bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
+        Select all baseline-pairs whose first _or_ second baseline are in bls list.
+        This changes if and_bls == True.
+
+    and_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
+        are found in bls list.
+
+    h5file : h5py file descriptor, used for loading in selection of data from h5py file
+    """
+    if spws is not None:
+        # spectral window selection
+        spw_select = uvp.spw_to_indices(spws)
+        uvp.spw_array = uvp.spw_array[spw_select]
+        uvp.freq_array = uvp.freq_array[spw_select]
+        uvp.dly_array = uvp.dly_array[spw_select]
+        uvp.Nspws = len(np.unique(uvp.spw_array))
+        uvp.Ndlys = len(np.unique(uvp.dly_array))
+        uvp.Nspwdlys = len(uvp.spw_array)
+        if hasattr(uvp, 'scalar_array'):
+            uvp.scalar_array = uvp.scalar_array[spws, :]
+
+    if bls is not None:
+        # get blpair baselines in integer form
+        bl1 = np.floor(uvp.blpair_array / 1e6)
+        blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int).T
+        # ensure bls is in integer form
+        if isinstance(bls, tuple):
+            assert ininstance(tuple[0], (int, np.int)), "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
+            bls = [uvp.antnums_to_bl(bls)]
+        elif isinstance(bls, list):
+            if isinstance(bls[0], tuple):
+                bls = map(lambda b: uvp.antnums_to_bl(b), bls)
+        elif isinstance(bls, (int, np.int)):
+            bls = [bls]
+        # get indices
+        if and_bls:
+            blp_select = np.array(reduce(operator.add, map(lambda b: (blpair_bls[:,0]==b) + (blpair_bls[:,1]==b), bls)))
+        else:
+            blp_select = np.array(reduce(operator.add, map(lambda b: (blpair_bls[:,0]==b) * (blpair_bls[:,1]==b), bls)))
+        # index arrays
+        uvp.blpair_array = uvp.blpair_array[blp_select]
+        uvp.time_1_array = uvp.time_1_array[blp_select]
+        uvp.time_2_array = uvp.time_2_array[blp_select]
+        uvp.lst_1_array = uvp.lst_1_array[blp_select]
+        uvp.lst_2_array = uvp.lst_2_array[blp_select]
+        uvp.Ntimes = len(np.unique(uvp.time_1_array))
+        uvp.Nblpairs = len(np.unique(uvp.blpair_array))
+        uvp.Nblpairts = len(uvp.blpair_array)
+        bl_array = np.unique(blpair_bls)
+        bl_select = reduce(operator.add, map(lambda b: uvp.bl_array==b, bl_array))
+        uvp.bl_array = uvp.bl_array[bl_select]
+        uvp.bl_vecs = uvp.bl_vecs[bl_select]
+        uvp.Nbls = len(uvp.bl_array)
+
+    # select data arrays
+    try:
+        # select data arrays
+        data = odict()
+        flags = odict()
+        ints = odict()
+        for s in np.unique(uvp.spw_array):
+            if h5file is not None:
+                if bls is not None:
+                    # fancy index
+                    data[s] = h5file['data_spw{}'.format(s)][blp_select, :, :]
+                    flags[s] = h5file['flag_spw{}'.format(s)][blp_select, :, :]
+                    ints[s] = h5file['integration_spw{}'.format(s)][blp_select, :]
+                else:
+                    # slice
+                    data[s] = h5file['data_spw{}'.format(s)][:]
+                    flags[s] = h5file['flag_spw{}'.format(s)][:]
+                    ints[s] = h5file['integration_spw{}'.format(s)][:]
+            else:
+                data[s] = uvp.data_array[s]
+                flags[s] = uvp.flag_array[s]
+                ints[s] = uvp.integration_array[s]
+        uvp.data_array = data
+        uvp.flag_array = flags
+        uvp.integration_array = ints
+    except AttributeError:
+        # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
+        pass
 
 def _blpair_to_antnums(blpair):
     """

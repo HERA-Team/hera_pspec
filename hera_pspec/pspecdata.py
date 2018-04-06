@@ -48,7 +48,6 @@ class PSpecData(object):
         # Store a primary beam
         self.primary_beam = beam
 
-
     def add(self, dsets, wgts):
         """
         Add a dataset to the collection in this PSpecData object.
@@ -713,7 +712,6 @@ class PSpecData(object):
         """
         return np.dot(M, q)
     
-    
     def units(self):
         """
         Return the units of the power spectrum. These are inferred from the 
@@ -1012,7 +1010,7 @@ class PSpecData(object):
         # Loop over spectral windows
         for i in range(len(spw_ranges)):
             # set spectral range
-            if verbose: print( "Setting spectral range: {}".format(spw_ranges[i]))
+            if verbose: print( "\nSetting spectral range: {}".format(spw_ranges[i]))
             self.set_spw(spw_ranges[i])
 
             # clear covariance cache
