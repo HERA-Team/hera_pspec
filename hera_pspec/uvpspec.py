@@ -63,19 +63,19 @@ class UVPSpec(object):
         self._filename2 = PSpecParam("filename1", description="filename of data from second dataset", expected_type=str)
         self._tag1 = PSpecParam("tag1", description="tag of data from first dataset", expected_type=str)
         self._tag2 = PSpecParam("tag2", description="tag of data from second dataset", expected_type=str)
-        self._hash = PSpecParam("hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
+        self._git_hash = PSpecParam("git_hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
 
         # collect required parameters
         self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
                             "data_array", "flag_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units",
-                            "taper", "norm", "hash"]
+                            "taper", "norm", "git_hash"]
         self._all_params = copy.copy(self._req_params) + \
                             ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
         self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
                                  "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
-                                 "norm", "taper", "hash"]
+                                 "norm", "taper", "git_hash"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
