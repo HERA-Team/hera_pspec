@@ -35,6 +35,8 @@ class PSpecData(object):
         self.clear_cov_cache()  # Covariance matrix cache
         self.dsets = []; self.wgts = []
         self.Nfreqs = None
+        self.spw_range = None
+        self.spw_Nfreqs = None
         
         # Set R to identity by default
         self.R = self.I
@@ -94,6 +96,8 @@ class PSpecData(object):
         
         # Store the actual frequencies
         self.freqs = self.dsets[0].freq_array[0]
+        self.spw_range = (0, self.Nfreqs)
+        self.spw_Nfreqs = self.Nfreqs
         
     def validate_datasets(self, verbose=True):
         """
@@ -223,7 +227,7 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset = key[0]; bl = key[1:]
-        return self.dsets[dset].get_data(bl).T # FIXME: Transpose?
+        return self.dsets[dset].get_data(bl).T[self.spw_range[0]:self.spw_range[1], :] # FIXME: Transpose?
 
     def w(self, key):
         """
@@ -243,15 +247,13 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         assert isinstance(key, tuple)
-
         dset = key[0]; bl = key[1:]
-        
         if self.wgts[dset] is not None:
-            return self.wgts[dset].get_data(bl).T # FIXME: Transpose?
+            return self.wgts[dset].get_data(bl).T[self.spw_range[0]:self.spw_range[1], :] # FIXME: Transpose?
         else:
             # If weights were not specified, use the flags built in to the
             # UVData dataset object
-            flags = self.dsets[dset].get_flags(bl).astype(float).T
+            flags = self.dsets[dset].get_flags(bl).astype(float).T[self.spw_range[0]:self.spw_range[1], :]
             return 1. - flags # Flag=1 => weight=0
 
     def C(self, key):
@@ -271,7 +273,6 @@ class PSpecData(object):
             (Weighted) empirical covariance of data for baseline 'bl'.
         """
         assert isinstance(key, tuple)
-
         # Set covariance if it's not in the cache
         if not self._C.has_key(key):
             self.set_C( {key : utils.cov(self.x(key), self.w(key))} )
@@ -313,7 +314,6 @@ class PSpecData(object):
             Empirical covariance for the specified key.
         """
         assert isinstance(key, tuple)
-
         # Check cache for empirical covariance
         if not self._Cempirical.has_key(key):
             self._Cempirical[key] = utils.cov(self.x(key), self.w(key))
@@ -338,7 +338,7 @@ class PSpecData(object):
         assert isinstance(key, tuple)
 
         if not self._I.has_key(key):
-            self._I[key] = np.identity(self.Nfreqs)
+            self._I[key] = np.identity(self.spw_Nfreqs)
         return self._I[key]
 
     def iC(self, key):
@@ -358,7 +358,6 @@ class PSpecData(object):
             Inverse covariance matrix for specified dataset and baseline.
         """
         assert isinstance(key, tuple)
-
         # Calculate inverse covariance if not in cache
         if not self._iC.has_key(key):
             C = self.C(key)
@@ -405,6 +404,20 @@ class PSpecData(object):
             self.R = self.iC
         else:
             self.R = R_matrix
+
+    def set_spw(self, spw_range):
+        """
+        Set the spectral window range
+
+        Parameters
+        ----------
+        spw_range : tuple, contains start and end of spw in channel indices
+            used to slice the frequency array
+        """
+        assert isinstance(spw_range, tuple), "spw_range must be fed as a len-2 integer tuple"
+        assert isinstance(spw_range[0], (int, np.int)), "spw_range must be fed as len-2 integer tuple"
+        self.spw_range = spw_range
+        self.spw_Nfreqs = spw_range[1] - spw_range[0]
 
     def q_hat(self, key1, key2, use_fft=True, taper='none'):
         """
@@ -454,7 +467,7 @@ class PSpecData(object):
         # Whether to use FFT or slow direct method
         if use_fft:
             if taper != 'none':
-                tapering_fct = aipy.dsp.gen_window(self.Nfreqs, taper)
+                tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
                 Rx1 *= tapering_fct
                 Rx2 *= tapering_fct
 
@@ -466,8 +479,8 @@ class PSpecData(object):
         else:
             # Slow method, used to explicitly cross-check FFT code
             q = []
-            for i in xrange(self.Nfreqs):
-                Q = self.get_Q(i, self.Nfreqs, taper=taper)
+            for i in xrange(self.spw_Nfreqs):
+                Q = self.get_Q(i, self.spw_Nfreqs, taper=taper)
                 RQR = np.einsum('ab,bc,cd',
                                 self.R(key1).T.conj(), Q, self.R(key2))
                 qi = np.sum(self.x(key1).conj()*np.dot(RQR, self.x(key2)), axis=0)
@@ -506,18 +519,18 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        G = np.zeros((self.Nfreqs, self.Nfreqs), dtype=np.complex)
+        G = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
 
         iR1Q, iR2Q = {}, {}
-        for ch in xrange(self.Nfreqs): # this loop is nchan^3
-            Q = self.get_Q(ch, self.Nfreqs, taper=taper)
+        for ch in xrange(self.spw_Nfreqs): # this loop is nchan^3
+            Q = self.get_Q(ch, self.spw_Nfreqs, taper=taper)
             iR1Q[ch] = np.dot(R1, Q) # R_1 Q
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
 
-        for i in xrange(self.Nfreqs): # this loop goes as nchan^4
-            for j in xrange(self.Nfreqs):
+        for i in xrange(self.spw_Nfreqs): # this loop goes as nchan^4
+            for j in xrange(self.spw_Nfreqs):
                 # tr(R_2 Q_i R_1 Q_j)
                 G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
 
@@ -726,34 +739,27 @@ class PSpecData(object):
         
         return pspec_units, delay_units
     
-    def delays(self, spw_range=None):
+    def delays(self):
         """
         Return an array of delays, tau, corresponding to the bins of the delay 
-        power spectrum output by pspec().
+        power spectrum output by pspec() using self.spw_range to specify the spectral window.
         
-        Parameters
-        ----------
-        spw_range : len-2 tuple, contains start and stop channel indices used to index self.freq_array. 
-            default is to use all channels.
-
         Returns
         -------
         delays : array_like
             Delays, tau. Units: ns.
         """
-        if spw_range is None:
-            spw_range = (0, self.dsets[0].freq_array.shape[1])
         # Calculate the delays
         if len(self.dsets) == 0:
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate delays.")
         else:
-            return utils.get_delays(self.dsets[0].freq_array.flatten()[spw_range[0]:spw_range[1]]) * 1e9 # convert to ns    
+            return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]]) * 1e9 # convert to ns    
     
-    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, spw_range=None, beam=None):
+    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
-        in "telescope units" to cosmological units
+        in "telescope units" to cosmological units, using self.spw_range to set spectral window.
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
@@ -780,10 +786,6 @@ class PSpecData(object):
                 numerical integral
                 Default: 10000
 
-        spw_range : tuple, Example: (200, 300)
-            tuple containing a start and stop channel used to index the `freq_array` of the datasets.
-            The default (None) is to use the entire band provided in the dataset.
-
         beam : PSpecBeam object
             Option to use a manually-fed PSpecBeam object instead of using self.primary_beam.
 
@@ -794,9 +796,7 @@ class PSpecData(object):
                 in h^-3 Mpc^3 or Mpc^3.
         """
         # set spw_range and get freqs
-        if spw_range is None:
-            spw_range = (0, self.freqs.shape[1])
-        freqs = self.freqs[spw_range[0]:spw_range[1]]
+        freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]
 
         # calculate scalar
         if beam is None:
@@ -810,7 +810,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, input_data_weight='identity', norm='I', taper='none', 
               little_h=True, avg_group=False, exclude_auto_bls=False, exclude_conjugated_blpairs=False,
-              spw_range=None, verbose=True, history=''):
+              spw_ranges=None, verbose=True, history=''):
         """
         Estimate the delay power spectrum from a pair of datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
@@ -890,7 +890,7 @@ class PSpecData(object):
         avg_group : boolean, optional
             If bls1 and bls2 contain a list of bl groups, average data in each group before cross-multiplying.
 
-        spw_range : list of tuples, optional. Example: [(220, 320), (650, 775)]
+        spw_ranges : list of tuples, optional. Example: [(220, 320), (650, 775)]
             A list of spectral window channel ranges to select within the total bandwidth of the datasets, 
             each of which forms an independent power spectrum estimate. 
             Each tuple should contain a start and stop channel used to index the `freq_array` of each dataset.
@@ -990,10 +990,10 @@ class PSpecData(object):
             raise NotImplementedError
 
         # configure spectral window selections
-        if spw_range is None:
-            spw_range = [(0, dset1.freq_array.shape[1])]
+        if spw_ranges is None:
+            spw_ranges = [(0, self.Nfreqs)]
         else:
-            assert np.isclose(map(lambda t: len(t), spw_range), 2).all(), "spw_range must be fed as a list of length-2 tuples"
+            assert np.isclose(map(lambda t: len(t), spw_ranges), 2).all(), "spw_ranges must be fed as a list of length-2 tuples"
 
         # initialize empty lists
         data_array = odict()
@@ -1005,19 +1005,27 @@ class PSpecData(object):
         spws = []
         dlys = []
         freqs = []
-        sclr_arr = np.ones((len(spw_range), len(pol_arr)), np.float)
+        sclr_arr = np.ones((len(spw_ranges), len(pol_arr)), np.float)
         blp_arr = []
         bls_arr = []
 
         # Loop over spectral windows
-        for i in range(len(spw_range)):
+        for i in range(len(spw_ranges)):
+            # set spectral range
+            if verbose: print( "Setting spectral range: {}".format(spw_ranges[i]))
+            self.set_spw(spw_ranges[i])
+
+            # clear covariance cache
+            self.clear_cov_cache()
+
+            # setup emtpy data arrays
             spw_data = []
             spw_ints = []
-
-            d = self.delays(spw_range=spw_range[i]) * 1e-9
+            
+            d = self.delays() * 1e-9
             dlys.extend(d)
             spws.extend(np.ones_like(d, np.int) * i)
-            freqs.extend(dset1.freq_array.flatten()[spw_range[i][0]:spw_range[i][1]])
+            freqs.extend(dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]])
 
             # Loop over polarizations
             for j, p in enumerate(pol_arr):
@@ -1026,7 +1034,7 @@ class PSpecData(object):
 
                 # Compute the scalar to convert from "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
-                    scalar = self.scalar(taper=taper, little_h=True, spw_range=spw_range[i])
+                    scalar = self.scalar(taper=taper, little_h=True)
                 else: 
                     raise_warning("Warning: self.primary_beam is not defined, so pspectra are not properly normalized", verbose=verbose)
                     scalar = 1.0
