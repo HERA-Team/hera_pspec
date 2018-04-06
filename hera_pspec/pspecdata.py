@@ -8,6 +8,7 @@ import hera_cal as hc
 from hera_pspec import uvpspec
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
+import operator
 
 
 class PSpecData(object):
@@ -128,9 +129,23 @@ class PSpecData(object):
         # Check for the same polarizations
         pols = []
         for d in self.dsets: pols.extend(d.polarization_array)
-        pols = np.unique(pols)
         if np.unique(pols).size > 1:
             raise ValueError("all dsets must have the same number and kind of polarizations: \n{}".format(pols))
+
+        # Check phase type
+        phase_types = []
+        for d in self.dsets: phase_types.append(d.phase_type)
+        if np.unique(phase_types).size > 1:
+            raise ValueError("all datasets must have the same phase type (i.e. 'drift', 'phased', ...)\ncurrent phase types are {}".format(phase_types))
+
+        # Check phase centers if phase type is phased
+        if 'phased' in set(phase_types):
+            phase_ra = map(lambda d: d.phase_center_ra_degrees, self.dsets)
+            phase_dec = map(lambda d: d.phase_center_dec_degrees, self.dsets)
+            max_diff_ra = np.max(map(lambda d: np.diff(d), itertools.combinations(phase_ra, 2)))
+            max_diff_dec = np.max(map(lambda d: np.diff(d), itertools.combinations(phase_dec, 2)))
+            max_diff = np.sqrt(max_diff_ra**2 + max_diff_dec**2)
+            if max_diff > 0.15: raise_warning("Warning: maximum phase-center difference between datasets is > 10 arcmin", verbose=verbose)
 
     def check_key_in_dset(self, key, dset_ind):
         """
@@ -895,9 +910,9 @@ class PSpecData(object):
         self.validate_datasets(verbose=verbose)
 
         # get datasets
-        assert type(dsets) in (list, tuple), "dsets must be fed as length-2 tuple of integers"
+        assert isinstance(dsets, (list, tuple)), "dsets must be fed as length-2 tuple of integers"
         assert len(dsets) == 2, "len(dsets) must be 2"
-        assert type(dsets[0]) in (int, np.int) and type(dsets[1] in (int, np.int)), "dsets must contain integer indices"
+        assert isinstance(dsets[0], (int, np.int)) and isinstance(dsets[1], (int, np.int)), "dsets must contain integer indices"
         dset1 = self.dsets[dsets[0]]
         dset2 = self.dsets[dsets[1]]
 
@@ -918,6 +933,9 @@ class PSpecData(object):
 
         else:
             raise TypeError("bls1 and bls2 must both be fed as either a list of bl tuples, or a list of bl groups")
+
+        # validate bl-pair redundancy
+        validate_bls(bls1, bls2, dset1, dset2, baseline_tol=1.0)
 
         # construct list of baseline pairs
         bl_pairs = []
@@ -1025,7 +1043,7 @@ class PSpecData(object):
                         key1 = (dsets[0],) + blp[0] + (p,)
                         key2 = (dsets[1],) + blp[1] + (p,)
                         
-                    if verbose: print("Baselines:", key1, key2)
+                    if verbose: print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, p))
 
                     # Set covariance weighting scheme for input data
                     if verbose: print("  Setting weight matrix for input data...")
@@ -1187,6 +1205,9 @@ class PSpecData(object):
         for i, dset in enumerate(dsets):
             # don't rephase dataset we are using as our LST anchor
             if i == dset_index:
+                # even though not phasing this dset, must set to match all other 
+                # dsets due to phasing-check validation
+                dset.phase_type = 'unknown'
                 continue
 
             # skip if dataset is not drift phased
@@ -1225,6 +1246,79 @@ class PSpecData(object):
 
         if inplace is False:
             return dsets
+
+
+def validate_bls(bls1, bls2, uvd1, uvd2, baseline_tol=1.0, verbose=True):
+    """
+    Validate baseline pairings between bls1 and bls2 are redundant within the 
+    specified tolerance.
+
+    Parameters
+    ----------
+    bls1 : list of baseline tuples, or list of bl-groups.
+        See docstring of PSpecData.pspec() for details on format.
+
+    bls2 : list of baseline tuples, or list of bl-groups.
+        See docstring of PSpecData.pspec() for details on format.
+
+    uvd1 : pyuvdata.UVData instance containing visibility data that bls1 will draw from
+
+    uvd2 : pyuvdata.UVData instance containing visibility data that bls2 will draw from
+
+    baseline_tol : float, distance tolerance for notion of baseline "redundancy" in meters
+
+    verbose : bool, if True report feedback to stdout
+    """
+    # ensure both bls1 and bls2 are the same type
+    if isinstance(bls1[0], tuple) and isinstance(bls1[0][0], (int, np.int)) \
+        and isinstance(bls2[0], tuple) and isinstance(bls2[0][0], (int, np.int)):
+        # bls1 and bls2 fed as list of bl tuples
+        fed_bl_group = False
+
+    elif isinstance(bls1[0], list) and isinstance(bls1[0][0], tuple) and isinstance(bls2[0], list) \
+        and isinstance(bls2[0][0], tuple):
+        # bls1 and bls2 fed as list of bl groups
+        fed_bl_group = True
+        assert len(bls1) == len(bls2), "if fed as list of bl groups, len(bls1) must equal len(bls2)"
+
+    else:
+        raise TypeError("bls1 and bls2 must both be fed as either a list of bl tuples, or a list of bl groups")
+
+    # ensure uvd1 and uvd2 are UVData objects
+    if isinstance(uvd1, pyuvdata.UVData) == False:
+        raise TypeError("uvd1 must be a pyuvdata.UVData instance")
+    if isinstance(uvd2, pyuvdata.UVData) == False:
+        raise TypeError("uvd2 must be a pyuvdata.UVData instance")
+
+    # get antenna position dictionary
+    ap1, a1 = uvd1.get_ENU_antpos(pick_data_ants=True)
+    ap2, a2 = uvd1.get_ENU_antpos(pick_data_ants=True)
+    ap1 = dict(zip(a1, ap1))
+    ap2 = dict(zip(a2, ap2))
+
+    # ensure shared antenna keys match within tolerance
+    shared = sorted(set(ap1.keys()) & set(ap2.keys()))
+    for k in shared:
+        assert np.linalg.norm(ap1[k] - ap2[k]) <= baseline_tol, "uvd1 and uvd2 don't agree on antenna positions within tolerance of {} m".format(baseline_tol)
+    ap = ap1
+    ap.update(ap2)
+
+    # iterate through baselines and 1) check baselines crossed with each other are within tolerance
+    # and 2) check baselines within a single group (if grouped) are within tolerance
+    for i in range(len(bls1)):
+        if fed_bl_group:
+            # get baseline vectors for each bl in the i'th group
+            blvecs1 = map(lambda bl: ap[bl[0]] - ap[bl[1]], bls1[i])
+            blvecs2 = map(lambda bl: ap[bl[0]] - ap[bl[1]], bls2[i])
+            # get maximum residual between all pairs
+            resid = map(lambda p: np.linalg.norm(reduce(operator.sub, p)), itertools.combinations(blvecs1+blvecs2, 2))
+            if np.max(np.abs(resid)) >= baseline_tol:
+                raise_warning("baseline-pair residual(s) in the {}'th bl group exceed a bl tol of {} m".format(i, baseline_tol), verbose=verbose)
+        else:
+            blvec1 = ap[bls1[i][0]] - ap[bls1[i][1]]
+            blvec2 = ap[bls2[i][0]] - ap[bls2[i][1]]
+            if np.linalg.norm(blvec1 - blvec2) >= baseline_tol:
+                raise_warning("bl1 {} and bl2 {} separation exceeds the bl tol of {} m".format(bls1[i], bls2[i], baseline_tol), verbose=verbose)
 
 
 def raise_warning(warning, verbose=True):

@@ -519,6 +519,21 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(NotImplementedError, ds.pspec, red_bls, red_bls, (0, 1), avg_group=True)
 
 
+    def test_validate_bls(self):
+        # test exceptions
+        uvd = copy.deepcopy(self.uvd)
+        nt.assert_raises(TypeError, pspecdata.validate_bls, [1], [1], uvd, uvd)
+        nt.assert_raises(TypeError, pspecdata.validate_bls, [1], [1], [1], uvd)
+        nt.assert_raises(TypeError, pspecdata.validate_bls, [1], [1], uvd, [1])
+
+        bls1 = [(24, 25), (37, 38)]
+        bls2 = [(24, 25), (37, 52)]
+        pspecdata.validate_bls(bls1, bls2, uvd, uvd)
+        bls1 = [[(24,25),(37,38)]]
+        bls2 = [[(24,25),(37,52)]]
+        pspecdata.validate_bls(bls1, bls2, uvd, uvd)
+
+
 """
 # LEGACY MONTE CARLO TESTS
 
