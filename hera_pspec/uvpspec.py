@@ -67,7 +67,8 @@ class UVPSpec(object):
                             "data_array", "flag_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units"]
-        self._all_params = copy.copy(self._req_params) + ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
+        self._all_params = copy.copy(self._req_params) + \
+                            ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
         self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
                                  "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
                                  "norm", "taper"]
@@ -75,6 +76,7 @@ class UVPSpec(object):
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
         self._dicts = ["data_array", "flag_array", "integration_array"]
+        self._non_dicts = sorted(set(self._all_params) - set(self._dicts))
 
     def get_data(self, key):
         """
@@ -232,6 +234,17 @@ class UVPSpec(object):
 
         return np.arange(self.Nblpairts)[self.blpair_array == blpair]
 
+    def spw_to_indices(self, spw):
+        """
+        Convert a spectral window integer into a list of indices to index
+        into the spwdlys axis of dly_array and/or freq_array.
+
+        Parameters
+        ----------
+        spw : int, spectral window index
+        """
+        return np.arange(self.Nspwdlys)[self.spw_array == spw]
+
     def pol_to_index(self, pol):
         """
         Map a polarization integer or str to its index in pol_array
@@ -337,30 +350,9 @@ class UVPSpec(object):
         # open file descriptor
         with h5py.File(filepath, 'r') as f:
             # load-in meta data
-            self.Ntimes = f.attrs['Ntimes']
-            self.Nfreqs = f.attrs['Nfreqs']
-            self.Nspws = f.attrs['Nspws']
-            self.Nspwdlys = f.attrs['Nspwdlys']
-            self.Ndlys = f.attrs['Ndlys']
-            self.Nblpairs = f.attrs['Nblpairs']
-            self.Nblpairts = f.attrs['Nblpairts']
-            self.Npols = f.attrs['Npols']
-            self.bl_array = f.attrs['bl_array']
-            self.spw_array = f.attrs['spw_array']
-            self.dly_array = f.attrs['dly_array']
-            self.freq_array = f.attrs['freq_array']
-            self.pol_array = f.attrs['pol_array']
-            self.telescope_location = f.attrs['telescope_location']
-            self.units = f.attrs['units']
-            self.weighting = f.attrs['weighting']
-            self.channel_width = f.attrs['channel_width']
-            self.history = f.attrs['history']
-            self.blpair_array = f['blpair_array'][:]
-            self.time_1_array = f['time_1_array'][:]
-            self.time_2_array = f['time_2_array'][:]
-            self.lst_1_array = f['lst_1_array'][:]
-            self.lst_2_array = f['lst_2_array'][:]
-            self.bl_vecs = f['bl_vecs'][:]
+            for k in f.attrs:
+                if k in uvp._all_params:
+                    setattr(self, f.attrs[k])
 
             # edit metadata given selection
             if spws is not None:
@@ -416,30 +408,9 @@ class UVPSpec(object):
         # write file
         with h5py.File(filepath, 'w') as f:
             # write meta data
-            f.attrs['Ntimes'] = self.Ntimes
-            f.attrs['Nfreqs'] = self.Nfreqs
-            f.attrs['Nspws'] = self.Nspws
-            f.attrs['Nspwdlys'] = self.Nspwdlys
-            f.attrs['Ndlys'] = self.Ndlys
-            f.attrs['Nblpairs'] = self.Nblpairs
-            f.attrs['Nblpairts'] = self.Nblpairts
-            f.attrs['Npols'] = self.Npols
-            f.attrs['bl_array'] = self.bl_array
-            f.attrs['spw_array'] = self.spw_array
-            f.attrs['dly_array'] = self.dly_array
-            f.attrs['freq_array'] = self.freq_array
-            f.attrs['pol_array'] = self.pol_array
-            f.attrs['telescope_location'] = self.telescope_location
-            f.attrs['units'] = self.units
-            f.attrs['weighting'] = self.weighting
-            f.attrs['channel_width'] = self.channel_width
-            f.attrs['history'] = self.history
-            f.create_dataset('blpair_array', data=self.blpair_array, dtype=np.int)
-            f.create_dataset('time_1_array', data=self.time_1_array, dtype=np.float)
-            f.create_dataset('time_2_array', data=self.time_2_array, dtype=np.float)
-            f.create_dataset('lst_1_array', data=self.lst_1_array, dtype=np.float)
-            f.create_dataset('lst_2_array', data=self.lst_2_array, dtype=np.float)
-            f.create_dataset('bl_vecs', data=self.bl_vecs, dtype=np.float)
+            for k in uvp._non_dicts:
+                if hasattr(self, k):
+                    f.attrs[k] = getattr(self, k)
 
             # iterate over spectral windows and create datasets
             for i in np.unique(self.spw_array):
