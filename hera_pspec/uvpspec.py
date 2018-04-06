@@ -351,7 +351,7 @@ class UVPSpec(object):
         with h5py.File(filepath, 'r') as f:
             # load-in meta data
             for k in f.attrs:
-                if k in uvp._all_params:
+                if k in self._all_params:
                     setattr(self, f.attrs[k])
 
             # edit metadata given selection
@@ -408,7 +408,7 @@ class UVPSpec(object):
         # write file
         with h5py.File(filepath, 'w') as f:
             # write meta data
-            for k in uvp._non_dicts:
+            for k in self._non_dicts:
                 if hasattr(self, k):
                     f.attrs[k] = getattr(self, k)
 
