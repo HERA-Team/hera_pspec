@@ -352,7 +352,7 @@ class UVPSpec(object):
             # load-in meta data
             for k in f.attrs:
                 if k in self._all_params:
-                    setattr(self, f.attrs[k])
+                    setattr(self, k, f.attrs[k])
 
             # edit metadata given selection
             if spws is not None:
