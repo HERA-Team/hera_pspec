@@ -78,11 +78,12 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
 
     # Get B_pp = \int dnu taper^2 and Bp = \int dnu
     if taper == 'none':
-        dBpp_over_BpSq = np.ones_like(integration_freqs, np.float)
+        BpSq = (np.median(np.diff(integration_freqs)) * len(integration_freqs))**2
+        dBpp_over_BpSq = np.ones_like(integration_freqs, np.float) / BpSq
     else:
-        dBpp_over_BpSq = aipy.dsp.gen_window(len(pspec_freqs), taper)**2
+        BpSq = integrate.trapz(aipy.dsp.gen_window(len(integration_freqs), taper), x=integration_freqs)**2
+        dBpp_over_BpSq = aipy.dsp.gen_window(len(pspec_freqs), taper)**2 / BpSq
         dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest')(integration_freqs)
-    dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
 
     # integrate to get scalar
     d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 / X2Y
