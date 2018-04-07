@@ -162,6 +162,39 @@ class PSpecBeamBase(object):
 
         return scalar
 
+    def Jy_to_mK(self, freqs, stokes='pseudo_I'):
+        """
+        Return the multiplicative factor, M [mK / Jy], to convert a visibility from Jy -> mK,
+
+        M = 1e3 * 1e-23 * c^2 / [2 * k_b * nu^2 * Omega_p(nu)]
+
+        where k_b is boltzmann constant, c is speed of light, nu is frequency 
+        and Omega_p is the integral of the unitless beam-response (steradians),
+        and the 1e3 is the conversion from K -> mK and the 1e-23 is the conversion 
+        from Jy to cgs.
+
+        Parameters
+        ----------
+        freqs : float ndarray, contains frequencies to evaluate conversion factor [Hz]
+
+        stokes: str, optional
+                Which Stokes parameter's beam to compute the scalar for.
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Default: 'pseudo_I'
+
+        Returns
+        -------
+        M : float ndarray, contains Jy -> mK factor at each frequency
+        """
+        if isinstance(freqs, (int, np.float, float)):
+            freqs = np.array([freqs])
+        if np.min(freqs) < self.beam_freqs.min(): print "Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs))
+        if np.max(freqs) > self.beam_freqs.max(): print "Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs))
+
+        Op = interp1d(self.beam_freqs/1e6, self.power_beam_int(stokes=stokes), kind='quadratic', fill_value='extrapolate')(freqs/1e6)
+
+        return 1e-20 * conversions.cgs_units.c**2 / (2 * conversions.cgs_units.kb * freqs**2 * Op)
+
 
 class PSpecBeamGauss(PSpecBeamBase):
 

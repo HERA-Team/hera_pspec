@@ -12,7 +12,6 @@ class Test_Cosmo(unittest.TestCase):
     def setUp(self):
         self.C = conversions.Cosmo_Conversions(Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=100.0,
                                                Om_M=None, Om_k=None)
-
     def tearDown(self):
         pass
 
@@ -28,6 +27,12 @@ class Test_Cosmo(unittest.TestCase):
         # test parameters get fed to class
         C = conversions.Cosmo_Conversions(H0=25.5)
         self.assertAlmostEqual(C.H0, 25.5)
+
+    def test_units(self):
+        si = conversions.units()
+        cgs = conversions.cgs_units()
+        nt.assert_almost_equal(si.c, 2.99792458e8)
+        nt.assert_almost_equal(cgs.c, 2.99792458e10)
 
     def test_distances(self):
         self.assertAlmostEqual(self.C.f2z(100e6), 13.20405751)
