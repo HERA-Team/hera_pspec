@@ -78,8 +78,9 @@ class Test_DataSet(unittest.TestCase):
         # test Jy_to_mK
         M = self.bm.Jy_to_mK(np.linspace(100e6, 200e6, 11))
         nt.assert_equal(len(M), 11)
-        nt.assert_almost_equal(M[0], 41.33552971)
-        M = self.bm.Jy_to_mK(120e6)
+        nt.assert_almost_equal(M[0], 41.360105524572283)
+        M = self.bm.Jy_to_mK(99e6)
+        M = self.bm.Jy_to_mK(201)
 
     def test_Gaussbeam(self):
         Om_p = self.gauss.power_beam_int()

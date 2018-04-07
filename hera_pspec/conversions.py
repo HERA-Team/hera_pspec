@@ -45,8 +45,8 @@ class cgs_units:
     """
     fundamental constants in ** CGS ** units
     """
-    c = 2.99702453e10  # cm s-1
-    kb = 1.38064e-16  # erg K-1
+    c = 2.99792458e10  # cm s-1
+    kb = 1.38064852e-16  # erg K-1
 
 
 class Cosmo_Conversions(object):
