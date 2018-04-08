@@ -476,13 +476,22 @@ class PSpecData(object):
             return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
                                  * np.fft.fftshift(_Rx2, axes=0) )
         else:
+            # get taper if provided
+            if taper != 'none':
+                tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
+
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.spw_Nfreqs):
                 Q = self.get_Q(i, self.spw_Nfreqs)
                 RQR = np.einsum('ab,bc,cd',
                                 self.R(key1).T.conj(), Q, self.R(key2))
-                qi = np.sum(self.x(key1).conj()*np.dot(RQR, self.x(key2)), axis=0)
+                x1 = self.x(key1).conj()
+                x2 = self.x(key2)
+                if taper != 'none':
+                    x1 *= tapering_fct
+                    x2 *= tapering_fct
+                qi = np.sum(x1*np.dot(RQR, x2), axis=0)
                 q.append(qi)
             return 0.5 * np.array(q)
 
