@@ -219,7 +219,7 @@ class Test_PSpecData(unittest.TestCase):
                 self.assertEqual(q_hat_a.shape, (Nfreq, Ntime))
                 
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
-                q_hat_b = self.ds.q_hat(key2, key1)
+                q_hat_b = self.ds.q_hat(key2, key1, taper=taper)
                 q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
                 for i in range(Nfreq):
                     for j in range(Ntime):
@@ -229,9 +229,9 @@ class Test_PSpecData(unittest.TestCase):
                                                q_hat_diff[i,j].imag)
                 
                 # Check that lists of keys are handled properly
-                q_hat_aa = self.ds.q_hat(key1, key4) # q_hat(k1, k2+k2)
-                q_hat_bb = self.ds.q_hat(key4, key1) # q_hat(k2+k2, k1)
-                q_hat_cc = self.ds.q_hat(key3, key4) # q_hat(k1+k1, k2+k2)
+                q_hat_aa = self.ds.q_hat(key1, key4, taper=taper) # q_hat(k1, k2+k2)
+                q_hat_bb = self.ds.q_hat(key4, key1, taper=taper) # q_hat(k2+k2, k1)
+                q_hat_cc = self.ds.q_hat(key3, key4, taper=taper) # q_hat(k1+k1, k2+k2)
                 
                 # Effectively checks that q_hat(2*k1, 2*k2) = 4*q_hat(k1, k2)
                 for i in range(Nfreq):
@@ -243,16 +243,8 @@ class Test_PSpecData(unittest.TestCase):
                 
                 # Check that the slow method is the same as the FFT method
                 q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False, taper=taper)
-                vector_scale = np.min([ np.min(np.abs(q_hat_a_slow.real)), 
-                                        np.min(np.abs(q_hat_a_slow.imag)) ])
-                for i in range(Nfreq):
-                    for j in range(Ntime):
-                        self.assertLessEqual(
-                                np.abs((q_hat_a[i,j] - q_hat_a_slow[i,j]).real), 
-                                vector_scale*1e-6 )
-                        self.assertLessEqual(
-                                np.abs((q_hat_a[i,j] - q_hat_a_slow[i,j]).imag), 
-                                vector_scale*1e-6 )
+                self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
+                self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
     def test_get_G(self):
         """

@@ -489,8 +489,8 @@ class PSpecData(object):
                 x1 = self.x(key1).conj()
                 x2 = self.x(key2)
                 if taper != 'none':
-                    x1 *= tapering_fct
-                    x2 *= tapering_fct
+                    x1 = x1 * tapering_fct[:, None]
+                    x2 = x2 * tapering_fct[:, None]
                 qi = np.sum(x1*np.dot(RQR, x2), axis=0)
                 q.append(qi)
             return 0.5 * np.array(q)
