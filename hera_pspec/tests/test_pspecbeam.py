@@ -80,7 +80,11 @@ class Test_DataSet(unittest.TestCase):
         nt.assert_equal(len(M), 11)
         nt.assert_almost_equal(M[0], 41.360105524572283)
         M = self.bm.Jy_to_mK(99e6)
-        M = self.bm.Jy_to_mK(201)
+        M = self.bm.Jy_to_mK(201e6)
+        # test exception
+        nt.assert_raises(TypeError, self.bm.Jy_to_mK, [1])
+        nt.assert_raises(TypeError, self.bm.Jy_to_mK, np.array([1]))
+
 
     def test_Gaussbeam(self):
         Om_p = self.gauss.power_beam_int()

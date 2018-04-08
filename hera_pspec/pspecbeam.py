@@ -186,8 +186,12 @@ class PSpecBeamBase(object):
         -------
         M : float ndarray, contains Jy -> mK factor at each frequency
         """
-        if isinstance(freqs, (int, np.float, float)):
+        if isinstance(freqs, (np.float, float)):
             freqs = np.array([freqs])
+        elif not isinstance(freqs, np.ndarray):
+            raise TypeError("freqs must be fed as a float ndarray")
+        elif isinstance(freqs, np.ndarray) and freqs.dtype not in (float, np.float, np.float64):
+            raise TypeError("freqs must be fed as a float ndarray")
         if np.min(freqs) < self.beam_freqs.min(): print "Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs))
         if np.max(freqs) > self.beam_freqs.max(): print "Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs))
 
