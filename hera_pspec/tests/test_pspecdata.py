@@ -16,7 +16,7 @@ dfiles = [
 ]
 
 # List of tapering function to use in tests
-taper_selection = ['blackman',]
+taper_selection = ['none', 'blackman',]
 #taper_selection = ['blackman', 'blackman-harris', 'gaussian0.4', 'kaiser2',
 #                   'kaiser3', 'hamming', 'hanning', 'parzen']
 
@@ -215,7 +215,7 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 
                 # Calculate q_hat for a pair of baselines and test output shape
-                q_hat_a = self.ds.q_hat(key1, key2)
+                q_hat_a = self.ds.q_hat(key1, key2, taper=taper)
                 self.assertEqual(q_hat_a.shape, (Nfreq, Ntime))
                 
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
@@ -242,7 +242,7 @@ class Test_PSpecData(unittest.TestCase):
                                                0.25 * q_hat_cc[i,j].imag)
                 
                 # Check that the slow method is the same as the FFT method
-                q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False)
+                q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False, taper=taper)
                 vector_scale = np.min([ np.min(np.abs(q_hat_a_slow.real)), 
                                         np.min(np.abs(q_hat_a_slow.imag)) ])
                 for i in range(Nfreq):
