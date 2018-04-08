@@ -264,12 +264,12 @@ class Test_PSpecData(unittest.TestCase):
 
         for input_data_weight in ['identity','iC']:
             for taper in taper_selection:
-                print 'input_data_weight', input_data_weight, 'taper', taper
+                print 'input_data_weight', input_data_weight
                 self.ds.set_R(input_data_weight)
                 key1 = (0, 24, 38)
                 key2 = (1, 25, 38)
 
-                G = self.ds.get_G(key1, key2, taper=taper)
+                G = self.ds.get_G(key1, key2)
                 self.assertEqual(G.shape, (Nfreq,Nfreq)) # Test shape
                 print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
@@ -292,7 +292,7 @@ class Test_PSpecData(unittest.TestCase):
                     # same test as the symmetry test, but perhaps there are
                     # creative ways to break the code to break one test but not
                     # the other.
-                    G_swapped = self.ds.get_G(key2, key1, taper=taper)
+                    G_swapped = self.ds.get_G(key2, key1)
                     G_diff_norm = np.linalg.norm(G - G_swapped)
                     self.assertLessEqual(G_diff_norm, 
                                         matrix_scale * multiplicative_tolerance)
@@ -309,7 +309,7 @@ class Test_PSpecData(unittest.TestCase):
                     # In general, when R_1 != R_2, there is a more restricted 
                     # symmetry where swapping R_1 and R_2 *and* taking the 
                     # transpose gives the same result
-                    G_swapped = self.ds.get_G(key2, key1, taper=taper)
+                    G_swapped = self.ds.get_G(key2, key1)
                     G_diff_norm = np.linalg.norm(G - G_swapped.T)
                     self.assertLessEqual(G_diff_norm, 
                                          matrix_scale * multiplicative_tolerance)

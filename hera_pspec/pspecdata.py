@@ -479,14 +479,14 @@ class PSpecData(object):
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.spw_Nfreqs):
-                Q = self.get_Q(i, self.spw_Nfreqs, taper=taper)
+                Q = self.get_Q(i, self.spw_Nfreqs)
                 RQR = np.einsum('ab,bc,cd',
                                 self.R(key1).T.conj(), Q, self.R(key2))
                 qi = np.sum(self.x(key1).conj()*np.dot(RQR, self.x(key2)), axis=0)
                 q.append(qi)
             return 0.5 * np.array(q)
 
-    def get_G(self, key1, key2, taper='none'):
+    def get_G(self, key1, key2):
         """
         Calculates the response matrix G of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -509,10 +509,6 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines 
             in the list will be combined with inverse noise weights.
 
-        taper : str, optional
-            Tapering (window) function used when calculating Q. Takes the same
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
-
         Returns
         -------
         G : array_like, complex
@@ -524,7 +520,7 @@ class PSpecData(object):
 
         iR1Q, iR2Q = {}, {}
         for ch in xrange(self.spw_Nfreqs): # this loop is nchan^3
-            Q = self.get_Q(ch, self.spw_Nfreqs, taper=taper)
+            Q = self.get_Q(ch, self.spw_Nfreqs)
             iR1Q[ch] = np.dot(R1, Q) # R_1 Q
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
 
@@ -653,7 +649,7 @@ class PSpecData(object):
         M /= norm; W = np.dot(M, G)
         return M, W
 
-    def get_Q(self, mode, n_k, taper='none'):
+    def get_Q(self, mode, n_k):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha.
 
@@ -673,10 +669,6 @@ class PSpecData(object):
         n_k : int
             Number of k bins that will be .
 
-        taper : str, optional
-            Type of tapering (window) function to use. Valid options are any
-            window function supported by aipy.dsp.gen_window(). Default: 'none'.
-
         Returns
         -------
         Q : array_like
@@ -685,8 +677,8 @@ class PSpecData(object):
         _m = np.zeros((n_k,), dtype=np.complex)
         _m[mode] = 1. # delta function at specific delay mode
 
-        # FFT to transform to frequency space, and apply window function
-        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, taper)
+        # FFT to transform to frequency space
+        m = np.fft.fft(np.fft.ifftshift(_m))
         Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
         return Q
 
