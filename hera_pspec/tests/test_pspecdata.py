@@ -463,7 +463,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.add(self.uvd, None)
         # test basic execution
         psu = ds.units()
-        nt.assert_equal(psu, "improper normalization")
+        nt.assert_equal(psu, '(UNCALIB)^2 Hz [beam normalization not specified]')
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
