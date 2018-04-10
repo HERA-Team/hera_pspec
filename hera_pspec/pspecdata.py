@@ -709,10 +709,16 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
-    def units(self):
+    def units(self, little_h=True):
         """
         Return the units of the power spectrum. These are inferred from the 
         units reported by the input visibilities (UVData objects).
+
+        Parameters
+        ----------
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
 
         Returns
         -------
@@ -726,7 +732,11 @@ class PSpecData(object):
         if self.primary_beam is None:
             pspec_units = "improper normalization"
         else:
-            pspec_units = "(%s)^2 h^-3 Mpc^3" % self.dsets[0].vis_units
+            if little_h:
+                h_unit = "h^-3 "
+            else:
+                h_unit = ""
+            pspec_units = "({})^2 {}Mpc^3".format(self.dsets[0].vis_units, h_unit)
         
         return pspec_units
     
@@ -1152,7 +1162,7 @@ class PSpecData(object):
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width
         uvp.weighting = input_data_weight
-        uvp.units = self.units()
+        uvp.units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
         uvp.data_array = data_array
         uvp.integration_array = integration_array
@@ -1161,7 +1171,6 @@ class PSpecData(object):
         uvp.taper = taper
         uvp.norm = norm
         uvp.git_hash = version.git_hash
-        uvp.form = 'Pk'
         if self.primary_beam is not None:
             uvp.cosmo_params = str(self.primary_beam.conversion.get_params())
         if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
