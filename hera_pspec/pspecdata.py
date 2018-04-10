@@ -724,7 +724,7 @@ class PSpecData(object):
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate power spectrum units.")
         if self.primary_beam is None:
-            pspec_units = "not properly normalized..."
+            pspec_units = "improper normalization"
         else:
             pspec_units = "(%s)^2 h^-3 Mpc^3" % self.dsets[0].vis_units
         

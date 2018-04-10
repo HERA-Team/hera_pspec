@@ -463,7 +463,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.add(self.uvd, None)
         # test basic execution
         psu = ds.units()
-        nt.assert_equal(psu, "(%s)^2"%ds.dsets[0].vis_units)
+        nt.assert_equal(psu, "improper normalization")
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
