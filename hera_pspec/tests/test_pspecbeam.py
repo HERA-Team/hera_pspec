@@ -75,6 +75,17 @@ class Test_DataSet(unittest.TestCase):
         scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
         self.assertAlmostEqual(scalar / 1793248694.8873105, 1.0, delta=1e-8)
 
+        # test Jy_to_mK
+        M = self.bm.Jy_to_mK(np.linspace(100e6, 200e6, 11))
+        nt.assert_equal(len(M), 11)
+        nt.assert_almost_equal(M[0], 41.360105524572283)
+        M = self.bm.Jy_to_mK(99e6)
+        M = self.bm.Jy_to_mK(201e6)
+        # test exception
+        nt.assert_raises(TypeError, self.bm.Jy_to_mK, [1])
+        nt.assert_raises(TypeError, self.bm.Jy_to_mK, np.array([1]))
+
+
     def test_Gaussbeam(self):
         Om_p = self.gauss.power_beam_int()
         Om_pp = self.gauss.power_beam_sq_int()

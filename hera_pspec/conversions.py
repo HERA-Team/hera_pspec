@@ -40,6 +40,15 @@ class units:
     w21 = 0.211061140542  # 21cm wavelength in meters
     H0_to_SI = 3.24078e-20 # km s-1 Mpc-1 to s-1
 
+
+class cgs_units:
+    """
+    fundamental constants in ** CGS ** units
+    """
+    c = 2.99792458e10  # cm s-1
+    kb = 1.38064852e-16  # erg K-1
+
+
 class Cosmo_Conversions(object):
     """
     Cosmo_Conversions class for mathematical conversion functions,
