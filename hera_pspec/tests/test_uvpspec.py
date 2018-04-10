@@ -52,7 +52,6 @@ class Test_UVPSpec(unittest.TestCase):
         taper = "none"
         norm = "I"
         git_hash = "random"
-        form = 'Pk'
 
         telescope_location = np.array([5109325.85521063, 2005235.09142983, -3239928.42475397])
 
@@ -66,7 +65,7 @@ class Test_UVPSpec(unittest.TestCase):
                   'Nbls', 'blpair_array', 'time_1_array', 'time_2_array', 'lst_1_array', 'lst_2_array',
                   'spw_array', 'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
                   'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 'units',
-                  'channel_width', 'weighting', 'history', 'taper', 'norm', 'git_hash', 'form']
+                  'channel_width', 'weighting', 'history', 'taper', 'norm', 'git_hash']
 
         for p in params:
             setattr(uvp, p, locals()[p])
@@ -102,6 +101,14 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(i.shape, (10,))
         nt.assert_true(i.dtype == np.float)
         nt.assert_almost_equal(i[0], 1.0)
+
+    def test_convert_deltasq(self):
+        uvp = copy.deepcopy(self.uvp)
+        uvp.add_cosmology(conversions.Cosmo_Conversions())
+        uvp.convert_to_deltasq(little_h=True)
+        k_perp, k_para = uvp.get_kvecs(0, little_h=True)
+        k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
+        nt.assert_true(np.isclose(uvp.data_array[0][0,:,0], (self.uvp.data_array[0]*k_mag**3/(2*np.pi**2))[0,:,0]).all())
 
     def test_blpair_conversions(self):
         # test blpair -> antnums
@@ -204,22 +211,6 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp.Nblpairs, 3)
         nt.assert_false(hasattr(uvp, 'data_array'))
         if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
-
-    def test_convert_deltasq(self):
-        # test basic execution
-        dsq = self.uvp.convert_to_deltasq(cosmo=conversions.Cosmo_Conversions(), inplace=False)
-        nt.assert_true(dsq.Ndlys < self.uvp.Ndlys//2)
-        dsq2 = copy.deepcopy(self.uvp)
-        dsq2.convert_to_deltasq(cosmo=conversions.Cosmo_Conversions(), inplace=True)
-        nt.assert_equal(dsq2, dsq)
-
-        # test add cosmology
-        cosmo = conversions.Cosmo_Conversions()
-        dsq.add_cosmology(cosmo)
-        nt.assert_equal(cosmo, dsq.cosmo)
-
-        # test exception
-        nt.assert_raises(AssertionError, dsq.write_hdf5, 'ex')
 
 def test_conj_blpair_int():
     conj_blpair = uvpspec._conj_blpair_int(1002003004)

@@ -66,7 +66,6 @@ class UVPSpec(object):
         self._tag1 = PSpecParam("tag1", description="tag of data from first dataset", expected_type=str)
         self._tag2 = PSpecParam("tag2", description="tag of data from second dataset", expected_type=str)
         self._git_hash = PSpecParam("git_hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
-        self._form = PSpecParam("form", description="Form of power spectra, either P(k) or Delta^2(k), options=['Pk', 'Dsq']. Only P(k) can be written to disk.", expected_type=str)
         self._cosmo_params = PSpecParam("cosmo_params", description="LCDM cosmological parameter string, used to instantiate a conversions.Cosmo_Conversions object.", expected_type=str)
 
         # collect required parameters
@@ -74,12 +73,12 @@ class UVPSpec(object):
                             "data_array", "wgt_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units",
-                            "taper", "norm", "git_hash", "form"]
+                            "taper", "norm", "git_hash"]
         self._all_params = copy.copy(self._req_params) + \
                             ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
         self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                                  "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
-                                 "norm", "taper", "git_hash", "form", "cosmo_params"]
+                                 "norm", "taper", "git_hash", "cosmo_params"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
@@ -180,6 +179,87 @@ class UVPSpec(object):
         """
         indices = self.spw_to_indices(key)
         return self.dly_array[indices]
+
+    def get_blpair_seps(self):
+        """
+        For each baseline-pair, get the average baseline separation in ENU frame in meters.
+
+        Returns blp_avg_sep
+        -------
+        blp_avg_sep : float ndarray, shape=(Nblpairts,)
+        """
+        # get list of bl separations
+        bl_vecs = self.get_ENU_bl_vecs()
+        bls = self.bl_array.tolist()
+        blseps = np.array(map(lambda bl: np.linalg.norm(bl_vecs[bls.index(bl)]), self.bl_array))
+
+        # iterate over blpair_array
+        blp_avg_sep = []
+        for blp in self.blpair_array:
+            an = self.blpair_to_antnums(blp)
+            bl1 = self.antnums_to_bl(an[0])
+            bl2 = self.antnums_to_bl(an[1])
+            blp_avg_sep.append(np.mean([blseps[bls.index(bl1)], blseps[bls.index(bl2)]]))
+
+        return np.array(blp_avg_sep)
+
+    def get_kvecs(self, spw, little_h=True):
+        """
+        Get cosmological wavevectors for power spectra given an adopted cosmology.
+
+        Parameters
+        ----------
+        spw : int, choice of specral window
+
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+
+        Returns (k_perp, k_para)
+        -------
+        k_perp : float ndarray, containing perpendicular cosmological wave-vectors, shape=(Nblpairs,)
+        k_para : float ndarray, containing parallel cosmological wave-vectors, shape=(Ndlys given spw)
+
+        """
+        # assert cosmo
+        assert hasattr(self, 'cosmo'), "self.cosmo must exist to form cosmological wave-vectors. See self.add_cosmology()"
+
+        # calculate mean redshift of band
+        avg_z = self.cosmo.f2z(np.mean(self.freq_array[self.spw_to_indices(spw)]))
+
+        # get kperps
+        blpair_seps = self.get_blpair_seps()
+        k_perp = blpair_seps * self.cosmo.bl_to_kperp(avg_z, little_h=little_h)
+
+        # get kparas
+        k_para = self.get_dlys(spw) * self.cosmo.tau_to_kpara(avg_z, little_h=little_h)
+
+        return k_perp, k_para
+
+    def convert_to_deltasq(self, little_h=True):
+        """
+        Convert P(k) -> Delta^2(k) units.
+
+        Parameters
+        ----------
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+        """
+        # loop over spectral windows
+        for spw in range(self.Nspws):
+            # get k vectors
+            k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
+            k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
+
+            # multiply into data
+            self.data_array[spw] *= k_mag**3 / (2*np.pi**2)
+
+        # edit units
+        if little_h:
+            self.units += " h^3 k^3 / (2pi^2)"
+        else:
+            self.units += " k^3 / (2pi^2)"
 
     def blpair_to_antnums(self, blpair):
         """
@@ -480,9 +560,6 @@ class UVPSpec(object):
         if run_check:
             self.check()
 
-        # assert form is Pk
-        assert self.form == 'Pk', "Can only write power spectra in P(k) form to disk, current form is {}".format(self.form)
-
         # write file
         with h5py.File(filepath, 'w') as f:
             # write meta data
@@ -513,62 +590,7 @@ class UVPSpec(object):
             cosmo = conversions.Cosmo_Conversions(**cosmo)
         print("attaching cosmology: \n{}".format(cosmo))
         self.cosmo = cosmo
-
-    def convert_to_deltasq(self, cosmo=None, inplace=True):
-        """
-        Convert power spectra from P(k) -> k^3 / (2pi^2) P(k) = Delta^2(k)
-        """
-        assert self.form == 'Pk', "can only convert to Delta-Sq ['Dsq'] if current form is P(k) ['Pk']"
-
-        # copy object if desired
-        if inplace:
-            uvp = self
-        else:
-            uvp = copy.deepcopy(self)
-
-        if cosmo is not None:
-            uvp.add_cosmology(cosmo)
-        elif not hasattr(self, 'cosmo'):
-            raise AttributeError("if no hera_pspec.conversions.Cosmo_Conversions instance exists in self.cosmo\n"
-                                 "one must be fed through 'cosmo' kwarg")
-
-        # iterate over spectral windows
-        data_array = odict()
-        integration_array = odict()
-        dly_array = []
-        spw_array = []
-        for spw in range(uvp.Nspws):
-            # get new delta-sq delays
-            dlys = uvp.get_dlys(spw)
-            Ndlys = len(dlys)
-            dsq_dlys = dlys[Ndlys//2:]
-            dsq_dlys = dsq_dlys[~np.isclose(dsq_dlys, 0.0)]
-            dly_array.extend(dsq_dlys)
-            spw_array.extend(np.ones_like(dsq_dlys, np.int) * spw)
-
-            # get data
-            data = uvp.data_array[spw]
-
-            # fold data and average
-            if Ndlys % 2 == 1:
-                # odd number of delays, folds nicely
-                data_array[spw] = np.mean([data[:, Ndlys//2+1:, :], data[:, :Ndlys//2, :][:, ::-1, :]], axis=0)
-            else:
-                # even number of delays, doesn't fold as nice
-                data_array[spw] = np.mean([data[:, Ndlys//2+1:, :], data[:, 1:Ndlys//2, :][:, ::-1, :]], axis=0)
-
-            integration_array[spw] = uvp.integration_array[spw] * np.sqrt(2)
-
-        uvp.data_array = data_array
-        uvp.integration_array = integration_array
-        uvp.dly_array = np.array(dly_array)
-        uvp.spw_array = np.array(spw_array)
-        uvp.Nspwdlys = len(uvp.dly_array)
-        uvp.Ndlys = len(np.unique(uvp.dly_array))
-        uvp.form = 'Dsq'
-        uvp.units = uvp.units + ' k^3 / (2pi^2)'
-        if not inplace:
-            return uvp
+        self.cosmo_params = str(self.cosmo.get_params())
 
     def check(self):
         """
