@@ -209,7 +209,7 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        spw : int, choice of specral window
+        spw : int, choice of spectral window
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
@@ -238,7 +238,10 @@ class UVPSpec(object):
 
     def convert_to_deltasq(self, little_h=True):
         """
-        Convert P(k) -> Delta^2(k) units.
+        Convert from P(k) to Delta^2(k) by multiplying by k^3 / (2pi^2).
+
+        The units of the output is therefore the current units (self.units) times h^3 Mpc^-3,
+        where the h^3 is only included if little_h == True.
 
         Parameters
         ----------

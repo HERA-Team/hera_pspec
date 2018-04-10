@@ -730,7 +730,7 @@ class PSpecData(object):
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate power spectrum units.")
         if self.primary_beam is None:
-            pspec_units = "improper normalization"
+            pspec_units = "({})^2 Hz [beam normalization not specified]".format(self.dsets[0].vis_units)
         else:
             if little_h:
                 h_unit = "h^-3 "
@@ -1093,11 +1093,15 @@ class PSpecData(object):
                     # insert pspectra
                     pol_data.extend(pv.T)
 
-                    # insert integration info
+                    # get weights
                     wgts1 = self.w(key1).T
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1)[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
                     wgts2 = self.w(key2).T
+
+                    # get average of nsample across frequency axis, weighted by wgts
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1)[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
                     nsamp2 = np.sum(dset2.get_nsamples(bl2)[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+
+                    # take average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
                     pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0) * dset1.integration_time)
 
                     # combined weight is geometric mean

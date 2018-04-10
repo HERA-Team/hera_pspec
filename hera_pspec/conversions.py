@@ -294,7 +294,11 @@ class Cosmo_Conversions(object):
 
     def bl_to_kperp(self, z, little_h=True):
         """
-        Conversion factor from baseline length [meters] to k_perpendicular mode [h Mpc-1] at a specified redshift.
+        Produce the conversion factor from baseline length [meters] to k_perpendicular mode [h Mpc-1] at a 
+        specified redshift. 
+
+        Multiply this conversion factor by a baseline-separation length in [meters]
+        to get its corresponding k_perp mode in [h Mpc-1].
 
         Parameters
         ----------
@@ -306,7 +310,7 @@ class Cosmo_Conversions(object):
 
         Return
         ------
-        bl2kpara : float, conversion factor in units [h Mpc-1 / meters]
+        bl2kperp : float, conversion factor in units [h Mpc-1 / meters]
         """
         # Parsons 2012, Pober 2014, Kohn 2018
         bl2kpara = 2*np.pi / (self.dRperp_dtheta(z, little_h=little_h) * (units.c / self.z2f(z)))
@@ -315,7 +319,10 @@ class Cosmo_Conversions(object):
 
     def tau_to_kpara(self, z, little_h=True):
         """
-        Conversion factor from delay [seconds] to k_parallel mode [h Mpc-1] at a specified redshift.
+        Produce the conversion factor from delay [seconds] to k_parallel mode [h Mpc-1] at a specified redshift.
+
+        Multiply this conversion factor by a delay mode in [seconds]
+        to get its corresponding k_para mode in [h Mpc-1].
 
         Parameters
         ----------
