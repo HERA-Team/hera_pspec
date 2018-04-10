@@ -8,6 +8,7 @@ import bootstrap
 from pspecdata import PSpecData
 from container import PSpecContainer
 from pspecbeam import PSpecBeamUV
+from uvpspec import UVPSpec
 
 # XXX: This will eventually be deprecated
 import legacy_pspec as legacy

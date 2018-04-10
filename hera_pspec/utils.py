@@ -1,5 +1,6 @@
 import numpy as np
 import md5
+import yaml
 
 def hash(w):
     """
@@ -50,3 +51,28 @@ def cov(d1, w1, d2=None, w2=None):
     C -= np.outer(x1, x2.conj())
     return C
 
+
+def log(msg, lvl=0):
+    """
+    Add a message to the log (just prints to the terminal for now).
+    
+    Parameters
+    ----------
+    lvl : int, optional
+        Indent level of the message. Each level adds two extra spaces. 
+        Default: 0.
+    """
+    print("%s%s" % ("  "*lvl, msg))
+
+
+def load_config(config_file):
+    """
+    Load configuration details from a YAML file.
+    """
+    # Open and read config file
+    with open(config_file, 'r') as cfile:
+        try:
+            cfg = yaml.load(cfile)
+        except yaml.YAMLError as exc:
+            raise(exc)
+    return cfg

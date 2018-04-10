@@ -695,7 +695,7 @@ class PSpecData(object):
             return delay * 1e9 # convert to ns
     
     
-    def scalar(self, stokes='I', taper='none', little_h=True, num_steps=2000):
+    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
