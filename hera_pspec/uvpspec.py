@@ -1,6 +1,6 @@
 import numpy as np
 from collections import OrderedDict as odict
-from hera_pspec import conversions
+from hera_pspec import conversions, noise
 from hera_pspec.parameter import PSpecParam
 import os
 from pyuvdata import uvutils as uvutils
@@ -9,6 +9,7 @@ import shutil
 import copy
 import operator
 import ast
+import fnmatch
 
 
 class UVPSpec(object):
@@ -35,9 +36,11 @@ class UVPSpec(object):
         self._data_array = PSpecParam("data_array", description=desc, expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=dict, form="(Nblpairts, Nfreqs, 2, Npols)")
-        desc = "Integration dictionary containing total amount of integration time (seconds) in each power spectrum " \
-                "with same form as data_array except without the dlys axis."
+        self._flag_array = PSpecParam("flag_array", description=desc, expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
         self._integration_array = PSpecParam("integration_array", description=desc, expected_type=dict, form="(Nblpairts, Npols)")
+        desc = "Nsample dictionary, if the pspectra have been incoherently averaged, this is the number of samples in that average. "\
+               "This has the same shape as data_array except without the dlys axis."
+        self._nsample_array = PSpecParam("nsample_array", description=desc, expected_type=dict, form="(Nblpairts, Npols)")
         self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)")
         self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nspwdlys,)")
         self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)")
@@ -67,26 +70,32 @@ class UVPSpec(object):
         self._tag2 = PSpecParam("tag2", description="tag of data from second dataset", expected_type=str)
         self._git_hash = PSpecParam("git_hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
         self._cosmo_params = PSpecParam("cosmo_params", description="LCDM cosmological parameter string, used to instantiate a conversions.Cosmo_Conversions object.", expected_type=str)
+        self._beamfile = PSpecParam("beamfile", description-"filename of beam-model used to normalized pspectra.", expected_type=str)
 
-        # collect required parameters
+        # collect parameters
+        self._all_params = sorted(fnmatch.filter(self.__dict__.keys(), '_*'))
+
         self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                             "data_array", "wgt_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units",
-                            "taper", "norm", "git_hash"]
-        self._all_params = copy.copy(self._req_params) + \
-                            ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
-        self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
-                                 "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
-                                 "norm", "taper", "git_hash", "cosmo_params"]
+                            "taper", "norm", "git_hash", "nsample_array"]
+
+        self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
+                            "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
+                            "norm", "taper", "git_hash", "cosmo_params", "beamfile"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
-        self._dicts = ["data_array", "wgt_array", "integration_array"]
+        self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array"]
+
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array", 
                             "bl_vecs", "bl_array"]
         self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets))
         self._meta = sorted(set(self._meta_dsets).union(set(self._meta_attrs)))
+
+        # check all params are covered
+        assert len(set(self._all_params) - set(self._dicts) - set(self._immutables) - set(self._ndarrays) == 0)
 
     def get_data(self, key, *args):
         """
@@ -626,7 +635,7 @@ class UVPSpec(object):
             for p in self._all_params:
                 if p not in self._req_params and (not hasattr(self, p) and not hasattr(other, p)):
                     continue
-                if p in self._immutable_params:
+                if p in self._immutables:
                     assert getattr(self, p) == getattr(other, p)
                 elif p in self._ndarrays:
                     assert np.isclose(getattr(self, p), getattr(other, p)).all()
@@ -638,7 +647,31 @@ class UVPSpec(object):
 
         return True
 
-    def generate_noise_spectra(self, spw, Tsys, beam, little_h=True, form='Pk', num_steps=5000):
+    def generate_sense(self, cosmo=None, beam=None):
+        """
+        Generate a hera_pspec.noise.Sense instance and attach to self as self.sense
+
+        Parameters
+        ----------
+        cosmo : conversions.Cosmo_Conversions instance, or a UVPSpec.cosmo_params string or dictionary
+
+        beam : pspecbeam.PSpecBeamUV instance
+        """
+        # add cosmology and/or beam
+        if cosmo is not None:
+            self.add_cosmology(cosmo)
+            
+        # add a beam
+        if beam is not None:
+            self.add_beam(beam)
+
+        assert hasattr(self, 'cosmo'), "cosmo must be fed or self.cosmo must exist in order to instantiate a Sense object, see self.add_cosmology()"
+        assert hasattr(self, 'beam'), "beam must be fed or self.beam must exist in order to instantiate a Sense object, see self.add_beam()"
+
+        # instantiate a noise.Sense object
+        self.sense = noise.Sense(cosmo=self.cosmo, beam=self.beam)
+
+    def generate_noise_spectra(self, spw, pol, Tsys, beam, little_h=True, form='Pk', num_steps=5000, verbose=True):
         """
         Generate the expected 1-sigma noise-floor power spectrum given the spectral window, system temp., 
         a beam model, a cosmological model, and the integration time of data_array.
@@ -646,6 +679,8 @@ class UVPSpec(object):
         Parameters
         ----------
         spw : int, spectral window index to generate noise curve for
+
+        pol : str or int, polarization selection in form of str (e.g. 'I' or 'Q' or 'xx') or int (e.g. -5 or -6)
 
         Tsys : float, system temperature in Kelvin
 
@@ -658,46 +693,35 @@ class UVPSpec(object):
         noise_spectra : complex ndarray containing power spectrum noise estimate, shape=(Nblpairts, Ndlys, Npols)
         """
         # assert cosmology exists
-        assert hasattr(self, 'cosmo'), "self.cosmo required to generate noise spectra. See self.add_cosmology()"
+        assert hasattr(self, 'sense'), "self.sense required to generate noise spectra. See self.generate_sense()"
+
+        # get polarization index
+        pol_ind = self.pol_to_indices(pol)
 
         # get frequency band
         freqs = self.freq_array[self.spw_to_indices(spw)]
 
-        # Get mean redshift
-        avg_z = self.cosmo.f2z(np.mean(freqs))
+        # calculate scalar
+        self.sense.calc_scalar(freqs, pol, num_steps=num_steps, little_h=little_h)
 
-        # loop over polarization
-        noise_spectra = []
+        # Get k vectors
+        k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
+        k_mag = np.sqrt(k_perp[:, None]**2 + k_para[None, :]**2)
 
-        for i, p in enumerate(self.pol_array):
+        # Iterate over blpairs to get P_N
+        P_N = []
+        for i, blp in enumerate(self.blpair_array):
+            # get integration time
+            t_int = self.integration_array[spw][i, pol_ind]
+            n_samp = self.nsample_array[spw][i, pol_ind]
+            pn = self.sense.calc_P_N(k_mag[i], Tsys, t_int, Nincoherent=n_samp, form=form, little_h=little_h, verbose=verbose)
+            P_N.append(pn)
 
-            # Generate noise prefactor
-            P_N = np.ones((uvp.Nblpairts, len(freqs), uvp.Npols), np.complex)
+        return np.array(P_N)
 
-            # Multiply by scalar
-            P_N *= beam.compute_pspec_scalar(freqs.min(), freqs.max(), len(freqs), num_steps=num_steps,
-                                            stokes=p, no_Bpp_ov_BpSq=True, little_h=little_h)
-
-            # Multiply by Tsys
-            P_N *= Tsys**2
-
-            # Divide by integration time
-            P_N /= np.sqrt(self.integration_array[spw][:, None, i])
-
-            # convert to deltasq
-            if form == 'Dsq':
-                k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
-                k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
-                P_N *= k_mag**3 / (2*np.pi**2)
-
-
-            noise_spectra.append(P_N)
-
-        noise_spectra = np.moveaxis(noise_spectra, 0, -1)
-
-        return noise_spectra
 
 def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, h5file=None):
+
     """
     Select function for selecting out certain slices of the data.
 
