@@ -1,6 +1,6 @@
 import numpy as np
 from collections import OrderedDict as odict
-import os, copy, shutil, operator
+import os, copy, shutil, operator, ast
 from hera_pspec import conversions
 from hera_pspec.parameter import PSpecParam
 from pyuvdata import uvutils as uvutils
@@ -22,19 +22,20 @@ class UVPSpec(object):
         self._Nspwdlys = PSpecParam("Nspwdlys", description="Total number of delay bins across all sub-bands.", expected_type=int)
         self._Nspws = PSpecParam("Nspws", description="Number of spectral windows.", expected_type=int)
         self._Ndlys = PSpecParam("Ndlys", description="Total number of delay bins.", expected_type=int)
+        self._Nfreqs = PSpecParam("Nfreqs", description="Total number of frequency bins in the original data.", expected_type=int)
         self._Npols = PSpecParam("Npols", description="Number of polarizations in the data.", expected_type=int)
         self._history = PSpecParam("history", description='The file history.', expected_type=str)
 
         # Data attributes
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
         self._data_array = PSpecParam("data_array", description=desc, expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
-        desc = "Data flag dictionary, with same shape as data_array but ndarrays are boolean. True if flagged."
-        self._flag_array = PSpecParam("flag_array", description=desc, expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
+        desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
+        self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=dict, form="(Nblpairts, Nfreqs, 2, Npols)")
         desc = "Integration dictionary containing total amount of integration time (seconds) in each power spectrum " \
                 "with same form as data_array except without the dlys axis."
         self._integration_array = PSpecParam("integration_array", description=desc, expected_type=dict, form="(Nblpairts, Npols)")
         self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)")
-        self._freq_array = PSpecParam("freq_array", description="Frequency array in Hz.", form="(Nspwdlys,)")
+        self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nspwdlys,)")
         self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)")
         self._pol_array = PSpecParam("pol_array", description="Polarizations in data.", form="(Npols,)")
         self._lst_1_array = PSpecParam("lst_1_array", description="LST array of the first bl in the bl-pair [radians].", form="(Nblpairts,)")
@@ -61,22 +62,23 @@ class UVPSpec(object):
         self._tag1 = PSpecParam("tag1", description="tag of data from first dataset", expected_type=str)
         self._tag2 = PSpecParam("tag2", description="tag of data from second dataset", expected_type=str)
         self._git_hash = PSpecParam("git_hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
+        self._cosmo_params = PSpecParam("cosmo_params", description="LCDM cosmological parameter string, used to instantiate a conversions.Cosmo_Conversions object.", expected_type=str)
 
         # collect required parameters
-        self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
-                            "data_array", "flag_array", "integration_array", "spw_array", "freq_array", "dly_array",
+        self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
+                            "data_array", "wgt_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units",
                             "taper", "norm", "git_hash"]
         self._all_params = copy.copy(self._req_params) + \
                             ["filename1", "filename2", "tag1", "tag2", "scalar_array"]
-        self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "history",
+        self._immutable_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                                  "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
-                                 "norm", "taper", "git_hash"]
+                                 "norm", "taper", "git_hash", "cosmo_params"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
-        self._dicts = ["data_array", "flag_array", "integration_array"]
+        self._dicts = ["data_array", "wgt_array", "integration_array"]
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array", 
                             "bl_vecs", "bl_array"]
         self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets))
@@ -107,9 +109,9 @@ class UVPSpec(object):
 
         return self.data_array[spw][blpairts, :, pol]
 
-    def get_flags(self, key, *args):
+    def get_wgts(self, key, *args):
         """
-        Slice into flag_array with a specified data key in the format
+        Slice into wgt_array with a specified data key in the format
 
         (spw, ((ant1, ant2), (ant3, ant4)), pol)
 
@@ -126,11 +128,12 @@ class UVPSpec(object):
 
         Return
         ------
-        data : boolean ndarray with shape (Ntimes, Ndlys)
+        wgts : float ndarray with shape (2, Ntimes, Ndlys), where the zeroth axis holds
+            [wgt_1, wgt_2] in that order
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
 
-        return self.flag_array[spw][blpairts, :, pol]
+        return self.wgt_array[spw][blpairts, :, :, pol]
 
     def get_integrations(self, key, *args):
         """
@@ -156,6 +159,106 @@ class UVPSpec(object):
         spw, blpairts, pol = self.key_to_indices(key, *args)
 
         return self.integration_array[spw][blpairts, pol]
+
+    def get_dlys(self, key):
+        """
+        Get array of delays given a spectral window selection.
+
+        Parameters
+        ----------
+        key : int, or tuple with integer
+            Spectral window selection
+
+        Returns
+        -------
+        dlys : float ndarray, contains delays in nanosec of pspectra given spw
+        """
+        indices = self.spw_to_indices(key)
+        return self.dly_array[indices]
+
+    def get_blpair_seps(self):
+        """
+        For each baseline-pair, get the average baseline separation in ENU frame in meters.
+
+        Returns blp_avg_sep
+        -------
+        blp_avg_sep : float ndarray, shape=(Nblpairts,)
+        """
+        # get list of bl separations
+        bl_vecs = self.get_ENU_bl_vecs()
+        bls = self.bl_array.tolist()
+        blseps = np.array(map(lambda bl: np.linalg.norm(bl_vecs[bls.index(bl)]), self.bl_array))
+
+        # iterate over blpair_array
+        blp_avg_sep = []
+        for blp in self.blpair_array:
+            an = self.blpair_to_antnums(blp)
+            bl1 = self.antnums_to_bl(an[0])
+            bl2 = self.antnums_to_bl(an[1])
+            blp_avg_sep.append(np.mean([blseps[bls.index(bl1)], blseps[bls.index(bl2)]]))
+
+        return np.array(blp_avg_sep)
+
+    def get_kvecs(self, spw, little_h=True):
+        """
+        Get cosmological wavevectors for power spectra given an adopted cosmology.
+
+        Parameters
+        ----------
+        spw : int, choice of spectral window
+
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+
+        Returns (k_perp, k_para)
+        -------
+        k_perp : float ndarray, containing perpendicular cosmological wave-vectors, shape=(Nblpairs,)
+        k_para : float ndarray, containing parallel cosmological wave-vectors, shape=(Ndlys given spw)
+
+        """
+        # assert cosmo
+        assert hasattr(self, 'cosmo'), "self.cosmo must exist to form cosmological wave-vectors. See self.add_cosmology()"
+
+        # calculate mean redshift of band
+        avg_z = self.cosmo.f2z(np.mean(self.freq_array[self.spw_to_indices(spw)]))
+
+        # get kperps
+        blpair_seps = self.get_blpair_seps()
+        k_perp = blpair_seps * self.cosmo.bl_to_kperp(avg_z, little_h=little_h)
+
+        # get kparas
+        k_para = self.get_dlys(spw) * self.cosmo.tau_to_kpara(avg_z, little_h=little_h)
+
+        return k_perp, k_para
+
+    def convert_to_deltasq(self, little_h=True):
+        """
+        Convert from P(k) to Delta^2(k) by multiplying by k^3 / (2pi^2).
+
+        The units of the output is therefore the current units (self.units) times h^3 Mpc^-3,
+        where the h^3 is only included if little_h == True.
+
+        Parameters
+        ----------
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+        """
+        # loop over spectral windows
+        for spw in range(self.Nspws):
+            # get k vectors
+            k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
+            k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
+
+            # multiply into data
+            self.data_array[spw] *= k_mag**3 / (2*np.pi**2)
+
+        # edit units
+        if little_h:
+            self.units += " h^3 k^3 / (2pi^2)"
+        else:
+            self.units += " k^3 / (2pi^2)"
 
     def blpair_to_antnums(self, blpair):
         """
@@ -348,7 +451,7 @@ class UVPSpec(object):
 
         return spw, blpairts, pol
 
-    def select(self, spws=None, bls=None, and_bls=True, inplace=True):
+    def select(self, spws=None, bls=None, only_pairs_in_bls=True, inplace=True):
         """
         Select function for selecting out certain slices of the data.
 
@@ -358,9 +461,9 @@ class UVPSpec(object):
 
         bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
             Select all baseline-pairs whose first _or_ second baseline are in bls list.
-            This changes if and_bls == True.
+            This changes if only_pairs_in_bls == True.
 
-        and_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
+        only_pairs_in_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
             are found in bls list.
 
         inplace : boolean, if True edit and overwrite arrays in self, else make a copy of self and return
@@ -370,7 +473,7 @@ class UVPSpec(object):
         else:
             uvp = copy.deepcopy(self)
 
-        _select(uvp, spws=spws, bls=bls, and_bls=and_bls)
+        _select(uvp, spws=spws, bls=bls, only_pairs_in_bls=only_pairs_in_bls)
 
         if inplace == False:
             return uvp
@@ -381,7 +484,7 @@ class UVPSpec(object):
         """
         return uvutils.ENU_from_ECEF((self.bl_vecs + self.telescope_location).T, *uvutils.LatLonAlt_from_XYZ(self.telescope_location)).T
 
-    def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None, and_bls=True):
+    def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None, only_pairs_in_bls=False):
         """
         Clear current UVPSpec object and load in data from an HDF5 file.
 
@@ -389,15 +492,15 @@ class UVPSpec(object):
         ----------
         filepath : str, path to HDF5 file
 
-        just_meta : boolean, read-in only metadata and no data, flags or integration arrays
+        just_meta : boolean, read-in only metadata and no data, wgts or integration arrays
 
         spws : list of spectral window integers to select
 
         bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
             Select all baseline-pairs whose first _or_ second baseline are in bls list.
-            This changes if and_bls == True.
+            This changes if only_pairs_in_bls == True.
 
-        and_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
+        only_pairs_in_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
             are found in bls list.
         """
         # clear object
@@ -415,21 +518,22 @@ class UVPSpec(object):
 
             if spws is not None or bls is not None:
                 if just_meta:
-                    _select(self, spws=spws, bls=bls, and_bls=and_bls)
+                    _select(self, spws=spws, bls=bls, only_pairs_in_bls=only_pairs_in_bls)
                 else:
-                    _select(self, spws=spws, bls=bls, and_bls=and_bls, h5file=f)
-                return 
-            elif just_meta:
+                    _select(self, spws=spws, bls=bls, only_pairs_in_bls=only_pairs_in_bls, h5file=f)
+                return
+
+            if just_meta:
                 return
             else:
                 # load in all data if desired
                 self.data_array = odict()
-                self.flag_array = odict()
+                self.wgt_array = odict()
                 self.integration_array = odict()
                 # iterate over spectral windows
                 for i in np.arange(self.Nspws):
                     self.data_array[i] = f['data_spw{}'.format(i)][:]
-                    self.flag_array[i] = f['flag_spw{}'.format(i)][:]
+                    self.wgt_array[i] = f['wgt_spw{}'.format(i)][:]
                     self.integration_array[i] = f['integration_spw{}'.format(i)][:]
 
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
@@ -468,8 +572,24 @@ class UVPSpec(object):
             # iterate over spectral windows and create datasets
             for i in np.unique(self.spw_array):
                 f.create_dataset("data_spw{}".format(i), data=self.data_array[i], dtype=np.complex)
-                f.create_dataset("flag_spw{}".format(i), data=self.flag_array[i], dtype=np.bool)
+                f.create_dataset("wgt_spw{}".format(i), data=self.wgt_array[i], dtype=np.float)
                 f.create_dataset("integration_spw{}".format(i), data=self.integration_array[i], dtype=np.float)
+
+    def add_cosmology(self, cosmo):
+        """
+        Add a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
+
+        Parameters
+        ----------
+        cosmo : conversions.Cosmo_Conversions instance, or self.cosmo_params string, or dictionary
+        """
+        if isinstance(cosmo, (str, np.str)):
+            cosmo = ast.literal_eval(cosmo)
+        if isinstance(cosmo, (dict, odict)):
+            cosmo = conversions.Cosmo_Conversions(**cosmo)
+        print("attaching cosmology: \n{}".format(cosmo))
+        self.cosmo = cosmo
+        self.cosmo_params = str(self.cosmo.get_params())
 
     def check(self):
         """
@@ -481,9 +601,9 @@ class UVPSpec(object):
         # check data
         assert type(self.data_array) in (dict, odict), "self.data_array must be a dictionary type"
         assert np.min(map(lambda k: self.data_array[k].dtype in (np.complex, complex, np.complex128), self.data_array.keys())), "self.data_array values must be complex type"
-        # check flags
-        assert type(self.flag_array) in (dict, odict), "self.flag_array must be a dictionary type"
-        assert np.min(map(lambda k: self.flag_array[k].dtype in (np.bool, bool), self.flag_array.keys())), "self.flag_array values must be boolean type"
+        # check wgts
+        assert type(self.wgt_array) in (dict, odict), "self.wgt_array must be a dictionary type"
+        assert np.min(map(lambda k: self.wgt_array[k].dtype in (np.float, float), self.wgt_array.keys())), "self.wgt_array values must be float type"
         # check integration
         assert type(self.integration_array) in (dict, odict), "self.integration_array must be a dictionary type"
         assert np.min(map(lambda k: self.integration_array[k].dtype in (np.float, float, np.float64), self.integration_array.keys())), "self.integration_array values must be float type"
@@ -496,24 +616,25 @@ class UVPSpec(object):
             if hasattr(self, p):
                 delattr(self, p)
 
-
     def __eq__(self, other):
         """ Check equivalence between attributes of two UVPSpec objects """
         try:
             for p in self._all_params:
+                if p not in self._req_params and (not hasattr(self, p) and not hasattr(other, p)):
+                    continue
                 if p in self._immutable_params:
                     assert getattr(self, p) == getattr(other, p)
                 elif p in self._ndarrays:
-                    assert np.isclose(getattr(self, p), getattr(other, p)).min()
+                    assert np.isclose(getattr(self, p), getattr(other, p)).all()
                 elif p in self._dicts:
                     for i in getattr(self, p):
-                        assert np.isclose(getattr(self, p)[i], getattr(other, p)[i]).min()
+                        assert np.isclose(getattr(self, p)[i], getattr(other, p)[i]).all()
         except AssertionError:
             return False
 
         return True
 
-def _select(uvp, spws=None, bls=None, and_bls=True, h5file=None):
+def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, h5file=None):
     """
     Select function for selecting out certain slices of the data.
 
@@ -526,10 +647,10 @@ def _select(uvp, spws=None, bls=None, and_bls=True, h5file=None):
 
     bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
         Select all baseline-pairs whose first _or_ second baseline are in bls list.
-        This changes if and_bls == True.
+        This changes if only_pairs_in_bls == True.
 
-    and_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
-        are found in bls list.
+    only_pairs_in_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
+        are both found in bls list.
 
     h5file : h5py file descriptor, used for loading in selection of data from h5py file
     """
@@ -559,10 +680,10 @@ def _select(uvp, spws=None, bls=None, and_bls=True, h5file=None):
         elif isinstance(bls, (int, np.int)):
             bls = [bls]
         # get indices
-        if and_bls:
-            blp_select = np.array(reduce(operator.add, map(lambda b: (blpair_bls[:,0]==b) + (blpair_bls[:,1]==b), bls)))
-        else:
+        if only_pairs_in_bls:
             blp_select = np.array(reduce(operator.add, map(lambda b: (blpair_bls[:,0]==b) * (blpair_bls[:,1]==b), bls)))
+        else:
+            blp_select = np.array(reduce(operator.add, map(lambda b: (blpair_bls[:,0]==b) + (blpair_bls[:,1]==b), bls)))
         # index arrays
         uvp.blpair_array = uvp.blpair_array[blp_select]
         uvp.time_1_array = uvp.time_1_array[blp_select]
@@ -582,32 +703,32 @@ def _select(uvp, spws=None, bls=None, and_bls=True, h5file=None):
     try:
         # select data arrays
         data = odict()
-        flags = odict()
+        wgts = odict()
         ints = odict()
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 if bls is not None:
                     # fancy index
                     data[s] = h5file['data_spw{}'.format(s)][blp_select, :, :]
-                    flags[s] = h5file['flag_spw{}'.format(s)][blp_select, :, :]
+                    wgts[s] = h5file['wgt_spw{}'.format(s)][blp_select, :, :]
                     ints[s] = h5file['integration_spw{}'.format(s)][blp_select, :]
                 else:
                     # slice
                     data[s] = h5file['data_spw{}'.format(s)][:]
-                    flags[s] = h5file['flag_spw{}'.format(s)][:]
+                    wgts[s] = h5file['wgt_spw{}'.format(s)][:]
                     ints[s] = h5file['integration_spw{}'.format(s)][:]
             else:
                 if bls is not None:
                     data[s] = uvp.data_array[s][blp_select]
-                    flags[s] = uvp.flag_array[s][blp_select]
+                    wgts[s] = uvp.wgt_array[s][blp_select]
                     ints[s] = uvp.integration_array[s][blp_select]
                 else:
                     data[s] = uvp.data_array[s]
-                    flags[s] = uvp.flag_array[s]
+                    wgts[s] = uvp.wgt_array[s]
                     ints[s] = uvp.integration_array[s]
  
         uvp.data_array = data
-        uvp.flag_array = flags
+        uvp.wgt_array = wgts
         uvp.integration_array = ints
     except AttributeError:
         # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data

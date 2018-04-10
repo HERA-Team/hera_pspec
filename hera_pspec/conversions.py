@@ -67,10 +67,8 @@ class Cosmo_Conversions(object):
     _astropy = _astropy
 
     def __init__(self, Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=67.27,
-                 Om_M=None, Om_k=None):
+                 Om_M=None, Om_k=None, **kwargs):
         """
-
-
         Default parameter values are Planck 2015 TT,TE,EE+lowP.
         (Table 4 of https://doi.org/10.1051/0004-6361/201525830)
 
@@ -114,8 +112,16 @@ class Cosmo_Conversions(object):
         self.H0 = H0
         self.h = self.H0 / 100.0
 
+        self.params = ["Om_L", "Om_b", "Om_c", "Om_M", "Om_k", "H0"]
+
         if _astropy:
             self.lcdm = LambdaCDM(H0=self.H0, Om0=self.Om_M, Ode0=self.Om_L)
+
+    def get_params(self):
+        """
+        Return a dictionary with cosmological parameters
+        """
+        return dict(map(lambda p: (p, getattr(self, p)), self.params))
 
     def f2z(self, freq, ghz=False):
         """
@@ -286,6 +292,58 @@ class Cosmo_Conversions(object):
         """
         return self.dRperp_dtheta(z, little_h=little_h)**2 * self.dRpara_df(z, little_h=little_h)
 
+    def bl_to_kperp(self, z, little_h=True):
+        """
+        Produce the conversion factor from baseline length [meters] to k_perpendicular mode [h Mpc-1] at a 
+        specified redshift. 
 
+        Multiply this conversion factor by a baseline-separation length in [meters]
+        to get its corresponding k_perp mode in [h Mpc-1].
+
+        Parameters
+        ----------
+        z : float, redshift at which to perform calculation
+
+        little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
+
+        Return
+        ------
+        bl2kperp : float, conversion factor in units [h Mpc-1 / meters]
+        """
+        # Parsons 2012, Pober 2014, Kohn 2018
+        bl2kpara = 2*np.pi / (self.dRperp_dtheta(z, little_h=little_h) * (units.c / self.z2f(z)))
+
+        return bl2kpara
+
+    def tau_to_kpara(self, z, little_h=True):
+        """
+        Produce the conversion factor from delay [seconds] to k_parallel mode [h Mpc-1] at a specified redshift.
+
+        Multiply this conversion factor by a delay mode in [seconds]
+        to get its corresponding k_para mode in [h Mpc-1].
+
+        Parameters
+        ----------
+        z : float, redshift at which to perform calculation
+
+        little_h : boolean, optional
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
+
+        Return
+        ------
+        tau2kpara : float, conversion factor in units [h Mpc-1 / seconds]
+        """
+        # Parsons 2012, Pober 2014, Kohn 2018
+        tau2kpara = 2*np.pi / self.dRpara_df(z, little_h=little_h, ghz=False)
+
+        return tau2kpara
+
+    def __str__(self):
+        message = "Cosmo_Conversions object at <{}>\n".format(hex(id(self)))
+        message += "; ".join(map(lambda p: "{:s} : {:0.4f}".format(p, getattr(self, p)), self.params))
+        return message
 
 
