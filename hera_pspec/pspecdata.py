@@ -1012,6 +1012,7 @@ class PSpecData(object):
 
             # clear covariance cache
             self.clear_cov_cache()
+            built_G = False  # haven't built Gv matrix in this spw loop yet
 
             # setup emtpy data arrays
             spw_data = []
@@ -1036,7 +1037,7 @@ class PSpecData(object):
                 sclr_arr[i, j] = scalar
 
                 # Loop over baseline pairs
-                for blp in bl_pairs:
+                for k, blp in enumerate(bl_pairs):
 
                     # assign keys
                     if avg_group and fed_bl_group:
@@ -1053,8 +1054,13 @@ class PSpecData(object):
                     self.set_R(input_data_weight)
 
                     # Build Fisher matrix
-                    if verbose: print("  Building G...")
-                    Gv = self.get_G(key1, key2, taper=taper)
+                    if input_data_weight == 'identity' and built_G:
+                        # in this case, all Gv are the same, so skip if already built for this spw!
+                        pass
+                    else:
+                        if verbose: print("  Building G...")
+                        Gv = self.get_G(key1, key2, taper=taper)
+                        built_G = True
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
