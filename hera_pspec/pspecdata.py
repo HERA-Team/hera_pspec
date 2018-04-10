@@ -557,7 +557,7 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         raise NotImplementedError()
-    
+
     def get_MW(self, G, mode='I'):
         """
         Construct the normalization matrix M and window function matrix W for
@@ -708,7 +708,7 @@ class PSpecData(object):
             Optimal estimate of bandpower, \hat{p}.
         """
         return np.dot(M, q)
-    
+
     def units(self):
         """
         Return the units of the power spectrum. These are inferred from the 
@@ -718,21 +718,17 @@ class PSpecData(object):
         -------
         pspec_units : str
             Units of the power spectrum that is returned by pspec().
-        
-        delay_units : str
-            Units of the delays (wavenumbers) returned by pspec().
         """
-        # Frequency units of UVData are always Hz => always convert to ns
-        delay_units = 'ns'
-        
         # Work out the power spectrum units
         if len(self.dsets) == 0:
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate power spectrum units.")
+        if self.primary_beam is None:
+            pspec_units = "not properly normalized..."
         else:
-            pspec_units = "(%s)^2 (ns)^-1" % self.dsets[0].vis_units
+            pspec_units = "(%s)^2 h^-3 Mpc^3" % self.dsets[0].vis_units
         
-        return pspec_units, delay_units
+        return pspec_units
     
     def delays(self):
         """
@@ -992,6 +988,7 @@ class PSpecData(object):
 
         # initialize empty lists
         data_array = odict()
+        wgt_array = odict()
         integration_array = odict()
         time1 = []
         time2 = []
@@ -1015,6 +1012,7 @@ class PSpecData(object):
 
             # setup emtpy data arrays
             spw_data = []
+            spw_wgts = []
             spw_ints = []
             
             d = self.delays() * 1e-9
@@ -1025,6 +1023,7 @@ class PSpecData(object):
             # Loop over polarizations
             for j, p in enumerate(pol_arr):
                 pol_data = []
+                pol_wgts = []
                 pol_ints = []
 
                 # Compute the scalar to convert from "telescope units" to "cosmo units"
@@ -1085,11 +1084,14 @@ class PSpecData(object):
                     pol_data.extend(pv.T)
 
                     # insert integration info
-                    wgts1 = (~dset1.get_flags(bl1)).astype(np.float)
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1) * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    wgts2 = (~dset2.get_flags(bl2)).astype(np.float)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2) * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
-                    pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0))
+                    wgts1 = self.w(key1).T
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1)[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
+                    wgts2 = self.w(key2).T
+                    nsamp2 = np.sum(dset2.get_nsamples(bl2)[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+                    pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0) * dset1.integration_time)
+
+                    # combined weight is geometric mean
+                    pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
 
                     # insert time and blpair info only once
                     if i < 1 and j < 1:
@@ -1104,14 +1106,17 @@ class PSpecData(object):
                         # insert blpair info
                         blp_arr.extend(np.ones_like(inds1, np.int) * uvpspec._antnums_to_blpair(blp))
 
-                # insert into data and integrations dictionaries
+                # insert into data and wgts integrations dictionaries
                 spw_data.append(pol_data)
+                spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
+            spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
             data_array[i] = spw_data
+            wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
 
         # fill uvp object
@@ -1141,15 +1146,18 @@ class PSpecData(object):
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width
         uvp.weighting = input_data_weight
-        uvp.units = self.units()[0]
+        uvp.units = self.units()
         uvp.telescope_location = dset1.telescope_location
         uvp.data_array = data_array
         uvp.integration_array = integration_array
-        uvp.flag_array = odict(map(lambda s: (s, np.zeros_like(data_array[s], np.bool)), data_array.keys()))
+        uvp.wgt_array = wgt_array
         uvp.history = dset1.history + dset2.history + history
         uvp.taper = taper
         uvp.norm = norm
         uvp.git_hash = version.git_hash
+        uvp.form = 'Pk'
+        if self.primary_beam is not None:
+            uvp.cosmo_params = str(self.primary_beam.conversion.get_params())
         if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
         if hasattr(dset2.extra_keywords, 'filename'): uvp.filename2 = dset2.extra_keywords['filename']
         if hasattr(dset1.extra_keywords, 'tag'): uvp.tag1 = dset1.extra_keywords['tag']

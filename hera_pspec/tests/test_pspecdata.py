@@ -462,9 +462,8 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(IndexError, ds.units)
         ds.add(self.uvd, None)
         # test basic execution
-        psu, dlu = ds.units()
-        nt.assert_equal(dlu, 'ns')
-        nt.assert_equal(psu, "(%s)^2 (ns)^-1"%ds.dsets[0].vis_units)
+        psu = ds.units()
+        nt.assert_equal(psu, "(%s)^2"%ds.dsets[0].vis_units)
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
@@ -527,10 +526,10 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec(red_bls, red_bls, (0, 1), spw_ranges=[(20,30), (30,40)], exclude_conjugated_blpairs=False, exclude_auto_bls=False, verbose=False)
         nt.assert_equal(uvp.Nblpairs, 16)
         nt.assert_equal(uvp.Nspws, 2)
-        uvp2 = uvp.select(spws=[0], bls=[(24, 25)], and_bls=True, inplace=False)
+        uvp2 = uvp.select(spws=[0], bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
         nt.assert_equal(uvp2.Nspws, 1)
         nt.assert_equal(uvp2.Nblpairs, 7)
-        uvp.select(spws=0, bls=(24, 25), and_bls=False, inplace=True)
+        uvp.select(spws=0, bls=(24, 25), only_pairs_in_bls=True, inplace=True)
         nt.assert_equal(uvp.Nspws, 1)
         nt.assert_equal(uvp.Nblpairs, 1)
 
