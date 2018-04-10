@@ -638,6 +638,65 @@ class UVPSpec(object):
 
         return True
 
+    def generate_noise_spectra(self, spw, Tsys, beam, little_h=True, form='Pk', num_steps=5000):
+        """
+        Generate the expected 1-sigma noise-floor power spectrum given the spectral window, system temp., 
+        a beam model, a cosmological model, and the integration time of data_array.
+
+        Parameters
+        ----------
+        spw : int, spectral window index to generate noise curve for
+
+        Tsys : float, system temperature in Kelvin
+
+        beam : pspecbeam.UVBeam instance
+
+        form : str, form of pspectra, P(k) or Delta^2(k), options=['Pk', 'Dsq']
+
+        Returns noise_spectra
+        -------
+        noise_spectra : complex ndarray containing power spectrum noise estimate, shape=(Nblpairts, Ndlys, Npols)
+        """
+        # assert cosmology exists
+        assert hasattr(self, 'cosmo'), "self.cosmo required to generate noise spectra. See self.add_cosmology()"
+
+        # get frequency band
+        freqs = self.freq_array[self.spw_to_indices(spw)]
+
+        # Get mean redshift
+        avg_z = self.cosmo.f2z(np.mean(freqs))
+
+        # loop over polarization
+        noise_spectra = []
+
+        for i, p in enumerate(self.pol_array):
+
+            # Generate noise prefactor
+            P_N = np.ones((uvp.Nblpairts, len(freqs), uvp.Npols), np.complex)
+
+            # Multiply by scalar
+            P_N *= beam.compute_pspec_scalar(freqs.min(), freqs.max(), len(freqs), num_steps=num_steps,
+                                            stokes=p, no_Bpp_ov_BpSq=True, little_h=little_h)
+
+            # Multiply by Tsys
+            P_N *= Tsys**2
+
+            # Divide by integration time
+            P_N /= np.sqrt(self.integration_array[spw][:, None, i])
+
+            # convert to deltasq
+            if form == 'Dsq':
+                k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
+                k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
+                P_N *= k_mag**3 / (2*np.pi**2)
+
+
+            noise_spectra.append(P_N)
+
+        noise_spectra = np.moveaxis(noise_spectra, 0, -1)
+
+        return noise_spectra
+
 def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, h5file=None):
     """
     Select function for selecting out certain slices of the data.

@@ -8,7 +8,7 @@ import aipy
 
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps=5000,
-                          stokes='pseudo_I', taper='none', little_h=True):
+                          stokes='pseudo_I', taper='none', little_h=True, no_Bpp_ov_BpSq=False):
     """
     This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
@@ -57,6 +57,11 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
             Value of h is obtained from conversion object stored in pspecbeam
             Default: h^-1 Mpc
 
+    no_Bpp_ov_BpSq : boolean, optional
+            Whether to keep the Bpp_ov_BpSq term in the integral or not. By default
+            this is False, which means its in the integral, otherwise its not in the integral,
+            and the scalar is just X2Y * Omega_P**2 / Omega_PP.
+
     Returns
     -------
     scalar: float
@@ -85,6 +90,10 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
         dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest', fill_value='extrapolate')(integration_freqs)
     dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
 
+    # Keep dBpp_over_BpSq term or not
+    if no_Bpp_ov_BpSq:
+        dBpp_over_BpSq = 1.0
+
     # integrate to get scalar
     d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 / X2Y
     scalar = 1.0 / integrate.trapz(d_inv_scalar, x=integration_freqs)
@@ -101,7 +110,7 @@ class PSpecBeamBase(object):
             self.conversion = conversions.Cosmo_Conversions()
 
     def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, num_steps=5000, stokes='pseudo_I',
-                             taper='none', little_h=True):
+                             taper='none', little_h=True, no_Bpp_ov_BpSq=False):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -145,6 +154,11 @@ class PSpecBeamBase(object):
                 Value of h is obtained from conversion object stored in pspecbeam
                 Default: h^-1 Mpc
 
+        no_Bpp_ov_BpSq : boolean, optional
+                Whether to keep the Bpp_ov_BpSq term in the integral or not. By default
+                this is False, which means its in the integral, otherwise its not in the integral,
+                and the scalar is just X2Y * Omega_P**2 / Omega_PP.
+
         Returns
         -------
         scalar: float
@@ -159,7 +173,8 @@ class PSpecBeamBase(object):
 
         # Get scalar
         scalar = _compute_pspec_scalar(self.conversion, self.beam_freqs, omega_ratio, pspec_freqs,
-                                       num_steps=num_steps, stokes=stokes, taper=taper, little_h=little_h)
+                                       num_steps=num_steps, stokes=stokes, taper=taper, little_h=little_h,
+                                       no_Bpp_ov_BpSq=no_Bpp_ov_BpSq)
 
         return scalar
 
