@@ -54,7 +54,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
 
     little_h : boolean, optional
             Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Value of h is obtained from conversion object stored in pspecbeam
+            Value of h is obtained from cosmo object stored in pspecbeam
             Default: h^-1 Mpc
 
     no_Bpp_ov_BpSq : boolean, optional
@@ -105,9 +105,9 @@ class PSpecBeamBase(object):
 
     def __init__(self, cosmo=None):
         if cosmo is not None:
-            self.conversion = cosmo
+            self.cosmo = cosmo
         else:
-            self.conversion = conversions.Cosmo_Conversions()
+            self.cosmo = conversions.Cosmo_Conversions()
 
     def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, num_steps=5000, stokes='pseudo_I',
                              taper='none', little_h=True, no_Bpp_ov_BpSq=False):
@@ -151,7 +151,7 @@ class PSpecBeamBase(object):
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Value of h is obtained from conversion object stored in pspecbeam
+                Value of h is obtained from cosmo object stored in pspecbeam
                 Default: h^-1 Mpc
 
         no_Bpp_ov_BpSq : boolean, optional
@@ -172,7 +172,7 @@ class PSpecBeamBase(object):
         omega_ratio = self.power_beam_sq_int(stokes) / self.power_beam_int(stokes)**2
 
         # Get scalar
-        scalar = _compute_pspec_scalar(self.conversion, self.beam_freqs, omega_ratio, pspec_freqs,
+        scalar = _compute_pspec_scalar(self.cosmo, self.beam_freqs, omega_ratio, pspec_freqs,
                                        num_steps=num_steps, stokes=stokes, taper=taper, little_h=little_h,
                                        no_Bpp_ov_BpSq=no_Bpp_ov_BpSq)
 
@@ -233,9 +233,9 @@ class PSpecBeamGauss(PSpecBeamBase):
         self.fwhm = fwhm
         self.beam_freqs = beam_freqs
         if cosmo is not None:
-            self.conversion = cosmo
+            self.cosmo = cosmo
         else:
-            self.conversion = conversions.Cosmo_Conversions()
+            self.cosmo = conversions.Cosmo_Conversions()
 
     def power_beam_int(self, stokes='pseudo_I'):
         """
@@ -312,9 +312,9 @@ class PSpecBeamUV(PSpecBeamBase):
 
         self.beam_freqs = self.primary_beam.freq_array[0]
         if cosmo is not None:
-            self.conversion = cosmo
+            self.cosmo = cosmo
         else:
-            self.conversion = conversions.Cosmo_Conversions()
+            self.cosmo = conversions.Cosmo_Conversions()
 
     def power_beam_int(self, stokes='pseudo_I'):
         """
