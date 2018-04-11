@@ -1192,7 +1192,7 @@ class PSpecData(object):
         uvp.data_array = data_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
-        uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.int)), uvp.integration_array.keys()))
+        uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))
 
         # run check
         uvp.check()
