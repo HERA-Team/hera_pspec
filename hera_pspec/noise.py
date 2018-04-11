@@ -105,7 +105,14 @@ class Sense(object):
     def calc_P_N(self, k, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', little_h=True):
         """
         Calculate the noise power spectrum via Eqn. (1) of Pober et al. 2014, ApJ 782, 66
+    
+        The noise power spectrum is written as 
 
+        P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
+
+        where scalar is a nomalization given by the cosmological model and beam response, 
+        Tsys is the system temp in Kelvin, integration_time is the total integration time underlying
+        the power spectrum, and Nincoherent is the number of incoherent averages after squaring.
 
         Parameters
         ----------
@@ -116,8 +123,9 @@ class Sense(object):
         t_int : float, integration time of power spectra in seconds
 
         Ncoherent : int, number of coherent averages of visibility data with integration time t_int
+            Total integration time is t_int * Ncoherent
 
-        Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring)
+        Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
 
         form : str, power spectra form 'Pk' for P(k) and 'Dsq' for Delta^2(k)
 
@@ -151,7 +159,7 @@ class Sense(object):
 
         # Convert to Delta Sq
         if form == 'Dsq':
-            P_N *= k**3 / (2*np.pi**2)
+            P_N = P_N * k**3 / (2*np.pi**2)
 
         return np.ones_like(k, np.float) * P_N
 
