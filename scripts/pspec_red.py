@@ -8,6 +8,16 @@ from hera_pspec.utils import log, load_config
 from hera_cal import redcal
 import pyuvdata as uv
 import os, sys, glob, time
+
+# Default settings for pspec calculation
+pspec_defaults = {
+    'overwrite':                    False,
+    'little_h':                     True,
+    'avg_group':                    False,
+    'exclude_auto_bls':             False,
+    'exclude_conjugated_blpairs':   False,
+}
+
     
 #-------------------------------------------------------------------------------
 # Settings
@@ -75,43 +85,52 @@ wgts = [None for f in files]
 ds = hp.PSpecData(dsets=dsets, wgts=wgts, beam=beam)
 
 # Set-up which baselines to cross-correlate
-# TODO: Need to find available redundant baseline sets
-#bls = [(37, 39),]
-
 antpos, ants = dsets[0].get_ENU_antpos(pick_data_ants=True)
 antpos = dict(zip(ants, antpos))
 red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0, low_hi=True)
 
-# FIXME
-bls = red_bls[0]
-print("Baselines:", bls)
+bls = red_bls[0] # FIXME
+print("Baselines: %s" % bls)
 
-# Calculate power spectra for all baseline pairs
-# pspecs: (N_bls, N_freq, N_LST)
-pspecs, blpairs = ds.pspec(bls, 
-                           input_data_weight=pspec_cfg['weight'], 
-                           norm=pspec_cfg['norm'], 
-                           taper=pspec_cfg['taper'], 
-                           little_h=True)
+# Replace default pspec settings if specified in config file
+for key in pspec_defaults.keys():
+    if key in pspec_cfg.keys(): pspec_defaults[key] = pspec_cfg[key]
 
-# Create new PSpecContainer to store output power spectra
+# Open or create PSpecContainer to store output power spectra
 ps_store = hp.PSpecContainer(pspec_cfg['output'], mode='rw')
 
-# FIXME: Placeholder for proper UVPSpec implementation
-for i in range(pspecs.shape[0]):
-    pair_name = "(%s).(%s)" % (",".join(str(n) for n in blpairs[i][0]), 
-                               ",".join(str(n) for n in blpairs[i][1]))
-    print pair_name
-    ps = hp.UVPSpec(data_dict={'pspec.%s' % pair_name : pspecs[i]}, 
-                    attr_dict={'bls.%s' % pair_name : blpairs[i]})
+# Loop over pairs of datasets
+dset_idxs = range(len(ds.dsets))
+for i in dset_idxs:
+    for j in dset_idxs:
+        if i == j: continue
+        
+        # Name for this set of power spectra
+        pspec_name = "pspec_dset(%d,%d)" % (i,j)
+        
+        # Calculate power spectra for all baseline pairs (returns UVPSpec)
+        pspecs = ds.pspec([bls,], [bls,], dsets=(i,j), 
+                          input_data_weight=pspec_cfg['weight'], 
+                          norm=pspec_cfg['norm'], 
+                          taper=pspec_cfg['taper'], 
+                          avg_group=pspec_defaults['avg_group'], 
+                          exclude_auto_bls=pspec_defaults['exclude_auto_bls'], 
+                          exclude_conjugated_blpairs=\
+                              pspec_defaults['exclude_conjugated_blpairs'],
+                          spw_ranges=None,
+                          little_h=pspec_defaults['little_h'])
+        
+        # Store power spectra in container
+        ps_store.set_pspec(group=pspec_cfg['groupname'], pspec=pspec_name, 
+                           ps=pspecs, overwrite=pspec_defaults['overwrite'])
 
-    # Add power spectrum to container
-    ps_store.set_pspec(group=pspec_cfg['groupname'], pspec="something", ps=ps)
-
+# Check that power spectra can be retrieved
+pspectra = ps_store.get_pspec(pspec_cfg['groupname'], pspec=None)
+print pspectra
 
 # Open file for reading
-px = hp.PSpecContainer(pspec_cfg['output'], mode='r')
-print(px.data[pspec_cfg['groupname']])
+#px = hp.PSpecContainer(pspec_cfg['output'], mode='r')
+#print(px.data[pspec_cfg['groupname']].keys())
 
 #-------------------------------------------------------------------------------
 # Output empirical covariance matrix diagnostics

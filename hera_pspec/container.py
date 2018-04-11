@@ -45,7 +45,7 @@ class PSpecContainer(object):
             self._update_header()
     
     
-    def _store_pspec(self, pspec, ps):
+    def _store_pspec(self, pspec_group, ps):
         """
         Store a UVPSpec object as group of datasets within the HDF5 file.
         
@@ -61,8 +61,13 @@ class PSpecContainer(object):
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
         
         # Get data and attributes from UVPSpec object (stored in dicts)
-        data, attrs = ps.serialize()
+        assert isinstance(ps, UVPSpec)
+        #data, attrs = ps.serialize()
         
+        # Write UVPSpec to group
+        ps.write_to_group(pspec_group, run_check=True)
+        
+        """
         # Store data into HDF5 file
         for key in data.keys():
             if not isinstance(data[key], np.ndarray):
@@ -89,7 +94,7 @@ class PSpecContainer(object):
         # Store attributes into HDF5 file
         for key in attrs.keys():
             pspec.attrs[key] = attrs[key]
-    
+        """
     
     def _load_pspec(self, grp):
         """
@@ -99,14 +104,10 @@ class PSpecContainer(object):
         ----------
         grp : HDF5 group
             Group containing datasets that contain power spectrum and 
-            supporting information in a standard format expected by UVPSpec.
+            supporting information, in a standard format expected by UVPSpec.
         """
-        # Load data and attributes from HDF5 group
-        data_dict = {key : grp[key] for key in grp.keys()}
-        attr_dict = {key : grp.attrs[key] for key in grp.attrs.keys()}
-        
-        # Package data into a new UVPspec object
-        pspec = UVPSpec(data_dict=data, attr_dict=attrs)
+        pspec = UVPSpec()
+        pspec.read_from_group(grp)
         return pspec
     
     
@@ -128,7 +129,7 @@ class PSpecContainer(object):
         hdr.attrs['hera_pspec.git_hash'] = version.git_hash
         
     
-    def set_pspec(self, group, pspec, ps):
+    def set_pspec(self, group, pspec, ps, overwrite=False):
         """
         Store a delay power spectrum in the container.
         
@@ -142,6 +143,10 @@ class PSpecContainer(object):
             
         ps : UVPSpec
             Power spectrum object to store in the container.
+        
+        overwrite : bool, optional
+            If the power spectrum already exists in the file, whether it should 
+            overwrite it or raise an error. Default: False (does not overwrite).
         """
         if self.mode == 'r':
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
@@ -157,8 +162,17 @@ class PSpecContainer(object):
         
         # Check that the pspec exists
         if key2 not in grp.keys():
+            # Create group if it doesn't exist
             pspec = grp.create_group(key2)
         else:
+            if overwrite:
+                # Delete group and recreate
+                del grp[key2]
+                pspec = grp.create_group(key2)
+            else:
+                raise AttributeError(
+                   "Power spectrum %s/%s already exists and overwrite=False." \
+                   % (key1, key2) )
             pspec = grp[key2]
         
         # Add power spectrum to this group
@@ -189,15 +203,21 @@ class PSpecContainer(object):
         else:
             raise KeyError("No group named '%s'" % key1)
         
-        # Return the whole group if pspec not specified
-        if pspec is None: return grp
+        # If pspec was specified, check that it exists and extract
+        if pspec is not None:
+            key2 = "%s" % pspec
+            if key2 in grp.keys():
+                return self._load_pspec(grp[key2])
+            else:
+                raise KeyError("No pspec named '%s' in group '%s'" % (key2, key1))
         
-        # Check that pspec is in keys and extract it if so
-        key2 = "%s" % pspec
-        if key2 in grp.keys():
-            return self._load_pspec(grp[key2])
-        else:
-            raise KeyError("No pspec named '%s' in group '%s'" % (key2, key1))
+        # Otherwise, extract all available power spectra
+        spectra = []
+        for key in grp.keys():
+            if "pspec_" in key:
+                spectra.append( self._load_pspec(grp[key]) )
+        return spectra
+        
     
     def save(self):
         """

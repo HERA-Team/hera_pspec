@@ -483,8 +483,74 @@ class UVPSpec(object):
         return baseline vector array in TOPO (ENU) frame in meters, with matched ordering of self.bl_vecs.
         """
         return uvutils.ENU_from_ECEF((self.bl_vecs + self.telescope_location).T, *uvutils.LatLonAlt_from_XYZ(self.telescope_location)).T
+    
+    
+    
+    def read_from_group(self, grp, just_meta=False, spws=None, bls=None, 
+                        only_pairs_in_bls=False):
+        """
+        Clear current UVPSpec object and load in data from specified HDF5 group.
+        
+        Parameters
+        ----------
+        grp : HDF5 group
+            HDF5 group to load data from.
 
-    def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None, only_pairs_in_bls=False):
+        just_meta : bool, optional
+            If True, read-in metadata but ignore data, wgts and integration 
+            arrays. Default: False.
+
+        spws : list of tuple, optional
+            List of spectral window integers to select. Default: None (loads 
+            all channels).
+
+        bls : list of i6 baseline integers or baseline tuples
+            Select all baseline-pairs whose first _or_ second baseline are in 
+            the list. This changes if only_pairs_in_bls == True.
+            Example tuple: (2, 3). Default: None (loads all bl pairs).
+
+        only_pairs_in_bls : bool, optional
+            If True, keep only baseline-pairs whose first _and_ second baseline
+            are found in the 'bls' list. Default: False.
+        """
+        # Clear all data in the current object
+        self._clear()
+        
+        # Load-in meta data
+        for k in grp.attrs:
+            if k in self._meta_attrs:
+                setattr(self, k, grp.attrs[k])
+        for k in grp:
+            if k in self._meta_dsets:
+                setattr(self, k, grp[k][:])
+        
+        # Use _select() to pick out only the requested baselines/spws
+        if spws is not None or bls is not None:
+            if just_meta:
+                _select(self, spws=spws, bls=bls,
+                        only_pairs_in_bls=only_pairs_in_bls)
+            else:
+                _select(self, spws=spws, bls=bls, 
+                        only_pairs_in_bls=only_pairs_in_bls, h5file=grp)
+            return
+        
+        # Return at this point if only metadata was requested
+        if just_meta: return
+        
+        # Load in all data if requested
+        self.data_array = odict()
+        self.wgt_array = odict()
+        self.integration_array = odict()
+        
+        # Iterate over spectral windows
+        for i in np.arange(self.Nspws):
+            self.data_array[i] = grp['data_spw{}'.format(i)][:]
+            self.wgt_array[i] = grp['wgt_spw{}'.format(i)][:]
+            self.integration_array[i] = grp['integration_spw{}'.format(i)][:]
+    
+    
+    def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
+                  only_pairs_in_bls=False):
         """
         Clear current UVPSpec object and load in data from an HDF5 file.
 
@@ -492,22 +558,31 @@ class UVPSpec(object):
         ----------
         filepath : str, path to HDF5 file
 
-        just_meta : boolean, read-in only metadata and no data, wgts or integration arrays
+        just_meta : bool, optional
+            If True, read-in metadata but ignore data, wgts and integration 
+            arrays. Default: False.
 
-        spws : list of spectral window integers to select
+        spws : list of tuple, optional
+            List of spectral window integers to select. Default: None (loads 
+            all channels).
 
-        bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
-            Select all baseline-pairs whose first _or_ second baseline are in bls list.
-            This changes if only_pairs_in_bls == True.
+        bls : list of i6 baseline integers or baseline tuples
+            Select all baseline-pairs whose first _or_ second baseline are in 
+            the list. This changes if only_pairs_in_bls == True.
+            Example tuple: (2, 3). Default: None (loads all bl pairs).
 
-        only_pairs_in_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
-            are found in bls list.
+        only_pairs_in_bls : bool, optional
+            If True, keep only baseline-pairs whose first _and_ second baseline
+            are found in the 'bls' list. Default: False.
         """
         # clear object
-        self._clear()
+        #self._clear()
 
-        # open file descriptor
+        # Open file descriptor and read data
         with h5py.File(filepath, 'r') as f:
+            self.read_from_group(f, just_meta=just_meta, spws=spws, bls=bls, 
+                                 only_pairs_in_bls=only_pairs_in_bls)
+            """
             # load-in meta data
             for k in f.attrs:
                 if k in self._meta_attrs:
@@ -518,9 +593,11 @@ class UVPSpec(object):
 
             if spws is not None or bls is not None:
                 if just_meta:
-                    _select(self, spws=spws, bls=bls, only_pairs_in_bls=only_pairs_in_bls)
+                    _select(self, spws=spws, bls=bls,
+                            only_pairs_in_bls=only_pairs_in_bls)
                 else:
-                    _select(self, spws=spws, bls=bls, only_pairs_in_bls=only_pairs_in_bls, h5file=f)
+                    _select(self, spws=spws, bls=bls, 
+                            only_pairs_in_bls=only_pairs_in_bls, h5file=f)
                 return
 
             if just_meta:
@@ -535,7 +612,41 @@ class UVPSpec(object):
                     self.data_array[i] = f['data_spw{}'.format(i)][:]
                     self.wgt_array[i] = f['wgt_spw{}'.format(i)][:]
                     self.integration_array[i] = f['integration_spw{}'.format(i)][:]
+            """
 
+    
+    def write_to_group(self, group, run_check=True):
+        """
+        Write UVPSpec data into an HDF5 group.
+        """
+        # Run check
+        if run_check: self.check()
+        
+        # Check whether the group already contains info
+        # TODO
+        
+        # Write meta data
+        for k in self._meta_attrs:
+            if hasattr(self, k):
+                group.attrs[k] = getattr(self, k)
+        for k in self._meta_dsets:
+            if hasattr(self, k):
+                group.create_dataset(k, data=getattr(self, k))
+
+        # iterate over spectral windows and create datasets
+        for i in np.unique(self.spw_array):
+            group.create_dataset("data_spw{}".format(i), 
+                                 data=self.data_array[i], 
+                                 dtype=np.complex)
+            group.create_dataset("wgt_spw{}".format(i), 
+                                 data=self.wgt_array[i], 
+                                 dtype=np.float)
+            group.create_dataset("integration_spw{}".format(i), 
+                                 data=self.integration_array[i], 
+                                 dtype=np.float)
+
+    
+    
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
         Write a UVPSpec object to HDF5 file.
@@ -554,34 +665,21 @@ class UVPSpec(object):
         elif os.path.exists(filepath) and overwrite is True:
             print "{} exists, overwriting...".format(filepath)
             os.remove(filepath)
-
-        # run check
-        if run_check:
-            self.check()
-
+        
         # write file
         with h5py.File(filepath, 'w') as f:
-            # write meta data
-            for k in self._meta_attrs:
-                if hasattr(self, k):
-                    f.attrs[k] = getattr(self, k)
-            for k in self._meta_dsets:
-                if hasattr(self, k):
-                    f.create_dataset(k, data=getattr(self, k))
-
-            # iterate over spectral windows and create datasets
-            for i in np.unique(self.spw_array):
-                f.create_dataset("data_spw{}".format(i), data=self.data_array[i], dtype=np.complex)
-                f.create_dataset("wgt_spw{}".format(i), data=self.wgt_array[i], dtype=np.float)
-                f.create_dataset("integration_spw{}".format(i), data=self.integration_array[i], dtype=np.float)
+            self.write_to_group(f, run_check=run_check)
+    
 
     def add_cosmology(self, cosmo):
         """
-        Add a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
+        Add a cosmological model to self.cosmo via an instance of 
+        hera_pspec.conversions.Cosmo_Conversions
 
         Parameters
         ----------
-        cosmo : conversions.Cosmo_Conversions instance, or self.cosmo_params string, or dictionary
+        cosmo : conversions.Cosmo_Conversions instance, or self.cosmo_params 
+        string, or dictionary
         """
         if isinstance(cosmo, (str, np.str)):
             cosmo = ast.literal_eval(cosmo)
@@ -597,16 +695,26 @@ class UVPSpec(object):
         """
         # check required parameters exist
         for p in self._req_params:
-            assert hasattr(self, p), "required parameter {} hasn't been defined".format(p)
+            assert hasattr(self, p), \
+                   "required parameter {} hasn't been defined".format(p)
+        
         # check data
-        assert type(self.data_array) in (dict, odict), "self.data_array must be a dictionary type"
-        assert np.min(map(lambda k: self.data_array[k].dtype in (np.complex, complex, np.complex128), self.data_array.keys())), "self.data_array values must be complex type"
+        assert type(self.data_array) in (dict, odict), \
+               "self.data_array must be a dictionary type"
+        assert np.min(map(lambda k: self.data_array[k].dtype in (np.complex, complex, np.complex128), self.data_array.keys())), \
+               "self.data_array values must be complex type"
+        
         # check wgts
-        assert type(self.wgt_array) in (dict, odict), "self.wgt_array must be a dictionary type"
-        assert np.min(map(lambda k: self.wgt_array[k].dtype in (np.float, float), self.wgt_array.keys())), "self.wgt_array values must be float type"
+        assert type(self.wgt_array) in (dict, odict), \
+               "self.wgt_array must be a dictionary type"
+        assert np.min(map(lambda k: self.wgt_array[k].dtype in (np.float, float), self.wgt_array.keys())), \
+               "self.wgt_array values must be float type"
+        
         # check integration
-        assert type(self.integration_array) in (dict, odict), "self.integration_array must be a dictionary type"
-        assert np.min(map(lambda k: self.integration_array[k].dtype in (np.float, float, np.float64), self.integration_array.keys())), "self.integration_array values must be float type"
+        assert type(self.integration_array) in (dict, odict), \
+               "self.integration_array must be a dictionary type"
+        assert np.min(map(lambda k: self.integration_array[k].dtype in (np.float, float, np.float64), self.integration_array.keys())), \
+               "self.integration_array values must be float type"
 
     def _clear(self):
         """
@@ -615,12 +723,35 @@ class UVPSpec(object):
         for p in self._all_params:
             if hasattr(self, p):
                 delattr(self, p)
-
+    
+    def __str__(self):
+        """
+        Output useful info about UVPSpec object.
+        """
+        s = ""
+        s += " ATTRIBUTES\n"
+        s += "-"*12 + "\n"
+        for k in self._meta_attrs:
+            if hasattr(self, k) and 'history' not in k:
+                y = getattr(self, k)
+                if isinstance(y, np.ndarray):
+                    s += "%18s: shape %s\n" % (k, y.shape)
+                else:
+                    s += "%18s: %s\n" % (k, y)
+        
+        s += "\n DATASETS\n"
+        s += "-"*12 + "\n"
+        for k in self._meta_dsets:
+            if hasattr(self, k):
+                s += "%18s: shape %s\n" % (k, getattr(self, k).shape)
+        return s
+    
     def __eq__(self, other):
         """ Check equivalence between attributes of two UVPSpec objects """
         try:
             for p in self._all_params:
-                if p not in self._req_params and (not hasattr(self, p) and not hasattr(other, p)):
+                if p not in self._req_params \
+                  and (not hasattr(self, p) and not hasattr(other, p)):
                     continue
                 if p in self._immutable_params:
                     assert getattr(self, p) == getattr(other, p)
@@ -628,7 +759,8 @@ class UVPSpec(object):
                     assert np.isclose(getattr(self, p), getattr(other, p)).all()
                 elif p in self._dicts:
                     for i in getattr(self, p):
-                        assert np.isclose(getattr(self, p)[i], getattr(other, p)[i]).all()
+                        assert np.isclose(getattr(self, p)[i], \
+                               getattr(other, p)[i]).all()
         except AssertionError:
             return False
 
@@ -733,6 +865,9 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, h5file=None):
     except AttributeError:
         # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
         pass
+
+
+
 
 def _blpair_to_antnums(blpair):
     """
