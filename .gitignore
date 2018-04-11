@@ -10,4 +10,4 @@ eggs/
 *.eggs/
 *egg-info
 *GIT_INFO
-
+*ipynb_checkpoints
