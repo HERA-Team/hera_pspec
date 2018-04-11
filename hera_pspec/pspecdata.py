@@ -1144,10 +1144,14 @@ class PSpecData(object):
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
+
+        # fill meta-data
         uvp.time_1_array = np.array(time1)
         uvp.time_2_array = np.array(time2)
+        uvp.time_avg_array = np.mean([uvp.time_1_array, uvp.time_2_array], axis=0)
         uvp.lst_1_array = np.array(lst1)
         uvp.lst_2_array = np.array(lst2)
+        uvp.lst_avg_array = np.mean([np.unwrap(uvp.lst_1_array), np.unwrap(uvp.lst_2_array)], axis=0) % (2*np.pi)
         uvp.blpair_array = np.array(blp_arr)
         uvp.Nblpairs = len(np.unique(blp_arr))
         uvp.Ntimes = len(np.unique(time1))
@@ -1171,15 +1175,12 @@ class PSpecData(object):
         uvp.weighting = input_data_weight
         uvp.units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
-        uvp.data_array = data_array
-        uvp.integration_array = integration_array
-        uvp.wgt_array = wgt_array
         uvp.history = dset1.history + dset2.history + history
         uvp.taper = taper
         uvp.norm = norm
         uvp.git_hash = version.git_hash
         if self.primary_beam is not None:
-            uvp.cosmo_params = str(self.primary_beam.conversion.get_params())
+            uvp.cosmo_params = str(self.primary_beam.cosmo.get_params())
         if self.primary_beam is not None and hasattr(self.primary_beam, 'filename'): 
             uvp.beamfile = self.primary_beam.filename
         if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
@@ -1187,6 +1188,13 @@ class PSpecData(object):
         if hasattr(dset1.extra_keywords, 'tag'): uvp.tag1 = dset1.extra_keywords['tag']
         if hasattr(dset2.extra_keywords, 'tag'): uvp.tag2 = dset2.extra_keywords['tag']
 
+        # fill data arrays
+        uvp.data_array = data_array
+        uvp.integration_array = integration_array
+        uvp.wgt_array = wgt_array
+        uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.int)), uvp.integration_array.keys()))
+
+        # run check
         uvp.check()
 
         return uvp
