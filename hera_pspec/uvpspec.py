@@ -871,35 +871,38 @@ class UVPSpec(object):
                     bpg_wgts = []
                     bpg_ints = []
                     bpg_nsmp = []
-                    int_list = []
+                    w_list = []
 
                     # iterate within a baseline-pair group and get integration-weighted data
                     for k, blp in enumerate(blpg):
+                        nsmp = uvp.get_nsamples(spw, blp, p)[:, None]
                         ints = uvp.get_integrations(spw, blp, p)[:, None]
-                        bpg_data.append(uvp.get_data(spw, blp, p) * ints)
-                        bpg_wgts.append(uvp.get_wgts(spw, blp, p) * ints[:, None])
-                        bpg_ints.append(ints * ints)
-                        bpg_nsmp.append(uvp.get_nsamples(spw, blp, p) * ints)
-                        int_list.append(ints)
+                        w = (ints * np.sqrt(nsmp))
+                        bpg_data.append(uvp.get_data(spw, blp, p) * w)
+                        bpg_wgts.append(uvp.get_wgts(spw, blp, p) * w[:, None])
+                        bpg_ints.append(ints * w)
+                        bpg_nsmp.append(nsmp)
+                        w_list.append(w)
 
                     # take integration-weighted averages
-                    bpg_data = np.sum(bpg_data, axis=0) / np.sum(int_list, axis=0).clip(1e-10, np.inf)
-                    bpg_wgts = np.sum(bpg_wgts, axis=0) / np.sum(int_list, axis=0).clip(1e-10, np.inf)[:, None]
-                    bpg_ints = np.sum(bpg_ints, axis=0) / np.sum(int_list, axis=0).clip(1e-10, np.inf)
-                    bpg_nsmp = np.sum(bpg_nsmp, axis=0) / np.sum(int_list, axis=0).clip(1e-10, np.inf)
+                    bpg_data = np.sum(bpg_data, axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)
+                    bpg_wgts = np.sum(bpg_wgts, axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)[:, None]
+                    bpg_nsmp = np.sum(bpg_nsmp, axis=0)
+                    bpg_ints = np.sum(bpg_ints, axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)
+                    w_list = np.sum(w_list, axis=0)
 
                     # take time average if desired
                     if time_avg:
-                        bpg_data = [np.sum(bpg_data * bpg_ints, axis=0) / np.sum(bpg_ints, axis=0).clip(1e-10, np.inf)]
-                        bpg_wgts = [np.sum(bpg_wgts * bpg_ints[:, None], axis=0) / np.sum(bpg_ints, axis=0).clip(1e-10, np.inf)[:, None]]
-                        bpg_nsmp = [np.sum(bpg_nsmp * bpg_ints, axis=0) / np.sum(bpg_ints, axis=0).clip(1e-10, np.inf)]
-                        bpg_ints = [np.sum(bpg_ints * bpg_ints, axis=0) / np.sum(bpg_ints, axis=0).clip(1e-10, np.inf)]
+                        bpg_data = [np.sum(bpg_data * w_list, axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)]
+                        bpg_wgts = [np.sum(bpg_wgts * w_list[:, None], axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)[:, None]]
+                        bpg_nsmp = [np.sum(bpg_nsmp, axis=0)]
+                        bpg_ints = [np.sum(bpg_ints * w_list, axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)]
 
                     # append to lists
-                    pol_data.append(bpg_data)
-                    pol_wgts.append(bpg_wgts)
-                    pol_ints.append(bpg_ints)
-                    pol_nsmp.append(bpg_nsmp)
+                    pol_data.extend(bpg_data)
+                    pol_wgts.extend(bpg_wgts)
+                    pol_ints.extend(bpg_ints)
+                    pol_nsmp.extend(bpg_nsmp)
 
                 # append to lists
                 spw_data.append(pol_data)
@@ -910,16 +913,16 @@ class UVPSpec(object):
             # append to dictionaries
             data_array[spw] = np.moveaxis(spw_data, 0, -1)
             wgts_array[spw] = np.moveaxis(spw_wgts, 0, -1)
-            ints_array[spw] = np.moveaxis(spw_ints, 0, -1)
-            nsmp_array[spw] = np.moveaxis(spw_nsmp, 0, -1)
+            ints_array[spw] = np.moveaxis(spw_ints, 0, -1)[:, 0, :]
+            nsmp_array[spw] = np.moveaxis(spw_nsmp, 0, -1)[:, 0, :]
 
         # iterate over blpair groups one more time to assign metadata
         time_1 = []
         time_2 = []
-        time_avg = []
+        time_avg_arr = []
         lst_1 = []
         lst_2 = []
-        lst_avg = []
+        lst_avg_arr = []
         blpair_arr = []
         bl_arr = []
         for i, blpg in enumerate(blpair_groups):
@@ -931,26 +934,26 @@ class UVPSpec(object):
                 blpair_arr.append(blpg[0])
                 time_1.extend([np.mean(uvp.time_1_array[blpairts])])
                 time_2.extend([np.mean(uvp.time_2_array[blpairts])])
-                time_avg.extend([np.mean(uvp.time_avg_array[blpairts])])
+                time_avg_arr.extend([np.mean(uvp.time_avg_array[blpairts])])
                 lst_1.extend([np.mean(np.unwrap(uvp.lst_1_array[blpairts]))%(2*np.pi)])
                 lst_2.extend([np.mean(np.unwrap(uvp.lst_2_array[blpairts]))%(2*np.pi)])
-                lst_avg.extend([np.mean(np.unwrap(uvp.lst_avg_array[blpairts]))%(2*np.pi)])
+                lst_avg_arr.extend([np.mean(np.unwrap(uvp.lst_avg_array[blpairts]))%(2*np.pi)])
             else:
                 blpair_arr.extend(np.ones_like(blpairts, np.int) * blpg[0])
                 time_1.extend(uvp.time_1_array[blpairts])
                 time_2.extend(uvp.time_2_array[blpairts])
-                time_avg.extend(uvp.time_avg_array[blpairts])
+                time_avg_arr.extend(uvp.time_avg_array[blpairts])
                 lst_1.extend(uvp.lst_1_array[blpairts])
                 lst_2.extend(uvp.lst_2_array[blpairts])
-                lst_avg.extend(uvp.lst_avg_array[blpairts])
+                lst_avg_arr.extend(uvp.lst_avg_array[blpairts])
 
         # update arrays
         bl_arr = np.array(sorted(set(bl_arr)))
         bl_vecs = np.array(map(lambda bl: uvp.bl_vecs[uvp.bl_array.tolist().index(bl)], bl_arr))
 
         # assign to uvp
-        uvp.Ntimes = len(np.unique(time_avg))
-        uvp.Nblpairts = len(time_avg)
+        uvp.Ntimes = len(np.unique(time_avg_arr))
+        uvp.Nblpairts = len(time_avg_arr)
         uvp.Nblpairs = len(blpair_arr)
         uvp.Nbls = len(bl_arr)
         uvp.bl_array = bl_arr
@@ -958,10 +961,10 @@ class UVPSpec(object):
         uvp.blpair_array = np.array(blpair_arr)
         uvp.time_1_array = np.array(time_1)
         uvp.time_2_array = np.array(time_2)
-        uvp.time_avg_array = np.array(time_avg)
+        uvp.time_avg_array = np.array(time_avg_arr)
         uvp.lst_1_array = np.array(lst_1)
         uvp.lst_2_array = np.array(lst_2)
-        uvp.lst_avg_array = np.array(lst_avg)
+        uvp.lst_avg_array = np.array(lst_avg_arr)
         uvp.data_array = data_array
         uvp.integration_array = ints_array
         uvp.wgt_array = wgts_array
