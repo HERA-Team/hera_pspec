@@ -954,7 +954,7 @@ class UVPSpec(object):
         # assign to uvp
         uvp.Ntimes = len(np.unique(time_avg_arr))
         uvp.Nblpairts = len(time_avg_arr)
-        uvp.Nblpairs = len(blpair_arr)
+        uvp.Nblpairs = len(np.unique(blpair_arr))
         uvp.Nbls = len(bl_arr)
         uvp.bl_array = bl_arr
         uvp.bl_vecs = bl_vecs
@@ -994,7 +994,7 @@ class UVPSpec(object):
         blpair_groups = []
         for blg in bls:
             blp_select = _get_blpairs_from_bls(self, blg, only_pairs_in_bls=only_pairs_in_bls)
-            blpair_groups.append(self.blpair_array[blp_select])
+            blpair_groups.append(sorted(set(self.blpair_array[blp_select])))
 
         return blpair_groups
 
@@ -1081,6 +1081,9 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
             uvp.scalar_array = uvp.scalar_array[spws, :]
 
     if bls is not None:
+        # get blpair baselines in integer form
+        bl1 = np.floor(uvp.blpair_array / 1e6)
+        blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int).T
         blp_select = _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=only_pairs_in_bls)
 
     if blpairs is not None:
@@ -1130,7 +1133,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
 
         # if fed as strings convert to integers
         if isinstance(pols[0], (np.str, str)):
-            pols = map(lambda p: utils.polstr2num(p), pols)
+            pols = map(lambda p: uvutils.polstr2num(p), pols)
 
         # create selection
         pol_select = np.array(reduce(operator.add, map(lambda p: uvp.pol_array == p, pols)))
@@ -1138,7 +1141,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         # edit metadata
         uvp.pol_array = uvp.pol_array[pol_select]
         uvp.Npols = len(uvp.pol_array)
-        uvp.scalar_array = uvp.scalar_array[:, pol_select]
+        if hasattr(uvp, 'scalar_array'):
+            uvp.scalar_array = uvp.scalar_array[:, pol_select]
     else:
         pol_select = slice(None)
 
@@ -1151,12 +1155,12 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 data[s] = h5file['data_spw{}'.format(s)][blp_select, :, pol_select]
-                wgts[s] = h5file['wgt_spw{}'.format(s)][blp_select, :, pol_select]
+                wgts[s] = h5file['wgt_spw{}'.format(s)][blp_select, :, :, pol_select]
                 ints[s] = h5file['integration_spw{}'.format(s)][blp_select, pol_select]
                 nsmp[s] = h5file['nsample_spw{}'.format(s)][blp_select, pol_select]
             else:
                 data[s] = uvp.data_array[s][blp_select, :, pol_select]
-                wgts[s] = uvp.wgt_array[s][blp_select, :, pol_select]
+                wgts[s] = uvp.wgt_array[s][blp_select, :, :, pol_select]
                 ints[s] = uvp.integration_array[s][blp_select, pol_select]
                 nsmp[s] = uvp.nsample_array[s][blp_select, pol_select]
  
