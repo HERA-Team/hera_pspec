@@ -1069,7 +1069,7 @@ class PSpecData(object):
                         pass
                     else:
                         if verbose: print("  Building G...")
-                        Gv = self.get_G(key1, key2, taper=taper)
+                        Gv = self.get_G(key1, key2)
                         built_G = True
 
                     # Calculate unnormalized bandpowers
