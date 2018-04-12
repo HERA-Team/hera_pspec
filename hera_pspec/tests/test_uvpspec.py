@@ -184,6 +184,16 @@ class Test_UVPSpec(unittest.TestCase):
         inds = self.uvp.blpair_to_indices(((1,2),(1,2)))
         nt.assert_true(np.isclose(inds, np.array([0,3,6,9,12,15,18,21,24,27])).min())
 
+        # test time to indices
+        time = self.uvp.time_avg_array[5]
+        blpair = 1002001002
+        inds = self.uvp.time_to_indices(time=time)
+        nt.assert_equal(len(inds), 3)
+        nt.assert_true(np.isclose(self.uvp.time_avg_array[inds], time, rtol=1e-10).all())
+        inds = self.uvp.time_to_indices(time=time, blpair=blpair)
+        nt.assert_equal(len(inds), 1)
+        nt.assert_equal(self.uvp.blpair_array[inds], blpair)
+
     def test_select(self):
         # bl group select
         uvp = copy.deepcopy(self.uvp)
