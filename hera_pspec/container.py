@@ -62,39 +62,10 @@ class PSpecContainer(object):
         
         # Get data and attributes from UVPSpec object (stored in dicts)
         assert isinstance(ps, UVPSpec)
-        #data, attrs = ps.serialize()
         
         # Write UVPSpec to group
         ps.write_to_group(pspec_group, run_check=True)
         
-        """
-        # Store data into HDF5 file
-        for key in data.keys():
-            if not isinstance(data[key], np.ndarray):
-                raise TypeError("UVPSpec object 'ps' returned data that was not "
-                                "a numpy array.")
-            
-            # Check if dataset exists
-            if "%s" % key not in pspec.keys():
-                ds = pspec.create_dataset("%s" % key, 
-                                          data[key].shape, 
-                                          data[key].dtype)
-            else:
-                # Check that existing dataset has the right shape
-                if ds.shape != data[key].shape:
-                    raise ValueError("Power spectrum '%s' already exists with "
-                                     "a different shape.")
-                if ds.dtype != data[key].dtype:
-                    raise ValueError("Power spectrum '%s' already exists with "
-                                     "a different dtype.")
-                ds = pspec["%s" % key]
-            
-            ds[:] = data[key][:]
-        
-        # Store attributes into HDF5 file
-        for key in attrs.keys():
-            pspec.attrs[key] = attrs[key]
-        """
     
     def _load_pspec(self, grp):
         """
@@ -143,14 +114,14 @@ class PSpecContainer(object):
         
         Parameters
         ----------
-        group : str, optional
+        group : str
             Which group the power spectrum belongs to.
         
-        psname : str, optional
-            The name of the power spectrum to return from within the group.
+        psname : str or list of str
+            The name(s) of the power spectrum to return from within the group.
             
-        pspec : UVPSpec
-            Power spectrum object to store in the container.
+        pspec : UVPSpec or list of UVPSpec
+            Power spectrum object(s) to store in the container.
         
         overwrite : bool, optional
             If the power spectrum already exists in the file, whether it should 
@@ -158,7 +129,33 @@ class PSpecContainer(object):
         """
         if self.mode == 'r':
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
-            
+        
+        if getattr(group, '__iter__', False):
+            raise ValueError("Only one group can be specified at a time.")
+        
+        # Handle input arguments that are iterable (i.e. sequences, but not str)
+        if getattr(psname, '__iter__', False):
+            if getattr(pspec, '__iter__', False) and len(pspec) == len(psname):
+                # Recursively call set_pspec() on each item of the list
+                for _psname, _pspec in zip(psname, pspec):
+                    if not isinstance(_pspec, UVPSpec):
+                        raise TypeError("pspec lists must only contain UVPSpec "
+                                        "objects.")
+                    self.set_pspec(group, _psname, _pspec, overwrite=overwrite)
+                return
+            else:
+                # Raise exception if psname is a list, but pspec is not
+                raise ValueError("If psname is a list, pspec must be a list of "
+                                 "the same length.")
+        if getattr(pspec, '__iter__', False) \
+          and not getattr(psname, '__iter__', False):
+            raise ValueError("If pspec is a list, psname must also be a list.")
+        # No lists should pass beyond this point
+        
+        # Check that input is of the correct type
+        if not isinstance(pspec, UVPSpec):
+            raise TypeError("pspec must be a UVPSpec object.")
+        
         key1 = "%s" % group
         key2 = "%s" % psname
         
@@ -181,7 +178,6 @@ class PSpecContainer(object):
                 raise AttributeError(
                    "Power spectrum %s/%s already exists and overwrite=False." \
                    % (key1, key2) )
-            #psgrp = grp[key2]
         
         # Add power spectrum to this group
         self._store_pspec(psgrp, pspec)
@@ -279,12 +275,15 @@ class PSpecContainer(object):
     
     def tree(self):
         """
-        Print a tree of groups and the power spectra that they contain.
+        Output a string containing a tree diagram of groups and the power 
+        spectra that they contain.
         """
+        s = ""
         for grp in self.groups():
-            print("(%s)" % grp)
+            s += "(%s)\n" % grp
             for pspec in self.spectra(grp):
-                print("  |--%s" % pspec)
+                s += "  |--%s\n" % pspec
+        return s
     
     def save(self):
         """
@@ -296,4 +295,7 @@ class PSpecContainer(object):
         """
         Make sure that HDF5 file is closed on destruct.
         """
-        self.data.close()
+        try:
+            self.data.close()
+        except:
+            pass
