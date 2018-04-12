@@ -6,6 +6,7 @@ def hash(w):
     """
     Return an MD5 hash of a set of weights.
     """
+    DeprecationWarning("utils.hash is deprecated.")
     return md5.md5(w.copy(order='C')).digest()
 
 

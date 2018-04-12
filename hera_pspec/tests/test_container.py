@@ -8,7 +8,7 @@ from hera_pspec import PSpecContainer, UVPSpec
 class Test_PSpecContainer(unittest.TestCase):
     
     def setUp(self):
-        self.fname = "%s/_test_container.hdf5" % DATA_PATH
+        self.fname = os.path.join(DATA_PATH, '_test_container.hdf5')
         self.setUp_uvpspec()    
     
     def setUp_uvpspec(self):
