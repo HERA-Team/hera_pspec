@@ -109,24 +109,33 @@ for i in dset_idxs:
         pspec_name = "pspec_dset(%d,%d)" % (i,j)
         
         # Calculate power spectra for all baseline pairs (returns UVPSpec)
-        pspecs = ds.pspec([bls,], [bls,], dsets=(i,j), 
-                          input_data_weight=pspec_cfg['weight'], 
-                          norm=pspec_cfg['norm'], 
-                          taper=pspec_cfg['taper'], 
-                          avg_group=pspec_defaults['avg_group'], 
-                          exclude_auto_bls=pspec_defaults['exclude_auto_bls'], 
-                          exclude_conjugated_blpairs=\
-                              pspec_defaults['exclude_conjugated_blpairs'],
-                          spw_ranges=None,
-                          little_h=pspec_defaults['little_h'])
+        ps = ds.pspec([bls,], [bls,], dsets=(i,j), 
+                      input_data_weight=pspec_cfg['weight'], 
+                      norm=pspec_cfg['norm'], 
+                      taper=pspec_cfg['taper'], 
+                      avg_group=pspec_defaults['avg_group'], 
+                      exclude_auto_bls=pspec_defaults['exclude_auto_bls'], 
+                      exclude_conjugated_blpairs=\
+                          pspec_defaults['exclude_conjugated_blpairs'],
+                      spw_ranges=None,
+                      little_h=pspec_defaults['little_h'])
         
         # Store power spectra in container
-        ps_store.set_pspec(group=pspec_cfg['groupname'], pspec=pspec_name, 
-                           ps=pspecs, overwrite=pspec_defaults['overwrite'])
+        ps_store.set_pspec(group=pspec_cfg['groupname'], psname=pspec_name, 
+                           pspec=ps, overwrite=pspec_defaults['overwrite'])
 
 # Check that power spectra can be retrieved
-pspectra = ps_store.get_pspec(pspec_cfg['groupname'], pspec=None)
-print pspectra
+ps = ps_store.get_pspec(pspec_cfg['groupname'], psname="pspec_dset(0,1)")
+#print ps
+
+ps_store.tree()
+
+#print ps_store.spectra(group=pspec_cfg['groupname'])
+#print ps_store.groups()
+#for pp in ps_store.spectra(group=pspec_cfg['groupname']):
+#    print pp
+#    y = ps_store.get_pspec(pspec_cfg['groupname'], psname=pp)
+    
 
 # Open file for reading
 #px = hp.PSpecContainer(pspec_cfg['output'], mode='r')

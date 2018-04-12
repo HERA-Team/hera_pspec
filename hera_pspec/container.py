@@ -106,6 +106,14 @@ class PSpecContainer(object):
             Group containing datasets that contain power spectrum and 
             supporting information, in a standard format expected by UVPSpec.
         """
+        # Check that group is tagged as containing UVPSpec (pspec_type attribute)
+        if 'pspec_type' in grp.attrs.keys():
+            if grp.attrs['pspec_type'] != UVPSpec.__name__:
+                raise TypeError("HDF5 group is not tagged as a UVPSpec object.")
+        else:
+            raise TypeError("HDF5 group is not tagged as a UVPSpec object.")
+        
+        # Create new UVPSpec object and fill with data from this group
         pspec = UVPSpec()
         pspec.read_from_group(grp)
         return pspec
@@ -129,7 +137,7 @@ class PSpecContainer(object):
         hdr.attrs['hera_pspec.git_hash'] = version.git_hash
         
     
-    def set_pspec(self, group, pspec, ps, overwrite=False):
+    def set_pspec(self, group, psname, pspec, overwrite=False):
         """
         Store a delay power spectrum in the container.
         
@@ -138,10 +146,10 @@ class PSpecContainer(object):
         group : str, optional
             Which group the power spectrum belongs to.
         
-        pspec : str, optional
+        psname : str, optional
             The name of the power spectrum to return from within the group.
             
-        ps : UVPSpec
+        pspec : UVPSpec
             Power spectrum object to store in the container.
         
         overwrite : bool, optional
@@ -152,7 +160,7 @@ class PSpecContainer(object):
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
             
         key1 = "%s" % group
-        key2 = "%s" % pspec
+        key2 = "%s" % psname
         
         # Check that the group exists
         if key1 not in self.data.keys():
@@ -160,26 +168,29 @@ class PSpecContainer(object):
         else:
             grp = self.data[key1]
         
-        # Check that the pspec exists
+        # Check that the psname exists
         if key2 not in grp.keys():
             # Create group if it doesn't exist
-            pspec = grp.create_group(key2)
+            psgrp = grp.create_group(key2)
         else:
             if overwrite:
                 # Delete group and recreate
                 del grp[key2]
-                pspec = grp.create_group(key2)
+                psgrp = grp.create_group(key2)
             else:
                 raise AttributeError(
                    "Power spectrum %s/%s already exists and overwrite=False." \
                    % (key1, key2) )
-            pspec = grp[key2]
+            #psgrp = grp[key2]
         
         # Add power spectrum to this group
-        self._store_pspec(pspec, ps)
+        self._store_pspec(psgrp, pspec)
+        
+        # Store info about what kind of power spectra are in the group
+        psgrp.attrs['pspec_type'] = pspec.__class__.__name__
     
     
-    def get_pspec(self, group, pspec=None):
+    def get_pspec(self, group, psname=None):
         """
         Get a UVPSpec power spectrum object from a given group.
         
@@ -188,13 +199,14 @@ class PSpecContainer(object):
         group : str, optional
             Which group the power spectrum belongs to.
         
-        pspec : str, optional
-            The name of the power spectrum to return from within the group.
+        psname : str, optional
+            The name of the power spectrum to return.
         
         Returns
         -------
-        pspec : UVPSpec
-            The specified power spectrum, as a UVPSpec object.
+        pspec : UVPSpec or list of UVPSpec
+            The specified power spectrum, as a UVPSpec object (or a list, if 
+            pname was not specified).
         """
         # Check that group is in keys and extract it if so
         key1 = "%s" % group
@@ -203,9 +215,11 @@ class PSpecContainer(object):
         else:
             raise KeyError("No group named '%s'" % key1)
         
-        # If pspec was specified, check that it exists and extract
-        if pspec is not None:
-            key2 = "%s" % pspec
+        # If psname was specified, check that it exists and extract
+        if psname is not None:
+            key2 = "%s" % psname
+            
+            # Load power spectrum if it exists
             if key2 in grp.keys():
                 return self._load_pspec(grp[key2])
             else:
@@ -218,6 +232,59 @@ class PSpecContainer(object):
                 spectra.append( self._load_pspec(grp[key]) )
         return spectra
         
+    
+    def spectra(self, group):
+        """
+        Return list of available power spectra.
+        
+        Parameters
+        ----------
+        group : str
+            Which group to list power spectra from.
+        
+        Returns
+        -------
+        ps_list : list of str
+            List of names of power spectra in the group.
+        """
+        # Check that group is in keys and extract it if so
+        key1 = "%s" % group
+        if key1 in self.data.keys():
+            grp = self.data[key1]
+        else:
+            raise KeyError("No group named '%s'" % key1)
+        
+        # Filter to look for pspec objects
+        ps_list = []
+        def pspec_filter(n, obj):
+            if u'pspec_type' in obj.attrs.keys():
+                ps_list.append(n)
+        
+        # Traverse the entire set of groups/datasets looking for pspecs
+        grp.visititems(pspec_filter)
+        return ps_list
+    
+    def groups(self):
+        """
+        Return list of groups in the container.
+        
+        Returns
+        -------
+        group_list : list of str
+            List of group names.
+        """
+        groups = self.data.keys()
+        if u'header' in groups: groups.remove(u'header')
+        return groups
+    
+    def tree(self):
+        """
+        Print a tree of groups and the power spectra that they contain.
+        """
+        for grp in self.groups():
+            print("(%s)" % grp)
+            for pspec in self.spectra(grp):
+                print("  |--%s" % pspec)
     
     def save(self):
         """
