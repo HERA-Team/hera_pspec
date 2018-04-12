@@ -455,7 +455,7 @@ class UVPSpec(object):
         indices : integer ndarray, contains indices at which selection is satisfied along the blpairts axis.
         """
         time_select = np.isclose(self.time_avg_array, time, rtol=1e-10)
-        if blpair is None:
+        if blpairs is None:
             return np.arange(self.Nblpairts)[time_select]
         else:
             blp_select = np.zeros(self.Nblpairts, np.bool)
