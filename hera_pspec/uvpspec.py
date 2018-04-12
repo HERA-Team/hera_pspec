@@ -437,7 +437,7 @@ class UVPSpec(object):
         indices = np.arange(self.Npols)[reduce(operator.add, map(lambda p: self.pol_array == p, pol))]
         return indices
 
-    def time_to_indices(self, time, blpair=None):
+    def time_to_indices(self, time, blpairs=None):
         """
         Convert a time [Julian Date] from self.time_avg_array to an array that indexes the elements
         at which time appears in that array. Can optionally take a blpair selection to further select
@@ -447,8 +447,8 @@ class UVPSpec(object):
         ----------
         time : float, Julian Date time from self.time_avg_array
 
-        blpair : tuple or int, optional, blpair tuple or integer that further selects
-            the elements at which both time and blpair are satisfied.
+        blpairs : tuple or int, optional, list of blpair tuples or integers that further selects
+            the elements at which both time and blpairs are satisfied.
 
         Returns
         -------
@@ -459,7 +459,10 @@ class UVPSpec(object):
             return np.arange(self.Nblpairts)[time_select]
         else:
             blp_select = np.zeros(self.Nblpairts, np.bool)
-            blp_select[self.blpair_to_indices(blpair)] = True
+            if isinstance(blpairs, (tuple, int, np.int)):
+                blpairs = [blpairs]
+            for blp in blpairs:
+                blp_select[self.blpair_to_indices(blp)] = True
             time_select *= blp_select
             return np.arange(self.Nblpairts)[time_select]
 
