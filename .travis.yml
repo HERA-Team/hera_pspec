@@ -35,7 +35,7 @@ install:
   - pip install healpy
   - pip install scikit-learn
   - pip install h5py
-  - pip install yaml
+  - pip install pyyaml
   - python setup.py install
 
 before_script:
