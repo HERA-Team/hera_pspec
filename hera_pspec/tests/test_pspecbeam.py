@@ -5,26 +5,12 @@ import pyuvdata as uv
 from hera_pspec import pspecbeam
 from hera_pspec.data import DATA_PATH
 
-
-class Example(unittest.TestCase):
-    """
-    when running tests in this file by-hand in an interactive interpreter, 
-    instantiate this example class as
-
-    self = Example()
-
-    and you can copy-paste self.assert* calls interactively.
-    """
-    def runTest(self):
-        pass
-
-
 class Test_DataSet(unittest.TestCase):
 
     def setUp(self):
         beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
-        self.gauss = pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))
+        self.gauss = pspecbeam.PSpecBeamGauss(0.8, np.linspace(100e6, 200e6, 50, endpoint=False))
 
     def tearDown(self):
         pass
@@ -73,14 +59,17 @@ class Test_DataSet(unittest.TestCase):
 
         # test taper execution
         scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
-        self.assertAlmostEqual(scalar / 1793248694.8873105, 1.0, delta=1e-8)
+        self.assertAlmostEqual(scalar / 1793248694.8873105, 1.0, delta=1e-5)
 
         # test Jy_to_mK
         M = self.bm.Jy_to_mK(np.linspace(100e6, 200e6, 11))
         nt.assert_equal(len(M), 11)
         nt.assert_almost_equal(M[0], 41.360105524572283)
-        M = self.bm.Jy_to_mK(99e6)
-        M = self.bm.Jy_to_mK(201e6)
+        
+        # Extrapolation will fail
+        nt.assert_raises(ValueError, self.bm.Jy_to_mK, 99e6)
+        nt.assert_raises(ValueError, self.bm.Jy_to_mK, 201e6)
+        
         # test exception
         nt.assert_raises(TypeError, self.bm.Jy_to_mK, [1])
         nt.assert_raises(TypeError, self.bm.Jy_to_mK, np.array([1]))

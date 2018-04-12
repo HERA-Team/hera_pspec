@@ -1,7 +1,7 @@
 """
 __init__.py file for hera_pspec
 """
-from hera_pspec import version, conversions, bootstrap, pspecbeam, pyuvdata
+from hera_pspec import version, conversions, bootstrap, pspecbeam
 
 from hera_pspec.uvpspec import UVPSpec
 from hera_pspec.pspecdata import PSpecData

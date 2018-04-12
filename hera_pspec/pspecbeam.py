@@ -193,11 +193,17 @@ class PSpecBeamBase(object):
         elif isinstance(freqs, np.ndarray) and freqs.dtype not in (float, np.float, np.float64):
             raise TypeError("freqs must be fed as a float ndarray")
         if np.min(freqs) < self.beam_freqs.min():
-            print ("Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs)))
+            raise ValueError("Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs)))
         if np.max(freqs) > self.beam_freqs.max(): 
-            print("Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs)))
+            raise ValueError("Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs)))
 
-        Op = interp1d(self.beam_freqs/1e6, self.power_beam_int(stokes=stokes), kind='quadratic', fill_value='extrapolate')(freqs/1e6)
+        #Op = interp1d(self.beam_freqs/1e6, self.power_beam_int(stokes=stokes), kind='quadratic', fill_value='extrapolate')(freqs/1e6)
+        try:
+            Op = interp1d(self.beam_freqs/1e6, 
+                          self.power_beam_int(stokes=stokes), 
+                          kind='quadratic')(freqs/1e6)
+        except:
+            raise
 
         return 1e-20 * conversions.cgs_units.c**2 / (2 * conversions.cgs_units.kb * freqs**2 * Op)
 
