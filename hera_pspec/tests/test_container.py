@@ -115,13 +115,17 @@ class Test_PSpecContainer(unittest.TestCase):
             ps_store.set_pspec(group=group_names[2], psname=psname, 
                                pspec=self.uvp, overwrite=True)
         
-        # Check that overwriting fails if disallowed
+        # Check that overwriting fails if overwrite=False
         assert_raises(AttributeError, ps_store.set_pspec, group=group_names[2], 
                       psname=psname, pspec=self.uvp, overwrite=False)
         
         # Check that wrong pspec types are rejected by the set() method
         assert_raises(ValueError, ps_store.set_pspec, group=group_names[2], 
                       psname=psname, pspec=np.arange(11), overwrite=True)
+        assert_raises(TypeError, ps_store.set_pspec, group=group_names[2], 
+                      psname=psname, pspec=1, overwrite=True)
+        assert_raises(TypeError, ps_store.set_pspec, group=group_names[2], 
+                      psname=psname, pspec="abc", overwrite=True)
         
         # Check that power spectra can be retrieved one by one
         for i in range(len(group_names)):
@@ -160,6 +164,9 @@ class Test_PSpecContainer(unittest.TestCase):
         assert( len(pslist) == len(pspec_names) )
         for g in grplist: assert(g in group_names)
         
+        # Check that spectra() raises an error if group doesn't exist
+        assert_raises(KeyError, ps_store.spectra, "x")
+        
         # Check that spectra() and groups() can be iterated over to retrieve ps
         for g in ps_store.groups():
             for psname in ps_store.spectra(group=g):
@@ -174,6 +181,10 @@ class Test_PSpecContainer(unittest.TestCase):
         assert_raises(ValueError, ps_store.set_pspec, group='g1', 
                       psname=pspec_names[0], pspec=[self.uvp,self.uvp,self.uvp], 
                       overwrite=True)
+        assert_raises(TypeError, ps_store.set_pspec, group='g1', 
+                      psname=pspec_names, pspec=[self.uvp,None,self.uvp], 
+                      overwrite=True)
+                      
         # Check that lists can be used to set pspec
         ps_store.set_pspec(group='g1', psname=pspec_names, 
                            pspec=[self.uvp,self.uvp,self.uvp], overwrite=True)
