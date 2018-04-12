@@ -56,10 +56,10 @@ git_branch = version_info['git_branch']
 # String to add to history of any files written with this version of pyuvdata
 hera_pspec_version_str = ('hera_pspec version: ' + version + '.')
 if git_hash is not '':
-    hera_pspec_version_str += ('  Git origin: ' + git_origin +
-                            '.  Git hash: ' + git_hash +
-                            '.  Git branch: ' + git_branch +
-                            '.  Git description: ' + git_description + '.')
+    hera_pspec_version_str += ('  Git origin: ' + str(git_origin) +
+                            '.  Git hash: ' + str(git_hash) +
+                            '.  Git branch: ' + str(git_branch) +
+                            '.  Git description: ' + str(git_description) + '.')
 
 
 def main():

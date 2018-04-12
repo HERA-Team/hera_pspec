@@ -1,10 +1,10 @@
 import numpy as np
-import pyuvdata
 import os
+import aipy
+import pyuvdata
 from hera_pspec import conversions
 from scipy import integrate
 from scipy.interpolate import interp1d
-import aipy
 
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps=5000,
@@ -192,8 +192,10 @@ class PSpecBeamBase(object):
             raise TypeError("freqs must be fed as a float ndarray")
         elif isinstance(freqs, np.ndarray) and freqs.dtype not in (float, np.float, np.float64):
             raise TypeError("freqs must be fed as a float ndarray")
-        if np.min(freqs) < self.beam_freqs.min(): print "Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs))
-        if np.max(freqs) > self.beam_freqs.max(): print "Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs))
+        if np.min(freqs) < self.beam_freqs.min():
+            print ("Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs)))
+        if np.max(freqs) > self.beam_freqs.max(): 
+            print("Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs)))
 
         Op = interp1d(self.beam_freqs/1e6, self.power_beam_int(stokes=stokes), kind='quadratic', fill_value='extrapolate')(freqs/1e6)
 
