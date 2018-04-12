@@ -47,6 +47,16 @@ def test_load_config():
     
     # Check that lists are read in as lists
     assert(len(cfg['data']['subdirs']) == 1)
+    
+    # Check that missing files cause an error
+    nt.assert_raises(IOError, utils.load_config, "file_that_doesnt_exist")
+
+def test_log():
+    """
+    Test that log() prints output.
+    """
+    utils.log("message")
+    utils.log("message", lvl=2)
 
 def test_hash():
     """
