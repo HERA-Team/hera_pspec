@@ -1015,13 +1015,13 @@ class UVPSpec(object):
         if inplace == False:
             return uvp
 
-    def get_blpair_groups_from_bl_groups(self, bls, only_pairs_in_bls=False):
+    def get_blpair_groups_from_bl_groups(self, blgroups, only_pairs_in_bls=False):
         """
         Get baseline pair matches from a list of baseline groups.
 
         Parameters
         ----------
-        bls : list of baseline groups, which themselves are lists of baseline tuples or baseline i6 integers
+        blgroups : list of baseline groups, which themselves are lists of baseline tuples or baseline i6 integers
             Ex: [ [(1, 2), (2, 3), (3, 4)], [(1, 4), (2, 5)] ]
 
         only_pairs_in_bls : bool, if True, select only baseline-pairs whose first _and_ second baseline
@@ -1032,9 +1032,11 @@ class UVPSpec(object):
         blpair_groups : list of blpair groups, which themselves are lists of blpair integers
         """
         blpair_groups = []
-        for blg in bls:
+        for blg in blgroups:
             blp_select = _get_blpairs_from_bls(self, blg, only_pairs_in_bls=only_pairs_in_bls)
-            blpair_groups.append(sorted(set(self.blpair_array[blp_select])))
+            blp = sorted(set(self.blpair_array[blp_select]))
+            if len(blp) > 0:
+                blpair_groups.append(blp)
 
         return blpair_groups
 
