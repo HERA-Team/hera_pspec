@@ -65,7 +65,7 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(Om_pp[24], 0.024137903003171767)
         self.assertAlmostEqual(Om_pp[-1], 0.013178952686690554)
 
-        self.assertAlmostEqual(scalar/544745630.76776004, 1.0, delta=1e-4)
+        self.assertAlmostEqual(scalar/567871703.75268996, 1.0, delta=1e-4)
         
         # convergence of integral
         scalar_large_Nsteps = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=10000) 
@@ -73,7 +73,7 @@ class Test_DataSet(unittest.TestCase):
 
         # test taper execution
         scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
-        self.assertAlmostEqual(scalar / 1793248694.8873105, 1.0, delta=1e-8)
+        self.assertAlmostEqual(scalar / 1986172241.1760113, 1.0, delta=1e-8)
 
         # test Jy_to_mK
         M = self.bm.Jy_to_mK(np.linspace(100e6, 200e6, 11))
@@ -114,7 +114,7 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(Om_pp[4], 0.36258881134617554)
         self.assertAlmostEqual(Om_pp[4], Om_pp[0])
 
-        self.assertAlmostEqual(scalar/6082814757.7556648, 1.0, delta=1e-4)
+        self.assertAlmostEqual(scalar/6392750120.8657961, 1.0, delta=1e-4)
         
         # convergence of integral
         scalar_large_Nsteps = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000)
@@ -122,5 +122,5 @@ class Test_DataSet(unittest.TestCase):
 
         # test taper execution
         scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
-        self.assertAlmostEqual(scalar / 19974901797.178055, 1.0, delta=1e-8)
+        self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)
 
