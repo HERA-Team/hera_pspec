@@ -9,13 +9,13 @@ import copy
 import h5py
 from collections import OrderedDict as odict
 
-class Test_Sense(unittest.TestCase):
-    """ Test noise.Sense object """
+class Test_Sensitivity(unittest.TestCase):
+    """ Test noise.Sensitivity object """
 
     def setUp(self):
         self.cosmo = conversions.Cosmo_Conversions()
         self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits'))
-        self.sense = noise.Sense(beam=self.beam, cosmo=self.cosmo)
+        self.sense = noise.Sensitivity(beam=self.beam, cosmo=self.cosmo)
 
     def tearDown(self):
         pass
@@ -24,7 +24,7 @@ class Test_Sense(unittest.TestCase):
         pass
 
     def test_add(self):
-        sense = noise.Sense()
+        sense = noise.Sensitivity()
 
         C = conversions.Cosmo_Conversions()
         sense.add_cosmology(C)
@@ -55,7 +55,7 @@ class Test_Sense(unittest.TestCase):
         t_int = 10.7
         P_N = self.sense.calc_P_N(k, Tsys, t_int, Ncoherent=1, Nincoherent=1, form='Pk')
         nt.assert_equal(P_N.shape, (10,))
-        nt.assert_true(np.isclose(P_N, 9.07836740e+11).all())
+        nt.assert_true(np.isclose(P_N, 906609626029.72791).all())
         # calculate DelSq
         Dsq = self.sense.calc_P_N(k, Tsys, t_int, Ncoherent=1, Nincoherent=1, form='DelSq')
         nt.assert_equal(Dsq.shape, (10,))
