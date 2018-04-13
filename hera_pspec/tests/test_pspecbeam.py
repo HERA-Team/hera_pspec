@@ -87,7 +87,7 @@ class Test_DataSet(unittest.TestCase):
 
         # test noise scalar
         sclr = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000, noise_scalar=True)
-        nt.assert_almost_equal(sclr, 71.677056679968445)
+        nt.assert_almost_equal(sclr, 70.983962969086235)
 
 
     def test_Gaussbeam(self):
