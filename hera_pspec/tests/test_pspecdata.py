@@ -3,11 +3,13 @@ import nose.tools as nt
 import numpy as np
 import pyuvdata as uv
 import os, copy, sys
-from scipy.integrate import simps
-from hera_pspec import pspecdata, pspecbeam
+from scipy.integrate import simps, trapz
+from hera_pspec import pspecdata, pspecbeam, conversions
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 from hera_cal import redcal
+from scipy.signal import windows
+from scipy.interpolate import interp1d
 
 # Data files to use in tests
 dfiles = [
@@ -546,7 +548,57 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Ndlys, 10)
         nt.assert_equal(len(uvp.data_array), 1)
 
-        # check
+    def test_normalization(self):
+        # Test Normalization of pspec() compared to PAPER legacy techniques
+        d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2], 
+                             frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
+        d2 = self.uvd.select(times=np.unique(self.uvd.time_array)[1::2], 
+                             frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
+        freqs = np.unique(d1.freq_array)
+
+        # Setup baselines
+        bl1 = (24, 25)
+        bl2 = (37, 38)
+
+        # Get beam
+        beam = copy.deepcopy(self.bm)
+        cosmo = conversions.Cosmo_Conversions()
+
+        # Set to mK scale
+        d1.data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
+        d2.data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
+
+        # Compare using no taper
+        OmegaP = beam.power_beam_int()
+        OmegaPP = beam.power_beam_sq_int()
+        OmegaP = interp1d(beam.beam_freqs/1e6, OmegaP)(freqs/1e6)
+        OmegaPP = interp1d(beam.beam_freqs/1e6, OmegaPP)(freqs/1e6)
+        NEB = 1.0
+        Bp = np.median(np.diff(freqs)) * len(freqs)
+        scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
+        data1 = d1.get_data(bl1)
+        data2 = d2.get_data(bl2)
+        legacy = np.fft.fftshift(np.fft.ifft(data1, axis=1) * np.conj(np.fft.ifft(data2, axis=1)) * scalar, axes=1)[0]
+        # hera_pspec OQE
+        ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
+        uvp = ds.pspec([bl1], [bl2], (0, 1), taper='none', input_data_weight='identity', norm='I')
+        oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        # assert answers are same to within 3%
+        nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
+
+        # taper
+        window = windows.blackmanharris(len(freqs))
+        NEB = Bp / trapz(window**2, x=freqs)
+        scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
+        data1 = d1.get_data(bl1)
+        data2 = d2.get_data(bl2)
+        legacy = np.fft.fftshift(np.fft.ifft(data1*window[None, :], axis=1) * np.conj(np.fft.ifft(data2*window[None, :], axis=1)) * scalar, axes=1)[0]
+        # hera_pspec OQE
+        ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
+        uvp = ds.pspec([bl1], [bl2], (0, 1), taper='blackman-harris', input_data_weight='identity', norm='I')
+        oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        # assert answers are same to within 3%
+        nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
 
     def test_validate_bls(self):
         # test exceptions

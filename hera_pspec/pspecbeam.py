@@ -64,7 +64,8 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
             in h^-3 Mpc^3 or Mpc^3.
     """
     # get integration freqs, redshift and cosmological scalars
-    integration_freqs = np.linspace(pspec_freqs.min(), pspec_freqs.max(), num_steps, endpoint=True, dtype=np.float)
+    df = np.median(np.diff(pspec_freqs))
+    integration_freqs = np.linspace(pspec_freqs.min(), pspec_freqs.min()+df*len(pspec_freqs), num_steps, endpoint=True, dtype=np.float)
     integration_freqs_MHz = integration_freqs / 1e6  # The interpolations are generally more stable in MHz
     redshifts = cosmo.f2z(integration_freqs).flatten()
     X2Y = np.array(map(lambda z: cosmo.X2Y(z, little_h=little_h), redshifts))
@@ -73,7 +74,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
     # derived from the beam model to the same frequency grid as the power spectrum
     # estimation
     beam_model_freqs_MHz = beam_freqs / 1e6
-    dOpp_over_Op2_fit = interp1d(beam_model_freqs_MHz, omega_ratio, kind='quadratic')
+    dOpp_over_Op2_fit = interp1d(beam_model_freqs_MHz, omega_ratio, kind='quadratic', fill_value='extrapolate')
     dOpp_over_Op2 = dOpp_over_Op2_fit(integration_freqs_MHz)
 
     # Get B_pp = \int dnu taper^2 and Bp = \int dnu
@@ -81,7 +82,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
         dBpp_over_BpSq = np.ones_like(integration_freqs, np.float)
     else:
         dBpp_over_BpSq = aipy.dsp.gen_window(len(pspec_freqs), taper)**2
-        dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest')(integration_freqs)
+        dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest', fill_value='extrapolate')(integration_freqs)
     dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2
 
     # integrate to get scalar

@@ -799,13 +799,15 @@ class PSpecData(object):
         """
         # set spw_range and get freqs
         freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]
+        start = freqs[0]
+        end = freqs[0] + np.median(np.diff(freqs)) * len(freqs)
 
         # calculate scalar
         if beam is None:
-            scalar = self.primary_beam.compute_pspec_scalar(freqs[0], freqs[-1], len(freqs), stokes=stokes,
+            scalar = self.primary_beam.compute_pspec_scalar(start, end, len(freqs), stokes=stokes,
                                                             taper=taper, little_h=little_h, num_steps=num_steps)
         else:
-            scalar = beam.compute_pspec_scalar(freqs[0], freqs[-1], len(freqs), stokes=stokes,
+            scalar = beam.compute_pspec_scalar(start, end, len(freqs), stokes=stokes,
                                                             taper=taper, little_h=little_h, num_steps=num_steps)
 
         return scalar
