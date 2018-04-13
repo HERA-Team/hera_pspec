@@ -65,7 +65,7 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(Om_pp[24], 0.024137903003171767)
         self.assertAlmostEqual(Om_pp[-1], 0.013178952686690554)
 
-        self.assertAlmostEqual(scalar/544745630.76776004, 1.0, delta=1e-4)
+        self.assertAlmostEqual(scalar/567871703.75268996, 1.0, delta=1e-4)
         
         # convergence of integral
         scalar_large_Nsteps = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=10000) 
@@ -73,7 +73,7 @@ class Test_DataSet(unittest.TestCase):
 
         # test taper execution
         scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
-        self.assertAlmostEqual(scalar / 1793248694.8873105, 1.0, delta=1e-8)
+        self.assertAlmostEqual(scalar / 1986172241.1760113, 1.0, delta=1e-8)
 
         # test Jy_to_mK
         M = self.bm.Jy_to_mK(np.linspace(100e6, 200e6, 11))
