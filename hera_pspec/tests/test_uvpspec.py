@@ -274,10 +274,10 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvp.generate_noise_spectra, 0, 0, 0)
 
         # test generate_sense
-        uvp.generate_sense(self.beam)
-        nt.assert_true(hasattr(uvp, 'sense'))
-        nt.assert_true(hasattr(uvp.sense, 'beam'))
-        nt.assert_true(hasattr(uvp.sense, 'cosmo'))
+        uvp.generate_sensitivity(self.beam)
+        nt.assert_true(hasattr(uvp, 'sensitivity'))
+        nt.assert_true(hasattr(uvp.sensitivity, 'beam'))
+        nt.assert_true(hasattr(uvp.sensitivity, 'cosmo'))
 
         # test generate noise spectra
         P_N = uvp.generate_noise_spectra(0, -5, 500, form='Pk', real=True)
@@ -292,7 +292,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true((P_N < P_N2).all())
 
         # test Dsq
-        Dsq = uvp.generate_noise_spectra(0, -5, 500, form='Dsq', real=True)
+        Dsq = uvp.generate_noise_spectra(0, -5, 500, form='DelSq', real=True)
         nt.assert_equal(Dsq.shape, (30, 50))
         nt.assert_true(Dsq[0, 1] < P_N[0, 1])
 
