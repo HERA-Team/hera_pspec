@@ -27,6 +27,7 @@ class Test_Cosmo(unittest.TestCase):
         # test parameters get fed to class
         C = conversions.Cosmo_Conversions(H0=25.5)
         self.assertAlmostEqual(C.H0, 25.5)
+        print C
 
     def test_units(self):
         si = conversions.units()
@@ -63,13 +64,15 @@ class Test_Cosmo(unittest.TestCase):
         self.assertAlmostEqual(self.C.dRpara_df(10.0, ghz=True, little_h=True), 12487.605057418872)
         self.assertAlmostEqual(self.C.X2Y(10.0, little_h=True), 529.26719942209002)
 
+    def test_params(self):
+        params = self.C.get_params()
+        self.assertAlmostEqual(params['Om_L'], self.C.Om_L)
 
-
-
-
-
-
-
+    def test_kpara_kperp(self):
+        bl2kperp = self.C.bl_to_kperp(10.0, little_h=True)
+        tau2kpara = self.C.tau_to_kpara(10.0, little_h=True)
+        self.assertAlmostEqual(bl2kperp, 0.00041570092391078579)
+        self.assertAlmostEqual(tau2kpara, 503153.74952115043)
 
 if __name__ == "__main__":
     unittest.main()

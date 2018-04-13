@@ -4,8 +4,7 @@ import numpy as np
 import os
 import sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec
-from hera_pspec import parameter
+from hera_pspec import uvpspec, conversions, parameter
 import copy
 import h5py
 from collections import OrderedDict as odict
@@ -43,7 +42,7 @@ class Test_UVPSpec(unittest.TestCase):
         spws = np.arange(Nspws)
         spw_array = np.tile(spws, Ndlys)
         freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), Nspws)
-        dly_array = np.repeat(np.fft.fftfreq(Nfreqs, np.median(np.diff(freq_array))), Nspws)
+        dly_array = np.fft.fftshift(np.repeat(np.fft.fftfreq(Nfreqs, np.median(np.diff(freq_array))), Nspws))
         pol_array = np.array([-5])
         Npols = len(pol_array)
         units = 'unknown'
@@ -56,15 +55,15 @@ class Test_UVPSpec(unittest.TestCase):
 
         telescope_location = np.array([5109325.85521063, 2005235.09142983, -3239928.42475397])
 
-        data_array, flag_array, integration_array = {}, {}, {}
+        data_array, wgt_array, integration_array = {}, {}, {}
         for s in spws:
             data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) * blpair_array[:, None, None] / 1e9
-            flag_array[s] = np.zeros((Nblpairts, Ndlys, Npols), dtype=np.bool)
+            wgt_array[s] = np.ones((Nblpairts, Ndlys, 2, Npols), dtype=np.float)
             integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
 
         params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys',
                   'Nbls', 'blpair_array', 'time_1_array', 'time_2_array', 'lst_1_array', 'lst_2_array',
-                  'spw_array', 'dly_array', 'freq_array', 'pol_array', 'data_array', 'flag_array',
+                  'spw_array', 'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
                   'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 'units',
                   'channel_width', 'weighting', 'history', 'taper', 'norm', 'git_hash']
 
@@ -92,16 +91,24 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_almost_equal(d[0,0], (1.0020010020000001+0j))
         d = self.uvp.get_data((0, 1002001002, -5))
         nt.assert_almost_equal(d[0,0], (1.0020010020000001+0j))
-        # get_flags
-        f = self.uvp.get_flags((0, ((1, 2), (1, 2)), 'xx'))
-        nt.assert_equal(f.shape, (10, 50))
-        nt.assert_true(f.dtype == np.bool)
-        nt.assert_equal(f[0,0], False)
+        # get_wgts
+        w = self.uvp.get_wgts((0, ((1, 2), (1, 2)), 'xx'))
+        nt.assert_equal(w.shape, (10, 50, 2))
+        nt.assert_true(w.dtype == np.float)
+        nt.assert_equal(w[0,0,0], 1.0)
         # get_integrations
         i = self.uvp.get_integrations((0, ((1, 2), (1, 2)), 'xx'))
         nt.assert_equal(i.shape, (10,))
         nt.assert_true(i.dtype == np.float)
         nt.assert_almost_equal(i[0], 1.0)
+
+    def test_convert_deltasq(self):
+        uvp = copy.deepcopy(self.uvp)
+        uvp.add_cosmology(conversions.Cosmo_Conversions())
+        uvp.convert_to_deltasq(little_h=True)
+        k_perp, k_para = uvp.get_kvecs(0, little_h=True)
+        k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
+        nt.assert_true(np.isclose(uvp.data_array[0][0,:,0], (self.uvp.data_array[0]*k_mag**3/(2*np.pi**2))[0,:,0]).all())
 
     def test_blpair_conversions(self):
         # test blpair -> antnums
