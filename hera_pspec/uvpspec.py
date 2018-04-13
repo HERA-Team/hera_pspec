@@ -232,12 +232,12 @@ class UVPSpec(object):
         blseps = np.array(map(lambda bl: np.linalg.norm(bl_vecs[bls.index(bl)]), self.bl_array))
 
         # iterate over blpair_array
-        blp_avg_sep = []
-        for blp in self.blpair_array:
-            an = self.blpair_to_antnums(blp)
-            bl1 = self.antnums_to_bl(an[0])
-            bl2 = self.antnums_to_bl(an[1])
-            blp_avg_sep.append(np.mean([blseps[bls.index(bl1)], blseps[bls.index(bl2)]]))
+        blp_avg_sep = np.empty(self.Nblpairts, np.float)
+        bl1 = np.floor(self.blpair_array / 1e6)
+        blpair_bls = np.vstack([bl1, self.blpair_array - bl1*1e6]).astype(np.int).T
+
+        for i, blp in enumerate(blpair_bls):
+            blp_avg_sep[i] = np.mean([blseps[bls.index(blp[0])], blseps[bls.index(blp[1])]])
 
         return np.array(blp_avg_sep)
 
@@ -274,7 +274,7 @@ class UVPSpec(object):
 
         return k_perp, k_para
 
-    def convert_to_deltasq(self, little_h=True):
+    def convert_to_deltasq(self, little_h=True, inplace=True):
         """
         Convert from P(k) to Delta^2(k) by multiplying by k^3 / (2pi^2).
 
@@ -286,21 +286,32 @@ class UVPSpec(object):
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
+
+        inplace : boolean, if True edit and overwrite arrays in self, else make a copy of self and return
         """
+        # copy object
+        if inplace:
+            uvp = self
+        else:
+            uvp = copy.deepcopy(self)
+
         # loop over spectral windows
-        for spw in range(self.Nspws):
+        for spw in range(uvp.Nspws):
             # get k vectors
-            k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
+            k_perp, k_para = uvp.get_kvecs(spw, little_h=little_h)
             k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
 
             # multiply into data
-            self.data_array[spw] *= k_mag**3 / (2*np.pi**2)
+            uvp.data_array[spw] *= k_mag**3 / (2*np.pi**2)
 
         # edit units
         if little_h:
-            self.units += " h^3 k^3 / (2pi^2)"
+            uvp.units += " h^3 k^3 / (2pi^2)"
         else:
-            self.units += " k^3 / (2pi^2)"
+            uvp.units += " k^3 / (2pi^2)"
+
+        if inplace == False:
+            return uvp
 
     def blpair_to_antnums(self, blpair):
         """
@@ -1062,9 +1073,9 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
         bls = [bls]
     # get indices
     if only_pairs_in_bls:
-        blp_select = np.array(reduce(operator.add, map(lambda b: (blpair_bls[:,0]==b) * (blpair_bls[:,1]==b), bls)))
+        blp_select = np.array(map(lambda blp: np.bool((blp[0] in bls) * (blp[1] in bls)), blpair_bls))
     else:
-        blp_select = np.array(reduce(operator.add, map(lambda b: (blpair_bls[:,0]==b) + (blpair_bls[:,1]==b), bls)))
+        blp_select = np.array(map(lambda blp: np.bool((blp[0] in bls) + (blp[1] in bls)), blpair_bls))
 
     return blp_select
 

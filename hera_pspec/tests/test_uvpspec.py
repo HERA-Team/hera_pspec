@@ -299,7 +299,7 @@ class Test_UVPSpec(unittest.TestCase):
     def test_average_spectra(self):
         uvp = copy.deepcopy(self.uvp)
         # test blpair averaging
-        blpairs = uvp.get_blpair_groups_from_bl_groups([[1002, 2003, 1003]])
+        blpairs = uvp.get_blpair_groups_from_bl_groups([[1002, 2003, 1003]], only_pairs_in_bls=False)
         uvp2 = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 3.0).all())
@@ -309,7 +309,6 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(uvp2.Ntimes, 1)
         nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 10.0).all())
         nt.assert_true(uvp2.get_data(0, 1002001002, 'xx').shape, (1, 50))
-
 
 def test_conj_blpair_int():
     conj_blpair = uvpspec._conj_blpair_int(1002003004)
