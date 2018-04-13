@@ -6,12 +6,12 @@ import ast
 from collections import OrderedDict as odict
 
 
-class Sense(object):
-    """ Sense object for calculating thermal sensitivities """
+class Sensitivity(object):
+    """ Power spectrum thermal sensitivity calculator """
 
     def __init__(self, cosmo=None, beam=None):
         """
-        Sense object for calculating thermal sensitivities.
+        Object for power spectrum thermal sensitivity calculations.
 
         Parameters
         ----------
@@ -127,7 +127,7 @@ class Sense(object):
 
         Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
 
-        form : str, power spectra form 'Pk' for P(k) and 'Dsq' for Delta^2(k)
+        form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
@@ -136,13 +136,13 @@ class Sense(object):
         Returns (P_N)
         -------
         P_N : estimated noise power spectrum in units of mK^2 * h^-3 Mpc^3
-        if form == 'Dsq', then units include a factor of h^3 k^3 / (2pi^2)
+        if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
         """
         # assert scalar exists
         assert hasattr(self, 'scalar'), "self.scalar must exist before one can calculate a noise spectrum, see self.calc_scalar()"
 
         # assert form
-        assert form in ('Pk', 'Dsq'), "form must be either 'Pk' or 'Dsq' for P(k) or Delta^2(k) respectively"
+        assert form in ('Pk', 'DelSq'), "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
 
         # convert to mK
         Tsys *= 1e3
@@ -158,7 +158,7 @@ class Sense(object):
             P_N /= np.sqrt(Nincoherent)
 
         # Convert to Delta Sq
-        if form == 'Dsq':
+        if form == 'DelSq':
             P_N = P_N * k**3 / (2*np.pi**2)
 
         return np.ones_like(k, np.float) * P_N

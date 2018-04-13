@@ -727,23 +727,23 @@ class UVPSpec(object):
 
         return True
 
-    def generate_sense(self, beam):
+    def generate_sensitivity(self, beam):
         """
-        Generate a hera_pspec.noise.Sense instance and attach to self as self.sense
+        Generate a hera_pspec.noise.Sensitivity instance and attach to self as self.sensitivity
 
         Parameters
         ----------
         beam : pspecbeam.PSpecBeamUV instance
 
-        Result
+        Results
         ------
-        self.sense : noise.Sense instance
+        self.sensitivity : noise.Sensitivity instance
         """
-        assert hasattr(self, 'cosmo'), "self.cosmo must exist in order to instantiate a Sense object, see self.add_cosmology()"
+        assert hasattr(self, 'cosmo'), "self.cosmo must exist in order to instantiate a Sensitivity object, see self.add_cosmology()"
 
-        # instantiate a noise.Sense object
-        print "attaching self.sense"
-        self.sense = noise.Sense(cosmo=self.cosmo, beam=beam)
+        # instantiate a noise.Sensitivity object
+        print "attaching self.sensitivity"
+        self.sensitivity = noise.Sensitivity(cosmo=self.cosmo, beam=beam)
 
     def generate_noise_spectra(self, spw, pol, Tsys, little_h=True, form='Pk', num_steps=5000, real=True):
         """
@@ -757,10 +757,10 @@ class UVPSpec(object):
         number of incoherent averaging samples and comes from self.nsample_array.
 
         If the polarization specified is a pseudo Stokes pol (I, Q, U or V) then an extra sqrt(2) is divided.
-        If form == 'Dsq' then a factor of k^3 / (2pi^2) is multiplied.
+        If form == 'DelSq' then a factor of k^3 / (2pi^2) is multiplied.
         If real is True, a factor of sqrt(2) is divided to account for discarding imaginary noise component.
 
-        For more details, see hera_pspec.noise.Sense.calc_P_N
+        For more details, see hera_pspec.noise.Sensitivity.calc_P_N
     
         Parameters
         ----------
@@ -774,7 +774,7 @@ class UVPSpec(object):
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
 
-        form : str, form of pspectra, P(k) or Delta^2(k), options=['Pk', 'Dsq']
+        form : str, form of pspectra, P(k) or Delta^2(k), options=['Pk', 'DelSq']
 
         num_steps : int, number of frequency bins to use in integrating power spectrum scalar in pspecbeam
 
@@ -786,7 +786,7 @@ class UVPSpec(object):
         P_N : float ndarray containing power spectrum noise estimate, shape=(Nblpairts, Ndlys)
         """
         # assert cosmology exists
-        assert hasattr(self, 'sense'), "self.sense required to generate noise spectra. See self.generate_sense()"
+        assert hasattr(self, 'sensitivity'), "self.sensitivity required to generate noise spectra. See self.generate_sensitivity()"
 
         # get polarization index
         pol_ind = self.pol_to_indices(pol)
@@ -795,7 +795,7 @@ class UVPSpec(object):
         freqs = self.freq_array[self.spw_to_indices(spw)]
 
         # calculate scalar
-        self.sense.calc_scalar(freqs, 'pseudo_I', num_steps=num_steps, little_h=little_h)
+        self.sensitivity.calc_scalar(freqs, 'pseudo_I', num_steps=num_steps, little_h=little_h)
 
         # Get k vectors
         k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
@@ -807,7 +807,7 @@ class UVPSpec(object):
             # get integration time
             t_int = self.integration_array[spw][i, pol_ind]
             n_samp = self.nsample_array[spw][i, pol_ind]
-            pn = self.sense.calc_P_N(k_mag[i], Tsys, t_int, Nincoherent=n_samp, form=form, little_h=little_h)
+            pn = self.sensitivity.calc_P_N(k_mag[i], Tsys, t_int, Nincoherent=n_samp, form=form, little_h=little_h)
             P_N.append(pn)
 
         P_N = np.array(P_N)

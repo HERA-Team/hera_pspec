@@ -56,8 +56,8 @@ class Test_Sense(unittest.TestCase):
         P_N = self.sense.calc_P_N(k, Tsys, t_int, Ncoherent=1, Nincoherent=1, form='Pk')
         nt.assert_equal(P_N.shape, (10,))
         nt.assert_true(np.isclose(P_N, 9.07836740e+11).all())
-        # calculate Dsq
-        Dsq = self.sense.calc_P_N(k, Tsys, t_int, Ncoherent=1, Nincoherent=1, form='Dsq')
+        # calculate DelSq
+        Dsq = self.sense.calc_P_N(k, Tsys, t_int, Ncoherent=1, Nincoherent=1, form='DelSq')
         nt.assert_equal(Dsq.shape, (10,))
         nt.assert_true(Dsq[1] < P_N[1])
 
