@@ -114,7 +114,7 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(Om_pp[4], 0.36258881134617554)
         self.assertAlmostEqual(Om_pp[4], Om_pp[0])
 
-        self.assertAlmostEqual(scalar/6082814757.7556648, 1.0, delta=1e-4)
+        self.assertAlmostEqual(scalar/6392750120.8657961, 1.0, delta=1e-4)
         
         # convergence of integral
         scalar_large_Nsteps = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000)
@@ -122,5 +122,5 @@ class Test_DataSet(unittest.TestCase):
 
         # test taper execution
         scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
-        self.assertAlmostEqual(scalar / 19974901797.178055, 1.0, delta=1e-8)
+        self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)
 
