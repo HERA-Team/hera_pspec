@@ -102,16 +102,6 @@ class Test_DataSet(unittest.TestCase):
         self.assertEqual(Om_p.ndim,1)
         self.assertEqual(Om_pp.ndim,1)
 
-        # Check that errors are raised for other Stokes parameters
-        for stokes in ['Q', 'U', 'V', 'Z']:
-            nt.assert_raises(NotImplementedError, 
-                             self.gauss.power_beam_int, stokes=stokes)
-            nt.assert_raises(NotImplementedError, 
-                             self.gauss.power_beam_sq_int, stokes=stokes)
-            nt.assert_raises(NotImplementedError, 
-                             self.gauss.compute_pspec_scalar, 
-                             lower_freq, upper_freq, num_freqs, stokes=stokes)
-
         self.assertAlmostEqual(Om_p[4], 0.7251776226923511)
         self.assertAlmostEqual(Om_p[4], Om_p[0])
 
