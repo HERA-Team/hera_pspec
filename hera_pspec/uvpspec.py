@@ -773,15 +773,15 @@ class UVPSpec(object):
 
         P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
 
-        where scalar is the cosmological and beam scalar calculated from pspecbeam with noise_scalar = True,
-        integration_time is in seconds and comes from self.integration_array and Nincoherent is the
-        number of incoherent averaging samples and comes from self.nsample_array.
+        where scalar is the cosmological and beam scalar (i.e. X2y * Omega_eff) calculated from pspecbeam 
+        with noise_scalar = True, integration_time is in seconds and comes from self.integration_array and 
+        Nincoherent is the number of incoherent averaging samples and comes from self.nsample_array.
 
-        If the polarization specified is a pseudo Stokes pol (I, Q, U or V) then an extra sqrt(2) is divided.
+        If the polarization specified is a pseudo Stokes pol (I, Q, U or V) then an extra factor of 2 is divided.
         If form == 'DelSq' then a factor of k^3 / (2pi^2) is multiplied.
         If real is True, a factor of sqrt(2) is divided to account for discarding imaginary noise component.
 
-        For more details, see hera_pspec.noise.Sensitivity.calc_P_N
+        For more details, see hera_pspec.noise.Sensitivity.calc_P_N, and Cheng et al. 2018.
     
         Parameters
         ----------
@@ -838,7 +838,7 @@ class UVPSpec(object):
             pol = uvutils.polstr2num(pol)
         if pol in (1, 2, 3, 4):
             # pseudo stokes pol
-            P_N /= np.sqrt(2)
+            P_N /= 2.0
 
         if real:
             P_N /= np.sqrt(2)
