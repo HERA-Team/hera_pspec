@@ -310,6 +310,15 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 10.0).all())
         nt.assert_true(uvp2.get_data(0, 1002001002, 'xx').shape, (1, 50))
 
+    def test_fold_spectra(self):
+        uvp = copy.deepcopy(self.uvp)
+        uvp.fold_spectra()
+        nt.assert_true(uvp.folded)
+        nt.assert_raises(AssertionError, uvp.fold_spectra)
+        nt.assert_equal(len(uvp.get_dlys(0)), 24)
+        nt.assert_true(np.isclose(uvp.nsample_array[0], 2.0).all())
+
+
 def test_conj_blpair_int():
     conj_blpair = uvpspec._conj_blpair_int(1002003004)
     nt.assert_equal(conj_blpair, 3004001002)
