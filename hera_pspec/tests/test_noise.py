@@ -53,13 +53,13 @@ class Test_Sensitivity(unittest.TestCase):
         k = np.linspace(0, 3, 10)
         Tsys = 500.0
         t_int = 10.7
-        P_N = self.sense.calc_P_N(k, Tsys, t_int, Ncoherent=1, Nincoherent=1, form='Pk')
-        nt.assert_equal(P_N.shape, (10,))
-        nt.assert_true(np.isclose(P_N, 906609626029.72791).all())
+        P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, form='Pk')
+        nt.assert_true(isinstance(P_N, (float, np.float)))
+        nt.assert_true(np.isclose(P_N, 906609626029.72791))
         # calculate DelSq
-        Dsq = self.sense.calc_P_N(k, Tsys, t_int, Ncoherent=1, Nincoherent=1, form='DelSq')
+        Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form='DelSq')
         nt.assert_equal(Dsq.shape, (10,))
-        nt.assert_true(Dsq[1] < P_N[1])
+        nt.assert_true(Dsq[1] < P_N)
 
 
 

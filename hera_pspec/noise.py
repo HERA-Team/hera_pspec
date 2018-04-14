@@ -102,7 +102,7 @@ class Sensitivity(object):
         self.subband = freqs
         self.stokes = stokes
 
-    def calc_P_N(self, k, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', little_h=True):
+    def calc_P_N(self, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, little_h=True):
         """
         Calculate the noise power spectrum via Eqn. (21) of Cheng et al. 2018
     
@@ -117,8 +117,6 @@ class Sensitivity(object):
 
         Parameters
         ----------
-        k : float ndarray, cosmological wave-vectors in h Mpc^-1
-
         Tsys : float, System temperature in Kelvin
 
         t_int : float, integration time of power spectra in seconds
@@ -129,6 +127,8 @@ class Sensitivity(object):
         Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
 
         form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
+
+        k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
@@ -160,8 +160,9 @@ class Sensitivity(object):
 
         # Convert to Delta Sq
         if form == 'DelSq':
+            assert k is not None, "if form == 'DelSq' then k must be fed"
             P_N = P_N * k**3 / (2*np.pi**2)
 
-        return np.ones_like(k, np.float) * P_N
+        return P_N
 
 
