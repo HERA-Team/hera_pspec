@@ -1,6 +1,6 @@
 import numpy as np
 from collections import OrderedDict as odict
-from hera_pspec import conversions, noise
+from hera_pspec import conversions, noise, version
 from hera_pspec.parameter import PSpecParam
 import os
 from pyuvdata import uvutils as uvutils
@@ -75,6 +75,7 @@ class UVPSpec(object):
         self._git_hash = PSpecParam("git_hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
         self._cosmo_params = PSpecParam("cosmo_params", description="LCDM cosmological parameter string, used to instantiate a conversions.Cosmo_Conversions object.", expected_type=str)
         self._beamfile = PSpecParam("beamfile", description="filename of beam-model used to normalized pspectra.", expected_type=str)
+        self._folded = PSpecParam("folded", description="if power spectra are folded (i.e. averaged) onto purely positive delay axis. Default is False", expected_type=bool)
 
         # collect parameters
         self._all_params = sorted(map(lambda p: p[1:], fnmatch.filter(self.__dict__.keys(), '_*')))
@@ -83,11 +84,11 @@ class UVPSpec(object):
                             "data_array", "wgt_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units",
-                            "taper", "norm", "git_hash", "nsample_array", 'lst_avg_array', 'time_avg_array']
+                            "taper", "norm", "git_hash", "nsample_array", 'lst_avg_array', 'time_avg_array', 'folded']
 
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                             "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "tag1", "tag2",
-                            "norm", "taper", "git_hash", "cosmo_params", "beamfile"]
+                            "norm", "taper", "git_hash", "cosmo_params", "beamfile" ,'folded']
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 'lst_avg_array', 'time_avg_array', 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
@@ -100,6 +101,10 @@ class UVPSpec(object):
 
         # check all params are covered
         assert len(set(self._all_params) - set(self._dicts) - set(self._immutables) - set(self._ndarrays)) == 0
+
+        # Default parameter values
+        self.folded = False
+        self.git_hash = version.git_hash
 
     def get_data(self, key, *args):
         """
@@ -124,7 +129,14 @@ class UVPSpec(object):
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
 
-        return self.data_array[spw][blpairts, :, pol]
+        # if data has been folded, return only positive delays
+        if self.folded:
+            Ndlys = self.data_array[spw].shape[1]
+            return self.data_array[spw][blpairts, Ndlys//2+1:, pol]
+
+        # else return all delays
+        else:
+            return self.data_array[spw][blpairts, :, pol]
 
     def get_wgts(self, key, *args):
         """
@@ -406,6 +418,9 @@ class UVPSpec(object):
         Convert a spectral window integer into a list of indices to index
         into the spwdlys axis of dly_array and/or freq_array.
 
+        If self.folded == False, return indices for both positive and negative delay bins,
+        else if self.folded == True, returns indices for only positive delay bins.
+
         Parameters
         ----------
         spw : int, spectral window index or list of indices
@@ -417,7 +432,13 @@ class UVPSpec(object):
         # assert exists in data
         assert np.array(map(lambda s: s in self.spw_array, spw)).all(), "spws {} not all found in data".format(spw)
 
-        return np.arange(self.Nspwdlys)[reduce(operator.add, map(lambda s: self.spw_array == s, spw))]
+        # get select boolean array
+        select = reduce(operator.add, map(lambda s: self.spw_array == s, spw))
+
+        if self.folded:
+            select[self.dly_array < 1e-10] = False
+
+        return np.arange(self.Nspwdlys)[select]
 
     def pol_to_indices(self, pol):
         """
@@ -1014,6 +1035,42 @@ class UVPSpec(object):
 
         if inplace == False:
             return uvp
+
+    def fold_spectra(self):
+        """
+        Fold power spectra: average bandpowers from matching positive and degative delay bins onto a purely
+        positive delay axis. Negative delay bins are still populated, but are filled with zero
+        power. Will only work if self.folded == False, i.e. data is currently unfolded across
+        negative and positive delay. Because this averages the data, the nsample array is multiplied
+        by a factor of 2. Warning: this operation cannot be undone.
+        """
+        # assert folded is False
+        assert self.folded == False, "cannot fold power spectra if self.folded == True"
+
+        # Iterate over spw
+        for spw in range(self.Nspws):
+
+            # get number of dly bins
+            Ndlys = len(self.get_dlys(spw))
+
+            if Ndlys % 2 == 0:
+                # even number of dlys
+                left = self.data_array[spw][:, 1:Ndlys//2, :][:, ::-1, :]
+                right = self.data_array[spw][:, Ndlys//2+1:, :]
+                self.data_array[spw][:, Ndlys//2+1:, :] = np.mean([left, right], axis=0)
+                self.data_array[spw][:, :Ndlys//2, :] = 0.0
+                self.nsample_array[spw] *= 2.0
+
+            else:
+                # odd number of dlys
+                left = self.data_array[spw][:, :Ndlys//2, :][:, ::-1, :]
+                right = self.data_array[spw][:, Ndlys//2+1:, :]   
+                self.data_array[spw][:, Ndlys//2+1:, :] = np.mean([left, right], axis=0)
+                self.data_array[spw][:, :Ndlys//2, :] = 0.0
+                self.nsample_array[spw] *= 2.0
+
+        self.folded = True
+
 
     def get_blpair_groups_from_bl_groups(self, blgroups, only_pairs_in_bls=False):
         """
