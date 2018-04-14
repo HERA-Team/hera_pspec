@@ -104,15 +104,16 @@ class Sensitivity(object):
 
     def calc_P_N(self, k, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', little_h=True):
         """
-        Calculate the noise power spectrum via Eqn. (1) of Pober et al. 2014, ApJ 782, 66
+        Calculate the noise power spectrum via Eqn. (21) of Cheng et al. 2018
     
         The noise power spectrum is written as 
 
-        P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
+        P_N = scalar * (Tsys * 1e3)^2 / (t_int * Ncoherent) / sqrt(Nincoherent)
 
-        where scalar is a nomalization given by the cosmological model and beam response, 
-        Tsys is the system temp in Kelvin, integration_time is the total integration time underlying
-        the power spectrum, and Nincoherent is the number of incoherent averages after squaring.
+        where scalar is a nomalization given by the cosmological model and beam response, i.e. X2Y * Omega_eff
+        Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec], 
+        Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the 
+        number of incoherent averages after squaring.
 
         Parameters
         ----------
