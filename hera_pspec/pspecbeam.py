@@ -8,7 +8,7 @@ import aipy
 
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps=5000,
-                          stokes='pseudo_I', taper='none', little_h=True, noise_scalar=False):
+                          taper='none', little_h=True, noise_scalar=False):
     """
     This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
@@ -17,10 +17,6 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
     in "telescope units" to cosmological units
 
     See arxiv:1304.4991 and HERA memo #27 for details.
-
-    Currently, only the "pseudo Stokes I" beam is supported.
-    See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
-    or arxiv:1502.05072 for details.
 
     Parameters
     ----------
@@ -41,11 +37,6 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
     num_steps : int, optional
             Number of steps to use when interpolating primary beams for
             numerical integral
-
-    stokes: str, optional
-            Which Stokes parameter's beam to compute the scalar for.
-            'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
-            Default: 'pseudo_I'
 
     taper : str, optional
             Whether a tapering function (e.g. Blackman-Harris) is being
@@ -117,7 +108,7 @@ class PSpecBeamBase(object):
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
-        Currently, only the "pseudo Stokes I" beam is supported.
+        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
@@ -140,8 +131,9 @@ class PSpecBeamBase(object):
                 Default: 10000
 
         stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Which Stokes parameter's to compute the beam scalar for.
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
                 Default: 'pseudo_I'
 
         taper : str, optional
@@ -173,7 +165,7 @@ class PSpecBeamBase(object):
 
         # Get scalar
         scalar = _compute_pspec_scalar(self.cosmo, self.beam_freqs, omega_ratio, pspec_freqs,
-                                       num_steps=num_steps, stokes=stokes, taper=taper, little_h=little_h,
+                                       num_steps=num_steps, taper=taper, little_h=little_h,
                                        noise_scalar=noise_scalar)
 
         return scalar
@@ -194,8 +186,9 @@ class PSpecBeamBase(object):
         freqs : float ndarray, contains frequencies to evaluate conversion factor [Hz]
 
         stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Which Stokes parameter's to compute the beam scalar for.
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
                 Default: 'pseudo_I'
 
         Returns
@@ -246,24 +239,23 @@ class PSpecBeamGauss(PSpecBeamBase):
         Trivially this returns an array (i.e., a function of frequency),
         but the results are frequency independent.
 
-        Currently, only the "pseudo Stokes I" beam is supported.
+        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
         Parameters
         ----------
         stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Which Stokes parameter's to compute the beam scalar for.
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
                 Default: 'pseudo_I'
+
         Returns
         -------
         primary beam area: float, array-like
         """
-        if stokes != 'pseudo_I':
-            raise NotImplementedError("Only stokes='pseudo_I' is currently supported.")
-        else:
-            return np.ones_like(self.beam_freqs) * 2. * np.pi * self.fwhm**2 / (8. * np.log(2.))
+        return np.ones_like(self.beam_freqs) * 2. * np.pi * self.fwhm**2 / (8. * np.log(2.))
 
     def power_beam_sq_int(self, stokes='pseudo_I'):
         """
@@ -274,24 +266,23 @@ class PSpecBeamGauss(PSpecBeamBase):
         Trivially this returns an array (i.e., a function of frequency),
         but the results are frequency independent.
 
-        Currently, only the "pseudo Stokes I" beam is supported.
+        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
         Parameters
         ----------
         stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Which Stokes parameter's to compute the beam scalar for.
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
                 Default: 'pseudo_I'
+
         Returns
         -------
         primary beam area: float, array-like
         """
-        if stokes != 'pseudo_I':
-            raise NotImplementedError("Only stokes='pseudo_I' is currently supported.")
-        else:
-            return np.ones_like(self.beam_freqs) * np.pi * self.fwhm**2 / (8. * np.log(2.))
+        return np.ones_like(self.beam_freqs) * np.pi * self.fwhm**2 / (8. * np.log(2.))
 
 
 class PSpecBeamUV(PSpecBeamBase):
@@ -322,16 +313,18 @@ class PSpecBeamUV(PSpecBeamBase):
         a beam area (in str) as a function of frequency. Uses function
         in pyuvdata.
 
-        Currently, only the "pseudo Stokes I" beam is supported.
+        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
         Parameters
         ----------
         stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Which Stokes parameter's to compute the beam scalar for.
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
                 Default: 'pseudo_I'
+
         Returns
         -------
         primary beam area: float, array-like
@@ -347,16 +340,18 @@ class PSpecBeamUV(PSpecBeamBase):
         a beam**2 area (in str) as a function of frequency. Uses function
         in pyuvdata.
 
-        Currently, only the "pseudo Stokes I" beam is supported.
+        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
         Parameters
         ----------
         stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', although currently only 'pseudo_I' is implemented
+                Which Stokes parameter's to compute the beam scalar for.
+                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
                 Default: 'pseudo_I'
+
         Returns
         -------
         primary beam area: float, array-like
