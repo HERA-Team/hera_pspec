@@ -3,11 +3,13 @@ import nose.tools as nt
 import numpy as np
 import pyuvdata as uv
 import os, copy, sys
-from scipy.integrate import simps
-from hera_pspec import pspecdata, pspecbeam
+from scipy.integrate import simps, trapz
+from hera_pspec import pspecdata, pspecbeam, conversions
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 from hera_cal import redcal
+from scipy.signal import windows
+from scipy.interpolate import interp1d
 
 # Data files to use in tests
 dfiles = [
@@ -16,7 +18,7 @@ dfiles = [
 ]
 
 # List of tapering function to use in tests
-taper_selection = ['blackman',]
+taper_selection = ['none', 'blackman',]
 #taper_selection = ['blackman', 'blackman-harris', 'gaussian0.4', 'kaiser2',
 #                   'kaiser3', 'hamming', 'hanning', 'parzen']
 
@@ -215,11 +217,11 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 
                 # Calculate q_hat for a pair of baselines and test output shape
-                q_hat_a = self.ds.q_hat(key1, key2)
+                q_hat_a = self.ds.q_hat(key1, key2, taper=taper)
                 self.assertEqual(q_hat_a.shape, (Nfreq, Ntime))
                 
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
-                q_hat_b = self.ds.q_hat(key2, key1)
+                q_hat_b = self.ds.q_hat(key2, key1, taper=taper)
                 q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
                 for i in range(Nfreq):
                     for j in range(Ntime):
@@ -229,9 +231,9 @@ class Test_PSpecData(unittest.TestCase):
                                                q_hat_diff[i,j].imag)
                 
                 # Check that lists of keys are handled properly
-                q_hat_aa = self.ds.q_hat(key1, key4) # q_hat(k1, k2+k2)
-                q_hat_bb = self.ds.q_hat(key4, key1) # q_hat(k2+k2, k1)
-                q_hat_cc = self.ds.q_hat(key3, key4) # q_hat(k1+k1, k2+k2)
+                q_hat_aa = self.ds.q_hat(key1, key4, taper=taper) # q_hat(k1, k2+k2)
+                q_hat_bb = self.ds.q_hat(key4, key1, taper=taper) # q_hat(k2+k2, k1)
+                q_hat_cc = self.ds.q_hat(key3, key4, taper=taper) # q_hat(k1+k1, k2+k2)
                 
                 # Effectively checks that q_hat(2*k1, 2*k2) = 4*q_hat(k1, k2)
                 for i in range(Nfreq):
@@ -242,17 +244,9 @@ class Test_PSpecData(unittest.TestCase):
                                                0.25 * q_hat_cc[i,j].imag)
                 
                 # Check that the slow method is the same as the FFT method
-                q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False)
-                vector_scale = np.min([ np.min(np.abs(q_hat_a_slow.real)), 
-                                        np.min(np.abs(q_hat_a_slow.imag)) ])
-                for i in range(Nfreq):
-                    for j in range(Ntime):
-                        self.assertLessEqual(
-                                np.abs((q_hat_a[i,j] - q_hat_a_slow[i,j]).real), 
-                                vector_scale*1e-6 )
-                        self.assertLessEqual(
-                                np.abs((q_hat_a[i,j] - q_hat_a_slow[i,j]).imag), 
-                                vector_scale*1e-6 )
+                q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False, taper=taper)
+                self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
+                self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
     def test_get_G(self):
         """
@@ -264,12 +258,12 @@ class Test_PSpecData(unittest.TestCase):
 
         for input_data_weight in ['identity','iC']:
             for taper in taper_selection:
-                print 'input_data_weight', input_data_weight, 'taper', taper
+                print 'input_data_weight', input_data_weight
                 self.ds.set_R(input_data_weight)
                 key1 = (0, 24, 38)
                 key2 = (1, 25, 38)
 
-                G = self.ds.get_G(key1, key2, taper=taper)
+                G = self.ds.get_G(key1, key2)
                 self.assertEqual(G.shape, (Nfreq,Nfreq)) # Test shape
                 print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
@@ -292,7 +286,7 @@ class Test_PSpecData(unittest.TestCase):
                     # same test as the symmetry test, but perhaps there are
                     # creative ways to break the code to break one test but not
                     # the other.
-                    G_swapped = self.ds.get_G(key2, key1, taper=taper)
+                    G_swapped = self.ds.get_G(key2, key1)
                     G_diff_norm = np.linalg.norm(G - G_swapped)
                     self.assertLessEqual(G_diff_norm, 
                                         matrix_scale * multiplicative_tolerance)
@@ -309,7 +303,7 @@ class Test_PSpecData(unittest.TestCase):
                     # In general, when R_1 != R_2, there is a more restricted 
                     # symmetry where swapping R_1 and R_2 *and* taking the 
                     # transpose gives the same result
-                    G_swapped = self.ds.get_G(key2, key1, taper=taper)
+                    G_swapped = self.ds.get_G(key2, key1)
                     G_diff_norm = np.linalg.norm(G - G_swapped.T)
                     self.assertLessEqual(G_diff_norm, 
                                          matrix_scale * multiplicative_tolerance)
@@ -554,7 +548,57 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Ndlys, 10)
         nt.assert_equal(len(uvp.data_array), 1)
 
-        # check
+    def test_normalization(self):
+        # Test Normalization of pspec() compared to PAPER legacy techniques
+        d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2], 
+                             frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
+        d2 = self.uvd.select(times=np.unique(self.uvd.time_array)[1::2], 
+                             frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
+        freqs = np.unique(d1.freq_array)
+
+        # Setup baselines
+        bl1 = (24, 25)
+        bl2 = (37, 38)
+
+        # Get beam
+        beam = copy.deepcopy(self.bm)
+        cosmo = conversions.Cosmo_Conversions()
+
+        # Set to mK scale
+        d1.data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
+        d2.data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
+
+        # Compare using no taper
+        OmegaP = beam.power_beam_int()
+        OmegaPP = beam.power_beam_sq_int()
+        OmegaP = interp1d(beam.beam_freqs/1e6, OmegaP)(freqs/1e6)
+        OmegaPP = interp1d(beam.beam_freqs/1e6, OmegaPP)(freqs/1e6)
+        NEB = 1.0
+        Bp = np.median(np.diff(freqs)) * len(freqs)
+        scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
+        data1 = d1.get_data(bl1)
+        data2 = d2.get_data(bl2)
+        legacy = np.fft.fftshift(np.fft.ifft(data1, axis=1) * np.conj(np.fft.ifft(data2, axis=1)) * scalar, axes=1)[0]
+        # hera_pspec OQE
+        ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
+        uvp = ds.pspec([bl1], [bl2], (0, 1), taper='none', input_data_weight='identity', norm='I')
+        oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        # assert answers are same to within 3%
+        nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
+
+        # taper
+        window = windows.blackmanharris(len(freqs))
+        NEB = Bp / trapz(window**2, x=freqs)
+        scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
+        data1 = d1.get_data(bl1)
+        data2 = d2.get_data(bl2)
+        legacy = np.fft.fftshift(np.fft.ifft(data1*window[None, :], axis=1) * np.conj(np.fft.ifft(data2*window[None, :], axis=1)) * scalar, axes=1)[0]
+        # hera_pspec OQE
+        ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
+        uvp = ds.pspec([bl1], [bl2], (0, 1), taper='blackman-harris', input_data_weight='identity', norm='I')
+        oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        # assert answers are same to within 3%
+        nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
 
     def test_validate_bls(self):
         # test exceptions
