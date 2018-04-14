@@ -64,6 +64,7 @@ for f in files:
     dsets.append(_d)
 log("Loaded data in %1.1f sec." % (time.time() - t0), lvl=1)
 
+
 #-------------------------------------------------------------------------------
 # Load flags and beam
 #-------------------------------------------------------------------------------
@@ -73,9 +74,15 @@ beamfile = os.path.join(data_cfg['root'], data_cfg['beam'])
 beam = hp.pspecbeam.PSpecBeamUV(beamfile)
 log("Loaded beam file: %s" % beamfile)
 
-# Load weights
-# FIXME: Need to load weights from a proper source
+# Use the flags included in the UVData files
 wgts = [None for f in files]
+
+# Convert data files from Jy to mK if requested
+if 'convert_jy_to_mk' in data_cfg.keys():
+    if data_cfg['convert_jy_to_mk']:
+        for i in range(len(dsets)):
+            freqs = dsets[i].freq_array.flatten()
+            dsets[i].data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
 
 #-------------------------------------------------------------------------------
 # Calculate power spectrum and package output into PSpecContainer
@@ -89,7 +96,8 @@ antpos, ants = dsets[0].get_ENU_antpos(pick_data_ants=True)
 antpos = dict(zip(ants, antpos))
 red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0, low_hi=True)
 
-bls = red_bls[0] # FIXME
+# FIXME: Use only the first redundant baseline group for now
+bls = red_bls[0]
 print("Baselines: %s" % bls)
 
 # Replace default pspec settings if specified in config file
@@ -124,26 +132,6 @@ for i in dset_idxs:
         ps_store.set_pspec(group=pspec_cfg['groupname'], psname=pspec_name, 
                            pspec=ps, overwrite=pspec_defaults['overwrite'])
 
-# Check that power spectra can be retrieved
-ps = ps_store.get_pspec(pspec_cfg['groupname'], psname="pspec_dset(0,1)")
-#print ps
-
+# Print list of power spectra that were stored in the container
 ps_store.tree()
-
-#print ps_store.spectra(group=pspec_cfg['groupname'])
-#print ps_store.groups()
-#for pp in ps_store.spectra(group=pspec_cfg['groupname']):
-#    print pp
-#    y = ps_store.get_pspec(pspec_cfg['groupname'], psname=pp)
-    
-
-# Open file for reading
-#px = hp.PSpecContainer(pspec_cfg['output'], mode='r')
-#print(px.data[pspec_cfg['groupname']].keys())
-
-#-------------------------------------------------------------------------------
-# Output empirical covariance matrix diagnostics
-#-------------------------------------------------------------------------------
-#ps.iC(key)
-
 
