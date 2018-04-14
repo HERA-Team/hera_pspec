@@ -155,7 +155,7 @@ class Test_UVPSpec(unittest.TestCase):
         bp = self.uvp.antnums_to_bl((1, 2))
         nt.assert_equal(bp, 1002)
 
-    def get_indices_funcs(self):
+    def test_indices_funcs(self):
         # key to indices
         spw, blpairts, pol = self.uvp.key_to_indices( (0, ((1,2),(1,2)), -5) )
         nt.assert_equal(spw, 0)

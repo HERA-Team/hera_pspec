@@ -102,6 +102,7 @@ class Test_PSpecData(unittest.TestCase):
         # Load beam file
         beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
+        self.bm.filename = 'NF_HERA_Beams.beamfits'
 
         # load another data file
         self.uvd = uv.UVData()
@@ -604,8 +605,8 @@ class Test_PSpecData(unittest.TestCase):
         # test exceptions
         uvd = copy.deepcopy(self.uvd)
         nt.assert_raises(TypeError, pspecdata.validate_bls, [1], [1], uvd, uvd)
-        nt.assert_raises(TypeError, pspecdata.validate_bls, [1], [1], [1], uvd)
-        nt.assert_raises(TypeError, pspecdata.validate_bls, [1], [1], uvd, [1])
+        nt.assert_raises(TypeError, pspecdata.validate_bls, [[1]], [[1]], 1, uvd)
+        nt.assert_raises(TypeError, pspecdata.validate_bls, [[1]], [[1]], uvd, 1)
 
         bls1 = [(24, 25), (37, 38)]
         bls2 = [(24, 25), (37, 52)]
