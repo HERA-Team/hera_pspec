@@ -3,11 +3,12 @@ import os
 import aipy
 import pyuvdata
 from hera_pspec import conversions
+from scipy import __version__ as scipy_version
 from scipy import integrate
 from scipy.interpolate import interp1d
 
 # Version check
-if (scipy.__version__ < '0.19.0'):
+if (scipy_version < '0.19.0'):
     raise RuntimeError("scipy version 0.19.0 or greater is required.")
 
 

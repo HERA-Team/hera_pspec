@@ -221,11 +221,15 @@ class PSpecContainer(object):
             else:
                 raise KeyError("No pspec named '%s' in group '%s'" % (key2, key1))
         
+        
         # Otherwise, extract all available power spectra
         spectra = []
-        for key in grp.keys():
-            if "pspec_" in key:
-                spectra.append( self._load_pspec(grp[key]) )
+        def pspec_filter(n, obj):
+            if u'pspec_type' in obj.attrs.keys():
+                spectra.append(self._load_pspec(obj))
+        
+        # Traverse the entire set of groups/datasets looking for pspecs
+        grp.visititems(pspec_filter)
         return spectra
         
     
