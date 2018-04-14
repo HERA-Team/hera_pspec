@@ -766,14 +766,14 @@ class UVPSpec(object):
         print "attaching self.sensitivity"
         self.sensitivity = noise.Sensitivity(cosmo=self.cosmo, beam=beam)
 
-    def generate_noise_spectra(self, spw, pol, Tsys, little_h=True, form='Pk', num_steps=5000, real=True):
+    def generate_noise_spectra(self, spw, pol, Tsys, blpairs=None, little_h=True, form='Pk', num_steps=5000, real=True):
         """
-        Generate the expected 1-sigma noise-floor power spectrum given the spectral window, system temp., 
+        Generate the expected 1-sigma noise power spectrum given a selection of spectral window, system temp., 
         and polarization. This estimate is constructed as
 
         P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
 
-        where scalar is the cosmological and beam scalar (i.e. X2y * Omega_eff) calculated from pspecbeam 
+        where scalar is the cosmological and beam scalar (i.e. X2Y * Omega_eff) calculated from pspecbeam 
         with noise_scalar = True, integration_time is in seconds and comes from self.integration_array and 
         Nincoherent is the number of incoherent averaging samples and comes from self.nsample_array.
 
@@ -791,6 +791,9 @@ class UVPSpec(object):
 
         Tsys : float, system temperature in Kelvin
 
+        blpairs : list of unique blair tuples or i12 integers to calculate noise spectrum for
+            default is to calculate for baseline pairs
+
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
@@ -799,15 +802,20 @@ class UVPSpec(object):
 
         num_steps : int, number of frequency bins to use in integrating power spectrum scalar in pspecbeam
 
-        real : boolean, if True assume real component of complex power spectrum is used, will divide by 
-            extra sqrt(2), otherwise assume power spectra are complex and keep P_N as is
+        real : boolean, if True assumes the real component of complex power spectrum is used, amd will divide
+            P_N by an extra sqrt(2), otherwise assume power spectra are complex and keep P_N as is
 
         Returns P_N
         -------
-        P_N : float ndarray containing power spectrum noise estimate, shape=(Nblpairts, Ndlys)
+        P_N : dictionary containing blpair integers as keys and float ndarray of noise power spectrum as values,
+            with ndarrays having shape (Ntimes, Ndlys)
         """
         # assert cosmology exists
         assert hasattr(self, 'sensitivity'), "self.sensitivity required to generate noise spectra. See self.generate_sensitivity()"
+
+        # assert polarization type
+        if isinstance(pol, (np.int, int)):
+            pol = uvutils.polnum2str(pol)
 
         # get polarization index
         pol_ind = self.pol_to_indices(pol)
@@ -816,32 +824,63 @@ class UVPSpec(object):
         freqs = self.freq_array[self.spw_to_indices(spw)]
 
         # calculate scalar
-        self.sensitivity.calc_scalar(freqs, 'pseudo_I', num_steps=num_steps, little_h=little_h)
+        self.sensitivity.calc_scalar(freqs, pol, num_steps=num_steps, little_h=little_h)
 
         # Get k vectors
-        k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
-        k_mag = np.sqrt(k_perp[:, None]**2 + k_para[None, :]**2)
+        if form == 'DelSq':
+            k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
+            k_mag = np.sqrt(k_perp[:, None]**2 + k_para[None, :]**2)
+
+        # get blpairs
+        if blpairs is None:
+            blpairs = np.unique(self.blpair_array)
+        elif isinstance(blpairs[0], tuple):
+            blpairs = map(lambda blp: self.antnums_to_blpair(blp), blpairs)
+
+        # get dlys
+        dlys = self.get_dlys(spw)
 
         # Iterate over blpairs to get P_N
-        P_N = []
-        for i, blp in enumerate(self.blpair_array):
-            # get integration time
-            t_int = self.integration_array[spw][i, pol_ind]
-            n_samp = self.nsample_array[spw][i, pol_ind]
-            pn = self.sensitivity.calc_P_N(k_mag[i], Tsys, t_int, Nincoherent=n_samp, form=form, little_h=little_h)
-            P_N.append(pn)
+        P_N = odict()
+        for i, blp in enumerate(blpairs):
+            # get indices
+            inds = self.blpair_to_indices(blp)
 
-        P_N = np.array(P_N)
+            P_blp = []
+            # iterate over time axis
+            for j, ind in enumerate(inds):
+                # get integration time and n_samp
+                t_int = self.integration_array[spw][ind, pol_ind]
+                n_samp = self.nsample_array[spw][ind, pol_ind]
 
-        # if pseudo stokes pol (as opposed to linear or circular pol) divide by extra factor of sqrt(2)
-        if isinstance(pol, (np.str, str)):
-            pol = uvutils.polstr2num(pol)
-        if pol in (1, 2, 3, 4):
-            # pseudo stokes pol
-            P_N /= 2.0
+                # get kvecs
+                if form == 'DelSq':
+                    k = k_mag[ind]
+                else:
+                    k = None
 
-        if real:
-            P_N /= np.sqrt(2)
+                # get pn
+                pn = self.sensitivity.calc_P_N(Tsys, t_int, 
+                                               k=k, Nincoherent=n_samp, form=form, little_h=little_h)
+
+                # put into appropriate form
+                if form == 'Pk':
+                    pn = np.ones(len(dlys), np.float) * pn
+
+                # if pseudo stokes pol (as opposed to linear or circular pol) divide by extra factor of 2
+                if isinstance(pol, (np.str, str)):
+                    pol = uvutils.polstr2num(pol)
+                if pol in (1, 2, 3, 4):
+                    # pseudo stokes pol
+                    pn /= 2.0
+                # if real divide by sqrt(2)
+                if real:
+                    pn /= np.sqrt(2)
+
+                # append to P_blp
+                P_blp.append(pn)
+
+            P_N[blp] = np.array(P_blp)
 
         return P_N
 
