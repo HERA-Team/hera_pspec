@@ -50,8 +50,8 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps
 
     noise_scalar : boolean, optional
             Whether to calculate power spectrum scalar, or noise power scalar. The noise power
-            scalar only differs in that the Bpp_over_BpSq term just because 1_over_Bp.
-            See Pober et al. 2014, ApJ 782, 66
+            scalar only differs in that the Bpp_over_BpSq term turns into 1_over_Bp.
+            See Pober et al. 2014, ApJ 782, 66, and Parsons HERA Memo #27
 
     Returns
     -------

@@ -472,12 +472,12 @@ class UVPSpec(object):
     def time_to_indices(self, time, blpairs=None):
         """
         Convert a time [Julian Date] from self.time_avg_array to an array that indexes the elements
-        at which time appears in that array. Can optionally take a blpair selection to further select
-        the indices at which both that time and blpair is satisfied.
+        at which it appears in that array. Can optionally take a blpair selection to further select
+        the indices at which both that time and blpair are satisfied.
 
         Parameters
         ----------
-        time : float, Julian Date time from self.time_avg_array
+        time : float, Julian Date time from self.time_avg_array, Ex: 2458042.12242
 
         blpairs : tuple or int, optional, list of blpair tuples or integers that further selects
             the elements at which both time and blpairs are satisfied.
@@ -771,7 +771,7 @@ class UVPSpec(object):
         Generate the expected 1-sigma noise power spectrum given a selection of spectral window, system temp., 
         and polarization. This estimate is constructed as
 
-        P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
+        P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent) [mK^2 h^-3 Mpc^3]
 
         where scalar is the cosmological and beam scalar (i.e. X2Y * Omega_eff) calculated from pspecbeam 
         with noise_scalar = True, integration_time is in seconds and comes from self.integration_array and 
@@ -782,7 +782,10 @@ class UVPSpec(object):
         If real is True, a factor of sqrt(2) is divided to account for discarding imaginary noise component.
 
         For more details, see hera_pspec.noise.Sensitivity.calc_P_N, and Cheng et al. 2018.
-    
+
+        The default units of P_N are mK^2 h^-3 Mpc^3 (if little_h=True and form='Pk'), but is different
+        if those kwargs are altered.
+
         Parameters
         ----------
         spw : int, spectral window index to generate noise curve for
@@ -805,10 +808,10 @@ class UVPSpec(object):
         real : boolean, if True assumes the real component of complex power spectrum is used, amd will divide
             P_N by an extra sqrt(2), otherwise assume power spectra are complex and keep P_N as is
 
-        Returns P_N
+        Returns (P_N)
         -------
-        P_N : dictionary containing blpair integers as keys and float ndarray of noise power spectrum as values,
-            with ndarrays having shape (Ntimes, Ndlys)
+        P_N : dictionary containing blpair integers as keys and float ndarrays of noise power spectra as values,
+            with ndarrays having shape (Ntimes, Ndlys).
         """
         # assert cosmology exists
         assert hasattr(self, 'sensitivity'), "self.sensitivity required to generate noise spectra. See self.generate_sensitivity()"
