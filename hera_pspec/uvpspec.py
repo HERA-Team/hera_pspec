@@ -823,8 +823,9 @@ class UVPSpec(object):
         # get frequency band
         freqs = self.freq_array[self.spw_to_indices(spw)]
 
-        # calculate scalar
-        self.sensitivity.calc_scalar(freqs, pol, num_steps=num_steps, little_h=little_h)
+        # calculate scalar, hard-coded to pseudo_I because that is currently all that pyuvdata supports
+        # near-future pyuvdata PR will extend support for extra polarizations
+        self.sensitivity.calc_scalar(freqs, 'pseudo_I', num_steps=num_steps, little_h=little_h)
 
         # Get k vectors
         if form == 'DelSq':
