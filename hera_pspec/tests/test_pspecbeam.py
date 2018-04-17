@@ -74,6 +74,10 @@ class Test_DataSet(unittest.TestCase):
         nt.assert_raises(TypeError, self.bm.Jy_to_mK, [1])
         nt.assert_raises(TypeError, self.bm.Jy_to_mK, np.array([1]))
 
+        # test noise scalar
+        sclr = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000, noise_scalar=True)
+        nt.assert_almost_equal(sclr, 70.983962969086235)
+
 
     def test_Gaussbeam(self):
         Om_p = self.gauss.power_beam_int()
@@ -86,16 +90,6 @@ class Test_DataSet(unittest.TestCase):
         # Check array dimensionality
         self.assertEqual(Om_p.ndim,1)
         self.assertEqual(Om_pp.ndim,1)
-
-        # Check that errors are raised for other Stokes parameters
-        for stokes in ['Q', 'U', 'V', 'Z']:
-            nt.assert_raises(NotImplementedError, 
-                             self.gauss.power_beam_int, stokes=stokes)
-            nt.assert_raises(NotImplementedError, 
-                             self.gauss.power_beam_sq_int, stokes=stokes)
-            nt.assert_raises(NotImplementedError, 
-                             self.gauss.compute_pspec_scalar, 
-                             lower_freq, upper_freq, num_freqs, stokes=stokes)
 
         self.assertAlmostEqual(Om_p[4], 0.7251776226923511)
         self.assertAlmostEqual(Om_p[4], Om_p[0])
