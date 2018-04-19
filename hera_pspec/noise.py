@@ -20,14 +20,14 @@ class Sensitivity(object):
         beam : hera_pspec.pspecbeam.PSpecBeam instance
         """
         if cosmo is not None:
-            self.add_cosmology(cosmo)
+            self.set_cosmology(cosmo)
 
         if beam is not None:
-            self.add_beam(beam)
+            self.set_beam(beam)
 
-    def add_cosmology(self, cosmo):
+    def set_cosmology(self, cosmo):
         """
-        Add a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
+        Set a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
 
         Parameters
         ----------
@@ -40,9 +40,9 @@ class Sensitivity(object):
         self.cosmo = cosmo
         self.cosmo_params = str(self.cosmo.get_params())
 
-    def add_beam(self, beam):
+    def set_beam(self, beam):
         """
-        Add a pspecbeam.PSpecBeam object to self as self.beam
+        Set a pspecbeam.PSpecBeam object to self as self.beam
 
         Parameters
         ----------
@@ -63,7 +63,7 @@ class Sensitivity(object):
             else:
                 # neither beam nor self have cosmo, raise AssertionError
                 raise AssertionError("neither self nor beam have a Cosmo_Conversions instance attached. "\
-                                     "See self.add_cosmology().")
+                                     "See self.set_cosmology().")
 
         self.beam = beam
 

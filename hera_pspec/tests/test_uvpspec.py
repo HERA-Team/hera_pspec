@@ -147,10 +147,18 @@ class Test_UVPSpec(unittest.TestCase):
         k_perp, k_para = self.uvp.get_kvecs(0)
         nt.assert_equal(len(k_perp), 30)
         nt.assert_equal(len(k_para), 50)
+        # test key expansion
+        key = (0, ((1, 2), (1, 2)), 'xx')
+        d = self.uvp.get_data(*key)
+        nt.assert_equal(d.shape, (10, 50))
+        # test key as dictionary
+        key = {'spw':0, 'blpair':((1, 2), (1, 2)), 'pol': 'xx'}
+        d = self.uvp.get_data(key)
+        nt.assert_equal(d.shape, (10, 50))
 
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
-        uvp.add_cosmology(conversions.Cosmo_Conversions())
+        uvp.set_cosmology(conversions.Cosmo_Conversions())
         uvp.convert_to_deltasq(little_h=True)
         k_perp, k_para = uvp.get_kvecs(0, little_h=True)
         k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)

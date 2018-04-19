@@ -267,7 +267,7 @@ class UVPSpec(object):
 
         """
         # assert cosmo
-        assert hasattr(self, 'cosmo'), "self.cosmo must exist to form cosmological wave-vectors. See self.add_cosmology()"
+        assert hasattr(self, 'cosmo'), "self.cosmo must exist to form cosmological wave-vectors. See self.set_cosmology()"
 
         # calculate mean redshift of band
         avg_z = self.cosmo.f2z(np.mean(self.freq_array[self.spw_to_indices(spw)]))
@@ -502,7 +502,7 @@ class UVPSpec(object):
         """
         Convert a data key into relevant slice arrays. A data key takes the form
 
-        (spw, ((ant1, ant2), (ant3, ant4)), pol)
+        (spw_integer, ((ant1, ant2), (ant3, ant4)), pol_string)
 
         or
 
@@ -514,6 +514,14 @@ class UVPSpec(object):
         One can also expand this key into the kwarg slots, such that 
         key=spw, key2=blpair, and key3=pol.
     
+        The key can also be a dictionary in the form
+        key = {
+            'spw' : spw_integer,
+            'blpair' : ((ant1, ant2), (ant3, ant4))
+            'pol' : pol_string
+            }
+        and it will parse the dictionary for you.
+
         Parameters
         ----------
         key : tuple, baseline-pair key
@@ -525,29 +533,38 @@ class UVPSpec(object):
         pol : integer
         """
         # assert key length
-        if len(args) == 0: assert len(key) == 3, "length of key must be 3."
+        if len(args) == 0:
+            assert len(key) == 3, "length of key must be 3."
+            if isinstance(key, (odict, dict)):
+                key = (key['spw'], key['blpair'], key['pol'])
         elif len(args) > 0:
-            assert isinstance(key, (int, np.int)) and len(args) == 2, "length of key must be 3."
+            assert len(args) == 2, "length of key must be 3."
+            assert isinstance(args[0], (tuple, int, np.int)) and isinstance(args[1], (np.str, str, int, np.int)), "key must be ordered as (spw, blpair, pol)"
             key = (key, args[0], args[1])
 
         # assign key elements
         spw = key[0]
         blpair = key[1]
         pol = key[2]
+
         # assert types
         assert isinstance(spw, (int, np.int)), "spw must be an integer"
         assert isinstance(blpair, (int, np.int, tuple)), "blpair must be an integer or nested tuple"
         assert isinstance(pol, (np.str, str, np.int, int)), "pol must be a string or integer"
+
         # convert blpair to int if not int
         if type(blpair) == tuple:
             blpair = self.antnums_to_blpair(blpair)
+
         # convert pol to int if str
         if type(pol) in (str, np.str):
             pol = uvutils.polstr2num(pol)
+
         # check attribuets exists in data
         assert spw in self.spw_array, "spw {} not found in data".format(spw)
         assert blpair in self.blpair_array, "blpair {} not found in data".format(blpair)
         assert pol in self.pol_array, "pol {} not found in data".format(pol)
+
         # index polarization array
         pol = self.pol_to_indices(pol)
         # index blpairts
@@ -775,9 +792,9 @@ class UVPSpec(object):
             self.write_to_group(f, run_check=run_check)
 
 
-    def add_cosmology(self, cosmo):
+    def set_cosmology(self, cosmo):
         """
-        Add a cosmological model to self.cosmo via an instance of 
+        Set a cosmological model to self.cosmo via an instance of 
         hera_pspec.conversions.Cosmo_Conversions
 
         Parameters
@@ -883,7 +900,7 @@ class UVPSpec(object):
         ------
         self.sensitivity : noise.Sensitivity instance
         """
-        assert hasattr(self, 'cosmo'), "self.cosmo must exist in order to instantiate a Sensitivity object, see self.add_cosmology()"
+        assert hasattr(self, 'cosmo'), "self.cosmo must exist in order to instantiate a Sensitivity object, see self.set_cosmology()"
 
         # instantiate a noise.Sensitivity object
         print "attaching self.sensitivity"
