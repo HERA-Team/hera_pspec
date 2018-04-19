@@ -960,13 +960,11 @@ class PSpecData(object):
         return scalar
 
     def pspec(self, bls1, bls2, dsets, input_data_weight='identity', norm='I', 
-              taper='none', little_h=True, avg_group=False, 
-              exclude_auto_bls=False, exclude_conjugated_blpairs=False,
-              spw_ranges=None, verbose=True, history=''):
+              taper='none', little_h=True, spw_ranges=None, verbose=True, 
+              history=''):
         """
-        Estimate the delay power spectrum from a pair of datasets contained in 
-        this object, using the optimal quadratic estimator from 
-        arXiv:1502.06016.
+        Estimate the delay power spectrum from a pair of datasets contained in this 
+        object, using the optimal quadratic estimator from arXiv:1502.06016.
 
         In this formulation, the power spectrum is proportional to the 
         visibility data via
@@ -988,44 +986,9 @@ class PSpecData(object):
 
         Parameters
         ----------
-        bls1, bls2 : list of bl tuples 
-            (or list of bl groups, which themselves are list of bl tuples)
-            List of baseline tuples to use in the power spectrum calculation 
-            for the "left-hand" dataset (bls1) and "right-hand" dataset (bls2). 
-            A baseline tuple is specified as an antenna pair, Ex: (ant1, ant2)
+        bls1 : list of baseline groups, each being a list of ant-pair tuples
 
-            Alternatively, bls1 and bls2 can contain lists of baselines groups, 
-            which are themselves lists of baseline tuples. A bl-group in bls1 
-            should have the same positional index in bls2, i.e. a group at 
-            bls1[i] should correspond to a group at bls2[i]. 
-            
-            In this case, pspec will do one of two things:
-
-              1) If avg_group=True, the data in each baseline-group will be 
-                 averaged together before squaring, and then crossed with the 
-                 baseline groups with the same positions (indices) in bls1 and 
-                 bls2, e.g. bls1[i] x bls2[i]
-
-              2) If avg_group=False, all permutations of cross-spectra between 
-                 bls in a group in bls1 and bls in the corresponding group in 
-                 bls2 are calculated. (Note that baselines are never crossed 
-                 between different baseline groups, which are defined based on 
-                 their positional index in the list, i.e. we never do 
-                 bls1[i] x bls2[j] for i != j.
-                 
-                 Example: if bls1 = bls2 = [[(1, 2), (2, 3)], [(1, 5), (2, 6)]] 
-                 then we will find all permutations of:
-                     [(1, 2), (2, 3)] x [(1, 2), (2, 3)] 
-                 and [(1, 5), (2, 6)] x [(1, 5), (2, 6)].
-
-                 If exclude_auto_bls = True, bl-pairs that have a repeated 
-                 baseline are eliminated. Example: ((1, 2), (1, 2)) would be 
-                 eliminated from the bl_pairs array.
-
-                 If exclude_conjugated_blpairs = True, if a baseline pair 
-                 exists as well as its conjugate, the latter is eliminated. 
-                 Example: ((1, 2), (2, 3)) and ((2, 3), (1, 2)), in which case 
-                 ((2, 3), (1, 2)) would be eliminated from the bl_pairs array.
+        bls2 : list of baseline groups, each being a list of ant-pair tuples
 
         dsets : length-2 tuple or list
             Contains indices of self.dsets to use in forming power spectra, 
@@ -1049,20 +1012,6 @@ class PSpecData(object):
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
 
-        exclude_conjugated_blpairs : boolean, optional
-            If bls1 and bls2 are lists of bl groups, exclude conjugated 
-            baseline-pairs. Example: If ((1, 2), (2,3)) and ((2, 3), (1,2)) 
-            exist, exclude the latter.
-
-        exclude_auto_bls : boolean, optional
-            If bls1 and bls2 are lists of bl groups, exclude bl-pairs when a bl 
-            is paired with itself. Used to prevent the inclusion of power 
-            spectra with noise biases.
-
-        avg_group : boolean, optional
-            If bls1 and bls2 contain a list of bl groups, average data in each 
-            group before cross-multiplying.
-
         spw_ranges : list of tuples, optional
             A list of spectral window channel ranges to select within the total 
             bandwidth of the datasets, each of which forms an independent power 
@@ -1082,6 +1031,33 @@ class PSpecData(object):
         -------
         uvp : UVPSpec object
             Instance of UVPSpec that holds the output power spectrum data.
+
+        Examples
+        --------
+        Example 1 : no grouping, i.e. each baseline is its own group, no 
+        brackets needed for each bl.
+        if
+            A = (1, 2); B = (2, 3); C = (3, 4); D = (4, 5); E = (5, 6); F = (6, 7)
+        and
+            bls1 = [ A, B, C ]
+            bls2 = [ D, E, F ]
+        then
+            blpairs = [ (A, D), (B, E), (C, F) ]
+
+        Example 2: grouping, blpairs come in lists of blgroups, which are considered 
+        "grouped" in OQE
+        if
+            bls1 = [ [A, B], [C, D] ]
+            bls2 = [ [C, D], [E, F] ]
+        then
+            blpairs = [ [(A, C), (B, D)], [(C, E), (D, F)] ]   
+    
+        Example 3: mixed grouping, i.e. some blpairs are grouped, others are not
+        if
+            bls1 = [ [A, B], C ]
+            bls2 = [ [D, E], F ]
+        then
+            blpairs = [ [(A, D), (B, E)], (C, F)]
         """
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
@@ -1096,75 +1072,26 @@ class PSpecData(object):
         # get polarization array from zero'th dset
         pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), dset1.polarization_array)
 
-        # ensure both bls1 and bls2 are the same type
-        if isinstance(bls1[0], tuple) and isinstance(bls1[0][0], (int, np.int)) \
-            and isinstance(bls2[0], tuple) and isinstance(bls2[0][0], (int, np.int)):
-            # bls1 and bls2 fed as list of bl tuples
-            fed_bl_group = False
-
-        elif isinstance(bls1[0], list) and isinstance(bls1[0][0], tuple) and isinstance(bls2[0], list) \
-            and isinstance(bls2[0][0], tuple):
-            # bls1 and bls2 fed as list of bl groups
-            fed_bl_group = True
-            assert len(bls1) == len(bls2), "if fed as list of bl groups, len(bls1) must equal len(bls2)"
-
-        else:
-            raise TypeError("bls1 and bls2 must both be fed as either a list of bl tuples, or a list of bl groups")
-
-        # validate bl-pair redundancy
-        validate_bls(bls1, bls2, dset1, dset2, baseline_tol=1.0)
+        # assert form of bls1 and bls2
+        assert len(bls1) == len(bls2), "length of bls1 must equal length of bls2"
+        for i in range(len(bls1)):
+            if isinstance(bls1[i], tuple):
+                assert isinstance(bls2[i], tuple), "bls1[{}] type must match bls2[{}] type".format(i, i)
+            else:
+                assert len(bls1[i]) == len(bls2[i]), "len(bls1[{}]) must match len(bls2[{}])".format(i, i)
 
         # construct list of baseline pairs
         bl_pairs = []
         for i in range(len(bls1)):
-            if fed_bl_group:
-                bl_grp = []
-                for j in range(len(bls1[i])):
-                    bl_grp.extend(itertools.combinations(bls2[i] + [bls1[i][j]], 2))
-                # eliminate duplicates
-                bl_grp = sorted(set(bl_grp))
-                bl_pairs.append(bl_grp)
+            if isinstance(bls1[i], tuple):
+                bl_pairs.append( (bls1[i], bls2[i]) )
+            elif isinstance(bls1[i], list) and len(bls1[i]) == 1:
+                bl_pairs.append( (bls1[i][0], bls2[i][0]) )
             else:
-                bl_pairs.append((bls1[i], bls2[i]))
+                bl_pairs.append(map(lambda j: (bls1[i][j] , bls2[i][j]), range(len(bls1[i]))))
 
-        # iterate through all bl pairs and ensure it exists in the specified dsets, else remove
-        new_bl_pairs = []
-        for i, blg in enumerate(bl_pairs):
-            if fed_bl_group:
-                new_blg = []
-                for blp in blg:
-                    if self.check_key_in_dset(blp[0], dsets[0]) and self.check_key_in_dset(blp[1], dsets[1]):
-                        new_blg.append(blp)
-                if len(new_blg) > 0:
-                    new_bl_pairs.append(new_blg)
-            else:
-                if self.check_key_in_dset(blg[0], dsets[1]) and self.check_key_in_dset(blg[1], dsets[1]):
-                    new_bl_pairs.append(blg)
-        bl_pairs = new_bl_pairs
-
-        # exclude autos or conjugated blpairs if desired
-        if fed_bl_group:
-            new_bl_pairs = []
-            for i, blg in enumerate(bl_pairs):
-                new_blg = []
-                for blp in blg:
-                    if exclude_auto_bls:
-                        if blp[0] == blp[1]:
-                            continue
-                    if (blp[1], blp[0]) in new_blg and exclude_conjugated_blpairs:
-                        continue
-                    new_blg.append(blp)
-                if len(new_blg) > 0:
-                    new_bl_pairs.append(new_blg)
-            bl_pairs = new_bl_pairs
-
-        # flatten bl_pairs list if bls fed as bl groups but no averaging is desired
-        if avg_group == False and fed_bl_group:
-            bl_pairs = [item for sublist in bl_pairs for item in sublist]
-
-        if avg_group:
-            # bl group averaging currently fails at self.get_G() function
-            raise NotImplementedError
+        # validate bl-pair redundancy
+        validate_blpairs(bl_pairs, dset1, dset2, baseline_tol=1.0)
 
         # configure spectral window selections
         if spw_ranges is None:
@@ -1229,10 +1156,12 @@ class PSpecData(object):
                 for k, blp in enumerate(bl_pairs):
 
                     # assign keys
-                    if avg_group and fed_bl_group:
+                    if isinstance(blp, list):
+                        # interpet blp as group of baseline-pairs
                         key1 = [(dsets[0],) + _blp[0] + (p,) for _blp in blp]
                         key2 = [(dsets[1],) + _blp[1] + (p,) for _blp in blp]
-                    else:
+                    elif isinstance(blp, tuple):
+                        # interpret blp as baseline-pair
                         key1 = (dsets[0],) + blp[0] + (p,)
                         key2 = (dsets[1],) + blp[1] + (p,)
                         
@@ -1267,7 +1196,7 @@ class PSpecData(object):
                         pv *= scalar
 
                     # Get baseline keys
-                    if avg_group and fed_bl_group:
+                    if isinstance(blp, list):
                         bl1 = blp[0][0]
                         bl2 = blp[0][1]
                     else:
@@ -1477,43 +1406,98 @@ class PSpecData(object):
         if inplace is False:
             return dsets
 
-
-def validate_bls(bls1, bls2, uvd1, uvd2, baseline_tol=1.0, verbose=True):
+def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
     """
-    Validate baseline pairings between bls1 and bls2 are redundant within the 
+    Construct a list of baseline-pairs from a baseline-group. This function can be used to easily convert a 
+    single list of baselines into the input needed by PSpecData.pspec(bls1, bls2, ...).
+
+    Parameters
+    ----------
+    bls : list of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]
+
+    exclude_auto_bls: boolean, if True, exclude all baselines crossed with itself from the final blpairs list
+
+    exclude_permutations : boolean, if True, exclude permutations and only form combinations of the bls list.
+        For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, but makes this example clearer)
+        and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
+        If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
+        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.   
+        
+    group : boolean, optional
+        if True, group each consecutive Nblps_per_group blpairs into sub-lists
+
+    Nblps_per_group : integer, number of baseline-pairs to put into each sub-group
+
+    Returns (bls1, bls2, blpairs)
+    -------
+    bls1 : list of baseline tuples from the zeroth index of the blpair
+
+    bls2 : list of baseline tuples from the first index of the blpair
+
+    blpairs : list of blpair tuples
+    """
+    # assert form
+    assert isinstance(bls, list) and isinstance(bls[0], tuple), "bls must be fed as list of baseline tuples"
+
+    # form blpairs w/o explicitly forming auto blpairs
+    # however, if there are repeated bl in bls, there will be auto bls in blpairs
+    if exclude_permutations:
+        blpairs = list(itertools.combinations(bls, 2))
+    else:
+        blpairs = list(itertools.permutations(bls, 2))
+
+    # explicitly add in auto baseline pairs
+    blpairs.extend(zip(bls, bls))
+
+    # iterate through and eliminate all autos if desired
+    if exclude_auto_bls:
+        new_blpairs = []
+        for blp in blpairs:
+            if blp[0] != blp[1]:
+                new_blpairs.append(blp)
+        blpairs = new_blpairs
+
+    # create bls1 and bls2 list
+    bls1 = map(lambda blp: blp[0], blpairs)
+    bls2 = map(lambda blp: blp[1], blpairs)
+
+    # group baseline pairs if desired
+    if group:
+        Nblps = len(blpairs)
+        Ngrps = int(np.ceil(float(Nblps) / Nblps_per_group))
+        new_blps = []
+        new_bls1 = []
+        new_bls2 = []
+        for i in range(Ngrps):
+            new_blps.append(blpairs[i*Nblps_per_group:(i+1)*Nblps_per_group])
+            new_bls1.append(bls1[i*Nblps_per_group:(i+1)*Nblps_per_group])
+            new_bls2.append(bls2[i*Nblps_per_group:(i+1)*Nblps_per_group])
+
+        bls1 = new_bls1
+        bls2 = new_bls2
+        blpairs = new_blps
+
+    return bls1, bls2, blpairs
+
+
+def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
+    """
+    Validate baseline pairings in the blpair list are redundant within the 
     specified tolerance.
 
     Parameters
     ----------
-    bls1 : list of baseline tuples, or list of bl-groups.
+    blpairs : list of baseline-pair tuples, Ex. [((1,2),(1,2)), ((2,3),(2,3))]
         See docstring of PSpecData.pspec() for details on format.
 
-    bls2 : list of baseline tuples, or list of bl-groups.
-        See docstring of PSpecData.pspec() for details on format.
+    uvd1 : pyuvdata.UVData instance containing visibility data that first bl in blpair will draw from
 
-    uvd1 : pyuvdata.UVData instance containing visibility data that bls1 will draw from
-
-    uvd2 : pyuvdata.UVData instance containing visibility data that bls2 will draw from
+    uvd2 : pyuvdata.UVData instance containing visibility data that second bl in blpair will draw from
 
     baseline_tol : float, distance tolerance for notion of baseline "redundancy" in meters
 
     verbose : bool, if True report feedback to stdout
     """
-    # ensure both bls1 and bls2 are the same type
-    if isinstance(bls1[0], tuple) and isinstance(bls1[0][0], (int, np.int)) \
-        and isinstance(bls2[0], tuple) and isinstance(bls2[0][0], (int, np.int)):
-        # bls1 and bls2 fed as list of bl tuples
-        fed_bl_group = False
-
-    elif isinstance(bls1[0], list) and isinstance(bls1[0][0], tuple) and isinstance(bls2[0], list) \
-        and isinstance(bls2[0][0], tuple):
-        # bls1 and bls2 fed as list of bl groups
-        fed_bl_group = True
-        assert len(bls1) == len(bls2), "if fed as list of bl groups, len(bls1) must equal len(bls2)"
-
-    else:
-        raise TypeError("bls1 and bls2 must both be fed as either a list of bl tuples, or a list of bl groups")
-
     # ensure uvd1 and uvd2 are UVData objects
     if isinstance(uvd1, pyuvdata.UVData) == False:
         raise TypeError("uvd1 must be a pyuvdata.UVData instance")
@@ -1533,22 +1517,15 @@ def validate_bls(bls1, bls2, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     ap = ap1
     ap.update(ap2)
 
-    # iterate through baselines and 1) check baselines crossed with each other are within tolerance
-    # and 2) check baselines within a single group (if grouped) are within tolerance
-    for i in range(len(bls1)):
-        if fed_bl_group:
-            # get baseline vectors for each bl in the i'th group
-            blvecs1 = map(lambda bl: ap[bl[0]] - ap[bl[1]], bls1[i])
-            blvecs2 = map(lambda bl: ap[bl[0]] - ap[bl[1]], bls2[i])
-            # get maximum residual between all pairs
-            resid = map(lambda p: np.linalg.norm(reduce(operator.sub, p)), itertools.combinations(blvecs1+blvecs2, 2))
-            if np.max(np.abs(resid)) >= baseline_tol:
-                raise_warning("baseline-pair residual(s) in the {}'th bl group exceed a bl tol of {} m".format(i, baseline_tol), verbose=verbose)
-        else:
-            blvec1 = ap[bls1[i][0]] - ap[bls1[i][1]]
-            blvec2 = ap[bls2[i][0]] - ap[bls2[i][1]]
-            if np.linalg.norm(blvec1 - blvec2) >= baseline_tol:
-                raise_warning("bl1 {} and bl2 {} separation exceeds the bl tol of {} m".format(bls1[i], bls2[i], baseline_tol), verbose=verbose)
+    # iterate through baselines and check baselines crossed with each other are within tolerance
+    for i, blg in enumerate(blpairs):
+        if isinstance(blg, tuple):
+            blg = [blg]
+        for blp in blg:
+            bl1_vec = ap[blp[0][0]] - ap[blp[0][1]]
+            bl2_vec = ap[blp[1][0]] - ap[blp[1][1]]
+            if np.linalg.norm(bl1_vec - bl2_vec) >= baseline_tol:
+                raise_warning("blpair {} exceeds redundancy tolerance of {} m".format(blp, baseline_tol), verbose=verbose)
 
 
 def raise_warning(warning, verbose=True):
