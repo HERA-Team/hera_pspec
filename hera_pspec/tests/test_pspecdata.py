@@ -562,6 +562,12 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(uvp.antnums_to_blpair(((52, 53), (24, 25))) not in uvp.blpair_array)
         nt.assert_equal(uvp.Nblpairs, 10)
  
+        # test mixed bl group and non blgroup, currently bl grouping of more than 1 blpair doesn't work
+        bls1 = [[(24, 25)], (52, 53)]
+        bls2 = [[(24, 25)], (52, 53)]
+        uvp = ds.pspec(bls1, bls2, (0, 1), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
+
         # test select
         red_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
         bls1, bls2, blp = pspecdata.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
@@ -591,6 +597,9 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Nspws, 1)
         nt.assert_equal(uvp.Ndlys, 10)
         nt.assert_equal(len(uvp.data_array), 1)
+
+        # test exceptions
+        nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1))
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -656,6 +665,10 @@ class Test_PSpecData(unittest.TestCase):
         bls1, bls2, blpairs = pspecdata.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True,
                                                           group=True)
 
+        pspecdata.validate_blpairs(blpairs, uvd, uvd)
+
+        # test non-redundant
+        blpairs = [((24, 25), (24, 38))]
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
 """
