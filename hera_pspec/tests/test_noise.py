@@ -23,20 +23,20 @@ class Test_Sensitivity(unittest.TestCase):
     def runTest(self):
         pass
 
-    def test_add(self):
+    def test_set(self):
         sense = noise.Sensitivity()
 
         C = conversions.Cosmo_Conversions()
-        sense.add_cosmology(C)
+        sense.set_cosmology(C)
         nt.assert_equal(C.get_params(), sense.cosmo.get_params())
         params = str(C.get_params())
-        sense.add_cosmology(params)
+        sense.set_cosmology(params)
         nt.assert_equal(C.get_params(), sense.cosmo.get_params())
 
-        sense.add_beam(self.beam)
+        sense.set_beam(self.beam)
         nt.assert_equal(sense.cosmo.get_params(), sense.beam.cosmo.get_params())
         self.beam.cosmo = C
-        sense.add_beam(self.beam)
+        sense.set_beam(self.beam)
         nt.assert_equal(sense.cosmo.get_params(), sense.beam.cosmo.get_params())
 
     def test_scalar(self):
