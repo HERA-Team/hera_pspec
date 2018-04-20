@@ -1,8 +1,9 @@
 """
 Module to construct Stokes (I,Q,U,V) visibilities from miriad files or UVData objects
 """
-import numpy as np
+import numpy as np, os
 import pyuvdata
+import copy
 
 # weights used in forming Stokes visibilities
 pol_weights = {
@@ -28,11 +29,12 @@ def miriad2pyuvdata(dset):
    dset : Miriad file
    """
    uv = pyuvdata.UVData()
-   return uv.read_miriad(dset)
+   uv.read_miriad(dset)
+   return uv
 
-def combine_pol(uvd1, uvd2, pol1, pol2, outfile, stokes='I'):
+def combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
    """
-   Reads in miriad file and combines visibilities to form the desired Stokes visibilities
+   Reads in miriad file and combines visibilities to form the desired Stokes visibilities. It return UVData object containing the Stokes visibilities
    
    Parameters
    ---------
@@ -53,8 +55,6 @@ def combine_pol(uvd1, uvd2, pol1, pol2, outfile, stokes='I'):
    stokes: Stokes parameter, type: str
        Pseudo stokes parameter to form, can be 'I' or 'Q' or 'U' or 'V'. Default: I
   
-   outfile: Name of output file, type: str
-       Name of the file containing the Stokes visibilities
    """
    # extracting data array from the UVData objects
    data1 = uvd1.data_array
@@ -66,7 +66,7 @@ def combine_pol(uvd1, uvd2, pol1, pol2, outfile, stokes='I'):
    #constructing flags (boolean)
    flag = flag1 + flag2
    # constructing Stokes visibilities
-   stdata = 0.5 * (pol_wgts[stokes][pol1]*data1 + pol_wgts[stokes][pol2]*data2)
+   stdata = 0.5 * (pol_weights[stokes][pol1]*data1 + pol_weights[stokes][pol2]*data2)
 
    # assigning and writing data, flags and metadata to UVData object
    uvdS = copy.deepcopy(uvd1)
@@ -74,12 +74,11 @@ def combine_pol(uvd1, uvd2, pol1, pol2, outfile, stokes='I'):
    uvdS.flag_array = flag # flag array
    uvdS.polarization_array = np.array([pol_stokes[stokes]]) # polarization number
    uvdS.nsample_array = uvd1.nsample_array + uvd2.nsample_array # nsamples
-   uvdS.history = 'merged to form stokes visibilities' + uvd1 + uvd2 # history
-   uvdS.write_miriad(outfile)
+   uvdS.history = 'merged to form stokes visibilities. ' + uvd1.history + uvd2.history # history
 
    return uvdS
 
-def construct_stokes(dset1, dset2, stokes='I', outfile=None):
+def construct_stokes(dset1, dset2, stokes='I'):
    """
    Validates datasets required to construct desired visibilities and constructs desired Stokes parameters
    
@@ -96,8 +95,6 @@ def construct_stokes(dset1, dset2, stokes='I', outfile=None):
    stokes: Stokes parameter, type: str
        Pseudo stokes parameter to form, can be 'I' or 'Q' or 'U' or 'V'. Default: I
 
-   outfile: Name of output file, type: str
-       Name of the file containing the Stokes visibilities. Default: Input file name with the polarization label replaced by the specified Stokes parameter for example if input file is zen.all.xx.LST.1.06964.uvA the default output is zen.all.I.LST.1.06964.uvA for Stokes=I'
    """
    # convert dset1 and dset2 to UVData objects if they are miriad files
    if isinstance(dset1, pyuvdata.UVData) == False:
@@ -113,11 +110,12 @@ def construct_stokes(dset1, dset2, stokes='I', outfile=None):
    pol1 = uvd1.get_pols()[0]
    pol2 = uvd2.get_pols()[0]
 
-   # name of output file
-   if outfile==None:
-      outfile = dset1.replace(pol1,stokes)
+   # validate polarizations, that is, ensures that the the proper input datasets or UVData objects are given to form the desired Stokes visibilties
+   st_weights = pol_weights[stokes]
+   assert (pol1 in st_weights)
+   assert (pol2 in st_weights)
 
-   # combining the visibilities to form the desired Stokes visibilties
-   uvdS = combine_pol(uvd1=uvd1,uvd2=uvd2,pol1=pol1,pol2=pol2,stokes=stokes,outfile=outfile)
+   # combining visibilities to form the desired Stokes visibilties
+   uvdS = combine_pol(uvd1=uvd1,uvd2=uvd2,pol1=pol1,pol2=pol2, stokes=stokes)
 
    return uvdS
