@@ -4,7 +4,7 @@ import numpy as np
 import os
 import sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, parameter, pspecbeam
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata
 import copy
 import h5py
 from collections import OrderedDict as odict
@@ -336,6 +336,13 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(uvp2.Ntimes, 1)
         nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 10.0).all())
         nt.assert_true(uvp2.get_data(0, 1002001002, 'xx').shape, (1, 50))
+        # ensure averaging works when multiple repeated baselines are present, but only
+        # if time_avg = True
+        uvp.blpair_array[uvp.blpair_to_indices(2003002003)] = 1002001002
+        nt.assert_raises(ValueError, uvp.average_spectra, blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=False)
+        uvp.average_spectra(blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=True)
+        nt.assert_equal(uvp.Ntimes, 1)
+        nt.assert_equal(uvp.Nblpairs, 1)
 
     def test_fold_spectra(self):
         uvp = copy.deepcopy(self.uvp)
