@@ -1080,9 +1080,10 @@ class UVPSpec(object):
 
         Notes
         -----
-        Currently, every baseline-pair in a blpair group must have the same 
-        Ntimes. Future versions may support baseline-pair averaging of 
-        heterogeneous time arrays.
+        Currently, every baseline-pair in a blpair group must have the same Ntimes, 
+        unless time_avg=True. Future versions may support baseline-pair averaging of 
+        heterogeneous time arrays. This includes the scenario of repeated blpairs 
+        (e.g. in bootstrapping), which will return multiple copies of their time_array.
         """
         if inplace:
             uvp = self
@@ -1144,10 +1145,21 @@ class UVPSpec(object):
                     # iterate within a baseline-pair group and get integration-weighted data
                     for k, blp in enumerate(blpg):
                         nsmp = uvp.get_nsamples(spw, blp, p)[:, None]
+                        data = uvp.get_data(spw, blp, p)
+                        wgts = uvp.get_wgts(spw, blp, p)
                         ints = uvp.get_integrations(spw, blp, p)[:, None]
                         w = (ints * np.sqrt(nsmp))
-                        bpg_data.append(uvp.get_data(spw, blp, p) * w)
-                        bpg_wgts.append(uvp.get_wgts(spw, blp, p) * w[:, None])
+
+                        # take time average if desired
+                        if time_avg:
+                            data = (np.sum(data * w, axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
+                            wgts = (np.sum(wgts * w[:, None], axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf)[:, None])[None] 
+                            ints = (np.sum(ints * w, axis=0) / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
+                            nsmp = np.sum(nsmp, axis=0)[None]
+                            w = np.sum(w, axis=0)[None]
+
+                        bpg_data.append(data * w)
+                        bpg_wgts.append(wgts * w[:, None])
                         bpg_ints.append(ints * w)
                         bpg_nsmp.append(nsmp)
                         w_list.append(w)
@@ -1158,13 +1170,6 @@ class UVPSpec(object):
                     bpg_nsmp = np.sum(bpg_nsmp, axis=0)
                     bpg_ints = np.sum(bpg_ints, axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)
                     w_list = np.sum(w_list, axis=0)
-
-                    # take time average if desired
-                    if time_avg:
-                        bpg_data = [np.sum(bpg_data * w_list, axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)]
-                        bpg_wgts = [np.sum(bpg_wgts * w_list[:, None], axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)[:, None]]
-                        bpg_nsmp = [np.sum(bpg_nsmp, axis=0)]
-                        bpg_ints = [np.sum(bpg_ints * w_list, axis=0) / np.sum(w_list, axis=0).clip(1e-10, np.inf)]
 
                     # append to lists
                     pol_data.extend(bpg_data)
