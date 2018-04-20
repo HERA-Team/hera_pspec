@@ -78,7 +78,7 @@ def combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
 
    return uvdS
 
-def construct_stokes(dset1, dset2, stokes='I'):
+def validate_stokes(dset1, dset2, stokes='I'):
    """
    Validates datasets required to construct desired visibilities and constructs desired Stokes parameters
    
@@ -106,14 +106,20 @@ def construct_stokes(dset1, dset2, stokes='I'):
    else:
       uvd2 = dset2
 
+   # makes the Npol length==1 so that the UVData carries data for the required polarization only
+   st_keys = pol_weights[stokes]
+   if uvd1.Npols > 1:
+      uvd1 = uvd1.select(polarization=st_keys[0],inplace=True)
+   if uvd2.Npols > 1:
+      uvd2 = uvd2.select(polarization=st_keys[1],inplace=True)
+   
    # extracts polarization and ensures that the input dsets have the proper polarizations to form the desired stokes parameters
    pol1 = uvd1.get_pols()[0]
    pol2 = uvd2.get_pols()[0]
 
    # validate polarizations, that is, ensures that the the proper input datasets or UVData objects are given to form the desired Stokes visibilties
-   st_weights = pol_weights[stokes]
-   assert (pol1 in st_weights)
-   assert (pol2 in st_weights)
+   assert (pol1 in st_keys)
+   assert (pol2 in st_keys)
 
    # combining visibilities to form the desired Stokes visibilties
    uvdS = combine_pol(uvd1=uvd1,uvd2=uvd2,pol1=pol1,pol2=pol2, stokes=stokes)
