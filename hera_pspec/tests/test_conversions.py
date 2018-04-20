@@ -29,6 +29,9 @@ class Test_Cosmo(unittest.TestCase):
         self.assertAlmostEqual(C.H0, 25.5)
         print C
 
+        #test equality
+        self.assertEqual(C, C)
+
     def test_units(self):
         si = conversions.units()
         cgs = conversions.cgs_units()

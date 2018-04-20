@@ -346,4 +346,7 @@ class Cosmo_Conversions(object):
         message += "; ".join(map(lambda p: "{:s} : {:0.4f}".format(p, getattr(self, p)), self.params))
         return message
 
+    def __eq__(self, other):
+        """ check two Cosmo_Conversion objects are equivalent """
+        return self.get_params() == other.get_params()
 

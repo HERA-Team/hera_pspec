@@ -476,17 +476,26 @@ class PSpecData(object):
             return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
                                  * np.fft.fftshift(_Rx2, axes=0) )
         else:
+            # get taper if provided
+            if taper != 'none':
+                tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
+
             # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.spw_Nfreqs):
-                Q = self.get_Q(i, self.spw_Nfreqs, taper=taper)
+                Q = self.get_Q(i, self.spw_Nfreqs)
                 RQR = np.einsum('ab,bc,cd',
                                 self.R(key1).T.conj(), Q, self.R(key2))
-                qi = np.sum(self.x(key1).conj()*np.dot(RQR, self.x(key2)), axis=0)
+                x1 = self.x(key1).conj()
+                x2 = self.x(key2)
+                if taper != 'none':
+                    x1 = x1 * tapering_fct[:, None]
+                    x2 = x2 * tapering_fct[:, None]
+                qi = np.sum(x1*np.dot(RQR, x2), axis=0)
                 q.append(qi)
             return 0.5 * np.array(q)
 
-    def get_G(self, key1, key2, taper='none'):
+    def get_G(self, key1, key2):
         """
         Calculates the response matrix G of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -509,10 +518,6 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines 
             in the list will be combined with inverse noise weights.
 
-        taper : str, optional
-            Tapering (window) function used when calculating Q. Takes the same
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
-
         Returns
         -------
         G : array_like, complex
@@ -524,7 +529,7 @@ class PSpecData(object):
 
         iR1Q, iR2Q = {}, {}
         for ch in xrange(self.spw_Nfreqs): # this loop is nchan^3
-            Q = self.get_Q(ch, self.spw_Nfreqs, taper=taper)
+            Q = self.get_Q(ch, self.spw_Nfreqs)
             iR1Q[ch] = np.dot(R1, Q) # R_1 Q
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
 
@@ -653,7 +658,7 @@ class PSpecData(object):
         M /= norm; W = np.dot(M, G)
         return M, W
 
-    def get_Q(self, mode, n_k, taper='none'):
+    def get_Q(self, mode, n_k):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha.
 
@@ -673,10 +678,6 @@ class PSpecData(object):
         n_k : int
             Number of k bins that will be .
 
-        taper : str, optional
-            Type of tapering (window) function to use. Valid options are any
-            window function supported by aipy.dsp.gen_window(). Default: 'none'.
-
         Returns
         -------
         Q : array_like
@@ -685,8 +686,8 @@ class PSpecData(object):
         _m = np.zeros((n_k,), dtype=np.complex)
         _m[mode] = 1. # delta function at specific delay mode
 
-        # FFT to transform to frequency space, and apply window function
-        m = np.fft.fft(np.fft.ifftshift(_m)) * aipy.dsp.gen_window(n_k, taper)
+        # FFT to transform to frequency space
+        m = np.fft.fft(np.fft.ifftshift(_m))
         Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
         return Q
 
@@ -798,13 +799,15 @@ class PSpecData(object):
         """
         # set spw_range and get freqs
         freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]
+        start = freqs[0]
+        end = freqs[0] + np.median(np.diff(freqs)) * len(freqs)
 
         # calculate scalar
         if beam is None:
-            scalar = self.primary_beam.compute_pspec_scalar(freqs[0], freqs[-1], len(freqs), stokes=stokes,
+            scalar = self.primary_beam.compute_pspec_scalar(start, end, len(freqs), stokes=stokes,
                                                             taper=taper, little_h=little_h, num_steps=num_steps)
         else:
-            scalar = beam.compute_pspec_scalar(freqs[0], freqs[-1], len(freqs), stokes=stokes,
+            scalar = beam.compute_pspec_scalar(start, end, len(freqs), stokes=stokes,
                                                             taper=taper, little_h=little_h, num_steps=num_steps)
 
         return scalar
@@ -1068,7 +1071,7 @@ class PSpecData(object):
                         pass
                     else:
                         if verbose: print("  Building G...")
-                        Gv = self.get_G(key1, key2, taper=taper)
+                        Gv = self.get_G(key1, key2)
                         built_G = True
 
                     # Calculate unnormalized bandpowers
@@ -1141,10 +1144,14 @@ class PSpecData(object):
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
+
+        # fill meta-data
         uvp.time_1_array = np.array(time1)
         uvp.time_2_array = np.array(time2)
+        uvp.time_avg_array = np.mean([uvp.time_1_array, uvp.time_2_array], axis=0)
         uvp.lst_1_array = np.array(lst1)
         uvp.lst_2_array = np.array(lst2)
+        uvp.lst_avg_array = np.mean([np.unwrap(uvp.lst_1_array), np.unwrap(uvp.lst_2_array)], axis=0) % (2*np.pi)
         uvp.blpair_array = np.array(blp_arr)
         uvp.Nblpairs = len(np.unique(blp_arr))
         uvp.Ntimes = len(np.unique(time1))
@@ -1168,20 +1175,26 @@ class PSpecData(object):
         uvp.weighting = input_data_weight
         uvp.units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
-        uvp.data_array = data_array
-        uvp.integration_array = integration_array
-        uvp.wgt_array = wgt_array
         uvp.history = dset1.history + dset2.history + history
         uvp.taper = taper
         uvp.norm = norm
         uvp.git_hash = version.git_hash
         if self.primary_beam is not None:
-            uvp.cosmo_params = str(self.primary_beam.conversion.get_params())
+            uvp.cosmo_params = str(self.primary_beam.cosmo.get_params())
+        if self.primary_beam is not None and hasattr(self.primary_beam, 'filename'): 
+            uvp.beamfile = self.primary_beam.filename
         if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
         if hasattr(dset2.extra_keywords, 'filename'): uvp.filename2 = dset2.extra_keywords['filename']
         if hasattr(dset1.extra_keywords, 'tag'): uvp.tag1 = dset1.extra_keywords['tag']
         if hasattr(dset2.extra_keywords, 'tag'): uvp.tag2 = dset2.extra_keywords['tag']
 
+        # fill data arrays
+        uvp.data_array = data_array
+        uvp.integration_array = integration_array
+        uvp.wgt_array = wgt_array
+        uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))
+
+        # run check
         uvp.check()
 
         return uvp
