@@ -69,3 +69,126 @@ def get_delays(freqs):
     delay = np.fft.fftshift(np.fft.fftfreq(freqs.size, d=np.median(np.diff(freqs))))
     return delay
 
+
+def spw_range_from_freqs(data, freq_range, bounds_error=True):
+    """
+    Return the first and last frequency array indices for a spectral window, 
+    where the window is specified as a range of frequencies.
+    
+    Parameters
+    ----------
+    data : UVData or UVPSpec object
+        Object containing data with a frequency dimension.
+        
+    freq_range : tuple or list of tuples
+        Tuples containing the lower and upper frequency bounds for each 
+        spectral window. The range is inclusive of the lower frequency bound, 
+        i.e. it includes all channels in freq_range[0] <= freq < freq_range[1]. 
+        Frequencies are in Hz.
+    
+    bounds_error : bool, optional
+        Whether to raise an error if a specified lower/upper frequency is 
+        outside the frequency range available in 'data'. Default: True.
+
+    Returns
+    -------
+    spw_range : tuple or list of tuples
+        Indices of the channels at the lower and upper bounds of the specified 
+        spectral window(s). 
+        
+        Note: If the requested spectral window is outside the available 
+        frequency range, and bounds_error is False, '(None, None)' is returned. 
+    """
+    # Get frequency array from input object
+    try:
+        freqs = data.freq_array
+    except:
+        raise AttributeError("Object 'data' does not have a freq_array attribute.")
+    
+    # Check for a single tuple input
+    is_tuple = False
+    if isinstance(freq_range, tuple):
+        is_tuple = True
+        freq_range = [freq_range,]
+    
+    # Make sure freq_range is now a list (of tuples)
+    if not isinstance(freq_range, list):
+        raise TypeError("freq_range must be a tuple or list of tuples.")
+    
+    # Loop over tuples and find spectral window indices
+    spw_range = []
+    for frange in freq_range:
+        fmin, fmax = frange
+        if fmin > fmax: 
+            raise ValueError("Upper bound of spectral window is less than "
+                             "the lower bound.")
+        
+        # Check that this doesn't go beyond the available range of freqs
+        if fmin < np.min(freqs) and bounds_error:
+            raise ValueError("Lower bound of spectral window is below the "
+                             "available frequency range. (Note: freqs should "
+                             "be in Hz)")
+        if fmax > np.max(freqs) and bounds_error:
+            raise ValueError("Upper bound of spectral window is above the "
+                             "available frequency range. (Note: freqs should "
+                             "be in Hz)")
+
+        # Get indices within this range
+        idxs = np.where(np.logical_and(freqs >= fmin, freqs < fmax))[0]
+        spw = (idxs[0], idxs[1]) if idxs.size > 0 else (None, None)
+        spw_range.append(spw)
+    
+    # Unpack from list if only a single tuple was specified originally
+    if is_tuple: return spw_range[0]
+    return spw_range
+
+
+def spw_range_from_redshifts(data, z_range, bounds_error=True):
+    """
+    Return the first and last frequency array indices for a spectral window, 
+    where the window is specified as a range of redshifts.
+    
+    Parameters
+    ----------
+    data : UVData or UVPSpec object
+        Object containing data with a frequency dimension.
+        
+    z_range : tuple or list of tuples
+        Tuples containing the lower and upper fredshift bounds for each 
+        spectral window. The range is inclusive of the upper redshift bound, 
+        i.e. it includes all channels in z_range[0] > z >= z_range[1].
+    
+    bounds_error : bool, optional
+        Whether to raise an error if a specified lower/upper redshift is 
+        outside the frequency range available in 'data'. Default: True.
+
+    Returns
+    -------
+    spw_range : tuple or list of tuples
+        Indices of the channels at the lower and upper bounds of the specified 
+        spectral window(s).
+        
+        Note: If the requested spectral window is outside the available 
+        frequency range, and bounds_error is False, '(None, None)' is returned. 
+    """
+    # Check for a single tuple input
+    is_tuple = False
+    if isinstance(z_range, tuple):
+        is_tuple = True
+        z_range = [z_range,]
+    
+    # Convert redshifts to frequencies (in Hz)
+    NU21CM = 1420405751.7667 # 21cm rest freq. in Hz
+    freq_range = []
+    for zrange in z_range:
+        zmin, zmax = zrange
+        freq_range.append( (NU21CM/(1.+zmax), NU21CM/(1.+zmin)) )
+    
+    # Use freq. function to get spectral window
+    spw_range = spw_range_from_freqs(data=data, freq_range=freq_range, 
+                                     bounds_error=bounds_error)
+    
+    # Unpack from list if only a single tuple was specified originally
+    if is_tuple: return spw_range[0]
+    return spw_range
+    

@@ -1,14 +1,12 @@
 import unittest
 import nose.tools as nt
 import numpy as np
-import os
-import sys
+import os, sys, copy
 from hera_pspec.data import DATA_PATH
 from hera_pspec import utils
-import copy
-from collections import OrderedDict as odict
 from pyuvdata import UVData
-
+from collections import OrderedDict as odict
+from test_uvpspec import build_example_uvpspec
 
 def test_cov():
     # load another data file
@@ -33,3 +31,94 @@ def test_cov():
     nt.assert_raises(ValueError, utils.cov, d1, w1)
 
 
+class Test_Utils(unittest.TestCase):
+
+    def setUp(self):
+        # Load data into UVData object
+        self.uvd = UVData()
+        self.uvd.read_miriad(os.path.join(DATA_PATH, 
+                                          "zen.2458042.17772.xx.HH.uvXA"))
+        
+        # Create UVPSpec object
+        self.uvp, cosmo = build_example_uvpspec()
+
+    def tearDown(self):
+        pass
+
+    def runTest(self):
+        pass
+    
+    def test_spw_range_from_freqs(self):
+        """
+        Test that spectral window ranges are correctly recovered from UVData and 
+        UVPSpec files.
+        """
+        # Check that type errors and bounds errors are raised
+        nt.assert_raises(AttributeError, utils.spw_range_from_freqs, np.arange(3), 
+                         freq_range=(100e6, 110e6))
+        for obj in [self.uvd, self.uvp]:
+            nt.assert_raises(ValueError, utils.spw_range_from_freqs, obj, 
+                             freq_range=(98e6, 110e6)) # lower bound
+            nt.assert_raises(ValueError, utils.spw_range_from_freqs, obj, 
+                             freq_range=(190e6, 202e6)) # upper bound
+            nt.assert_raises(ValueError, utils.spw_range_from_freqs, obj, 
+                             freq_range=(190e6, 180e6)) # wrong order
+            
+        # Check that valid frequency ranges are returned
+        freq_list = [(100e6, 120e6), (120e6, 140e6), (140e6, 160e6)]
+        spw1 = utils.spw_range_from_freqs(self.uvd, freq_range=(110e6, 130e6))
+        spw2 = utils.spw_range_from_freqs(self.uvd, freq_range=freq_list)
+        spw3 = utils.spw_range_from_freqs(self.uvd, freq_range=(98e6, 120e6), 
+                                          bounds_error=False)
+        spw4 = utils.spw_range_from_freqs(self.uvd, freq_range=(100e6, 120e6))
+        
+        # Make sure tuple vs. list arguments were handled correctly
+        nt.ok_( isinstance(spw1, tuple) )
+        nt.ok_( isinstance(spw2, list) )
+        nt.ok_( len(spw2) == len(freq_list) )
+        
+        # Make sure that bounds_error=False works
+        nt.ok_( spw3 == spw4 )
+        
+        # Make sure that this also works for UVPSpec objects
+        spw5 = utils.spw_range_from_freqs(self.uvp, freq_range=(100e6, 104e6))
+        nt.ok_( isinstance(spw5, tuple) )
+        nt.ok_( spw5[0] is not None )
+    
+    def test_spw_range_from_redshifts(self):
+        """
+        Test that spectral window ranges are correctly recovered from UVData and 
+        UVPSpec files (when redshift range is specified).
+        """
+        # Check that type errors and bounds errors are raised
+        nt.assert_raises(AttributeError, utils.spw_range_from_redshifts, 
+                         np.arange(3), z_range=(9.7, 12.1))
+        for obj in [self.uvd, self.uvp]:
+            nt.assert_raises(ValueError, utils.spw_range_from_redshifts, obj, 
+                             z_range=(5., 8.)) # lower bound
+            nt.assert_raises(ValueError, utils.spw_range_from_redshifts, obj, 
+                             z_range=(10., 20.)) # upper bound
+            nt.assert_raises(ValueError, utils.spw_range_from_redshifts, obj, 
+                             z_range=(11., 10.)) # wrong order
+            
+        # Check that valid frequency ranges are returned
+        z_list = [(6.5, 7.5), (7.5, 8.5), (8.5, 9.5)]
+        spw1 = utils.spw_range_from_redshifts(self.uvd, z_range=(7., 8.))
+        spw2 = utils.spw_range_from_redshifts(self.uvd, z_range=z_list)
+        spw3 = utils.spw_range_from_redshifts(self.uvd, z_range=(12., 14.), 
+                                              bounds_error=False)
+        spw4 = utils.spw_range_from_redshifts(self.uvd, z_range=(6.2, 7.2))
+        
+        # Make sure tuple vs. list arguments were handled correctly
+        nt.ok_( isinstance(spw1, tuple) )
+        nt.ok_( isinstance(spw2, list) )
+        nt.ok_( len(spw2) == len(z_list) )
+        
+        # Make sure that bounds_error=False works
+        nt.ok_( spw3 == spw4 )
+        
+        # Make sure that this also works for UVPSpec objects
+        spw5 = utils.spw_range_from_redshifts(self.uvp, z_range=(13.1, 13.2))
+        nt.ok_( isinstance(spw5, tuple) )
+        nt.ok_( spw5[0] is not None )
+        
