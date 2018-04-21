@@ -13,27 +13,34 @@ import operator
 
 class PSpecData(object):
 
-    def __init__(self, dsets=[], wgts=[], beam=None):
+    def __init__(self, dsets=[], wgts=[], labels=None, beam=None):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
 
         Parameters
         ----------
-        dsets : List of UVData objects, optional
-            List of UVData objects containing the data that will be used to
-            compute the power spectrum. Default: Empty list.
+        dsets : list or dict of UVData objects, optional
+            Set of UVData objects containing the data that will be used to
+            compute the power spectrum. If specified as a dict, the key names 
+            will be used to tag each dataset. Default: Empty list.
 
-        wgts : List of UVData objects, optional
-            List of UVData objects containing weights for the input data.
+        wgts : list or dict of UVData objects, optional
+            Set of UVData objects containing weights for the input data.
             Default: Empty list.
-
+        
+        labels : list of str, optional
+            An ordered list of names/labels for each dataset, if dsets was 
+            specified as a list. If None, names will not be assigned to the 
+            datasets. If dsets was specified as a dict, the keys 
+            of that dict will be used instead of this. Default: None.
+        
         beam : PspecBeam object, optional
             PspecBeam object containing information about the primary beam
             Default: None.
         """
         self.clear_cov_cache()  # Covariance matrix cache
-        self.dsets = []; self.wgts = []
+        self.dsets = []; self.wgts = []; self.labels = []
         self.Nfreqs = None
         self.spw_range = None
         self.spw_Nfreqs = None
@@ -43,29 +50,53 @@ class PSpecData(object):
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
-            self.add(dsets, wgts)
+            self.add(dsets, wgts, labels=labels)
 
         # Store a primary beam
         self.primary_beam = beam
 
-    def add(self, dsets, wgts):
+    def add(self, dsets, wgts, labels=None):
         """
         Add a dataset to the collection in this PSpecData object.
 
         Parameters
         ----------
-        dsets : UVData or list
+        dsets : UVData or list or dict
             UVData object or list of UVData objects containing data to add to
             the collection.
 
-        wgts : UVData or list
+        wgts : UVData or list or dict
             UVData object or list of UVData objects containing weights to add
             to the collection. Must be the same length as dsets. If a weight is
             set to None, the flags of the corresponding
+        
+        labels : list of str
+            An ordered list of names/labels for each dataset, if dsets was 
+            specified as a list. If dsets was specified as a dict, the keys 
+            of that dict will be used instead.
         """
+        # Check for dicts and unpack into an ordered list if found
+        if isinstance(dsets, dict):
+            # Disallow labels kwarg if a dict was passed
+            if labels is not None:
+                raise ValueError("If 'dsets' is a dict, 'labels' cannot be "
+                                 "specified.")
+            
+            if not isinstance(wgts, dict):
+                raise TypeError("If 'dsets' is a dict, 'wgts' must also be "
+                                "a dict")
+            
+            # Unpack dsets and wgts dicts
+            labels = dsets.keys()
+            _dsets = [dsets[key] for key in labels]
+            _wgts = [wgts[key] for key in labels]
+            dsets = _dsets
+            wgts = _wgts
+            
         # Convert input args to lists if possible
         if isinstance(dsets, pyuvdata.UVData): dsets = [dsets,]
         if isinstance(wgts, pyuvdata.UVData): wgts = [wgts,]
+        if isinstance(labels, str): labels = [labels,]
         if wgts is None: wgts = [wgts,]
         if isinstance(dsets, tuple): dsets = list(dsets)
         if isinstance(wgts, tuple): wgts = list(wgts)
@@ -76,6 +107,7 @@ class PSpecData(object):
 
         # Make sure enough weights were specified
         assert(len(dsets) == len(wgts))
+        if labels is not None: assert(len(dsets) == len(labels))
 
         # Check that everything is a UVData object
         for d, w in zip(dsets, wgts):
@@ -88,6 +120,12 @@ class PSpecData(object):
         # Append to list
         self.dsets += dsets
         self.wgts += wgts
+        
+        # Store labels (if they were set)
+        if labels is None:
+            self.labels = [None for d in dsets]
+        else:
+            self.labels += labels
 
         # Store no. frequencies and no. times
         self.Nfreqs = self.dsets[0].Nfreqs
@@ -97,6 +135,27 @@ class PSpecData(object):
         self.freqs = self.dsets[0].freq_array[0]
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
+    
+    
+    def __str__(self):
+        """
+        Print basic info about this PSpecData object.
+        """
+        # Basic info
+        s = "PSpecData object\n"
+        s += "  %d datasets" % len(self.dsets)
+        if len(self.dsets) == 0: return s
+        
+        # Dataset summary
+        for i, d in enumerate(self.dsets):
+            if self.labels[i] is None:
+                s += "  dset (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" \
+                      % (i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols)
+            else:
+                s += "  dset '%s' (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" \
+                      % (self.labels[i], i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols)
+        return s
+        
         
     def validate_datasets(self, verbose=True):
         """
@@ -149,7 +208,8 @@ class PSpecData(object):
             max_diff_dec = np.max(map(lambda d: np.diff(d), itertools.combinations(phase_dec, 2)))
             max_diff = np.sqrt(max_diff_ra**2 + max_diff_dec**2)
             if max_diff > 0.15: raise_warning("Warning: maximum phase-center difference between datasets is > 10 arcmin", verbose=verbose)
-
+    
+    
     def check_key_in_dset(self, key, dset_ind):
         """
         Check 'key' exists in the UVData object self.dsets[dset_ind]
@@ -168,6 +228,9 @@ class PSpecData(object):
         exists : bool
             True if the key exists, False otherwise
         """
+        #FIXME: Fix this to enable label keys
+        
+        
         # get iterable
         key = pyuvdata.utils.get_iterable(key)
         if isinstance(key, str):
@@ -206,7 +269,75 @@ class PSpecData(object):
                 except(KeyError): pass
                 try: del(self._iC[k])
                 except(KeyError): pass
-
+    
+    def dset_idx(self, dset):
+        """
+        Return the index of a dataset, regardless of whether it was specified 
+        as an integer of a string.
+        
+        Parameters
+        ----------
+        dset : int or str
+            Index or name of a dataset belonging to this PSpecData object.
+        
+        Returns
+        -------
+        dset_idx : int
+            Index of dataset.
+        """
+        # Look up dset label if it's a string
+        if isinstance(dset, str):
+            if dset in self.labels:
+                return self.labels.index(dset)
+            else:
+                raise KeyError("dset '%s' not found." % dset)
+        elif isinstance(dset, int):
+            return dset
+        else:
+            raise TypeError("dset must be either an int or string")
+    
+    
+    def blkey(self, dset, bl=None, pol=None):
+        """
+        Return a key specifying a particular dataset, baseline, and 
+        (optionally) polarization, in the tuple format used by other methods 
+        of PSpecData.
+        
+        Parameters
+        ----------
+        dset : int or str
+            Index or name of a dataset belonging to this PSpecData object.
+        
+        bl : tuple, optional
+            Baseline ID, specified as a tuple of antenna pairs, e.g. (10, 11). 
+            Default: None.
+        
+        pol : str, optional
+            Polarization of the visibility, in linear (e.g. 'xx') or Stokes 
+            (e.g. 'I') notation, whatever is supported by the input UVData 
+            objects. Default: None (polarization will not be included).
+        
+        Returns
+        -------
+        key : tuple
+            Tuple containing dataset ID, baseline index (if specified), and 
+            polarization (if specified).
+        """
+        key = ()
+        
+        # Look up dset label if it's a string
+        dset_idx = self.dset_idx(dset)
+        key += (dset_idx,)
+                
+        # Add the baseline tuple if it was specified
+        if bl is None: return key
+        key += (bl,)
+        
+        # Polarization
+        if pol is not None: key += (pol,)
+        return key
+        
+    
     def x(self, key):
         """
         Get data for a given dataset and baseline, as specified in a standard
@@ -216,8 +347,8 @@ class PSpecData(object):
         ----------
         key : tuple
             Tuple containing dataset ID and baseline index. The first element
-            of the tuple is the dataset index, and the subsequent elements are
-            the baseline ID.
+            of the tuple is the dataset index (or label), and the subsequent 
+            elements are the baseline ID.
 
         Returns
         -------
@@ -225,8 +356,9 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         assert isinstance(key, tuple)
-        dset = key[0]; bl = key[1:]
-        return self.dsets[dset].get_data(bl).T[self.spw_range[0]:self.spw_range[1], :] # FIXME: Transpose?
+        dset, bl = self.blkey(dset=key[0], bl=key[1:])
+        spwmin, spwmax = self.spw_range[0], self.spw_range[1]
+        return self.dsets[dset].get_data(bl).T[spwmin:spwmax, :]
 
     def w(self, key):
         """
@@ -246,13 +378,15 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         assert isinstance(key, tuple)
-        dset = key[0]; bl = key[1:]
+        spwrange = self.spw_range
+        dset, bl = self.blkey(dset=key[0], bl=key[1:])
+        
         if self.wgts[dset] is not None:
-            return self.wgts[dset].get_data(bl).T[self.spw_range[0]:self.spw_range[1], :] # FIXME: Transpose?
+            return self.wgts[dset].get_data(bl).T[spwrange[0]:spwrange[1], :]
         else:
             # If weights were not specified, use the flags built in to the
             # UVData dataset object
-            flags = self.dsets[dset].get_flags(bl).astype(float).T[self.spw_range[0]:self.spw_range[1], :]
+            flags = self.dsets[dset].get_flags(bl).astype(float).T[spwrange[0]:spwrange[1], :]
             return 1. - flags # Flag=1 => weight=0
 
     def C(self, key):
@@ -272,6 +406,8 @@ class PSpecData(object):
             (Weighted) empirical covariance of data for baseline 'bl'.
         """
         assert isinstance(key, tuple)
+        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
+        
         # Set covariance if it's not in the cache
         if not self._C.has_key(key):
             self.set_C( {key : utils.cov(self.x(key), self.w(key))} )
@@ -313,6 +449,8 @@ class PSpecData(object):
             Empirical covariance for the specified key.
         """
         assert isinstance(key, tuple)
+        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
+        
         # Check cache for empirical covariance
         if not self._Cempirical.has_key(key):
             self._Cempirical[key] = utils.cov(self.x(key), self.w(key))
@@ -335,6 +473,7 @@ class PSpecData(object):
             Identity covariance matrix, dimension (Nfreqs, Nfreqs).
         """
         assert isinstance(key, tuple)
+        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
 
         if not self._I.has_key(key):
             self._I[key] = np.identity(self.spw_Nfreqs)
@@ -357,6 +496,8 @@ class PSpecData(object):
             Inverse covariance matrix for specified dataset and baseline.
         """
         assert isinstance(key, tuple)
+        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
+        
         # Calculate inverse covariance if not in cache
         if not self._iC.has_key(key):
             C = self.C(key)
@@ -396,14 +537,13 @@ class PSpecData(object):
             If set to "iC", sets R = C^-1
             Otherwise, accepts a user inputted dictionary
         """
-
         if R_matrix == "identity":
             self.R = self.I
         elif R_matrix == "iC":
             self.R = self.iC
         else:
             self.R = R_matrix
-
+    
     def set_spw(self, spw_range):
         """
         Set the spectral window range
@@ -413,8 +553,10 @@ class PSpecData(object):
         spw_range : tuple, contains start and end of spw in channel indices
             used to slice the frequency array
         """
-        assert isinstance(spw_range, tuple), "spw_range must be fed as a len-2 integer tuple"
-        assert isinstance(spw_range[0], (int, np.int)), "spw_range must be fed as len-2 integer tuple"
+        assert isinstance(spw_range, tuple), \
+            "spw_range must be fed as a len-2 integer tuple"
+        assert isinstance(spw_range[0], (int, np.int)), \
+            "spw_range must be fed as len-2 integer tuple"
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
 
@@ -744,7 +886,8 @@ class PSpecData(object):
     def delays(self):
         """
         Return an array of delays, tau, corresponding to the bins of the delay 
-        power spectrum output by pspec() using self.spw_range to specify the spectral window.
+        power spectrum output by pspec() using self.spw_range to specify the 
+        spectral window.
         
         Returns
         -------
@@ -757,12 +900,13 @@ class PSpecData(object):
                              "calculate delays.")
         else:
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]]) * 1e9 # convert to ns    
-    
-    
-    def scalar(self, pol='I', taper='none', little_h=True, num_steps=2000, beam=None):
+        
+    def scalar(self, pol='I', taper='none', little_h=True, 
+               num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
-        in "telescope units" to cosmological units, using self.spw_range to set spectral window.
+        in "telescope units" to cosmological units, using self.spw_range to set 
+        spectral window.
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
@@ -788,7 +932,8 @@ class PSpecData(object):
                 Default: 10000
 
         beam : PSpecBeam object
-            Option to use a manually-fed PSpecBeam object instead of using self.primary_beam.
+            Option to use a manually-fed PSpecBeam object instead of using 
+            self.primary_beam.
 
         Returns
         -------
@@ -804,9 +949,9 @@ class PSpecData(object):
         # calculate scalar
         if beam is None:
             scalar = self.primary_beam.compute_pspec_scalar(
-                                    start, end, len(freqs), pol=pol,
-                                    taper=taper, little_h=little_h, 
-                                    num_steps=num_steps)
+                                        start, end, len(freqs), pol=pol,
+                                        taper=taper, little_h=little_h, 
+                                        num_steps=num_steps)
         else:
             scalar = beam.compute_pspec_scalar(start, end, len(freqs), 
                                                pol=pol, taper=taper, 
@@ -945,8 +1090,8 @@ class PSpecData(object):
         assert isinstance(dsets, (list, tuple)), "dsets must be fed as length-2 tuple of integers"
         assert len(dsets) == 2, "len(dsets) must be 2"
         assert isinstance(dsets[0], (int, np.int)) and isinstance(dsets[1], (int, np.int)), "dsets must contain integer indices"
-        dset1 = self.dsets[dsets[0]]
-        dset2 = self.dsets[dsets[1]]
+        dset1 = self.dsets[self.dset_idx(dsets[0])]
+        dset2 = self.dsets[self.dset_idx(dsets[1])]
 
         # get polarization array from zero'th dset
         pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), dset1.polarization_array)
@@ -1244,8 +1389,8 @@ class PSpecData(object):
 
         Parameters
         ----------
-        dset_index : int
-            index of dataset in self.dset to phase other datasets to.
+        dset_index : int or str
+            Index or label of dataset in self.dset to phase other datasets to.
 
         inplace : bool, optional
             If True, edits data in dsets in-memory. Else, makes a copy of
@@ -1266,7 +1411,10 @@ class PSpecData(object):
             dsets = self.dsets
         else:
             dsets = copy.deepcopy(self.dsets)
-
+        
+        # Parse dset_index
+        dset_index = self.dset_idx(dset_index)
+        
         # get LST grid we are phasing to
         lst_grid = []
         lst_array = dsets[dset_index].lst_array.ravel()
