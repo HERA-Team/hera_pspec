@@ -106,7 +106,8 @@ class Test_PSpecData(unittest.TestCase):
 
         # load another data file
         self.uvd = uv.UVData()
-        self.uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+        self.uvd.read_miriad(os.path.join(DATA_PATH, 
+                                          "zen.2458042.17772.xx.HH.uvXA"))
 
     def tearDown(self):
         pass
@@ -139,10 +140,41 @@ class Test_PSpecData(unittest.TestCase):
         self.assertRaises(TypeError, ds.add, [1], [None])
 
     def test_add_data(self):
-        # test adding non UVData object
+        """
+        Test adding non UVData object.
+        """
         nt.assert_raises(TypeError, self.ds.add, 1, 1)
-
+    
+    def test_labels(self):
+        """
+        Test that dataset labels work.
+        """
+        # Check that specifying labels does work
+        psd = pspecdata.PSpecData( dsets=[self.d[0], self.d[1],], 
+                                   wgts=[self.w[0], self.w[1], ],
+                                   labels=['red', 'blue'] )
+        np.testing.assert_array_equal( psd.x(('red', 24, 38)), 
+                                       psd.x((0, 24, 38)) )
+        
+        # Check specifying labels using dicts
+        dsdict = {'a':self.d[0], 'b':self.d[1]}
+        psd = pspecdata.PSpecData(dsets=dsdict, wgts=dsdict)
+        self.assertRaises(ValueError, pspecdata.PSpecData, dsets=dsdict, 
+                          wgts=dsdict, labels=['a', 'b'])
+        
+        # Check that invalid labels raise errors
+        self.assertRaises(KeyError, psd.x, ('green', 24, 38))
+    
+    def test_str(self):
+        """
+        Check that strings can be output.
+        """
+        print(self.ds)
+    
     def test_get_Q(self):
+        """
+        Test the Q = dC/dp function.
+        """
         vect_length = 50
         x_vect = np.random.normal(size=vect_length) \
                + 1.j * np.random.normal(size=vect_length)
