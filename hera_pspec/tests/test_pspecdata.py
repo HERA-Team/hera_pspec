@@ -169,7 +169,10 @@ class Test_PSpecData(unittest.TestCase):
         """
         Check that strings can be output.
         """
-        print(self.ds)
+        ds = pspecdata.PSpecData()
+        print(ds) # print empty psd
+        ds.add(self.uvd, None)
+        print(ds) # print populated psd
     
     def test_get_Q(self):
         """

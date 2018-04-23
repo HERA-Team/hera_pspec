@@ -1357,15 +1357,18 @@ class PSpecData(object):
         uvp.taper = taper
         uvp.norm = norm
         uvp.git_hash = version.git_hash
+        
         if self.primary_beam is not None:
             uvp.cosmo_params = str(self.primary_beam.cosmo.get_params())
         if self.primary_beam is not None and hasattr(self.primary_beam, 'filename'): 
             uvp.beamfile = self.primary_beam.filename
-        if hasattr(dset1.extra_keywords, 'filename'): uvp.filename1 = dset1.extra_keywords['filename']
-        if hasattr(dset2.extra_keywords, 'filename'): uvp.filename2 = dset2.extra_keywords['filename']
-        if hasattr(dset1.extra_keywords, 'tag'): uvp.tag1 = dset1.extra_keywords['tag']
-        if hasattr(dset2.extra_keywords, 'tag'): uvp.tag2 = dset2.extra_keywords['tag']
-
+        if hasattr(dset1.extra_keywords, 'filename'):
+            uvp.filename1 = dset1.extra_keywords['filename']
+        if hasattr(dset2.extra_keywords, 'filename'): 
+            uvp.filename2 = dset2.extra_keywords['filename']
+        uvp.label1 = self.labels[dset1]
+        uvp.label2 = self.labels[dset2]
+        
         # fill data arrays
         uvp.data_array = data_array
         uvp.integration_array = integration_array
