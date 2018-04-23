@@ -238,15 +238,21 @@ class UVPSpec(object):
         bls = self.bl_array.tolist()
         blseps = np.array(map(lambda bl: np.linalg.norm(bl_vecs[bls.index(bl)]), self.bl_array))
 
-        # iterate over blpair_array
+        # construct empty blp_avg_sep array
         blp_avg_sep = np.empty(self.Nblpairts, np.float)
-        bl1 = np.floor(self.blpair_array / 1e6)
-        blpair_bls = np.vstack([bl1, self.blpair_array - bl1*1e6]).astype(np.int).T
 
+        # construct blpair_bls
+        blpairs = np.unique(self.blpair_array)
+        bl1 = np.floor(blpairs / 1e6)
+        blpair_bls = np.vstack([bl1, blpairs - bl1*1e6]).astype(np.int).T
+
+        # iterate over blpairs
         for i, blp in enumerate(blpair_bls):
-            blp_avg_sep[i] = np.mean([blseps[bls.index(blp[0])], blseps[bls.index(blp[1])]])
+            avg_sep = np.mean([blseps[bls.index(blp[0])], blseps[bls.index(blp[1])]])
+            inds = self.blpair_to_indices(blp)
+            blpair[inds] = avg_sep
 
-        return np.array(blp_avg_sep)
+        return blp_avg_sep
 
     def get_kvecs(self, spw, little_h=True):
         """
