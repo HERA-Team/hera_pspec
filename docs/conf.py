@@ -22,6 +22,8 @@
 
 import os
 import sys
+
+# Mock-import modules to allow build to complete without throwing errors
 import mock
 MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'pyuvdata', 'h5py', 'aipy', 'omnical', 'linsolve', 'hera_qm', 'uvtools', 'hera_cal', 'healpy', 'scikit-learn']
 for mod_name in MOCK_MODULES:
@@ -97,7 +99,12 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+#html_theme = 'alabaster'
+html_theme = "default"
+html_theme_options = {
+    "rightsidebar": "false",
+    "relbarbgcolor": "black"
+}
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
