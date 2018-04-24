@@ -23,7 +23,7 @@
 import sys
 import os
 sys.path.insert(0, os.path.abspath('../'))
-import hera_pspec
+#import hera_pspec
 
 
 # -- General configuration ------------------------------------------------
