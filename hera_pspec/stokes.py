@@ -109,9 +109,9 @@ def validate_stokes(dset1, dset2, stokes='I'):
    # makes the Npol length==1 so that the UVData carries data for the required polarization only
    st_keys = pol_weights[stokes]
    if uvd1.Npols > 1:
-      uvd1 = uvd1.select(polarization=st_keys[0],inplace=True)
+      uvd1 = uvd1.select(polarization=st_keys[0],inplace=False)
    if uvd2.Npols > 1:
-      uvd2 = uvd2.select(polarization=st_keys[1],inplace=True)
+      uvd2 = uvd2.select(polarization=st_keys[1],inplace=False)
    
    # extracts polarization and ensures that the input dsets have the proper polarizations to form the desired stokes parameters
    pol1 = uvd1.get_pols()[0]
