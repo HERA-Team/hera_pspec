@@ -11,11 +11,11 @@ import os, sys, glob, time
 
 # Default settings for pspec calculation
 pspec_defaults = {
-    'overwrite':                    False,
-    'little_h':                     True,
-    'avg_group':                    False,
-    'exclude_auto_bls':             False,
-    'exclude_conjugated_blpairs':   False,
+    'overwrite':                False,
+    'little_h':                 True,
+    'avg_group':                False,
+    'exclude_auto_bls':         False,
+    'exclude_permutations':     False,
 }
 
     
@@ -83,6 +83,7 @@ if 'convert_jy_to_mk' in data_cfg.keys():
         for i in range(len(dsets)):
             freqs = dsets[i].freq_array.flatten()
             dsets[i].data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
+            dsets[i].vis_units = 'mK'
 
 #-------------------------------------------------------------------------------
 # Calculate power spectrum and package output into PSpecContainer
@@ -123,8 +124,7 @@ for i in dset_idxs:
                       taper=pspec_cfg['taper'], 
                       avg_group=pspec_defaults['avg_group'], 
                       exclude_auto_bls=pspec_defaults['exclude_auto_bls'], 
-                      exclude_conjugated_blpairs=\
-                          pspec_defaults['exclude_conjugated_blpairs'],
+                      exclude_permutations=pspec_defaults['exclude_permutations'],
                       spw_ranges=None,
                       little_h=pspec_defaults['little_h'])
         

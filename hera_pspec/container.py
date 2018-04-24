@@ -45,49 +45,54 @@ class PSpecContainer(object):
             self._update_header()
     
     
-    def _store_pspec(self, pspec_group, ps):
+    def _store_pspec(self, pspec_group, uvp):
         """
         Store a UVPSpec object as group of datasets within the HDF5 file.
         
         Parameters
         ----------
-        pspec : HDF5 group
+        pspec_group : HDF5 group
             HDF5 group to store power spectrum data in.
         
-        ps : UVPSpec
+        uvp : UVPSpec
             Object containing power spectrum and related data.
         """
         if self.mode == 'r':
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
         
         # Get data and attributes from UVPSpec object (stored in dicts)
-        assert isinstance(ps, UVPSpec)
+        assert isinstance(uvp, UVPSpec)
         
         # Write UVPSpec to group
-        ps.write_to_group(pspec_group, run_check=True)
+        uvp.write_to_group(pspec_group, run_check=True)
         
     
-    def _load_pspec(self, grp):
+    def _load_pspec(self, pspec_group):
         """
         Load a new UVPSpec object from a HDF5 group.
         
         Parameters
         ----------
-        grp : HDF5 group
+        pspec_group : HDF5 group
             Group containing datasets that contain power spectrum and 
             supporting information, in a standard format expected by UVPSpec.
+        
+        Returns
+        -------
+        uvp : UVPSpec
+            Returns a UVPSpec object constructed from the input HDF5 group.
         """
         # Check that group is tagged as containing UVPSpec (pspec_type attribute)
-        if 'pspec_type' in grp.attrs.keys():
-            if grp.attrs['pspec_type'] != UVPSpec.__name__:
+        if 'pspec_type' in pspec_group.attrs.keys():
+            if pspec_group.attrs['pspec_type'] != UVPSpec.__name__:
                 raise TypeError("HDF5 group is not tagged as a UVPSpec object.")
         else:
             raise TypeError("HDF5 group is not tagged as a UVPSpec object.")
         
         # Create new UVPSpec object and fill with data from this group
-        pspec = UVPSpec()
-        pspec.read_from_group(grp)
-        return pspec
+        uvp = UVPSpec()
+        uvp.read_from_group(pspec_group)
+        return uvp
     
     
     def _update_header(self):
@@ -200,9 +205,9 @@ class PSpecContainer(object):
         
         Returns
         -------
-        pspec : UVPSpec or list of UVPSpec
-            The specified power spectrum, as a UVPSpec object (or a list, if 
-            pname was not specified).
+        uvp : UVPSpec or list of UVPSpec
+            The specified power spectrum as a UVPSpec object (or a list of all 
+            power spectra in the group, if psname was not specified).
         """
         # Check that group is in keys and extract it if so
         key1 = "%s" % group
@@ -223,14 +228,14 @@ class PSpecContainer(object):
         
         
         # Otherwise, extract all available power spectra
-        spectra = []
+        uvp = []
         def pspec_filter(n, obj):
             if u'pspec_type' in obj.attrs.keys():
-                spectra.append(self._load_pspec(obj))
+                uvp.append(self._load_pspec(obj))
         
         # Traverse the entire set of groups/datasets looking for pspecs
-        grp.visititems(pspec_filter)
-        return spectra
+        grp.visititems(pspec_filter) # This adds power spectra to the uvp list
+        return uvp
         
     
     def spectra(self, group):
@@ -299,6 +304,7 @@ class PSpecContainer(object):
         """
         Make sure that HDF5 file is closed on destruct.
         """
+        # Uses try-except construct just as a safeguard
         try:
             self.data.close()
         except:

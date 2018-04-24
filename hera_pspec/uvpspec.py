@@ -712,9 +712,6 @@ class UVPSpec(object):
             If True, keep only baseline-pairs whose first _and_ second baseline
             are found in the 'bls' list. Default: False.
         """
-        # clear object
-        self._clear()
-
         # Open file descriptor and read data
         with h5py.File(filepath, 'r') as f:
             self.read_from_group(f, just_meta=just_meta, spws=spws, bls=bls, 

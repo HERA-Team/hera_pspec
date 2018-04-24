@@ -2,15 +2,29 @@ import unittest, os
 import nose.tools as nt
 import numpy as np
 import pyuvdata as uv
-from hera_pspec import pspecbeam
+from hera_pspec import pspecbeam, conversions
 from hera_pspec.data import DATA_PATH
+
+class Example(unittest.TestCase):
+    """
+    when running tests in this file by-hand in an interactive interpreter, 
+    instantiate this example class as
+
+    self = Example()
+
+    and you can copy-paste self.assert* calls interactively.
+    """
+    def runTest(self):
+        pass
+
 
 class Test_DataSet(unittest.TestCase):
 
     def setUp(self):
-        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
-        self.bm = pspecbeam.PSpecBeamUV(beamfile)
-        self.gauss = pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))
+        self.beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        self.bm = pspecbeam.PSpecBeamUV(self.beamfile)
+        self.gauss = pspecbeam.PSpecBeamGauss(0.8, 
+                                  np.linspace(115e6, 130e6, 50, endpoint=False))
 
     def tearDown(self):
         pass
@@ -31,6 +45,10 @@ class Test_DataSet(unittest.TestCase):
         upper_freq = 128.*10**6
         num_freqs = 20
         scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000)
+        
+        # Check that user-defined cosmology can be specified
+        bm = pspecbeam.PSpecBeamUV(self.beamfile,
+                                   cosmo=conversions.Cosmo_Conversions())
 
         # Check array dimensionality
         self.assertEqual(Om_p.ndim, 1)
@@ -86,7 +104,12 @@ class Test_DataSet(unittest.TestCase):
         upper_freq = 128.*10**6
         num_freqs = 20
         scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000)
-
+        
+        # Check that user-defined cosmology can be specified
+        bgauss = pspecbeam.PSpecBeamGauss(0.8, 
+                                 np.linspace(115e6, 130e6, 50, endpoint=False), 
+                                 cosmo=conversions.Cosmo_Conversions())
+        
         # Check array dimensionality
         self.assertEqual(Om_p.ndim,1)
         self.assertEqual(Om_pp.ndim,1)

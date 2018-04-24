@@ -7,10 +7,6 @@ from scipy import __version__ as scipy_version
 from scipy import integrate
 from scipy.interpolate import interp1d
 
-# Version check
-if (scipy_version < '0.19.0'):
-    raise RuntimeError("scipy version 0.19.0 or greater is required.")
-
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, num_steps=5000,
                           taper='none', little_h=True, noise_scalar=False):

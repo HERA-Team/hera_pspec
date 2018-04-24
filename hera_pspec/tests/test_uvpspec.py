@@ -334,6 +334,10 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvp.fold_spectra)
         nt.assert_equal(len(uvp.get_dlys(0)), 24)
         nt.assert_true(np.isclose(uvp.nsample_array[0], 2.0).all())
+    
+    def test_str(self):
+        a = str(self.uvp)
+        nt.assert_true(len(a) > 0)
 
 
 def test_conj_blpair_int():

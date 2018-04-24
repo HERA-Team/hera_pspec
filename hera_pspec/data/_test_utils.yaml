@@ -17,5 +17,5 @@ pspec:
     little_h:           True
     avg_group:          False
     exclude_auto_bls:   False
-    exclude_conjugated_blpairs:   False
+    exclude_permutations:   False
 
