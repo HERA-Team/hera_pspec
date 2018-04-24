@@ -129,12 +129,6 @@ class PSpecData(object):
             raise_warning("Warning: taking power spectra between frequency bins misaligned by more than 0.001 MHz",
                           verbose=verbose)
 
-        # Check for the same polarizations
-        pols = []
-        for d in self.dsets: pols.extend(d.polarization_array)
-        if np.unique(pols).size > 1:
-            raise ValueError("all dsets must have the same number and kind of polarizations: \n{}".format(pols))
-
         # Check phase type
         phase_types = []
         for d in self.dsets: phase_types.append(d.phase_type)
@@ -247,6 +241,7 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset = key[0]; bl = key[1:]
+        print bl
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T[self.spw_range[0]:self.spw_range[1], :] # FIXME: Transpose?
         else:
@@ -816,7 +811,22 @@ class PSpecData(object):
                                                num_steps=num_steps)
         return scalar
 
-    def pspec(self, bls1, bls2, dsets, input_data_weight='identity', norm='I', 
+    def validate_pol(self,dsets,pol):
+        """
+        Validates polarization so that they are consitent with the polarizations of the UVData objects
+
+        dsets: UVData objects containing visibility
+
+        pol : Polarization which will specified to draw the visibilities from the UVData object
+        """
+
+        if not isinstance(dsets,list): dsets = [dsets,]
+        dset_pols = []
+        dset_pols.extend(d.get_pols() for d in dsets)
+        dset_pols = np.unique(dset_pols)
+        #if pol==pol.lower(): pol=pol.upper()# flexible to take lower case polarizations      
+        assert (pol.lower() or pol.upper() in dset_pols), "UVData object must have the same polarization as specified. In case of Stokes parameter (I,Q,U,V), refer to stokes.py to form Stokes visibilities"
+    def pspec(self, bls1, bls2, dsets,pol_select, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, avg_group=False, 
               exclude_auto_bls=False, exclude_conjugated_blpairs=False,
               spw_ranges=None, verbose=True, history=''):
@@ -888,6 +898,9 @@ class PSpecData(object):
             Contains indices of self.dsets to use in forming power spectra, 
             where the first index is for the Left-Hand dataset and second index 
             is used for the Right-Hand dataset (see above).
+
+        pol_select : length-2 tuple or list
+            contains polarization pairs to use in forming power spectra e.g ('XX','XX') estimates power spectra from xx polarized visibilities from both datasets. It allows for power spectrum estimation using cross polarized visibilities e.g ('XY','YX').
 
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
@@ -1063,14 +1076,25 @@ class PSpecData(object):
             d = self.delays() * 1e-9
             dlys.extend(d)
             spws.extend(np.ones_like(d, np.int) * i)
-            freqs.extend(
-                dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
+            freqs.extend(dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
 
-            # Loop over polarizations
-            for j, p in enumerate(pol_arr):
+            
+            # Loop over polarization pairs
+            for j, p in enumerate(pol_select):
+                # set polarization pair range
+                if verbose: print( "\nSetting polarization pair: {}".format(pol_select[j]))
+                assert isinstance(p[0], (str, str)), "pol_select must be fed as len-2 string tuple"
+                assert isinstance(p[1], (str, str)), "pol_select must be fed as len-2 string tuple"
+
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
+
+                # validating first set of datasets
+                self.validate_pol(dset1,p[0])
+                # validating first set of datasets
+                self.validate_pol(dset2,p[1])
+
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
@@ -1087,11 +1111,11 @@ class PSpecData(object):
 
                     # assign keys
                     if avg_group and fed_bl_group:
-                        key1 = [(dsets[0],) + _blp[0] + (p,) for _blp in blp]
-                        key2 = [(dsets[1],) + _blp[1] + (p,) for _blp in blp]
+                        key1 = [(dsets[0],) + _blp[0] + (p[0],) for _blp in blp]
+                        key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
                     else:
-                        key1 = (dsets[0],) + blp[0] + (p,)
-                        key2 = (dsets[1],) + blp[1] + (p,)
+                        key1 = (dsets[0],) + blp[0] + (p[0],)
+                        key2 = (dsets[1],) + blp[1] + (p[1],)
                         
                     if verbose:
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, p))
