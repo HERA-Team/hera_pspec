@@ -41,7 +41,7 @@ sys.path.insert(0, os.path.abspath('../'))
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = ['sphinx.ext.autodoc',
-    'numpydoc',
+    'sphinx.ext.napoleon',
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
@@ -119,7 +119,10 @@ htmlhelp_basename = 'hera_pspecdoc'
 
 # -- Options for numpydoc ------------------------------------------
 
-numpydoc_show_class_members = False
+#numpydoc_show_class_members = False
+napoleon_google_docstring = False
+napoleon_use_param = False
+napoleon_use_ivar = True
 
 
 # -- Options for LaTeX output ---------------------------------------------
