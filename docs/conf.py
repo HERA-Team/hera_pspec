@@ -20,14 +20,13 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+import os
+import sys
 import mock
 MOCK_MODULES = ['numpy', 'scipy', 'pyuvdata', 'h5py', 'aipy', 'omnical', 'linsolve', 'hera_qm', 'uvtools', 'hera_cal', 'healpy', 'scikit-learn']
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 
-
-import sys
-import os
 sys.path.insert(0, os.path.abspath('../'))
 #import hera_pspec
 
