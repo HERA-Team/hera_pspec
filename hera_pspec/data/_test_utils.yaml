@@ -1,0 +1,21 @@
+
+data:
+    root:       ../hera_pspec/
+    subdirs:
+        - data
+    template:   zen.*.xx.HH.uvXA
+    beam:       data/NF_HERA_Beams.beamfits
+    flags:      zen.2458098.66239.yy.HH.uv.vis.uvfits.flags.npz
+
+pspec:
+    output:             hera_red.hdf5
+    overwrite:          True
+    weight:             iC
+    norm:               I
+    taper:              none
+    groupname:          test
+    little_h:           True
+    avg_group:          False
+    exclude_auto_bls:   False
+    exclude_permutations:   False
+

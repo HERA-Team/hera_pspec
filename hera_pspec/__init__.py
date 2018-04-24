@@ -1,15 +1,15 @@
 """
 __init__.py file for hera_pspec
 """
-import version
-import conversions
-import bootstrap
-import pspecbeam
-from uvpspec import UVPSpec
-from pspecdata import PSpecData
-from parameter import PSpecParam
+from hera_pspec import version, conversions, bootstrap, pspecbeam
+
+from hera_pspec.uvpspec import UVPSpec
+from hera_pspec.pspecdata import PSpecData
+from hera_pspec.container import PSpecContainer
+from hera_pspec.parameter import PSpecParam
+from hera_pspec.pspecbeam import PSpecBeamUV
 
 # XXX: This will eventually be deprecated
-import legacy_pspec as legacy
+from hera_pspec import legacy_pspec as legacy
 
 __version__ = version.version
