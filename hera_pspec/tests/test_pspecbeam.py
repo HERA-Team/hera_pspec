@@ -129,4 +129,12 @@ class Test_DataSet(unittest.TestCase):
         # test taper execution
         scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
         self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)
-
+    
+    def test_PSpecBeamBase(self):
+        """
+        Test that base class can be instantiated.
+        """
+        bm1 = pspecbeam.PSpecBeamBase()
+        
+        # Check that user-defined cosmology can be specified
+        bm2 = pspecbeam.PSpecBeamBase(cosmo=conversions.Cosmo_Conversions())
