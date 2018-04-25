@@ -1,11 +1,14 @@
 import numpy as np
 import md5
+import yaml
 from conversions import Cosmo_Conversions
+
 
 def hash(w):
     """
     Return an MD5 hash of a set of weights.
     """
+    DeprecationWarning("utils.hash is deprecated.")
     return md5.md5(w.copy(order='C')).digest()
 
 
@@ -50,7 +53,6 @@ def cov(d1, w1, d2=None, w2=None):
     C /= np.where(W > 0, W, 1)
     C -= np.outer(x1, x2.conj())
     return C
-
 
 def get_delays(freqs):
     """
@@ -182,8 +184,8 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
     freq_range = []
     for zrange in z_range:
         zmin, zmax = zrange
-        freq_range.append( Cosmo_Conversions.z2f(zmax), 
-                           Cosmo_Conversions.z2f(zmin) )
+        freq_range.append( (Cosmo_Conversions.z2f(zmax), 
+                            Cosmo_Conversions.z2f(zmin)) )
     
     # Use freq. function to get spectral window
     spw_range = spw_range_from_freqs(data=data, freq_range=freq_range, 
@@ -193,3 +195,29 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
     if is_tuple: return spw_range[0]
     return spw_range
     
+
+def log(msg, lvl=0):
+    """
+    Add a message to the log (just prints to the terminal for now).
+    
+    Parameters
+    ----------
+    lvl : int, optional
+        Indent level of the message. Each level adds two extra spaces. 
+        Default: 0.
+    """
+    print("%s%s" % ("  "*lvl, msg))
+
+
+def load_config(config_file):
+    """
+    Load configuration details from a YAML file.
+    """
+    # Open and read config file
+    with open(config_file, 'r') as cfile:
+        try:
+            cfg = yaml.load(cfile)
+        except yaml.YAMLError as exc:
+            raise(exc)
+    return cfg
+

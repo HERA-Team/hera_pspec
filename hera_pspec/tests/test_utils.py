@@ -4,8 +4,8 @@ import numpy as np
 import os, sys, copy
 from hera_pspec.data import DATA_PATH
 from hera_pspec import utils
-from pyuvdata import UVData
 from collections import OrderedDict as odict
+from pyuvdata import UVData
 from test_uvpspec import build_example_uvpspec
 
 def test_cov():
@@ -29,6 +29,26 @@ def test_cov():
     nt.assert_raises(TypeError, utils.cov, d1, w1, d2=d2, w2=w2*1j)
     w1 *= -1.0
     nt.assert_raises(ValueError, utils.cov, d1, w1)
+
+def test_load_config():
+    """
+    Check YAML config file handling.
+    """
+    fname = os.path.join(DATA_PATH, '_test_utils.yaml')
+    cfg = utils.load_config(fname)
+    
+    # Check that expected keys exist
+    assert('data' in cfg.keys())
+    assert('pspec' in cfg.keys())
+    
+    # Check that boolean values are read in correctly
+    assert(cfg['pspec']['overwrite'] == True)
+    
+    # Check that lists are read in as lists
+    assert(len(cfg['data']['subdirs']) == 1)
+    
+    # Check that missing files cause an error
+    nt.assert_raises(IOError, utils.load_config, "file_that_doesnt_exist")
 
 
 class Test_Utils(unittest.TestCase):
@@ -122,3 +142,15 @@ class Test_Utils(unittest.TestCase):
         nt.ok_( isinstance(spw5, tuple) )
         nt.ok_( spw5[0] is not None )
         
+def test_log():
+    """
+    Test that log() prints output.
+    """
+    utils.log("message")
+    utils.log("message", lvl=2)
+
+def test_hash():
+    """
+    Check that MD5 hashing works.
+    """
+    hsh = utils.hash(np.ones((8,16)))
