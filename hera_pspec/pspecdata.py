@@ -1242,9 +1242,6 @@ class PSpecData(object):
                 lst_grid.append(l)
         lst_grid = np.array(lst_grid)
 
-        # get polarization list
-        pol_list = dsets[dset_index].polarization_array.tolist()
-
         # iterate over dsets
         for i, dset in enumerate(dsets):
             # don't rephase dataset we are using as our LST anchor
@@ -1262,6 +1259,7 @@ class PSpecData(object):
             # a copy of the data
             (data, flgs, antpos, ants, freqs, times, lsts, 
              pols) = hc.io.load_vis(dset, return_meta=True)
+            pol_list = dset.polarization_array.tolist()
 
             # make bls dictionary
             bls = dict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
@@ -1280,7 +1278,7 @@ class PSpecData(object):
                 # get blts indices of basline
                 indices = dset.antpair2ind(*k[:2])
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(hc.io.polstr2num[k[-1]])
+                polind = pol_list.index(hc.io.polstr2num[k[2]])
                 # insert into dset
                 dset.data_array[indices, 0, :, polind] = data[k]
 
