@@ -1,5 +1,6 @@
 import numpy as np
 import md5
+from conversions import Cosmo_Conversions
 
 def hash(w):
     """
@@ -178,11 +179,11 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
         z_range = [z_range,]
     
     # Convert redshifts to frequencies (in Hz)
-    NU21CM = 1420405751.7667 # 21cm rest freq. in Hz
     freq_range = []
     for zrange in z_range:
         zmin, zmax = zrange
-        freq_range.append( (NU21CM/(1.+zmax), NU21CM/(1.+zmin)) )
+        freq_range.append( Cosmo_Conversions.z2f(zmax), 
+                           Cosmo_Conversions.z2f(zmin) )
     
     # Use freq. function to get spectral window
     spw_range = spw_range_from_freqs(data=data, freq_range=freq_range, 
