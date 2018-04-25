@@ -1,7 +1,7 @@
 import unittest
 import nose.tools as nt
 import numpy as np
-from hera_pspec import bootstrap as boot
+from hera_pspec import grouping
 
 class Test_bootstrap(unittest.TestCase):
 
@@ -35,17 +35,17 @@ class Test_bootstrap(unittest.TestCase):
         bls6 = [(0,i) for i in range(521)]
         
         # Check that error is raised when more groups requested than baselines
-        nt.assert_raises(ValueError, boot.group_baselines, bls1, 2)
-        nt.assert_raises(ValueError, boot.group_baselines, bls2, 5)
-        nt.assert_raises(ValueError, boot.group_baselines, bls4, 6)
+        nt.assert_raises(ValueError, grouping.group_baselines, bls1, 2)
+        nt.assert_raises(ValueError, grouping.group_baselines, bls2, 5)
+        nt.assert_raises(ValueError, grouping.group_baselines, bls4, 6)
         
         # Check that keep_remainder=False results in equal-sized blocks
-        g1a = boot.group_baselines(bls4, 2, keep_remainder=False, randomize=False)
-        g1b = boot.group_baselines(bls5, 5, keep_remainder=False, randomize=False)
-        g1c = boot.group_baselines(bls6, 10, keep_remainder=False, randomize=False)
-        g2a = boot.group_baselines(bls4, 2, keep_remainder=False, randomize=True)
-        g2b = boot.group_baselines(bls5, 5, keep_remainder=False, randomize=True)
-        g2c = boot.group_baselines(bls6, 10, keep_remainder=False, randomize=True)
+        g1a = grouping.group_baselines(bls4, 2, keep_remainder=False, randomize=False)
+        g1b = grouping.group_baselines(bls5, 5, keep_remainder=False, randomize=False)
+        g1c = grouping.group_baselines(bls6, 10, keep_remainder=False, randomize=False)
+        g2a = grouping.group_baselines(bls4, 2, keep_remainder=False, randomize=True)
+        g2b = grouping.group_baselines(bls5, 5, keep_remainder=False, randomize=True)
+        g2c = grouping.group_baselines(bls6, 10, keep_remainder=False, randomize=True)
         
         # Loop over groups and check that blocks are equal in size
         gs = [g1a, g1b, g1c, g2a, g2b, g2c]
@@ -57,7 +57,7 @@ class Test_bootstrap(unittest.TestCase):
             for ngrp in [1, 2, 5, 10, 45]:
                 for rand in [True, False]:
                     try:
-                        g = boot.group_baselines(bls, ngrp, 
+                        g = grouping.group_baselines(bls, ngrp, 
                                                  keep_remainder=True, 
                                                  randomize=rand)
                     except:
@@ -66,9 +66,9 @@ class Test_bootstrap(unittest.TestCase):
                     self.assertEqual(count, len(bls))
         
         # Check that random seed works
-        g1 = boot.group_baselines(bls5, 3, randomize=True, seed=10)
-        g2 = boot.group_baselines(bls5, 3, randomize=True, seed=11)
-        g3 = boot.group_baselines(bls5, 3, randomize=True, seed=10)
+        g1 = grouping.group_baselines(bls5, 3, randomize=True, seed=10)
+        g2 = grouping.group_baselines(bls5, 3, randomize=True, seed=11)
+        g3 = grouping.group_baselines(bls5, 3, randomize=True, seed=10)
         for i in range(len(g1)):
             for j in range(len(g1[i])):
                 self.assertEqual(g1[i][j], g3[i][j])
@@ -86,15 +86,15 @@ class Test_bootstrap(unittest.TestCase):
         bls6 = [(0,i) for i in range(521)]
         
         # Example grouped list
-        g1 = boot.group_baselines(bls5, 3, randomize=False)
+        g1 = grouping.group_baselines(bls5, 3, randomize=False)
         
         # Check that returned length is the same as input length
         for bls in [bls1, bls2, bls3, bls4, bls5, bls6]:
-            samp = boot.sample_baselines(bls)
+            samp = grouping.sample_baselines(bls)
             self.assertEqual(len(bls), len(samp))
         
         # Check that returned length is the same for groups too
-        samp = boot.sample_baselines(g1)
+        samp = grouping.sample_baselines(g1)
         self.assertEqual(len(g1), len(samp))
         
     
