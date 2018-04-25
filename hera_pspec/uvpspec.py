@@ -48,7 +48,7 @@ class UVPSpec(object):
         self._lst_avg_array = PSpecParam("lst_avg_array", description="Average of the lst_1_array and lst_2_array [radians].", form="(Nblpairts,)")
         self._time_1_array = PSpecParam("time_1_array", description="Time array of the first bl in the bl-pair [Julian Date].", form="(Nblpairts,)")
         self._time_1_array = PSpecParam("time_2_array", description="Time array of the second bl in the bl-pair [Julian Date].", form="(Nblpairts,)")
-        self._time_avg_array = PSpecParam("time_avg_array", description="Average of the time_1_array and time_2_array [Julian Date].", form='(Nblparits,)')
+        self._time_avg_array = PSpecParam("time_avg_array", description="Average of the time_1_array and time_2_array [Julian Date].", form='(Nblpairts,)')
         self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)")
 
         # Baseline attributes
@@ -545,7 +545,7 @@ class UVPSpec(object):
         # convert pol to int if str
         if type(pol) in (str, np.str):
             pol = uvutils.polstr2num(pol)
-        # check attribuets exists in data
+        # check attributes exist in data
         assert spw in self.spw_array, "spw {} not found in data".format(spw)
         assert blpair in self.blpair_array, "blpair {} not found in data".format(blpair)
         assert pol in self.pol_array, "pol {} not found in data".format(pol)
