@@ -129,7 +129,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
             bl_select = reduce(operator.add, map(lambda b: uvp.bl_array==b, bl_array))
             uvp.bl_array = uvp.bl_array[bl_select]
             uvp.bl_vecs = uvp.bl_vecs[bl_select]
-            uvp.Nbls = len(uvp.bl_array)        
+            uvp.Nbls = len(uvp.bl_array)
 
     if pols is not None:
         # assert form

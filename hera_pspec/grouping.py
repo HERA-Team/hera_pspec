@@ -4,49 +4,6 @@ from hera_pspec import uvpspec_utils as uvputils
 import random
 import copy
 
-def fold_kparallel(pspec_list):
-    """
-    Take a power spectrum with bins in positive and negative k, and combine 
-    into a power spectrum for absolute |k| only.
-    
-    Parameters
-    ----------
-    pspec_list : list of PSpec objects
-        List of power spectra, one for each bootstrap. Dimensions: 
-        (N_lsts, N_kbins, N_boots).
-    
-    Returns
-    -------
-    k_folded : array_like
-        Folded k values, |k|.
-        
-    pspec_folded : array_like
-        Folded power spectrum, with only |k_parallel|.
-    """
-    NotImplementedError()
-    # Takes kbins from properties of PSpec.kbins.
-
-
-def collapse_over_lsts(pspec_list):
-    """
-    Average a set of bootstrap-sampled power spectra over LSTs.
-    
-    Parameters
-    ----------
-    pspec_list : list of PSpec objects
-        List of power spectra, one for each bootstrap. Dimensions: 
-        (N_lsts, N_kbins, N_boots).
-    
-    Returns
-    -------
-    pspec_list : array_like
-        List of power spectra averaged over LST, one for each bootstrap. 
-        Dimensions: (N_kbins, N_boots).
-    """
-    # 1. Take a set of power spectra for many bootstrap samples
-    # 2. Average over time for each bootstrap sample
-    NotImplementedError()
-
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False, 
                     seed=None):
@@ -134,6 +91,140 @@ def sample_baselines(bls, seed=None):
     
     # Sample with replacement; return as many baselines/groups as were input
     return [random.choice(bls) for i in range(len(bls))]
+
+
+def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True, 
+                  inplace=False):
+    """
+    Find spectral windows, baseline-pairs, times, and/or polarizations that a 
+    set of UVPSpec objects have in common and return new UVPSpec objects that 
+    contain only those data.
+    
+    If there is no overlap, an error will be raised.
+    
+    Parameters
+    ----------
+    uvp_list : list of UVPSpec
+        List of input UVPSpec objects.
+    
+    spws : bool, optional
+        Whether to retain only the spectral windows that all UVPSpec objects 
+        have in common. For a spectral window to be retained, the entire set of 
+        delays in that window must match across all UVPSpec objects (this will 
+        not allow you to just pull out common delays).
+        
+        If set to False, the original spectral windows will remain in each 
+        UVPSpec. Default: True.
+    
+    blpairs : bool, optional
+        Whether to retain only the baseline-pairs that all UVPSpec objects have 
+        in common. Default: True.
+    
+    times : bool, optional
+        Whether to retain only the (average) times that all UVPSpec objects 
+        have in common. This does not check to make sure that time_1 and time_2 
+        (i.e. the LSTs for the left-hand and right-hand visibilities that went 
+        into the power spectrum calculation) are the same. See the 
+        UVPSpec.time_avg_array attribute for more details. Default: True.
+    
+    pols : bool, optional
+        Whether to retain only the polarizations that all UVPSpec objects have 
+        in common. Default: True.
+    
+    inplace : bool, optional
+        Whether the selection should be applied to the UVPSpec objects 
+        in-place, or new copies of the objects should be returned.
+    
+    Returns
+    -------
+    uvp_list : list of UVPSpec, optional
+        List of UVPSpec objects with the overlap selection applied. This will 
+        only be returned if inplace = False.
+    """
+    if len(uvp_list) < 2:
+        raise IndexError("uvp_list must contain two or more UVPSpec objects.")
+    
+    # Get times that are common to all UVPSpec objects in the list
+    if times:
+        common_times = np.unique(uvp_list[0].time_avg_array)
+        has_times = [np.isin(common_times, uvp.time_avg_array) 
+                     for uvp in uvp_list]
+        common_times = common_times[np.all(has_times, axis=0)]
+        print "common_times:", common_times
+    
+    # Get baseline-pairs that are common to all
+    if blpairs:
+        common_blpairs = np.unique(uvp_list[0].blpair_array)
+        has_blpairs = [np.isin(common_blpairs, uvp.blpair_array) 
+                       for uvp in uvp_list]
+        common_blpairs = common_blpairs[np.all(has_blpairs, axis=0)]
+        print "common_blpairs:", common_blpairs
+    
+    # Get polarizations that are common to all
+    if pols:
+        common_pols = np.unique(uvp_list[0].pol_array)
+        has_pols = [np.isin(common_pols, uvp.pol_array) for uvp in uvp_list]
+        common_pols = common_pols[np.all(has_pols, axis=0)]
+        print "common_pols:", common_pols
+    
+    # Get common spectral windows (the entire window must match)
+    # Each row of common_spws is a list of that spw's index in each UVPSpec
+    if spws:
+        common_spws = []
+        for spw in range(uvp_list[0].Nspws):
+            dlys0 = uvp_list[0].get_dlys((spw,))
+            
+            # Check if this window exists in all UVPSpec objects
+            found_spws = [spw, ]
+            missing = False
+            for uvp in uvp_list:
+                # Check if any spws in this UVPSpec match the current spw
+                matches_spw = np.array([ np.array_equal(dlys0, uvp.get_dlys((i,))) 
+                                         for i in range(uvp.Nspws) ])
+                if not np.any(matches_spw):
+                    missing = True
+                    break
+                else:
+                    # Store which spw of this UVPSpec it was found in
+                    found_spws.append( np.where(matches_spw)[0] )
+            
+            # Only add this spw to the list if it was found in all UVPSpecs
+            if missing: continue
+            common_spws.append(found_spws)
+        common_spws = np.array(common_spws).T # Transpose
+        print "common_spws:", common_spws
+        
+    # Check that this won't be an empty selection
+    if spws and len(common_spws) == 0:
+        raise ValueError("No spectral windows were found that exist in all "
+                         "spectra (the entire spectral window must match).")
+    
+    if blpairs and len(common_blpairs) == 0:
+        raise ValueError("No baseline-pairs were found that exist in all spectra.")
+    
+    if times and len(common_times) == 0:
+        raise ValueError("No times were found that exist in all spectra.")
+    
+    if pols and len(common_pols) == 0:
+        raise ValueError("No polarizations were found that exist in all spectra.")
+    
+    # Apply selections
+    out_list = []
+    for i, uvp in enumerate(uvp_list):
+        _spws, _blpairs, _times, _pols = None, None, None, None
+        
+        # Set indices of blpairs, times, and pols to keep
+        if blpairs: _blpairs = common_blpairs
+        if times: _times = common_times
+        if pols: _pols = common_pols
+        if spws: _spws = common_spws[i]
+        
+        _uvp = uvp.select(spws=_spws, blpairs=_blpairs, times=_times, 
+                          pols=_pols, inplace=inplace)
+        if not inplace: out_list.append(_uvp)
+    
+    # Return if not inplace
+    if not inplace: return out_list
 
 
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
