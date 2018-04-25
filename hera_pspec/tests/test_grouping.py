@@ -14,14 +14,6 @@ class Test_bootstrap(unittest.TestCase):
     def runTest(self):
         pass
     
-    def test_fold_kparallel(self):
-        #fold_kparallel(pspec_list)
-        pass
-    
-    def test_collapse_over_lsts(self):
-        #collapse_over_lsts(pspec_list)
-        pass
-    
     def test_group_baselines(self):
         """
         Test baseline grouping behavior.
