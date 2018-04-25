@@ -425,10 +425,19 @@ class Test_PSpecData(unittest.TestCase):
         # only expect equality to ~10^-2 to 10^-3
         np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
     '''
+    
+    def test_get_V_gaussian(self):
+        nt.assert_raises(NotImplementedError, self.ds.get_V_gaussian, 
+                         (0,1), (0,1))
+        
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
-
+        
+        gauss = pspecbeam.PSpecBeamGauss(0.8, 
+                                  np.linspace(115e6, 130e6, 50, endpoint=False))
+        ds2 = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=gauss)
+        
         # Precomputed results in the following test were done "by hand" 
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         # FIXME: Uncomment when pyuvdata support for this is ready
@@ -494,6 +503,12 @@ class Test_PSpecData(unittest.TestCase):
         # test basic execution
         psu = ds.units()
         nt.assert_equal(psu, '(UNCALIB)^2 Hz [beam normalization not specified]')
+        
+        ds.primary_beam = pspecbeam.PSpecBeamGauss(0.8, 
+                                  np.linspace(115e6, 130e6, 50, endpoint=False))
+        psu = ds.units(little_h=False)
+        nt.assert_equal(psu, '(UNCALIB)^2 Mpc^3')
+        
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
@@ -642,13 +657,16 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(TypeError, pspecdata.validate_bls, [1], [1], uvd, uvd)
         nt.assert_raises(TypeError, pspecdata.validate_bls, [[1]], [[1]], 1, uvd)
         nt.assert_raises(TypeError, pspecdata.validate_bls, [[1]], [[1]], uvd, 1)
-
+        
         bls1 = [(24, 25), (37, 38)]
         bls2 = [(24, 25), (37, 52)]
         pspecdata.validate_bls(bls1, bls2, uvd, uvd)
         bls1 = [[(24,25),(37,38)]]
         bls2 = [[(24,25),(37,52)]]
         pspecdata.validate_bls(bls1, bls2, uvd, uvd)
+        
+        nt.assert_raises(TypeError, pspecdata.validate_bls, bls1, bls2, uvd, 1)
+        nt.assert_raises(TypeError, pspecdata.validate_bls, bls1, bls2, 1, uvd)
 
 
 """
