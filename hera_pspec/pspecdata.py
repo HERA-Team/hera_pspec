@@ -1295,7 +1295,6 @@ class PSpecData(object):
         if self.primary_beam is not None:
             # attach cosmology
             uvp.cosmo = self.primary_beam.cosmo
-            uvp._cosmo_params = str(uvp.cosmo.get_params())
             # attach beam info
             uvp.beam_freqs = self.primary_beam.beam_freqs
             uvp.OmegaP, uvp.OmegaPP = self.primary_beam.get_Omegas(uvp.pol_array)

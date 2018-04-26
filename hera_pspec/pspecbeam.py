@@ -239,7 +239,6 @@ class PSpecBeamBase(object):
         return 1e-20 * conversions.cgs_units.c**2 \
                / (2 * conversions.cgs_units.kb * freqs**2 * Op)
 
-
     def get_Omegas(self, pols):
         """
         Get OmegaP and OmegaPP across beam_freqs for requested polarizatiosn
@@ -254,6 +253,12 @@ class PSpecBeamBase(object):
 
         OmegaPP : ndarray containing power_sq_beam_int, shape=(Nbeam_freqs, Npols)
         """
+        # type check
+        if isinstance(pols, (int, np.int)):
+            pols = [pols]
+        elif isinstance(pols, (str, np.str)):
+            pols = [pols]
+            
         # initialize blank lists
         OmegaP, OmegaPP = [], []
         for p in pols:

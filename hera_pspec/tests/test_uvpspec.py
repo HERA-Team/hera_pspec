@@ -47,7 +47,8 @@ def build_example_uvpspec():
     dly_array = np.fft.fftshift(np.repeat(np.fft.fftfreq(Nfreqs, np.median(np.diff(freq_array))), Nspws))
     pol_array = np.array([-5])
     Npols = len(pol_array)
-    units = 'unknown'
+    vis_units = 'unknown'
+    norm_units = 'Hz str'
     weighting = 'identity'
     channel_width = np.median(np.diff(freq_array))
     history = 'example'
@@ -57,6 +58,8 @@ def build_example_uvpspec():
     scalar_array = np.ones((Nspws, Npols), np.float)
     label1 = 'red'
     #label2 = 'blue' # Leave commented out to make sure non-named UVPSpecs work!
+    OmegaP, OmegaPP = self.beam.get_Omegas(['xx'])
+    beam_freqs = self.beam.beam_freqs
 
     telescope_location = np.array([5109325.85521063, 
                                    2005235.09142983, 
@@ -77,9 +80,10 @@ def build_example_uvpspec():
               'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array', 
               'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 
-              'units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
+              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
               'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array', 
-              'cosmo', 'scalar_array', 'label1']
+              'cosmo', 'scalar_array', 'label1', 'OmegaP', 'OmegaPP', 'beam_freqs', 
+              'norm_units']
     
     # Set all parameters
     for p in params:
@@ -97,9 +101,6 @@ class Test_UVPSpec(unittest.TestCase):
 
         # test equivalence
         nt.assert_equal(uvp, uvp)
-
-        self.cosmo = cosmo
-        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits'))
 
     def tearDown(self):
         pass
@@ -157,7 +158,6 @@ class Test_UVPSpec(unittest.TestCase):
 
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
-        uvp.set_cosmology(conversions.Cosmo_Conversions())
         uvp.convert_to_deltasq(little_h=True)
         k_perp, k_para = self.uvp.get_kperps(0), self.uvp.get_kparas(0)
         k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
@@ -293,15 +293,6 @@ class Test_UVPSpec(unittest.TestCase):
     def test_sense(self):
         uvp = copy.deepcopy(self.uvp)
 
-        # test exception
-        nt.assert_raises(AssertionError, uvp.generate_noise_spectra, 0, 0, 0)
-
-        # test generate_sense
-        uvp.generate_sensitivity(self.beam)
-        nt.assert_true(hasattr(uvp, 'sensitivity'))
-        nt.assert_true(hasattr(uvp.sensitivity, 'beam'))
-        nt.assert_true(hasattr(uvp.sensitivity, 'cosmo'))
-
         # test generate noise spectra
         P_N = uvp.generate_noise_spectra(0, -5, 500, form='Pk', real=True)
         nt.assert_equal(P_N[1002001002].shape, (10, 50))
@@ -355,6 +346,36 @@ class Test_UVPSpec(unittest.TestCase):
         a = str(self.uvp)
         nt.assert_true(len(a) > 0)
 
+    def test_compute_scalar(self):
+        uvp = copy.deepcopy(self.uvp)
+        # test basic execution
+        s = uvp.compute_scalar(0, 'xx', num_steps=1000, noise_scalar=False)
+        nt.assert_almost_equal(s/258034762.16569147, 1.0, places=5)
+        # test execptions
+        del uvp.OmegaP
+        nt.assert_raises(AssertionError, uvp.compute_scalar, 0, -5)
+
+    def test_set_cosmology(self):
+        uvp = copy.deepcopy(self.uvp)
+        new_cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
+        # test no overwrite
+        uvp.set_cosmology(new_cosmo, overwrite=False)
+        nt.assert_not_equal(uvp.cosmo, new_cosmo)
+        # test setting cosmology
+        uvp.set_cosmology(new_cosmo, overwrite=True)
+        nt.assert_equal(uvp.cosmo, new_cosmo)
+        nt.assert_equal(uvp.norm_units, 'h^-3 Mpc^3')
+        nt.assert_true((uvp.scalar_array>1.0).all())
+        nt.assert_true((uvp.data_array[0] > 1e5).all())
+        # test exception
+        new_cosmo2 = conversions.Cosmo_Conversions(Om_L=1.0)
+        del uvp.OmegaP
+        uvp.set_cosmology(new_cosmo2, overwrite=True)
+        nt.assert_not_equal(uvp.cosmo, new_cosmo2)
+        # try with new beam
+        uvp.set_cosmology(new_cosmo2, overwrite=True, new_beam=self.beam)
+        nt.assert_equal(uvp.cosmo, new_cosmo2)
+        nt.assert_true(hasattr(uvp, 'OmegaP'))
 
 def test_conj_blpair_int():
     conj_blpair = uvpspec._conj_blpair_int(1002003004)
