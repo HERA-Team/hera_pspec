@@ -1,7 +1,7 @@
 import numpy as np
 from collections import OrderedDict as odict
 import os, copy, shutil, operator, ast, fnmatch
-from hera_pspec import conversions, noise, version
+from hera_pspec import conversions, noise, version, pspecbeam
 from hera_pspec.parameter import PSpecParam
 from pyuvdata import uvutils as uvutils
 import h5py
@@ -41,7 +41,8 @@ class UVPSpec(object):
         self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)")
         self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nspwdlys,)")
         self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)")
-        self._pol_array = PSpecParam("pol_array", description="Polarizations in data.", form="(Npols,)")
+        desc = "Polarization integers of power spectra. Stokes 1:4 (I,Q,U,V); circular -1:-4 (RR,LL,RL,LR); linear -5:-8 (XX,YY,XY,YX)"
+        self._pol_array = PSpecParam("pol_array", description=desc, form="(Npols,)")
         self._lst_1_array = PSpecParam("lst_1_array", description="LST array of the first bl in the bl-pair [radians].", form="(Nblpairts,)")
         self._lst_2_array = PSpecParam("lst_2_array", description="LST array of the second bl in the bl-pair [radians].", form="(Nblpairts,)")
         self._lst_avg_array = PSpecParam("lst_avg_array", description="Average of the lst_1_array and lst_2_array [radians].", form="(Nblpairts,)")
@@ -58,19 +59,22 @@ class UVPSpec(object):
         # Misc Attributes
         self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", expected_type=float)
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.ndarray)
-        self._weighting = PSpecParam("weighting", description="form of data weighting used when forming power spectra.", expected_type=str)
-        self._norm = PSpecParam("norm", description="normalization method", expected_type=str)
-        self._taper = PSpecParam("taper", description='taper function applied to data before FFT"', expected_type=str)
-        self._units = PSpecParam("units", description="units of the power spectra.", expected_type=str)
-        self._scalar_array = PSpecParam("scalar_array", description="power spectrum scalar from pspecbeam module.", expected_type=np.ndarray, form="(Nspws, Npols)")
+        self._weighting = PSpecParam("weighting", description="Form of data weighting used when forming power spectra.", expected_type=str)
+        self._norm = PSpecParam("norm", description="Normalization method adopted in OQE (M matrix).", expected_type=str)
+        self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT."', expected_type=str)
+        self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
+        self._norm_units = PSpecParam("norm_units", description="Power spectra normalization units, i.e. telescope units [Hz str] or cosmological [(h^-3) Mpc^3].", expected_type=str)
         self._filename1 = PSpecParam("filename1", description="filename of data from first dataset", expected_type=str)
         self._filename2 = PSpecParam("filename2", description="filename of data from second dataset", expected_type=str)
         self._label1 = PSpecParam("label1", description="label of data from first dataset", expected_type=str)
         self._label2 = PSpecParam("label2", description="label of data from second dataset", expected_type=str)
         self._git_hash = PSpecParam("git_hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
-        self._cosmo_params = PSpecParam("cosmo_params", description="LCDM cosmological parameter string, used to instantiate a conversions.Cosmo_Conversions object.", expected_type=str)
-        self._beamfile = PSpecParam("beamfile", description="filename of beam-model used to normalized pspectra.", expected_type=str)
         self._folded = PSpecParam("folded", description="if power spectra are folded (i.e. averaged) onto purely positive delay axis. Default is False", expected_type=bool)
+        self._scalar_array = PSpecParam("scalar_array", description="Power spectrum normalization scalar from pspecbeam module.", expected_type=np.ndarray, form="(Nspws, Npols)")
+        self._beamfile = PSpecParam("beamfile", description="filename of beam-model used to normalized pspectra.", expected_type=str)
+        self._OmegaP = PSpecParam("OmegaP", description="Integral of unitless beam power over the sky [steradians].", form="(Nbeam_freqs, Npols)")
+        self._OmegaPP = PSpecParam("OmegaP", description="Integral of unitless beam power squared over the sky [steradians].", form="(Nbeam_freqs, Npols)")
+        self._beam_freqs = PSpecParam("beam_freqs", description="Frequency bins of the OmegaP and OmegaPP beam-integral arrays [Hz].", form="(Nbeam_freqs,)")
 
         # collect parameters
         self._all_params = sorted(map(lambda p: p[1:], fnmatch.filter(self.__dict__.keys(), '_*')))
@@ -78,14 +82,15 @@ class UVPSpec(object):
         self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                             "data_array", "wgt_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
-                            "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units",
-                            "taper", "norm", "git_hash", "nsample_array", 'lst_avg_array', 'time_avg_array', 'folded']
+                            "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "vis_units",
+                            "norm_units", "taper", "norm", "git_hash", "nsample_array", 'lst_avg_array', 'time_avg_array', 'folded',
+                            "scalar_array"]
 
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
-                            "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "label1", "label2",
-                            "norm", "taper", "git_hash", "cosmo_params", "beamfile" ,'folded']
+                            "Nbls", "channel_width", "weighting", "vis_units", "filename1", "filename2", "label1", "label2",
+                            "norm", "norm_units", "taper", "git_hash", "cosmo_params", "beamfile" ,'folded']
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 'lst_avg_array', 'time_avg_array', 
-                          "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
+                          "lst_2_array", "time_1_array", "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
         self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array"]
 
@@ -322,10 +327,6 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
-
         inplace : boolean, if True edit and overwrite arrays in self, else make a copy of self and return
         """
         # copy object
@@ -345,10 +346,7 @@ class UVPSpec(object):
             uvp.data_array[spw] *= k_mag**3 / (2*np.pi**2)
 
         # edit units
-        if little_h:
-            uvp.units += " h^3 k^3 / (2pi^2)"
-        else:
-            uvp.units += " k^3 / (2pi^2)"
+        uvp.norm_units = "k^3 / (2pi^2)"
 
         if inplace == False:
             return uvp
@@ -825,23 +823,83 @@ class UVPSpec(object):
             self.write_to_group(f, run_check=run_check)
 
 
-    def set_cosmology(self, cosmo):
+    def set_cosmology(self, new_cosmo, overwrite=False, new_beam=None, 
+                      verbose=True):
         """
-        Set a cosmological model to self.cosmo via an instance of 
-        hera_pspec.conversions.Cosmo_Conversions
+        Set the cosmology for this UVPSpec object by passing an instance of 
+        conversions.Cosmo_Conversions and assigning it to self.cosmo, in 
+        addition to re-computing power spectrum normalization quantities like 
+        self.scalar_array. Because this will attempt to recompute the scalar_array,
+        the beam-related metadata (OmegaP, OmegaPP and beam_freqs) must exist in self. 
+        If they do not, or if you'd like to overwrite them with a new beam, you can 
+        pass a UVBeam object or path to a beam file via the new_beam kwarg.
+
+        If self.cosmo already exists then you are attempting to overwrite the 
+        currently adopted cosmology, which will only proceed if overwrite == True. 
+        If overwrite == True, then this module will overwrite self.cosmo. It will 
+        also recompute the power spectrum normalization scalar (using pspecbeam) 
+        and will overwrite the values in self.scalar_array. It will then propagate 
+        these re-normalization changes into the data_array by multiplying the data by 
+        new_scalar_array / old_scalar_array.
 
         Parameters
         ----------
-        cosmo : conversions.Cosmo_Conversions instance, or self.cosmo_params 
-        string, or dictionary
+        new_cosmo : Cosmo_Conversions instance or cosmological parameter dictionary
+            The new cosmology you want to adopt for this UVPSpec object.
+
+        overwrite : boolean, if True, overwrite self.cosmo if it already exists
+
+        new_beam : pspecbeam.PSpecBeamUV object or path to beam file.
+            The new beam you want to adopt for this UVPSpec object.
+
+        verbose : boolean, if True, rerport feedback to stdout.
         """
-        if isinstance(cosmo, (str, np.str)):
-            cosmo = ast.literal_eval(cosmo)
-        if isinstance(cosmo, (dict, odict)):
-            cosmo = conversions.Cosmo_Conversions(**cosmo)
-        print("attaching cosmology: \n{}".format(cosmo))
-        self.cosmo = cosmo
-        self.cosmo_params = str(self.cosmo.get_params())
+        if hasattr(self, 'cosmo') and overwrite == False:
+            print("self.cosmo exists and overwrite == False, not overwriting...")
+            return
+
+        else:
+            if (not hasattr(self, 'OmegaP') or not hasattr(self, 'OmegaPP') or not hasattr(self, 'beam_freqs')) and new_beam is None:
+                print "In order to set the cosmology, self.OmegaP, self.OmegaPP and self.beam_freqs " \
+                      "must exist, or you need to pass a PSpecBeamUV object or a path to a beam " \
+                      "file as new_beam."
+                return
+
+        # overwrite beam quantities
+        if new_beam is not None:
+            if verbose: print "Updating beam data with {}".format(new_beam)
+            if isinstance(new_beam, (str, np.str)):
+                # PSpecBeamUV will adopt a default cosmology upon instantiation, but this doesn't matter
+                # for what we need from it
+                new_beam = pspecbeam.PSpecBeamUV(new_beam)
+            self.OmegaP, self.OmegaPP = new_beam.get_Omegas(self.pol_array)
+            self.beam_freqs = new_beam.beam_freqs
+
+        # update cosmo and _cosmo_params
+        if isinstance(new_cosmo, (str, np.str)):
+            new_cosmo = ast.literal_eval(new_cosmo)
+        if isinstance(new_cosmo, (dict, odict)):
+            new_cosmo = conversions.Cosmo_Conversions(**new_cosmo)
+        if verbose: print("setting cosmology: \n{}".format(new_cosmo))
+        self.cosmo = new_cosmo
+        self._cosmo_params = str(self.cosmo.get_params())
+
+        # update scalar_array
+        if verbose: print("Updating scalar array and re-normalizing power spectra")
+        for spw in range(self.Nspws):
+            for j, pol in enumerate(self.pol_array):
+                scalar = self.compute_scalar(spw, pol, num_steps=1000, 
+                                             little_h=True, noise_scalar=False)
+
+                # renormalize power spectra with new scalar
+                self.data_array[spw][:, :, j] *= scalar / self.scalar_array[spw, j]
+
+                # update self.scalar_array element
+                self.scalar_array[spw, j] = scalar
+
+        # update self.units if pspectra were not originally in cosmological units
+        if "Mpc" not in self.norm_units:
+            self.norm_units = "h^-3 Mpc^3"
 
     def check(self, just_meta=False):
         """
@@ -869,6 +927,14 @@ class UVPSpec(object):
             # check nsample
             assert isinstance(self.nsample_array, (dict, odict)), "self.nsample_array must be a dictionary type"
             assert np.min(map(lambda k: self.nsample_array[k].dtype in (np.float, float, np.float64), self.nsample_array.keys())), "self.nsample_array values must be float type"
+
+        # assert cosmology consistency between self.cosmo and self._cosmo_params
+        if hasattr(self, '_cosmo_params') and hasattr(self, 'cosmo') == False:
+            self.cosmo = self.set_cosmology(self._cosmo_params, overwrite=True)
+        elif hasattr(self, "cosmo") and hasattr(self, "_cosmo_params") == False:
+            self.cosmo = self.set_cosmology(self.cosmo, overwrite=True)
+        elif hasattr(self, "cosmo") and hasattr(self, "_cosmo_params"):
+            assert self.cosmo == conversions.Cosmo_Conversions(**ast.literal_eval(self._cosmo_params))
 
     def _clear(self):
         """
@@ -920,28 +986,13 @@ class UVPSpec(object):
 
         return True
 
-    def generate_sensitivity(self, beam):
-        """
-        Generate a hera_pspec.noise.Sensitivity instance and attach to self as 
-        self.sensitivity.
+    @property
+    def units(self):
+        """ return power spectrum units. See self.vis_units and self.norm_units."""
+        return "({})^2 {}".format(self.vis_units, self.norm_units)
 
-        Parameters
-        ----------
-        beam : pspecbeam.PSpecBeamUV instance
-
-        Results
-        ------
-        self.sensitivity : noise.Sensitivity instance
-        """
-        assert hasattr(self, 'cosmo'), "self.cosmo must exist in order to instantiate a Sensitivity object, see self.set_cosmology()"
-
-        # instantiate a noise.Sensitivity object
-        print "attaching self.sensitivity"
-        self.sensitivity = noise.Sensitivity(cosmo=self.cosmo, beam=beam)
-
-    def generate_noise_spectra(self, spw, pol, Tsys, blpairs=None, 
-                               little_h=True, form='Pk', num_steps=5000, 
-                               real=True):
+    def generate_noise_spectra(self, spw, pol, Tsys, blpairs=None, little_h=True, 
+                               form='Pk', num_steps=2000, real=True):
         """
         Generate the expected 1-sigma noise power spectrum given a selection of 
         spectral window, system temp., and polarization. This estimate is 
@@ -999,9 +1050,6 @@ class UVPSpec(object):
             of noise power spectra as values, with ndarrays having shape 
             (Ntimes, Ndlys).
         """
-        # assert cosmology exists
-        assert hasattr(self, 'sensitivity'), "self.sensitivity required to generate noise spectra. See self.generate_sensitivity()"
-
         # assert polarization type
         if isinstance(pol, (np.int, int)):
             pol = uvutils.polnum2str(pol)
@@ -1013,7 +1061,7 @@ class UVPSpec(object):
         freqs = self.freq_array[self.spw_to_indices(spw)]
 
         # calculate scalar
-        self.sensitivity.calc_scalar(freqs, pol, num_steps=num_steps, little_h=little_h)
+        scalar = self.compute_scalar(spw, pol, num_steps=num_steps, little_h=little_h, noise_scalar=True)
 
         # Get k vectors
         if form == 'DelSq':
@@ -1050,9 +1098,7 @@ class UVPSpec(object):
                     k = None
 
                 # get pn
-                pn = self.sensitivity.calc_P_N(Tsys, t_int, 
-                                               k=k, Nincoherent=n_samp, 
-                                               form=form, little_h=little_h)
+                pn = noise.calc_P_N(scalar, Tsys, t_int, k=k, Nincoherent=n_samp, form=form)
 
                 # put into appropriate form
                 if form == 'Pk':
@@ -1319,7 +1365,6 @@ class UVPSpec(object):
 
         self.folded = True
 
-
     def get_blpair_groups_from_bl_groups(self, blgroups, only_pairs_in_bls=False):
         """
         Get baseline pair matches from a list of baseline groups.
@@ -1344,6 +1389,43 @@ class UVPSpec(object):
                 blpair_groups.append(blp)
 
         return blpair_groups
+
+    def compute_scalar(self, spw, pol, num_steps=5000, little_h=True, noise_scalar=False):
+        """
+        Compute power spectrum normalization scalar given an adopted cosmology and a beam model.
+        See pspecbeam.PSpecBeamBase.compute_pspec_scalar for details.
+
+        Parameters
+        ----------
+        spw : integer, spectral window selection
+
+        pol : string or integer, polarization selection
+
+        num_steps : integer, number of integration bins along frequency in computing scalar
+
+        noise_scalar : boolean, if True calculate noise pspec scalar, else calculate normal pspec scalar
+            See pspecbeam.py for difference between normal scalar and noise scalar.
+
+        Returns
+        -------
+        scalar : float, power spectrum normalization scalar
+        """
+        # make assertions
+        assert hasattr(self, 'cosmo'), "self.cosmo object must exist to compute scalar. See self.set_cosmology()"
+        assert hasattr(self, 'OmegaP') and hasattr(self, "OmegaPP") and hasattr(self, "beam_freqs"), "self.OmegaP, "\
+            "self.OmegaPP and self.beam_freqs must exist to compute scalar."
+
+        # get freq array of selected spw
+        spw_freqs = self.freq_array[self.spw_to_indices(spw)]
+
+        # compute scalar
+        OP = self.OmegaP[:, self.pol_to_indices(pol)].squeeze()
+        OPP = self.OmegaPP[:, self.pol_to_indices(pol)].squeeze()
+        scalar = pspecbeam._compute_pspec_scalar(self.cosmo, self.beam_freqs, OPP / OP**2, spw_freqs, 
+                                                 num_steps=num_steps, taper=self.taper, little_h=little_h, 
+                                                 noise_scalar=noise_scalar)
+
+        return scalar
 
 
 def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
