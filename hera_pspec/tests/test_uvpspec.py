@@ -162,7 +162,7 @@ class Test_UVPSpec(unittest.TestCase):
         k_perp, k_para = self.uvp.get_kperps(0), self.uvp.get_kparas(0)
         k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
         nt.assert_true(np.isclose(uvp.data_array[0][0,:,0], (self.uvp.data_array[0]*k_mag**3/(2*np.pi**2))[0,:,0]).all())
-        nt.assert_equal(uvp.units, 'unknown h^3 k^3 / (2pi^2)')
+        nt.assert_equal(uvp.norm_units, 'k^3 / (2pi^2)')
 
     def test_blpair_conversions(self):
         # test blpair -> antnums
@@ -350,7 +350,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp)
         # test basic execution
         s = uvp.compute_scalar(0, 'xx', num_steps=1000, noise_scalar=False)
-        nt.assert_almost_equal(s/258034762.16569147, 1.0, places=5)
+        nt.assert_almost_equal(s/552908638.8711592, 1.0, places=5)
         # test execptions
         del uvp.OmegaP
         nt.assert_raises(AssertionError, uvp.compute_scalar, 0, -5)
