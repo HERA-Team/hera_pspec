@@ -75,6 +75,7 @@ class UVPSpec(object):
         self._OmegaP = PSpecParam("OmegaP", description="Integral of unitless beam power over the sky [steradians].", form="(Nbeam_freqs, Npols)")
         self._OmegaPP = PSpecParam("OmegaP", description="Integral of unitless beam power squared over the sky [steradians].", form="(Nbeam_freqs, Npols)")
         self._beam_freqs = PSpecParam("beam_freqs", description="Frequency bins of the OmegaP and OmegaPP beam-integral arrays [Hz].", form="(Nbeam_freqs,)")
+        self._cosmo = PSpecParam("cosmo", description="Instance of conversion.Cosmo_Conversions class.")
 
         # collect parameters
         self._all_params = sorted(map(lambda p: p[1:], fnmatch.filter(self.__dict__.keys(), '_*')))
@@ -88,14 +89,14 @@ class UVPSpec(object):
 
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                             "Nbls", "channel_width", "weighting", "vis_units", "filename1", "filename2", "label1", "label2",
-                            "norm", "norm_units", "taper", "git_hash", "cosmo_params", "beamfile" ,'folded']
+                            "norm", "norm_units", "taper", "git_hash", "cosmo", "beamfile" ,'folded']
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array", 'lst_avg_array', 'time_avg_array', 
                           "lst_2_array", "time_1_array", "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
         self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array"]
 
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array", 
-                            "bl_vecs", "bl_array", 'lst_avg_array', 'time_avg_array']
+                            "bl_vecs", "bl_array", 'lst_avg_array', 'time_avg_array', 'OmegaP', 'OmegaPP']
         self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets))
         self._meta = sorted(set(self._meta_dsets).union(set(self._meta_attrs)))
 
@@ -771,7 +772,6 @@ class UVPSpec(object):
         with h5py.File(filepath, 'r') as f:
             self.read_from_group(f, just_meta=just_meta, spws=spws, bls=bls, 
                                  only_pairs_in_bls=only_pairs_in_bls)
-
     
     def write_to_group(self, group, run_check=True):
         """
@@ -882,14 +882,11 @@ class UVPSpec(object):
             self.OmegaP, self.OmegaPP = new_beam.get_Omegas(self.pol_array)
             self.beam_freqs = new_beam.beam_freqs
 
-        # update cosmo and _cosmo_params
-        if isinstance(new_cosmo, (str, np.str)):
-            new_cosmo = ast.literal_eval(new_cosmo)
+        # update cosmo
         if isinstance(new_cosmo, (dict, odict)):
             new_cosmo = conversions.Cosmo_Conversions(**new_cosmo)
         if verbose: print("setting cosmology: \n{}".format(new_cosmo))
         self.cosmo = new_cosmo
-        self._cosmo_params = str(self.cosmo.get_params())
 
         # update scalar_array
         if verbose: print("Updating scalar array and re-normalizing power spectra")
@@ -934,14 +931,6 @@ class UVPSpec(object):
             # check nsample
             assert isinstance(self.nsample_array, (dict, odict)), "self.nsample_array must be a dictionary type"
             assert np.min(map(lambda k: self.nsample_array[k].dtype in (np.float, float, np.float64), self.nsample_array.keys())), "self.nsample_array values must be float type"
-
-        # assert cosmology consistency between self.cosmo and self._cosmo_params
-        if hasattr(self, '_cosmo_params') and hasattr(self, 'cosmo') == False:
-            self.cosmo = self.set_cosmology(self._cosmo_params, overwrite=True)
-        elif hasattr(self, "cosmo") and hasattr(self, "_cosmo_params") == False:
-            self.cosmo = self.set_cosmology(self.cosmo, overwrite=True)
-        elif hasattr(self, "cosmo") and hasattr(self, "_cosmo_params"):
-            assert self.cosmo == conversions.Cosmo_Conversions(**ast.literal_eval(self._cosmo_params))
 
     def _clear(self):
         """
@@ -1401,7 +1390,7 @@ class UVPSpec(object):
 
         return blpair_groups
 
-    def compute_scalar(self, spw, pol, num_steps=5000, little_h=True, noise_scalar=False):
+    def compute_scalar(self, spw, pol, num_steps=1000, little_h=True, noise_scalar=False):
         """
         Compute power spectrum normalization scalar given an adopted cosmology and a beam model.
         See pspecbeam.PSpecBeamBase.compute_pspec_scalar for details.
