@@ -30,6 +30,7 @@ setup_args = {
     'packages':     ['hera_pspec'],
     'package_dir':  {'hera_pspec': 'hera_pspec'},
     'package_data': {'hera_pspec': data_files},
+    'install_requires': ['numpy>=1.10', 'scipy>=0.19',],
     'include_package_data': True,
     'zip_safe':     False,
 }
