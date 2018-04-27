@@ -112,15 +112,11 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     # Plot power spectra
     for blgrp in blpairs:
         # Loop over blpairs in group and plot power spectrum for each one
-        print "Group:", blgrp
         for blp in blgrp:
             key = (spw, blp, pol)
-            print "\tKey:", key
-            power = np.abs(np.real(uvp_plt.get_data(key))).T # FIXME: Transpose?
+            power = np.abs(np.real(uvp_plt.get_data(key))).T
             
-            print "\t\t", x.shape, power.shape
-            
-            ax.plot(x, power, label="%s" % str(key)) # FIXME
+            ax.plot(x, power, label="%s" % str(key))
             
             # If blpairs were averaged, only the first blpair in the group 
             # exists any more (so skip the rest)
@@ -139,11 +135,30 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     """
     # Add legend
     if legend:
-        ax.add_legend(loc='upper left')
+        ax.legend(loc='upper left')
     
     # Add labels with units
     if ax.get_xlabel() == "":
-        ax.set_xlabel("x")
+        if delay:
+            ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
+        else:
+            ax.set_xlabel("$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
+    if ax.get_ylabel() == "":
+        # Sanitize power spectrum units 
+        psunits = uvp_plt.units
+        if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
+        if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}")
+        if "Mpc" in psunits and "\\rm" not in psunits: 
+            psunits = psunits.replace("Mpc", r"{\rm Mpc}")
+        if "pi" in psunits and "\\pi" not in psunits: 
+            psunits = psunits.replace("pi", r"\pi")
+        
+        # Power spectrum type
+        if deltasq:
+            ax.set_ylabel("$\Delta^2$ $[%s]$" % psunits, fontsize=16)
+        else:
+            ax.set_ylabel("$P(k_\parallel)$ $[%s]$" % psunits, fontsize=16)
     
+    # Return Axes
     return ax
     
