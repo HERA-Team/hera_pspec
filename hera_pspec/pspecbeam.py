@@ -146,7 +146,7 @@ class PSpecBeamBase(object):
 
         num_steps : int, optional
             Number of steps to use when interpolating primary beams for 
-            numerical integral. Default: 10000.
+            numerical integral. Default: 5000.
 
         pol: str, optional
                 Which polarization to compute the beam scalar for.
