@@ -195,9 +195,16 @@ class Test_DataSet(unittest.TestCase):
                          OmegaPP={'pseudo_I': 'string',},
                          beam_freqs=beam_freqs)
         
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamFromArray,
+                         OmegaP={'pseudo_I': Om_P}, 
+                         OmegaPP={'pseudo_I': Om_PP[:-2],},
+                         beam_freqs=beam_freqs)
+        
         # Check that invalid method args raise errors
         nt.assert_raises(KeyError, psbeam.power_beam_int, stokes='blah')
         nt.assert_raises(KeyError, psbeam.power_beam_sq_int, stokes='blah')
+        nt.assert_raises(KeyError, psbeam.add_pol, pol='pseudo_A', 
+                         OmegaP=Om_P, OmegaPP=Om_PP)
         
         # Check that string works
         self.assert_(len(str(psbeam)) > 0)
