@@ -423,10 +423,17 @@ class PSpecData(object):
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
 
-          \hat{q}_a = (1/2) conj(x_1) R_1 Q_a R_2 x_2 (arXiv:1502.06016, Eq. 13)
+          \hat{q}_a = (1/2) conj(x_1) R_1 Q^alt_a R_2 x_2
 
         Note that the R matrix need not be set to C^-1. This is something that
         is set by the user in the set_R method.
+
+        This is related to Equation 13 of arXiv:1502.06016. However, notice
+        that there is a Q^alt_a instead of Q_a. The latter is defined as
+        Q_a \equiv dC/dp_a. Since this is the derivative of the covariance
+        with respect to the power spectrum, it contains factors of the primary
+        beam etc. Q^alt_a strips away all of this, leaving only the barebones
+        job of taking a Fourier transform. See HERA memo #44 for details
 
         Parameters
         ----------
@@ -495,7 +502,7 @@ class PSpecData(object):
                 q.append(qi)
             return 0.5 * np.array(q)
 
-    def get_G(self, key1, key2):
+    def get_G(self, key1, key2, taper='none'):
         """
         Calculates the response matrix G of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -504,10 +511,13 @@ class PSpecData(object):
 
         This is given by
 
-            G_ab = (1/2) Tr[R_1 Q_a R_2 Q_b]
+            G_ab = (1/2) Tr[R_1 Q_a^alt R_2 Q_b]
 
-        Note that in the limit that R_1 = R_2 = C^-1, this reduces to the Fisher
-        matrix
+        (See HERA memo #44). As currently implemented, this approximates the
+        primary beam as frequency independent.
+
+        Note that in the limit that R_1 = R_2 = C^-1 and Q_a is used instead
+        of Q_a^alt, this reduces to the Fisher matrix
 
             F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
 
@@ -518,25 +528,38 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines 
             in the list will be combined with inverse noise weights.
 
+
+        taper : str, optional
+            Tapering (window) function to apply to the data. Takes the same
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
+
         Returns
         -------
         G : array_like, complex
-            Fisher matrix, with dimensions (Nfreqs, Nfreqs).
+            Dimensions (Nfreqs, Nfreqs).
         """
         G = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
 
-        iR1Q, iR2Q = {}, {}
+        if taper != 'none':
+            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
+            tapering_matrix = np.diag(tapering_fct)
+
+        iR1Q_alt, iR2Q = {}, {}
         for ch in xrange(self.spw_Nfreqs): # this loop is nchan^3
-            Q = self.get_Q(ch, self.spw_Nfreqs)
-            iR1Q[ch] = np.dot(R1, Q) # R_1 Q
-            iR2Q[ch] = np.dot(R2, Q) # R_2 Q
+            Q_alt = self.get_Q(ch, self.spw_Nfreqs)
+            iR1Q_alt[ch] = np.dot(R1, Q_alt) # R_1 Q_alt
+            if taper != 'none':
+                Q_tapered = np.dot(tapering_matrix, np.dot(Q_alt), tapering_matrix)
+                iR2Q[ch] = np.dot(R2, Q_tapered) # R_2 Q
+            else:
+                iR2Q[ch] = np.dot(R2, Q_alt) # R_2 Q
 
         for i in xrange(self.spw_Nfreqs): # this loop goes as nchan^4
             for j in xrange(self.spw_Nfreqs):
                 # tr(R_2 Q_i R_1 Q_j)
-                G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
+                G[i,j] += np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
 
         return G / 2.
     
