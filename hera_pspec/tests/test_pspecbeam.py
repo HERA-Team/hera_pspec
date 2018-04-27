@@ -130,6 +130,79 @@ class Test_DataSet(unittest.TestCase):
         scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
         self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)
     
+    
+    def test_BeamFromArray(self):
+        """
+        Test PSpecBeamFromArray
+        """
+        # Get Gaussian beam to use as a reference
+        Om_P = self.gauss.power_beam_int()
+        Om_PP = self.gauss.power_beam_sq_int()
+        beam_freqs = self.gauss.beam_freqs
+        
+        # Array specs for tests
+        lower_freq = 120.*10**6
+        upper_freq = 128.*10**6
+        num_freqs = 20
+        
+        # Check that PSpecBeamFromArray can be instantiated
+        psbeam = pspecbeam.PSpecBeamFromArray(OmegaP=Om_P, OmegaPP=Om_PP, 
+                                              beam_freqs=beam_freqs)
+        
+        psbeampol = pspecbeam.PSpecBeamFromArray(
+                                OmegaP={'pseudo_I': Om_P, 'pseudo_Q': Om_P},
+                                OmegaPP={'pseudo_I': Om_PP, 'pseudo_Q': Om_PP},
+                                beam_freqs=beam_freqs)
+        
+        # Check that user-defined cosmology can be specified
+        bm2 = pspecbeam.PSpecBeamFromArray(OmegaP=Om_P, OmegaPP=Om_PP, 
+                                           beam_freqs=beam_freqs,
+                                           cosmo=conversions.Cosmo_Conversions())
+        
+        # Compare scalar calculation with Gaussian case
+        scalar = psbeam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, 
+                                             stokes='pseudo_I', num_steps=2000)
+        g_scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, 
+                                                   num_freqs, stokes='pseudo_I', 
+                                                   num_steps=2000)
+        np.testing.assert_array_almost_equal(scalar, g_scalar)
+        
+        # Check that polarizations are recognized and invalid ones rejected
+        scalarp = psbeampol.compute_pspec_scalar(lower_freq, upper_freq, 
+                                                 num_freqs, stokes='pseudo_Q', 
+                                                 num_steps=2000)
+        
+        # Test taper execution (same as Gaussian case)
+        scalar = psbeam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, 
+                                             num_steps=5000, taper='blackman')
+        self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)
+        
+        # Check that invalid init args raise errors
+        nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray, OmegaP=Om_P, 
+                         OmegaPP={'pseudo_I': Om_PP}, beam_freqs=beam_freqs)
+        nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
+                         OmegaP={'pseudo_I': Om_P, 'pseudo_Q': Om_P},
+                         OmegaPP={'pseudo_I': Om_PP,},
+                         beam_freqs=beam_freqs)
+        
+        nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
+                         OmegaP={'pseudo_A': Om_P}, 
+                         OmegaPP={'pseudo_A': Om_PP,},
+                         beam_freqs=beam_freqs)
+        
+        nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray,
+                         OmegaP={'pseudo_I': Om_P,},
+                         OmegaPP={'pseudo_I': 'string',},
+                         beam_freqs=beam_freqs)
+        
+        # Check that invalid method args raise errors
+        nt.assert_raises(KeyError, psbeam.power_beam_int, stokes='blah')
+        nt.assert_raises(KeyError, psbeam.power_beam_sq_int, stokes='blah')
+        
+        # Check that string works
+        self.assert_(len(str(psbeam)) > 0)
+    
+    
     def test_PSpecBeamBase(self):
         """
         Test that base class can be instantiated.
