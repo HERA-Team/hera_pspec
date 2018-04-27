@@ -524,7 +524,6 @@ class PSpecBeamFromArray(PSpecBeamBase):
         # Check that array dimensions are consistent
         if OmegaP.shape != self.beam_freqs.shape \
           or OmegaPP.shape != self.beam_freqs.shape:
-               print OmegaP.shape, OmegaPP.shape, self.beam_freqs.shape
                raise ValueError("OmegaP and OmegaPP should both "
                                 "have the same shape as beam_freqs.")
         # Store arrays
