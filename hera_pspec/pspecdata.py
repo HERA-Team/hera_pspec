@@ -759,20 +759,18 @@ class PSpecData(object):
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]]) * 1e9 # convert to ns    
     
     
-    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, beam=None):
+    def scalar(self, pol='I', taper='none', little_h=True, num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set spectral window.
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
-        Currently this is only for Stokes I.
-
         Parameters
         ----------
-        stokes: str, optional
-                Which Stokes parameter's beam to compute the scalar for.
-                'I', 'Q', 'U', 'V', although currently only 'I' is implemented
+        pol: str, optional
+                Which polarization to compute the scalar for.
+                e.g. 'I', 'Q', 'U', 'V', 'XX', 'YY'...
                 Default: 'I'
 
         taper : str, optional
@@ -806,12 +804,12 @@ class PSpecData(object):
         # calculate scalar
         if beam is None:
             scalar = self.primary_beam.compute_pspec_scalar(
-                                    start, end, len(freqs), stokes=stokes,
+                                    start, end, len(freqs), pol=pol,
                                     taper=taper, little_h=little_h, 
                                     num_steps=num_steps)
         else:
             scalar = beam.compute_pspec_scalar(start, end, len(freqs), 
-                                               stokes=stokes, taper=taper, 
+                                               pol=pol, taper=taper, 
                                                little_h=little_h, 
                                                num_steps=num_steps)
         return scalar

@@ -41,14 +41,14 @@ class Test_Sensitivity(unittest.TestCase):
 
     def test_scalar(self):
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        self.sense.calc_scalar(freqs, 'pseudo_I', num_steps=5000, little_h=True)
+        self.sense.calc_scalar(freqs, 'I', num_steps=5000, little_h=True)
         nt.assert_true(np.isclose(freqs, self.sense.subband).all())
-        nt.assert_true(self.sense.stokes, 'I')
+        nt.assert_true(self.sense.pol, 'I')
 
     def test_calc_P_N(self):
         # calculate scalar
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        self.sense.calc_scalar(freqs, 'pseudo_I', num_steps=5000, little_h=True)
+        self.sense.calc_scalar(freqs, 'I', num_steps=5000, little_h=True)
         # basic execution 
         k = np.linspace(0, 3, 10)
         Tsys = 500.0
