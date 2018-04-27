@@ -96,7 +96,6 @@ class Sensitivity(object):
         self.stokes : str, stokes polarization used to calculate self.scalar
         """
         # parse stokes
-        if stokes == 'I': stokes = 'pseudo_I'
         self.scalar = self.beam.compute_pspec_scalar(freqs.min(), freqs.max(), len(freqs), num_steps=num_steps, 
                                                      stokes=stokes, little_h=little_h, noise_scalar=True)
         self.subband = freqs

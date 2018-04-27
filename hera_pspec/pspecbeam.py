@@ -101,7 +101,7 @@ class PSpecBeamBase(object):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, num_steps=5000, stokes='pseudo_I',
+    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, num_steps=5000, stokes='I',
                              taper='none', little_h=True, noise_scalar=False):
         """
         Computes the scalar function to convert a power spectrum estimate
@@ -109,7 +109,7 @@ class PSpecBeamBase(object):
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
-        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
+        Currently, only the Stokes "I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
@@ -133,9 +133,9 @@ class PSpecBeamBase(object):
 
         stokes: str, optional
                 Which Stokes parameter's to compute the beam scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
-                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
-                Default: 'pseudo_I'
+                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'I' and linear dipole pol (e.g. 'XX') are implemented.
+                Default: 'I'
 
         taper : str, optional
                 Whether a tapering function (e.g. Blackman-Harris) is being
@@ -171,7 +171,7 @@ class PSpecBeamBase(object):
 
         return scalar
 
-    def Jy_to_mK(self, freqs, stokes='pseudo_I'):
+    def Jy_to_mK(self, freqs, stokes='I'):
         """
         Return the multiplicative factor, M [mK / Jy], to convert a visibility from Jy -> mK,
 
@@ -188,9 +188,9 @@ class PSpecBeamBase(object):
 
         stokes: str, optional
                 Which Stokes parameter's to compute the beam scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
-                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
-                Default: 'pseudo_I'
+                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'I' and linear dipole pol (e.g. 'XX') are implemented.
+                Default: 'I'
 
         Returns
         -------
@@ -233,7 +233,7 @@ class PSpecBeamGauss(PSpecBeamBase):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-    def power_beam_int(self, stokes='pseudo_I'):
+    def power_beam_int(self, stokes='I'):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in sr). Uses analytic formula that the answer
@@ -242,7 +242,7 @@ class PSpecBeamGauss(PSpecBeamBase):
         Trivially this returns an array (i.e., a function of frequency),
         but the results are frequency independent.
 
-        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
+        Currently, only the Stokes "I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
@@ -250,9 +250,9 @@ class PSpecBeamGauss(PSpecBeamBase):
         ----------
         stokes: str, optional
                 Which Stokes parameter's to compute the beam scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
-                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
-                Default: 'pseudo_I'
+                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'I' and linear dipole pol (e.g. 'XX') are implemented.
+                Default: 'I'
 
         Returns
         -------
@@ -260,7 +260,7 @@ class PSpecBeamGauss(PSpecBeamBase):
         """
         return np.ones_like(self.beam_freqs) * 2. * np.pi * self.fwhm**2 / (8. * np.log(2.))
 
-    def power_beam_sq_int(self, stokes='pseudo_I'):
+    def power_beam_sq_int(self, stokes='I'):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam area (in str). Uses analytic formula that the answer
@@ -269,7 +269,7 @@ class PSpecBeamGauss(PSpecBeamBase):
         Trivially this returns an array (i.e., a function of frequency),
         but the results are frequency independent.
 
-        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
+        Currently, only the Stokes "I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
@@ -277,9 +277,9 @@ class PSpecBeamGauss(PSpecBeamBase):
         ----------
         stokes: str, optional
                 Which Stokes parameter's to compute the beam scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
-                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
-                Default: 'pseudo_I'
+                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'I' and linear dipole pol (e.g. 'XX') are implemented.
+                Default: 'I'
 
         Returns
         -------
@@ -310,13 +310,13 @@ class PSpecBeamUV(PSpecBeamBase):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-    def power_beam_int(self, stokes='pseudo_I'):
+    def power_beam_int(self, stokes='I'):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency. Uses function
         in pyuvdata.
 
-        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
+        Currently, only the Stokes "I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
@@ -324,9 +324,9 @@ class PSpecBeamUV(PSpecBeamBase):
         ----------
         stokes: str, optional
                 Which Stokes parameter's to compute the beam scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
-                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
-                Default: 'pseudo_I'
+                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'I' and linear dipole pol (e.g. 'XX') are implemented.
+                Default: 'I'
 
         Returns
         -------
@@ -337,13 +337,13 @@ class PSpecBeamUV(PSpecBeamBase):
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
 
-    def power_beam_sq_int(self, stokes='pseudo_I'):
+    def power_beam_sq_int(self, stokes='I'):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam**2 area (in str) as a function of frequency. Uses function
         in pyuvdata.
 
-        Currently, only the "pseudo Stokes I", "XX" and "YY" beam are supported.
+        Currently, only the Stokes "I", "XX" and "YY" beam are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
@@ -351,9 +351,9 @@ class PSpecBeamUV(PSpecBeamBase):
         ----------
         stokes: str, optional
                 Which Stokes parameter's to compute the beam scalar for.
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 'XX', 'YY', 'XY', 'YX', although 
-                currently only 'pseudo_I' and linear dipole pol (e.g. 'XX') are implemented.
-                Default: 'pseudo_I'
+                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX', although 
+                currently only 'I' and linear dipole pol (e.g. 'XX') are implemented.
+                Default: 'I'
 
         Returns
         -------

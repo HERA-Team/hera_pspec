@@ -44,7 +44,7 @@ class Test_DataSet(unittest.TestCase):
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
         num_freqs = 20
-        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000)
+        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='I', num_steps=2000)
         
         # Check that user-defined cosmology can be specified
         bm = pspecbeam.PSpecBeamUV(self.beamfile,
@@ -72,7 +72,7 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(scalar/567871703.75268996, 1.0, delta=1e-4)
         
         # convergence of integral
-        scalar_large_Nsteps = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=10000) 
+        scalar_large_Nsteps = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='I', num_steps=10000) 
         self.assertAlmostEqual(scalar / scalar_large_Nsteps, 1.0, delta=1e-5)
 
         # test taper execution
@@ -93,7 +93,7 @@ class Test_DataSet(unittest.TestCase):
         nt.assert_raises(TypeError, self.bm.Jy_to_mK, np.array([1]))
 
         # test noise scalar
-        sclr = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000, noise_scalar=True)
+        sclr = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='I', num_steps=2000, noise_scalar=True)
         nt.assert_almost_equal(sclr, 70.983962969086235)
 
 
@@ -103,7 +103,7 @@ class Test_DataSet(unittest.TestCase):
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
         num_freqs = 20
-        scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='pseudo_I', num_steps=2000)
+        scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, stokes='I', num_steps=2000)
         
         # Check that user-defined cosmology can be specified
         bgauss = pspecbeam.PSpecBeamGauss(0.8, 

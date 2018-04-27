@@ -759,7 +759,7 @@ class PSpecData(object):
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]]) * 1e9 # convert to ns    
     
     
-    def scalar(self, stokes='pseudo_I', taper='none', little_h=True, num_steps=2000, beam=None):
+    def scalar(self, stokes='I', taper='none', little_h=True, num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set spectral window.
