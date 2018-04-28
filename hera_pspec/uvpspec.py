@@ -726,6 +726,10 @@ class UVPSpec(object):
                     blpairs=blpairs, times=times, pols=pols, 
                     h5file=grp)
         
+        # handle cosmo
+        if hasattr(self, 'cosmo'):
+            self.cosmo = conversions.Cosmo_Conversions(**ast.literal_eval(self.cosmo))
+
         self.check(just_meta=just_meta)
     
     
@@ -786,6 +790,10 @@ class UVPSpec(object):
         # Write meta data
         for k in self._meta_attrs:
             if hasattr(self, k):
+                # handle cosmo
+                if k == 'cosmo':
+                    f.attrs['cosmo'] = str(getattr(self, k).get_params())
+                    continue
                 group.attrs[k] = getattr(self, k)
         for k in self._meta_dsets:
             if hasattr(self, k):
