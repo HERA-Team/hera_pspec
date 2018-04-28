@@ -58,9 +58,7 @@ def build_example_uvpspec(beamfile=None):
     scalar_array = np.ones((Nspws, Npols), np.float)
     label1 = 'red'
     #label2 = 'blue' # Leave commented out to make sure non-named UVPSpecs work!
-    if beamfile is not None:
-        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
-        beam = pspecbeam.PSpecBeamUV(beamfile)
+    if beam is not None:
         OmegaP, OmegaPP = beam.get_Omegas(beam.primary_beam.polarization_array[0])
         beam_freqs = beam.beam_freqs
 
@@ -98,8 +96,9 @@ def build_example_uvpspec(beamfile=None):
 class Test_UVPSpec(unittest.TestCase):
 
     def setUp(self):
-        beamfile=os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
-        uvp, cosmo = build_example_uvpspec(beamfile=beamfile)
+        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        self.beam = pspecbeam.PSpecBeamUV(beamfile)
+        uvp, cosmo = build_example_uvpspec(beam=self.beam)
         uvp.check()
         self.uvp = uvp
 
