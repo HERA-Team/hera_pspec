@@ -254,9 +254,40 @@ class UVPSpec(object):
 
         return blp_avg_sep
 
-    def get_kvecs(self, spw, little_h=True):
+    def get_kperps(self, spw, little_h=True):
         """
-        Get cosmological wavevectors for power spectra given an adopted cosmology.
+        Get transverse (perpendicular) cosmological wavevector for each
+        baseline-pair given an adopted cosmology and a spw selection.
+
+        Parameters
+        ----------
+        spw : int, choice of spectral window
+
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc
+
+        Returns
+        -------
+        k_perp : float ndarray, transverse wave-vectors, shape=(Nblpairs,)
+        """
+        # assert cosmo
+        assert hasattr(self, 'cosmo'), "self.cosmo must exist to form cosmological " \
+            "wave-vectors. See self.set_cosmology()"
+
+        # calculate mean redshift of band
+        avg_z = self.cosmo.f2z(np.mean(self.freq_array[self.spw_to_indices(spw)]))
+
+        # get kperps
+        blpair_seps = self.get_blpair_seps()
+        k_perp = blpair_seps * self.cosmo.bl_to_kperp(avg_z, little_h=little_h)
+
+        return k_perp
+
+    def get_kparas(self, spw, little_h=True):
+        """
+        Get radial (parallel) cosmological wavevectors for
+        power spectra given an adopted cosmology and a spw selection.
 
         Parameters
         ----------
@@ -268,24 +299,19 @@ class UVPSpec(object):
 
         Returns (k_perp, k_para)
         -------
-        k_perp : float ndarray, containing perpendicular cosmological wave-vectors, shape=(Nblpairs,)
-        k_para : float ndarray, containing parallel cosmological wave-vectors, shape=(Ndlys given spw)
-
+        k_para : float ndarray, radial wave-vectors, shape=(Ndlys given spw)
         """
         # assert cosmo
-        assert hasattr(self, 'cosmo'), "self.cosmo must exist to form cosmological wave-vectors. See self.set_cosmology()"
+        assert hasattr(self, 'cosmo'), "self.cosmo must exist to form cosmological " \
+            "wave-vectors. See self.set_cosmology()"
 
         # calculate mean redshift of band
         avg_z = self.cosmo.f2z(np.mean(self.freq_array[self.spw_to_indices(spw)]))
 
-        # get kperps
-        blpair_seps = self.get_blpair_seps()
-        k_perp = blpair_seps * self.cosmo.bl_to_kperp(avg_z, little_h=little_h)
-
         # get kparas
         k_para = self.get_dlys(spw) * self.cosmo.tau_to_kpara(avg_z, little_h=little_h)
 
-        return k_perp, k_para
+        return k_para
 
     def convert_to_deltasq(self, little_h=True, inplace=True):
         """
