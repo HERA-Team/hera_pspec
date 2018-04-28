@@ -1366,8 +1366,10 @@ class PSpecData(object):
             uvp.filename1 = dset1.extra_keywords['filename']
         if hasattr(dset2.extra_keywords, 'filename'): 
             uvp.filename2 = dset2.extra_keywords['filename']
-        uvp.label1 = self.labels[self.dset_idx(dsets[0])]
-        uvp.label2 = self.labels[self.dset_idx(dsets[1])]
+        lbl1 = self.labels[self.dset_idx(dsets[0])]
+        lbl2 = self.labels[self.dset_idx(dsets[1])]
+        if lbl1 is not None: uvp.label1 = lbl1
+        if lbl2 is not None: uvp.label2 = lbl2
         
         # fill data arrays
         uvp.data_array = data_array
