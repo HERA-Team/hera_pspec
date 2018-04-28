@@ -9,7 +9,7 @@ import copy
 import h5py
 from collections import OrderedDict as odict
 
-def build_example_uvpspec(beamfile=None):
+def build_example_uvpspec(beam=None):
     """
     Build an example UVPSpec object, with all necessary metadata.
     """
@@ -353,7 +353,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp)
         # test basic execution
         s = uvp.compute_scalar(0, 'xx', num_steps=1000, noise_scalar=False)
-        nt.assert_almost_equal(s/552908638.8711592, 1.0, places=5)
+        nt.assert_almost_equal(s/552336586.23970914, 1.0, places=5)
         # test execptions
         del uvp.OmegaP
         nt.assert_raises(AssertionError, uvp.compute_scalar, 0, -5)
