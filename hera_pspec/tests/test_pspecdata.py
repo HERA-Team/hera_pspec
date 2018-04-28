@@ -536,7 +536,7 @@ class Test_PSpecData(unittest.TestCase):
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm, labels=['red', 'blue'])
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)] 
