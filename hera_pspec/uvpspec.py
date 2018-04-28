@@ -785,7 +785,7 @@ class UVPSpec(object):
             if hasattr(self, k):
                 # handle cosmo
                 if k == 'cosmo':
-                    f.attrs['cosmo'] = str(getattr(self, k).get_params())
+                    group.attrs['cosmo'] = str(getattr(self, k).get_params())
                     continue
                 group.attrs[k] = getattr(self, k)
         for k in self._meta_dsets:
