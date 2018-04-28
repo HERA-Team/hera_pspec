@@ -247,10 +247,10 @@ class UVPSpec(object):
         blpair_bls = np.vstack([bl1, blpairs - bl1*1e6]).astype(np.int).T
 
         # iterate over blpairs
-        for i, blp in enumerate(blpair_bls):
-            avg_sep = np.mean([blseps[bls.index(blp[0])], blseps[bls.index(blp[1])]])
+        for blp, bl in zip(blpairs, blpair_bls):
+            avg_sep = np.mean([blseps[bls.index(bl[0])], blseps[bls.index(bl[1])]])
             inds = self.blpair_to_indices(blp)
-            blpair[inds] = avg_sep
+            blp_avg_sep[inds] = avg_sep
 
         return blp_avg_sep
 
