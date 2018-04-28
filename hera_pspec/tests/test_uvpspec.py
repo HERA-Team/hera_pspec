@@ -9,7 +9,7 @@ import copy
 import h5py
 from collections import OrderedDict as odict
 
-def build_example_uvpspec():
+def build_example_uvpspec(beamfile=None):
     """
     Build an example UVPSpec object, with all necessary metadata.
     """
@@ -58,8 +58,11 @@ def build_example_uvpspec():
     scalar_array = np.ones((Nspws, Npols), np.float)
     label1 = 'red'
     #label2 = 'blue' # Leave commented out to make sure non-named UVPSpecs work!
-    OmegaP, OmegaPP = self.beam.get_Omegas(['xx'])
-    beam_freqs = self.beam.beam_freqs
+    if beamfile is not None:
+        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        beam = pspecbeam.PSpecBeamUV(beamfile)
+        OmegaP, OmegaPP = beam.get_Omegas(beam.primary_beam.polarization_array[0])
+        beam_freqs = beam.beam_freqs
 
     telescope_location = np.array([5109325.85521063, 
                                    2005235.09142983, 
@@ -95,7 +98,8 @@ def build_example_uvpspec():
 class Test_UVPSpec(unittest.TestCase):
 
     def setUp(self):
-        uvp, cosmo = build_example_uvpspec()
+        beamfile=os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        uvp, cosmo = build_example_uvpspec(beamfile=beamfile)
         uvp.check()
         self.uvp = uvp
 

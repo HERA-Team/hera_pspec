@@ -254,18 +254,19 @@ class PSpecBeamBase(object):
         OmegaPP : ndarray containing power_sq_beam_int, shape=(Nbeam_freqs, Npols)
         """
         # type check
-        if isinstance(pols, (int, np.int)):
+        if isinstance(pols, (int, np.int, np.int32)):
             pols = [pols]
         elif isinstance(pols, (str, np.str)):
             pols = [pols]
-            
+        if isinstance(pols, list):
+            if isinstance(pols[0], (int, np.int, np.int32)):
+                pols = map(lambda p: uvutils.polnum2str(p), pols)
+                
         # initialize blank lists
         OmegaP, OmegaPP = [], []
         for p in pols:
-            ## FIXME: get rid of this line when pyuvdata supports other polarizations
-            p = 'pseudo_I'
-            OmegaP.append(self.power_beam_int(stokes=p))
-            OmegaPP.append(self.power_beam_sq_int(stokes=p))
+            OmegaP.append(self.power_beam_int(pol=p))
+            OmegaPP.append(self.power_beam_sq_int(pol=p))
 
         OmegaP = np.array(OmegaP).T
         OmegaPP = np.array(OmegaPP).T
