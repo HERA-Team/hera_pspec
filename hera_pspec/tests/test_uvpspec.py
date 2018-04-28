@@ -91,7 +91,6 @@ def build_example_uvpspec():
 class Test_UVPSpec(unittest.TestCase):
 
     def setUp(self):
-        
         uvp, cosmo = build_example_uvpspec()
         uvp.check()
         self.uvp = uvp
@@ -144,7 +143,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(len(blp), 30)
         nt.assert_true(np.isclose(blp, 14.60, rtol=1e-1, atol=1e-1).all())
         # get kvecs
-        k_perp, k_para = self.uvp.get_kvecs(0)
+        k_perp, k_para = self.uvp.get_kperps(0), self.uvp.get_kparas(0)
         nt.assert_equal(len(k_perp), 30)
         nt.assert_equal(len(k_para), 50)
         # test key expansion
@@ -160,7 +159,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp)
         uvp.set_cosmology(conversions.Cosmo_Conversions())
         uvp.convert_to_deltasq(little_h=True)
-        k_perp, k_para = uvp.get_kvecs(0, little_h=True)
+        k_perp, k_para = self.uvp.get_kperps(0), self.uvp.get_kparas(0)
         k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
         nt.assert_true(np.isclose(uvp.data_array[0][0,:,0], (self.uvp.data_array[0]*k_mag**3/(2*np.pi**2))[0,:,0]).all())
         nt.assert_equal(uvp.units, 'unknown h^3 k^3 / (2pi^2)')
