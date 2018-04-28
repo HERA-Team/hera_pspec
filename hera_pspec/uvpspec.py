@@ -337,7 +337,8 @@ class UVPSpec(object):
         # loop over spectral windows
         for spw in range(uvp.Nspws):
             # get k vectors
-            k_perp, k_para = uvp.get_kvecs(spw, little_h=little_h)
+            k_perp = uvp.get_kperps(spw, little_h=little_h)
+            k_para = uvp.get_kparas(spw, little_h=little_h)
             k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
 
             # multiply into data
@@ -1016,7 +1017,8 @@ class UVPSpec(object):
 
         # Get k vectors
         if form == 'DelSq':
-            k_perp, k_para = self.get_kvecs(spw, little_h=little_h)
+            k_perp = self.get_kperps(spw, little_h=little_h)
+            k_para = self.get_kparas(spw, little_h=little_h)
             k_mag = np.sqrt(k_perp[:, None]**2 + k_para[None, :]**2)
 
         # get blpairs
