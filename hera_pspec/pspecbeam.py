@@ -407,7 +407,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         
         Allowed polarizations are: 
         
-            pseudo_I, pseudo_Q, pseudo_U, pseudo_V, XX, YY, XY, YX
+            I, Q, U, V, XX, YY, XY, YX
         
         Other polarizations will be ignored.
         
@@ -417,14 +417,14 @@ class PSpecBeamFromArray(PSpecBeamBase):
             Integral over beam solid angle, as a function of frequency. 
             
             If only one array is specified, this will be assumed to be for the 
-            pseudo_I polarization. If a dict is specified, an OmegaP array for 
+            I polarization. If a dict is specified, an OmegaP array for 
             several polarizations can be specified.
         
         OmegaPP : array_like of float (or dict of array_like)
             Integral over beam solid angle squared, as a function of frequency. 
             
             If only one array is specified, this will be assumed to be for the 
-            pseudo_I polarization. If a dict is specified, an OmegaP array for 
+            I polarization. If a dict is specified, an OmegaP array for 
             several polarizations can be specified.
         
         beam_freqs : array_like of float
@@ -436,7 +436,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
             Cosmology object. Uses the default cosmology object if not 
             specified. Default: None.
         """
-        self.allowed_pols = ['pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 
+        self.allowed_pols = ['I', 'Q', 'U', 'V', 
                              'XX', 'YY', 'XY', 'YX']
         self.OmegaP = {}; self.OmegaPP = {}
         
@@ -444,9 +444,9 @@ class PSpecBeamFromArray(PSpecBeamBase):
         self.beam_freqs = np.array(beam_freqs)
         
         if isinstance(OmegaP, np.ndarray) and isinstance(OmegaPP, np.ndarray):
-            # Only single arrays were specified; assume pseudo_I
-            OmegaP = {'pseudo_I': OmegaP}
-            OmegaPP = {'pseudo_I': OmegaPP}
+            # Only single arrays were specified; assume I
+            OmegaP = {'I': OmegaP}
+            OmegaPP = {'I': OmegaPP}
         
         elif isinstance(OmegaP, np.ndarray) or isinstance(OmegaPP, np.ndarray):
             # Mixed dict and array types are not allowed
@@ -496,7 +496,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
             Which polarization to add beam solid angle arrays for. Valid 
             options are:
             
-              'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 
+              'I', 'Q', 'U', 'V', 
               'XX', 'YY', 'XY', 'YX' 
             
             If the arrays already exist for the specified polarization, they 
@@ -531,56 +531,56 @@ class PSpecBeamFromArray(PSpecBeamBase):
         self.OmegaPP[pol] = OmegaPP
             
     
-    def power_beam_int(self, stokes='pseudo_I'):
+    def power_beam_int(self, pol='I'):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency.
 
         Parameters
         ----------
-        stokes: str, optional
-            Which Stokes parameters to compute the beam scalar for. 
-                'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 
+        pol: str, optional
+            Which polarization to compute the beam scalar for. 
+                'I', 'Q', 'U', 'V', 
                 'XX', 'YY', 'XY', 'YX'
-            Default: pseudo_I.
+            Default: I.
 
         Returns
         -------
         primary_beam_area: float, array-like
             Scalar integral over beam solid angle.
         """
-        if stokes in self.OmegaP.keys():
-            return self.OmegaP[stokes]
+        if pol in self.OmegaP.keys():
+            return self.OmegaP[pol]
         else:
             available_pols = ", ".join(self.OmegaP.keys())
             raise KeyError("OmegaP not specified for polarization '%s'. " 
                            "Available polarizations are: %s" \
-                           % (stokes, available_pols))
+                           % (pol, available_pols))
     
-    def power_beam_sq_int(self, stokes='pseudo_I'):
+    def power_beam_sq_int(self, pol='I'):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam**2 area (in str) as a function of frequency.
 
         Parameters
         ----------
-        stokes: str, optional
-            Which Stokes parameters to compute the beam scalar for.
-              'pseudo_I', 'pseudo_Q', 'pseudo_U', 'pseudo_V', 
+        pol: str, optional
+            Which polarization to compute the beam scalar for.
+              'I', 'Q', 'U', 'V', 
               'XX', 'YY', 'XY', 'YX' 
-            Default: pseudo_I.
+            Default: I.
 
         Returns
         -------
         primary_beam_area: float, array-like
         """
-        if stokes in self.OmegaPP.keys():
-            return self.OmegaPP[stokes]
+        if pol in self.OmegaPP.keys():
+            return self.OmegaPP[pol]
         else:
             available_pols = ", ".join(self.OmegaPP.keys())
             raise KeyError("OmegaPP not specified for polarization '%s'. " 
                            "Available polarizations are: %s" \
-                           % (stokes, available_pols))
+                           % (pol, available_pols))
     
     def __str__(self):
         """

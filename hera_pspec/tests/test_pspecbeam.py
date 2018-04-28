@@ -150,8 +150,8 @@ class Test_DataSet(unittest.TestCase):
                                               beam_freqs=beam_freqs)
         
         psbeampol = pspecbeam.PSpecBeamFromArray(
-                                OmegaP={'pseudo_I': Om_P, 'pseudo_Q': Om_P},
-                                OmegaPP={'pseudo_I': Om_PP, 'pseudo_Q': Om_PP},
+                                OmegaP={'I': Om_P, 'Q': Om_P},
+                                OmegaPP={'I': Om_PP, 'Q': Om_PP},
                                 beam_freqs=beam_freqs)
         
         # Check that user-defined cosmology can be specified
@@ -161,15 +161,15 @@ class Test_DataSet(unittest.TestCase):
         
         # Compare scalar calculation with Gaussian case
         scalar = psbeam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, 
-                                             stokes='pseudo_I', num_steps=2000)
+                                             pol='I', num_steps=2000)
         g_scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, 
-                                                   num_freqs, stokes='pseudo_I', 
+                                                   num_freqs, pol='I', 
                                                    num_steps=2000)
         np.testing.assert_array_almost_equal(scalar, g_scalar)
         
         # Check that polarizations are recognized and invalid ones rejected
         scalarp = psbeampol.compute_pspec_scalar(lower_freq, upper_freq, 
-                                                 num_freqs, stokes='pseudo_Q', 
+                                                 num_freqs, pol='Q', 
                                                  num_steps=2000)
         
         # Test taper execution (same as Gaussian case)
@@ -179,31 +179,31 @@ class Test_DataSet(unittest.TestCase):
         
         # Check that invalid init args raise errors
         nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray, OmegaP=Om_P, 
-                         OmegaPP={'pseudo_I': Om_PP}, beam_freqs=beam_freqs)
+                         OmegaPP={'I': Om_PP}, beam_freqs=beam_freqs)
         nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'pseudo_I': Om_P, 'pseudo_Q': Om_P},
-                         OmegaPP={'pseudo_I': Om_PP,},
+                         OmegaP={'I': Om_P, 'Q': Om_P},
+                         OmegaPP={'I': Om_PP,},
                          beam_freqs=beam_freqs)
         
         nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'pseudo_A': Om_P}, 
-                         OmegaPP={'pseudo_A': Om_PP,},
+                         OmegaP={'A': Om_P}, 
+                         OmegaPP={'A': Om_PP,},
                          beam_freqs=beam_freqs)
         
         nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'pseudo_I': Om_P,},
-                         OmegaPP={'pseudo_I': 'string',},
+                         OmegaP={'I': Om_P,},
+                         OmegaPP={'I': 'string',},
                          beam_freqs=beam_freqs)
         
         nt.assert_raises(ValueError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'pseudo_I': Om_P}, 
-                         OmegaPP={'pseudo_I': Om_PP[:-2],},
+                         OmegaP={'I': Om_P}, 
+                         OmegaPP={'I': Om_PP[:-2],},
                          beam_freqs=beam_freqs)
         
         # Check that invalid method args raise errors
-        nt.assert_raises(KeyError, psbeam.power_beam_int, stokes='blah')
-        nt.assert_raises(KeyError, psbeam.power_beam_sq_int, stokes='blah')
-        nt.assert_raises(KeyError, psbeam.add_pol, pol='pseudo_A', 
+        nt.assert_raises(KeyError, psbeam.power_beam_int, pol='blah')
+        nt.assert_raises(KeyError, psbeam.power_beam_sq_int, pol='blah')
+        nt.assert_raises(KeyError, psbeam.add_pol, pol='A', 
                          OmegaP=Om_P, OmegaPP=Om_PP)
         
         # Check that string works
