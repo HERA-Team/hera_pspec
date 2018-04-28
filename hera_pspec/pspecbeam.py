@@ -258,7 +258,7 @@ class PSpecBeamBase(object):
             pols = [pols]
         elif isinstance(pols, (str, np.str)):
             pols = [pols]
-        if isinstance(pols, list):
+        if isinstance(pols, (list, np.ndarray, tuple)):
             if isinstance(pols[0], (int, np.int, np.int32)):
                 pols = map(lambda p: uvutils.polnum2str(p), pols)
                 
