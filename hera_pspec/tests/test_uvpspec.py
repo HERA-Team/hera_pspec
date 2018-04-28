@@ -83,8 +83,9 @@ def build_example_uvpspec(beam=None):
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 
               'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
               'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array', 
-              'cosmo', 'scalar_array', 'label1', 'OmegaP', 'OmegaPP', 'beam_freqs', 
-              'norm_units']
+              'cosmo', 'scalar_array', 'label1', 'norm_units']
+    if beam is not None:
+        params += ['OmegaP', 'OmegaPP', 'beam_freqs']
     
     # Set all parameters
     for p in params:
