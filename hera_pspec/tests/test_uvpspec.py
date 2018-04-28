@@ -55,6 +55,8 @@ def build_example_uvpspec():
     norm = "I"
     git_hash = "random"
     scalar_array = np.ones((Nspws, Npols), np.float)
+    label1 = 'red'
+    #label2 = 'blue' # Leave commented out to make sure non-named UVPSpecs work!
 
     telescope_location = np.array([5109325.85521063, 
                                    2005235.09142983, 
@@ -77,7 +79,7 @@ def build_example_uvpspec():
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 
               'units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
               'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array', 
-              'cosmo', 'scalar_array']
+              'cosmo', 'scalar_array', 'label1']
     
     # Set all parameters
     for p in params:

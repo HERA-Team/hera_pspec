@@ -79,7 +79,7 @@ class UVPSpec(object):
                             "data_array", "wgt_array", "integration_array", "spw_array", "freq_array", "dly_array",
                             "pol_array", "lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "Nbls", "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting", "units",
-                            "taper", "norm", "git_hash", "nsample_array", 'lst_avg_array', 'time_avg_array', 'folded', "label1", "label2"]
+                            "taper", "norm", "git_hash", "nsample_array", 'lst_avg_array', 'time_avg_array', 'folded']
 
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                             "Nbls", "channel_width", "weighting", "units", "filename1", "filename2", "label1", "label2",
@@ -1220,8 +1220,8 @@ class UVPSpec(object):
         uvp.integration_array = ints_array
         uvp.wgt_array = wgts_array
         uvp.nsample_array = nsmp_array
-        uvp.label1 = self.label1
-        uvp.label2 = self.label2
+        if hasattr(self, 'label1'): uvp.label1 = self.label1
+        if hasattr(self, 'label2'): uvp.label2 = self.label2
 
         uvp.check()
 
