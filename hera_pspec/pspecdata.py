@@ -961,7 +961,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, spw_ranges=None, verbose=True, 
-              history=''):
+              dryrun=False, history=''):
         """
         Estimate the delay power spectrum from a pair of datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
@@ -1023,7 +1023,13 @@ class PSpecData(object):
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
-
+        
+        dryrun : bool, optional
+            Whether to run in dry-run mode. This will prevent any actual 
+            power spectrum calculations from being carried out, but will print 
+            all of the same output and return information about the objects 
+            that would have been generated. Default: False.
+        
         history : str, optional
             history string to attach to UVPSpec object
 
@@ -1167,34 +1173,42 @@ class PSpecData(object):
                         
                     if verbose:
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, p))
+                    
+                    if not dryrun:
+                        # Perform the actual power spectrum calculation
+                        # Set covariance weighting scheme for input data
+                        if verbose:
+                            print("  Setting weight matrix for input data...")
+                        self.set_R(input_data_weight)
 
-                    # Set covariance weighting scheme for input data
-                    if verbose: print("  Setting weight matrix for input data...")
-                    self.set_R(input_data_weight)
+                        # Build Fisher matrix
+                        if input_data_weight == 'identity' and built_G:
+                            # In this case, all Gv are the same, so skip if 
+                            # already built for this spw!
+                            pass
+                        else:
+                            if verbose: print("  Building G...")
+                            Gv = self.get_G(key1, key2)
+                            built_G = True
 
-                    # Build Fisher matrix
-                    if input_data_weight == 'identity' and built_G:
-                        # in this case, all Gv are the same, so skip if already built for this spw!
-                        pass
+                        # Calculate unnormalized bandpowers
+                        if verbose: print("  Building q_hat...")
+                        qv = self.q_hat(key1, key2, taper=taper)
+
+                        # Normalize power spectrum estimate
+                        if verbose: print("  Normalizing power spectrum...")
+                        Mv, Wv = self.get_MW(Gv, mode=norm)
+                        pv = self.p_hat(Mv, qv)
+                        
+                        # Multiply by scalar
+                        if self.primary_beam != None:
+                            if verbose:
+                                print("  Computing and multiplying scalar...")
+                            pv *= scalar
                     else:
-                        if verbose: print("  Building G...")
-                        Gv = self.get_G(key1, key2)
-                        built_G = True
-
-                    # Calculate unnormalized bandpowers
-                    if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, taper=taper)
-
-                    # Normalize power spectrum estimate
-                    if verbose: print("  Normalizing power spectrum...")
-                    Mv, Wv = self.get_MW(Gv, mode=norm)
-                    pv = self.p_hat(Mv, qv)
-
-                    # Multiply by scalar
-                    if self.primary_beam != None:
-                        if verbose: print("  Computing and multiplying scalar...")
-                        pv *= scalar
-
+                        # Do not calculate p_hat if in dryrun mode
+                        pass
+                    
                     # Get baseline keys
                     if isinstance(blp, list):
                         bl1 = blp[0][0]
@@ -1205,23 +1219,31 @@ class PSpecData(object):
 
                     # append bls
                     bls_arr.extend([bl1, bl2])
+                    
+                    if not dryrun:
+                        # insert pspectra
+                        pol_data.extend(pv.T)
 
-                    # insert pspectra
-                    pol_data.extend(pv.T)
+                        # get weights
+                        wgts1 = self.w(key1).T
+                        wgts2 = self.w(key2).T
 
-                    # get weights
-                    wgts1 = self.w(key1).T
-                    wgts2 = self.w(key2).T
+                        # Get average of nsample across frequency axis, 
+                        # weighted by wgts
+                        nsamp1 = np.sum(dset1.get_nsamples(bl1)[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) \
+                               / np.sum(wgts1, axis=1).clip(1, np.inf)
+                        nsamp2 = np.sum(dset2.get_nsamples(bl2)[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) \
+                               / np.sum(wgts2, axis=1).clip(1, np.inf)
 
-                    # get average of nsample across frequency axis, weighted by wgts
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1)[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2)[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+                        # Take average of nsamp1 and nsamp2 and multiply by 
+                        # integration time [seconds] to get total integration
+                        pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0)
+                                        * dset1.integration_time)
 
-                    # take average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
-                    pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0) * dset1.integration_time)
-
-                    # combined weight is geometric mean
-                    pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
+                        # combined weight is geometric mean
+                        pol_wgts.extend(np.concatenate([wgts1[:, :, None], 
+                                                        wgts2[:, :, None]], 
+                                                        axis=2))
 
                     # insert time and blpair info only once
                     if i < 1 and j < 1:
@@ -1234,20 +1256,23 @@ class PSpecData(object):
                         lst2.extend(dset2.lst_array[inds2])
 
                         # insert blpair info
-                        blp_arr.extend(np.ones_like(inds1, np.int) * uvpspec._antnums_to_blpair(blp))
+                        blp_arr.extend(np.ones_like(inds1, np.int) \
+                                       * uvpspec._antnums_to_blpair(blp))
 
                 # insert into data and wgts integrations dictionaries
-                spw_data.append(pol_data)
-                spw_wgts.append(pol_wgts)
-                spw_ints.append(pol_ints)
+                if not dryrun:
+                    spw_data.append(pol_data)
+                    spw_wgts.append(pol_wgts)
+                    spw_ints.append(pol_ints)
 
-            # insert into data and integration dictionaries
-            spw_data = np.moveaxis(np.array(spw_data), 0, -1)
-            spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
-            spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
-            data_array[i] = spw_data
-            wgt_array[i] = spw_wgts
-            integration_array[i] = spw_ints
+            # Insert into data and integration dictionaries
+            if not dryrun:
+                spw_data = np.moveaxis(np.array(spw_data), 0, -1)
+                spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
+                spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
+                data_array[i] = spw_data
+                wgt_array[i] = spw_wgts
+                integration_array[i] = spw_ints
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
@@ -1301,13 +1326,14 @@ class PSpecData(object):
         if lbl2 is not None: uvp.label2 = lbl2
         
         # fill data arrays
-        uvp.data_array = data_array
-        uvp.integration_array = integration_array
-        uvp.wgt_array = wgt_array
-        uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))
+        if not dryrun:
+            uvp.data_array = data_array
+            uvp.integration_array = integration_array
+            uvp.wgt_array = wgt_array
+            uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))
 
-        # run check
-        uvp.check()
+            # run check
+            uvp.check()
 
         return uvp
 
