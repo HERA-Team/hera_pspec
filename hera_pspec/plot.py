@@ -4,6 +4,12 @@ from hera_pspec import conversions
 import matplotlib.pyplot as plt
 import copy
 
+"""
+def ax():
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True, sharey=True)
+    do_my_stuff_with_first_axis(ax=ax1)
+    do_my_stuff_with_second_axis(ax=ax2)
+"""
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
                    average_times=False, fold=False, plot_noise=False, 
@@ -66,7 +72,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     new_plot = False
     if ax is None:
         new_plot = True
-        ax = plt.subplot()
+        #ax = plt.subplot()
+        fig, ax = plt.subplots(1, 1)
     
     # Add ungrouped baseline-pairs into a group of their own (expected by the
     # averaging routines) # FIXME: Check if this is an in-place operation
@@ -106,7 +113,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         dlys = uvp_plt.get_dlys(spw) * 1e9 # ns
         x = dlys
     else:
-        k_perp, k_para = uvp_plt.get_kvecs(spw, little_h=little_h)
+        k_para = uvp_plt.get_kparas(spw, little_h=little_h)
         x = k_para
     
     # Plot power spectra
