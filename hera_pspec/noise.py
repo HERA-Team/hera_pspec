@@ -20,14 +20,14 @@ class Sensitivity(object):
         beam : hera_pspec.pspecbeam.PSpecBeam instance
         """
         if cosmo is not None:
-            self.add_cosmology(cosmo)
+            self.set_cosmology(cosmo)
 
         if beam is not None:
-            self.add_beam(beam)
+            self.set_beam(beam)
 
-    def add_cosmology(self, cosmo):
+    def set_cosmology(self, cosmo):
         """
-        Add a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
+        Set a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
 
         Parameters
         ----------
@@ -40,9 +40,9 @@ class Sensitivity(object):
         self.cosmo = cosmo
         self.cosmo_params = str(self.cosmo.get_params())
 
-    def add_beam(self, beam):
+    def set_beam(self, beam):
         """
-        Add a pspecbeam.PSpecBeam object to self as self.beam
+        Set a pspecbeam.PSpecBeam object to self as self.beam
 
         Parameters
         ----------
@@ -63,11 +63,11 @@ class Sensitivity(object):
             else:
                 # neither beam nor self have cosmo, raise AssertionError
                 raise AssertionError("neither self nor beam have a Cosmo_Conversions instance attached. "\
-                                     "See self.add_cosmology().")
+                                     "See self.set_cosmology().")
 
         self.beam = beam
 
-    def calc_scalar(self, freqs, stokes, num_steps=5000, little_h=True):
+    def calc_scalar(self, freqs, pol, num_steps=5000, little_h=True):
         """
         Calculate noise power spectrum prefactor from Eqn. (1) of Pober et al. 2014, ApJ 782, 66,
         equal to 
@@ -78,7 +78,7 @@ class Sensitivity(object):
         ----------
         freqs : float ndarray, holds frequency bins of spectral window in Hz
 
-        stokes : str, specification of (pseudo) Stokes polarization, or linear dipole polarization
+        pol : str, specification of polarization to calculate scalar for
             See pyuvdata.utils.polstr2num for options.
 
         num_steps : number of frequency bins to use in numerical integration of scalar
@@ -93,14 +93,13 @@ class Sensitivity(object):
 
         self.subband : float ndarray, frequencies in spectral window used to calculate self.scalar
 
-        self.stokes : str, stokes polarization used to calculate self.scalar
+        self.pol : str, polarization used to calculate self.scalar
         """
-        # parse stokes
-        if stokes == 'I': stokes = 'pseudo_I'
+        # compute scalar
         self.scalar = self.beam.compute_pspec_scalar(freqs.min(), freqs.max(), len(freqs), num_steps=num_steps, 
-                                                     stokes=stokes, little_h=little_h, noise_scalar=True)
+                                                     pol=pol, little_h=little_h, noise_scalar=True)
         self.subband = freqs
-        self.stokes = stokes
+        self.pol = pol
 
     def calc_P_N(self, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, little_h=True):
         """
