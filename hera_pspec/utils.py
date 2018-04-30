@@ -105,6 +105,11 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     # Get frequency array from input object
     try:
         freqs = data.freq_array
+        if len(freqs.shape) == 2 and freqs.shape[0] == 1:
+            freqs = freqs.flatten() # Support UVData 2D freq_array
+        elif len(freqs.shape) > 2:
+            raise ValueError("data.freq_array has unsupported shape: %s" \
+                             % str(freqs.shape))
     except:
         raise AttributeError("Object 'data' does not have a freq_array attribute.")
     
@@ -138,7 +143,7 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
 
         # Get indices within this range
         idxs = np.where(np.logical_and(freqs >= fmin, freqs < fmax))[0]
-        spw = (idxs[0], idxs[1]) if idxs.size > 0 else (None, None)
+        spw = (idxs[0], idxs[-1]) if idxs.size > 0 else (None, None)
         spw_range.append(spw)
     
     # Unpack from list if only a single tuple was specified originally

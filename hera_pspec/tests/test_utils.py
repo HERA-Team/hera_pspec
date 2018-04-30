@@ -134,9 +134,6 @@ class Test_Utils(unittest.TestCase):
         nt.ok_( isinstance(spw2, list) )
         nt.ok_( len(spw2) == len(z_list) )
         
-        # Make sure that bounds_error=False works
-        nt.ok_( spw3 == spw4 )
-        
         # Make sure that this also works for UVPSpec objects
         spw5 = utils.spw_range_from_redshifts(self.uvp, z_range=(13.1, 13.2))
         nt.ok_( isinstance(spw5, tuple) )
