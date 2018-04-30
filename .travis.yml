@@ -2,6 +2,11 @@ language: python
 python:
   # We don't actually use the Travis Python, but this keeps it organized.
   - "2.7"
+
+# Cache pip-installed dependencies
+cache:
+    pip: true
+
 install:
   # ensure that we have the full tag information available for version.py
   - git fetch --tags
@@ -34,6 +39,8 @@ install:
   - pip install git+https://github.com/HERA-Team/hera_cal.git
   - pip install healpy
   - pip install scikit-learn
+  - pip install h5py
+  - pip install pyyaml
   - python setup.py install
 
 before_script:

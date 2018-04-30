@@ -106,7 +106,8 @@ class Test_PSpecData(unittest.TestCase):
 
         # load another data file
         self.uvd = uv.UVData()
-        self.uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+        self.uvd.read_miriad(os.path.join(DATA_PATH, 
+                                          "zen.2458042.17772.xx.HH.uvXA"))
 
     def tearDown(self):
         pass
@@ -139,10 +140,44 @@ class Test_PSpecData(unittest.TestCase):
         self.assertRaises(TypeError, ds.add, [1], [None])
 
     def test_add_data(self):
-        # test adding non UVData object
+        """
+        Test adding non UVData object.
+        """
         nt.assert_raises(TypeError, self.ds.add, 1, 1)
-
+    
+    def test_labels(self):
+        """
+        Test that dataset labels work.
+        """
+        # Check that specifying labels does work
+        psd = pspecdata.PSpecData( dsets=[self.d[0], self.d[1],], 
+                                   wgts=[self.w[0], self.w[1], ],
+                                   labels=['red', 'blue'] )
+        np.testing.assert_array_equal( psd.x(('red', 24, 38)), 
+                                       psd.x((0, 24, 38)) )
+        
+        # Check specifying labels using dicts
+        dsdict = {'a':self.d[0], 'b':self.d[1]}
+        psd = pspecdata.PSpecData(dsets=dsdict, wgts=dsdict)
+        self.assertRaises(ValueError, pspecdata.PSpecData, dsets=dsdict, 
+                          wgts=dsdict, labels=['a', 'b'])
+        
+        # Check that invalid labels raise errors
+        self.assertRaises(KeyError, psd.x, ('green', 24, 38))
+    
+    def test_str(self):
+        """
+        Check that strings can be output.
+        """
+        ds = pspecdata.PSpecData()
+        print(ds) # print empty psd
+        ds.add(self.uvd, None)
+        print(ds) # print populated psd
+    
     def test_get_Q(self):
+        """
+        Test the Q = dC/dp function.
+        """
         vect_length = 50
         x_vect = np.random.normal(size=vect_length) \
                + 1.j * np.random.normal(size=vect_length)
@@ -390,10 +425,19 @@ class Test_PSpecData(unittest.TestCase):
         # only expect equality to ~10^-2 to 10^-3
         np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
     '''
+    
+    def test_get_V_gaussian(self):
+        nt.assert_raises(NotImplementedError, self.ds.get_V_gaussian, 
+                         (0,1), (0,1))
+        
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
-
+        
+        gauss = pspecbeam.PSpecBeamGauss(0.8, 
+                                  np.linspace(115e6, 130e6, 50, endpoint=False))
+        ds2 = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=gauss)
+        
         # Precomputed results in the following test were done "by hand" 
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         # FIXME: Uncomment when pyuvdata support for this is ready
@@ -459,6 +503,12 @@ class Test_PSpecData(unittest.TestCase):
         # test basic execution
         psu = ds.units()
         nt.assert_equal(psu, '(UNCALIB)^2 Hz [beam normalization not specified]')
+        
+        ds.primary_beam = pspecbeam.PSpecBeamGauss(0.8, 
+                                  np.linspace(115e6, 130e6, 50, endpoint=False))
+        psu = ds.units(little_h=False)
+        nt.assert_equal(psu, '(UNCALIB)^2 Mpc^3')
+        
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
@@ -486,13 +536,12 @@ class Test_PSpecData(unittest.TestCase):
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm, labels=['red', 'blue'])
 
         # check basic execution with baseline list
-        bls = [(24, 25), (37, 38), (38, 39), (52, 53)] 
+        bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
         uvp = ds.pspec(bls, bls, (0, 1), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
-                                verbose=False)
+                                little_h=True, verbose=False)
         nt.assert_equal(len(uvp.bl_array), len(bls))
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
         nt.assert_equal(uvp.data_array[0].dtype, np.complex128)
@@ -501,24 +550,30 @@ class Test_PSpecData(unittest.TestCase):
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
-        red_bls = redcal.get_pos_reds(antpos, low_hi=True)
-        uvp = ds.pspec(red_bls, red_bls, (0, 1), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, exclude_conjugated_blpairs=False, exclude_auto_bls=False,
-                                verbose=False)
+        red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos, low_hi=True))[2]
+        bls1, bls2, blps = pspecdata.construct_blpairs(red_bls, exclude_permutations=True)
+        uvp = ds.pspec(bls1, bls2, (0, 1), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array)
-        nt.assert_equal(uvp.Nblpairs, 63)
-        uvp = ds.pspec(red_bls, red_bls, (0, 1), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, exclude_conjugated_blpairs=True, exclude_auto_bls=True,
-                                verbose=False)
+        nt.assert_equal(uvp.Nblpairs, 10)
+        uvp = ds.pspec(bls1, bls2, (0, 1), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (52, 53))) in uvp.blpair_array)
         nt.assert_true(uvp.antnums_to_blpair(((52, 53), (24, 25))) not in uvp.blpair_array)
-        nt.assert_equal(uvp.Nblpairs, 21)
+        nt.assert_equal(uvp.Nblpairs, 10)
  
+        # test mixed bl group and non blgroup, currently bl grouping of more than 1 blpair doesn't work
+        bls1 = [[(24, 25)], (52, 53)]
+        bls2 = [[(24, 25)], (52, 53)]
+        uvp = ds.pspec(bls1, bls2, (0, 1), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
+
         # test select
-        red_bls = [[(24, 25), (37, 38), (38, 39), (52, 53)]]
+        red_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
+        bls1, bls2, blp = pspecdata.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp = ds.pspec(red_bls, red_bls, (0, 1), spw_ranges=[(20,30), (30,40)], exclude_conjugated_blpairs=False, exclude_auto_bls=False, verbose=False)
+        uvp = ds.pspec(bls1, bls2, (0, 1), spw_ranges=[(20,30), (30,40)], verbose=False)
         nt.assert_equal(uvp.Nblpairs, 16)
         nt.assert_equal(uvp.Nspws, 2)
         uvp2 = uvp.select(spws=[0], bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
@@ -527,12 +582,6 @@ class Test_PSpecData(unittest.TestCase):
         uvp.select(spws=0, bls=(24, 25), only_pairs_in_bls=True, inplace=True)
         nt.assert_equal(uvp.Nspws, 1)
         nt.assert_equal(uvp.Nblpairs, 1)
-
-        # check exception
-        nt.assert_raises(TypeError, ds.pspec, [0], [0], (0, 1))
-
-        # get exception for bl_group
-        nt.assert_raises(NotImplementedError, ds.pspec, red_bls, red_bls, (0, 1), avg_group=True)
 
         # check w/ multiple spectral ranges
         uvd = copy.deepcopy(self.uvd)
@@ -549,6 +598,9 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Ndlys, 10)
         nt.assert_equal(len(uvp.data_array), 1)
 
+        # test exceptions
+        nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1))
+
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
         d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2], 
@@ -558,8 +610,8 @@ class Test_PSpecData(unittest.TestCase):
         freqs = np.unique(d1.freq_array)
 
         # Setup baselines
-        bl1 = (24, 25)
-        bl2 = (37, 38)
+        bls1 = [(24, 25)]
+        bls2 = [(37, 38)]
 
         # Get beam
         beam = copy.deepcopy(self.bm)
@@ -577,12 +629,12 @@ class Test_PSpecData(unittest.TestCase):
         NEB = 1.0
         Bp = np.median(np.diff(freqs)) * len(freqs)
         scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
-        data1 = d1.get_data(bl1)
-        data2 = d2.get_data(bl2)
+        data1 = d1.get_data(bls1[0])
+        data2 = d2.get_data(bls2[0])
         legacy = np.fft.fftshift(np.fft.ifft(data1, axis=1) * np.conj(np.fft.ifft(data2, axis=1)) * scalar, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-        uvp = ds.pspec([bl1], [bl2], (0, 1), taper='none', input_data_weight='identity', norm='I')
+        uvp = ds.pspec(bls1, bls2, (0, 1), taper='none', input_data_weight='identity', norm='I')
         oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
@@ -591,30 +643,33 @@ class Test_PSpecData(unittest.TestCase):
         window = windows.blackmanharris(len(freqs))
         NEB = Bp / trapz(window**2, x=freqs)
         scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
-        data1 = d1.get_data(bl1)
-        data2 = d2.get_data(bl2)
+        data1 = d1.get_data(bls1[0])
+        data2 = d2.get_data(bls2[0])
         legacy = np.fft.fftshift(np.fft.ifft(data1*window[None, :], axis=1) * np.conj(np.fft.ifft(data2*window[None, :], axis=1)) * scalar, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-        uvp = ds.pspec([bl1], [bl2], (0, 1), taper='blackman-harris', input_data_weight='identity', norm='I')
+        uvp = ds.pspec(bls1, bls2, (0, 1), taper='blackman-harris', input_data_weight='identity', norm='I')
         oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
 
-    def test_validate_bls(self):
+    def test_validate_blpairs(self):
         # test exceptions
         uvd = copy.deepcopy(self.uvd)
-        nt.assert_raises(TypeError, pspecdata.validate_bls, [1], [1], uvd, uvd)
-        nt.assert_raises(TypeError, pspecdata.validate_bls, [[1]], [[1]], 1, uvd)
-        nt.assert_raises(TypeError, pspecdata.validate_bls, [[1]], [[1]], uvd, 1)
+        nt.assert_raises(TypeError, pspecdata.validate_blpairs, [((1, 2), (2, 3))], None, uvd)
+        nt.assert_raises(TypeError, pspecdata.validate_blpairs, [((1, 2), (2, 3))], uvd, None)
 
-        bls1 = [(24, 25), (37, 38)]
-        bls2 = [(24, 25), (37, 52)]
-        pspecdata.validate_bls(bls1, bls2, uvd, uvd)
-        bls1 = [[(24,25),(37,38)]]
-        bls2 = [[(24,25),(37,52)]]
-        pspecdata.validate_bls(bls1, bls2, uvd, uvd)
+        bls = [(24,25),(37,38)]
+        bls1, bls2, blpairs = pspecdata.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True)
+        pspecdata.validate_blpairs(blpairs, uvd, uvd)
+        bls1, bls2, blpairs = pspecdata.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True,
+                                                          group=True)
 
+        pspecdata.validate_blpairs(blpairs, uvd, uvd)
+
+        # test non-redundant
+        blpairs = [((24, 25), (24, 38))]
+        pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
 """
 # LEGACY MONTE CARLO TESTS
