@@ -488,10 +488,10 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd1)], wgts=[None, None])
         # get normal pspec
         bls = [(37, 39)]
-        uvp1 = ds.pspec(bls, bls, (0, 1), verbose=False)
+        uvp1 = ds.pspec(bls, bls, (0, 1), pol_select=[('xx','xx')], verbose=False)
         # rephase and get pspec
         ds.rephase_to_dset(0)
-        uvp2 = ds.pspec(bls, bls, (0, 1), verbose=False)
+        uvp2 = ds.pspec(bls, bls, (0, 1), pol_select=[('xx','xx')], verbose=False)
         blp = (0, ((37,39),(37,39)), 'XX')
         nt.assert_true(np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min())
 
@@ -540,7 +540,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
-        uvp = ds.pspec(bls, bls, (0, 1), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls, bls, (0, 1), pol_select=[('xx','xx')], input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         nt.assert_equal(len(uvp.bl_array), len(bls))
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
@@ -552,11 +552,11 @@ class Test_PSpecData(unittest.TestCase):
         antpos = dict(zip(ants, antpos))
         red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos, low_hi=True))[2]
         bls1, bls2, blps = pspecdata.construct_blpairs(red_bls, exclude_permutations=True)
-        uvp = ds.pspec(bls1, bls2, (0, 1), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), pol_select=[('xx','xx')], input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array)
         nt.assert_equal(uvp.Nblpairs, 10)
-        uvp = ds.pspec(bls1, bls2, (0, 1), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), pol_select=[('xx','xx')], input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (52, 53))) in uvp.blpair_array)
         nt.assert_true(uvp.antnums_to_blpair(((52, 53), (24, 25))) not in uvp.blpair_array)
@@ -565,7 +565,7 @@ class Test_PSpecData(unittest.TestCase):
         # test mixed bl group and non blgroup, currently bl grouping of more than 1 blpair doesn't work
         bls1 = [[(24, 25)], (52, 53)]
         bls2 = [[(24, 25)], (52, 53)]
-        uvp = ds.pspec(bls1, bls2, (0, 1), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), pol_select=[('xx','xx')], input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
         # test select
@@ -573,7 +573,7 @@ class Test_PSpecData(unittest.TestCase):
         bls1, bls2, blp = pspecdata.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp = ds.pspec(bls1, bls2, (0, 1), spw_ranges=[(20,30), (30,40)], verbose=False)
+        uvp = ds.pspec(bls1, bls2, (0, 1), pol_select=[('xx','xx')], spw_ranges=[(20,30), (30,40)], verbose=False)
         nt.assert_equal(uvp.Nblpairs, 16)
         nt.assert_equal(uvp.Nspws, 2)
         uvp2 = uvp.select(spws=[0], bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
@@ -586,7 +586,7 @@ class Test_PSpecData(unittest.TestCase):
         # check w/ multiple spectral ranges
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp = ds.pspec(bls, bls, (0, 1), spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
+        uvp = ds.pspec(bls, bls, (0, 1), pol_select=[('XX','XX')], spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
         nt.assert_equal(uvp.Nspws, 3)
         nt.assert_equal(uvp.Nspwdlys, 43)
         nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
@@ -599,7 +599,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(len(uvp.data_array), 1)
 
         # test exceptions
-        nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1))
+        nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1), pol_select=[('xx','xx')])
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -634,7 +634,7 @@ class Test_PSpecData(unittest.TestCase):
         legacy = np.fft.fftshift(np.fft.ifft(data1, axis=1) * np.conj(np.fft.ifft(data2, axis=1)) * scalar, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-        uvp = ds.pspec(bls1, bls2, (0, 1), taper='none', input_data_weight='identity', norm='I')
+        uvp = ds.pspec(bls1, bls2, (0, 1), pol_select=[('XX','XX')], taper='none', input_data_weight='identity', norm='I')
         oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
@@ -648,7 +648,7 @@ class Test_PSpecData(unittest.TestCase):
         legacy = np.fft.fftshift(np.fft.ifft(data1*window[None, :], axis=1) * np.conj(np.fft.ifft(data2*window[None, :], axis=1)) * scalar, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-        uvp = ds.pspec(bls1, bls2, (0, 1), taper='blackman-harris', input_data_weight='identity', norm='I')
+        uvp = ds.pspec(bls1, bls2, (0, 1), pol_select=[('xx','xx')], taper='blackman-harris', input_data_weight='identity', norm='I')
         oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
