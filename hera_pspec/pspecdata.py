@@ -188,6 +188,12 @@ class PSpecData(object):
             raise_warning("Warning: taking power spectra between frequency bins misaligned by more than 0.001 MHz",
                           verbose=verbose)
 
+        # Check for the same polarizations
+        pols = []
+        for d in self.dsets: pols.extend(d.polarization_array)
+        if np.unique(pols).size > 1:
+            raise ValueError("all dsets must have the same number and kind of polarizations: \n{}".format(pols))
+
         # Check phase type
         phase_types = []
         for d in self.dsets: phase_types.append(d.phase_type)
@@ -372,14 +378,9 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         assert isinstance(key, tuple)
-<<<<<<< HEAD
-        dset = key[0]; bl = key[1:]
-        print bl
-=======
         spwrange = self.spw_range
         dset, bl = self.blkey(dset=key[0], bl=key[1:])
         
->>>>>>> master
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T[spwrange[0]:spwrange[1], :]
         else:
@@ -591,7 +592,7 @@ class PSpecData(object):
             Unnormalized bandpowers
         """
         Rx1, Rx2 = 0, 0
-        
+    
         # Calculate R x_1
         if isinstance(key1, list):
             for _key in key1: Rx1 += np.dot(self.R(_key), self.x(_key))
@@ -958,7 +959,6 @@ class PSpecData(object):
                                                num_steps=num_steps)
         return scalar
 
-<<<<<<< HEAD
     def validate_pol(self,dsets,pol):
         """
         Validates polarization so that they are consitent with the polarizations of the UVData objects
@@ -974,15 +974,11 @@ class PSpecData(object):
         dset_pols = np.unique(dset_pols)
         #if pol==pol.lower(): pol=pol.upper()# flexible to take lower case polarizations      
         assert (pol.lower() or pol.upper() in dset_pols), "UVData object must have the same polarization as specified. In case of Stokes parameter (I,Q,U,V), refer to stokes.py to form Stokes visibilities"
-    def pspec(self, bls1, bls2, dsets,pol_select, input_data_weight='identity', norm='I', 
+
+    def pspec(self, bls1, bls2, dsets, pol_select, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, avg_group=False, 
               exclude_auto_bls=False, exclude_conjugated_blpairs=False,
               spw_ranges=None, verbose=True, history=''):
-=======
-    def pspec(self, bls1, bls2, dsets, input_data_weight='identity', norm='I', 
-              taper='none', little_h=True, spw_ranges=None, verbose=True, 
-              history=''):
->>>>>>> master
         """
         Estimate the delay power spectrum from a pair of datasets contained in this 
         object, using the optimal quadratic estimator from arXiv:1502.06016.
@@ -1093,8 +1089,9 @@ class PSpecData(object):
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
 
-        # get polarization array from zero'th dset
+        # get polarization array from dsets
         pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), dset1.polarization_array)
+        #pol_arr.extend(map(lambda p: pyuvdata.utils.polnum2str(p), dset2.polarization_array))
 
         # assert form of bls1 and bls2
         assert len(bls1) == len(bls2), "length of bls1 must equal length of bls2"
@@ -1158,8 +1155,7 @@ class PSpecData(object):
             dlys.extend(d)
             spws.extend(np.ones_like(d, np.int) * i)
             freqs.extend(dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
-
-            
+        
             # Loop over polarization pairs
             for j, p in enumerate(pol_select):
                 # set polarization pair range
@@ -1191,23 +1187,21 @@ class PSpecData(object):
                 for k, blp in enumerate(bl_pairs):
 
                     # assign keys
-<<<<<<< HEAD
                     if avg_group and fed_bl_group:
                         key1 = [(dsets[0],) + _blp[0] + (p[0],) for _blp in blp]
                         key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
                     else:
                         key1 = (dsets[0],) + blp[0] + (p[0],)
                         key2 = (dsets[1],) + blp[1] + (p[1],)
-=======
+
                     if isinstance(blp, list):
                         # interpet blp as group of baseline-pairs
-                        key1 = [(dsets[0],) + _blp[0] + (p,) for _blp in blp]
-                        key2 = [(dsets[1],) + _blp[1] + (p,) for _blp in blp]
+                        key1 = [(dsets[0],) + _blp[0] + (p[0],) for _blp in blp]
+                        key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
                     elif isinstance(blp, tuple):
                         # interpret blp as baseline-pair
-                        key1 = (dsets[0],) + blp[0] + (p,)
-                        key2 = (dsets[1],) + blp[1] + (p,)
->>>>>>> master
+                        key1 = (dsets[0],) + blp[0] + (p[0],)
+                        key2 = (dsets[1],) + blp[1] + (p[1],)
                         
                     if verbose:
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, p))
