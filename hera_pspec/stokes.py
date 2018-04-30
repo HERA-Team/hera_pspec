@@ -78,7 +78,7 @@ def combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
 
    return uvdS
 
-def validate_stokes(dset1, dset2, stokes='I'):
+def construct_stokes(dset1, dset2, stokes='I'):
    """
    Validates datasets required to construct desired visibilities and constructs desired Stokes parameters
    
