@@ -29,4 +29,6 @@ Clone the repo using
 
 Navigate into the directory and run `python setup.py install`.
 
+## Running `hera_pspec`
 
+See the documentation for an [overview and examples](http://hera-pspec.readthedocs.io/en/latest/pspec.html) of how to run `hera_pspec`. There are also some example Jupyter notebooks, including [`examples/PS_estimation_examples.ipynb`](examples/PS_estimation_example.ipynb) (a brief tutorial on how to create delay spectra), and [`examples/PSpecBeam_tutorial.ipynb`](examples/PSpecBeam_tutorial.ipynb) (a brief tutorial on handling beam objects).
