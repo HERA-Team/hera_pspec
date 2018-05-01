@@ -878,7 +878,7 @@ class PSpecData(object):
 
         # set pspec norm units
         if self.primary_beam is None:
-            norm_units = "Hz str [beam normalization not specified]".format(self.dsets[0].vis_units)
+            norm_units = "Hz str [beam normalization not specified]"
         else:
             if little_h:
                 h_unit = "h^-3 "
