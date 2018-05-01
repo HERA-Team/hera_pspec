@@ -116,11 +116,13 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        key : tuple, baseline-pair key
+        key : tuple
+            Baseline-pair key
 
-        Return
-        ------
-        data : complex ndarray with shape (Ntimes, Ndlys)
+        Returns
+        -------
+        data : complex ndarray
+            Shape (Ntimes, Ndlys)
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
 
@@ -150,10 +152,11 @@ class UVPSpec(object):
         ----------
         key : tuple, baseline-pair key
 
-        Return
-        ------
-        wgts : float ndarray with shape (2, Ntimes, Ndlys), where the zeroth axis holds
-            [wgt_1, wgt_2] in that order
+        Returns
+        -------
+        wgts : float ndarray
+            Has shape (2, Ntimes, Ndlys), where the zeroth axis holds 
+            [wgt_1, wgt_2] in that order.
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
 
@@ -174,11 +177,13 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        key : tuple, baseline-pair key
+        key : tuple
+            Baseline-pair key
 
-        Return
-        ------
-        data : float ndarray with shape (Ntimes,)
+        Returns
+        -------
+        data : float ndarray
+            Has shape (Ntimes,)
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
 
@@ -201,8 +206,8 @@ class UVPSpec(object):
         ----------
         key : tuple, baseline-pair key
 
-        Return
-        ------
+        Returns
+        -------
         data : float ndarray with shape (Ntimes,)
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
@@ -227,11 +232,13 @@ class UVPSpec(object):
 
     def get_blpair_seps(self):
         """
-        For each baseline-pair, get the average baseline separation in ENU frame in meters.
+        For each baseline-pair, get the average baseline separation in ENU 
+        frame in meters.
 
-        Returns blp_avg_sep
+        Returns
         -------
-        blp_avg_sep : float ndarray, shape=(Nblpairts,)
+        blp_avg_sep : float ndarray
+            shape=(Nblpairts,)
         """
         # get list of bl separations
         bl_vecs = self.get_ENU_bl_vecs()
@@ -362,8 +369,8 @@ class UVPSpec(object):
         blpair : i12 int
             baseline-pair integer ID
 
-        Return
-        ------
+        Returns
+        -------
         antnums : tuple
             nested tuple containing baseline-pair antenna numbers. Ex. ((ant1, ant2), (ant3, ant4))
         """
@@ -379,8 +386,8 @@ class UVPSpec(object):
             nested tuple containing integer antenna numbers for a baseline-pair.
             Ex. ((ant1, ant2), (ant3, ant4))
 
-        Return
-        ------
+        Returns
+        -------
         blpair : i12 integer
             baseline-pair integer
         """
@@ -395,8 +402,8 @@ class UVPSpec(object):
         bl : i6 int
             baseline integer ID
 
-        Return
-        ------
+        Returns
+        -------
         antnums : tuple
             tuple containing baseline antenna numbers. Ex. (ant1, ant2)
         """
@@ -412,8 +419,8 @@ class UVPSpec(object):
             tuple containing integer antenna numbers for a baseline.
             Ex. (ant1, ant2)
 
-        Return
-        ------
+        Returns
+        -------
         bl : i6 integer
             baseline integer
         """
@@ -1101,23 +1108,27 @@ class UVPSpec(object):
         Parameters
         ----------
         blpair_groups : list of baseline-pair groups
-            i.e. list of list of tuples or integers. 
-            All power spectra in a baseline-pair group are averaged together. 
-            If a baseline-pair exists in more than one group, a warning is 
-            raised.
+            List of list of tuples or integers. All power spectra in a 
+            baseline-pair group are averaged together. If a baseline-pair 
+            exists in more than one group, a warning is raised.
+            
             Ex: blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], [((4, 6), (4, 6))]] or
-                blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
+            blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
 
-        time_avg : boolean, if True, average power spectra across the time axis.
+        time_avg : bool, optional
+            If True, average power spectra across the time axis. Default: False.
 
-        inplace : bool, if True, edit data in self, else make a copy and return
+        inplace : bool, optional
+            If True, edit data in self, else make a copy and return. Default: 
+            True.
 
         Notes
         -----
-        Currently, every baseline-pair in a blpair group must have the same Ntimes, 
-        unless time_avg=True. Future versions may support baseline-pair averaging of 
-        heterogeneous time arrays. This includes the scenario of repeated blpairs 
-        (e.g. in bootstrapping), which will return multiple copies of their time_array.
+        Currently, every baseline-pair in a blpair group must have the same 
+        Ntimes, unless time_avg=True. Future versions may support 
+        baseline-pair averaging of heterogeneous time arrays. This includes 
+        the scenario of repeated blpairs (e.g. in bootstrapping), which will 
+        return multiple copies of their time_array.
         """
         if inplace:
             uvp = self
@@ -1531,8 +1542,8 @@ def _blpair_to_antnums(blpair):
     blpair : <i12 integer
         baseline-pair integer
 
-    Return
-    ------
+    Returns
+    -------
     antnums : tuple
         nested tuple containing baseline-pair antenna numbers. Ex. ((ant1, ant2), (ant3, ant4))
     """
@@ -1557,8 +1568,8 @@ def _antnums_to_blpair(antnums):
         nested tuple containing integer antenna numbers for a baseline-pair.
         Ex. ((ant1, ant2), (ant3, ant4))
 
-    Return
-    ------
+    Returns
+    -------
     blpair : <i12 integer
         baseline-pair integer
     """
@@ -1582,8 +1593,8 @@ def _bl_to_antnums(bl):
     blpair : <i6 integer
         baseline integer
 
-    Return
-    ------
+    Returns
+    -------
     antnums : tuple
         tuple containing baseline antenna numbers. Ex. (ant1, ant2)
     """
@@ -1606,8 +1617,8 @@ def _antnums_to_bl(antnums):
         tuple containing integer antenna numbers for a baseline.
         Ex. (ant1, ant2)
 
-    Return
-    ------
+    Returns
+    -------
     blpair : <i6 integer
         baseline integer
     """
@@ -1648,8 +1659,8 @@ def _conj_blpair_int(blpair):
     blpair : <12 int
         baseline-pair integer
 
-    Return
-    -------
+    Returns
+    --------
     conj_blpair : <12 int
         conjugated baseline-pair integer. 
         Ex: ((ant1, ant2), (ant3, ant4)) --> ((ant3, ant4), (ant1, ant2))
@@ -1668,8 +1679,8 @@ def _conj_bl_int(bl):
     blpair : i6 int
         baseline integer
 
-    Return
-    -------
+    Returns
+    --------
     conj_bl : i6 int
         conjugated baseline integer. 
         Ex: (ant1, ant2) --> (ant2, ant1)
@@ -1692,8 +1703,8 @@ def _conj_blpair(blpair, which='both'):
     which : str, options=['first', 'second', 'both']
         which baseline to conjugate
 
-    Return
-    ------
+    Returns
+    -------
     conj_blpair : <12 int
         blpair with one or both baselines conjugated
     """
