@@ -75,8 +75,11 @@ def get_delays(freqs):
 
 def spw_range_from_freqs(data, freq_range, bounds_error=True):
     """
-    Return the first and last frequency array indices for a spectral window, 
-    where the window is specified as a range of frequencies.
+    Return a tuple defining the spectral window that corresponds to the 
+    frequency range specified in freq_range.
+    
+    (Spectral windows are specified as tuples containing the first and last 
+    index of a frequency range in data.freq_array.)
     
     Parameters
     ----------
@@ -153,8 +156,11 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
 
 def spw_range_from_redshifts(data, z_range, bounds_error=True):
     """
-    Return the first and last frequency array indices for a spectral window, 
-    where the window is specified as a range of redshifts.
+    Return a tuple defining the spectral window that corresponds to the 
+    redshift range specified in z_range.
+    
+    (Spectral windows are specified as tuples containing the first and last 
+    index of a frequency range in data.freq_array.)
     
     Parameters
     ----------
