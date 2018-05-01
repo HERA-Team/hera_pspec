@@ -21,6 +21,8 @@ def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=No
 
     Parameters
     ----------
+    scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
+    
     Tsys : float, System temperature in Kelvin
 
     t_int : float, integration time of power spectra in seconds
