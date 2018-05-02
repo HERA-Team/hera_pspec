@@ -959,7 +959,7 @@ class PSpecData(object):
 
         Parameters
         ----------
-        dsets : str or list
+        dsets : length-2 list or length-2 tuple of integers or str
             Contains indices of self.dsets to use in forming power spectra,
             where the first index is for the Left-Hand dataset and second index
             is used for the Right-Hand dataset (see above).
@@ -968,25 +968,28 @@ class PSpecData(object):
             Contains polarization pair which will be used in estiamting the power spectrum e,g ('xx','xx') or  ('xy','yx'). Only equal polarization pair is implemented for the time being.               
         """
         assert isinstance(pol_pair, tuple), "polarization pair must be specified as a len-2 tuple"
-        assert isinstance(pol_pair[0], (str, str)), "polarization must be fed as len-2 string tuple"
-        assert isinstance(pol_pair[1], (str, str)), "polarization must be fed as len-2 string tuple"
+        assert isinstance(pol_pair[0], (str, np.str)), "polarization must be fed as len-2 string tuple"
+        assert isinstance(pol_pair[1], (str, np.str)), "polarization must be fed as len-2 string tuple"
              
         if pol_pair[0]!=pol_pair[1]:
             raise NotImplementedError("Only auto/equal polarizations are implement at the moment.") 
   
-        dset1 = self.dsets[dsets[0]] # first list of UVData objects
-        dset2 = self.dsets[dsets[1]] # second list of UVData objects
+        dset1 = self.dsets[self.dset_idx(dsets[0])] # first list of UVData objects
+        dset2 = self.dsets[self.dset_idx(dsets[1])] # second list of UVData objects
 
         # extracting polarization metadata from UVData objects
-        dset1_pols = [dset1.get_pols() for d in dset1] 
-        dset1_pols = np.unique(dset1_pols)
-        dset2_pols = [dset2.get_pols() for d in dset2]
-        dset2_pols = np.unique(dset2_pols)
+        dset1_pols = dset1.get_pols()  
+        dset2_pols = dset2.get_pols()
 
-        assert (pol_pair[0].lower() in dset1_pols or pol_pair[0].upper() in dset1_pols), "UVData objects does not contain data for polarization {}".format(pol_pair[0])
-        assert (pol_pair[1].lower() in dset1_pols or pol_pair[1].upper() in dset2_pols), "UVData objects does not contain data for polarization {}".format(pol_pair[1])
-       
-        return True
+        pol_pair = [p.upper() for p in pol_pair]
+        if pol_pair[0] not in dset1_pols:
+           print "UVData objects does not contain data for polarization {}".format(pol_pair[0])
+           return False
+        elif pol_pair[1] not in dset2_pols:
+           print "UVData objects does not contain data for polarization {}".format(pol_pair[1])
+           return False 
+        else:
+           return True
 
     def pspec(self, bls1, bls2, dsets, pol_select=None, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, spw_ranges=None, verbose=True, 
@@ -1019,7 +1022,7 @@ class PSpecData(object):
 
         bls2 : list of baseline groups, each being a list of ant-pair tuples
 
-        dsets : length-2 tuple or list
+        dsets : length-2 tuple or length-2 list od integers or str
             Contains indices of self.dsets to use in forming power spectra, 
             where the first index is for the Left-Hand dataset and second index 
             is used for the Right-Hand dataset (see above).
@@ -1183,7 +1186,8 @@ class PSpecData(object):
                    pass
                 else:
                    print ("Polarization pair: {} failed the validation test".format(p))
-                
+                   continue
+
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
@@ -1321,7 +1325,8 @@ class PSpecData(object):
         uvp.Ndlys = len(np.unique(dlys))
         uvp.Nspwdlys = len(spws)
         uvp.Nfreqs = len(np.unique(freqs))
-        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p), pol_arr))
+        # pol_array needs to be changed
+        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p[0]), pol_select))
         uvp.Npols = len(pol_arr)
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width
