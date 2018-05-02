@@ -465,10 +465,6 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = copy.deepcopy(self.d[0])
         uvd.select(frequencies=np.unique(uvd.freq_array)[:10], times=np.unique(uvd.time_array)[:10])
         uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], times=np.unique(uvd2.time_array)[10:20])
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-        ds.validate_datasets()
-        uvd2.polarization_array = np.array([-7])
-        nt.assert_raises(ValueError, ds.validate_datasets)
         # test phasing
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
@@ -586,7 +582,7 @@ class Test_PSpecData(unittest.TestCase):
         # check w/ multiple spectral ranges
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp = ds.pspec(bls, bls, (0, 1), pol_select=[('XX','XX')], spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
+        uvp = ds.pspec(bls, bls, (0, 1), pol_select=[('xx','xx')], spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
         nt.assert_equal(uvp.Nspws, 3)
         nt.assert_equal(uvp.Nspwdlys, 43)
         nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
@@ -598,9 +594,16 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Ndlys, 10)
         nt.assert_equal(len(uvp.data_array), 1)
 
+        # test multiple polarization pairs
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        
         # test exceptions
         nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1), pol_select=[('xx','xx')])
-
+        nt.assert_raises(AssertionError, ds.pspec, bls, bls, (0, 1), pol_select=[('xx','xx'), ('yy','yy')], verbose=False)                
+        nt.assert_raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pol_select=[('xx','yy')])
+        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1))        
+        
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
         d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2], 
@@ -634,7 +637,7 @@ class Test_PSpecData(unittest.TestCase):
         legacy = np.fft.fftshift(np.fft.ifft(data1, axis=1) * np.conj(np.fft.ifft(data2, axis=1)) * scalar, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-        uvp = ds.pspec(bls1, bls2, (0, 1), pol_select=[('XX','XX')], taper='none', input_data_weight='identity', norm='I')
+        uvp = ds.pspec(bls1, bls2, (0, 1), pol_select=[('xx','xx')], taper='none', input_data_weight='identity', norm='I')
         oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
