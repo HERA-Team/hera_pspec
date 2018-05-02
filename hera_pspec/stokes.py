@@ -1,5 +1,5 @@
 """
-Module to construct Stokes (I,Q,U,V) visibilities from miriad files or UVData objects
+Module to construct pseudo-Stokes (I,Q,U,V) visibilities from miriad files or UVData objects
 """
 import numpy as np, os
 import pyuvdata
@@ -28,7 +28,7 @@ def miriad2pyuvdata(dset):
 
 def _combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
    """
-   Reads in miriad file and combines visibilities to form the desired Stokes visibilities. It return UVData object containing the Stokes visibilities
+   Reads in miriad file and combines visibilities to form the desired pseudo-stokes visibilities. It return UVData object containing the Stokes visibilities
    
    Parameters
    ---------
