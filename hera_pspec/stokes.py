@@ -19,13 +19,14 @@ def miriad2pyuvdata(dset):
 
    Parameters
    ----------
-   dset : Miriad file
+   dset : str
+      Miriad file to convert to UVData object containing visibilities and corresponding metadata
    """
    uv = pyuvdata.UVData()
    uv.read_miriad(dset)
    return uv
 
-def combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
+def _combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
    """
    Reads in miriad file and combines visibilities to form the desired Stokes visibilities. It return UVData object containing the Stokes visibilities
    
@@ -73,13 +74,13 @@ def combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
    uvdS = copy.deepcopy(uvd1)
    uvdS.data_array = stdata # stokes data
    uvdS.flag_array = flag # flag array
-   uvdS.polarization_array = pyuvdata.polstr2num(stokes) # polarization number
+   uvdS.polarization_array = np.array([pyuvdata.polstr2num(stokes)]) # polarization number
    uvdS.nsample_array = uvd1.nsample_array + uvd2.nsample_array # nsamples
    uvdS.history = 'merged to form stokes visibilities. ' + uvd1.history + uvd2.history # history
 
    return uvdS
 
-def construct_stokes(dset1, dset2, stokes='I'):
+def construct_stokes(dset1, dset2, stokes='I', run_check=True):
    """
    Validates datasets required to construct desired visibilities and constructs desired Stokes parameters
    
@@ -96,6 +97,8 @@ def construct_stokes(dset1, dset2, stokes='I'):
    stokes: Stokes parameter, type: str
        Pseudo stokes parameter to form, can be 'I' or 'Q' or 'U' or 'V'. Default: I
 
+   run_check: boolean
+      Pyvdata attribute check
    """
    # convert dset1 and dset2 to UVData objects if they are miriad files
    if isinstance(dset1, pyuvdata.UVData) == False:
@@ -130,6 +133,7 @@ def construct_stokes(dset1, dset2, stokes='I'):
       uvd2.select(polarizations=pvals[1],inplace=True)
    
    # combining visibilities to form the desired Stokes visibilties
-   uvdS = combine_pol(uvd1=uvd1,uvd2=uvd2,pol1=pol1,pol2=pol2, stokes=stokes)
+   uvdS = _combine_pol(uvd1=uvd1,uvd2=uvd2,pol1=pol1,pol2=pol2, stokes=stokes)
 
+   if run_check: uvdS.check()
    return uvdS
