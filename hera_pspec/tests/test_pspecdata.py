@@ -597,10 +597,14 @@ class Test_PSpecData(unittest.TestCase):
         # test multiple polarization pairs
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        
+        uvp = ds.pspec(bls, bls, (0, 1), pol_select=[('xx','xx'), ('yy','yy')], spw_ranges=[(10, 24)], verbose=False)        
+        # test polarizations specified by numbers
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        uvp = ds.pspec(bls, bls, (0, 1), pol_select=[(-5,-5)], spw_ranges=[(10, 24)], verbose=False)
+
         # test exceptions
         nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1), pol_select=[('xx','xx')])
-        nt.assert_raises(AssertionError, ds.pspec, bls, bls, (0, 1), pol_select=[('xx','xx'), ('yy','yy')], verbose=False)                
         nt.assert_raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pol_select=[('xx','yy')])
         nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1))        
         

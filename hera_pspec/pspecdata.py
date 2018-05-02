@@ -1027,7 +1027,7 @@ class PSpecData(object):
             where the first index is for the Left-Hand dataset and second index 
             is used for the Right-Hand dataset (see above).
 
-        pol_select : length-2 tuple or list
+        pol_select : length-2 tuple or list of strings or integers
             contains polarization pairs to use in forming power spectra 
             e.g. ('XX','XX') or ('XY','YX') or list of polarization pairs. 
             Only auto/equal polarization pairs are implemented at the moment.  
@@ -1148,7 +1148,7 @@ class PSpecData(object):
         spws = []
         dlys = []
         freqs = []
-        sclr_arr = np.ones((len(spw_ranges), len(pol_select)), np.float)
+        sclr_arr = []
         blp_arr = []
         bls_arr = []
 
@@ -1167,6 +1167,8 @@ class PSpecData(object):
             spw_data = []
             spw_wgts = []
             spw_ints = []
+            spw_scalar = []
+            spw_pol = []
 
             d = self.delays() * 1e-9
             dlys.extend(d)
@@ -1175,12 +1177,22 @@ class PSpecData(object):
                 dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
 
             # Loop over polarizations
-            for j, p in enumerate(pol_select):
+            for j, ps in enumerate(pol_select):
+                p = []
+                if isinstance(ps[0], (int, np.int)): 
+                    p.append(pyuvdata.utils.polnum2str(ps[0]))
+                else:
+                    p.append(ps[0])
+                if isinstance(ps[1], (int, np.int)):
+                    p.append(pyuvdata.utils.polnum2str(ps[1]))
+                else:
+                    p.append(ps[1])
                 if verbose: print( "\nSetting polarization pair: {}".format(p))
 
                 # validating polarization pair of UVData objects
-                valid = self.validate_pol(dsets, p)
+                valid = self.validate_pol(dsets, tuple(p))
                 if valid:
+                   spw_pol.append(p)
                    pass
                 else:
                    print ("Polarization pair: {} failed the validation test".format(p))
@@ -1198,7 +1210,8 @@ class PSpecData(object):
                                   "so pspectra are not properly normalized", 
                                   verbose=verbose)
                     scalar = 1.0
-                sclr_arr[i, j] = scalar
+                spw_scalar.append(scalar)
+  
 
                 # Loop over baseline pairs
                 for k, blp in enumerate(bl_pairs):
@@ -1288,7 +1301,7 @@ class PSpecData(object):
                 spw_data.append(pol_data)
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
-
+             
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
@@ -1296,6 +1309,7 @@ class PSpecData(object):
             data_array[i] = spw_data
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
+            sclr_arr.append(spw_scalar)
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
@@ -1324,8 +1338,8 @@ class PSpecData(object):
         uvp.Nspwdlys = len(spws)
         uvp.Nfreqs = len(np.unique(freqs))
         # pol_array needs to be changed
-        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p[0]), pol_select))
-        uvp.Npols = len(pol_arr)
+        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p[0]), spw_pol))
+        uvp.Npols = len(spw_pol)
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width
         uvp.weighting = input_data_weight
