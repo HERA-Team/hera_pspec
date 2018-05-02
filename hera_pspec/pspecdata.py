@@ -1106,8 +1106,6 @@ class PSpecData(object):
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
 
-        # get polarization array from dsets
-        pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), dset1.polarization_array)    
         # check pol_select inputs
         if pol_select == None:   
            raise ValueError("pol_select is currently set to None, specify a polarization pair tuple or list.")
