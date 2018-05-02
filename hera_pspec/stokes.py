@@ -13,13 +13,6 @@ pol_weights = {
     'V': {'XY':-1.j, 'YX': 1.j},
 }
 
-# polarization values for Stokes parameters
-pol_stokes = {'I': 1,
-              'Q': 2,
-              'U': 3,
-              'V': 4,
-}
-
 def miriad2pyuvdata(dset):
    """
    Converts Miriad file to UVData object
@@ -56,6 +49,14 @@ def combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
        Pseudo stokes parameter to form, can be 'I' or 'Q' or 'U' or 'V'. Default: I
   
    """
+   if isinstance(uvd1, pyuvdata.UVData) == False:
+      raise TypeError("uvd1 must be a pyuvdata.UVData instance")
+   if isinstance(uvd2, pyuvdata.UVData) == False:
+      raise TypeError("uvd2 must be a pyuvdata.UVData instance")
+   
+   assert isinstance(pol1, str)
+   assert isinstance(pol2, str)
+
    # extracting data array from the UVData objects
    data1 = uvd1.data_array
    data2 = uvd2.data_array
@@ -72,7 +73,7 @@ def combine_pol(uvd1, uvd2, pol1, pol2, stokes='I'):
    uvdS = copy.deepcopy(uvd1)
    uvdS.data_array = stdata # stokes data
    uvdS.flag_array = flag # flag array
-   uvdS.polarization_array = np.array([pol_stokes[stokes]]) # polarization number
+   uvdS.polarization_array = pyuvdata.polstr2num(stokes) # polarization number
    uvdS.nsample_array = uvd1.nsample_array + uvd2.nsample_array # nsamples
    uvdS.history = 'merged to form stokes visibilities. ' + uvd1.history + uvd2.history # history
 
@@ -98,29 +99,36 @@ def construct_stokes(dset1, dset2, stokes='I'):
    """
    # convert dset1 and dset2 to UVData objects if they are miriad files
    if isinstance(dset1, pyuvdata.UVData) == False:
+      assert isinstance(dset1, str)
       uvd1 = miriad2pyuvdata(dset1)
    else:
       uvd1 = dset1
    if isinstance(dset2, pyuvdata.UVData) == False:
+      assert isinstance(dset2, str)
       uvd2 = miriad2pyuvdata(dset2)
    else:
       uvd2 = dset2
 
    # makes the Npol length==1 so that the UVData carries data for the required polarization only
-   st_keys = pol_weights[stokes]
-   if uvd1.Npols > 1:
-      uvd1 = uvd1.select(polarization=st_keys[0],inplace=False)
-   if uvd2.Npols > 1:
-      uvd2 = uvd2.select(polarization=st_keys[1],inplace=False)
+   st_keys = pol_weights[stokes].keys()
+   st_keys = st_keys[::-1]
+   pvals = map(lambda p: pyuvdata.utils.polstr2num(p), st_keys) # polarization values corresponding to the polarization strings
    
-   # extracts polarization and ensures that the input dsets have the proper polarizations to form the desired stokes parameters
-   pol1 = uvd1.get_pols()[0]
-   pol2 = uvd2.get_pols()[0]
+   if uvd1.Npols==uvd2.Npols==1:
+      # extracts polarization and ensures that the input dsets have the proper polarizations to form the desired stokes parameters
+      pol1 = uvd1.get_pols()[0]
+      pol2 = uvd2.get_pols()[0]
+      assert(pol1 != pol2), "UVData objects have same polarization"
+   else:
+      pol1 = st_keys[0]; pol2 = st_keys[1]
 
-   # validate polarizations, that is, ensures that the the proper input datasets or UVData objects are given to form the desired Stokes visibilties
-   assert (pol1 in st_keys)
-   assert (pol2 in st_keys)
-
+   if uvd1.Npols > 1:
+      assert (st_keys[0] in uvd1.get_pols()), "Polarization {} not found in UVData object".format(st_keys[0])
+      uvd1.select(polarizations=pvals[0],inplace=True)
+   if uvd2.Npols > 1:
+      assert (st_keys[1] in uvd2.get_pols()), "Polarization {} not found in UVData object".format(st_keys[1])
+      uvd2.select(polarizations=pvals[1],inplace=True)
+   
    # combining visibilities to form the desired Stokes visibilties
    uvdS = combine_pol(uvd1=uvd1,uvd2=uvd2,pol1=pol1,pol2=pol2, stokes=stokes)
 
