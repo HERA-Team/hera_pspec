@@ -8,6 +8,8 @@ from hera_pspec import uvpspec, conversions, parameter, pspecbeam, noise
 import copy
 import h5py
 from collections import OrderedDict as odict
+from pyuvdata import UVData
+
 
 class Test_Sensitivity(unittest.TestCase):
     """ Test noise.Sensitivity object """

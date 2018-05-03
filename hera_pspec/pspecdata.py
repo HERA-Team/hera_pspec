@@ -872,16 +872,21 @@ class PSpecData(object):
         if len(self.dsets) == 0:
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate power spectrum units.")
+
+        # get visibility units
+        vis_units = self.dsets[0].vis_units
+
+        # set pspec norm units
         if self.primary_beam is None:
-            pspec_units = "({})^2 Hz [beam normalization not specified]".format(self.dsets[0].vis_units)
+            norm_units = "Hz str [beam normalization not specified]"
         else:
             if little_h:
                 h_unit = "h^-3 "
             else:
                 h_unit = ""
-            pspec_units = "({})^2 {}Mpc^3".format(self.dsets[0].vis_units, h_unit)
+            norm_units = "{}Mpc^3".format(h_unit)
         
-        return pspec_units
+        return vis_units, norm_units
     
     def delays(self):
         """
@@ -1287,7 +1292,7 @@ class PSpecData(object):
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width
         uvp.weighting = input_data_weight
-        uvp.units = self.units(little_h=little_h)
+        uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
         uvp.history = dset1.history + dset2.history + history
         uvp.taper = taper
@@ -1295,18 +1300,22 @@ class PSpecData(object):
         uvp.git_hash = version.git_hash
         
         if self.primary_beam is not None:
-            uvp.cosmo_params = str(self.primary_beam.cosmo.get_params())
-        if self.primary_beam is not None and hasattr(self.primary_beam, 'filename'): 
-            uvp.beamfile = self.primary_beam.filename
+            # attach cosmology
+            uvp.cosmo = self.primary_beam.cosmo
+            # attach beam info
+            uvp.beam_freqs = self.primary_beam.beam_freqs
+            uvp.OmegaP, uvp.OmegaPP = self.primary_beam.get_Omegas(uvp.pol_array)
+            if hasattr(self.primary_beam, 'filename'):
+                uvp.beamfile = self.primary_beam.filename
         if hasattr(dset1.extra_keywords, 'filename'):
             uvp.filename1 = dset1.extra_keywords['filename']
-        if hasattr(dset2.extra_keywords, 'filename'): 
+        if hasattr(dset2.extra_keywords, 'filename'):
             uvp.filename2 = dset2.extra_keywords['filename']
         lbl1 = self.labels[self.dset_idx(dsets[0])]
         lbl2 = self.labels[self.dset_idx(dsets[1])]
         if lbl1 is not None: uvp.label1 = lbl1
         if lbl2 is not None: uvp.label2 = lbl2
-        
+
         # fill data arrays
         uvp.data_array = data_array
         uvp.integration_array = integration_array

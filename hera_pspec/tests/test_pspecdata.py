@@ -501,14 +501,9 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(IndexError, ds.units)
         ds.add(self.uvd, None)
         # test basic execution
-        psu = ds.units()
-        nt.assert_equal(psu, '(UNCALIB)^2 Hz [beam normalization not specified]')
-        
-        ds.primary_beam = pspecbeam.PSpecBeamGauss(0.8, 
-                                  np.linspace(115e6, 130e6, 50, endpoint=False))
-        psu = ds.units(little_h=False)
-        nt.assert_equal(psu, '(UNCALIB)^2 Mpc^3')
-        
+        vis_u, norm_u = ds.units()
+        nt.assert_equal(vis_u, "UNCALIB")
+        nt.assert_equal(norm_u, "Hz str [beam normalization not specified]")
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
