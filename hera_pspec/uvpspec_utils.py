@@ -129,7 +129,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
             bl_select = reduce(operator.add, map(lambda b: uvp.bl_array==b, bl_array))
             uvp.bl_array = uvp.bl_array[bl_select]
             uvp.bl_vecs = uvp.bl_vecs[bl_select]
-            uvp.Nbls = len(uvp.bl_array)
+            uvp.Nbls = len(uvp.bl_array)        
 
     if pols is not None:
         # assert form
@@ -188,8 +188,8 @@ def _blpair_to_antnums(blpair):
     blpair : <i12 integer
         baseline-pair integer
 
-    Return
-    ------
+    Returns
+    -------
     antnums : tuple
         nested tuple containing baseline-pair antenna numbers. Ex. ((ant1, ant2), (ant3, ant4))
     """
@@ -214,8 +214,8 @@ def _antnums_to_blpair(antnums):
         nested tuple containing integer antenna numbers for a baseline-pair.
         Ex. ((ant1, ant2), (ant3, ant4))
 
-    Return
-    ------
+    Returns
+    -------
     blpair : <i12 integer
         baseline-pair integer
     """
@@ -239,8 +239,8 @@ def _bl_to_antnums(bl):
     blpair : <i6 integer
         baseline integer
 
-    Return
-    ------
+    Returns
+    -------
     antnums : tuple
         tuple containing baseline antenna numbers. Ex. (ant1, ant2)
     """
@@ -263,8 +263,8 @@ def _antnums_to_bl(antnums):
         tuple containing integer antenna numbers for a baseline.
         Ex. (ant1, ant2)
 
-    Return
-    ------
+    Returns
+    -------
     blpair : <i6 integer
         baseline integer
     """
@@ -305,8 +305,8 @@ def _conj_blpair_int(blpair):
     blpair : <12 int
         baseline-pair integer
 
-    Return
-    -------
+    Returns
+    --------
     conj_blpair : <12 int
         conjugated baseline-pair integer. 
         Ex: ((ant1, ant2), (ant3, ant4)) --> ((ant3, ant4), (ant1, ant2))
@@ -325,8 +325,8 @@ def _conj_bl_int(bl):
     blpair : i6 int
         baseline integer
 
-    Return
-    -------
+    Returns
+    --------
     conj_bl : i6 int
         conjugated baseline integer. 
         Ex: (ant1, ant2) --> (ant2, ant1)
@@ -349,8 +349,8 @@ def _conj_blpair(blpair, which='both'):
     which : str, options=['first', 'second', 'both']
         which baseline to conjugate
 
-    Return
-    ------
+    Returns
+    -------
     conj_blpair : <12 int
         blpair with one or both baselines conjugated
     """
@@ -365,5 +365,4 @@ def _conj_blpair(blpair, which='both'):
         raise ValueError("didn't recognize {}".format(which))
 
     return conj_blpair
-
 

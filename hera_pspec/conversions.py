@@ -142,8 +142,9 @@ class Cosmo_Conversions(object):
             freq = freq * 1e9
 
         return (units.f21 / freq - 1)
-
-    def z2f(self, z, ghz=False):
+    
+    @staticmethod
+    def z2f(z, ghz=False):
         """
         convert redshift to frequency in Hz for 21cm line
 

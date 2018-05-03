@@ -4,12 +4,13 @@ import numpy as np
 import os
 import sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, parameter, pspecbeam
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata
+from hera_pspec import uvpspec_utils as uvputils
 import copy
 import h5py
 from collections import OrderedDict as odict
 
-def build_example_uvpspec():
+def build_example_uvpspec(beam=None):
     """
     Build an example UVPSpec object, with all necessary metadata.
     """
@@ -47,7 +48,8 @@ def build_example_uvpspec():
     dly_array = np.fft.fftshift(np.repeat(np.fft.fftfreq(Nfreqs, np.median(np.diff(freq_array))), Nspws))
     pol_array = np.array([-5])
     Npols = len(pol_array)
-    units = 'unknown'
+    vis_units = 'unknown'
+    norm_units = 'Hz str'
     weighting = 'identity'
     channel_width = np.median(np.diff(freq_array))
     history = 'example'
@@ -55,6 +57,11 @@ def build_example_uvpspec():
     norm = "I"
     git_hash = "random"
     scalar_array = np.ones((Nspws, Npols), np.float)
+    label1 = 'red'
+    #label2 = 'blue' # Leave commented out to make sure non-named UVPSpecs work!
+    if beam is not None:
+        OmegaP, OmegaPP = beam.get_Omegas(beam.primary_beam.polarization_array[0])
+        beam_freqs = beam.beam_freqs
 
     telescope_location = np.array([5109325.85521063, 
                                    2005235.09142983, 
@@ -75,9 +82,11 @@ def build_example_uvpspec():
               'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array', 
               'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 
-              'units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
+              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
               'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array', 
-              'cosmo', 'scalar_array']
+              'cosmo', 'scalar_array', 'label1', 'norm_units']
+    if beam is not None:
+        params += ['OmegaP', 'OmegaPP', 'beam_freqs']
     
     # Set all parameters
     for p in params:
@@ -89,16 +98,14 @@ def build_example_uvpspec():
 class Test_UVPSpec(unittest.TestCase):
 
     def setUp(self):
-        
-        uvp, cosmo = build_example_uvpspec()
+        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        self.beam = pspecbeam.PSpecBeamUV(beamfile)
+        uvp, cosmo = build_example_uvpspec(beam=self.beam)
         uvp.check()
         self.uvp = uvp
 
         # test equivalence
         nt.assert_equal(uvp, uvp)
-
-        self.cosmo = cosmo
-        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits'))
 
     def tearDown(self):
         pass
@@ -142,18 +149,25 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(len(blp), 30)
         nt.assert_true(np.isclose(blp, 14.60, rtol=1e-1, atol=1e-1).all())
         # get kvecs
-        k_perp, k_para = self.uvp.get_kvecs(0)
+        k_perp, k_para = self.uvp.get_kperps(0), self.uvp.get_kparas(0)
         nt.assert_equal(len(k_perp), 30)
         nt.assert_equal(len(k_para), 50)
+        # test key expansion
+        key = (0, ((1, 2), (1, 2)), 'xx')
+        d = self.uvp.get_data(*key)
+        nt.assert_equal(d.shape, (10, 50))
+        # test key as dictionary
+        key = {'spw':0, 'blpair':((1, 2), (1, 2)), 'pol': 'xx'}
+        d = self.uvp.get_data(key)
+        nt.assert_equal(d.shape, (10, 50))
 
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
-        uvp.add_cosmology(conversions.Cosmo_Conversions())
         uvp.convert_to_deltasq(little_h=True)
-        k_perp, k_para = uvp.get_kvecs(0, little_h=True)
+        k_perp, k_para = self.uvp.get_kperps(0), self.uvp.get_kparas(0)
         k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
         nt.assert_true(np.isclose(uvp.data_array[0][0,:,0], (self.uvp.data_array[0]*k_mag**3/(2*np.pi**2))[0,:,0]).all())
-        nt.assert_equal(uvp.units, 'unknown h^3 k^3 / (2pi^2)')
+        nt.assert_equal(uvp.norm_units, 'k^3 / (2pi^2)')
 
     def test_blpair_conversions(self):
         # test blpair -> antnums
@@ -284,15 +298,6 @@ class Test_UVPSpec(unittest.TestCase):
     def test_sense(self):
         uvp = copy.deepcopy(self.uvp)
 
-        # test exception
-        nt.assert_raises(AssertionError, uvp.generate_noise_spectra, 0, 0, 0)
-
-        # test generate_sense
-        uvp.generate_sensitivity(self.beam)
-        nt.assert_true(hasattr(uvp, 'sensitivity'))
-        nt.assert_true(hasattr(uvp.sensitivity, 'beam'))
-        nt.assert_true(hasattr(uvp.sensitivity, 'cosmo'))
-
         # test generate noise spectra
         P_N = uvp.generate_noise_spectra(0, -5, 500, form='Pk', real=True)
         nt.assert_equal(P_N[1002001002].shape, (10, 50))
@@ -326,6 +331,13 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(uvp2.Ntimes, 1)
         nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 10.0).all())
         nt.assert_true(uvp2.get_data(0, 1002001002, 'xx').shape, (1, 50))
+        # ensure averaging works when multiple repeated baselines are present, but only
+        # if time_avg = True
+        uvp.blpair_array[uvp.blpair_to_indices(2003002003)] = 1002001002
+        nt.assert_raises(ValueError, uvp.average_spectra, blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=False, inplace=False)
+        uvp.average_spectra(blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=True)
+        nt.assert_equal(uvp.Ntimes, 1)
+        nt.assert_equal(uvp.Nblpairs, 1)
 
     def test_fold_spectra(self):
         uvp = copy.deepcopy(self.uvp)
@@ -338,4 +350,52 @@ class Test_UVPSpec(unittest.TestCase):
     def test_str(self):
         a = str(self.uvp)
         nt.assert_true(len(a) > 0)
+
+    def test_compute_scalar(self):
+        uvp = copy.deepcopy(self.uvp)
+        # test basic execution
+        s = uvp.compute_scalar(0, 'xx', num_steps=1000, noise_scalar=False)
+        nt.assert_almost_equal(s/552336586.23970914, 1.0, places=5)
+        # test execptions
+        del uvp.OmegaP
+        nt.assert_raises(AssertionError, uvp.compute_scalar, 0, -5)
+
+    def test_set_cosmology(self):
+        uvp = copy.deepcopy(self.uvp)
+        new_cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
+        # test no overwrite
+        uvp.set_cosmology(new_cosmo, overwrite=False)
+        nt.assert_not_equal(uvp.cosmo, new_cosmo)
+        # test setting cosmology
+        uvp.set_cosmology(new_cosmo, overwrite=True)
+        nt.assert_equal(uvp.cosmo, new_cosmo)
+        nt.assert_equal(uvp.norm_units, 'h^-3 Mpc^3')
+        nt.assert_true((uvp.scalar_array>1.0).all())
+        nt.assert_true((uvp.data_array[0] > 1e5).all())
+        # test exception
+        new_cosmo2 = conversions.Cosmo_Conversions(Om_L=1.0)
+        del uvp.OmegaP
+        uvp.set_cosmology(new_cosmo2, overwrite=True)
+        nt.assert_not_equal(uvp.cosmo, new_cosmo2)
+        # try with new beam
+        uvp.set_cosmology(new_cosmo2, overwrite=True, new_beam=self.beam)
+        nt.assert_equal(uvp.cosmo, new_cosmo2)
+        nt.assert_true(hasattr(uvp, 'OmegaP'))
+
+def test_conj_blpair_int():
+    conj_blpair = uvputils._conj_blpair_int(1002003004)
+    nt.assert_equal(conj_blpair, 3004001002)
+
+def test_conj_bl_int():
+    conj_bl = uvputils._conj_bl_int(1002)
+    nt.assert_equal(conj_bl, 2001)
+
+def test_conj_blpair():
+    blpair = uvputils._conj_blpair(1002003004, which='first')
+    nt.assert_equal(blpair, 2001003004)
+    blpair = uvputils._conj_blpair(1002003004, which='second')
+    nt.assert_equal(blpair, 1002004003)
+    blpair = uvputils._conj_blpair(1002003004, which='both')
+    nt.assert_equal(blpair, 2001004003)
+    nt.assert_raises(ValueError, uvputils._conj_blpair, 2001003004, which='foo')
 

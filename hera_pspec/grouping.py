@@ -247,34 +247,32 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
     equivalent to cylindrical binning in 3D k-space.
 
     If you want help constructing baseline-pair groups from baseline 
-    groups, see uvp.get_blpair_groups_from_bl_groups.
+    groups, see self.get_blpair_groups_from_bl_groups.
 
     Parameters
     ----------
-    uvp_in : UVPSpec
-        Input UVPSpec file (containing power spectra for a given pair of 
-        datasets).
-        
     blpair_groups : list of baseline-pair groups
-        (i.e. list of lists of tuples or integers)
-        All power spectra in a baseline-pair group are averaged together. 
-        If a baseline-pair exists in more than one group, a warning is 
-        raised.
-        Ex: [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], [((4, 6), (4, 6))] ] or
-            [ [1002001002, 2003002003], [4006004006] ]
+        List of list of tuples or integers. All power spectra in a 
+        baseline-pair group are averaged together. If a baseline-pair 
+        exists in more than one group, a warning is raised.
+        
+        Ex: blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], [((4, 6), (4, 6))]] or
+        blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
 
     time_avg : bool, optional
         If True, average power spectra across the time axis. Default: False.
 
     inplace : bool, optional
-        If True, edit data in input UVPSpec object; otherwise, make a copy and 
-        return a new UVPSpec object. Default: True.
+        If True, edit data in self, else make a copy and return. Default: 
+        True.
 
     Notes
     -----
     Currently, every baseline-pair in a blpair group must have the same 
-    Ntimes. Future versions may support baseline-pair averaging of 
-    heterogeneous time arrays.
+    Ntimes, unless time_avg=True. Future versions may support 
+    baseline-pair averaging of heterogeneous time arrays. This includes 
+    the scenario of repeated blpairs (e.g. in bootstrapping), which will 
+    return multiple copies of their time_array.
     """
     if inplace:
         uvp = uvp_in
@@ -331,12 +329,25 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
                     
                     # Get no. samples and construct integration weight
                     nsmp = uvp.get_nsamples(spw, blp, p)[:, None]
+                    data = uvp.get_data(spw, blp, p)
+                    wgts = uvp.get_wgts(spw, blp, p)
                     ints = uvp.get_integrations(spw, blp, p)[:, None]
                     w = (ints * np.sqrt(nsmp))
                     
+                    # Take time average if desired
+                    if time_avg:
+                      data = (np.sum(data * w, axis=0) \
+                           / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
+                      wgts = (np.sum(wgts * w[:, None], axis=0) \
+                           / np.sum(w, axis=0).clip(1e-10, np.inf)[:, None])[None] 
+                      ints = (np.sum(ints * w, axis=0) \
+                           / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
+                      nsmp = np.sum(nsmp, axis=0)[None]
+                      w = np.sum(w, axis=0)[None]
+                    
                     # Apply integration weight to data
-                    bpg_data.append(uvp.get_data(spw, blp, p) * w)
-                    bpg_wgts.append(uvp.get_wgts(spw, blp, p) * w[:, None])
+                    bpg_data.append(data * w)
+                    bpg_wgts.append(wgts * w[:, None])
                     bpg_ints.append(ints * w)
                     bpg_nsmp.append(nsmp)
                     w_list.append(w)
@@ -352,21 +363,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
                          / np.sum(w_list, axis=0).clip(1e-10, np.inf)
                 w_list = np.sum(w_list, axis=0)
 
-                # Take time average if desired
-                if time_avg:
-                    bpg_data = [np.sum(bpg_data * w_list, axis=0) \
-                             / np.sum(w_list, axis=0).clip(1e-10, np.inf)]
-                    bpg_wgts = [np.sum(bpg_wgts * w_list[:, None], axis=0) \
-                             / np.sum(w_list, axis=0).clip(1e-10, np.inf)[:, None]]
-                    bpg_nsmp = [np.sum(bpg_nsmp, axis=0)]
-                    bpg_ints = [np.sum(bpg_ints * w_list, axis=0) \
-                             / np.sum(w_list, axis=0).clip(1e-10, np.inf)]
-
-                # Append to lists
+                # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
 
-            # Append to lists
+            # Append to lists (spectral window)
             spw_data.append(pol_data); spw_wgts.append(pol_wgts)
             spw_ints.append(pol_ints); spw_nsmp.append(pol_nsmp)
 
@@ -435,6 +436,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
     uvp.integration_array = ints_array
     uvp.wgt_array = wgts_array
     uvp.nsample_array = nsmp_array
+    if hasattr(uvp_in, 'label1'): uvp.label1 = uvp_in.label1
+    if hasattr(uvp_in, 'label2'): uvp.label2 = uvp_in.label2
 
     # Validity check
     uvp.check()
