@@ -114,6 +114,13 @@ class Test_Plot(unittest.TestCase):
         elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
         self.assertTrue( self.axes_contains(ax3, elements) )
         
+        # Plot the spectra averaged over baseline-pairs and times, but also 
+        # fold the delay axis
+        ax4 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+                                  average_blpairs=True, average_times=True,
+                                  fold=True)
+        elements = [(matplotlib.lines.Line2D, 1),]
+        self.assertTrue( self.axes_contains(ax4, elements) )
         
     def test_plot_cosmo(self):
         """
