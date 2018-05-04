@@ -920,7 +920,6 @@ class PSpecData(object):
         pol: str
                 Which polarization to compute the scalar for.
                 e.g. 'I', 'Q', 'U', 'V', 'XX', 'YY'...
-                Default: 'I'
 
         taper : str, optional
                 Whether a tapering function (e.g. Blackman-Harris) is being
