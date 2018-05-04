@@ -906,7 +906,7 @@ class PSpecData(object):
         else:
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]]) * 1e9 # convert to ns    
         
-    def scalar(self, pol='I', taper='none', little_h=True, 
+    def scalar(self, pol, taper='none', little_h=True, 
                num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
@@ -917,7 +917,7 @@ class PSpecData(object):
 
         Parameters
         ----------
-        pol: str, optional
+        pol: str
                 Which polarization to compute the scalar for.
                 e.g. 'I', 'Q', 'U', 'V', 'XX', 'YY'...
                 Default: 'I'
@@ -1149,7 +1149,7 @@ class PSpecData(object):
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
-                    scalar = self.scalar(taper=taper, little_h=True)
+                    scalar = self.scalar(p, taper=taper, little_h=True)
                 else: 
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized", 
