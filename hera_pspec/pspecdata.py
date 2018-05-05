@@ -57,7 +57,7 @@ class PSpecData(object):
         # Store a primary beam
         self.primary_beam = beam
 
-    def add(self, dsets, wgts, labels=None):
+    def add(self, dsets, wgts, labels=None, dsets_std=None):
         """
         Add a dataset to the collection in this PSpecData object.
 
@@ -76,6 +76,13 @@ class PSpecData(object):
             An ordered list of names/labels for each dataset, if dsets was
             specified as a list. If dsets was specified as a dict, the keys
             of that dict will be used instead.
+
+        dsets_std: UVData or list or dict
+            UVData object or list of UVData objects containing the standard
+            deviations (real and imaginary) of data to add to the collection.
+            if dsets is a dict, will assume dsets_std is a dict and if dsets is
+            a list, will assume dsets_std is a list.
+
         """
         # Check for dicts and unpack into an ordered list if found
         if isinstance(dsets, dict):
@@ -88,6 +95,14 @@ class PSpecData(object):
                 raise TypeError("If 'dsets' is a dict, 'wgts' must also be "
                                 "a dict")
 
+            if dsets_std is not None:
+                if not isinstance(dsets_std,dict):
+                    raise TypeError("If 'dsets' is a dict, 'dsets_std' must"
+                                    "also be a dict")
+
+                _dsets_std = [dsets_std[key] for key in labels]
+                dsets_std = _dsets_std
+
             # Unpack dsets and wgts dicts
             labels = dsets.keys()
             _dsets = [dsets[key] for key in labels]
@@ -99,16 +114,23 @@ class PSpecData(object):
         if isinstance(dsets, UVData): dsets = [dsets,]
         if isinstance(wgts, UVData): wgts = [wgts,]
         if isinstance(labels, str): labels = [labels,]
+        if isinstance(dsets_std,pyuvdata.UVData): dsets_std=[dsets_std,]
         if wgts is None: wgts = [wgts,]
+        if dsets_std is None: dsets_std=[dsets_std,]
         if isinstance(dsets, tuple): dsets = list(dsets)
         if isinstance(wgts, tuple): wgts = list(wgts)
+        if isinstance(dsets_std,tuple): dsets_std=list(dsets_std)
 
         # Only allow UVData or lists
-        if not isinstance(dsets, list) or not isinstance(wgts, list):
-            raise TypeError("dsets and wgts must be UVData or lists of UVData")
+        if not isinstance(dsets, list) or not isinstance(wgts, list)\
+        or not isinstance(dsets_std,list):
+            raise TypeError("dsets, dsets_std, and wgts must be UVData"
+                            "or lists of UVData")
+
 
         # Make sure enough weights were specified
         assert(len(dsets) == len(wgts))
+        assert(len(dsets_std)==len(dsets))
         if labels is not None: assert(len(dsets) == len(labels))
 
         # Check that everything is a UVData object
@@ -118,10 +140,14 @@ class PSpecData(object):
             if not isinstance(w, UVData) and w is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "weights.")
+            if not isinstance(s,pyuvdata.UVData) and s is not None:
+                raise TypeError("Only UVData objects (or None) can be used as "
+                                "error sets")
 
         # Append to list
         self.dsets += dsets
         self.wgts += wgts
+        self.dsets_std+=dsets_std
 
         # Store labels (if they were set)
         if labels is None:
@@ -165,6 +191,10 @@ class PSpecData(object):
         # check dsets and wgts have same number of elements
         if len(self.dsets) != len(self.wgts):
             raise ValueError("self.wgts does not have same length as self.dsets")
+
+        if len(self.dsets_std) != len(self.dsets):
+            raise ValueError("self.dsets_std does not have the same lenght as "
+                             "self.dsets")
 
         # Check if dsets are all the same shape along freq axis
         Nfreqs = [d.Nfreqs for d in self.dsets]
@@ -333,6 +363,7 @@ class PSpecData(object):
 
         return dset_idx, bl
 
+
     def x(self, key):
         """
         Get data for a given dataset and baseline, as specified in a standard
@@ -353,6 +384,31 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         spw = slice(self.spw_range[0], self.spw_range[1])
         return self.dsets[dset].get_data(bl).T[spw]
+
+
+
+    def dx(self,key):
+        """
+        Get standard deviation of data for given dataset and baseline as
+        pecified in standard key format.
+
+        Parameters
+        ----------
+        key : tuple
+            Tuple containing datset ID and baseline index. The first element
+            of the tuple is the dataset index (or label), and the subsequent
+            elements are the baseline ID.
+
+        Returns
+        -------
+        x : array_like
+            Array of data from the requested UVData dataset and baseline.
+        """
+        assert isinstance(key,tuple)
+        dset,bl = self.blkey(dset=key[0],bl=key[1:])
+        spwmin,spwmax = self.spw_range[0], self.spw_range[1]
+        return self.dsets_std[dset].get_data(bl).T[spwmin:spwmax,:]
+
 
     def w(self, key):
         """
@@ -381,6 +437,7 @@ class PSpecData(object):
             # UVData dataset object
             wgts = (~self.dsets[dset].get_flags(bl)).astype(float).T[spw]
             return wgts
+
 
     def set_C(self, cov):
         """
@@ -435,6 +492,7 @@ class PSpecData(object):
                 self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
 
         return self._C[Ckey]
+
 
     def I(self, key):
         """
@@ -568,6 +626,82 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
+    def cov_q_hat(self,key1,key2,taper='none'):
+        """
+        Compute the un-normalized covariance matrix for q_hat for a given pair
+        of visibility vectors. Returns the following matrix:
+
+        Cov(\hat{q}_a,\hat{q}_b)
+
+        Parameters
+        ----------
+        key1,key2: tuples or lists of tuples
+            Tuples containing the indices of the dataset and baselines for the
+            two input datavectors. If a list of tuples is provided, the baselines
+            in the list will be combined with inverse noise weights.
+
+        taper: str, optional
+            Tapering (window) function to apply to the data. Takes the same
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
+
+        Returns
+        -------
+        cov_q_hat, matrix with covariances between un-normalized band powers
+        """
+
+        qc=np.zeros(self.spw_Nfreqs,self.spw_Nfreqs,dtype=complex)
+
+        R1,R2=0,0
+        N1a,N2a,N1b,N2b=0,0,0,0
+        #compute noise covariance matrices. Assume diagonal!
+
+
+
+        #compute E^alpha and E^beta
+        if isinstance(key1,list):
+            for _key in key1:
+                R1+=self.R(_key)
+                N1a+=np.diagonal(np.real(self.dx(_key))**2.)
+                N1b+=np.diagonal(np.imag(self.dx(_key))**2.)
+        else:
+            R1=self.R(key1)
+            N1a=np.diagonal(np.real(self.dx(_key))**2.)
+            N1b=np.diagonal(np.imag(self.dx(_key))**2.)
+
+        if isinstance(key2,list):
+            for _key in key2: R2+=self.R(_key)
+            N2a+=np.diagonal(np.real(self.dx(_key))**2.)
+            N2b+=np.diagonal(np.imag(self.dx(_key))**2.)
+        else:
+            R2=self.R(key2)
+            N2a=np.diagonal(np.real(self.dx(_key)**2.))
+            N2b=np.diagonal(np.imag(self.dx(_key)**2.))
+
+
+
+        if taper != 'none':
+            tapering_fct=\
+            np.diagonal(aipy.dsp.gen_window(self.spw_Nfreqs,taper))
+            R1=np.dot(tapering_fct,R1)
+            R2=np.dot(tapering_fct,R2)
+
+        for i in xrange(self.spw_Nfreqs):
+            for j in xrange(self.spw_Nfreqs):
+                Qalpha=self.get_Q(i,self.spw_Nfreqs)
+                Qbeta=self.get_Q(j,self.spw_Nfreqs)
+                Ealpha=np.einsum('ab,bc,cd',R1.T.conj(),Qalpha,R2)
+                Ebeta=np.einsum('ab,bc,cd',R1.T.conj(),Qbeta,R2)
+                qc[i,j]=\
+                (np.einsum('ab,bc,cd,da',Ealpha,N2a,Ebeta,N1a)\
+                +np.einsum('ab,bc,cd,da',Ealpha,N2b,Ebeta,N1a)\
+                +np.einsum('ab,bc,cd,da',Ealpha,N2a,Ebeta,N1b)\
+                +np.einsum('ab,bc,cd,da',Ealpha,N2b,Ebeta,N1b))
+        return qc/4.
+
+
+
+
+
     def q_hat(self, key1, key2, allow_fft=False, taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of
@@ -593,6 +727,7 @@ class PSpecData(object):
             in the list will be combined with inverse noise weights.
 
         allow_fft : bool, optional
+
             Whether to use a fast FFT summation trick to construct q_hat, or
             a simpler brute-force matrix multiplication. The FFT method assumes
             a delta-fn bin in delay space. It also only works if the number
@@ -633,6 +768,7 @@ class PSpecData(object):
             _Rx2 = np.fft.fft(Rx2, axis=0)
 
             return 0.5 * np.fft.fftshift(_Rx1, axes=0).conj() * np.fft.fftshift(_Rx2, axes=0)
+
         else:
             q = []
             for i in xrange(self.spw_Ndlys):
@@ -1334,6 +1470,7 @@ class PSpecData(object):
         then::
 
             blpairs = [ [(A, D), (B, E)], (C, F)]
+
         """
 
         # Validate the input data to make sure it's sensible
@@ -1675,6 +1812,7 @@ class PSpecData(object):
         Will only phase if the dataset's phase type is 'drift'. This is because the rephasing
         algorithm assumes the data is drift-phased when applying phasor term.
 
+
         Note that PSpecData.Jy_to_mK() must be run after rephase_to_dset(), if one intends
         to use the former capability at any point.
 
@@ -1851,6 +1989,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
 
+
     Parameters
     ----------
     dsets : list
@@ -1946,6 +2085,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
         If True, use the beam model provided to convert the units of each
         dataset from Jy to milli-Kelvin. If the visibility data are not in Jy,
         this correction is not applied.
+
 
     overwrite : boolean
         If True, overwrite outputs if they exist on disk.
