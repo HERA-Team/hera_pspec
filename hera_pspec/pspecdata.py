@@ -257,11 +257,11 @@ class PSpecData(object):
             keys will be removed. Default: None.
         """
         if keys is None:
-            self._C, self._Cempirical, self._I, self._iC = {}, {}, {}, {}
+            self._C, self._I, self._iC = {}, {}, {}
             self._iCt = {}
         else:
             for k in keys:
-                try: del(self._Cempirical[k])
+                try: del(self._C[k])
                 except(KeyError): pass
                 try: del(self._I[k])
                 except(KeyError): pass
@@ -387,10 +387,24 @@ class PSpecData(object):
             flags = self.dsets[dset].get_flags(bl).astype(float).T[spwrange[0]:spwrange[1], :]
             return 1. - flags # Flag=1 => weight=0
 
-    def C_empirical(self, key):
+    def set_C(self, cov):
         """
-        Calculate empirical covariance from the data (with appropriate
-        weighting).
+        Set the cached covariance matrix to a set of user-provided values.
+
+        Parameters
+        ----------
+        cov : dict
+            Dictionary containing new covariance values for given datasets and
+            baselines. Keys of the dictionary are tuples, with the first item
+            being the ID (index) of the dataset, and subsequent items being the
+            baseline indices.
+        """
+        self.clear_cov_cache(cov.keys())
+        for key in cov: self._C[key] = cov[key]
+
+    def C_model(self, key, mtype='empirical'):
+        """
+        Return a covariance model having specified a key and model type.
 
         Parameters
         ----------
@@ -399,18 +413,26 @@ class PSpecData(object):
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
 
+        mtype : string, optional
+            Type of covariance model to calculate, if not cached. options=['empirical']
+
         Returns
         -------
-        C_empirical : array_like
-            Empirical covariance for the specified key.
+        C : array-like
+            Covariance model for the specified key.
         """
-        assert isinstance(key, tuple)
-        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
-        
-        # Check cache for empirical covariance
-        if not self._Cempirical.has_key(key):
-            self._Cempirical[key] = utils.cov(self.x(key), self.w(key))
-        return self._Cempirical[key]
+        # type check
+        assert isinstance(key, tuple), "key must be fed as a tuple"
+        assert isinstance(mtype, (str, np.str)), "mtype must be a string"
+        assert mtype in ['empirical'], "didn't recognize mtype {}".format(mtype)
+
+        # check cache
+        if not self._C.has_key(key):
+            # calculate covariance model
+            if mtype == 'empirical':
+                self.set_C({key: utils.cov(self.x(key), self.w(key))})
+
+        return self._C[key]
 
     def I(self, key):
         """
@@ -435,7 +457,7 @@ class PSpecData(object):
             self._I[key] = np.identity(self.spw_Nfreqs)
         return self._I[key]
 
-    def iC(self, key):
+    def iC(self, key, mtype='empirical'):
         """
         Return the inverse covariance matrix, C^-1.
 
@@ -445,6 +467,9 @@ class PSpecData(object):
             Tuple containing indices of dataset and baselines. The first item
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
+
+        mtype : string
+            Type of covariance model to calculate, if not cached. options=['empirical']
 
         Returns
         -------
@@ -456,7 +481,7 @@ class PSpecData(object):
         
         # Calculate inverse covariance if not in cache
         if not self._iC.has_key(key):
-            C = self.C_empirical(key)
+            C = self.C_model(key, mtype=mtype)
             U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
 
             # FIXME: Not sure what these are supposed to do
