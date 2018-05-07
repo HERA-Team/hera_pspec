@@ -9,7 +9,7 @@ import copy
 import h5py
 from collections import OrderedDict as odict
 from pyuvdata import UVData
-
+from hera_pspec.tests import noise_sim
 
 class Test_Sensitivity(unittest.TestCase):
     """ Test noise.Sensitivity object """
@@ -62,6 +62,26 @@ class Test_Sensitivity(unittest.TestCase):
         Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form='DelSq')
         nt.assert_equal(Dsq.shape, (10,))
         nt.assert_true(Dsq[1] < P_N)
+
+def test_noise_sim():
+    # run noise simulation
+    ds, uvp = noise_sim()
+
+    # get standard dev of real(data)
+    dstd = np.std(np.real(uvp.data_array[0].ravel()))
+
+    # get noise.py estimate
+    blp = uvp.blpair_to_antnums(uvp.blpair_array[0])
+    PN = uvp.generate_noise_spectra(0, 'xx', 100.0, blpairs=[uvp.blpair_array[0]], 
+                                    little_h=True, form='Pk', real=True)
+    pn = PN[uvp.blpair_array[0]][0,0]
+
+    # check that noise.py agrees w/ standard dev of real(pspectra) to within 5%
+    nt.assert_true(np.abs( (dstd - pn) / pn ) < 0.05)
+
+
+
+
 
 
 
