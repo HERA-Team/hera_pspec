@@ -6,7 +6,7 @@ from hera_pspec.data import DATA_PATH
 from hera_pspec import utils
 from collections import OrderedDict as odict
 from pyuvdata import UVData
-from test_uvpspec import build_example_uvpspec
+from hera_pspec.testing import build_example_uvpspec
 
 def test_cov():
     # load another data file

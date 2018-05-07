@@ -4,7 +4,7 @@ import numpy as np
 import os, sys, copy
 from hera_pspec.data import DATA_PATH
 from hera_pspec import PSpecContainer, UVPSpec
-from test_uvpspec import build_example_uvpspec
+from hera_pspec.testing import build_example_uvpspec
 
 class Test_PSpecContainer(unittest.TestCase):
     
