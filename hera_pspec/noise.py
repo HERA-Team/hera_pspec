@@ -205,5 +205,3 @@ class Sensitivity(object):
 
         return P_N
 
-
-

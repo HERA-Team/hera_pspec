@@ -9,6 +9,7 @@ from hera_pspec.container import PSpecContainer
 from hera_pspec.parameter import PSpecParam
 from hera_pspec import pspecbeam as beam
 from hera_pspec.pspecbeam import PSpecBeamUV, PSpecBeamGauss, PSpecBeamFromArray
+from hera_pspec import testing
 
 # XXX: This will eventually be deprecated
 from hera_pspec import legacy_pspec as legacy

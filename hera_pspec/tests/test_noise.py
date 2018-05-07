@@ -4,12 +4,12 @@ import numpy as np
 import os
 import sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, parameter, pspecbeam, noise
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, noise, testing
 import copy
 import h5py
 from collections import OrderedDict as odict
 from pyuvdata import UVData
-from hera_pspec.tests import noise_sim
+
 
 class Test_Sensitivity(unittest.TestCase):
     """ Test noise.Sensitivity object """
@@ -65,7 +65,7 @@ class Test_Sensitivity(unittest.TestCase):
 
 def test_noise_sim():
     # run noise simulation
-    ds, uvp = noise_sim()
+    ds, uvp = testing.noise_sim()
 
     # get standard dev of real(data)
     dstd = np.std(np.real(uvp.data_array[0].ravel()))
