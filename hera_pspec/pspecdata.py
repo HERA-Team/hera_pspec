@@ -261,8 +261,6 @@ class PSpecData(object):
             self._iCt = {}
         else:
             for k in keys:
-                try: del(self._C[k])
-                except(KeyError): pass
                 try: del(self._Cempirical[k])
                 except(KeyError): pass
                 try: del(self._I[k])
@@ -389,48 +387,6 @@ class PSpecData(object):
             flags = self.dsets[dset].get_flags(bl).astype(float).T[spwrange[0]:spwrange[1], :]
             return 1. - flags # Flag=1 => weight=0
 
-    def C(self, key):
-        """
-        Estimate covariance matrices from the data.
-
-        Parameters
-        ----------
-        key : tuple
-            Tuple containing indices of dataset and baselines. The first item
-            specifies the index (ID) of a dataset in the collection, while
-            subsequent indices specify the baseline index, in _key2inds format.
-
-        Returns
-        -------
-        C : array_like
-            (Weighted) empirical covariance of data for baseline 'bl'.
-        """
-        assert isinstance(key, tuple)
-        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
-        
-        # Set covariance if it's not in the cache
-        if not self._C.has_key(key):
-            self.set_C( {key : utils.cov(self.x(key), self.w(key))} )
-            self._Cempirical[key] = self._C[key]
-
-        # Return cached covariance
-        return self._C[key]
-
-    def set_C(self, cov):
-        """
-        Set the cached covariance matrix to a set of user-provided values.
-
-        Parameters
-        ----------
-        cov : dict
-            Dictionary containing new covariance values for given datasets and
-            baselines. Keys of the dictionary are tuples, with the first item
-            being the ID (index) of the dataset, and subsequent items being the
-            baseline indices.
-        """
-        self.clear_cov_cache(cov.keys())
-        for key in cov: self._C[key] = cov[key]
-
     def C_empirical(self, key):
         """
         Calculate empirical covariance from the data (with appropriate
@@ -500,7 +456,7 @@ class PSpecData(object):
         
         # Calculate inverse covariance if not in cache
         if not self._iC.has_key(key):
-            C = self.C(key)
+            C = self.C_empirical(key)
             U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
 
             # FIXME: Not sure what these are supposed to do
