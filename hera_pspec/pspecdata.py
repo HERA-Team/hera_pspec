@@ -558,9 +558,9 @@ class PSpecData(object):
         (See HERA memo #44). As currently implemented, this approximates the
         primary beam as frequency independent. Under this approximation, the
         our H_ab is defined using the equation above *except* we have
-        \overline{Q} rather than Q_b, where
+        Q^tapered rather than Q_b, where
 
-            \overline{Q}^{beta} 
+            \overline{Q}^{tapered,beta} 
             = e^{i 2pi eta_beta (nu_i - nu_j)} gamma(nu_i) gamma(nu_j)
 
         where gamma is the tapering function. Again, see HERA memo #44 for
@@ -699,13 +699,13 @@ class PSpecData(object):
 
         # Build M matrix according to specified mode
         if mode == 'G^-1':
-            raise NoteImplementedError("G^-1 mode not currently supported.")
+            raise NotImplementedError("G^-1 mode not currently supported.")
             # M = np.linalg.pinv(G, rcond=1e-12)
             # #U,S,V = np.linalg.svd(F)
             # #M = np.einsum('ij,j,jk', V.T, 1./S, U.T)
 
         elif mode == 'G^-1/2':
-            raise NoteImplementedError("G^-1/2 mode not currently supported.")
+            raise NotImplementedError("G^-1/2 mode not currently supported.")
             # U,S,V = np.linalg.svd(G)
             # M = np.einsum('ij,j,jk', V.T, 1./np.sqrt(S), U.T)
 
@@ -718,7 +718,7 @@ class PSpecData(object):
             W_norm = np.diag(1. / np.sum(H, axis=1))
             W = np.dot(W_norm, H)
         else:
-            raise NoteImplementedError("Cholesky decomposition mode not currently supported.")
+            raise NotImplementedError("Cholesky decomposition mode not currently supported.")
             # # Cholesky decomposition
             # order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
             # order[order < 0] = order[order < 0] - 0.1
