@@ -109,6 +109,12 @@ class Test_grouping(unittest.TestCase):
                                inplace=False)
         uvp3 = self.uvp.select(blpairs=np.unique(self.uvp.blpair_array)[1:], 
                                inplace=False)
+        uvp4 = self.uvp.select(blpairs=np.unique(self.uvp.blpair_array)[:2], 
+                               inplace=False)
+        uvp5 = self.uvp.select(blpairs=np.unique(self.uvp.blpair_array)[:1], 
+                               inplace=False)
+        uvp6 = self.uvp.select(times=np.unique(self.uvp.time_avg_array)[:1], 
+                               inplace=False)
         
         # Check that selecting on common times works
         uvp_list = [uvp1, uvp2]
@@ -117,6 +123,31 @@ class Test_grouping(unittest.TestCase):
         self.assertEqual(uvp_new[0], uvp_new[1])
         np.testing.assert_array_equal(uvp_new[0].time_avg_array, 
                                       uvp_new[1].time_avg_array)
+        
+        # Check that selecting on common baseline-pairs works
+        uvp_list_2 = [uvp1, uvp2, uvp3]
+        uvp_new_2 = grouping.select_common(uvp_list_2, spws=True, blpairs=True, 
+                                           times=True, pols=True, inplace=False)
+        self.assertEqual(uvp_new_2[0], uvp_new_2[1])
+        self.assertEqual(uvp_new_2[0], uvp_new_2[2])
+        np.testing.assert_array_equal(uvp_new_2[0].time_avg_array, 
+                                      uvp_new_2[1].time_avg_array)
+        
+        # Check that zero overlap in times raises a ValueError
+        self.assertRaises(ValueError, grouping.select_common, [uvp2, uvp6], 
+                                      spws=True, blpairs=True, times=True, 
+                                      pols=True, inplace=False)
+        
+        # Check that zero overlap in times does *not* raise a ValueError if 
+        # not selecting on times
+        uvp_new_3 = grouping.select_common([uvp2, uvp6], spws=True, 
+                                           blpairs=True, times=False, 
+                                           pols=True, inplace=False)
+        
+        # Check that zero overlap in baselines raises a ValueError
+        self.assertRaises(ValueError, grouping.select_common, [uvp3, uvp5], 
+                                      spws=True, blpairs=True, times=True, 
+                                      pols=True, inplace=False)
         
         # Check that matching times are ignored when set to False
         uvp_new = grouping.select_common(uvp_list, spws=True, blpairs=True, 
