@@ -1,0 +1,1 @@
+HERA Noise Sim: Tsys = 100e3 mK; Trms = Tsys / sqrt(2 * dnu * integration_time); data = N(0, Trms) + 1j*N(0, Trms)
