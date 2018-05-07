@@ -27,7 +27,7 @@ setup_args = {
     'license':      'BSD',
     'version':      version.version,
     'description':  'HERA Power Spectrum Estimator Code.',
-    'packages':     ['hera_pspec'],
+    'packages':     ['hera_pspec', 'hera_pspec.tests'],
     'package_dir':  {'hera_pspec': 'hera_pspec'},
     'package_data': {'hera_pspec': data_files},
     'install_requires': ['numpy>=1.10', 'scipy>=0.19',],
