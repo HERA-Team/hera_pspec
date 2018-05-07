@@ -194,6 +194,7 @@ class Test_PSpecData(unittest.TestCase):
         print(ds) # print populated psd
 
     def test_get_Q_alt(self):
+
         """
         Test the Q = dC/dp function.
         """
@@ -299,6 +300,28 @@ class Test_PSpecData(unittest.TestCase):
                 for norm in test_norm:
                     self.assertAlmostEqual(norm, 1.)
 
+    def test_q_cov(self):
+        """
+        Test that q_hat_cov has the right shape and accepts keys in correct
+        format.
+        """
+        self.ds=pspecdata.(dsets=self.d,wghts=self.w,dsets_std=self.d_std)
+        Nfreq = self.ds.Nfreqs
+        Ntime = self.ds.Ntimes
+
+        key1 = (0,24,38)
+        key2 = (1,25,38)
+        key3 = [(0,24,38), (0,24,38)]
+        key4 = [(1,25,38), (1,25,38)]
+
+        for input_data_weight in ['identity','iC']:
+            self.ds.set_R(input_data_weight)
+
+            for taper in taper_selection:
+
+                q_hat_cov_a = self.ds.q_hat_cov_a(key1,key2,taper=taper)
+                self.assertEqual(q_hat_cov_a.shape,(Nfreq,Nfreq,Ntime))
+
     def test_q_hat(self):
         """
         Test that q_hat has right shape and accepts keys in the right format.
@@ -343,6 +366,7 @@ class Test_PSpecData(unittest.TestCase):
 
                 # Effectively checks that q_hat(2*x1, 2*x2) = 4*q_hat(x1, x2)
                 for i in range(Ndlys):
+
                     for j in range(Ntime):
                         self.assertAlmostEqual(q_hat_a[i,j].real,
                                                0.25 * q_hat_cc[i,j].real)
@@ -358,6 +382,7 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 q_hat_a_slow = self.ds.q_hat(key1, key2, allow_fft=False, taper=taper)
                 q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True, taper=taper)
+
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
@@ -538,6 +563,7 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.spw_Ndlys = self.ds.spw_Nfreqs
         adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
         self.assertAlmostEqual(adjustment, 1.0)
+
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
