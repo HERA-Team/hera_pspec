@@ -1135,7 +1135,8 @@ class UVPSpec(object):
 
         return P_N
 
-    def average_spectra(self, blpair_groups=None, time_avg=False, inplace=True):
+    def average_spectra(self, blpair_groups=None, time_avg=False, 
+                        blpair_weights=None, inplace=True):
         """
         Average power spectra across the baseline-pair-time axis, weighted by 
         each spectrum's integration time.
@@ -1169,7 +1170,14 @@ class UVPSpec(object):
 
         time_avg : bool, optional
             If True, average power spectra across the time axis. Default: False.
-
+        
+        blpair_weights : list of weights (float or int), optional
+            Relative weight of each baseline-pair when performing the average. 
+            This is useful for bootstrapping. This should have the same shape 
+            as blpair_groups if specified. The weights are automatically 
+            normalized within each baseline-pair group. Default: None (all 
+            baseline pairs have unity weights).
+        
         inplace : bool, optional
             If True, edit data in self, else make a copy and return. Default: 
             True.
@@ -1184,10 +1192,14 @@ class UVPSpec(object):
         """
         if inplace:
             grouping.average_spectra(self, blpair_groups=blpair_groups, 
-                                     time_avg=time_avg, inplace=True)
+                                     time_avg=time_avg, 
+                                     blpair_weights=blpair_weights, 
+                                     inplace=True)
         else:
             return grouping.average_spectra(self, blpair_groups=blpair_groups, 
-                                            time_avg=time_avg, inplace=False)
+                                            time_avg=time_avg, 
+                                            blpair_weights=blpair_weights, 
+                                            inplace=False)
         """
             blpair_groups = map(lambda blp: [blp], np.unique(uvp.blpair_array))
 

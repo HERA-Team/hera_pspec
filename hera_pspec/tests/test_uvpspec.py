@@ -326,6 +326,24 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 3.0).all())
         nt.assert_equal(uvp2.get_data(0, 1002001002, 'xx').shape, (10, 50))
+        
+        # Test blpair averaging (with baseline-pair weights)
+        # Results should be identical with different weights here, as the data 
+        # are all the same)
+        blpairs = [[1002001002, 1002001002]]
+        blpair_wgts = [[2., 0.,]]
+        uvp3a = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, 
+                                   blpair_weights=None,
+                                   inplace=False)
+        uvp3b = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, 
+                                   blpair_weights=blpair_wgts,
+                                   inplace=False)
+        #nt.assert_equal(uvp2.Nblpairs, 1)
+        nt.assert_true(np.isclose(uvp3a.get_data(0, 1002001002, 'xx'), 
+                                  uvp3b.get_data(0, 1002001002, 'xx')).all())
+        #nt.assert_equal(uvp2.get_data(0, 1002001002, 'xx').shape, (10, 50))
+        
+        
         # test time averaging
         uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
         nt.assert_true(uvp2.Ntimes, 1)

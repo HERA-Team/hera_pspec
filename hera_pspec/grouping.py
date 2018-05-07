@@ -227,7 +227,8 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
     if not inplace: return out_list
 
 
-def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
+def average_spectra(uvp_in, blpair_groups=None, time_avg=False, 
+                    blpair_weights=None, inplace=True):
     """
     Average power spectra across the baseline-pair-time axis, weighted by 
     each spectrum's integration time.
@@ -256,12 +257,20 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
         baseline-pair group are averaged together. If a baseline-pair 
         exists in more than one group, a warning is raised.
         
-        Ex: blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], [((4, 6), (4, 6))]] or
-        blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
+        Ex: blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], 
+                              [((4, 6), (4, 6))]] 
+        or blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
 
     time_avg : bool, optional
         If True, average power spectra across the time axis. Default: False.
-
+    
+    blpair_weights : list of weights (float or int), optional
+        Relative weight of each baseline-pair when performing the average. This 
+        is useful for bootstrapping. This should have the same shape as 
+        blpair_groups if specified. The weights are automatically normalized 
+        within each baseline-pair group. Default: None (all baseline pairs have 
+        unity weights).
+    
     inplace : bool, optional
         If True, edit data in self, else make a copy and return. Default: 
         True.
@@ -278,6 +287,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
         uvp = uvp_in
     else:
         uvp = copy.deepcopy(uvp_in)
+    
+    # Copy these, so we don't modify the input lists
+    blpair_groups = copy.deepcopy(blpair_groups)
+    blpair_weights = copy.deepcopy(blpair_weights)
 
     # If blpair_groups were fed in, enforce type and structure
     if blpair_groups is not None:
@@ -295,16 +308,34 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
     else:
         # If not, each baseline pair is its own group
         blpair_groups = map(lambda blp: [blp], np.unique(uvp.blpair_array))
+        assert blpair_weights is None, "Cannot specify blpair_weights if "\
+                                       "blpair_groups is None."
+        blpair_weights = map(lambda blp: [1.,], np.unique(uvp.blpair_array))
 
     # Print warning if a blpair appears more than once in all of blpair_groups
     all_blpairs = [item for sublist in blpair_groups for item in sublist]
     if len(set(all_blpairs)) < len(all_blpairs): 
-        print "Warning: some baseline-pairs are repeated between blpair "\
-              "averaging groups..."
-
+        print("Warning: some baseline-pairs are repeated between blpair "\
+              "averaging groups.")
+    
+    # Create baseline-pair weights list if not specified
+    if blpair_weights is None:
+        # Assign unity weights to baseline-pair groups that were specified
+        blpair_weights = [[1. for item in grp] for grp in blpair_groups]
+    else:
+        # Check that blpair_weights has the same shape as blpair_groups
+        for i, grp in enumerate(blpair_groups):
+            try:
+                len(blpair_weights[i]) == len(grp)
+            except:
+                print ">>>", blpair_weights, grp, blpair_groups
+                raise IndexError("blpair_weights must have the same shape as "
+                                 "blpair_groups")
+    
     # For baseline pairs not in blpair_groups, add them as their own group
     extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
     blpair_groups += map(lambda blp: [blp], extra_blpairs)
+    blpair_weights += map(lambda blp: [1.,], extra_blpairs)
 
     # Create new data arrays
     data_array, wgts_array = odict(), odict()
@@ -322,7 +353,22 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
             for j, blpg in enumerate(blpair_groups):
                 bpg_data, bpg_wgts, bpg_ints, bpg_nsmp = [], [], [], []
                 w_list = []
-
+                
+                # Sum over all weights within this baseline group to get 
+                # normalization (if weights specified). The normalization is 
+                # calculated so that Sum (blpair wgts) = no. baselines.
+                if blpair_weights is not None:
+                    print blpair_weights
+                    print blpair_groups
+                    blpg_wgts = np.array(blpair_weights[j])
+                    norm = np.sum(blpg_wgts)
+                    if norm <= 0.:
+                        raise ValueError("Sum of baseline-pair weights in "
+                                         "group %d is <= 0." % j)
+                    blpg_wgts *= float(blpg_wgts.size) / norm # Apply normalization
+                else:
+                    blpg_wgts = np.ones(len(blpg))
+                
                 # Iterate within a baseline-pair group and get integration-
                 # weighted data
                 for k, blp in enumerate(blpg):
@@ -345,12 +391,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False, inplace=True):
                       nsmp = np.sum(nsmp, axis=0)[None]
                       w = np.sum(w, axis=0)[None]
                     
-                    # Apply integration weight to data
-                    bpg_data.append(data * w)
+                    # Apply integration weight and baseline-pair weight to data
+                    bpg_data.append(data * w * blpg_wgts[k])
                     bpg_wgts.append(wgts * w[:, None])
-                    bpg_ints.append(ints * w)
-                    bpg_nsmp.append(nsmp)
-                    w_list.append(w)
+                    bpg_ints.append(ints * w * blpg_wgts[k])
+                    bpg_nsmp.append(nsmp * blpg_wgts[k])
+                    w_list.append(w * blpg_wgts[k])
 
                 # Take integration-weighted averages, with clipping to deal 
                 # with zeros
