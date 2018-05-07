@@ -239,6 +239,7 @@ class PSpecData(object):
             if max_diff > 0.15: raise_warning("Warning: maximum phase-center difference between datasets is > 10 arcmin", verbose=verbose)
 
 
+
     def check_key_in_dset(self, key, dset_ind):
         """
         Check 'key' exists in the UVData object self.dsets[dset_ind]
@@ -443,6 +444,7 @@ class PSpecData(object):
             return wgts
 
 
+
     def set_C(self, cov):
         """
         Set the cached covariance matrix to a set of user-provided values.
@@ -496,6 +498,7 @@ class PSpecData(object):
                 self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
 
         return self._C[Ckey]
+
 
 
     def I(self, key):
@@ -636,6 +639,11 @@ class PSpecData(object):
         of visibility vectors. Returns the following matrix:
 
         Cov(\hat{q}_a,\hat{q}_b)
+
+        !!!Only supports covariance between same power-spectrum estimates!!!
+        (covariance between pair of baselines with the same pair of baselines)
+        !!!Assumes that both baselines used in power-spectrum estimate
+        !!!have independent noise relizations!!!
 
         Parameters
         ----------
