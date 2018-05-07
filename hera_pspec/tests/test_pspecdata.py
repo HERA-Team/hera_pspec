@@ -174,6 +174,28 @@ class Test_PSpecData(unittest.TestCase):
         ds.add(self.uvd, None)
         print(ds) # print populated psd
     
+    def test_get_I(self):
+        """ test identity matrix weighting techniques """
+        d1 = copy.deepcopy(self.uvd)
+        d2 = copy.deepcopy(self.uvd)
+        d1.flag_array[:, :, 50:60, :] = True
+        d2.flag_array[:, :, 50:60, :] = True
+        ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None])
+        # confirm that get_I has flags in it
+        key1 = (0, (24, 25))
+        key2 = (1, (38, 39))
+        I1 = ds.I(key1)
+        I2 = ds.I(key2)
+        nt.assert_true(np.isclose(I1[50:60, 50:60].max(), 0.0))
+        nt.assert_true(np.isclose(I2[50:60, 50:60].max(), 0.0))
+        # make pspec, change data in flagged boundary
+        # make pspec again and confirm no change
+        uvp1 = ds.pspec([(24, 25)], [(37, 38)], (0, 1), input_data_weight='identity', norm='I', verbose=False)
+        ds.dsets[0].data_array[:, :, 50:60, :] *= 1e10
+        ds.dsets[1].data_array[:, :, 50:60, :] *= 1e10
+        uvp2 = ds.pspec([(24, 25)], [(37, 38)], (0, 1), input_data_weight='identity', norm='I', verbose=False)
+        nt.assert_equal(uvp1, uvp2)
+
     def test_get_Q(self):
         """
         Test the Q = dC/dp function.

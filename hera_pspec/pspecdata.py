@@ -296,7 +296,6 @@ class PSpecData(object):
         else:
             raise TypeError("dset must be either an int or string")
     
-    
     def blkey(self, dset, bl=None, pol=None):
         """
         Return a key specifying a particular dataset, baseline, and 
@@ -337,7 +336,6 @@ class PSpecData(object):
         if pol is not None: key += (pol,)
         return key
         
-    
     def x(self, key):
         """
         Get data for a given dataset and baseline, as specified in a standard
@@ -476,7 +474,7 @@ class PSpecData(object):
         key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
 
         if not self._I.has_key(key):
-            self._I[key] = np.identity(self.spw_Nfreqs)
+            self._I[key] = np.identity(self.spw_Nfreqs) * np.mean(self.w(key), axis=1)
         return self._I[key]
 
     def iC(self, key):
@@ -559,7 +557,7 @@ class PSpecData(object):
             "spw_range must be fed as len-2 integer tuple"
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
-
+    
     def q_hat(self, key1, key2, use_fft=True, taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of
