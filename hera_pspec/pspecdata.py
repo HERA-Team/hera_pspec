@@ -661,7 +661,7 @@ class PSpecData(object):
         cov_q_hat, matrix with covariances between un-normalized band powers
         """
 
-        qc=np.zeros(self.spw_Nfreqs,self.spw_Nfreqs,dtype=complex)
+        qc=np.zeros(self.spw_Nfreqs,self.spw_Nfreqs,self.Ntimes,dtype=complex)
 
         R1,R2=0,0
         N1a,N2a,N1b,N2b=0,0,0,0

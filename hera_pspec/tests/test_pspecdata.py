@@ -16,6 +16,10 @@ dfiles = [
     'zen.2458042.12552.xx.HH.uvXAA',
     'zen.2458042.12552.xx.HH.uvXAA'
 ]
+d_files_std = [
+    'zen.2458042.12552.std.xx.HH.uvXAA',
+    'zen.2458042.12552.std.xx.HH.uvXAA'
+]
 
 # List of tapering function to use in tests
 taper_selection = ['none', 'blackman',]
@@ -95,6 +99,12 @@ class Test_PSpecData(unittest.TestCase):
             _d = uv.UVData()
             _d.read_miriad(os.path.join(DATA_PATH, dfile))
             self.d.append(_d)
+        # Load standard deviations
+        self.d_std=[]
+        for dfile in dfiles_std:
+            _d = uv.UVData()
+            _d.read_miriad(os.path.join(DATA_PATH,dfile))
+            self.d_std.append(_d)
 
         # Set trivial weights
         self.w = [None for _d in dfiles]
@@ -321,6 +331,8 @@ class Test_PSpecData(unittest.TestCase):
 
                 q_hat_cov_a = self.ds.q_hat_cov_a(key1,key2,taper=taper)
                 self.assertEqual(q_hat_cov_a.shape,(Nfreq,Nfreq,Ntime))
+
+
 
     def test_q_hat(self):
         """
