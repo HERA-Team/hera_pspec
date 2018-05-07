@@ -1,12 +1,21 @@
 import unittest
 import nose.tools as nt
 import numpy as np
+import os
+from hera_pspec.data import DATA_PATH
+from test_uvpspec import build_example_uvpspec
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata
+from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec import grouping
 
-class Test_bootstrap(unittest.TestCase):
+class Test_grouping(unittest.TestCase):
 
     def setUp(self):
-        pass
+        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        self.beam = pspecbeam.PSpecBeamUV(beamfile)
+        uvp, cosmo = build_example_uvpspec(beam=self.beam)
+        uvp.check()
+        self.uvp = uvp
 
     def tearDown(self):
         pass
@@ -88,7 +97,38 @@ class Test_bootstrap(unittest.TestCase):
         # Check that returned length is the same for groups too
         samp = grouping.sample_baselines(g1)
         self.assertEqual(len(g1), len(samp))
-        
     
+    def test_select_common(self):
+        """
+        Test selecting power spectra that two UVPSpec objects have in common.
+        """
+        # Carve up some example UVPSpec objects
+        uvp1 = self.uvp.select(times=np.unique(self.uvp.time_avg_array)[:-1], 
+                               inplace=False)
+        uvp2 = self.uvp.select(times=np.unique(self.uvp.time_avg_array)[1:], 
+                               inplace=False)
+        uvp3 = self.uvp.select(blpairs=np.unique(self.uvp.blpair_array)[1:], 
+                               inplace=False)
+        
+        # Check that selecting on common times works
+        uvp_list = [uvp1, uvp2]
+        uvp_new = grouping.select_common(uvp_list, spws=True, blpairs=True, 
+                                         times=True, pols=True, inplace=False)
+        self.assertEqual(uvp_new[0], uvp_new[1])
+        np.testing.assert_array_equal(uvp_new[0].time_avg_array, 
+                                      uvp_new[1].time_avg_array)
+        
+        # Check that matching times are ignored when set to False
+        uvp_new = grouping.select_common(uvp_list, spws=True, blpairs=True, 
+                                         times=False, pols=True, inplace=False)
+        self.assertNotEqual( np.sum(uvp_new[0].time_avg_array 
+                                  - uvp_new[1].time_avg_array), 0.)
+        self.assertEqual(len(uvp_new), len(uvp_list))
+        
+        # Check that in-place selection works
+        grouping.select_common(uvp_list, spws=True, blpairs=True, 
+                               times=True, pols=True, inplace=True)
+        self.assertEqual(uvp1, uvp2)
+        
 if __name__ == "__main__":
     unittest.main()

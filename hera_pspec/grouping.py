@@ -328,7 +328,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             try:
                 len(blpair_weights[i]) == len(grp)
             except:
-                print ">>>", blpair_weights, grp, blpair_groups
                 raise IndexError("blpair_weights must have the same shape as "
                                  "blpair_groups")
     
@@ -358,8 +357,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 # normalization (if weights specified). The normalization is 
                 # calculated so that Sum (blpair wgts) = no. baselines.
                 if blpair_weights is not None:
-                    print blpair_weights
-                    print blpair_groups
                     blpg_wgts = np.array(blpair_weights[j])
                     norm = np.sum(blpg_wgts)
                     if norm <= 0.:
