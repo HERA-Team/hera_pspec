@@ -8,6 +8,8 @@ from hera_pspec import uvpspec, conversions, parameter, pspecbeam, noise
 import copy
 import h5py
 from collections import OrderedDict as odict
+from pyuvdata import UVData
+
 
 class Test_Sensitivity(unittest.TestCase):
     """ Test noise.Sensitivity object """
@@ -23,32 +25,32 @@ class Test_Sensitivity(unittest.TestCase):
     def runTest(self):
         pass
 
-    def test_add(self):
+    def test_set(self):
         sense = noise.Sensitivity()
 
         C = conversions.Cosmo_Conversions()
-        sense.add_cosmology(C)
+        sense.set_cosmology(C)
         nt.assert_equal(C.get_params(), sense.cosmo.get_params())
         params = str(C.get_params())
-        sense.add_cosmology(params)
+        sense.set_cosmology(params)
         nt.assert_equal(C.get_params(), sense.cosmo.get_params())
 
-        sense.add_beam(self.beam)
+        sense.set_beam(self.beam)
         nt.assert_equal(sense.cosmo.get_params(), sense.beam.cosmo.get_params())
         self.beam.cosmo = C
-        sense.add_beam(self.beam)
+        sense.set_beam(self.beam)
         nt.assert_equal(sense.cosmo.get_params(), sense.beam.cosmo.get_params())
 
     def test_scalar(self):
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        self.sense.calc_scalar(freqs, 'pseudo_I', num_steps=5000, little_h=True)
+        self.sense.calc_scalar(freqs, 'I', num_steps=5000, little_h=True)
         nt.assert_true(np.isclose(freqs, self.sense.subband).all())
-        nt.assert_true(self.sense.stokes, 'I')
+        nt.assert_true(self.sense.pol, 'I')
 
     def test_calc_P_N(self):
         # calculate scalar
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        self.sense.calc_scalar(freqs, 'pseudo_I', num_steps=5000, little_h=True)
+        self.sense.calc_scalar(freqs, 'I', num_steps=5000, little_h=True)
         # basic execution 
         k = np.linspace(0, 3, 10)
         Tsys = 500.0
