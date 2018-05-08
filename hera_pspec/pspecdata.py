@@ -563,10 +563,17 @@ class PSpecData(object):
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
 
-          \hat{q}_a = (1/2) conj(x_1) R_1 Q_a R_2 x_2 (arXiv:1502.06016, Eq. 13)
+          \hat{q}_a = (1/2) conj(x_1) R_1 Q^alt_a R_2 x_2
 
         Note that the R matrix need not be set to C^-1. This is something that
         is set by the user in the set_R method.
+
+        This is related to Equation 13 of arXiv:1502.06016. However, notice
+        that there is a Q^alt_a instead of Q_a. The latter is defined as
+        Q_a \equiv dC/dp_a. Since this is the derivative of the covariance
+        with respect to the power spectrum, it contains factors of the primary
+        beam etc. Q^alt_a strips away all of this, leaving only the barebones
+        job of taking a Fourier transform. See HERA memo #44 for details
 
         Parameters
         ----------
@@ -637,14 +644,11 @@ class PSpecData(object):
 
     def get_G(self, key1, key2):
         """
-        Calculates the response matrix G of the unnormalized band powers q
-        to the true band powers p, i.e.,
+        Calculates
 
-            <q_a> = \sum_b G_{ab} p_b
+            G_ab = (1/2) Tr[R_1 Q_a R_2 Q_b],
 
-        This is given by
-
-            G_ab = (1/2) Tr[R_1 Q_a R_2 Q_b]
+        which is needed for normalizing the power spectrum (see HERA memo #44)
 
         Note that in the limit that R_1 = R_2 = C^-1, this reduces to the Fisher
         matrix
@@ -679,6 +683,75 @@ class PSpecData(object):
                 G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
 
         return G / 2.
+
+    def get_H(self, key1, key2, taper='none'):
+        """
+        Calculates the response matrix H of the unnormalized band powers q
+        to the true band powers p, i.e.,
+
+            <q_a> = \sum_b H_{ab} p_b
+
+        This is given by
+
+            H_ab = (1/2) Tr[R_1 Q_a^alt R_2 Q_b]
+
+        (See HERA memo #44). As currently implemented, this approximates the
+        primary beam as frequency independent. Under this approximation, the
+        our H_ab is defined using the equation above *except* we have
+        Q^tapered rather than Q_b, where
+
+            \overline{Q}^{tapered,beta} 
+            = e^{i 2pi eta_beta (nu_i - nu_j)} gamma(nu_i) gamma(nu_j)
+
+        where gamma is the tapering function. Again, see HERA memo #44 for
+        details.
+
+        Note that in the limit that R_1 = R_2 = C^-1 and Q_a is used instead
+        of Q_a^alt, this reduces to the Fisher matrix
+
+            F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
+
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two 
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
+
+
+        taper : str, optional
+            Tapering (window) function to apply to the data. Takes the same
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
+
+        Returns
+        -------
+        H : array_like, complex
+            Dimensions (Nfreqs, Nfreqs).
+        """
+        H = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs), dtype=np.complex)
+        R1 = self.R(key1)
+        R2 = self.R(key2)
+
+        if taper != 'none':
+            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
+            tapering_matrix = np.diag(tapering_fct)
+
+        iR1Q_alt, iR2Q = {}, {}
+        for ch in xrange(self.spw_Nfreqs): # this loop is nchan^3
+            Q_alt = self.get_Q(ch, self.spw_Nfreqs)
+            iR1Q_alt[ch] = np.dot(R1, Q_alt) # R_1 Q_alt
+            if taper != 'none':
+                Q_tapered = np.dot(tapering_matrix, np.dot(Q_alt, tapering_matrix))
+                iR2Q[ch] = np.dot(R2, Q_tapered) # R_2 Q
+            else:
+                iR2Q[ch] = np.dot(R2, Q_alt) # R_2 Q
+
+        for i in xrange(self.spw_Nfreqs): # this loop goes as nchan^4
+            for j in xrange(self.spw_Nfreqs):
+                # tr(R_2 Q_i R_1 Q_j)
+                H[i,j] += np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
+
+        return H / 2.
     
     def get_V_gaussian(self, key1, key2):
         """
@@ -703,7 +776,7 @@ class PSpecData(object):
         """
         raise NotImplementedError()
 
-    def get_MW(self, G, mode='I'):
+    def get_MW(self, G, H, mode='I'):
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -711,28 +784,31 @@ class PSpecData(object):
 
             \hat{p} = M \hat{q}
             <\hat{p}> = W p
-            W = M G,
+            W = M H,
 
-        where p is the true band power and G is the response matrix (defined above
-        in get_G) of unnormalized bandpowers to normed bandpowers. The G matrix
-        is the Fisher matrix when R = C^-1
+        where p is the true band power and H is the response matrix (defined above
+        in get_H) of unnormalized bandpowers to normed bandpowers.
 
         Several choices for M are supported:
+            'I':      Set M to be diagonal (e.g. HERA Memo #44)
 
+        These choices will be supported very soon:
             'G^-1':   Set M = G^-1, the (pseudo)inverse response matrix.
             'G^-1/2': Set M = G^-1/2, the root-inverse response matrix (using SVD).
-            'I':      Set M = I, the identity matrix.
             'L^-1':   Set M = L^-1, Cholesky decomposition.
 
-        Note that when we say (e.g., M = I), we mean this before normalization.
-        The M matrix needs to be normalized such that each row of W sums to 1.
+        As written, the window functions will not be correclty normalized; it needs
+        to be adjusted by the pspec scalar for it to be approximately correctly
+        normalized. If the beam is being provided, this will be done in the pspec
+        function
 
         Parameters
         ----------
-        G : array_like or dict of array_like
+        G : array_like
+            Denominator matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
+
+        H : array_like
             Response matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
-            If a dict is specified, M and W will be calculated for each G
-            matrix in the dict.
 
         mode : str, optional
             Definition to use for M. Must be one of the options listed above.
@@ -748,11 +824,14 @@ class PSpecData(object):
             Window function matrix, W. (If G was passed in as a dict, a dict of
             array_like will be returned.)
         """
+
+        ### Next few lines commented out because (while elegant), the situation
+        ### here where G is a distionary is not supported by the rest of the code.
         # Recursive case, if many G's were specified at once
-        if type(G) is dict:
-            M,W = {}, {}
-            for key in G: M[key], W[key] = self.get_MW(G[key], mode=mode)
-            return M, W
+        # if type(G) is dict:
+        #     M,W = {}, {}
+        #     for key in G: M[key], W[key] = self.get_MW(G[key], mode=mode)
+        #     return M, W
 
         # Check that mode is supported
         modes = ['G^-1', 'G^-1/2', 'I', 'L^-1']
@@ -760,42 +839,46 @@ class PSpecData(object):
 
         # Build M matrix according to specified mode
         if mode == 'G^-1':
-            M = np.linalg.pinv(G, rcond=1e-12)
-            #U,S,V = np.linalg.svd(F)
-            #M = np.einsum('ij,j,jk', V.T, 1./S, U.T)
+            raise NotImplementedError("G^-1 mode not currently supported.")
+            # M = np.linalg.pinv(G, rcond=1e-12)
+            # #U,S,V = np.linalg.svd(F)
+            # #M = np.einsum('ij,j,jk', V.T, 1./S, U.T)
 
         elif mode == 'G^-1/2':
-            U,S,V = np.linalg.svd(G)
-            M = np.einsum('ij,j,jk', V.T, 1./np.sqrt(S), U.T)
+            raise NotImplementedError("G^-1/2 mode not currently supported.")
+            # U,S,V = np.linalg.svd(G)
+            # M = np.einsum('ij,j,jk', V.T, 1./np.sqrt(S), U.T)
 
         elif mode == 'I':
-            M = np.identity(G.shape[0], dtype=G.dtype)
-
+            # This is not the M matrix as is rigorously defined in the
+            # OQE formalism, because the power spectrum scalar is excluded
+            # in this matrix normalization (i.e., M doesn't do the full
+            # normalization)
+            M = np.diag(1. / np.sum(G, axis=1))
+            W_norm = np.diag(1. / np.sum(H, axis=1))
+            W = np.dot(W_norm, H)
         else:
-            # Cholesky decomposition
-            order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
-            order[order < 0] = order[order < 0] - 0.1
+            raise NotImplementedError("Cholesky decomposition mode not currently supported.")
+            # # Cholesky decomposition
+            # order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
+            # order[order < 0] = order[order < 0] - 0.1
 
-            # Negative integers have larger absolute value so they are sorted
-            # after positive integers.
-            order = (np.abs(order)).argsort()
-            if np.mod(G.shape[0], 2) == 1:
-                endindex = -2
-            else:
-                endindex = -1
-            order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
-            iorder = np.argsort(order)
+            # # Negative integers have larger absolute value so they are sorted
+            # # after positive integers.
+            # order = (np.abs(order)).argsort()
+            # if np.mod(G.shape[0], 2) == 1:
+            #     endindex = -2
+            # else:
+            #     endindex = -1
+            # order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
+            # iorder = np.argsort(order)
 
-            G_o = np.take(np.take(G, order, axis=0), order, axis=1)
-            L_o = np.linalg.cholesky(G_o)
-            U,S,V = np.linalg.svd(L_o.conj())
-            M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
-            M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
+            # G_o = np.take(np.take(G, order, axis=0), order, axis=1)
+            # L_o = np.linalg.cholesky(G_o)
+            # U,S,V = np.linalg.svd(L_o.conj())
+            # M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
+            # M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
 
-        # Calculate (normalized) W given Fisher matrix and choice of M
-        W = np.dot(M, G)
-        norm = W.sum(axis=-1); norm.shape += (1,)
-        M /= norm; W = np.dot(M, G)
         return M, W
 
     def get_Q(self, mode, n_k):
@@ -904,7 +987,7 @@ class PSpecData(object):
         else:
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]]) * 1e9 # convert to ns    
         
-    def scalar(self, pol='I', taper='none', little_h=True, 
+    def scalar(self, pol, taper='none', little_h=True, 
                num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
@@ -915,10 +998,9 @@ class PSpecData(object):
 
         Parameters
         ----------
-        pol: str, optional
+        pol: str
                 Which polarization to compute the scalar for.
                 e.g. 'I', 'Q', 'U', 'V', 'XX', 'YY'...
-                Default: 'I'
 
         taper : str, optional
                 Whether a tapering function (e.g. Blackman-Harris) is being
@@ -1065,6 +1147,15 @@ class PSpecData(object):
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
 
+        # Currently the "pspec normalization scalar" doesn't work if a
+        # non-identity data weighting AND a non-trivial taper are used
+        if taper != 'none' and input_data_weight != 'identity':
+            raise_warning("Warning: Scalar power spectrum normalization "
+                                  "doesn't work with current implementation "
+                                  "if the tapering AND non-identity "
+                                  "weighting matrices are both used.", 
+                                  verbose=verbose)
+
         # get datasets
         assert isinstance(dsets, (list, tuple)), "dsets must be fed as length-2 tuple of integers"
         assert len(dsets) == 2, "len(dsets) must be 2"
@@ -1126,7 +1217,7 @@ class PSpecData(object):
 
             # clear covariance cache
             self.clear_cov_cache()
-            built_G = False  # haven't built Gv matrix in this spw loop yet
+            built_GH = False  # haven't built Gv and Hv matrices in this spw loop yet
 
             # setup emtpy data arrays
             spw_data = []
@@ -1147,7 +1238,7 @@ class PSpecData(object):
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
-                    scalar = self.scalar(taper=taper, little_h=little_h)
+                    scalar = self.scalar(p, taper=taper, little_h=True)
                 else: 
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized", 
@@ -1176,13 +1267,14 @@ class PSpecData(object):
                     self.set_R(input_data_weight)
 
                     # Build Fisher matrix
-                    if input_data_weight == 'identity' and built_G:
+                    if input_data_weight == 'identity' and built_GH:
                         # in this case, all Gv are the same, so skip if already built for this spw!
                         pass
                     else:
                         if verbose: print("  Building G...")
                         Gv = self.get_G(key1, key2)
-                        built_G = True
+                        Hv = self.get_H(key1, key2, taper=taper)
+                        built_GH = True
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
@@ -1190,13 +1282,14 @@ class PSpecData(object):
 
                     # Normalize power spectrum estimate
                     if verbose: print("  Normalizing power spectrum...")
-                    Mv, Wv = self.get_MW(Gv, mode=norm)
+                    Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
                         pv *= scalar
+                        Mv *= scalar
 
                     # Get baseline keys
                     if isinstance(blp, list):
