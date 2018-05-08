@@ -66,7 +66,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='I'):
    flag1 = uvd1.flag_array
    flag2 = uvd2.flag_array
    #constructing flags (boolean)
-   flag = flag1 + flag2
+   flag = np.logical_or(flag1, flag2)
    # constructing Stokes visibilities
    stdata = 0.5 * (pol_weights[pstokes][pol1]*data1 + pol_weights[pstokes][pol2]*data2)
 
@@ -98,7 +98,8 @@ def construct_pstokes(dset1, dset2, pstokes='I', run_check=True):
        Pseudo stokes parameter to form, can be 'I' or 'Q' or 'U' or 'V'. Default: I
 
    run_check: boolean
-      Pyvdata attribute check
+      Option to check for the existence and proper shapes of
+      parameters after downselecting data on this object. Default is True.
    """
    # convert dset1 and dset2 to UVData objects if they are miriad files
    if isinstance(dset1, pyuvdata.UVData) == False:
@@ -112,28 +113,54 @@ def construct_pstokes(dset1, dset2, pstokes='I', run_check=True):
    else:
       uvd2 = dset2
 
+   # check if dset1 and dset2 habe the same spectral window
+   spw1 = uvd1.spw_array
+   spw2 = uvd2.spw_array
+   assert (len(spw1)==len(spw2)), "dset1 and dset2 must have the same Nspws (number of spectral windows)."
+   assert (spw1 == spw2), "dset1 and dset2 must have the same spectral windows."
+
+   # check if dset1 and dset2 have the same frequencies
+   freqs1 = uvd1.freq_array
+   freqs2 = uvd2.freq_array
+   assert (freqs1.shape[1]==freqs2.shape[1]) , "dset1 and dset2 must have the same Nfreqs (frequency channels)."
+   if np.array_equal(freqs1, freqs2) == False:
+       raise ValueError("dset1 and dset2 must have the same frequencies.")
+
+   # check if dset1 and dset2 have the same imestamps
+   times1 = uvd1.time_array
+   times2 = uvd2.time_array
+   assert (len(times1)==len(times2)) , "dset1 and dset2 must have the same Ntimes (number of timestamps)."
+   if np.array_equal(times1, times2) == False:
+       raise ValueError("dset1 and dset2 must have the same timestamps.")
+
+   # check if dset1 and dset2 have the same baselines
+   bls1 = uvd1.baseline_array
+   bls2 = uvd2.baseline_array
+   assert (len(bls1)==len(bls2)) , "dset1 and dset2 must have the same number of baselines"
+   if np.array_equal(bls1, bls2) == False:
+       raise ValueError("dset1 and dset2 must have the same baselines")
+
    # makes the Npol length==1 so that the UVData carries data for the required polarization only
    st_keys = pol_weights[pstokes].keys()
    st_keys = st_keys[::-1]
+   # check polarizations of UVData objects are consistent with the required polarization to form the desired pseudo Stokes visibilities
+   if uvd1.Npols == 1:
+       pol1 = uvd1.get_pols()[0]
+   if uvd1.Npols == 1:
+       pol2 = uvd2.get_pols()[0]
+   else:
+       pol1, pol2 = st_keys[0], st_keys[1]
+   assert(pol1 != pol2), "UVData objects have same polarization. To form Stokes {} visibilities, {} polarizations are required".format(pstokes, tuple(st_keys))
    pvals = map(lambda p: pyuvdata.utils.polstr2num(p), st_keys) # polarization values corresponding to the polarization strings
    
-   if uvd1.Npols==uvd2.Npols==1:
-      # extracts polarization and ensures that the input dsets have the proper polarizations to form the desired pseudo-stokes parameters
-      pol1 = uvd1.get_pols()[0]
-      pol2 = uvd2.get_pols()[0]
-      assert(pol1 != pol2), "UVData objects have same polarization"
-   else:
-      pol1 = st_keys[0]; pol2 = st_keys[1]
-
    if uvd1.Npols > 1:
       assert (st_keys[0] in uvd1.get_pols()), "Polarization {} not found in UVData object".format(st_keys[0])
       uvd1.select(polarizations=pvals[0],inplace=True)
    if uvd2.Npols > 1:
       assert (st_keys[1] in uvd2.get_pols()), "Polarization {} not found in UVData object".format(st_keys[1])
       uvd2.select(polarizations=pvals[1],inplace=True)
-   
    # combining visibilities to form the desired Stokes visibilties
-   uvdS = _combine_pol(uvd1=uvd1,uvd2=uvd2,pol1=pol1,pol2=pol2, pstokes=pstokes)
+   uvdS = _combine_pol(uvd1=uvd1, uvd2=uvd2, pol1=pol1, pol2=pol2, pstokes=pstokes)
 
    if run_check: uvdS.check()
    return uvdS
