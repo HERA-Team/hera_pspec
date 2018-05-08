@@ -6,6 +6,8 @@ from hera_pspec import conversions
 from scipy import __version__ as scipy_version
 from scipy import integrate
 from scipy.interpolate import interp1d
+import aipy
+from pyuvdata import utils as uvutils
 
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, 
@@ -236,6 +238,40 @@ class PSpecBeamBase(object):
 
         return 1e-20 * conversions.cgs_units.c**2 \
                / (2 * conversions.cgs_units.kb * freqs**2 * Op)
+
+    def get_Omegas(self, pols):
+        """
+        Get OmegaP and OmegaPP across beam_freqs for requested polarizatiosn
+
+        Parameters
+        ----------
+        pols : list of polarization strings or integers
+
+        Returns (OmegaP, OmegaPP)
+        -------
+        OmegaP : ndarray containing power_beam_int, shape=(Nbeam_freqs, Npols)
+
+        OmegaPP : ndarray containing power_sq_beam_int, shape=(Nbeam_freqs, Npols)
+        """
+        # type check
+        if isinstance(pols, (int, np.int, np.int32)):
+            pols = [pols]
+        elif isinstance(pols, (str, np.str)):
+            pols = [pols]
+        if isinstance(pols, (list, np.ndarray, tuple)):
+            if isinstance(pols[0], (int, np.int, np.int32)):
+                pols = map(lambda p: uvutils.polnum2str(p), pols)
+                
+        # initialize blank lists
+        OmegaP, OmegaPP = [], []
+        for p in pols:
+            OmegaP.append(self.power_beam_int(pol=p))
+            OmegaPP.append(self.power_beam_sq_int(pol=p))
+
+        OmegaP = np.array(OmegaP).T
+        OmegaPP = np.array(OmegaPP).T
+
+        return OmegaP, OmegaPP
 
 
 class PSpecBeamGauss(PSpecBeamBase):

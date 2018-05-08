@@ -96,7 +96,6 @@ class Test_DataSet(unittest.TestCase):
         sclr = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='I', num_steps=2000, noise_scalar=True)
         nt.assert_almost_equal(sclr, 70.983962969086235)
 
-
     def test_Gaussbeam(self):
         Om_p = self.gauss.power_beam_int()
         Om_pp = self.gauss.power_beam_sq_int()
@@ -128,8 +127,7 @@ class Test_DataSet(unittest.TestCase):
 
         # test taper execution
         scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
-        self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)
-    
+        self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)    
     
     def test_BeamFromArray(self):
         """
@@ -218,3 +216,13 @@ class Test_DataSet(unittest.TestCase):
         
         # Check that user-defined cosmology can be specified
         bm2 = pspecbeam.PSpecBeamBase(cosmo=conversions.Cosmo_Conversions())
+
+    def test_get_Omegas(self):
+        OP, OPP = self.bm.get_Omegas('xx')
+        nt.assert_equal(OP.shape, (101, 1))
+        nt.assert_equal(OPP.shape, (101, 1))
+        OP, OPP = self.bm.get_Omegas([-5, -6])
+        nt.assert_equal(OP.shape, (101, 2))
+        nt.assert_equal(OPP.shape, (101, 2))
+
+

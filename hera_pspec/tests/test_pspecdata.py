@@ -208,28 +208,30 @@ class Test_PSpecData(unittest.TestCase):
     def test_get_MW(self):
         n = 17
         random_G = generate_pos_def_all_pos(n)
+        random_H = generate_pos_def_all_pos(n)
 
-        nt.assert_raises(AssertionError, self.ds.get_MW, random_G, mode='L^3')
+        nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
         
         for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
-            M, W = self.ds.get_MW(random_G, mode=mode)
-            self.assertEqual(M.shape, (n,n))
-            self.assertEqual(W.shape, (n,n))
-            test_norm = np.sum(W, axis=1)
-            for norm in test_norm:
-                self.assertAlmostEqual(norm, 1.)
-
             if mode == 'G^-1':
-                # Test that the window functions are delta functions
-                self.assertEqual(diagonal_or_not(W), True)
+                # # Test that the window functions are delta functions
+                # self.assertEqual(diagonal_or_not(W), True)
+                nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode=mode)
             elif mode == 'G^-1/2':
-                # Test that the error covariance is diagonal
-                error_covariance = np.dot(M, np.dot(random_G, M.T)) 
-                # FIXME: We should be decorrelating V, not G. See Issue 21
-                self.assertEqual(diagonal_or_not(error_covariance), True)
+                # # Test that the error covariance is diagonal
+                # error_covariance = np.dot(M, np.dot(random_G, M.T)) 
+                # # FIXME: We should be decorrelating V, not G. See Issue 21
+                # self.assertEqual(diagonal_or_not(error_covariance), True)
+                nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode=mode)
             elif mode == 'I':
                 # Test that the norm matrix is diagonal
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
                 self.assertEqual(diagonal_or_not(M), True)
+                self.assertEqual(M.shape, (n,n))
+                self.assertEqual(W.shape, (n,n))
+                test_norm = np.sum(W, axis=1)
+                for norm in test_norm:
+                    self.assertAlmostEqual(norm, 1.)
 
     def test_q_hat(self):
         """
@@ -283,6 +285,24 @@ class Test_PSpecData(unittest.TestCase):
                 q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False, taper=taper)
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
+
+    def test_get_H(self):
+        """
+        Test Fisher/weight matrix calculation.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+
+        for input_data_weight in ['identity','iC']:
+            for taper in taper_selection:
+                print 'input_data_weight', input_data_weight
+                self.ds.set_R(input_data_weight)
+                key1 = (0, 24, 38)
+                key2 = (1, 25, 38)
+
+                H = self.ds.get_H(key1, key2, taper=taper)
+                self.assertEqual(H.shape, (Nfreq,Nfreq)) # Test shape
 
     def test_get_G(self):
         """
@@ -497,14 +517,9 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(IndexError, ds.units)
         ds.add(self.uvd, None)
         # test basic execution
-        psu = ds.units()
-        nt.assert_equal(psu, '(UNCALIB)^2 Hz [beam normalization not specified]')
-        
-        ds.primary_beam = pspecbeam.PSpecBeamGauss(0.8, 
-                                  np.linspace(115e6, 130e6, 50, endpoint=False))
-        psu = ds.units(little_h=False)
-        nt.assert_equal(psu, '(UNCALIB)^2 Mpc^3')
-        
+        vis_u, norm_u = ds.units()
+        nt.assert_equal(vis_u, "UNCALIB")
+        nt.assert_equal(norm_u, "Hz str [beam normalization not specified]")
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
