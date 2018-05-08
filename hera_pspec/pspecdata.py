@@ -964,8 +964,13 @@ class PSpecData(object):
             where the first index is for the Left-Hand dataset and second index
             is used for the Right-Hand dataset (see above).
 
-        pol_pair : length-2 tuple
+        pol_pair : length-2 tuple of str
             Contains polarization pair which will be used in estiamting the power spectrum e,g ('xx','xx') or  ('xy','yx'). Only equal polarization pair is implemented for the time being.               
+    
+        Returns
+        -------
+        boolean: True or False
+                 True if the UVData objects polarizations are consistent with the pol_pair (user specified polarizations) else False 
         """
         assert isinstance(pol_pair, tuple), "polarization pair must be specified as a len-2 tuple"
         assert isinstance(pol_pair[0], (str, np.str)), "polarization must be fed as len-2 string tuple"
@@ -991,7 +996,7 @@ class PSpecData(object):
         else:
            return True
 
-    def pspec(self, bls1, bls2, dsets, pol_select=None, input_data_weight='identity', norm='I', 
+    def pspec(self, bls1, bls2, dsets, pols=None, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, spw_ranges=None, verbose=True, 
               history=''):
         """
@@ -1022,15 +1027,17 @@ class PSpecData(object):
 
         bls2 : list of baseline groups, each being a list of ant-pair tuples
 
-        dsets : length-2 tuple or length-2 list od integers or str
+        dsets : length-2 tuple or length-2 list of integers or str
             Contains indices of self.dsets to use in forming power spectra, 
             where the first index is for the Left-Hand dataset and second index 
             is used for the Right-Hand dataset (see above).
 
-        pol_select : length-2 tuple or list of strings or integers
+        pols : length-2 tuple or list of strings or integers
             contains polarization pairs to use in forming power spectra 
             e.g. ('XX','XX') or ('XY','YX') or list of polarization pairs. 
-            Only auto/equal polarization pairs are implemented at the moment.  
+            Only auto/equal polarization pairs are implemented at the moment. 
+            It uses the polarizations of the UVData onjects (specified in dsets)
+            by default only if the UVData object consists of only one polarization.  
 
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
@@ -1105,11 +1112,18 @@ class PSpecData(object):
         assert isinstance(dsets[0], (int, np.int)) and isinstance(dsets[1], (int, np.int)), "dsets must contain integer indices"
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
-
+        
         # check pol_select inputs
-        if pol_select == None:   
-           raise ValueError("pol_select is currently set to None, specify a polarization pair tuple or list.")
-
+        if pols == None:
+            # check pol_select inputs
+            npols0 = dset1.Npols # number of polarization for zero'th UVData of the first set of UVData objects
+            npols1 = dset2.Npols # number of polarization for zero'th UVData of the second set of UVData objects
+            if npols0 == npols1 == 1:
+                pols = [(dset1.get_pols()[0], dset2.get_pols()[0])]
+                raise_warning("UVData objects have pols {} which are used to estimate the power spectrum.".format(tuple(pols)), verbose=verbose)
+            else:
+                raise ValueError("UVData objects must have only one polarization axis otherwise pols should be specified.")
+      
         # assert form of bls1 and bls2
         assert len(bls1) == len(bls2), "length of bls1 must equal length of bls2"
         for i in range(len(bls1)):
@@ -1177,8 +1191,8 @@ class PSpecData(object):
                 dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
 
             # Loop over polarizations
-            for j, ps in enumerate(pol_select):
-                p = []
+            for j, ps in enumerate(pols):
+                p = [] 
                 if isinstance(ps[0], (int, np.int)): 
                     p.append(pyuvdata.utils.polnum2str(ps[0]))
                 else:
