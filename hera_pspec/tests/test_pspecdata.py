@@ -4,8 +4,7 @@ import numpy as np
 import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps, trapz
-#from hera_pspec import pspecdata, pspecbeam, conversions
-import pspecdata, pspecbeam, conversions
+from hera_pspec import pspecdata, pspecbeam, conversions
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 from hera_cal import redcal
