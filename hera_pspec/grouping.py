@@ -1,6 +1,7 @@
 import numpy as np
 from collections import OrderedDict as odict
 from hera_pspec import uvpspec_utils as uvputils
+#from hera_pspec import UVPSpec
 import random
 import copy
 
@@ -228,7 +229,7 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
 
 
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False, 
-                    blpair_weights=None, inplace=True):
+                    blpair_weights=None, normalize_weights=True, inplace=True):
     """
     Average power spectra across the baseline-pair-time axis, weighted by 
     each spectrum's integration time.
@@ -252,6 +253,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
     Parameters
     ----------
+    uvp_in : UVPSpec
+        Input power spectrum (to average over).
+        
     blpair_groups : list of baseline-pair groups
         List of list of tuples or integers. All power spectra in a 
         baseline-pair group are averaged together. If a baseline-pair 
@@ -270,6 +274,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         blpair_groups if specified. The weights are automatically normalized 
         within each baseline-pair group. Default: None (all baseline pairs have 
         unity weights).
+    
+    normalize_weights: bool, optional
+        Whether to normalize the baseline-pair weights so that:
+           Sum(blpair_weights) = N_blpairs
+        If False, no normalization is applied to the weights. Default: True.
     
     inplace : bool, optional
         If True, edit data in self, else make a copy and return. Default: 
@@ -304,7 +313,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         if isinstance(blpair_groups[0][0], tuple):
             new_blpair_grps = [map(lambda blp: uvp.antnums_to_blpair(blp), blpg) 
                                for blpg in blpair_groups]
-            blpair_groups = new_blpair_groups
+            blpair_groups = new_blpair_grps
     else:
         # If not, each baseline pair is its own group
         blpair_groups = map(lambda blp: [blp], np.unique(uvp.blpair_array))
@@ -358,7 +367,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 # calculated so that Sum (blpair wgts) = no. baselines.
                 if blpair_weights is not None:
                     blpg_wgts = np.array(blpair_weights[j])
-                    norm = np.sum(blpg_wgts)
+                    norm = np.sum(blpg_wgts) if normalize_weights else 1.
+                    
                     if norm <= 0.:
                         raise ValueError("Sum of baseline-pair weights in "
                                          "group %d is <= 0." % j)
@@ -388,12 +398,14 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                       nsmp = np.sum(nsmp, axis=0)[None]
                       w = np.sum(w, axis=0)[None]
                     
-                    # Apply integration weight and baseline-pair weight to data
-                    bpg_data.append(data * w * blpg_wgts[k])
-                    bpg_wgts.append(wgts * w[:, None])
-                    bpg_ints.append(ints * w * blpg_wgts[k])
-                    bpg_nsmp.append(nsmp * blpg_wgts[k])
-                    w_list.append(w * blpg_wgts[k])
+                    # Add multiple copies of data for each baseline according 
+                    # to the weighting/multiplicity
+                    for m in range(int(blpg_wgts[k])):
+                        bpg_data.append(data * w)
+                        bpg_wgts.append(wgts * w[:, None])
+                        bpg_ints.append(ints * w)
+                        bpg_nsmp.append(nsmp)
+                        w_list.append(w)
 
                 # Take integration-weighted averages, with clipping to deal 
                 # with zeros
@@ -405,7 +417,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 bpg_ints = np.sum(bpg_ints, axis=0) \
                          / np.sum(w_list, axis=0).clip(1e-10, np.inf)
                 w_list = np.sum(w_list, axis=0)
-
+                
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
@@ -535,3 +547,150 @@ def fold_spectra(uvp):
     uvp.folded = True
 
 
+def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False, 
+                              seed=None):
+    """
+    Generate a bootstrap-sampled average over a set of power spectra. The 
+    sampling is done over user-defined groups of baseline pairs (with 
+    replacement).
+    
+    Multiple UVPSpec objects can be passed to this function. The bootstrap 
+    sampling is carried out over all of the available baseline-pairs (in a 
+    user-specified group) across all UVPSpec objects. (This means that each 
+    UVPSpec object can contribute a different number of baseline-pairs to the 
+    average each time.)
+    
+    Successive calls to the function will produce different random samples.
+    
+    Parameters
+    ----------
+    uvp_list : list of UVPSpec objects
+        List of UVPSpec objects to form a bootstrap sample from.
+        
+        The UVPSpec objects can have different numbers of baseline-pairs and 
+        times, but the averages will only be taken over spectral windows and 
+        polarizations that match across all UVPSpec objects.
+    
+    blpair_groups : list of baseline-pair groups
+        List of baseline-pair groups, where each group is a list of tuples or 
+        integers. The bootstrap sampling and averaging is done over the 
+        baseline-pairs within each group.
+        
+        There is no requirement for each UVPSpec object to contain all 
+        baseline-pairs within each specified blpair group, as long as they 
+        exist in at least one of the UVPSpec objects.
+    
+    time_avg : bool, optional
+        Whether to average over the time axis or not. Default: False.
+    
+    seed : int, optional
+        Random seed to use when drawing baseline-pairs.
+    
+    Returns
+    -------
+    uvp_avg_list : list of UVPSpec
+        List of UVPSpec objects containing averaged power spectra. 
+        
+        Each object is an averaged version of the corresponding input UVPSpec 
+        object. Each average is over the baseline-pairs sampled from that 
+        object only; to return the true bootstrap average, these objects 
+        should be averaged together.
+    
+    blpair_wgts_list : list of lists of integers
+        List of weights used for each baseline-pair in each group, from each 
+        UVPSpec object. This describes how the bootstrap sample was generated. 
+        Shape: (len(uvp_list), shape(blpair_groups)).
+    """
+    # Validate input data
+    from hera_pspec import UVPSpec
+    if isinstance(uvp_list, UVPSpec): uvp_list = [uvp_list,]
+    assert isinstance(uvp_list, list), \
+           "uvp_list must be a list of UVPSpec objects"
+    
+    # Check that uvp_list contains UVPSpec objects with the correct dimensions
+    for uvp in uvp_list:
+        assert isinstance(uvp, UVPSpec), \
+               "uvp_list must be a list of UVPSpec objects"
+    
+    # Check for same length of time axis if no time averaging will be done
+    if not time_avg:
+        if np.unique([uvp.Ntimes for uvp in uvp_list]).size > 1:
+            raise IndexError("Input UVPSpec objects must have the same number "
+                             "of time samples if time_avg is False.")
+    
+    # Check that blpair_groups is a list of lists of groups
+    assert isinstance(blpair_groups, list), \
+        "blpair_groups must be a list of lists of baseline-pair tuples/integers"
+    for grp in blpair_groups:
+        assert isinstance(grp, list), \
+        "blpair_groups must be a list of lists of baseline-pair tuples/integers"
+    
+    # Convert blpair tuples into blpair integers if necessary
+    if isinstance(blpair_groups[0][0], tuple):
+        new_blp_grps = [map(lambda blp: uvputils._antnums_to_blpair(blp), blpg) 
+                        for blpg in blpair_groups]
+        blpair_groups = new_blp_grps
+    
+    # Homogenise input UVPSpec objects in terms of available polarizations 
+    # and spectral windows
+    if len(uvp_list) > 1:
+        uvp_list = select_common(uvp_list, spws=True, pols=True, inplace=False)
+    
+    # Loop over UVPSpec objects, looking for available blpairs in each
+    avail_blpairs = [np.unique(uvp.blpair_array) for uvp in uvp_list]
+    all_avail_blpairs = np.unique([blp for blplist in avail_blpairs 
+                                       for blp in blplist])
+    
+    # Check that all requested blpairs exist in at least one UVPSpec object
+    all_req_blpairs = np.unique([blp for grp in blpair_groups for blp in grp])
+    missing = []
+    for blp in all_req_blpairs:
+        if blp not in all_avail_blpairs: missing.append(blp)
+    if len(missing) > 0:
+        raise KeyError("The following baseline-pairs were specified, but do "
+                       "not exist in any of the input UVPSpec objects: %s" \
+                       % str(missing))
+    
+    # Set random seed if specified
+    if seed is not None: np.random.seed(seed)
+    
+    # Sample with replacement from the full list of available baseline-pairs 
+    # in each group, and create a blpair_group and blpair_weights entry for 
+    # each UVPSpec object
+    blpair_grps_list = [[] for uvp in uvp_list]
+    blpair_wgts_list = [[] for uvp in uvp_list]
+    
+    # Loop over each requested blpair group
+    for grp in blpair_groups:
+        
+        # Find which blpairs in this group are available in each UVPSpec object
+        avail = [np.intersect1d(grp, blp_list) for blp_list in avail_blpairs]
+        avail_flat = [blp for lst in avail for blp in lst]
+        num_avail = len(avail_flat)
+        
+        # Draw set of random integers (with replacement) and convert into 
+        # list of weights for each blpair in each UVPSpec
+        draw = np.random.randint(low=0, high=num_avail, size=num_avail)
+        wgt = np.array([(draw == i).sum() for i in range(num_avail)])
+        
+        # Extract the blpair weights for each UVPSpec
+        j = 0
+        for i in range(len(uvp_list)):
+            n_blps = len(avail[i])
+            blpair_grps_list[i].append( list(avail[i]) )
+            _wgts = wgt[np.arange(j, j+n_blps)].astype(float) #+ 1e-4
+            blpair_wgts_list[i].append( list(_wgts) )
+            j += n_blps
+    
+    # Loop over UVPSpec objects and calculate averages in each blpair group, 
+    # using the bootstrap-sampled blpair weights
+    uvp_avg = []
+    for i, uvp in enumerate(uvp_list):
+        _uvp = average_spectra(uvp, blpair_groups=blpair_grps_list[i],  
+                               blpair_weights=blpair_wgts_list[i], 
+                               time_avg=time_avg, inplace=False)
+        uvp_avg.append(_uvp)
+    
+    # Return list of averaged spectra for now
+    return uvp_avg, blpair_wgts_list
+    

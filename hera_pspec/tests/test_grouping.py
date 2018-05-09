@@ -98,6 +98,57 @@ class Test_grouping(unittest.TestCase):
         samp = grouping.sample_baselines(g1)
         self.assertEqual(len(g1), len(samp))
     
+    def test_bootstrap_average_blpairs(self):
+        """
+        Test bootstrap averaging over power spectra.
+        """
+        # Check that basic bootstrap averaging works
+        blpair_groups = [list(np.unique(self.uvp.blpair_array)),]
+        uvp1, wgts = grouping.bootstrap_average_blpairs([self.uvp,], 
+                                                        blpair_groups, 
+                                                        time_avg=False)
+        
+        uvp2, wgts = grouping.bootstrap_average_blpairs([self.uvp,], 
+                                                        blpair_groups, 
+                                                        time_avg=True)
+        self.assertEqual(uvp1[0].Nblpairs, 1)
+        self.assertEqual(uvp1[0].Ntimes, self.uvp.Ntimes)
+        self.assertEqual(uvp2[0].Ntimes, 1)
+        
+        # Check that exceptions are raised when inputs are invalid
+        self.assertRaises(AssertionError, grouping.bootstrap_average_blpairs, 
+                          [np.arange(5),], blpair_groups, time_avg=False)
+        self.assertRaises(KeyError, grouping.bootstrap_average_blpairs, 
+                          [self.uvp,], [[100100100100,],], time_avg=False)
+        
+        # Reduce UVPSpec to only 3 blpairs and set them all to the same values
+        _blpairs = list(np.unique(self.uvp.blpair_array)[:3])
+        uvp3 = self.uvp.select(spws=0, inplace=False, blpairs=_blpairs)
+        Nt = uvp3.Ntimes
+        uvp3.data_array[0][Nt:2*Nt] = uvp3.data_array[0][:Nt]
+        uvp3.data_array[0][2*Nt:] = uvp3.data_array[0][:Nt]
+        uvp3.integration_array[0][Nt:2*Nt] = uvp3.integration_array[0][:Nt]
+        uvp3.integration_array[0][2*Nt:] = uvp3.integration_array[0][:Nt]
+        
+        # Test that different bootstrap-sampled averages have the same value as 
+        # the normal average (since the data for all blpairs has been set to 
+        # the same values for uvp3)
+        np.random.seed(10)
+        uvp_avg = uvp3.average_spectra(blpair_groups=[_blpairs,], 
+                                       time_avg=True, inplace=False)
+        blpair = uvp_avg.blpair_array[0]
+        for i in range(5):
+            # Generate multiple samples and make sure that they are all equal 
+            # to the regular average (for the cloned data in uvp3)
+            uvp4, wgts = grouping.bootstrap_average_blpairs(
+                                                     [uvp3,], 
+                                                     blpair_groups=[_blpairs,], 
+                                                     time_avg=True)
+            ps_avg = uvp_avg.get_data((0, blpair, 'xx'))
+            ps_boot = uvp4[0].get_data((0, blpair, 'xx'))
+            np.testing.assert_array_almost_equal(ps_avg, ps_boot)
+    
+    
     def test_select_common(self):
         """
         Test selecting power spectra that two UVPSpec objects have in common.
