@@ -1117,7 +1117,7 @@ class PSpecData(object):
 
         # check pol_select inputs
         if pols == None:
-            # check pol_select inputs
+            # check inputs for pol
             npols0 = dset1.Npols # number of polarization for zero'th UVData of the first set of UVData objects
             npols1 = dset2.Npols # number of polarization for zero'th UVData of the second set of UVData objects
             if npols0 == npols1 == 1:
@@ -1330,6 +1330,9 @@ class PSpecData(object):
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
 
+        # raise error if none of pols are consistent witht the UVData objects
+        if len(spw_pol)==0:
+            raise ValueError("None of the specified polarization pair match that of the UVData objects")
         # fill uvp object
         uvp = uvpspec.UVPSpec()
 
