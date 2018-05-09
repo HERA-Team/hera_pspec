@@ -134,15 +134,14 @@ class Test_Plot(unittest.TestCase):
         self.uvp.set_cosmology(conversions.Cosmo_Conversions())
         ax1 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=True, 
-                                  delay=False, little_h=True)
+                                  delay=False)
         elements = [(matplotlib.lines.Line2D, 1), (matplotlib.legend.Legend, 0)]
         self.assertTrue( self.axes_contains(ax1, elements) )
         
         # Plot in Delta^2 units
         ax2 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=True, 
-                                  delay=False, little_h=True, deltasq=True, 
-                                  legend=True)
+                                  delay=False, deltasq=True, legend=True)
         
         # Should contain 1 line and 1 legend
         elements = [(matplotlib.lines.Line2D, 1), (matplotlib.legend.Legend, 1)]

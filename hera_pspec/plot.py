@@ -4,19 +4,12 @@ from hera_pspec import conversions
 import matplotlib.pyplot as plt
 import copy
 
-"""
-def ax():
-    fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True, sharey=True)
-    do_my_stuff_with_first_axis(ax=ax1)
-    do_my_stuff_with_second_axis(ax=ax2)
-"""
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
                    average_times=False, fold=False, plot_noise=False, 
-                   delay=True, deltasq=False, little_h=True, 
-                   legend=False, ax=None):
+                   delay=True, deltasq=False, legend=False, ax=None):
     """
-    Plot a 1D delay spectrum for a group of baselines.
+    Plot a 1D delay spectrum (or spectra) for a group of baselines.
     
     Parameters
     ----------
@@ -50,10 +43,6 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         If True, plot dimensionless power spectra, Delta^2. This is ignored if 
         delay=True. Default: False.
     
-    little_h : bool, optional
-        If using cosmological units (i.e. delay=False), whether to use h^-1 
-        units or not. Default: True.
-    
     legend : bool, optional
         Whether to switch on the plot legend. Default: False.
     
@@ -72,7 +61,6 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     new_plot = False
     if ax is None:
         new_plot = True
-        #ax = plt.subplot()
         fig, ax = plt.subplots(1, 1)
     
     # Add ungrouped baseline-pairs into a group of their own (expected by the
@@ -94,12 +82,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         uvp_plt = copy.deepcopy(uvp)
         if average_times:
             # Average over times, but not baseline-pairs
-            # Unpacks blpairs from their groups into 1D list of 1-element lists
-            blpair_list = []
-            for blpgrp in blpairs: blpair_list += [[blp,] for blp in blpgrp]
-            uvp_plt.average_spectra(blpair_groups=blpair_list, 
-                                    time_avg=True, inplace=True)
-    
+            uvp_plt.average_spectra(time_avg=True, inplace=True)
+            
     # Fold the power spectra if requested
     if fold:
         uvp_plt.fold_spectra()
@@ -113,7 +97,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         dlys = uvp_plt.get_dlys(spw) * 1e9 # ns
         x = dlys
     else:
-        k_para = uvp_plt.get_kparas(spw, little_h=little_h)
+        k_para = uvp_plt.get_kparas(spw)
         x = k_para
     
     # Plot power spectra
@@ -132,14 +116,6 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     # Set log scale
     ax.set_yscale('log')
     
-    # Plot noise spectra, if requested
-    # FIXME: This takes Tsys as an argument. So should probably be a separate 
-    # plotting function...
-    """
-    if show_noise:
-        P_N = uvp_avg.generate_noise_spectra(spw, pol, 400) # FIXME
-        P_N = P_N[uvp_avg.antnums_to_blpair(blp)]
-    """
     # Add legend
     if legend:
         ax.legend(loc='upper left')
