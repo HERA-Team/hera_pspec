@@ -638,7 +638,7 @@ class UVPSpec(object):
 
         blpairs : list of baseline-pair tuples or integers
             List of baseline-pairs to keep. If bls is also fed, this list is 
-            concatenated onto the baseline-pair list constructed from from the 
+            concatenated onto the baseline-pair list constructed from the 
             bls selection.
 
         times : float ndarray of times from the time_avg_array to keep.
