@@ -64,7 +64,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         fig, ax = plt.subplots(1, 1)
     
     # Add ungrouped baseline-pairs into a group of their own (expected by the
-    # averaging routines) # FIXME: Check if this is an in-place operation
+    # averaging routines)
     blpairs_in = blpairs
     blpairs = [] # Must be a list, not an array
     for i, blpgrp in enumerate(blpairs_in):

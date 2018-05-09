@@ -95,7 +95,7 @@ class Test_Plot(unittest.TestCase):
         # Unpack the list of baseline-pairs into a Python list
         blpairs = np.unique(self.uvp.blpair_array)        
         blps = [blp for blp in blpairs]
-
+        
         # Plot the spectra averaged over baseline-pairs and times
         ax1 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=True)
