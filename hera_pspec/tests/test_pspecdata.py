@@ -603,11 +603,20 @@ class Test_PSpecData(unittest.TestCase):
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), pols=[('xx','xx'), ('yy','yy')], spw_ranges=[(10, 24)], verbose=False)
-        
+       
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        uvp = ds.pspec(bls, bls, (0, 1), pols=[(-5, -5)], spw_ranges=[(10, 24)], verbose=False)
+ 
         # test exceptions
         nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1))
         nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), pols=[('yy','yy')]) 
-        
+        uvd = copy.deepcopy(self.uvd)
+        uvd1 = copy.deepcopy(self.uvd)
+        uvd1.polarization_array = np.array([-6])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd1], wgts=[None, None], beam=self.bm)
+        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), pols=[('xx','xx')])
+
         # test files with more than one polarizations
         uvd = copy.deepcopy(self.uvd)
         uvd1 = copy.deepcopy(self.uvd)
