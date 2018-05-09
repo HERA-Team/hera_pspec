@@ -114,6 +114,8 @@ class Test_grouping(unittest.TestCase):
         self.assertEqual(uvp1[0].Nblpairs, 1)
         self.assertEqual(uvp1[0].Ntimes, self.uvp.Ntimes)
         self.assertEqual(uvp2[0].Ntimes, 1)
+        # Total of weights assigned should equal total no. of blpairs
+        self.assertEqual(np.sum(wgts), np.array(blpair_groups).size)
         
         # Check that exceptions are raised when inputs are invalid
         self.assertRaises(AssertionError, grouping.bootstrap_average_blpairs, 
