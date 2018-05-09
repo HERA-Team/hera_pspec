@@ -1115,11 +1115,10 @@ class PSpecData(object):
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
 
-        # check pol_select inputs
+        # check  inputs for pol
+        npols0 = dset1.Npols # number of polarization for zero'th UVData of the first set of UVData objects
+        npols1 = dset2.Npols # number of polarization for zero'th UVData of the second set of UVData objects
         if pols == None:
-            # check inputs for pol
-            npols0 = dset1.Npols # number of polarization for zero'th UVData of the first set of UVData objects
-            npols1 = dset2.Npols # number of polarization for zero'th UVData of the second set of UVData objects
             if npols0 == npols1 == 1:
                 pols = [(dset1.get_pols()[0], dset2.get_pols()[0])]
                 raise_warning("UVData objects have pols {} which are used to estimate the power spectrum.".format(tuple(pols)), verbose=verbose)

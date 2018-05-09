@@ -607,7 +607,15 @@ class Test_PSpecData(unittest.TestCase):
         # test exceptions
         nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1))
         nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), pols=[('yy','yy')]) 
- 
+        
+        # test files with more than one polarizations
+        uvd = copy.deepcopy(self.uvd)
+        uvd1 = copy.deepcopy(self.uvd)
+        uvd1.polarization_array = np.array([-6])
+        uvd3 = uvd + uvd1
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd3], wgts=[None, None], beam=self.bm)
+        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1))
+
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
         d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2], 
