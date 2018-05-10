@@ -1132,25 +1132,26 @@ class UVPSpec(object):
             used, and will divide P_N by an extra sqrt(2). Otherwise, assume 
             power spectra are complex and keep P_N as is. Default: True.
 
-        Returns (P_N)
+        Returns
         -------
         P_N : dict
             Dictionary containing blpair integers as keys and float ndarrays 
             of noise power spectra as values, with ndarrays having shape 
             (Ntimes, Ndlys).
         """
-        # assert polarization type
+        # Assert polarization type
         if isinstance(pol, (np.int, int)):
             pol = uvutils.polnum2str(pol)
 
-        # get polarization index
+        # Get polarization index
         pol_ind = self.pol_to_indices(pol)
 
-        # get frequency band
+        # Get frequency band
         freqs = self.freq_array[self.spw_to_indices(spw)]
 
-        # calculate scalar
-        scalar = self.compute_scalar(spw, pol, num_steps=num_steps, little_h=little_h, noise_scalar=True)
+        # Calculate scalar
+        scalar = self.compute_scalar(spw, pol, num_steps=num_steps, 
+                                     little_h=little_h, noise_scalar=True)
 
         # Get k vectors
         if form == 'DelSq':
@@ -1164,7 +1165,7 @@ class UVPSpec(object):
         elif isinstance(blpairs[0], tuple):
             blpairs = map(lambda blp: self.antnums_to_blpair(blp), blpairs)
 
-        # get dlys
+        # Get delays
         dlys = self.get_dlys(spw)
 
         # Iterate over blpairs to get P_N
@@ -1186,23 +1187,21 @@ class UVPSpec(object):
                 else:
                     k = None
 
-                # get pn
-                pn = noise.calc_P_N(scalar, Tsys, t_int, k=k, Nincoherent=n_samp, form=form)
+                # Get noise power spectrum
+                pn = noise.calc_P_N(scalar, Tsys, t_int, k=k, 
+                                    Nincoherent=n_samp, form=form)
 
-                # put into appropriate form
+                # Put into appropriate form
                 if form == 'Pk':
                     pn = np.ones(len(dlys), np.float) * pn
 
-                # if pseudo stokes pol (as opposed to linear or circular pol), 
+                # If pseudo stokes pol (as opposed to linear or circular pol), 
                 # divide by extra factor of 2
                 if isinstance(pol, (np.str, str)):
                     pol = uvutils.polstr2num(pol)
-                if pol in (1, 2, 3, 4):
-                    # pseudo stokes pol
-                    pn /= 2.0
-                # if real divide by sqrt(2)
-                if real:
-                    pn /= np.sqrt(2)
+                
+                if pol in (1, 2, 3, 4): pn /= 2.0 # pseudo stokes pol
+                if real: pn /= np.sqrt(2) # if real divide by sqrt(2)
 
                 # append to P_blp
                 P_blp.append(pn)
@@ -1239,11 +1238,14 @@ class UVPSpec(object):
         blpair_groups : list of baseline-pair groups
             List of list of tuples or integers. All power spectra in a 
             baseline-pair group are averaged together. If a baseline-pair 
-            exists in more than one group, a warning is raised.
+            exists in more than one group, a warning is raised. Examples::
             
-            Ex: blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], [((4, 6), (4, 6))]] or
-            blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
-
+                blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], 
+                                  [((4, 6), (4, 6))]] 
+                
+                blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
+        
+        
         time_avg : bool, optional
             If True, average power spectra across the time axis. Default: False.
         
@@ -1297,15 +1299,20 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        blgroups : list of baseline groups, which themselves are lists of baseline tuples or baseline i6 integers
+        blgroups : list 
+            List of baseline groups, which themselves are lists of baseline 
+            tuples or baseline i6 integers.
             Ex: [ [(1, 2), (2, 3), (3, 4)], [(1, 4), (2, 5)] ]
 
-        only_pairs_in_bls : bool, if True, select only baseline-pairs whose first _and_ second baseline
-            are both found in each baseline group.
+        only_pairs_in_bls : bool, optional
+            If True, select only baseline-pairs whose first _and_ second 
+            baseline are both found in each baseline group. Default: False.
 
-        Returns blpair_groups
+        Returns
         -------
-        blpair_groups : list of blpair groups, which themselves are lists of blpair integers
+        blpair_groups : list 
+            List of blpair groups, which themselves are lists of blpair 
+            integers.
         """
         blpair_groups = []
         for blg in blgroups:
@@ -1317,25 +1324,37 @@ class UVPSpec(object):
         return blpair_groups
 
     
-    def compute_scalar(self, spw, pol, num_steps=1000, little_h=True, noise_scalar=False):
+    def compute_scalar(self, spw, pol, num_steps=1000, little_h=True, 
+                       noise_scalar=False):
         """
-        Compute power spectrum normalization scalar given an adopted cosmology and a beam model.
-        See pspecbeam.PSpecBeamBase.compute_pspec_scalar for details.
+        Compute power spectrum normalization scalar given an adopted cosmology 
+        and a beam model. See pspecbeam.PSpecBeamBase.compute_pspec_scalar for 
+        details.
 
         Parameters
         ----------
-        spw : integer, spectral window selection
+        spw : integer
+            Spectral window selection.
 
-        pol : string or integer, polarization selection
+        pol : str or int
+            Which polarization to calculate the scalar for.
 
-        num_steps : integer, number of integration bins along frequency in computing scalar
-
-        noise_scalar : boolean, if True calculate noise pspec scalar, else calculate normal pspec scalar
-            See pspecbeam.py for difference between normal scalar and noise scalar.
+        num_steps : int, optional
+            Number of integration bins along frequency in computing scalar. 
+            Default: 1000.
+        
+        little_h : bool, optional
+            Whether to use h^-1 units or not. Default: True.
+        
+        noise_scalar : bool, optional
+            If True calculate noise pspec scalar, else calculate normal pspec 
+            scalar. See pspecbeam.py for difference between normal scalar and 
+            noise scalar. Default: False.
 
         Returns
         -------
-        scalar : float, power spectrum normalization scalar
+        scalar : float
+            Power spectrum normalization scalar.
         """
         # make assertions
         assert hasattr(self, 'cosmo'), "self.cosmo object must exist to compute scalar. See self.set_cosmology()"
