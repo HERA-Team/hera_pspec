@@ -1251,9 +1251,15 @@ class PSpecData(object):
 
                     # assign keys
                     if isinstance(blp, list):
-                        # interpet blp as group of baseline-pairs
-                        key1 = [(dsets[0],) + _blp[0] + (p,) for _blp in blp]
-                        key2 = [(dsets[1],) + _blp[1] + (p,) for _blp in blp]
+                        raise NotImplementedError("Baseline lists bls1 and bls2"
+                                " must be lists of tuples (not lists of lists"
+                                " of tuples).\n"
+                                "Use hera_pspec.pspecdata.construct_blpairs()"
+                                " to construct appropriately grouped baseline"
+                                " lists.")
+                        # interpret blp as group of baseline-pairs
+                        #key1 = [(dsets[0],) + _blp[0] + (p,) for _blp in blp]
+                        #key2 = [(dsets[1],) + _blp[1] + (p,) for _blp in blp]
                     elif isinstance(blp, tuple):
                         # interpret blp as baseline-pair
                         key1 = (dsets[0],) + blp[0] + (p,)
@@ -1272,6 +1278,7 @@ class PSpecData(object):
                         pass
                     else:
                         if verbose: print("  Building G...")
+                        print key1, "---", key2
                         Gv = self.get_G(key1, key2)
                         Hv = self.get_H(key1, key2, taper=taper)
                         built_GH = True
