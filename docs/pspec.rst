@@ -94,6 +94,7 @@ The most frequently-used methods from ``PSpecData`` are listed below. See :any:`
 
 .. autoclass:: hera_pspec.PSpecData
   :members: __init__, add, pspec, rephase_to_dset, scalar, delays, units
+  :noindex:
 
 
 ``UVPSpec``: Container for power spectra
@@ -167,6 +168,7 @@ The ``UVPSpec`` class
 The most relevant methods from ``UVPSpec`` are listed below. See :any:`uvpspec` for a full listing of all methods provided by ``UVPSpec``.
 
 .. autoclass:: hera_pspec.UVPSpec
-  :members: __init__, get_data, get_wgts, get_integrations, get_nsamples, get_dlys, get_kvecs, get_blpair_seps, select, read_hdf5, write_hdf5, generate_noise_spectra, average_spectra, fold_spectra, get_blpair_groups_from_bl_groups
+  :members: __init__, get_data, get_wgts, get_integrations, get_nsamples, get_dlys, get_kperps, get_kparas, get_blpair_seps, select, read_hdf5, write_hdf5, generate_noise_spectra, average_spectra, fold_spectra, get_blpair_groups_from_bl_groups
+  :noindex:
 
   

@@ -1,14 +1,10 @@
 import numpy as np
 import os
-import aipy
-import pyuvdata
-from hera_pspec import conversions
-from scipy import __version__ as scipy_version
-from scipy import integrate
+import hera_pspec.conversions as conversions
+import scipy.integrate as integrate
 from scipy.interpolate import interp1d
+from pyuvdata import UVBeam, utils as uvutils
 import aipy
-from pyuvdata import utils as uvutils
-
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, 
                           num_steps=5000, taper='none', little_h=True, 
@@ -373,7 +369,7 @@ class PSpecBeamUV(PSpecBeamBase):
             Cosmology object. Uses the default cosmology object if not 
             specified. Default: None.
         """
-        self.primary_beam = pyuvdata.UVBeam()
+        self.primary_beam = UVBeam()
         self.primary_beam.read_beamfits(beam_fname)
 
         self.beam_freqs = self.primary_beam.freq_array[0]

@@ -1048,8 +1048,8 @@ class PSpecData(object):
               taper='none', little_h=True, spw_ranges=None, verbose=True, 
               history=''):
         """
-        Estimate the delay power spectrum from a pair of datasets contained in this 
-        object, using the optimal quadratic estimator from arXiv:1502.06016.
+        Estimate the delay power spectrum from a pair of datasets contained in 
+        this object, using the optimal quadratic estimator of arXiv:1502.06016.
 
         In this formulation, the power spectrum is proportional to the 
         visibility data via
@@ -1071,9 +1071,8 @@ class PSpecData(object):
 
         Parameters
         ----------
-        bls1 : list of baseline groups, each being a list of ant-pair tuples
-
-        bls2 : list of baseline groups, each being a list of ant-pair tuples
+        bls1, bls2 : list
+            List of baseline groups, each group being a list of ant-pair tuples.
 
         dsets : length-2 tuple or list
             Contains indices of self.dsets to use in forming power spectra, 
@@ -1101,11 +1100,10 @@ class PSpecData(object):
             A list of spectral window channel ranges to select within the total 
             bandwidth of the datasets, each of which forms an independent power 
             spectrum estimate. Example: [(220, 320), (650, 775)].
-            
             Each tuple should contain a start and stop channel used to index 
             the `freq_array` of each dataset. The default (None) is to use the 
             entire band provided in each dataset.
-
+        
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -1119,30 +1117,41 @@ class PSpecData(object):
 
         Examples
         --------
-        Example 1 : no grouping, i.e. each baseline is its own group, no 
-        brackets needed for each bl.
-        if
+        *Example 1:* No grouping; i.e. each baseline is its own group, no 
+        brackets needed for each bl. If::
+        
             A = (1, 2); B = (2, 3); C = (3, 4); D = (4, 5); E = (5, 6); F = (6, 7)
-        and
+        
+        and::
+        
             bls1 = [ A, B, C ]
             bls2 = [ D, E, F ]
-        then
+        
+        then::
+        
             blpairs = [ (A, D), (B, E), (C, F) ]
 
-        Example 2: grouping, blpairs come in lists of blgroups, which are considered 
-        "grouped" in OQE
-        if
+        *Example 2:* Grouping; blpairs come in lists of blgroups, which are 
+        considered "grouped" in OQE. 
+        If::
+        
             bls1 = [ [A, B], [C, D] ]
             bls2 = [ [C, D], [E, F] ]
-        then
+        
+        then::
+        
             blpairs = [ [(A, C), (B, D)], [(C, E), (D, F)] ]   
     
-        Example 3: mixed grouping, i.e. some blpairs are grouped, others are not
-        if
+        *Example 3:* Mixed grouping; i.e. some blpairs are grouped, others are 
+        not. If::
+        
             bls1 = [ [A, B], C ]
             bls2 = [ [D, E], F ]
-        then
+        
+        then::
+        
             blpairs = [ [(A, D), (B, E)], (C, F)]
+        
         """
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
