@@ -3,7 +3,7 @@ Simple plotting functions
 
 The ``hera_pspec.plot`` module contains functions for making simple plots of delay power spectra.
 
-A simple example 
+The following example plots the power spectra from a ``UVPSpec`` object, averaged over baseline-pairs and times.
 
 .. code-block:: python
   
@@ -23,15 +23,8 @@ A simple example
   
 For a more extensive worked example, see `this example Jupyter notebook <https://github.com/HERA-Team/hera_pspec/blob/master/examples/Plotting_examples.ipynb>`_.
 
-.. contents::
-  :local:
-
-
-Plot module
------------
-
 The only plotting function currently available in the `hera_pspec.plot` module is `delay_spectrum()`.
 
-.. automodule:: hera_pspec.plot
+.. automodule:: plot
   :members:
 
