@@ -1,14 +1,10 @@
 import numpy as np
 import os
-import aipy
-import pyuvdata
-from hera_pspec import conversions
-from scipy import __version__ as scipy_version
-from scipy import integrate
+import hera_pspec.conversions as conversions
+import scipy.integrate as integrate
 from scipy.interpolate import interp1d
+from pyuvdata import UVBeam, utils as uvutils
 import aipy
-from pyuvdata import utils as uvutils
-
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, 
                           num_steps=5000, taper='none', little_h=True, 
@@ -241,17 +237,20 @@ class PSpecBeamBase(object):
 
     def get_Omegas(self, pols):
         """
-        Get OmegaP and OmegaPP across beam_freqs for requested polarizatiosn
+        Get OmegaP and OmegaPP across beam_freqs for requested polarizations.
 
         Parameters
         ----------
-        pols : list of polarization strings or integers
+        pols : list
+            List of polarization strings or integers.
 
-        Returns (OmegaP, OmegaPP)
+        Returns
         -------
-        OmegaP : ndarray containing power_beam_int, shape=(Nbeam_freqs, Npols)
+        OmegaP : array_like
+            Array containing power_beam_int, shape: (Nbeam_freqs, Npols).
 
-        OmegaPP : ndarray containing power_sq_beam_int, shape=(Nbeam_freqs, Npols)
+        OmegaPP : array_like
+            Array containing power_sq_beam_int, shape: (Nbeam_freqs, Npols).
         """
         # type check
         if isinstance(pols, (int, np.int, np.int32)):
@@ -373,7 +372,7 @@ class PSpecBeamUV(PSpecBeamBase):
             Cosmology object. Uses the default cosmology object if not 
             specified. Default: None.
         """
-        self.primary_beam = pyuvdata.UVBeam()
+        self.primary_beam = UVBeam()
         self.primary_beam.read_beamfits(beam_fname)
 
         self.beam_freqs = self.primary_beam.freq_array[0]
@@ -608,7 +607,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
 
         Returns
         -------
-        primary_beam_area: float, array-like
+        primary_beam_area: array_like
+            Array of floats containing the primary beam-squared area.
         """
         if pol in self.OmegaPP.keys():
             return self.OmegaPP[pol]
@@ -620,7 +620,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
     
     def __str__(self):
         """
-        Print string with useful information.
+        Return a string with useful information about this object.
         """
         s = "PSpecBeamFromArray object\n"
         s += "\tFrequency range: Min. %4.4e Hz, Max. %4.4e Hz\n" \

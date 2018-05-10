@@ -30,7 +30,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         If True, average spectra over the time axis. Default: False.
     
     fold : bool, optional
-        Whether to fold the power spectrum in |k_parallel|. Default: False.
+        Whether to fold the power spectrum in :math:`|k_\parallel|`. 
+        Default: False.
     
     plot_noise : bool, optional
         Whether to plot noise power spectrum curves or not. Default: False.

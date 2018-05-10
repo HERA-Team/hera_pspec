@@ -4,11 +4,10 @@ conversions.py
 
 Cosmological and instrumental
 conversion functions for hera_pspec
-
-
 """
 import numpy as np
-from scipy import integrate
+import scipy.integrate as integrate
+
 try:
     from astropy.cosmology import LambdaCDM
     _astropy = True
