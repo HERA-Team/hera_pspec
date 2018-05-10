@@ -237,17 +237,20 @@ class PSpecBeamBase(object):
 
     def get_Omegas(self, pols):
         """
-        Get OmegaP and OmegaPP across beam_freqs for requested polarizatiosn
+        Get OmegaP and OmegaPP across beam_freqs for requested polarizations.
 
         Parameters
         ----------
-        pols : list of polarization strings or integers
+        pols : list
+            List of polarization strings or integers.
 
-        Returns (OmegaP, OmegaPP)
+        Returns
         -------
-        OmegaP : ndarray containing power_beam_int, shape=(Nbeam_freqs, Npols)
+        OmegaP : array_like
+            Array containing power_beam_int, shape: (Nbeam_freqs, Npols).
 
-        OmegaPP : ndarray containing power_sq_beam_int, shape=(Nbeam_freqs, Npols)
+        OmegaPP : array_like
+            Array containing power_sq_beam_int, shape: (Nbeam_freqs, Npols).
         """
         # type check
         if isinstance(pols, (int, np.int, np.int32)):
@@ -604,7 +607,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
 
         Returns
         -------
-        primary_beam_area: float, array-like
+        primary_beam_area: array_like
+            Array of floats containing the primary beam-squared area.
         """
         if pol in self.OmegaPP.keys():
             return self.OmegaPP[pol]
@@ -616,7 +620,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
     
     def __str__(self):
         """
-        Print string with useful information.
+        Return a string with useful information about this object.
         """
         s = "PSpecBeamFromArray object\n"
         s += "\tFrequency range: Min. %4.4e Hz, Max. %4.4e Hz\n" \
