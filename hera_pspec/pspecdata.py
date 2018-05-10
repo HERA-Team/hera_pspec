@@ -1,14 +1,12 @@
 import numpy as np
 import aipy
 import pyuvdata
-from hera_pspec import utils
-import itertools
-import copy
-import hera_cal as hc
-from hera_pspec import uvpspec, version
+import copy, operator, itertools
 from collections import OrderedDict as odict
+import hera_cal as hc
+from hera_pspec import uvpspec, utils, version
+from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
-import operator
 
 
 class PSpecData(object):
@@ -1339,7 +1337,7 @@ class PSpecData(object):
                         lst2.extend(dset2.lst_array[inds2])
 
                         # insert blpair info
-                        blp_arr.extend(np.ones_like(inds1, np.int) * uvpspec._antnums_to_blpair(blp))
+                        blp_arr.extend(np.ones_like(inds1, np.int) * uvputils._antnums_to_blpair(blp))
 
                 # insert into data and wgts integrations dictionaries
                 spw_data.append(pol_data)
