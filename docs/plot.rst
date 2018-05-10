@@ -25,6 +25,7 @@ For a more extensive worked example, see `this example Jupyter notebook <https:/
 
 The only plotting function currently available in the `hera_pspec.plot` module is `delay_spectrum()`.
 
-.. automodule:: plot
+.. automodule:: hera_pspec.plot
   :members:
+
 
