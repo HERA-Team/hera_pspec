@@ -134,7 +134,6 @@ class PSpecData(object):
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
     
-    
     def __str__(self):
         """
         Print basic info about this PSpecData object.
@@ -153,7 +152,6 @@ class PSpecData(object):
                 s += "  dset '%s' (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" \
                       % (self.labels[i], i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols)
         return s
-        
         
     def validate_datasets(self, verbose=True):
         """
@@ -207,7 +205,6 @@ class PSpecData(object):
             max_diff = np.sqrt(max_diff_ra**2 + max_diff_dec**2)
             if max_diff > 0.15: raise_warning("Warning: maximum phase-center difference between datasets is > 10 arcmin", verbose=verbose)
     
-    
     def check_key_in_dset(self, key, dset_ind):
         """
         Check 'key' exists in the UVData object self.dsets[dset_ind]
@@ -255,29 +252,27 @@ class PSpecData(object):
             keys will be removed. Default: None.
         """
         if keys is None:
-            self._C, self._Cempirical, self._I, self._iC = {}, {}, {}, {}
+            self._C, self._I, self._iC = {}, {}, {}
             self._iCt = {}
         else:
             for k in keys:
                 try: del(self._C[k])
                 except(KeyError): pass
-                try: del(self._Cempirical[k])
-                except(KeyError): pass
                 try: del(self._I[k])
                 except(KeyError): pass
                 try: del(self._iC[k])
                 except(KeyError): pass
-    
+
     def dset_idx(self, dset):
         """
         Return the index of a dataset, regardless of whether it was specified 
         as an integer of a string.
-        
+
         Parameters
         ----------
         dset : int or str
             Index or name of a dataset belonging to this PSpecData object.
-        
+
         Returns
         -------
         dset_idx : int
@@ -293,49 +288,49 @@ class PSpecData(object):
             return dset
         else:
             raise TypeError("dset must be either an int or string")
-    
-    
-    def blkey(self, dset, bl=None, pol=None):
+
+    def parse_blkey(self, key):
         """
-        Return a key specifying a particular dataset, baseline, and 
-        (optionally) polarization, in the tuple format used by other methods 
-        of PSpecData.
-        
+        Parse a dataset + baseline key in the form (dataset, baseline, [pol]) 
+        into a dataset index and a baseline(pol) key, where pol is optional.
+
         Parameters
         ----------
-        dset : int or str
-            Index or name of a dataset belonging to this PSpecData object.
-        
-        bl : tuple, optional
-            Baseline ID, specified as a tuple of antenna pairs, e.g. (10, 11). 
-            Default: None.
-        
-        pol : str, optional
-            Polarization of the visibility, in linear (e.g. 'xx') or Stokes 
-            (e.g. 'I') notation, whatever is supported by the input UVData 
-            objects. Default: None (polarization will not be included).
-        
+        key : tuple
+
         Returns
         -------
-        key : tuple
-            Tuple containing dataset ID, baseline index (if specified), and 
-            polarization (if specified).
+        dset : int
+            dataset index
+        bl : tuple
+            baseline (pol) key
         """
-        key = ()
-        
-        # Look up dset label if it's a string
-        dset_idx = self.dset_idx(dset)
-        key += (dset_idx,)
-                
-        # Add the baseline tuple if it was specified
-        if bl is None: return key
-        key += (bl,)
-        
-        # Polarization
-        if pol is not None: key += (pol,)
-        return key
-        
-    
+        # type check
+        assert isinstance(key, tuple), "key must be fed as a tuple"
+        assert len(key) > 1, "key must have len >= 2"
+
+        # get dataset index
+        dset_idx = self.dset_idx(key[0])
+        key = key[1:]
+
+        # get baseline
+        bl = key[0]
+        if isinstance(bl, (int, np.int, np.int32)):
+            assert len(key) > 1, "baseline must be fed as a tuple"
+            bl = tuple(key[:2])
+            key = key[2:]
+        else:
+            key = key[1:]
+        assert isinstance(bl, tuple), "baseline must be fed as a tuple"
+
+        # put pol into bl key if it exists
+        if len(key) > 0:
+            pol = key[0]
+            assert isinstance(pol, (str, int, np.int, np.int32)), "pol must be fed as a str or int"
+            bl += (key[0],)
+
+        return dset_idx, bl
+
     def x(self, key):
         """
         Get data for a given dataset and baseline, as specified in a standard
@@ -353,10 +348,9 @@ class PSpecData(object):
         x : array_like
             Array of data from the requested UVData dataset and baseline.
         """
-        assert isinstance(key, tuple)
-        dset, bl = self.blkey(dset=key[0], bl=key[1:])
-        spwmin, spwmax = self.spw_range[0], self.spw_range[1]
-        return self.dsets[dset].get_data(bl).T[spwmin:spwmax, :]
+        dset, bl = self.parse_blkey(key)
+        spw = slice(self.spw_range[0], self.spw_range[1])
+        return self.dsets[dset].get_data(bl).T[spw]
 
     def w(self, key):
         """
@@ -375,44 +369,16 @@ class PSpecData(object):
         x : array_like
             Array of weights for the requested UVData dataset and baseline.
         """
-        assert isinstance(key, tuple)
-        spwrange = self.spw_range
-        dset, bl = self.blkey(dset=key[0], bl=key[1:])
+        dset, bl = self.parse_blkey(key)
+        spw = slice(self.spw_range[0], self.spw_range[1])
         
         if self.wgts[dset] is not None:
-            return self.wgts[dset].get_data(bl).T[spwrange[0]:spwrange[1], :]
+            return self.wgts[dset].get_data(bl).T[spw]
         else:
             # If weights were not specified, use the flags built in to the
             # UVData dataset object
-            flags = self.dsets[dset].get_flags(bl).astype(float).T[spwrange[0]:spwrange[1], :]
-            return 1. - flags # Flag=1 => weight=0
-
-    def C(self, key):
-        """
-        Estimate covariance matrices from the data.
-
-        Parameters
-        ----------
-        key : tuple
-            Tuple containing indices of dataset and baselines. The first item
-            specifies the index (ID) of a dataset in the collection, while
-            subsequent indices specify the baseline index, in _key2inds format.
-
-        Returns
-        -------
-        C : array_like
-            (Weighted) empirical covariance of data for baseline 'bl'.
-        """
-        assert isinstance(key, tuple)
-        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
-        
-        # Set covariance if it's not in the cache
-        if not self._C.has_key(key):
-            self.set_C( {key : utils.cov(self.x(key), self.w(key))} )
-            self._Cempirical[key] = self._C[key]
-
-        # Return cached covariance
-        return self._C[key]
+            wgts = (~self.dsets[dset].get_flags(bl)).astype(float).T[spw]
+            return wgts
 
     def set_C(self, cov):
         """
@@ -429,10 +395,9 @@ class PSpecData(object):
         self.clear_cov_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
 
-    def C_empirical(self, key):
+    def C_model(self, key, model='empirical'):
         """
-        Calculate empirical covariance from the data (with appropriate
-        weighting).
+        Return a covariance model having specified a key and model type.
 
         Parameters
         ----------
@@ -441,18 +406,33 @@ class PSpecData(object):
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
 
+        model : string, optional
+            Type of covariance model to calculate, if not cached. options=['empirical']
+
         Returns
         -------
-        C_empirical : array_like
-            Empirical covariance for the specified key.
+        C : array-like
+            Covariance model for the specified key.
         """
-        assert isinstance(key, tuple)
-        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
-        
-        # Check cache for empirical covariance
-        if not self._Cempirical.has_key(key):
-            self._Cempirical[key] = utils.cov(self.x(key), self.w(key))
-        return self._Cempirical[key]
+        # type check
+        assert isinstance(key, tuple), "key must be fed as a tuple"
+        assert isinstance(model, (str, np.str)), "model must be a string"
+        assert model in ['empirical'], "didn't recognize model {}".format(model)
+
+        # parse key
+        dset, bl = self.parse_blkey(key)
+        key = (dset,) + (bl,)
+
+        # add model to key
+        Ckey = key + (model,)
+
+        # check cache
+        if not self._C.has_key(Ckey):
+            # calculate covariance model
+            if model == 'empirical':
+                self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
+
+        return self._C[Ckey]
 
     def I(self, key):
         """
@@ -471,13 +451,15 @@ class PSpecData(object):
             Identity covariance matrix, dimension (Nfreqs, Nfreqs).
         """
         assert isinstance(key, tuple)
-        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
+        # parse key
+        dset, bl = self.parse_blkey(key)
+        key = (dset,) + (bl,)
 
         if not self._I.has_key(key):
             self._I[key] = np.identity(self.spw_Nfreqs)
         return self._I[key]
 
-    def iC(self, key):
+    def iC(self, key, model='empirical'):
         """
         Return the inverse covariance matrix, C^-1.
 
@@ -488,17 +470,24 @@ class PSpecData(object):
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
 
+        model : string
+            Type of covariance model to calculate, if not cached. options=['empirical']
+
         Returns
         -------
         iC : array_like
             Inverse covariance matrix for specified dataset and baseline.
         """
         assert isinstance(key, tuple)
-        key = (self.dset_idx(key[0]),) + key[1:]  # Sanitize dataset name
-        
+        # parse key
+        dset, bl = self.parse_blkey(key)
+        key = (dset,) + (bl,)
+
+        Ckey = key + (model,)
+
         # Calculate inverse covariance if not in cache
-        if not self._iC.has_key(key):
-            C = self.C(key)
+        if not self._iC.has_key(Ckey):
+            C = self.C_model(key, model=model)
             U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
 
             # FIXME: Not sure what these are supposed to do
@@ -506,8 +495,8 @@ class PSpecData(object):
             #if self.lmode is not None: S += S[self.lmode-1]
 
             # FIXME: Is series of dot products quicker?
-            self.set_iC({key:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
-        return self._iC[key]
+            self.set_iC({Ckey:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
+        return self._iC[Ckey]
 
     def set_iC(self, d):
         """
@@ -1464,7 +1453,7 @@ class PSpecData(object):
         
         # Parse dset_index
         dset_index = self.dset_idx(dset_index)
-        
+
         # get LST grid we are phasing to
         lst_grid = []
         lst_array = dsets[dset_index].lst_array.ravel()
@@ -1642,7 +1631,6 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
             bl2_vec = ap[blp[1][0]] - ap[blp[1][1]]
             if np.linalg.norm(bl1_vec - bl2_vec) >= baseline_tol:
                 raise_warning("blpair {} exceeds redundancy tolerance of {} m".format(blp, baseline_tol), verbose=verbose)
-
 
 def raise_warning(warning, verbose=True):
     '''warning function'''
