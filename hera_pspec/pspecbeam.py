@@ -117,15 +117,16 @@ class PSpecBeamBase(object):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, num_steps=5000, 
-                             pol='I', taper='none', little_h=True, noise_scalar=False):
+    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, 
+                             num_steps=5000, pol='pI', taper='none', 
+                             little_h=True, noise_scalar=False):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
-        Currently, only the "I", "XX" and "YY" polarization beams are supported.
+        Currently, only the "pI", "XX" and "YY" polarization beams are supported.
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
 
@@ -148,8 +149,8 @@ class PSpecBeamBase(object):
 
         pol: str, optional
                 Which polarization to compute the beam scalar for.
-                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX', although 
-                Default: 'I'
+                'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX'
+                Default: 'pI'
 
         taper : str, optional
             Whether a tapering function (e.g. Blackman-Harris) is being used in 
@@ -187,7 +188,7 @@ class PSpecBeamBase(object):
                                        noise_scalar=noise_scalar)
         return scalar
 
-    def Jy_to_mK(self, freqs, pol='I'):
+    def Jy_to_mK(self, freqs, pol='pI'):
         """
         Return the multiplicative factor [mK / Jy], to convert a visibility 
         from Jy -> mK,
@@ -206,8 +207,8 @@ class PSpecBeamBase(object):
 
         pol: str, optional
                 Which polarization to compute the beam scalar for.
-                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX', although 
-                Default: 'I'
+                'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX'
+                Default: 'pI'
 
         Returns
         -------
@@ -300,7 +301,7 @@ class PSpecBeamGauss(PSpecBeamBase):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-    def power_beam_int(self, pol='I'):
+    def power_beam_int(self, pol='pI'):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in sr). Uses analytic formula that the answer
@@ -316,8 +317,8 @@ class PSpecBeamGauss(PSpecBeamBase):
         ----------
         pol: str, optional
                 Which polarization to compute the beam scalar for.
-                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX' 
-                Default: 'I'
+                'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX' 
+                Default: 'pI'
 
         Returns
         -------
@@ -327,7 +328,7 @@ class PSpecBeamGauss(PSpecBeamBase):
         return np.ones_like(self.beam_freqs) * 2. * np.pi * self.fwhm**2 \
                / (8. * np.log(2.))
 
-    def power_beam_sq_int(self, pol='I'):
+    def power_beam_sq_int(self, pol='pI'):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam area (in str). Uses analytic formula that the answer
@@ -343,8 +344,8 @@ class PSpecBeamGauss(PSpecBeamBase):
         ----------
         pol: str, optional
                 Which polarization to compute the beam scalar for.
-                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX' 
-                Default: 'I'
+                'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX' 
+                Default: 'pI'
 
         Returns
         -------
@@ -381,7 +382,7 @@ class PSpecBeamUV(PSpecBeamBase):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-    def power_beam_int(self, pol='I'):
+    def power_beam_int(self, pol='pI'):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency. Uses function
@@ -394,8 +395,8 @@ class PSpecBeamUV(PSpecBeamBase):
         ----------
         pol: str, optional
                 Which polarization to compute the beam scalar for.
-                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX' 
-                Default: 'I'
+                'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX' 
+                Default: 'pI'
 
         Returns
         -------
@@ -407,7 +408,7 @@ class PSpecBeamUV(PSpecBeamBase):
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
 
-    def power_beam_sq_int(self, pol='I'):
+    def power_beam_sq_int(self, pol='pI'):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam**2 area (in str) as a function of frequency. Uses function
@@ -420,8 +421,8 @@ class PSpecBeamUV(PSpecBeamBase):
         ----------
         pol: str, optional
                 Which polarization to compute the beam scalar for.
-                'I', 'Q', 'U', 'V', 'XX', 'YY', 'XY', 'YX'
-                Default: 'I'
+                'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX'
+                Default: 'pI'
 
         Returns
         -------
@@ -442,7 +443,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         
         Allowed polarizations are: 
         
-            I, Q, U, V, XX, YY, XY, YX
+            pI, pQ, pU, pV, XX, YY, XY, YX
         
         Other polarizations will be ignored.
         
@@ -471,7 +472,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
             Cosmology object. Uses the default cosmology object if not 
             specified. Default: None.
         """
-        self.allowed_pols = ['I', 'Q', 'U', 'V', 
+        self.allowed_pols = ['pI', 'pQ', 'pU', 'pV', 
                              'XX', 'YY', 'XY', 'YX']
         self.OmegaP = {}; self.OmegaPP = {}
         
@@ -480,8 +481,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
         
         if isinstance(OmegaP, np.ndarray) and isinstance(OmegaPP, np.ndarray):
             # Only single arrays were specified; assume I
-            OmegaP = {'I': OmegaP}
-            OmegaPP = {'I': OmegaPP}
+            OmegaP = {'pI': OmegaP}
+            OmegaPP = {'pI': OmegaPP}
         
         elif isinstance(OmegaP, np.ndarray) or isinstance(OmegaPP, np.ndarray):
             # Mixed dict and array types are not allowed
@@ -531,7 +532,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
             Which polarization to add beam solid angle arrays for. Valid 
             options are:
             
-              'I', 'Q', 'U', 'V', 
+              'pI', 'pQ', 'pU', 'pV', 
               'XX', 'YY', 'XY', 'YX' 
             
             If the arrays already exist for the specified polarization, they 
@@ -566,7 +567,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         self.OmegaPP[pol] = OmegaPP
             
     
-    def power_beam_int(self, pol='I'):
+    def power_beam_int(self, pol='pI'):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency.
@@ -575,9 +576,9 @@ class PSpecBeamFromArray(PSpecBeamBase):
         ----------
         pol: str, optional
             Which polarization to compute the beam scalar for. 
-                'I', 'Q', 'U', 'V', 
+                'pI', 'pQ', 'pU', 'pV', 
                 'XX', 'YY', 'XY', 'YX'
-            Default: I.
+            Default: pI.
 
         Returns
         -------
@@ -592,7 +593,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
                            "Available polarizations are: %s" \
                            % (pol, available_pols))
     
-    def power_beam_sq_int(self, pol='I'):
+    def power_beam_sq_int(self, pol='pI'):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam**2 area (in str) as a function of frequency.
@@ -601,9 +602,9 @@ class PSpecBeamFromArray(PSpecBeamBase):
         ----------
         pol: str, optional
             Which polarization to compute the beam scalar for.
-              'I', 'Q', 'U', 'V', 
+              'pI', 'pQ', 'pU', 'pV', 
               'XX', 'YY', 'XY', 'YX' 
-            Default: I.
+            Default: pI.
 
         Returns
         -------
