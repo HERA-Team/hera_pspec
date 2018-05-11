@@ -1,9 +1,8 @@
 import unittest
 import nose.tools as nt
+import matplotlib
 import numpy as np
 import os, copy, sys
-import matplotlib
-matplotlib.use('Agg') # Do not assume we have access to an X server
 from hera_pspec import pspecdata, pspecbeam, conversions, plot
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
