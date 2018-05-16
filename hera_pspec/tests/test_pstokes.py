@@ -27,8 +27,8 @@ def test_combine_pol():
    
 def test_construct_pstokes():   
    # test to form I and Q from single polarized UVData objects
-   uvdI = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes='I')
-   uvdQ = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes='Q')
+   uvdI = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes='pI')
+   uvdQ = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes='pQ')
 
    # check exceptions
    nt.assert_raises(AssertionError, pstokes.construct_pstokes, uvd1, 1)   
@@ -57,10 +57,10 @@ def test_construct_pstokes():
    uvd3 = uvd1 + uvd2
 
    # test to form I and Q from dual polarized UVData objects
-   uvdI = pstokes.construct_pstokes(dset1=uvd3, dset2=uvd3, pstokes='I')
+   uvdI = pstokes.construct_pstokes(dset1=uvd3, dset2=uvd3, pstokes='pI')
 
    # check except for same polarizations
-   nt.assert_raises(AssertionError, dset1=uvd1, dset2=uvd1, pstokes='I')
+   nt.assert_raises(AssertionError, dset1=uvd1, dset2=uvd1, pstokes='pI')
 
 if __name__ == "__main__":
     unittest.main()

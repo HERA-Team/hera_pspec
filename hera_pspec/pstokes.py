@@ -7,10 +7,10 @@ import copy
 
 # weights used in forming Stokes visibilities
 pol_weights = {
-    'I': {'XX': 1. , 'YY': 1. },
-    'Q': {'XX': 1. , 'YY':-1. },
-    'U': {'XY': 1. , 'YX': 1. },
-    'V': {'XY':-1.j, 'YX': 1.j},
+    'pI': {'XX': 1. , 'YY': 1. },
+    'pQ': {'XX': 1. , 'YY':-1. },
+    'pU': {'XY': 1. , 'YX': 1. },
+    'pV': {'XY':-1.j, 'YX': 1.j},
 }
 
 def miriad2pyuvdata(dset):
@@ -26,7 +26,7 @@ def miriad2pyuvdata(dset):
    uv.read_miriad(dset)
    return uv
 
-def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='I'):
+def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI'):
    """
    Reads in miriad file and combines visibilities to form the desired pseudo-stokes visibilities. It returns UVData object containing the pseudo-stokes visibilities
    
@@ -47,7 +47,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='I'):
        Polarization of the second UVData object
 
    pstokes: Pseudo-stokes parameter, type: str
-       Pseudo stokes parameter to form, can be 'I' or 'Q' or 'U' or 'V'. Default: I
+       Pseudo stokes parameter to form, can be 'pI' or 'pQ' or 'pU' or 'pV'. Default: pI
   
    """
    if isinstance(uvd1, pyuvdata.UVData) == False:
@@ -80,7 +80,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='I'):
 
    return uvdS
 
-def construct_pstokes(dset1, dset2, pstokes='I', run_check=True):
+def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True):
    """
    Validates datasets required to construct desired visibilities and constructs desired Stokes parameters
    
@@ -95,7 +95,7 @@ def construct_pstokes(dset1, dset2, pstokes='I', run_check=True):
        form Stokes visibilities
 
    pstokes: Stokes parameter, type: str
-       Pseudo stokes parameter to form, can be 'I' or 'Q' or 'U' or 'V'. Default: I
+       Pseudo stokes parameter to form, can be 'pI' or 'pQ' or 'pU' or 'pV'. Default: I
 
    run_check: boolean
       Option to check for the existence and proper shapes of
