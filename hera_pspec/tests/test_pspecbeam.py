@@ -44,7 +44,7 @@ class Test_DataSet(unittest.TestCase):
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
         num_freqs = 20
-        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='I', num_steps=2000)
+        scalar = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='pI', num_steps=2000)
         
         # Check that user-defined cosmology can be specified
         bm = pspecbeam.PSpecBeamUV(self.beamfile,
@@ -55,12 +55,20 @@ class Test_DataSet(unittest.TestCase):
         self.assertEqual(Om_pp.ndim, 1)
 
         # Check that errors are raised for other Stokes parameters
-        for pol in ['Q', 'U', 'V', 'Z']:
+        for pol in ['pQ', 'pU', 'pV',]:
             nt.assert_raises(NotImplementedError, self.bm.power_beam_int, pol=pol)
             nt.assert_raises(NotImplementedError, self.bm.power_beam_sq_int, pol=pol)
             nt.assert_raises(NotImplementedError, self.bm.compute_pspec_scalar, 
                              lower_freq, upper_freq, num_freqs, pol=pol)
-
+        
+        # CHeck that invalid polarizations raise an error
+        pol = 'pZ'
+        nt.assert_raises(KeyError, self.bm.power_beam_int, pol=pol)
+        nt.assert_raises(KeyError, self.bm.power_beam_sq_int, pol=pol)
+        nt.assert_raises(KeyError, self.bm.compute_pspec_scalar, 
+                         lower_freq, upper_freq, num_freqs, pol=pol)
+        
+        
         self.assertAlmostEqual(Om_p[0], 0.078694909518866998)
         self.assertAlmostEqual(Om_p[18], 0.065472512282419112)
         self.assertAlmostEqual(Om_p[-1], 0.029484832405240326)
@@ -72,7 +80,7 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(scalar/567871703.75268996, 1.0, delta=1e-4)
         
         # convergence of integral
-        scalar_large_Nsteps = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='I', num_steps=10000) 
+        scalar_large_Nsteps = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='pI', num_steps=10000) 
         self.assertAlmostEqual(scalar / scalar_large_Nsteps, 1.0, delta=1e-5)
 
         # test taper execution
@@ -93,7 +101,7 @@ class Test_DataSet(unittest.TestCase):
         nt.assert_raises(TypeError, self.bm.Jy_to_mK, np.array([1]))
 
         # test noise scalar
-        sclr = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='I', num_steps=2000, noise_scalar=True)
+        sclr = self.bm.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='pI', num_steps=2000, noise_scalar=True)
         nt.assert_almost_equal(sclr, 70.983962969086235)
 
     def test_Gaussbeam(self):
@@ -102,7 +110,7 @@ class Test_DataSet(unittest.TestCase):
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
         num_freqs = 20
-        scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='I', num_steps=2000)
+        scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='pI', num_steps=2000)
         
         # Check that user-defined cosmology can be specified
         bgauss = pspecbeam.PSpecBeamGauss(0.8, 
@@ -148,8 +156,8 @@ class Test_DataSet(unittest.TestCase):
                                               beam_freqs=beam_freqs)
         
         psbeampol = pspecbeam.PSpecBeamFromArray(
-                                OmegaP={'I': Om_P, 'Q': Om_P},
-                                OmegaPP={'I': Om_PP, 'Q': Om_PP},
+                                OmegaP={'pI': Om_P, 'pQ': Om_P},
+                                OmegaPP={'pI': Om_PP, 'pQ': Om_PP},
                                 beam_freqs=beam_freqs)
         
         # Check that user-defined cosmology can be specified
@@ -159,15 +167,15 @@ class Test_DataSet(unittest.TestCase):
         
         # Compare scalar calculation with Gaussian case
         scalar = psbeam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, 
-                                             pol='I', num_steps=2000)
+                                             pol='pI', num_steps=2000)
         g_scalar = self.gauss.compute_pspec_scalar(lower_freq, upper_freq, 
-                                                   num_freqs, pol='I', 
+                                                   num_freqs, pol='pI', 
                                                    num_steps=2000)
         np.testing.assert_array_almost_equal(scalar, g_scalar)
         
         # Check that polarizations are recognized and invalid ones rejected
         scalarp = psbeampol.compute_pspec_scalar(lower_freq, upper_freq, 
-                                                 num_freqs, pol='Q', 
+                                                 num_freqs, pol='pQ', 
                                                  num_steps=2000)
         
         # Test taper execution (same as Gaussian case)
@@ -177,10 +185,10 @@ class Test_DataSet(unittest.TestCase):
         
         # Check that invalid init args raise errors
         nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray, OmegaP=Om_P, 
-                         OmegaPP={'I': Om_PP}, beam_freqs=beam_freqs)
+                         OmegaPP={'pI': Om_PP}, beam_freqs=beam_freqs)
         nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'I': Om_P, 'Q': Om_P},
-                         OmegaPP={'I': Om_PP,},
+                         OmegaP={'pI': Om_P, 'pQ': Om_P},
+                         OmegaPP={'pI': Om_PP,},
                          beam_freqs=beam_freqs)
         
         nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
@@ -189,13 +197,13 @@ class Test_DataSet(unittest.TestCase):
                          beam_freqs=beam_freqs)
         
         nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'I': Om_P,},
-                         OmegaPP={'I': 'string',},
+                         OmegaP={'pI': Om_P,},
+                         OmegaPP={'pI': 'string',},
                          beam_freqs=beam_freqs)
         
         nt.assert_raises(ValueError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'I': Om_P}, 
-                         OmegaPP={'I': Om_PP[:-2],},
+                         OmegaP={'pI': Om_P}, 
+                         OmegaPP={'pI': Om_PP[:-2],},
                          beam_freqs=beam_freqs)
         
         # Check that invalid method args raise errors

@@ -159,6 +159,25 @@ class Test_PSpecData(unittest.TestCase):
         # Check that invalid labels raise errors
         self.assertRaises(KeyError, psd.x, ('green', 24, 38))
     
+    def test_parse_blkey(self):
+        # make a double-pol UVData
+        uvd = copy.deepcopy(self.uvd)
+        uvd.polarization_array[0] = -7
+        uvd = uvd + self.uvd
+        # check parse_blkey
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'])
+        dset, bl = ds.parse_blkey((0, (24, 25)))
+        nt.assert_equal(dset, 0)
+        nt.assert_equal(bl, (24, 25))
+        dset, bl = ds.parse_blkey(('red', (24, 25), 'xx'))
+        nt.assert_equal(dset, 0)
+        nt.assert_equal(bl, (24, 25, 'xx'))
+        # check PSpecData.x works
+        nt.assert_equal(ds.x(('red', (24, 25))).shape, (2, 64, 60))
+        nt.assert_equal(ds.x(('red', (24, 25), 'xx')).shape, (64, 60))
+        nt.assert_equal(ds.w(('red', (24, 25))).shape, (2, 64, 60))
+        nt.assert_equal(ds.w(('red', (24, 25), 'xx')).shape, (64, 60))
+
     def test_str(self):
         """
         Check that strings can be output.

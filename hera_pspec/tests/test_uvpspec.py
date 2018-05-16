@@ -5,6 +5,7 @@ import os
 import sys
 from hera_pspec.data import DATA_PATH
 from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata
+from hera_pspec import uvpspec_utils as uvputils
 import copy
 import h5py
 from collections import OrderedDict as odict
@@ -325,6 +326,24 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 3.0).all())
         nt.assert_equal(uvp2.get_data(0, 1002001002, 'xx').shape, (10, 50))
+        
+        # Test blpair averaging (with baseline-pair weights)
+        # Results should be identical with different weights here, as the data 
+        # are all the same)
+        blpairs = [[1002001002, 1002001002]]
+        blpair_wgts = [[2., 0.,]]
+        uvp3a = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, 
+                                   blpair_weights=None,
+                                   inplace=False)
+        uvp3b = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, 
+                                   blpair_weights=blpair_wgts,
+                                   inplace=False)
+        #nt.assert_equal(uvp2.Nblpairs, 1)
+        nt.assert_true(np.isclose(uvp3a.get_data(0, 1002001002, 'xx'), 
+                                  uvp3b.get_data(0, 1002001002, 'xx')).all())
+        #nt.assert_equal(uvp2.get_data(0, 1002001002, 'xx').shape, (10, 50))
+        
+        
         # test time averaging
         uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
         nt.assert_true(uvp2.Ntimes, 1)
@@ -333,7 +352,7 @@ class Test_UVPSpec(unittest.TestCase):
         # ensure averaging works when multiple repeated baselines are present, but only
         # if time_avg = True
         uvp.blpair_array[uvp.blpair_to_indices(2003002003)] = 1002001002
-        nt.assert_raises(ValueError, uvp.average_spectra, blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=False)
+        nt.assert_raises(ValueError, uvp.average_spectra, blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=False, inplace=False)
         uvp.average_spectra(blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=True)
         nt.assert_equal(uvp.Ntimes, 1)
         nt.assert_equal(uvp.Nblpairs, 1)
@@ -382,21 +401,19 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(hasattr(uvp, 'OmegaP'))
 
 def test_conj_blpair_int():
-    conj_blpair = uvpspec._conj_blpair_int(1002003004)
+    conj_blpair = uvputils._conj_blpair_int(1002003004)
     nt.assert_equal(conj_blpair, 3004001002)
 
 def test_conj_bl_int():
-    conj_bl = uvpspec._conj_bl_int(1002)
+    conj_bl = uvputils._conj_bl_int(1002)
     nt.assert_equal(conj_bl, 2001)
 
 def test_conj_blpair():
-    blpair = uvpspec._conj_blpair(1002003004, which='first')
+    blpair = uvputils._conj_blpair(1002003004, which='first')
     nt.assert_equal(blpair, 2001003004)
-    blpair = uvpspec._conj_blpair(1002003004, which='second')
+    blpair = uvputils._conj_blpair(1002003004, which='second')
     nt.assert_equal(blpair, 1002004003)
-    blpair = uvpspec._conj_blpair(1002003004, which='both')
+    blpair = uvputils._conj_blpair(1002003004, which='both')
     nt.assert_equal(blpair, 2001004003)
-    nt.assert_raises(ValueError, uvpspec._conj_blpair, 2001003004, which='foo')
-
-
+    nt.assert_raises(ValueError, uvputils._conj_blpair, 2001003004, which='foo')
 
