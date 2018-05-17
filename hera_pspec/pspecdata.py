@@ -15,14 +15,12 @@ class PSpecData(object):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
-
         Parameters
         ----------
         dsets : list or dict of UVData objects, optional
             Set of UVData objects containing the data that will be used to
             compute the power spectrum. If specified as a dict, the key names 
             will be used to tag each dataset. Default: Empty list.
-
         wgts : list or dict of UVData objects, optional
             Set of UVData objects containing weights for the input data.
             Default: Empty list.
@@ -56,13 +54,11 @@ class PSpecData(object):
     def add(self, dsets, wgts, labels=None):
         """
         Add a dataset to the collection in this PSpecData object.
-
         Parameters
         ----------
         dsets : UVData or list or dict
             UVData object or list of UVData objects containing data to add to
             the collection.
-
         wgts : UVData or list or dict
             UVData object or list of UVData objects containing weights to add
             to the collection. Must be the same length as dsets. If a weight is
@@ -184,12 +180,6 @@ class PSpecData(object):
             raise_warning("Warning: taking power spectra between frequency bins misaligned by more than 0.001 MHz",
                           verbose=verbose)
 
-        # Check for the same polarizations
-        pols = []
-        for d in self.dsets: pols.extend(d.polarization_array)
-        if np.unique(pols).size > 1:
-            raise ValueError("all dsets must have the same number and kind of polarizations: \n{}".format(pols))
-
         # Check phase type
         phase_types = []
         for d in self.dsets: phase_types.append(d.phase_type)
@@ -208,16 +198,13 @@ class PSpecData(object):
     def check_key_in_dset(self, key, dset_ind):
         """
         Check 'key' exists in the UVData object self.dsets[dset_ind]
-
         Parameters
         ----------
         key : tuple
             if length 1: assumed to be polarization number or string
             elif length 2: assumed to be antenna-number tuple (ant1, ant2)
             elif length 3: assumed ot be antenna-number-polarization tuple (ant1, ant2, pol)
-
         dset_ind : int, the index of the dataset to-be-checked
-
         Returns
         -------
         exists : bool
@@ -244,7 +231,6 @@ class PSpecData(object):
     def clear_cov_cache(self, keys=None):
         """
         Clear stored covariance data (or some subset of it).
-
         Parameters
         ----------
         keys : list of tuples, optional
@@ -335,14 +321,12 @@ class PSpecData(object):
         """
         Get data for a given dataset and baseline, as specified in a standard
         key format.
-
         Parameters
         ----------
         key : tuple
             Tuple containing dataset ID and baseline index. The first element
             of the tuple is the dataset index (or label), and the subsequent 
             elements are the baseline ID.
-
         Returns
         -------
         x : array_like
@@ -356,14 +340,12 @@ class PSpecData(object):
         """
         Get weights for a given dataset and baseline, as specified in a
         standard key format.
-
         Parameters
         ----------
         key : tuple
             Tuple containing dataset ID and baseline index. The first element
             of the tuple is the dataset index, and the subsequent elements are
             the baseline ID.
-
         Returns
         -------
         x : array_like
@@ -383,7 +365,6 @@ class PSpecData(object):
     def set_C(self, cov):
         """
         Set the cached covariance matrix to a set of user-provided values.
-
         Parameters
         ----------
         cov : dict
@@ -437,14 +418,12 @@ class PSpecData(object):
     def I(self, key):
         """
         Return identity covariance matrix.
-
         Parameters
         ----------
         key : tuple
             Tuple containing indices of dataset and baselines. The first item
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
-
         Returns
         -------
         I : array_like
@@ -462,7 +441,6 @@ class PSpecData(object):
     def iC(self, key, model='empirical'):
         """
         Return the inverse covariance matrix, C^-1.
-
         Parameters
         ----------
         key : tuple
@@ -503,7 +481,6 @@ class PSpecData(object):
         Set the cached inverse covariance matrix for a given dataset and
         baseline to a specified value. For now, you should already have applied
         weights to this matrix.
-
         Parameters
         ----------
         d : dict
@@ -516,7 +493,6 @@ class PSpecData(object):
     def set_R(self, R_matrix):
         """
         Set the weighting matrix R for later use in q_hat.
-
         Parameters
         ----------
         R_matrix : string or matrix
@@ -534,7 +510,6 @@ class PSpecData(object):
     def set_spw(self, spw_range):
         """
         Set the spectral window range
-
         Parameters
         ----------
         spw_range : tuple, contains start and end of spw in channel indices
@@ -551,19 +526,15 @@ class PSpecData(object):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
-
           \hat{q}_a = (1/2) conj(x_1) R_1 Q^alt_a R_2 x_2
-
         Note that the R matrix need not be set to C^-1. This is something that
         is set by the user in the set_R method.
-
         This is related to Equation 13 of arXiv:1502.06016. However, notice
         that there is a Q^alt_a instead of Q_a. The latter is defined as
         Q_a \equiv dC/dp_a. Since this is the derivative of the covariance
         with respect to the power spectrum, it contains factors of the primary
         beam etc. Q^alt_a strips away all of this, leaving only the barebones
         job of taking a Fourier transform. See HERA memo #44 for details
-
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
@@ -575,11 +546,9 @@ class PSpecData(object):
             Whether to use a fast FFT summation trick to construct q_hat, or
             a simpler brute-force matrix multiplication. The FFT method assumes
             a delta-fn bin in delay space. Default: True.
-
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
-
         Returns
         -------
         q_hat : array_like
@@ -634,23 +603,17 @@ class PSpecData(object):
     def get_G(self, key1, key2):
         """
         Calculates
-
             G_ab = (1/2) Tr[R_1 Q_a R_2 Q_b],
-
         which is needed for normalizing the power spectrum (see HERA memo #44)
-
         Note that in the limit that R_1 = R_2 = C^-1, this reduces to the Fisher
         matrix
-
             F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
-
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
             Tuples containing indices of dataset and baselines for the two 
             input datavectors. If a list of tuples is provided, the baselines 
             in the list will be combined with inverse noise weights.
-
         Returns
         -------
         G : array_like, complex
@@ -677,41 +640,29 @@ class PSpecData(object):
         """
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
-
             <q_a> = \sum_b H_{ab} p_b
-
         This is given by
-
             H_ab = (1/2) Tr[R_1 Q_a^alt R_2 Q_b]
-
         (See HERA memo #44). As currently implemented, this approximates the
         primary beam as frequency independent. Under this approximation, the
         our H_ab is defined using the equation above *except* we have
         Q^tapered rather than Q_b, where
-
             \overline{Q}^{tapered,beta} 
             = e^{i 2pi eta_beta (nu_i - nu_j)} gamma(nu_i) gamma(nu_j)
-
         where gamma is the tapering function. Again, see HERA memo #44 for
         details.
-
         Note that in the limit that R_1 = R_2 = C^-1 and Q_a is used instead
         of Q_a^alt, this reduces to the Fisher matrix
-
             F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
-
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
             Tuples containing indices of dataset and baselines for the two 
             input datavectors. If a list of tuples is provided, the baselines 
             in the list will be combined with inverse noise weights.
-
-
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
-
         Returns
         -------
         H : array_like, complex
@@ -770,45 +721,35 @@ class PSpecData(object):
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
         arXiv:1502.06016:
-
             \hat{p} = M \hat{q}
             <\hat{p}> = W p
             W = M H,
-
         where p is the true band power and H is the response matrix (defined above
         in get_H) of unnormalized bandpowers to normed bandpowers.
-
         Several choices for M are supported:
             'I':      Set M to be diagonal (e.g. HERA Memo #44)
-
         These choices will be supported very soon:
             'G^-1':   Set M = G^-1, the (pseudo)inverse response matrix.
             'G^-1/2': Set M = G^-1/2, the root-inverse response matrix (using SVD).
             'L^-1':   Set M = L^-1, Cholesky decomposition.
-
         As written, the window functions will not be correclty normalized; it needs
         to be adjusted by the pspec scalar for it to be approximately correctly
         normalized. If the beam is being provided, this will be done in the pspec
         function
-
         Parameters
         ----------
         G : array_like
             Denominator matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
-
         H : array_like
             Response matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
-
         mode : str, optional
             Definition to use for M. Must be one of the options listed above.
             Default: 'I'.
-
         Returns
         -------
         M : array_like
             Normalization matrix, M. (If G was passed in as a dict, a dict of
             array_like will be returned.)
-
         W : array_like
             Window function matrix, W. (If G was passed in as a dict, a dict of
             array_like will be returned.)
@@ -873,23 +814,18 @@ class PSpecData(object):
     def get_Q(self, mode, n_k):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha.
-
         Assumes that Q will operate on a visibility vector in frequency space.
         In other words, produces a matrix Q that performs a two-sided Fourier
         transform and extracts a particular Fourier mode.
-
         (Computing x^t Q y is equivalent to Fourier transforming x and y
         separately, extracting one element of the Fourier transformed vectors,
         and then multiplying them.)
-
         Parameters
         ----------
         mode : int
             Central wavenumber (index) of the bandpower, p_alpha.
-
         n_k : int
             Number of k bins that will be .
-
         Returns
         -------
         Q : array_like
@@ -906,15 +842,12 @@ class PSpecData(object):
     def p_hat(self, M, q):
         """
         Optimal estimate of bandpower p_alpha, defined as p_hat = M q_hat.
-
         Parameters
         ----------
         M : array_like
             Normalization matrix, M.
-
         q : array_like
             Unnormalized bandpowers, \hat{q}.
-
         Returns
         -------
         p_hat : array_like
@@ -926,13 +859,11 @@ class PSpecData(object):
         """
         Return the units of the power spectrum. These are inferred from the 
         units reported by the input visibilities (UVData objects).
-
         Parameters
         ----------
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
-
         Returns
         -------
         pspec_units : str
@@ -982,33 +913,26 @@ class PSpecData(object):
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set 
         spectral window.
-
         See arxiv:1304.4991 and HERA memo #27 for details.
-
         Parameters
         ----------
         pol: str
                 Which polarization to compute the scalar for.
                 e.g. 'I', 'Q', 'U', 'V', 'XX', 'YY'...
-
         taper : str, optional
                 Whether a tapering function (e.g. Blackman-Harris) is being
                 used in the power spectrum estimation.
                 Default: none
-
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
-
         num_steps : int, optional
                 Number of steps to use when interpolating primary beams for
                 numerical integral
                 Default: 10000
-
         beam : PSpecBeam object
             Option to use a manually-fed PSpecBeam object instead of using 
             self.primary_beam.
-
         Returns
         -------
         scalar: float
@@ -1033,7 +957,49 @@ class PSpecData(object):
                                                num_steps=num_steps)
         return scalar
 
-    def pspec(self, bls1, bls2, dsets, input_data_weight='identity', norm='I', 
+    def validate_pol(self, dsets, pol_pair):
+        """
+        Validate polarization and returns the index of the datasets so that the polarization pair is consistent with the UVData objects
+        Parameters
+        ----------
+        dsets : length-2 list or length-2 tuple of integers or str
+            Contains indices of self.dsets to use in forming power spectra,
+            where the first index is for the Left-Hand dataset and second index
+            is used for the Right-Hand dataset (see above).
+        pol_pair : length-2 tuple of str
+            Contains polarization pair which will be used in estiamting the power spectrum e,g ('xx','xx') or  ('xy','yx'). Only equal polarization pair is implemented for the time being.               
+    
+        Returns
+        -------
+        boolean: True or False
+                 True if the UVData objects polarizations are consistent with the pol_pair (user specified polarizations) else False 
+        """
+        assert isinstance(pol_pair, tuple), "polarization pair must be specified as a len-2 tuple"
+        assert isinstance(pol_pair[0], (str, np.str)), "polarization must be fed as len-2 string tuple"
+        assert isinstance(pol_pair[1], (str, np.str)), "polarization must be fed as len-2 string tuple"
+             
+        if pol_pair[0]!=pol_pair[1]:
+            raise NotImplementedError("Only auto/equal polarizations are implement at the moment.") 
+  
+        dset1 = self.dsets[self.dset_idx(dsets[0])] # first list of UVData objects
+        dset2 = self.dsets[self.dset_idx(dsets[1])] # second list of UVData objects
+
+        # extracting polarization metadata from UVData objects
+        dset1_pols = dset1.get_pols()  
+        dset2_pols = dset2.get_pols()
+
+        pol_pair = [p.upper() for p in pol_pair]
+        if pol_pair[0] not in dset1_pols:
+           print "UVData objects does not contain data for polarization {}".format(pol_pair[0])
+           return False
+        elif pol_pair[1] not in dset2_pols:
+           print "UVData objects does not contain data for polarization {}".format(pol_pair[1])
+           return False 
+        else:
+           return True
+
+
+    def pspec(self, bls1, bls2, dsets, pols, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, spw_ranges=None, verbose=True, 
               history=''):
         """
@@ -1044,16 +1010,13 @@ class PSpecData(object):
         visibility data via
         
         P = M data_{LH} E data_{RH}
-
         where E contains the data weighting and FT matrices, M is a 
         normalization matrix, and the two separate datasets are denoted as 
         "left-hand" and "right-hand".
-
         Each power spectrum is generated by taking a baseline (specified by 
         an antenna-pair and polarization key) from bls1 out of dsets[0] and 
         assigning it as data_LH, and a bl from bls2 out of the dsets[1] and 
         assigning it as data_RH.
-
         If the bl chosen from bls1 is (ant1, ant2) and the bl chosen from bls2 
         is (ant3, ant4), the "baseline-pair" describing their cross 
         multiplication is ((ant1, ant2), (ant3, ant4)).
@@ -1067,7 +1030,14 @@ class PSpecData(object):
             Contains indices of self.dsets to use in forming power spectra, 
             where the first index is for the Left-Hand dataset and second index 
             is used for the Right-Hand dataset (see above).
-
+    
+        pols : length-2 tuple of strings or integers or list of length-2 tuples of strings or integers
+            Contains polarization pairs to use in forming power spectra 
+            e.g. ('XX','XX') or [('XX','XX'),('XY','YX')] or list of polarization pairs. 
+            Only auto/equal polarization pairs are implemented at the moment. 
+            It uses the polarizations of the UVData onjects (specified in dsets)
+            by default only if the UVData object consists of equal polarizations.
+    
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
             data. See the options in the set_R() method for details. 
@@ -1095,7 +1065,6 @@ class PSpecData(object):
         
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
-
         history : str, optional
             history string to attach to UVPSpec object
 
@@ -1161,8 +1130,15 @@ class PSpecData(object):
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
 
-        # get polarization array from zero'th dset
-        pol_arr = map(lambda p: pyuvdata.utils.polnum2str(p), dset1.polarization_array)
+        # check  inputs for pol
+        #npols0 = dset1.Npols # number of polarization for zero'th UVData of the first set of UVData objects
+        #npols1 = dset2.Npols # number of polarization for zero'th UVData of the second set of UVData objects
+        #if pols == None:
+        #    if npols0 == npols1 == 1:
+        #        pols = [(dset1.get_pols()[0], dset2.get_pols()[0])]
+        #        raise_warning("UVData objects have pols {} which are used to estimate the power spectrum.".format(tuple(pols)), verbose=verbose)
+        #    else:
+        #        raise ValueError("UVData objects must have only one polarization axis otherwise pols should be specified.")
 
         # assert form of bls1 and bls2
         assert len(bls1) == len(bls2), "length of bls1 must equal length of bls2"
@@ -1202,7 +1178,7 @@ class PSpecData(object):
         spws = []
         dlys = []
         freqs = []
-        sclr_arr = np.ones((len(spw_ranges), len(pol_arr)), np.float)
+        sclr_arr = []
         blp_arr = []
         bls_arr = []
 
@@ -1221,7 +1197,9 @@ class PSpecData(object):
             spw_data = []
             spw_wgts = []
             spw_ints = []
-            
+            spw_scalar = []
+            spw_pol = []            
+
             d = self.delays() * 1e-9
             dlys.extend(d)
             spws.extend(np.ones_like(d, np.int) * i)
@@ -1229,42 +1207,65 @@ class PSpecData(object):
                 dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
 
             # Loop over polarizations
-            for j, p in enumerate(pol_arr):
+            if isinstance(pols, tuple): pols = [pols]
+            for j, ps in enumerate(pols):
+                p = [] 
+                if isinstance(ps[0], (int, np.int)): 
+                    p.append(pyuvdata.utils.polnum2str(ps[0]))
+                else:
+                    p.append(ps[0])
+                if isinstance(ps[1], (int, np.int)):
+                    p.append(pyuvdata.utils.polnum2str(ps[1]))
+                else:
+                    p.append(ps[1])
+                if verbose: print( "\nSetting polarization pair: {}".format(p))
+
+                # validating polarization pair of UVData objects
+                valid = self.validate_pol(dsets, tuple(p))
+                if valid:
+                   # storing only one polarization as only equal polarization are allowed at the moment and UVPspec objec also understands one polarization for each UVspec object
+                   spw_pol.append(p[0]) 
+                   pass
+                else:
+                   print ("Polarization pair: {} failed the validation test".format(p))
+                   continue
+
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
-                    scalar = self.scalar(p, taper=taper, little_h=True)
+                    # using zero'th indexed poalrization as cross polarized beam are not yet implemented
+                    scalar = self.scalar(p[0], taper=taper, little_h=True)
                 else: 
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized", 
                                   verbose=verbose)
                     scalar = 1.0
-                sclr_arr[i, j] = scalar
+                spw_scalar.append(scalar)
 
                 # Loop over baseline pairs
                 for k, blp in enumerate(bl_pairs):
 
                     # assign keys
                     if isinstance(blp, list):
+                        # interpet blp as group of baseline-pairs
                         raise NotImplementedError("Baseline lists bls1 and bls2"
                                 " must be lists of tuples (not lists of lists"
                                 " of tuples).\n"
                                 "Use hera_pspec.pspecdata.construct_blpairs()"
                                 " to construct appropriately grouped baseline"
                                 " lists.")
-                        # interpret blp as group of baseline-pairs
-                        #key1 = [(dsets[0],) + _blp[0] + (p,) for _blp in blp]
-                        #key2 = [(dsets[1],) + _blp[1] + (p,) for _blp in blp]
+                        #key1 = [(dsets[0],) + _blp[0] + (p[0],) for _blp in blp]
+                        #key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
                     elif isinstance(blp, tuple):
                         # interpret blp as baseline-pair
-                        key1 = (dsets[0],) + blp[0] + (p,)
-                        key2 = (dsets[1],) + blp[1] + (p,)
+                        key1 = (dsets[0],) + blp[0] + (p[0],)
+                        key2 = (dsets[1],) + blp[1] + (p[1],)
                         
                     if verbose:
-                        print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, p))
+                        print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
 
                     # Set covariance weighting scheme for input data
                     if verbose: print("  Setting weight matrix for input data...")
@@ -1315,8 +1316,8 @@ class PSpecData(object):
                     wgts2 = self.w(key2).T
 
                     # get average of nsample across frequency axis, weighted by wgts
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1)[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2)[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
+                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
 
                     # take average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
                     pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0) * dset1.integration_time)
@@ -1349,7 +1350,11 @@ class PSpecData(object):
             data_array[i] = spw_data
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
+            sclr_arr.append(spw_scalar)
 
+        # raise error if none of pols are consistent witht the UVData objects
+        if len(spw_pol)==0:
+            raise ValueError("None of the specified polarization pair match that of the UVData objects")
         # fill uvp object
         uvp = uvpspec.UVPSpec()
 
@@ -1376,8 +1381,8 @@ class PSpecData(object):
         uvp.Ndlys = len(np.unique(dlys))
         uvp.Nspwdlys = len(spws)
         uvp.Nfreqs = len(np.unique(freqs))
-        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p), pol_arr))
-        uvp.Npols = len(pol_arr)
+        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p), spw_pol))
+        uvp.Npols = len(spw_pol)
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width
         uvp.weighting = input_data_weight
@@ -1420,21 +1425,16 @@ class PSpecData(object):
         """
         Rephase visibility data in self.dsets to the LST grid of dset[dset_index] 
         using hera_cal.utils.lst_rephase. 
-
         Each integration in all other dsets are phased to the center of the 
         corresponding LST bin (by index) in dset[dset_index].
-
         Will only phase if the dataset's phase type is 'drift'.
-
         Parameters
         ----------
         dset_index : int or str
             Index or label of dataset in self.dset to phase other datasets to.
-
         inplace : bool, optional
             If True, edits data in dsets in-memory. Else, makes a copy of
             dsets, edits data in the copy and returns to user.
-
         Returns
         -------
         if inplace:
@@ -1515,13 +1515,10 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
     """
     Construct a list of baseline-pairs from a baseline-group. This function can be used to easily convert a 
     single list of baselines into the input needed by PSpecData.pspec(bls1, bls2, ...).
-
     Parameters
     ----------
     bls : list of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]
-
     exclude_auto_bls: boolean, if True, exclude all baselines crossed with itself from the final blpairs list
-
     exclude_permutations : boolean, if True, exclude permutations and only form combinations of the bls list.
         For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, but makes this example clearer)
         and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
@@ -1530,15 +1527,11 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
         
     group : boolean, optional
         if True, group each consecutive Nblps_per_group blpairs into sub-lists
-
     Nblps_per_group : integer, number of baseline-pairs to put into each sub-group
-
     Returns (bls1, bls2, blpairs)
     -------
     bls1 : list of baseline tuples from the zeroth index of the blpair
-
     bls2 : list of baseline tuples from the first index of the blpair
-
     blpairs : list of blpair tuples
     """
     # assert form
@@ -1589,18 +1582,13 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     """
     Validate baseline pairings in the blpair list are redundant within the 
     specified tolerance.
-
     Parameters
     ----------
     blpairs : list of baseline-pair tuples, Ex. [((1,2),(1,2)), ((2,3),(2,3))]
         See docstring of PSpecData.pspec() for details on format.
-
     uvd1 : pyuvdata.UVData instance containing visibility data that first bl in blpair will draw from
-
     uvd2 : pyuvdata.UVData instance containing visibility data that second bl in blpair will draw from
-
     baseline_tol : float, distance tolerance for notion of baseline "redundancy" in meters
-
     verbose : bool, if True report feedback to stdout
     """
     # ensure uvd1 and uvd2 are UVData objects
