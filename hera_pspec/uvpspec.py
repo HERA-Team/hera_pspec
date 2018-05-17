@@ -6,6 +6,7 @@ from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.parameter import PSpecParam
 from pyuvdata import uvutils as uvutils
 import h5py
+import operator
 
 
 class UVPSpec(object):
@@ -25,60 +26,58 @@ class UVPSpec(object):
         self._Nspwdlys = PSpecParam("Nspwdlys", description="Total number of delay bins across all sub-bands.", expected_type=int)
         self._Nspws = PSpecParam("Nspws", description="Number of spectral windows.", expected_type=int)
         self._Ndlys = PSpecParam("Ndlys", description="Total number of delay bins.", expected_type=int)
-        self._Nfreqs = PSpecParam("Nfreqs", description="Total number of frequency bins in the original data.", expected_type=int)
+        self._Nfreqs = PSpecParam("Nfreqs", description="Total number of frequency bins in the data.", expected_type=int)
         self._Npols = PSpecParam("Npols", description="Number of polarizations in the data.", expected_type=int)
         self._history = PSpecParam("history", description='The file history.', expected_type=str)
 
         # Data attributes
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
-        self._data_array = PSpecParam("data_array", description=desc, expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
+        self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
-        self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=dict, form="(Nblpairts, Nfreqs, 2, Npols)")
+        self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
                "This is not necessarily equal to the integration time of the visibility data: If data have been coherently averaged " \
                "(i.e. averaged before squaring), than this is the sum of each spectrum's integration time."
-        self._integration_array = PSpecParam("integration_array", description=desc, expected_type=dict, form="(Nblpairts, Npols)")
+        self._integration_array = PSpecParam("integration_array", description=desc, expected_type=np.float64, form="(Nblpairts, Npols)")
         desc = "Nsample dictionary, if the pspectra have been incoherently averaged (i.e. averaged after squaring), this is " \
                "the effective number of samples in that average (float type). This is not the same as the pyuvdata.UVData nsample_array."
-        self._nsample_array = PSpecParam("nsample_array", description=desc, expected_type=dict, form="(Nblpairts, Npols)")
-        self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)")
-        self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nspwdlys,)")
-        self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)")
+        self._nsample_array = PSpecParam("nsample_array", description=desc, expected_type=np.float64, form="(Nblpairts, Npols)")
+        self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)", expected_type=np.int32)
+        self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nfreqs,)", expected_type=np.float64)
+        self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)", expected_type=np.float64)
         desc = "Polarization integers of power spectra. Stokes 1:4 (I,Q,U,V); circular -1:-4 (RR,LL,RL,LR); linear -5:-8 (XX,YY,XY,YX)"
-        self._pol_array = PSpecParam("pol_array", description=desc, form="(Npols,)")
-        self._lst_1_array = PSpecParam("lst_1_array", description="LST array of the first bl in the bl-pair [radians].", form="(Nblpairts,)")
-        self._lst_2_array = PSpecParam("lst_2_array", description="LST array of the second bl in the bl-pair [radians].", form="(Nblpairts,)")
-        self._lst_avg_array = PSpecParam("lst_avg_array", description="Average of the lst_1_array and lst_2_array [radians].", form="(Nblpairts,)")
-        self._time_1_array = PSpecParam("time_1_array", description="Time array of the first bl in the bl-pair [Julian Date].", form="(Nblpairts,)")
-        self._time_1_array = PSpecParam("time_2_array", description="Time array of the second bl in the bl-pair [Julian Date].", form="(Nblpairts,)")
-        self._time_avg_array = PSpecParam("time_avg_array", description="Average of the time_1_array and time_2_array [Julian Date].", form='(Nblpairts,)')
-        self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)")
+        self._pol_array = PSpecParam("pol_array", description=desc, form="(Npols,)", expected_type=np.ndarray)
+        self._lst_1_array = PSpecParam("lst_1_array", description="LST array of the first bl in the bl-pair [radians].", form="(Nblpairts,)", expected_type=np.float64)
+        self._lst_2_array = PSpecParam("lst_2_array", description="LST array of the second bl in the bl-pair [radians].", form="(Nblpairts,)", expected_type=np.float64)
+        self._lst_avg_array = PSpecParam("lst_avg_array", description="Average of the lst_1_array and lst_2_array [radians].", form="(Nblpairts,)", expected_type=np.float64)
+        self._time_1_array = PSpecParam("time_1_array", description="Time array of the first bl in the bl-pair [Julian Date].", form="(Nblpairts,)", expected_type=np.float64)
+        self._time_1_array = PSpecParam("time_2_array", description="Time array of the second bl in the bl-pair [Julian Date].", form="(Nblpairts,)", expected_type=np.float64)
+        self._time_avg_array = PSpecParam("time_avg_array", description="Average of the time_1_array and time_2_array [Julian Date].", form='(Nblpairts,)', expected_type=np.float64)
+        self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)", expected_type=np.int32)
+        self._scalar_array = PSpecParam("scalar_array", description="Power spectrum normalization scalar from pspecbeam module.", expected_type=np.float64, form="(Nspws, Npols)")
 
         # Baseline attributes
         self._Nbls = PSpecParam("Nbls", description="Number of unique baseline integers.", expected_type=int)
-        self._bl_vecs = PSpecParam("bl_vecs", description="ndarray of baseline separation vectors in the ITRF frame [meters]. To get it in ENU frame see self.get_ENU_bl_vecs().", expected_type=np.ndarray, form="(Nbls,)")
-        self._bl_array = PSpecParam("bl_array", description="All unique baseline (antenna-pair) integers.", expected_type=np.ndarray, form="(Nbls,)")
+        self._bl_vecs = PSpecParam("bl_vecs", description="ndarray of baseline separation vectors in the ITRF frame [meters]. To get it in ENU frame see self.get_ENU_bl_vecs().", expected_type=np.float64, form="(Nbls,)")
+        self._bl_array = PSpecParam("bl_array", description="All unique baseline (antenna-pair) integers.", expected_type=np.int32, form="(Nbls,)")
 
         # Misc Attributes
         self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", expected_type=float)
-        self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.ndarray)
+        self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.float64)
         self._weighting = PSpecParam("weighting", description="Form of data weighting used when forming power spectra.", expected_type=str)
         self._norm = PSpecParam("norm", description="Normalization method adopted in OQE (M matrix).", expected_type=str)
         self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT."', expected_type=str)
         self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
         self._norm_units = PSpecParam("norm_units", description="Power spectra normalization units, i.e. telescope units [Hz str] or cosmological [(h^-3) Mpc^3].", expected_type=str)
-        self._filename1 = PSpecParam("filename1", description="filename of data from first dataset", expected_type=str)
-        self._filename2 = PSpecParam("filename2", description="filename of data from second dataset", expected_type=str)
-        self._label1 = PSpecParam("label1", description="label of data from first dataset", expected_type=str)
-        self._label2 = PSpecParam("label2", description="label of data from second dataset", expected_type=str)
-        self._git_hash = PSpecParam("git_hash", description="GIT hash of hera_pspec when pspec was generated.", expected_type=str)
+        self._labels = PSpecParam("labels", description="Array of dataset string labels.", expected_type=np.str)
+        self._label_1_array = PSpecParam("label_1_array", description="Integer array w/ shape of data that indexes labels and gives label of dset1.", form="(Nspws, Nblpairts, Npols)", expected_type=np.int)
+        self._label_2_array = PSpecParam("label_2_array", description="Integer array w/ shape of data that indexes labels and gives label of dset2.", form="(Nspws, Nblpairts, Npols)", expected_type=np.int)
         self._folded = PSpecParam("folded", description="if power spectra are folded (i.e. averaged) onto purely positive delay axis. Default is False", expected_type=bool)
-        self._scalar_array = PSpecParam("scalar_array", description="Power spectrum normalization scalar from pspecbeam module.", expected_type=np.ndarray, form="(Nspws, Npols)")
         self._beamfile = PSpecParam("beamfile", description="filename of beam-model used to normalized pspectra.", expected_type=str)
-        self._OmegaP = PSpecParam("OmegaP", description="Integral of unitless beam power over the sky [steradians].", form="(Nbeam_freqs, Npols)")
-        self._OmegaPP = PSpecParam("OmegaP", description="Integral of unitless beam power squared over the sky [steradians].", form="(Nbeam_freqs, Npols)")
-        self._beam_freqs = PSpecParam("beam_freqs", description="Frequency bins of the OmegaP and OmegaPP beam-integral arrays [Hz].", form="(Nbeam_freqs,)")
-        self._cosmo = PSpecParam("cosmo", description="Instance of conversion.Cosmo_Conversions class.")
+        self._OmegaP = PSpecParam("OmegaP", description="Integral of unitless beam power over the sky [steradians].", form="(Nbeam_freqs, Npols)", expected_type=np.float64)
+        self._OmegaPP = PSpecParam("OmegaP", description="Integral of unitless beam power squared over the sky [steradians].", form="(Nbeam_freqs, Npols)", expected_type=np.float64)
+        self._beam_freqs = PSpecParam("beam_freqs", description="Frequency bins of the OmegaP and OmegaPP beam-integral arrays [Hz].", form="(Nbeam_freqs,)", expected_type=np.float64)
+        self._cosmo = PSpecParam("cosmo", description="Instance of conversion.Cosmo_Conversions class.", expected_type=conversions.Cosmo_Conversions)
 
         # collect all parameters: required and non-required
         self._all_params = sorted(map(lambda p: p[1:], fnmatch.filter(self.__dict__.keys(), '_*')))
@@ -89,18 +88,18 @@ class UVPSpec(object):
                             "spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array",
                             "lst_2_array", "time_1_array", "time_2_array", "blpair_array", "Nbls",
                             "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting",
-                            "vis_units", "norm_units", "taper", "norm", "git_hash", "nsample_array",
+                            "vis_units", "norm_units", "taper", "norm", "nsample_array",
                             'lst_avg_array', 'time_avg_array', 'folded', "scalar_array"]
 
         # all parameters must fall into one and only one of the following groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys",
                             "Npols", "Nfreqs", "history", "Nbls", "channel_width", "weighting",
-                            "vis_units", "filename1", "filename2", "label1", "label2", "norm",
-                            "norm_units", "taper", "git_hash", "cosmo", "beamfile" ,'folded']
+                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile" ,'folded']
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array",
                           'lst_avg_array', 'time_avg_array', "lst_2_array", "time_1_array",
                           "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
-                          "bl_vecs", "bl_array", "telescope_location", "scalar_array"]
+                          "bl_vecs", "bl_array", "telescope_location", "scalar_array", 'labels',
+                          'label_1_array', 'label_2_array']
         self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array"]
 
         # define which attributes are considred meta data. Large attrs should be constructed as datasets
@@ -114,7 +113,6 @@ class UVPSpec(object):
 
         # Default parameter values
         self.folded = False
-        self.git_hash = version.git_hash
 
     def get_data(self, key, *args):
         """
@@ -360,6 +358,27 @@ class UVPSpec(object):
 
         return all_keys
 
+    def get_spw_ranges(self):
+        """
+        Get the frequency range and Nfreqs of each spectral window in the object.
+
+        Returns
+        -------
+        spw_ranges : list of len-3 tuples (freq_start, freq_end, Nfreqs) in Hz
+            Contains start, stop and bin-width of frequencies [Hz] of each spectral window.
+            To turn this into the frequency array of the spectral window use 
+                spw_freqs = np.linspace(freq_start, freq_end, Nfreqs, endpoint=False)
+        """
+        spw_ranges = []
+        # iterate over spectral windows
+        for spw in np.unique(self.spw_array):
+            spw_freqs = self.freq_array[self.spw_to_indices(spw)]
+            Nfreqs = len(spw_freqs)
+            spw_df = np.median(np.diff(spw_freqs))
+            spw_ranges.append( (spw_freqs.min(), spw_freqs.min() + Nfreqs * spw_df, Nfreqs) )
+
+        return spw_ranges
+
     def convert_to_deltasq(self, little_h=True, inplace=True):
         """
         Convert from P(k) to Delta^2(k) by multiplying by k^3 / (2pi^2).
@@ -501,7 +520,7 @@ class UVPSpec(object):
             Spectral window index or list of indices.
         """
         # convert to list if int
-        if isinstance(spw, (np.int, int)):
+        if isinstance(spw, (int, np.integer)):
             spw = [spw]
 
         # assert exists in data
@@ -517,7 +536,7 @@ class UVPSpec(object):
 
     def pol_to_indices(self, pol):
         """
-        Map a polarization integer or str to its index in pol_array
+        Map a polarization integer or str to its index in pol_array.
 
         Parameters
         ----------
@@ -777,7 +796,7 @@ class UVPSpec(object):
         """
         # Clear all data in the current object
         self._clear()
-        
+
         # Load-in meta data
         for k in grp.attrs:
             if k in self._meta_attrs:
@@ -785,7 +804,7 @@ class UVPSpec(object):
         for k in grp:
             if k in self._meta_dsets:
                 setattr(self, k, grp[k][:])
-        
+
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
             uvputils._select(self, spws=spws, bls=bls,
@@ -796,14 +815,14 @@ class UVPSpec(object):
                              only_pairs_in_bls=only_pairs_in_bls, 
                              blpairs=blpairs, times=times, pols=pols, 
                              h5file=grp)
-        
+
         # handle cosmo
         if hasattr(self, 'cosmo'):
             self.cosmo = conversions.Cosmo_Conversions(**ast.literal_eval(self.cosmo))
 
         self.check(just_meta=just_meta)
     
-    
+
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
                   blpairs=None, times=None, pols=None, 
                   only_pairs_in_bls=False):
@@ -1020,26 +1039,39 @@ class UVPSpec(object):
         just_meta : bool, optional
             If True, only check metadata. Default: False.
         """
-        # check required parameters exist
-        if just_meta:
-            req_metas = sorted(set(self._req_params).intersection(set(self._meta)))
-            for p in req_metas:
-                assert hasattr(self, p), "required parameter {} hasn't been defined".format(p)
-        else:
-            for p in self._req_params:
-                assert hasattr(self, p), "required parameter {} hasn't been defined".format(p)
-            # check data
-            assert isinstance(self.data_array, (dict, odict)), "self.data_array must be a dictionary type"
-            assert np.min(map(lambda k: self.data_array[k].dtype in (np.complex, complex, np.complex128), self.data_array.keys())), "self.data_array values must be complex type"
-            # check wgts
-            assert isinstance(self.wgt_array, (dict, odict)), "self.wgt_array must be a dictionary type"
-            assert np.min(map(lambda k: self.wgt_array[k].dtype in (np.float, float), self.wgt_array.keys())), "self.wgt_array values must be float type"
-            # check integration
-            assert isinstance(self.integration_array, (dict, odict)), "self.integration_array must be a dictionary type"
-            assert np.min(map(lambda k: self.integration_array[k].dtype in (np.float, float, np.float64), self.integration_array.keys())), "self.integration_array values must be float type"
-            # check nsample
-            assert isinstance(self.nsample_array, (dict, odict)), "self.nsample_array must be a dictionary type"
-            assert np.min(map(lambda k: self.nsample_array[k].dtype in (np.float, float, np.float64), self.nsample_array.keys())), "self.nsample_array values must be float type"
+        # iterate over all possible parameters
+        for p in self._all_params:
+            # only enforce existance if not just_meta
+            if not just_meta:
+                if p in self._req_params:
+                    assert hasattr(self, p), "required parameter {} doesn't exist".format(p)
+
+            # if attribute exists, check its type
+            if hasattr(self, p):
+                a = getattr(self, '_'+p)
+                if hasattr(a, 'expected_type'):
+                    err_msg = "attribute {} does not have expected data type {}".format(p, a.expected_type)
+                    # ndarrays
+                    if p in self._ndarrays:
+                        assert isinstance(getattr(self, p), np.ndarray), "attribute {} needs to be an ndarray".format(p)
+                        if issubclass(getattr(self, p).dtype.type, a.expected_type):
+                            pass
+                        else:
+                            # try to cast into its dtype
+                            try:
+                                setattr(self, p, getattr(self, p).astype(a.expected_type))
+                            except:
+                                raise ValueError(err_msg)
+                    # dicts
+                    elif p in self._dicts:
+                        assert isinstance(getattr(self, p), (dict, odict)), "attribute {} needs to be a dictionary".format(p)
+                        # iterate over keys
+                        for k in getattr(self, p).keys():
+                            assert isinstance(getattr(self, p)[k], np.ndarray), "values of attribute {} need to be ndarrays".format(p)
+                            assert issubclass(getattr(self, p)[k].dtype.type, a.expected_type), err_msg
+                    # immutables
+                    elif p in self._immutables:
+                        assert isinstance(getattr(self, p), a.expected_type), err_msg
 
     def _clear(self):
         """
@@ -1070,11 +1102,13 @@ class UVPSpec(object):
             if hasattr(self, k):
                 s += "%18s: shape %s\n" % (k, getattr(self, k).shape)
         return s
-    
-    def __eq__(self, other):
+
+    def __eq__(self, other, params=None, verbose=False):
         """ Check equivalence between attributes of two UVPSpec objects """
+        if params is None:
+            params = self._all_params
         try:
-            for p in self._all_params:
+            for p in params:
                 if p not in self._req_params \
                   and (not hasattr(self, p) and not hasattr(other, p)):
                     continue
@@ -1087,9 +1121,16 @@ class UVPSpec(object):
                         assert np.isclose(getattr(self, p)[i], \
                                getattr(other, p)[i]).all()
         except AssertionError:
+            if verbose: 
+                print "UVPSpec parameter '{}' not equivalent between {} and {}" \
+                      "".format(p, self.__repr__(), other.__repr__())
             return False
 
         return True
+
+    def __add__(self, other, verbose=False):
+        """ Concatenate the data of two UVPSpec objects together along a single axis """
+        self = combine_uvp([self, other], verbose=verbose)
 
     @property
     def units(self):
@@ -1397,5 +1438,300 @@ class UVPSpec(object):
                                                  noise_scalar=noise_scalar)
 
         return scalar
+
+
+def combine_uvp(uvps, verbose=True):
+    """
+    Combine multiple UVPSpec objects into a single object, concatenating along one of
+    either spectral window [spw], baseline-pair-times [blpairts], or polarization [pol].
+    Certain meta-data of all of the UVPSpec objs must match exactly. 
+    In addition, one can only concatenate data along a single data axis, with the condition 
+    that all other axes match exactly.
+
+    Parameters
+    ----------
+    uvps : list 
+        A list of UVPSpec objects to combine.
+
+    Returns
+    -------
+    u : UVPSpec object
+        A UVPSpec object with the data of all the inputs combined.
+    """
+    # perform type checks and get concatenation axis
+    (uvps, concat_ax, new_spws, new_blpts, new_pols,
+     static_meta) = get_uvp_overlap(uvps, verbose=verbose)
+    Nuvps = len(uvps)
+
+    # create a new uvp
+    u = UVPSpec()
+
+    # sort new data axes
+    new_spws = sorted(new_spws)
+    new_blpts = sorted(new_blpts)
+    new_pols = sorted(new_pols)
+    Nspws = len(new_spws)
+    Nblpairts = len(new_blpts)
+    Npols = len(new_pols)
+
+    # create new empty data arrays and fill spw arrays
+    u.data_array = odict()
+    u.integration_array = odict()
+    u.wgt_array = odict()
+    u.nsample_array = odict()
+    u.scalar_array = np.empty((Nspws, Npols), np.float)
+    u.freq_array, u.spw_array, u.dly_array = [], [], []
+    for i, spw in enumerate(new_spws):
+        u.data_array[i] = np.empty((Nblpairts, spw[2], Npols), np.complex128)
+        u.integration_array[i] = np.empty((Nblpairts, Npols), np.float64)
+        u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
+        u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
+        spw_Nfreqs = spw[-1]
+        spw_freqs = np.linspace(*spw, endpoint=False)
+        spw_dlys = np.fft.fftshift(np.fft.fftfreq(spw_Nfreqs, np.median(np.diff(spw_freqs))))
+        u.spw_array.extend(np.ones(spw_Nfreqs, np.int) * i)
+        u.freq_array.extend(spw_freqs)
+        u.dly_array.extend(spw_dlys)
+    u.spw_array = np.array(u.spw_array)       
+    u.freq_array = np.array(u.freq_array)       
+    u.dly_array = np.array(u.dly_array)  
+    u.pol_array = np.array(new_pols)     
+    u.Nspws = Nspws
+    u.Nblpairts = Nblpairts
+    u.Npols = Npols
+    u.Nfreqs = len(u.freq_array)
+    u.Nspwdlys = len(u.spw_array)
+    u.Ndlys = len(np.unique(u.dly_array))
+    u.time_1_array, u.time_2_array = np.empty(Nblpairts, np.float), np.empty(Nblpairts, np.float)
+    u.time_avg_array, u.lst_avg_array = np.empty(Nblpairts, np.float), np.empty(Nblpairts, np.float)
+    u.lst_1_array, u.lst_2_array = np.empty(Nblpairts, np.float), np.empty(Nblpairts, np.float)
+    u.blpair_array = np.empty(Nblpairts, np.int)
+    u.labels = sorted(set(np.concatenate([uvp.labels for uvp in uvps])))
+    u.label_1_array = np.empty((Nspws, Nblpairts, Npols), np.int)
+    u.label_2_array = np.empty((Nspws, Nblpairts, Npols), np.int)
+
+    # get each uvp's data axes
+    uvp_spws = [_uvp.get_spw_ranges() for _uvp in uvps]
+    uvp_blpts = [zip(_uvp.blpair_array, _uvp.time_avg_array) for _uvp in uvps]
+    uvp_pols = [_uvp.pol_array.tolist() for _uvp in uvps]
+
+    # fill in data arrays depending on concat ax
+    if concat_ax == 'spw':
+        for i, spw in enumerate(new_spws):
+            l = [spw in _u for _u in uvp_spws].index(True)
+            m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+            for k, p in enumerate(new_pols):
+                q = uvp_pols[l].index(p)
+                u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
+                for j, blpt in enumerate(new_blpts):
+                    n = uvp_blpts[l].index(blpt)
+                    u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
+                    u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
+                    u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
+                    u.nsample_array[i][j, k] = uvps[l].integration_array[m][n, q]
+                    u.label_1_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
+                    u.label_2_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
+
+        for j, blpt in enumerate(new_blpts):
+            n = uvp_blpts[0].index(blpt)
+            u.time_1_array[j] = uvps[0].time_1_array[n]
+            u.time_2_array[j] = uvps[0].time_2_array[n]
+            u.time_avg_array[j] = uvps[0].time_avg_array[n]
+            u.lst_1_array[j] = uvps[0].lst_1_array[n]
+            u.lst_2_array[j] = uvps[0].lst_2_array[n]
+            u.lst_avg_array[j] = uvps[0].lst_avg_array[n]
+            u.blpair_array[j] = uvps[0].blpair_array[n]
+
+    elif concat_ax == 'blpairts':
+        for j, blpt in enumerate(new_blpts):
+            l = [blpt in _blpts for _blpts in uvp_blpts].index(True)
+            n = uvp_blpts[l].index(blpt)
+            for i, spw in enumerate(new_spws):
+                m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+                for k, p in enumerate(new_pols):
+                    q = uvp_pols[l].index(p)
+                    u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
+                    u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
+                    u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
+                    u.nsample_array[i][j, k] = uvps[l].integration_array[m][n, q]
+                    u.label_1_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
+                    u.label_2_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
+
+            u.time_1_array[j] = uvps[l].time_1_array[n]
+            u.time_2_array[j] = uvps[l].time_2_array[n]
+            u.time_avg_array[j] = uvps[l].time_avg_array[n]
+            u.lst_1_array[j] = uvps[l].lst_1_array[n]
+            u.lst_2_array[j] = uvps[l].lst_2_array[n]
+            u.lst_avg_array[j] = uvps[l].lst_avg_array[n]
+            u.blpair_array[j] = uvps[l].blpair_array[n]
+
+    elif concat_ax == 'pol':
+        for k, p in enumerate(new_pols):
+            l = [p in _pols for _pols in uvp_pols].index(True)
+            q = uvp_pols[l].index(p)
+            for i, spw in enumerate(new_spws):
+                m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+                u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
+                for j, blpt in enumerate(new_blpts):
+                    n = uvp_blpts[l].index(blpt)
+                    u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
+                    u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
+                    u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
+                    u.nsample_array[i][j, k] = uvps[l].integration_array[m][n, q]
+                    u.label_1_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
+                    u.label_2_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
+
+        for j, blpt in enumerate(new_blpts):
+            n = uvp_blpts[0].index(blpt)
+            u.time_1_array[j] = uvps[0].time_1_array[n]
+            u.time_2_array[j] = uvps[0].time_2_array[n]
+            u.time_avg_array[j] = uvps[0].time_avg_array[n]
+            u.lst_1_array[j] = uvps[0].lst_1_array[n]
+            u.lst_2_array[j] = uvps[0].lst_2_array[n]
+            u.lst_avg_array[j] = uvps[0].lst_avg_array[n]
+            u.blpair_array[j] = uvps[0].blpair_array[n]
+    
+    # set baselines
+    u.Nblpairs = len(np.unique(u.blpair_array))
+    uvp_bls = [uvp.bl_array for uvp in uvps]
+    new_bls = sorted(reduce(operator.or_, [set(bls) for bls in uvp_bls]))
+    u.bl_array = np.array(new_bls)
+    u.Nbls = len(u.bl_array)
+    u.bl_vecs = []
+    for b, bl in enumerate(new_bls):
+        l = [bl in _bls for _bls in uvp_bls].index(True)
+        h = [bl == _bl for _bl in uvp_bls[l]].index(True)
+        u.bl_vecs.append(uvps[l].bl_vecs[h])
+    u.bl_vecs = np.array(u.bl_vecs)
+    u.Ntimes = len(np.unique(u.time_avg_array))
+    u.history = reduce(operator.add, [uvp.history for uvp in uvps])
+    u.labels = np.array(u.labels, np.str)
+
+    for k in static_meta.keys():
+        setattr(u, k, static_meta[k])
+
+    # run check
+    u.check()
+
+    return u
+
+
+def get_uvp_overlap(uvps, verbose=True):
+    """
+    Given a list of UVPSpec objects or a list of paths to UVPSpec objects,
+    find a single data axis ['spw', 'blpairts', 'pol'] where all objects contain 
+    non-overlapping data.
+
+    Parameters
+    ----------
+    uvps : list of UVPSpec objects or list of string paths to UVPSpec objects
+
+    verbose : bool, optional
+        print feedback to standard output
+
+    Returns
+    -------
+    uvps : list
+        list of input UVPSpec objects 
+
+    concat_ax : str
+        data axis ['spw', 'blpairts', 'pols'] across data can be concatenated
+
+    unique_spws : list
+        list of unique spectral window tuples (spw_freq_start, spw_freq_end, spw_Nfreqs)
+        across all input uvps
+
+    unique_blpts : list
+        list of unique baseline-pair-time tuples (blpair_integer, time_avg_array JD float)
+        across all input uvps
+
+    unique_pols : list
+        list of unique polarization integers across all input uvps
+    """
+    # type check
+    assert isinstance(uvps, (list, tuple, np.ndarray)), "uvps must be fed as a list"
+    assert isinstance(uvps[0], (UVPSpec, str, np.str)), "uvps must be fed as a list of UVPSpec objects or strings"
+    Nuvps = len(uvps)
+
+    # load uvps if fed as strings
+    if isinstance(uvps[0], (str, np.str)):
+        _uvps = []
+        for u in uvps:
+            uvp = UVPSpec()
+            uvp.read_hdf5(u, just_meta=True)
+            _uvps.append(uvp)
+        uvps = _uvps
+
+    # ensure static metadata agree between all objects
+    static_meta = ['channel_width', 'telescope_location', 'weighting', 'OmegaP', 'beam_freqs', 'OmegaPP', 
+                   'beamfile', 'norm', 'taper', 'vis_units', 'norm_units', 'folded', 'cosmo']
+    for m in static_meta:
+        for u in uvps[1:]:
+            if hasattr(uvps[0], m) and hasattr(u, m):
+                assert uvps[0].__eq__(u, params=[m]), "Cannot concatenate UVPSpec objs: not all agree on '{}' attribute".format(m)
+            else:
+                assert not hasattr(uvps[0], m) and not hasattr(u, m), "Cannot concatenate UVPSpec objs: not all agree on '{}' attribute".format(m)
+
+    static_meta = odict([(k, getattr(uvps[0], k, None)) for k in static_meta if getattr(uvps[0], k, None) is not None])
+
+    # create unique data axis lists
+    unique_spws = []
+    unique_blpts = []
+    unique_pols = []
+    data_overlaps = odict()
+
+    # iterate over uvps
+    for i, uvp1 in enumerate(uvps):
+        # get uvp1 sets and append to unique lists
+        uvp1_spws = uvp1.get_spw_ranges()
+        uvp1_blpts = zip(uvp1.blpair_array, uvp1.time_avg_array)
+        uvp1_pols = uvp1.pol_array
+        for s in uvp1_spws: 
+            if s not in unique_spws: unique_spws.append(s)
+        for b in uvp1_blpts: 
+            if b not in unique_blpts: unique_blpts.append(b)
+        for p in uvp1_pols: 
+            if p not in unique_pols: unique_pols.append(p)
+
+        # iterate over uvps
+        for j, uvp2 in enumerate(uvps):
+            if j <= i: continue
+            # get uvp1 sets and determine overlap w/ uvp1
+            uvp2_spws = uvp2.get_spw_ranges()
+            uvp2_blpts = zip(uvp2.blpair_array, uvp2.time_avg_array)
+            uvp2_pols = uvp2.pol_array
+
+            spw_overlap = len(set(uvp1_spws) ^ set(uvp2_spws)) == 0
+            blpts_overlap = len(set(uvp1_blpts) ^ set(uvp2_blpts)) == 0
+            pol_overlap = len(set(uvp1_pols) ^ set(uvp2_pols)) == 0
+
+            # assert all except 1 axis overlaps
+            overlaps = [spw_overlap, blpts_overlap, pol_overlap]
+            assert sum(overlaps) != 3, "uvp {} and {} have overlapping data, cannot combine".format(i, j)
+            assert sum(overlaps) > 1, "uvp {} and {} are non-overlapping across multiple data axes, cannot combine".format(i, j)
+            concat_ax = ['spw', 'blpairts', 'pol'][overlaps.index(False)]
+            data_overlaps[(i, j)] = concat_ax
+            if verbose:
+                print "uvp {} and {} have non-overlap across {} axis".format(i, j, concat_ax)
+
+    # assert all uvp pairs have the same (single) non-overlap (concat) axis
+    err_msg = "Non-overlapping data in uvps span multiple data axes:\n{}" \
+              "".format("\n".join(map(lambda i: "{} & {}: {}".format(i[0][0], i[0][1], i[1]), data_overlaps.items())))
+    assert len(set(data_overlaps.values())) == 1, err_msg
+
+    # perform additional checks given concat ax
+    if concat_ax == 'spw':
+        # check for spws overlapping in freq
+        for i, spw1 in enumerate(unique_spws):
+            for j, spw2 in enumerate(unique_spws[i+1:]):
+                assert not (spw1[1] > spw2[0] and spw1[0] < spw2[1]), "cannot combine overlapping spws: {} & {}".format(spw1, spw2)
+
+    if concat_ax == 'blpairts':
+        # check scalar_array
+        assert np.all([np.isclose(uvps[0].scalar_array, u.scalar_array) for u in uvps[1:]]), "" \
+               "scalar_array must be the same for all uvps given concatenation along blpairts."
+
+    return uvps, concat_ax, unique_spws, unique_blpts, unique_pols, static_meta
+
 
 

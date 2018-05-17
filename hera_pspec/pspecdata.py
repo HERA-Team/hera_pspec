@@ -7,6 +7,7 @@ import hera_cal as hc
 from hera_pspec import uvpspec, utils, version, pspecbeam
 from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
+import datetime
 
 
 class PSpecData(object):
@@ -1472,10 +1473,21 @@ class PSpecData(object):
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
-        uvp.history = dset1.history + dset2.history + history
+        filename1 = getattr(dset1.extra_keywords, 'filename', None)
+        filename2 = getattr(dset2.extra_keywords, 'filename', None)
+        label1 = self.labels[self.dset_idx(dsets[0])]
+        label2 = self.labels[self.dset_idx(dsets[1])]
+        uvp.labels = np.array([label1, label2], np.str)
+        uvp.label_1_array = np.zeros((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int)
+        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int)
+        uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
+                      "dataset1: filename: {}, label: {}, history:\n{}\n{}\n" \
+                      "dataset2: filename: {}, label: {}, history:\n{}\n{}\n" \
+                      "".format(datetime.datetime.now(), version.git_hash, '-'*20, 
+                                filename1, label1, dset1.history, '-'*20, 
+                                filename2, label2, dset2.history, '-'*20)
         uvp.taper = taper
         uvp.norm = norm
-        uvp.git_hash = version.git_hash
         
         if self.primary_beam is not None:
             # attach cosmology
@@ -1485,14 +1497,6 @@ class PSpecData(object):
             uvp.OmegaP, uvp.OmegaPP = self.primary_beam.get_Omegas(uvp.pol_array)
             if hasattr(self.primary_beam, 'filename'):
                 uvp.beamfile = self.primary_beam.filename
-        if hasattr(dset1.extra_keywords, 'filename'):
-            uvp.filename1 = dset1.extra_keywords['filename']
-        if hasattr(dset2.extra_keywords, 'filename'):
-            uvp.filename2 = dset2.extra_keywords['filename']
-        lbl1 = self.labels[self.dset_idx(dsets[0])]
-        lbl2 = self.labels[self.dset_idx(dsets[1])]
-        if lbl1 is not None: uvp.label1 = lbl1
-        if lbl2 is not None: uvp.label2 = lbl2
 
         # fill data arrays
         uvp.data_array = data_array
