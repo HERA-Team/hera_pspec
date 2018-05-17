@@ -1257,8 +1257,8 @@ class PSpecData(object):
                                 "Use hera_pspec.pspecdata.construct_blpairs()"
                                 " to construct appropriately grouped baseline"
                                 " lists.")
-                        key1 = [(dsets[0],) + _blp[0] + (p[0],) for _blp in blp]
-                        key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
+                        #key1 = [(dsets[0],) + _blp[0] + (p[0],) for _blp in blp]
+                        #key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
                     elif isinstance(blp, tuple):
                         # interpret blp as baseline-pair
                         key1 = (dsets[0],) + blp[0] + (p[0],)
