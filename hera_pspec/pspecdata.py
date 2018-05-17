@@ -999,7 +999,7 @@ class PSpecData(object):
            return True
 
 
-    def pspec(self, bls1, bls2, dsets, pols=None, input_data_weight='identity', norm='I', 
+    def pspec(self, bls1, bls2, dsets, pols, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, spw_ranges=None, verbose=True, 
               history=''):
         """
@@ -1020,6 +1020,7 @@ class PSpecData(object):
         If the bl chosen from bls1 is (ant1, ant2) and the bl chosen from bls2 
         is (ant3, ant4), the "baseline-pair" describing their cross 
         multiplication is ((ant1, ant2), (ant3, ant4)).
+
         Parameters
         ----------
         bls1, bls2 : list
@@ -1029,25 +1030,31 @@ class PSpecData(object):
             Contains indices of self.dsets to use in forming power spectra, 
             where the first index is for the Left-Hand dataset and second index 
             is used for the Right-Hand dataset (see above).
-        pols : length-2 tuple or list of strings or integers
-            contains polarization pairs to use in forming power spectra 
-            e.g. ('XX','XX') or ('XY','YX') or list of polarization pairs. 
+    
+        pols : length-2 tuple of strings or integers or list of length-2 tuples of strings or integers
+            Contains polarization pairs to use in forming power spectra 
+            e.g. ('XX','XX') or [('XX','XX'),('XY','YX')] or list of polarization pairs. 
             Only auto/equal polarization pairs are implemented at the moment. 
             It uses the polarizations of the UVData onjects (specified in dsets)
-            by default only if the UVData object consists of only one polarization.
+            by default only if the UVData object consists of equal polarizations.
+    
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
             data. See the options in the set_R() method for details. 
             Default: 'identity'.
+
         norm : str, optional
             String specifying how to choose the normalization matrix, M. See 
             the 'mode' argument of get_MW() for options. Default: 'I'.
+
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
+
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
+
         spw_ranges : list of tuples, optional
             A list of spectral window channel ranges to select within the total 
             bandwidth of the datasets, each of which forms an independent power 
@@ -1060,10 +1067,12 @@ class PSpecData(object):
             If True, print progress, warnings and debugging info to stdout.
         history : str, optional
             history string to attach to UVPSpec object
+
         Returns
         -------
         uvp : UVPSpec object
             Instance of UVPSpec that holds the output power spectrum data.
+
         Examples
         --------
         *Example 1:* No grouping; i.e. each baseline is its own group, no 
@@ -1122,15 +1131,14 @@ class PSpecData(object):
         dset2 = self.dsets[self.dset_idx(dsets[1])]
 
         # check  inputs for pol
-        npols0 = dset1.Npols # number of polarization for zero'th UVData of the first set of UVData objects
-        npols1 = dset2.Npols # number of polarization for zero'th UVData of the second set of UVData objects
-        if pols == None:
-            if npols0 == npols1 == 1:
-                pols = [(dset1.get_pols()[0], dset2.get_pols()[0])]
-                raise_warning("UVData objects have pols {} which are used to estimate the power spectrum.".format(tuple(pols)), verbose=verbose)
-            else:
-                raise ValueError("UVData objects must have only one polarization axis otherwise pols should be specified.")
-
+        #npols0 = dset1.Npols # number of polarization for zero'th UVData of the first set of UVData objects
+        #npols1 = dset2.Npols # number of polarization for zero'th UVData of the second set of UVData objects
+        #if pols == None:
+        #    if npols0 == npols1 == 1:
+        #        pols = [(dset1.get_pols()[0], dset2.get_pols()[0])]
+        #        raise_warning("UVData objects have pols {} which are used to estimate the power spectrum.".format(tuple(pols)), verbose=verbose)
+        #    else:
+        #        raise ValueError("UVData objects must have only one polarization axis otherwise pols should be specified.")
 
         # assert form of bls1 and bls2
         assert len(bls1) == len(bls2), "length of bls1 must equal length of bls2"
@@ -1199,6 +1207,7 @@ class PSpecData(object):
                 dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
 
             # Loop over polarizations
+            if isinstance(pols, tuple): pols = [pols]
             for j, ps in enumerate(pols):
                 p = [] 
                 if isinstance(ps[0], (int, np.int)): 
@@ -1214,7 +1223,8 @@ class PSpecData(object):
                 # validating polarization pair of UVData objects
                 valid = self.validate_pol(dsets, tuple(p))
                 if valid:
-                   spw_pol.append(p)
+                   # storing only one polarization as only equal polarization are allowed at the moment and UVPspec objec also understands one polarization for each UVspec object
+                   spw_pol.append(p[0]) 
                    pass
                 else:
                    print ("Polarization pair: {} failed the validation test".format(p))
@@ -1306,8 +1316,8 @@ class PSpecData(object):
                     wgts2 = self.w(key2).T
 
                     # get average of nsample across frequency axis, weighted by wgts
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1)[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2)[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
+                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
 
                     # take average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
                     pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0) * dset1.integration_time)
@@ -1371,7 +1381,7 @@ class PSpecData(object):
         uvp.Ndlys = len(np.unique(dlys))
         uvp.Nspwdlys = len(spws)
         uvp.Nfreqs = len(np.unique(freqs))
-        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p[0]), spw_pol))
+        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p), spw_pol))
         uvp.Npols = len(spw_pol)
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width
