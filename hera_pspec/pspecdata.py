@@ -14,7 +14,7 @@ import argparse
 
 class PSpecData(object):
 
-    def __init__(self, dsets=[], wgts=[], labels=None, beam=None):
+    def __init__(self, dsets=[], wgts=[],dsets_std=None, labels=None, beam=None):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -25,7 +25,10 @@ class PSpecData(object):
             Set of UVData objects containing the data that will be used to
             compute the power spectrum. If specified as a dict, the key names
             will be used to tag each dataset. Default: Empty list.
-
+        dsets_std: list or dict of UVData objects, optional
+            Set of UVData objects containing the standard deviations of each
+            data point in UVData objects in dsets. If specified as a dict, the key names
+            will be used to tag each dataset. Default: Empty list.
         wgts : list or dict of UVData objects, optional
             Set of UVData objects containing weights for the input data.
             Default: Empty list.
@@ -42,6 +45,7 @@ class PSpecData(object):
         """
         self.clear_cov_cache()  # Covariance matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
+        self.dsets_std=[]
         self.Nfreqs = None
         self.spw_range = None
         self.spw_Nfreqs = None
@@ -52,7 +56,7 @@ class PSpecData(object):
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
-            self.add(dsets, wgts, labels=labels)
+            self.add(dsets, wgts,dsets_std=dsets_std, labels=labels)
 
         # Store a primary beam
         self.primary_beam = beam
@@ -95,13 +99,16 @@ class PSpecData(object):
                 raise TypeError("If 'dsets' is a dict, 'wgts' must also be "
                                 "a dict")
 
-            if dsets_std is not None:
-                if not isinstance(dsets_std,dict):
+            if not isinstance(dsets_std,dict):
+                if dsets_std is None:
+                    dsets_std=[None for m in range(len(dsets))]
+                else:
                     raise TypeError("If 'dsets' is a dict, 'dsets_std' must"
                                     "also be a dict")
-
+            else:
                 _dsets_std = [dsets_std[key] for key in labels]
                 dsets_std = _dsets_std
+
 
             # Unpack dsets and wgts dicts
             labels = dsets.keys()
@@ -116,7 +123,7 @@ class PSpecData(object):
         if isinstance(labels, str): labels = [labels,]
         if isinstance(dsets_std,pyuvdata.UVData): dsets_std=[dsets_std,]
         if wgts is None: wgts = [wgts,]
-        if dsets_std is None: dsets_std=[dsets_std,]
+        if dsets_std is None: dsets_std=[dsets_std for m in range(len(dsets))]
         if isinstance(dsets, tuple): dsets = list(dsets)
         if isinstance(wgts, tuple): wgts = list(wgts)
         if isinstance(dsets_std,tuple): dsets_std=list(dsets_std)
@@ -130,7 +137,7 @@ class PSpecData(object):
 
         # Make sure enough weights were specified
         assert(len(dsets) == len(wgts))
-        assert(len(dsets_std)==len(dsets))
+        assert(len(dsets_std) == len(dsets))
         if labels is not None: assert(len(dsets) == len(labels))
 
         # Check that everything is a UVData object
@@ -609,6 +616,7 @@ class PSpecData(object):
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
 
+<<<<<<< HEAD
     def set_Ndlys(self, ndlys=None):
         """
         Set the number of delay bins used.
@@ -629,6 +637,9 @@ class PSpecData(object):
             self.spw_Ndlys = ndlys
 
     def cov_q_hat(self,key1,key2,taper='none'):
+=======
+    def cov_q_hat(self,alpha,beta,key1,key2,time_indices,taper='none'):
+>>>>>>> now passes tests.
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
@@ -642,10 +653,14 @@ class PSpecData(object):
 
         Parameters
         ----------
+        alpha,beta: integers for covariance index.
+
         key1,key2: tuples or lists of tuples
             Tuples containing the indices of the dataset and baselines for the
             two input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
+
+        time_indices, list of indices for times.
 
         taper: str, optional
             Tapering (window) function to apply to the data. Takes the same
@@ -655,54 +670,59 @@ class PSpecData(object):
         -------
         cov_q_hat, matrix with covariances between un-normalized band powers
         """
+        ntimes=len(time_indices)
 
-        qc=np.zeros(self.spw_Nfreqs,self.spw_Nfreqs,self.Ntimes,dtype=complex)
+        qc=np.zeros(ntimes,
+                    dtype=complex)
 
         R1,R2=0,0
         N1a,N2a,N1b,N2b=0,0,0,0
         #compute noise covariance matrices. Assume diagonal!
-
-
-
-        #compute E^alpha and E^beta
+                    #compute E^alpha and E^beta
         if isinstance(key1,list):
             for _key in key1:
                 R1+=self.R(_key)
-                N1a+=np.diagonal(np.real(self.dx(_key))**2.)
-                N1b+=np.diagonal(np.imag(self.dx(_key))**2.)
+                N1a+=np.real(self.dx(_key))**2.
+                N1b+=np.imag(self.dx(_key))**2.
         else:
             R1=self.R(key1)
-            N1a=np.diagonal(np.real(self.dx(_key))**2.)
-            N1b=np.diagonal(np.imag(self.dx(_key))**2.)
+            N1a=np.real(self.dx(key1))**2.
+            N1b=np.imag(self.dx(key1))**2.
 
         if isinstance(key2,list):
             for _key in key2: R2+=self.R(_key)
-            N2a+=np.diagonal(np.real(self.dx(_key))**2.)
-            N2b+=np.diagonal(np.imag(self.dx(_key))**2.)
+            N2a+=np.real(self.dx(_key))**2.
+            N2b+=np.imag(self.dx(_key))**2.
         else:
             R2=self.R(key2)
-            N2a=np.diagonal(np.real(self.dx(_key)**2.))
-            N2b=np.diagonal(np.imag(self.dx(_key)**2.))
+            N2a=np.real(self.dx(key2)**2.)
+            N2b=np.imag(self.dx(key2)**2.)
 
-
-
+        #rearange Noise arrays into diagonals with Ntimes
+        n1a=np.zeros((self.spw_Nfreqs,self.spw_Nfreqs,ntimes),dtype=complex)
+        n1b=np.zeros_like(n1a)
+        n2a=np.zeros_like(n1a)
+        n2b=np.zeros_like(n1a)
+        for t,tind in enumerate(time_indices):
+            n1a[:,:,t]=np.diag(N1a[:,tind])
+            n1b[:,:,t]=np.diag(N1b[:,tind])
+            n2a[:,:,t]=np.diag(N2a[:,tind])
+            n2b[:,:,t]=np.diag(N2b[:,tind])
         if taper != 'none':
             tapering_fct=\
-            np.diagonal(aipy.dsp.gen_window(self.spw_Nfreqs,taper))
+            np.diag(aipy.dsp.gen_window(self.spw_Nfreqs,taper))
             R1=np.dot(tapering_fct,R1)
             R2=np.dot(tapering_fct,R2)
 
-        for i in xrange(self.spw_Nfreqs):
-            for j in xrange(self.spw_Nfreqs):
-                Qalpha=self.get_Q(i,self.spw_Nfreqs)
-                Qbeta=self.get_Q(j,self.spw_Nfreqs)
-                Ealpha=np.einsum('ab,bc,cd',R1.T.conj(),Qalpha,R2)
-                Ebeta=np.einsum('ab,bc,cd',R1.T.conj(),Qbeta,R2)
-                qc[i,j]=\
-                (np.einsum('ab,bc,cd,da',Ealpha,N2a,Ebeta,N1a)\
-                +np.einsum('ab,bc,cd,da',Ealpha,N2b,Ebeta,N1a)\
-                +np.einsum('ab,bc,cd,da',Ealpha,N2a,Ebeta,N1b)\
-                +np.einsum('ab,bc,cd,da',Ealpha,N2b,Ebeta,N1b))
+        Qalpha=self.get_Q(alpha,self.spw_Nfreqs)
+        Qbeta=self.get_Q(beta,self.spw_Nfreqs)
+        Ealpha=np.einsum('ab,bc,cd',R1.T.conj(),Qalpha,R2)
+        Ebeta=np.einsum('ab,bc,cd',R1.T.conj(),Qbeta,R2)
+        qc=\
+        (np.einsum('ab,bce,cd,dae->e',Ealpha,n2a,Ebeta,n1a)\
+        +np.einsum('ab,bce,cd,dae->e',Ealpha,n2b,Ebeta,n1a)\
+        +np.einsum('ab,bce,cd,dae->e',Ealpha,n2a,Ebeta,n1b)\
+        +np.einsum('ab,bce,cd,dae->e',Ealpha,n2b,Ebeta,n1b))
         return qc/4.
 
 

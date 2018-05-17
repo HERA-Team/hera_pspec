@@ -16,7 +16,7 @@ dfiles = [
     'zen.2458042.12552.xx.HH.uvXAA',
     'zen.2458042.12552.xx.HH.uvXAA'
 ]
-d_files_std = [
+dfiles_std = [
     'zen.2458042.12552.std.xx.HH.uvXAA',
     'zen.2458042.12552.std.xx.HH.uvXAA'
 ]
@@ -162,7 +162,7 @@ class Test_PSpecData(unittest.TestCase):
         # Check that specifying labels does work
         psd = pspecdata.PSpecData( dsets=[self.d[0], self.d[1],],
                                    wgts=[self.w[0], self.w[1], ],
-                                   labels=['red', 'blue'] )
+                                   labels=['red', 'blue'])
         np.testing.assert_array_equal( psd.x(('red', 24, 38)),
                                        psd.x((0, 24, 38)) )
 
@@ -310,27 +310,39 @@ class Test_PSpecData(unittest.TestCase):
                 for norm in test_norm:
                     self.assertAlmostEqual(norm, 1.)
 
-    def test_q_cov(self):
+
+    def test_cov_q(self):
         """
         Test that q_hat_cov has the right shape and accepts keys in correct
         format.
         """
-        self.ds=pspecdata.(dsets=self.d,wghts=self.w,dsets_std=self.d_std)
+        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
         Nfreq = self.ds.Nfreqs
         Ntime = self.ds.Ntimes
 
         key1 = (0,24,38)
         key2 = (1,25,38)
-        key3 = [(0,24,38), (0,24,38)]
-        key4 = [(1,25,38), (1,25,38)]
+        tinds=[0,1,2]
+        #key3 = [(0,24,38), (0,24,38)]
+        #key4 = [(1,25,38), (1,25,38)]
 
         for input_data_weight in ['identity','iC']:
             self.ds.set_R(input_data_weight)
 
             for taper in taper_selection:
+                q_hat_cov_a = self.ds.cov_q_hat(0,0,key1,key2,tinds,taper=taper)
+                self.assertEqual(q_hat_cov_a.shape,np.array(tinds).shape)
 
-                q_hat_cov_a = self.ds.q_hat_cov_a(key1,key2,taper=taper)
-                self.assertEqual(q_hat_cov_a.shape,(Nfreq,Nfreq,Ntime))
+        """
+        Now test that analytic Error calculation gives Nchan^2
+        """
+        self.ds.set_R('identity')
+        q_hat_cov_a=self.ds.cov_q_hat(0,0,key1,key2,tinds,taper='none')
+        self.assertTrue(np.isclose(q_hat_cov_a[0],
+                        Nfreq**2.,atol=1e-6))
+        q_hat_cov_a=self.ds.cov_q_hat(0,10,key1,key2,tinds,taper='none')
+        self.assertTrue(np.isclose(q_hat_cov_a[0],
+                        0.,atol=1e-6))
 
 
 
@@ -723,7 +735,7 @@ class Test_PSpecData(unittest.TestCase):
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm, labels=['red', 'blue'])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm, labels=['red', 'blue'])
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
