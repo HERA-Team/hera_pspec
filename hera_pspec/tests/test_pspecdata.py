@@ -286,8 +286,7 @@ class Test_PSpecData(unittest.TestCase):
         n = 17
         random_G = generate_pos_def_all_pos(n)
         random_H = generate_pos_def_all_pos(n)
-
-        nt.assert_raises(AssertionError, self.ds.get_MW, random_G, mode='L^3')
+        nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
 
         for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
             if mode == 'G^-1':
