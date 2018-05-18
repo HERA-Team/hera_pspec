@@ -1,7 +1,7 @@
 import numpy as np
 from collections import OrderedDict as odict
 import os, copy, shutil, operator, ast, fnmatch
-from hera_pspec import conversions, noise, version, pspecbeam, grouping
+from hera_pspec import conversions, noise, version, pspecbeam, grouping, utils
 from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.parameter import PSpecParam
 from pyuvdata import uvutils as uvutils
@@ -26,7 +26,7 @@ class UVPSpec(object):
         self._Nspwdlys = PSpecParam("Nspwdlys", description="Total number of delay bins across all sub-bands.", expected_type=int)
         self._Nspws = PSpecParam("Nspws", description="Number of spectral windows.", expected_type=int)
         self._Ndlys = PSpecParam("Ndlys", description="Total number of delay bins.", expected_type=int)
-        self._Nfreqs = PSpecParam("Nfreqs", description="Total number of frequency bins in the data.", expected_type=int)
+        self._Nfreqs = PSpecParam("Nfreqs", description="Total number of unique frequency bins in the data.", expected_type=int)
         self._Npols = PSpecParam("Npols", description="Number of polarizations in the data.", expected_type=int)
         self._history = PSpecParam("history", description='The file history.', expected_type=str)
 
@@ -42,18 +42,18 @@ class UVPSpec(object):
         desc = "Nsample dictionary, if the pspectra have been incoherently averaged (i.e. averaged after squaring), this is " \
                "the effective number of samples in that average (float type). This is not the same as the pyuvdata.UVData nsample_array."
         self._nsample_array = PSpecParam("nsample_array", description=desc, expected_type=np.float64, form="(Nblpairts, Npols)")
-        self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)", expected_type=np.int32)
+        self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)", expected_type=np.uint16)
         self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nfreqs,)", expected_type=np.float64)
         self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)", expected_type=np.float64)
         desc = "Polarization integers of power spectra. Stokes 1:4 (I,Q,U,V); circular -1:-4 (RR,LL,RL,LR); linear -5:-8 (XX,YY,XY,YX)"
-        self._pol_array = PSpecParam("pol_array", description=desc, form="(Npols,)", expected_type=np.ndarray)
+        self._pol_array = PSpecParam("pol_array", description=desc, form="(Npols,)", expected_type=np.int32)
         self._lst_1_array = PSpecParam("lst_1_array", description="LST array of the first bl in the bl-pair [radians].", form="(Nblpairts,)", expected_type=np.float64)
         self._lst_2_array = PSpecParam("lst_2_array", description="LST array of the second bl in the bl-pair [radians].", form="(Nblpairts,)", expected_type=np.float64)
         self._lst_avg_array = PSpecParam("lst_avg_array", description="Average of the lst_1_array and lst_2_array [radians].", form="(Nblpairts,)", expected_type=np.float64)
         self._time_1_array = PSpecParam("time_1_array", description="Time array of the first bl in the bl-pair [Julian Date].", form="(Nblpairts,)", expected_type=np.float64)
         self._time_1_array = PSpecParam("time_2_array", description="Time array of the second bl in the bl-pair [Julian Date].", form="(Nblpairts,)", expected_type=np.float64)
         self._time_avg_array = PSpecParam("time_avg_array", description="Average of the time_1_array and time_2_array [Julian Date].", form='(Nblpairts,)', expected_type=np.float64)
-        self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)", expected_type=np.int32)
+        self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)", expected_type=np.int64)
         self._scalar_array = PSpecParam("scalar_array", description="Power spectrum normalization scalar from pspecbeam module.", expected_type=np.float64, form="(Nspws, Npols)")
 
         # Baseline attributes
@@ -70,8 +70,8 @@ class UVPSpec(object):
         self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
         self._norm_units = PSpecParam("norm_units", description="Power spectra normalization units, i.e. telescope units [Hz str] or cosmological [(h^-3) Mpc^3].", expected_type=str)
         self._labels = PSpecParam("labels", description="Array of dataset string labels.", expected_type=np.str)
-        self._label_1_array = PSpecParam("label_1_array", description="Integer array w/ shape of data that indexes labels and gives label of dset1.", form="(Nspws, Nblpairts, Npols)", expected_type=np.int)
-        self._label_2_array = PSpecParam("label_2_array", description="Integer array w/ shape of data that indexes labels and gives label of dset2.", form="(Nspws, Nblpairts, Npols)", expected_type=np.int)
+        self._label_1_array = PSpecParam("label_1_array", description="Integer array w/ shape of data that indexes labels and gives label of dset1.", form="(Nspws, Nblpairts, Npols)", expected_type=np.int32)
+        self._label_2_array = PSpecParam("label_2_array", description="Integer array w/ shape of data that indexes labels and gives label of dset2.", form="(Nspws, Nblpairts, Npols)", expected_type=np.int32)
         self._folded = PSpecParam("folded", description="if power spectra are folded (i.e. averaged) onto purely positive delay axis. Default is False", expected_type=bool)
         self._beamfile = PSpecParam("beamfile", description="filename of beam-model used to normalized pspectra.", expected_type=str)
         self._OmegaP = PSpecParam("OmegaP", description="Integral of unitless beam power over the sky [steradians].", form="(Nbeam_freqs, Npols)", expected_type=np.float64)
@@ -88,8 +88,9 @@ class UVPSpec(object):
                             "spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array",
                             "lst_2_array", "time_1_array", "time_2_array", "blpair_array", "Nbls",
                             "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting",
-                            "vis_units", "norm_units", "taper", "norm", "nsample_array",
-                            'lst_avg_array', 'time_avg_array', 'folded', "scalar_array"]
+                            "vis_units", "norm_units", "taper", "norm", "nsample_array", 'lst_avg_array', 
+                            'time_avg_array', 'folded', "scalar_array", "labels", "label_1_array",
+                            "label_2_array"]
 
         # all parameters must fall into one and only one of the following groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys",
@@ -264,7 +265,7 @@ class UVPSpec(object):
         # construct blpair_bls
         blpairs = np.unique(self.blpair_array)
         bl1 = np.floor(blpairs / 1e6)
-        blpair_bls = np.vstack([bl1, blpairs - bl1*1e6]).astype(np.int).T
+        blpair_bls = np.vstack([bl1, blpairs - bl1*1e6]).astype(np.int32).T
 
         # iterate over blpairs
         for blp, bl in zip(blpairs, blpair_bls):
@@ -358,9 +359,14 @@ class UVPSpec(object):
 
         return all_keys
 
-    def get_spw_ranges(self):
+    def get_spw_ranges(self, spws=None):
         """
         Get the frequency range and Nfreqs of each spectral window in the object.
+
+        Parameters
+        ----------
+        spws : list of spw integers, optional
+            Default is all spws present in data.
 
         Returns
         -------
@@ -369,9 +375,14 @@ class UVPSpec(object):
             To turn this into the frequency array of the spectral window use 
                 spw_freqs = np.linspace(freq_start, freq_end, Nfreqs, endpoint=False)
         """
+        # type check
+        if isinstance(spws, (int, np.integer)):
+            spws = [spws]
+        if spws is None:
+            spws = np.arange(self.Nspws)
         spw_ranges = []
         # iterate over spectral windows
-        for spw in np.unique(self.spw_array):
+        for spw in spws:
             spw_freqs = self.freq_array[self.spw_to_indices(spw)]
             Nfreqs = len(spw_freqs)
             spw_df = np.median(np.diff(spw_freqs))
@@ -496,7 +507,7 @@ class UVPSpec(object):
         # convert blpair to integer if fed as tuple
         if isinstance(blpair, tuple):
             blpair = [self.antnums_to_blpair(blpair)]
-        elif isinstance(blpair, (np.int, int)):
+        elif isinstance(blpair, (np.integer, int)):
             blpair = [blpair]
         elif isinstance(blpair, list):
             if isinstance(blpair[0], tuple):
@@ -552,7 +563,7 @@ class UVPSpec(object):
         # convert pol to int if str
         if isinstance(pol, (str, np.str)):
             pol = [uvutils.polstr2num(pol)]
-        elif isinstance(pol, (int, np.int)):
+        elif isinstance(pol, (int, np.integer)):
             pol = [pol]
         elif isinstance(pol, (list, tuple)):
             for i in range(len(pol)):
@@ -592,7 +603,7 @@ class UVPSpec(object):
             return np.arange(self.Nblpairts)[time_select]
         else:
             blp_select = np.zeros(self.Nblpairts, np.bool)
-            if isinstance(blpairs, (tuple, int, np.int)):
+            if isinstance(blpairs, (tuple, int, np.integer)):
                 blpairs = [blpairs]
             for blp in blpairs:
                 blp_select[self.blpair_to_indices(blp)] = True
@@ -648,7 +659,7 @@ class UVPSpec(object):
                 key = (key['spw'], key['blpair'], key['pol'])
         elif len(args) > 0:
             assert len(args) == 2, "length of key must be 3."
-            assert isinstance(args[0], (tuple, int, np.int)) and isinstance(args[1], (np.str, str, int, np.int)), "key must be ordered as (spw, blpair, pol)"
+            assert isinstance(args[0], (tuple, int, np.integer)) and isinstance(args[1], (np.str, str, int, np.integer)), "key must be ordered as (spw, blpair, pol)"
             key = (key, args[0], args[1])
 
         # assign key elements
@@ -657,9 +668,9 @@ class UVPSpec(object):
         pol = key[2]
 
         # assert types
-        assert isinstance(spw, (int, np.int)), "spw must be an integer"
-        assert isinstance(blpair, (int, np.int, tuple)), "blpair must be an integer or nested tuple"
-        assert isinstance(pol, (np.str, str, np.int, int)), "pol must be a string or integer"
+        assert isinstance(spw, (int, np.integer)), "spw must be an integer"
+        assert isinstance(blpair, (int, np.integer, tuple)), "blpair must be an integer or nested tuple"
+        assert isinstance(pol, (np.str, str, np.integer, int)), "pol must be a string or integer"
 
         # convert blpair to int if not int
         if type(blpair) == tuple:
@@ -821,7 +832,7 @@ class UVPSpec(object):
             self.cosmo = conversions.Cosmo_Conversions(**ast.literal_eval(self.cosmo))
 
         self.check(just_meta=just_meta)
-    
+
 
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
                   blpairs=None, times=None, pols=None, 
@@ -1071,7 +1082,11 @@ class UVPSpec(object):
                             assert issubclass(getattr(self, p)[k].dtype.type, a.expected_type), err_msg
                     # immutables
                     elif p in self._immutables:
-                        assert isinstance(getattr(self, p), a.expected_type), err_msg
+                        if not isinstance(getattr(self, p), a.expected_type):
+                            try:
+                                setattr(self, p, a.expected_type(getattr(self, p)))
+                            except:
+                                raise AssertionError(err_msg)
 
     def _clear(self):
         """
@@ -1115,7 +1130,10 @@ class UVPSpec(object):
                 if p in self._immutables:
                     assert getattr(self, p) == getattr(other, p)
                 elif p in self._ndarrays:
-                    assert np.isclose(getattr(self, p), getattr(other, p)).all()
+                    if issubclass(getattr(self, p).dtype.type, np.str):
+                        assert np.all(getattr(self, p) == getattr(other, p))
+                    else:
+                        assert np.isclose(getattr(self, p), getattr(other, p)).all()
                 elif p in self._dicts:
                     for i in getattr(self, p):
                         assert np.isclose(getattr(self, p)[i], \
@@ -1130,7 +1148,7 @@ class UVPSpec(object):
 
     def __add__(self, other, verbose=False):
         """ Concatenate the data of two UVPSpec objects together along a single axis """
-        self = combine_uvp([self, other], verbose=verbose)
+        return concate_uvp([self, other], verbose=verbose)
 
     @property
     def units(self):
@@ -1206,7 +1224,7 @@ class UVPSpec(object):
             (Ntimes, Ndlys).
         """
         # Assert polarization type
-        if isinstance(pol, (np.int, int)):
+        if isinstance(pol, (np.integer, int)):
             pol = uvutils.polnum2str(pol)
 
         # Get polarization index
@@ -1440,9 +1458,9 @@ class UVPSpec(object):
         return scalar
 
 
-def combine_uvp(uvps, verbose=True):
+def concate_uvp(uvps, verbose=True):
     """
-    Combine multiple UVPSpec objects into a single object, concatenating along one of
+    Concatenate multiple UVPSpec objects into a single object, combining along one of
     either spectral window [spw], baseline-pair-times [blpairts], or polarization [pol].
     Certain meta-data of all of the UVPSpec objs must match exactly. 
     In addition, one can only concatenate data along a single data axis, with the condition 
@@ -1460,7 +1478,7 @@ def combine_uvp(uvps, verbose=True):
     """
     # perform type checks and get concatenation axis
     (uvps, concat_ax, new_spws, new_blpts, new_pols,
-     static_meta) = get_uvp_overlap(uvps, verbose=verbose)
+     static_meta) = get_uvp_overlap(uvps, just_meta=False, verbose=verbose)
     Nuvps = len(uvps)
 
     # create a new uvp
@@ -1489,7 +1507,7 @@ def combine_uvp(uvps, verbose=True):
         spw_Nfreqs = spw[-1]
         spw_freqs = np.linspace(*spw, endpoint=False)
         spw_dlys = np.fft.fftshift(np.fft.fftfreq(spw_Nfreqs, np.median(np.diff(spw_freqs))))
-        u.spw_array.extend(np.ones(spw_Nfreqs, np.int) * i)
+        u.spw_array.extend(np.ones(spw_Nfreqs, np.int32) * i)
         u.freq_array.extend(spw_freqs)
         u.dly_array.extend(spw_dlys)
     u.spw_array = np.array(u.spw_array)       
@@ -1499,16 +1517,16 @@ def combine_uvp(uvps, verbose=True):
     u.Nspws = Nspws
     u.Nblpairts = Nblpairts
     u.Npols = Npols
-    u.Nfreqs = len(u.freq_array)
+    u.Nfreqs = len(np.unique(u.freq_array))
     u.Nspwdlys = len(u.spw_array)
     u.Ndlys = len(np.unique(u.dly_array))
     u.time_1_array, u.time_2_array = np.empty(Nblpairts, np.float), np.empty(Nblpairts, np.float)
     u.time_avg_array, u.lst_avg_array = np.empty(Nblpairts, np.float), np.empty(Nblpairts, np.float)
     u.lst_1_array, u.lst_2_array = np.empty(Nblpairts, np.float), np.empty(Nblpairts, np.float)
-    u.blpair_array = np.empty(Nblpairts, np.int)
+    u.blpair_array = np.empty(Nblpairts, np.int64)
     u.labels = sorted(set(np.concatenate([uvp.labels for uvp in uvps])))
-    u.label_1_array = np.empty((Nspws, Nblpairts, Npols), np.int)
-    u.label_2_array = np.empty((Nspws, Nblpairts, Npols), np.int)
+    u.label_1_array = np.empty((Nspws, Nblpairts, Npols), np.int32)
+    u.label_2_array = np.empty((Nspws, Nblpairts, Npols), np.int32)
 
     # get each uvp's data axes
     uvp_spws = [_uvp.get_spw_ranges() for _uvp in uvps]
@@ -1616,15 +1634,19 @@ def combine_uvp(uvps, verbose=True):
     return u
 
 
-def get_uvp_overlap(uvps, verbose=True):
+def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     """
     Given a list of UVPSpec objects or a list of paths to UVPSpec objects,
-    find a single data axis ['spw', 'blpairts', 'pol'] where all objects contain 
-    non-overlapping data.
+    find a single data axis ['spw', 'blpairts', 'pol'] where *all* objects contain 
+    completely non-overlapping data. Overlapping data are delay spectra that
+    have identical spw, blpair-time and pol metadata between each other.
 
     Parameters
     ----------
     uvps : list of UVPSpec objects or list of string paths to UVPSpec objects
+
+    just_meta : boolean, optional
+        If uvps contain list of strings, load only the metadata in to get uvp overlap.
 
     verbose : bool, optional
         print feedback to standard output
@@ -1658,7 +1680,7 @@ def get_uvp_overlap(uvps, verbose=True):
         _uvps = []
         for u in uvps:
             uvp = UVPSpec()
-            uvp.read_hdf5(u, just_meta=True)
+            uvp.read_hdf5(u, just_meta=just_meta)
             _uvps.append(uvp)
         uvps = _uvps
 
@@ -1678,7 +1700,7 @@ def get_uvp_overlap(uvps, verbose=True):
     unique_spws = []
     unique_blpts = []
     unique_pols = []
-    data_overlaps = odict()
+    data_concat_axes = odict()
 
     # iterate over uvps
     for i, uvp1 in enumerate(uvps):
@@ -1696,36 +1718,39 @@ def get_uvp_overlap(uvps, verbose=True):
         # iterate over uvps
         for j, uvp2 in enumerate(uvps):
             if j <= i: continue
-            # get uvp1 sets and determine overlap w/ uvp1
+            # get uvp2 sets
             uvp2_spws = uvp2.get_spw_ranges()
             uvp2_blpts = zip(uvp2.blpair_array, uvp2.time_avg_array)
             uvp2_pols = uvp2.pol_array
 
-            spw_overlap = len(set(uvp1_spws) ^ set(uvp2_spws)) == 0
-            blpts_overlap = len(set(uvp1_blpts) ^ set(uvp2_blpts)) == 0
-            pol_overlap = len(set(uvp1_pols) ^ set(uvp2_pols)) == 0
+            # determine if uvp1 and uvp2 are an identical match
+            spw_match = len(set(uvp1_spws) ^ set(uvp2_spws)) == 0
+            blpts_match = len(set(uvp1_blpts) ^ set(uvp2_blpts)) == 0
+            pol_match = len(set(uvp1_pols) ^ set(uvp2_pols)) == 0
+
+            # ensure no partial-overlaps
+            if not spw_match:
+                assert len(set(uvp1_spws) & set(uvp2_spws)) == 0, "uvp {} and {} have partial overlap across spw, cannot combine".format(i, j)
+            if not blpts_match:
+                assert len(set(uvp1_blpts) & set(uvp2_blpts)) == 0, "uvp {} and {} have partial overlap across blpairts, cannot combine".format(i, j)
+            if not pol_match:
+                assert len(set(uvp1_pols) & set(uvp2_pols)) == 0, "uvp {} and {} have partial overlap across pol, cannot combine".format(i, j)
 
             # assert all except 1 axis overlaps
-            overlaps = [spw_overlap, blpts_overlap, pol_overlap]
-            assert sum(overlaps) != 3, "uvp {} and {} have overlapping data, cannot combine".format(i, j)
-            assert sum(overlaps) > 1, "uvp {} and {} are non-overlapping across multiple data axes, cannot combine".format(i, j)
-            concat_ax = ['spw', 'blpairts', 'pol'][overlaps.index(False)]
-            data_overlaps[(i, j)] = concat_ax
+            matches = [spw_match, blpts_match, pol_match]
+            assert sum(matches) != 3, "uvp {} and {} have completely overlapping data, cannot combine".format(i, j)
+            assert sum(matches) > 1, "uvp {} and {} are non-overlapping across multiple data axes, cannot combine".format(i, j)
+            concat_ax = ['spw', 'blpairts', 'pol'][matches.index(False)]
+            data_concat_axes[(i, j)] = concat_ax
             if verbose:
-                print "uvp {} and {} have non-overlap across {} axis".format(i, j, concat_ax)
+                print "uvp {} and {} are concatable across {} axis".format(i, j, concat_ax)
 
     # assert all uvp pairs have the same (single) non-overlap (concat) axis
     err_msg = "Non-overlapping data in uvps span multiple data axes:\n{}" \
-              "".format("\n".join(map(lambda i: "{} & {}: {}".format(i[0][0], i[0][1], i[1]), data_overlaps.items())))
-    assert len(set(data_overlaps.values())) == 1, err_msg
+              "".format("\n".join(map(lambda i: "{} & {}: {}".format(i[0][0], i[0][1], i[1]), data_concat_axes.items())))
+    assert len(set(data_concat_axes.values())) == 1, err_msg
 
     # perform additional checks given concat ax
-    if concat_ax == 'spw':
-        # check for spws overlapping in freq
-        for i, spw1 in enumerate(unique_spws):
-            for j, spw2 in enumerate(unique_spws[i+1:]):
-                assert not (spw1[1] > spw2[0] and spw1[0] < spw2[1]), "cannot combine overlapping spws: {} & {}".format(spw1, spw2)
-
     if concat_ax == 'blpairts':
         # check scalar_array
         assert np.all([np.isclose(uvps[0].scalar_array, u.scalar_array) for u in uvps[1:]]), "" \

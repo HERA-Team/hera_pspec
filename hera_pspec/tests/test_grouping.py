@@ -3,8 +3,7 @@ import nose.tools as nt
 import numpy as np
 import os
 from hera_pspec.data import DATA_PATH
-from test_uvpspec import build_example_uvpspec
-from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing
 from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec import grouping
 
@@ -13,7 +12,7 @@ class Test_grouping(unittest.TestCase):
     def setUp(self):
         beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
         self.beam = pspecbeam.PSpecBeamUV(beamfile)
-        uvp, cosmo = build_example_uvpspec(beam=self.beam)
+        uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam)
         uvp.check()
         self.uvp = uvp
 

@@ -4,95 +4,12 @@ import numpy as np
 import os
 import sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing
 from hera_pspec import uvpspec_utils as uvputils
 import copy
 import h5py
 from collections import OrderedDict as odict
-
-def build_example_uvpspec(beam=None):
-    """
-    Build an example UVPSpec object, with all necessary metadata.
-    """
-    uvp = uvpspec.UVPSpec()
-
-    Ntimes = 10
-    Nfreqs = 50
-    Ndlys = Nfreqs
-    Nspws = 1
-    Nspwdlys = Nspws * Nfreqs
-
-    # [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))]
-    blpairs = [1002001002, 2003002003, 1003001003]
-    bls = [1002, 2003, 1003]
-    Nbls = len(bls)
-    Nblpairs = len(blpairs)
-    Nblpairts = Nblpairs * Ntimes
-
-    blpair_array = np.tile(blpairs, Ntimes)
-    bl_array = np.array(bls)
-    bl_vecs = np.array([[  5.33391548e+00,  -1.35907816e+01,  -7.91624188e-09],
-                        [ -8.67982998e+00,   4.43554478e+00,  -1.08695203e+01],
-                        [ -3.34591450e+00,  -9.15523687e+00,  -1.08695203e+01]])
-    time_array = np.repeat(np.linspace(2458042.1, 2458042.2, Ntimes), Nblpairs)
-    time_1_array = time_array
-    time_2_array = time_array
-    lst_array = np.repeat(np.ones(Ntimes, dtype=np.float), Nblpairs)
-    lst_1_array = lst_array
-    lst_2_array = lst_array
-    time_avg_array = time_array
-    lst_avg_array = lst_array
-    spws = np.arange(Nspws)
-    spw_array = np.tile(spws, Ndlys)
-    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), Nspws)
-    dly_array = np.fft.fftshift(np.repeat(np.fft.fftfreq(Nfreqs, np.median(np.diff(freq_array))), Nspws))
-    pol_array = np.array([-5])
-    Npols = len(pol_array)
-    vis_units = 'unknown'
-    norm_units = 'Hz str'
-    weighting = 'identity'
-    channel_width = np.median(np.diff(freq_array))
-    history = 'example'
-    taper = "none"
-    norm = "I"
-    git_hash = "random"
-    scalar_array = np.ones((Nspws, Npols), np.float)
-    label1 = 'red'
-    #label2 = 'blue' # Leave commented out to make sure non-named UVPSpecs work!
-    if beam is not None:
-        OmegaP, OmegaPP = beam.get_Omegas(beam.primary_beam.polarization_array[0])
-        beam_freqs = beam.beam_freqs
-
-    telescope_location = np.array([5109325.85521063, 
-                                   2005235.09142983, 
-                                  -3239928.42475397])
-
-    cosmo = conversions.Cosmo_Conversions()
-
-    data_array, wgt_array, integration_array, nsample_array = {}, {}, {}, {}
-    for s in spws:
-        data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
-                      * blpair_array[:, None, None] / 1e9
-        wgt_array[s] = np.ones((Nblpairts, Ndlys, 2, Npols), dtype=np.float)
-        integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
-        nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
-
-    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts', 
-              'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array', 
-              'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array', 
-              'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
-              'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 
-              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
-              'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array', 
-              'cosmo', 'scalar_array', 'label1', 'norm_units']
-    if beam is not None:
-        params += ['OmegaP', 'OmegaPP', 'beam_freqs']
-    
-    # Set all parameters
-    for p in params:
-        setattr(uvp, p, locals()[p])
-    
-    return uvp, cosmo
+from pyuvdata import UVData
 
 
 class Test_UVPSpec(unittest.TestCase):
@@ -100,12 +17,8 @@ class Test_UVPSpec(unittest.TestCase):
     def setUp(self):
         beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
         self.beam = pspecbeam.PSpecBeamUV(beamfile)
-        uvp, cosmo = build_example_uvpspec(beam=self.beam)
-        uvp.check()
+        uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam)
         self.uvp = uvp
-
-        # test equivalence
-        nt.assert_equal(uvp, uvp)
 
     def tearDown(self):
         pass
@@ -115,6 +28,10 @@ class Test_UVPSpec(unittest.TestCase):
 
     def test_param(self):
         a = parameter.PSpecParam("example", description="example", expected_type=int)
+
+    def test_eq(self):
+        # test equivalence
+        nt.assert_equal(self.uvp, self.uvp)
 
     def test_get_funcs(self):
         # get_data
@@ -406,6 +323,77 @@ class Test_UVPSpec(unittest.TestCase):
         uvp.set_cosmology(new_cosmo2, overwrite=True, new_beam=self.beam)
         nt.assert_equal(uvp.cosmo, new_cosmo2)
         nt.assert_true(hasattr(uvp, 'OmegaP'))
+
+    def test_concate_uvps(self):
+        # setup uvp build
+        uvd = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits"))
+        bls = [(37, 38), (38, 39), (52, 53)]
+        uvp1 = testing.build_uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam)
+
+        # test failure due to overlapping data
+        uvp2 = copy.deepcopy(uvp1)
+        nt.assert_raises(AssertionError, uvpspec.concate_uvp, [uvp1, uvp2])
+        # test success across pol
+        uvp2.pol_array[0] = -6
+        out = uvpspec.concate_uvp([uvp1, uvp2], verbose=False)
+        nt.assert_equal(out.Npols, 2)
+        nt.assert_true(len(set(out.pol_array) ^ set([-5, -6])) == 0)
+
+        # test multiple non-overlapping data axes
+        uvp2.freq_array[0] = 0.0
+        nt.assert_raises(AssertionError, uvpspec.concate_uvp, [uvp1, uvp2])
+
+        # test partial data overlap failure
+        uvp2 = testing.build_uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], spw_ranges=[(20, 30), (60, 90)], beam=beam)
+        nt.assert_raises(AssertionError, uvpspec.concate_uvp, [uvp1, uvp2])
+        uvp2 = testing.build_uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 105)], beam=beam)
+        nt.assert_raises(AssertionError, uvpspec.concate_uvp, [uvp1, uvp2])
+        uvp2 = copy.deepcopy(uvp1)
+        uvp2.pol_array[0] = -6
+        uvp2 = uvpspec.concate_uvp([uvp1, uvp2], verbose=False)
+        nt.assert_raises(AssertionError, uvpspec.concate_uvp, [uvp1, uvp2])
+
+        # test concat across spw
+        uvp2 = testing.build_uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)], beam=beam)
+        out = uvpspec.concate_uvp([uvp1, uvp2], verbose=False)
+        nt.assert_equal(out.Nspws, 3)
+        nt.assert_equal(out.Nfreqs, 51)
+        nt.assert_equal(out.Nspwdlys, 56)
+
+        # test concat across blpairts
+        uvp2 = testing.build_uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 90)], beam=beam)
+        out = uvpspec.concate_uvp([uvp1, uvp2], verbose=False)
+        nt.assert_equal(out.Nblpairs, 8)
+        nt.assert_equal(out.Nbls, 5)
+
+        # test failure due to variable static metadata
+        uvp2.weighting = 'foo'
+        nt.assert_raises(AssertionError, uvpspec.concate_uvp, [uvp1, uvp2])
+        uvp2.weighting = 'identity'
+        del uvp2.OmegaP
+        del uvp2.OmegaPP
+        nt.assert_raises(AssertionError, uvpspec.concate_uvp, [uvp1, uvp2])
+
+        # test feed as strings
+        uvp1 = testing.build_uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)], beam=beam)
+        uvp2 = copy.deepcopy(uvp1)
+        uvp2.pol_array[0] = -6
+        uvp1.write_hdf5('uvp1.hdf5', overwrite=True)
+        uvp2.write_hdf5('uvp2.hdf5', overwrite=True)
+        out = uvpspec.concate_uvp(['uvp1.hdf5', 'uvp2.hdf5'], verbose=False)
+        nt.assert_true(out.Npols, 2)
+        for ff in ['uvp1.hdf5', 'uvp2.hdf5']:
+            if os.path.exists(ff):
+                os.remove(ff)
+
+        # test UVPSpec __add__
+        uvp3 = copy.deepcopy(uvp1)
+        uvp3.pol_array[0] = -7
+        out = uvp1 + uvp2 + uvp3
+        nt.assert_equal(out.Npols, 3)
+
 
 def test_conj_blpair_int():
     conj_blpair = uvputils._conj_blpair_int(1002003004)
