@@ -3,10 +3,10 @@ import nose.tools as nt
 import numpy as np
 import os, sys, copy
 from hera_pspec.data import DATA_PATH
-from hera_pspec import utils
+from hera_pspec import utils, testing
 from collections import OrderedDict as odict
 from pyuvdata import UVData
-from test_uvpspec import build_example_uvpspec
+
 
 def test_cov():
     # load another data file
@@ -60,7 +60,7 @@ class Test_Utils(unittest.TestCase):
                                           "zen.2458042.17772.xx.HH.uvXA"))
         
         # Create UVPSpec object
-        self.uvp, cosmo = build_example_uvpspec()
+        self.uvp, cosmo = testing.build_vanilla_uvpspec()
 
     def tearDown(self):
         pass
