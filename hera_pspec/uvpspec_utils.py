@@ -25,15 +25,15 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     """
     # get blpair baselines in integer form
     bl1 = np.floor(uvp.blpair_array / 1e6)
-    blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int).T
+    blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int32).T
     # ensure bls is in integer form
     if isinstance(bls, tuple):
-        assert isinstance(bls[0], (int, np.int)), "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
+        assert isinstance(bls[0], (int, np.integer)), "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
         bls = [uvp.antnums_to_bl(bls)]
     elif isinstance(bls, list):
         if isinstance(bls[0], tuple):
             bls = map(lambda b: uvp.antnums_to_bl(b), bls)
-    elif isinstance(bls, (int, np.int)):
+    elif isinstance(bls, (int, np.integer)):
         bls = [bls]
     # get indices
     if only_pairs_in_bls:
@@ -87,14 +87,14 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
     if bls is not None:
         # get blpair baselines in integer form
         bl1 = np.floor(uvp.blpair_array / 1e6)
-        blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int).T
+        blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int32).T
         blp_select = _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=only_pairs_in_bls)
 
     if blpairs is not None:
         if bls is None:
             blp_select = np.zeros(uvp.Nblpairts, np.bool)
         # assert form
-        assert isinstance(blpairs[0], (tuple, int, np.int)), "blpairs must be fed as a list of baseline-pair tuples or baseline-pair integers"
+        assert isinstance(blpairs[0], (tuple, int, np.integer)), "blpairs must be fed as a list of baseline-pair tuples or baseline-pair integers"
         # if fed as list of tuples, convert to integers
         if isinstance(blpairs[0], tuple):
             blpairs = map(lambda blp: uvp.antnums_to_blpair(blp), blpairs)
@@ -133,7 +133,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
 
     if pols is not None:
         # assert form
-        assert isinstance(pols[0], (str, np.str, int, np.int)), "pols must be fed as a list of pol strings or pol integers"
+        assert isinstance(pols[0], (str, np.str, int, np.integer)), "pols must be fed as a list of pol strings or pol integers"
 
         # if fed as strings convert to integers
         if isinstance(pols[0], (np.str, str)):
@@ -287,7 +287,7 @@ def _blpair_to_bls(blpair):
     blpair : baseline-pair integer or nested antenna-pair tuples
     """
     # convert to antnums if fed as ints
-    if isinstance(blpair, (int, np.int)):
+    if isinstance(blpair, (int, np.integer)):
         blpair = _blpair_to_antnums(blpair)
 
     # convert first and second baselines to baseline ints
