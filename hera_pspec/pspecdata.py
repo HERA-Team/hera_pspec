@@ -165,8 +165,11 @@ class PSpecData(object):
 
         # Check if dsets are all the same shape along freq axis
         Nfreqs = [d.Nfreqs for d in self.dsets]
+        channel_widths = [d.channel_width for d in self.dsets]
         if np.unique(Nfreqs).size > 1:
             raise ValueError("all dsets must have the same Nfreqs")
+        if np.unique(channel_widths).size > 1:
+            raise ValueError("all dsets must have the same channel_widths")
 
         # Check shape along time axis
         Ntimes = [d.Ntimes for d in self.dsets]
@@ -1218,7 +1221,8 @@ class PSpecData(object):
         # assert form of bls1 and bls2
         assert isinstance(bls1, list), "bls1 and bls2 must be fed as a list of antpair tuples"
         assert isinstance(bls2, list), "bls1 and bls2 must be fed as a list of antpair tuples"
-        assert len(bls1) == len(bls2), "length of bls1 must equal length of bls2"
+        assert len(bls1) == len(bls2) and len(bls1) > 0, "length of bls1 must equal length of bls2 and be > 0"
+
         for i in range(len(bls1)):
             if isinstance(bls1[i], tuple):
                 assert isinstance(bls2[i], tuple), "bls1[{}] type must match bls2[{}] type".format(i, i)
@@ -1360,7 +1364,6 @@ class PSpecData(object):
                         pass
                     else:
                         if verbose: print("  Building G...")
-                        print key1, "---", key2
                         Gv = self.get_G(key1, key2)
                         Hv = self.get_H(key1, key2, taper=taper)
                         built_GH = True
@@ -1469,7 +1472,7 @@ class PSpecData(object):
         uvp.pol_array = np.array(spw_pol, np.int)
         uvp.Npols = len(spw_pol)
         uvp.scalar_array = np.array(sclr_arr)
-        uvp.channel_width = dset1.channel_width
+        uvp.channel_width = dset1.channel_width  # all dsets are validated to agree
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
@@ -1477,9 +1480,12 @@ class PSpecData(object):
         filename2 = getattr(dset2.extra_keywords, 'filename', None)
         label1 = self.labels[self.dset_idx(dsets[0])]
         label2 = self.labels[self.dset_idx(dsets[1])]
-        uvp.labels = np.array([label1, label2], np.str)
-        uvp.label_1_array = np.zeros((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int)
-        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int)
+        uvp.labels = sorted(set([label1, label2]))
+        uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int) \
+                            * uvp.labels.index(label1)
+        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int) \
+                            * uvp.labels.index(label2)
+        uvp.labels = np.array(uvp.labels, np.str)
         uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
                       "dataset1: filename: {}, label: {}, history:\n{}\n{}\n" \
                       "dataset2: filename: {}, label: {}, history:\n{}\n{}\n" \

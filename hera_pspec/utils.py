@@ -232,3 +232,8 @@ def load_config(config_file):
             raise(exc)
     return cfg
 
+def flatten(nested_list):
+    """
+    Flatten a list of nested lists
+    """
+    return [item for sublist in nested_list for item in sublist]
