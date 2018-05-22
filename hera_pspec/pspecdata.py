@@ -1039,41 +1039,47 @@ class PSpecData(object):
             where the first index is for the Left-Hand dataset and second index
             is used for the Right-Hand dataset (see above).
 
-        pol_pair : length-2 tuple of str
+        pol_pair : length-2 tuple of integers or strings
             Contains polarization pair which will be used in estiamting the power 
-            spectrum e,g ('xx','xx') or  ('xy','yx'). Only equal polarization pair 
-            is implemented for the time being.               
+            spectrum e,g (-5, -5) or  ('xy', 'xy'). Only auto-polarization pairs
+            are implemented for the time being.               
     
         Returns
         -------
-        boolean: True or False
-                 True if the UVData objects polarizations are consistent with the 
-                 pol_pair (user specified polarizations) else False.
+        valid : boolean
+            True if the UVData objects polarizations are consistent with the 
+            pol_pair (user specified polarizations) else False.
         """
-        assert isinstance(pol_pair, tuple), "polarization pair must be specified as a len-2 tuple"
-        assert isinstance(pol_pair[0], (str, np.str)), "polarization must be fed as len-2 string tuple"
-        assert isinstance(pol_pair[1], (str, np.str)), "polarization must be fed as len-2 string tuple"
+        err_msg = "polarization must be fed as len-2 tuple of strings or ints"
+        assert isinstance(pol_pair, tuple), err_msg
+
+        # convert elements to integers if fed as strings
+        if isinstance(pol_pair[0], (str, np.str)):
+            pol_pair = (uvutils.polstr2num(pol_pair[0]), pol_pair[1])
+        if isinstance(pol_pair[1], (str, np.str)):
+            pol_pair = (pol_pair[0], uvutils.polstr2num(pol_pair[1]))
+
+        assert isinstance(pol_pair[0], (int, np.integer)), err_msg
+        assert isinstance(pol_pair[1], (int, np.integer)), err_msg
              
-        if pol_pair[0]!=pol_pair[1]:
+        if pol_pair[0] != pol_pair[1]:
             raise NotImplementedError("Only auto/equal polarizations are implement at the moment.") 
-  
-        dset1 = self.dsets[self.dset_idx(dsets[0])] # first list of UVData objects
-        dset2 = self.dsets[self.dset_idx(dsets[1])] # second list of UVData objects
 
-        # extracting polarization metadata from UVData objects
-        dset1_pols = dset1.get_pols()  
-        dset2_pols = dset2.get_pols()
+        dset_ind1 = self.dset_idx(dsets[0])
+        dset_ind2 = self.dset_idx(dsets[1])
+        dset1 = self.dsets[dset_ind1]  # first UVData object
+        dset2 = self.dsets[dset_ind2]  # second UVData object
 
-        pol_pair = [p.upper() for p in pol_pair]
-        if pol_pair[0] not in dset1_pols:
-           print "UVData objects does not contain data for polarization {}".format(pol_pair[0])
-           return False
-        elif pol_pair[1] not in dset2_pols:
-           print "UVData objects does not contain data for polarization {}".format(pol_pair[1])
-           return False 
-        else:
-           return True
+        valid = True
+        if pol_pair[0] not in dset1.polarization_array:
+            print "dset {} does not contain data for polarization {}".format(dset_ind1, pol_pair[0])
+            valid = False
 
+        if pol_pair[1] not in dset2.polarization_array:
+            print "dset {} does not contain data for polarization {}".format(dset_ind2, pol_pair[1])
+            valid = False
+
+        return valid
 
     def pspec(self, bls1, bls2, dsets, pols, input_data_weight='identity', norm='I', 
               taper='none', little_h=True, spw_ranges=None, verbose=True, 
@@ -1235,6 +1241,20 @@ class PSpecData(object):
         else:
             assert np.isclose(map(lambda t: len(t), spw_ranges), 2).all(), "spw_ranges must be fed as a list of length-2 tuples"
 
+        # setup polarization selection
+        if isinstance(pols, tuple):
+            pols = [pols]
+
+        # convert all polarizations to integers if fed as strings
+        _pols = []
+        for p in pols:
+            if isinstance(p[0], (str, np.str)):
+                p = (uvutils.polstr2num(p[0]), p[1])
+            if isinstance(p[1], (str, np.str)):
+                p = (p[0], uvutils.polstr2num(p[1]))
+            _pols.append(p)
+        pols = _pols
+
         # initialize empty lists
         data_array = odict()
         wgt_array = odict()
@@ -1274,30 +1294,22 @@ class PSpecData(object):
             freqs.extend(
                 dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
 
-            # Loop over polarizations
-            if isinstance(pols, tuple): pols = [pols]
-            for j, ps in enumerate(pols):
-                p = [] 
-                if isinstance(ps[0], (int, np.int)): 
-                    p.append(pyuvdata.utils.polnum2str(ps[0]))
-                else:
-                    p.append(ps[0])
-                if isinstance(ps[1], (int, np.int)):
-                    p.append(pyuvdata.utils.polnum2str(ps[1]))
-                else:
-                    p.append(ps[1])
-                if verbose: print( "\nSetting polarization pair: {}".format(p))
+            # Loop over polarizations                
+            for j, p in enumerate(pols):
+                p_str = tuple(map(lambda _p: uvutils.polnum2str(_p), p))
+                if verbose: print( "\nUsing polarization pair: {}".format(p_str))
 
-                # validating polarization pair of UVData objects
+                # validating polarization pair on UVData objects
                 valid = self.validate_pol(dsets, tuple(p))
-                if valid:
-                   # storing only one polarization as only equal polarization are allowed at the moment and UVPspec objec also understands one polarization for each UVspec object
-                   spw_pol.append(p[0]) 
-                   pass
-                else:
-                   print ("Polarization pair: {} failed the validation test".format(p))
+
+                if not valid:
+                   # storing only one polarization as only equal polarization are allowed at the 
+                   # moment and UVPSpec object also understands one polarization
+                   print ("Polarization pair: {} failed the validation test, continuing...".format(p_str))
                    continue
 
+                # UVPSpec only takes a single pol currently
+                spw_pol.append(p[0]) 
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
@@ -1329,8 +1341,8 @@ class PSpecData(object):
                         #key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
                     elif isinstance(blp, tuple):
                         # interpret blp as baseline-pair
-                        key1 = (dsets[0],) + blp[0] + (p[0],)
-                        key2 = (dsets[1],) + blp[1] + (p[1],)
+                        key1 = (dsets[0],) + blp[0] + (p_str[0],)
+                        key2 = (dsets[1],) + blp[1] + (p_str[1],)
                         
                     if verbose:
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
@@ -1423,6 +1435,7 @@ class PSpecData(object):
         # raise error if none of pols are consistent witht the UVData objects
         if len(spw_pol)==0:
             raise ValueError("None of the specified polarization pair match that of the UVData objects")
+
         # fill uvp object
         uvp = uvpspec.UVPSpec()
 
@@ -1449,7 +1462,7 @@ class PSpecData(object):
         uvp.Ndlys = len(np.unique(dlys))
         uvp.Nspwdlys = len(spws)
         uvp.Nfreqs = len(np.unique(freqs))
-        uvp.pol_array = np.array(map(lambda p: uvutils.polstr2num(p), spw_pol))
+        uvp.pol_array = np.array(spw_pol, np.int)
         uvp.Npols = len(spw_pol)
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width
