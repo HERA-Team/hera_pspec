@@ -140,6 +140,9 @@ def build_uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none',
     elif isinstance(data, UVData):
         uvd = data
 
+    # get pol
+    pol = uvd.polarization_array[0]
+
     # load beam
     if isinstance(beam, str):
         beam = pspecbeam.PSpecBeamUV(beam, cosmo=cosmo)
@@ -153,7 +156,7 @@ def build_uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none',
     bls1, bls2, _ = pspecdata.construct_blpairs(bls, exclude_auto_bls=True)
 
     # run pspec
-    uvp = ds.pspec(bls1, bls2, (0, 1), input_data_weight='identity', spw_ranges=spw_ranges, 
+    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges, 
                    taper=taper, verbose=verbose)
 
     return uvp
