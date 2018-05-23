@@ -160,6 +160,13 @@ class Test_UVPSpec(unittest.TestCase):
         key = {'spw':0, 'blpair':((1, 2), (1, 2)), 'pol': 'xx'}
         d = self.uvp.get_data(key)
         nt.assert_equal(d.shape, (10, 50))
+        # test get_blpairs
+        blps = self.uvp.get_blpairs()
+        nt.assert_equal(blps, [((1, 2), (1, 2)), ((1, 3), (1, 3)), ((2, 3), (2, 3))])
+        # test get all keys
+        keys = self.uvp.get_all_keys()
+        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), 'XX'), (0, ((1, 3), (1, 3)), 'XX'),
+                               (0, ((2, 3), (2, 3)), 'XX')])
 
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
