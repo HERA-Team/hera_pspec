@@ -1,13 +1,14 @@
 import numpy as np
 import aipy
-import pyuvdata
+from pyuvdata import UVData
 import copy, operator, itertools
 from collections import OrderedDict as odict
 import hera_cal as hc
-from hera_pspec import uvpspec, utils, version, pspecbeam
+from hera_pspec import uvpspec, utils, version, pspecbeam, container
 from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
 import datetime
+import time
 
 
 class PSpecData(object):
@@ -93,8 +94,8 @@ class PSpecData(object):
             wgts = _wgts
             
         # Convert input args to lists if possible
-        if isinstance(dsets, pyuvdata.UVData): dsets = [dsets,]
-        if isinstance(wgts, pyuvdata.UVData): wgts = [wgts,]
+        if isinstance(dsets, UVData): dsets = [dsets,]
+        if isinstance(wgts, UVData): wgts = [wgts,]
         if isinstance(labels, str): labels = [labels,]
         if wgts is None: wgts = [wgts,]
         if isinstance(dsets, tuple): dsets = list(dsets)
@@ -110,9 +111,9 @@ class PSpecData(object):
 
         # Check that everything is a UVData object
         for d, w in zip(dsets, wgts):
-            if not isinstance(d, pyuvdata.UVData):
+            if not isinstance(d, UVData):
                 raise TypeError("Only UVData objects can be used as datasets.")
-            if not isinstance(w, pyuvdata.UVData) and w is not None:
+            if not isinstance(w, UVData) and w is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "weights.")
 
@@ -225,7 +226,7 @@ class PSpecData(object):
         
         
         # get iterable
-        key = pyuvdata.utils.get_iterable(key)
+        key = uvutils.get_iterable(key)
         if isinstance(key, str):
             key = (key,)
 
@@ -1689,78 +1690,149 @@ class PSpecData(object):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
 
 
-def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
+def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None, spw_ranges=None, blpairs=None, exclude_auto_bls=True,
+              exclude_permutations=True, group=False, Nblps_per_group=1, bl_len_range=(0, 1e4), bl_error_tol=1.0,
+              pol_pairs=None, beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True, 
+              input_data_weight='identity', norm='I', taper='none', overwrite=True, verbose=True):
     """
-    Construct a list of baseline-pairs from a baseline-group. This function can be used to easily convert a 
-    single list of baselines into the input needed by PSpecData.pspec(bls1, bls2, ...).
+    Create a PSpecData object and run OQE delay spectrum estimation.
+
 
     Parameters
     ----------
-    bls : list of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]
 
-    exclude_auto_bls: boolean, if True, exclude all baselines crossed with itself from the final blpairs list
 
-    exclude_permutations : boolean, if True, exclude permutations and only form combinations of the bls list.
-        For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, but makes this example clearer)
-        and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
-        If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
-        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.   
-        
-    group : boolean, optional
-        if True, group each consecutive Nblps_per_group blpairs into sub-lists
 
-    Nblps_per_group : integer, number of baseline-pairs to put into each sub-group
-
-    Returns (bls1, bls2, blpairs)
+    Returns
     -------
-    bls1 : list of baseline tuples from the zeroth index of the blpair
-
-    bls2 : list of baseline tuples from the first index of the blpair
-
-    blpairs : list of blpair tuples
+    psc : PSpecContainer object
+        A container for the output UVPSpec objects, which themselves contain the 
+        power spectra and their metadata.
     """
-    # assert form
-    assert isinstance(bls, list) and isinstance(bls[0], tuple), "bls must be fed as list of baseline tuples"
+    # type check
+    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
+    if isinstance(dsets, (str, np.str, UVData)):
+        dsets = [dsets]
+    assert isinstance(dsets, (list, tuple, np.ndarray)), err_msg
+    Ndsets = len(dsets)
 
-    # form blpairs w/o explicitly forming auto blpairs
-    # however, if there are repeated bl in bls, there will be auto bls in blpairs
-    if exclude_permutations:
-        blpairs = list(itertools.combinations(bls, 2))
+    # polarizations check
+    if pol_pairs is not None:
+        pols = sorted(set(np.ravel(pol_pairs)))
     else:
-        blpairs = list(itertools.permutations(bls, 2))
+        pols = None
 
-    # explicitly add in auto baseline pairs
-    blpairs.extend(zip(bls, bls))
+    # baselines check
+    if blpairs is not None:
+        err_msg = "blpairs must be fed as a list of baseline-pair tuples, Ex: [((1, 2), (3, 4)), ...]"
+        assert isinstance(blpairs, list), err_msg
+        assert np.all([isinstance(blp, tuple) for blp in blpairs]), err_msg
+        bls1 = [blp[0] for blp in blpairs]
+        bls2 = [blp[1] for blp in blpairs]
+        bls = sorted(set(bls1 + bls2))
+    else:
+        # get redundant baseline groups
+        bls = None
 
-    # iterate through and eliminate all autos if desired
-    if exclude_auto_bls:
-        new_blpairs = []
-        for blp in blpairs:
-            if blp[0] != blp[1]:
-                new_blpairs.append(blp)
-        blpairs = new_blpairs
+    # load data if fed as filepaths
+    if isinstance(dsets[0], (str, np.str)):
+        # load data into UVData objects if fed as list of strings
+        t0 = time.time()
+        _dsets = []
+        for d in dsets:
+            uvd = UVData()
+            uvd.read_miriad(d, ant_pairs_nums=bls, polarizations=pols)
+            _dsets.append(uvd)
+        dsets = _dsets
+        utils.log("Loaded data in %1.1f sec." % (time.time() - t0), lvl=1, verbose=verbose)
+    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
+    assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
-    # create bls1 and bls2 list
-    bls1 = map(lambda blp: blp[0], blpairs)
-    bls2 = map(lambda blp: blp[1], blpairs)
+    # configure polarization
+    if pol_pairs is None:
+        unique_pols = reduce(operator.and_, [set(d.polarization_array) for d in dsets])
+        pol_pairs = [(up, up) for up in unique_pols]
 
-    # group baseline pairs if desired
-    if group:
-        Nblps = len(blpairs)
-        Ngrps = int(np.ceil(float(Nblps) / Nblps_per_group))
-        new_blps = []
-        new_bls1 = []
-        new_bls2 = []
-        for i in range(Ngrps):
-            new_blps.append(blpairs[i*Nblps_per_group:(i+1)*Nblps_per_group])
-            new_bls1.append(bls1[i*Nblps_per_group:(i+1)*Nblps_per_group])
-            new_bls2.append(bls2[i*Nblps_per_group:(i+1)*Nblps_per_group])
+    assert len(pol_pairs) > 0, "no pol_pairs specified"
 
-        bls1 = new_bls1
-        bls2 = new_bls2
-        blpairs = new_blps
+    # load beam
+    if isinstance(beam, (str, np.str)):
+        beam = pspecbeam.PSpecBeamUV(beam, cosmo=cosmo)
 
-    return bls1, bls2, blpairs
+    # beam and cosmology check
+    if beam is not None:
+        assert isinstance(beam, pspecbeam.PSpecBeamBase)
+        if cosmo is not None:
+            beam.cosmo = cosmo
+
+    # package into PSpecData
+    ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], beam=beam)
+
+    # Rephase if desired
+    if rephase_to_dset is not None:
+        ds.rephase_to_dset(rephase_to_dset)
+
+    # perform Jy to mK conversion if desired
+    if Jy2mK:
+        ds.Jy_to_mK()
+
+    # Construct dataset pairs to operate on
+    if dset_pairs is None:
+        dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+        dset_labels = ["dset{}_x_dset{}".format(dp[0], dp[1]) for dp in dset_pairs]
+    err_msg = "dset_pairs must be fed as a list of len-2 integer tuples"
+    assert isinstance(dset_pairs, list), err_msg
+    assert np.all([isinstance(d, tuple) for d in dset_pairs]), err_msg
+
+    # Get baseline-pairs to use for each dataset pair
+    bls1_list, bls2_list = [], []
+    for i, dsetp in enumerate(dset_pairs):
+        # get bls if blpairs not fed
+        if blpairs is None:
+            (bls1, bls2, blps, xants1, 
+             xants2) = utils.calc_reds(dsets[dsetp[0]], dsets[dsetp[1]],
+                                       filter_blpairs=True,
+                                       exclude_auto_bls=exclude_auto_bls,
+                                       exclude_permutations=exclude_permutations,
+                                       group=group, Nblps_per_group=Nblps_per_group,
+                                       bl_len_range=bl_len_range)
+            bls1_list.append(bls1)
+            bls2_list.append(bls2)
+
+        # ensure fed blpairs exist in each of the datasets
+        else:
+            dset1_bls = dsets[dsetp[0]].get_antpairs()
+            dset2_bls = dsets[dsetp[1]].get_antpairs()
+            _bls1 = []
+            _bls2 = []
+            for _bl1, _bl2 in zip(bls1, bls2):
+                if (_bl1 in dset1_bls or _bl1[::-1] in dset1_bls) \
+                    and (_bl2 in dset2_bls or _bls2[::-1] in dset2_bls):
+                    _bls1.append(_bl1)
+                    _bls2.append(_bl2)
+
+            bls1_list.append(_bls1)
+            bls2_list.append(_bls2)
+
+    # Open PSpecContainer to store all output in
+    psc = container.PSpecContainer(filename, mode='rw')
+
+    # assign group name
+    if groupname is None:
+        groupname = '_'.join(dset_labels)
+
+    # Loop over dataset combinations
+    for i, dset_idxs in enumerate(dset_pairs):
+
+        # Run OQE
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, spw_ranges=spw_ranges,
+                       input_data_weight=input_data_weight, norm=norm, taper=taper)
+
+        # Store output
+        psname = '{}_{}'.format(dset_labels[dset_idxs[0]], dset_labels[dset_idxs[1]])
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
+
+    return psc
 
 
 def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
@@ -1773,18 +1845,18 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     blpairs : list of baseline-pair tuples, Ex. [((1,2),(1,2)), ((2,3),(2,3))]
         See docstring of PSpecData.pspec() for details on format.
 
-    uvd1 : pyuvdata.UVData instance containing visibility data that first bl in blpair will draw from
+    uvd1 : UVData instance containing visibility data that first bl in blpair will draw from
 
-    uvd2 : pyuvdata.UVData instance containing visibility data that second bl in blpair will draw from
+    uvd2 : UVData instance containing visibility data that second bl in blpair will draw from
 
     baseline_tol : float, distance tolerance for notion of baseline "redundancy" in meters
     
     verbose : bool, if True report feedback to stdout
     """
     # ensure uvd1 and uvd2 are UVData objects
-    if isinstance(uvd1, pyuvdata.UVData) == False:
+    if isinstance(uvd1, UVData) == False:
         raise TypeError("uvd1 must be a pyuvdata.UVData instance")
-    if isinstance(uvd2, pyuvdata.UVData) == False:
+    if isinstance(uvd2, UVData) == False:
         raise TypeError("uvd2 must be a pyuvdata.UVData instance")
 
     # get antenna position dictionary
