@@ -630,7 +630,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(ValueError, ds.validate_datasets)
         # test std exception
         ds.dsets_std=ds.dsets_std[:1]
-        nt.assert_raises(ValueError, ds.validate_datsets)
+        nt.assert_raises(ValueError, ds.validate_datasets)
         # test warnings
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
