@@ -411,9 +411,10 @@ class PSpecData(object):
         x : array_like
             Array of data from the requested UVData dataset and baseline.
         """
-        dset,bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0], self.spw_range[1])
-        return self.dsets_std[dset].get_data(bl).T[spw]
+        assert isinstance(key,tuple)
+        dset,bl = self.blkey(dset=key[0],bl=key[1:])
+        spwmin,spwmax = self.spw_range[0], self.spw_range[1]
+        return self.dsets_std[dset].get_data(bl).T[spwmin:spwmax,:]
 
 
     def w(self, key):
@@ -615,7 +616,6 @@ class PSpecData(object):
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
 
-<<<<<<< HEAD
     def set_Ndlys(self, ndlys=None):
         """
         Set the number of delay bins used.
@@ -636,9 +636,6 @@ class PSpecData(object):
             self.spw_Ndlys = ndlys
 
     def cov_q_hat(self,key1,key2,taper='none'):
-=======
-    def cov_q_hat(self,alpha,beta,key1,key2,time_indices,taper='none'):
->>>>>>> now passes tests.
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:

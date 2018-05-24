@@ -618,6 +618,9 @@ class Test_PSpecData(unittest.TestCase):
         # test wgt exception
         ds.wgts = ds.wgts[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
+        # test std exception
+        ds.dsets_std=ds.dsets_std[:1]
+        nt.assert_raises(ValueError, ds.validate_datsets)
         # test warnings
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
@@ -837,6 +840,7 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [('xx', 'xx')])
         nt.assert_true(np.all(np.isclose(uvp.integration_array[0], 0.0)))
+
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
