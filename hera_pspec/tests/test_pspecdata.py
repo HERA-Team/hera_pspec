@@ -342,6 +342,16 @@ class Test_PSpecData(unittest.TestCase):
         q_hat_cov_a=self.ds.cov_q_hat(0,10,key1,key2,tinds,taper='none')
         self.assertTrue(np.isclose(q_hat_cov_a[0],
                         0.,atol=1e-6))
+        """
+        Test lists of keys
+        """
+        self.ds.set_R('identity')
+        q_hat_cov_a=self.ds.cov_q_hat(0,0,[key1],[key2],tinds,taper='none')
+        self.assertTrue(np.isclose(q_hat_cov_a[0],
+                        Nfreq**2.,atol=1e-6))
+        q_hat_cov_a=self.ds.cov_q_hat(0,10,[key1],[key2],tinds,taper='none')
+        self.assertTrue(np.isclose(q_hat_cov_a[0],
+                        0.,atol=1e-6))
 
 
 
