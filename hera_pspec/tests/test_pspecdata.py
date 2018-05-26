@@ -759,6 +759,16 @@ class Test_PSpecData(unittest.TestCase):
         blpairs = [((24, 25), (24, 38))]
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
+def test_pspec_run():
+    fnames = [os.path.join(DATA_PATH, d) for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
+                                                   'zen.odd.xx.LST.1.28828.uvOCRSA']]
+
+    # test basic execution
+    pspecdata.pspec_run(fnames, "./out.hdf5")
+
+
+
+
 """
 # LEGACY MONTE CARLO TESTS
     def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):
