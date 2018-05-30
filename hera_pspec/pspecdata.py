@@ -8,6 +8,7 @@ from hera_pspec import uvpspec, utils, version, pspecbeam, container
 from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
 import time
+import argparse
 
 
 class PSpecData(object):
@@ -1647,7 +1648,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
               exclude_auto_bls=True, exclude_permutations=True, group=False, 
               Nblps_per_group=1, bl_len_range=(0, 1e10), bl_error_tol=1.0, 
               beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True,
-              overwrite=True, verbose=True):
+              overwrite=True, verbose=True, history=''):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write 
     results to a PSpecContainer object.
@@ -1656,14 +1657,14 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     ----------
     dsets : list
         Contains UVData objects or string filepaths to miriad files
-    
+
     filename : str
         Output filepath for HDF5 PSpecContainer object
 
     groupname : str
         Groupname of the subdirectory in the HDF5 container to store the 
         UVPSpec objects in. Default is a concatenation the dset_labels.
-    
+
     dset_labels : list
         List of strings to label the input datasets. These labels form
         the psname of each UVPSpec object.
@@ -1754,6 +1755,9 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     verbose : boolean
         If True, report feedback to standard output.
 
+    history : str
+        String to add to history of each UVPSpec object.
+
     Returns
     -------
     psc : PSpecContainer object
@@ -1830,6 +1834,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     # Construct dataset pairs to operate on
     if dset_pairs is None:
         dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+    if dset_labels is None:
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
     err_msg = "dset_pairs must be fed as a list of len-2 integer tuples"
     assert isinstance(dset_pairs, list), err_msg
@@ -1877,13 +1882,42 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
 
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, spw_ranges=spw_ranges,
-                       input_data_weight=input_data_weight, norm=norm, taper=taper)
+                       input_data_weight=input_data_weight, norm=norm, taper=taper, history=history)
 
         # Store output
         psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], dset_labels[dset_idxs[1]])
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
 
     return psc
+
+
+def get_pspec_run_argparser():
+    a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
+
+    a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
+    a.add_argument("filename", type=str, help="Output filename of HDF5 container.")
+    a.add_argument("--groupname", default=None, type=str, help="Groupname for the UVPSpec objects in the HDF5 container.")
+    a.add_argument("--dset_pairs", default=None, type=tuple, nargs='*', help="List of len-2 integer tuples of dset pairings for OQE.")
+    a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
+    a.add_argument("--spw_ranges", default=None, type=tuple, nargs='*', help="List of len-2 integer tuples of spectral window selections for OQE.")
+    a.add_argument("--pol_pairs", default=None, type=tuple, nargs='*', help="List of len-2 integer of string tuples of polarization pairs for OQE.")
+    a.add_argument("--blpairs", default=None, type=tuple, nargs='*', help="List of integer tuples containing baseline pair to run OQE on. Ex: [((1, 2), (3, 4)), ((1, 2), (5, 6)), ...]")
+    a.add_argument("--input_data_weight", default='identity', type=str, help="Data weighting for OQE. See PSpecData.pspec for details.")
+    a.add_argument("--norm", default='I', type=str, help='M-matrix normalization type for OQE. See PSpecData.pspec for details.')
+    a.add_argument("--taper", default='none', type=str, help="Taper function to use in OQE delay transform. See PSpecData.pspec for details.")
+    a.add_argument("--beam", default=None, type=str, help="Filepath to UVBeam healpix map of antenna beam.")
+    a.add_argument("--cosmo", default=None, nargs='*', type=float, help="List of float values for [Om_L, Om_b, Om_c, H0, Om_M, Om_k].")
+    a.add_argument("--rephase_to_dset", default=None, type=int, help="dset integer index to phase all other dsets to. Default is no rephasing.")
+    a.add_argument("--Jy2mK", default=False, action='store_true', help="Convert datasets from Jy to mK if a beam model is provided.")
+    a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
+    a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')
+    a.add_argument("--group", default=False, action='store_true', help="If blpairs is not provided, group baseline pairs together.")
+    a.add_argument("--Nblps_per_group", default=1, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
+    a.add_argument("--bl_len_range", default=(0, 1e10), type=tuple, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
+    a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
+    a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
+    a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
+    return a
 
 
 def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
