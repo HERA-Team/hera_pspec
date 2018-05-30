@@ -343,7 +343,9 @@ class UVPSpec(object):
 
     def get_all_keys(self):
         """
-        Returns a list of all possible tuple keys in the data_array.
+        Returns a list of all possible tuple keys in the data_array, in the format:
+        
+        (spectral window, baseline-pair, polarization-string)
         """
         # get unique blpair tuples
         blps = self.get_blpairs()

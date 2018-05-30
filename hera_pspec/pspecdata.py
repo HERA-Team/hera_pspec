@@ -1402,6 +1402,7 @@ class PSpecData(object):
                     nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
 
                     # take inverse average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
+                    # inverse avg is done b/c nsamp_1 ~ 1/sigma_1 and nsamp_2 ~ 1/sigma_2 where sigma is a proxy for std of noise
                     pol_ints.extend(1./np.mean([1./nsamp1.clip(1e-10, np.inf), 1./nsamp2.clip(1e-10, np.inf)], axis=0) * dset1.integration_time)
 
                     # combined weight is geometric mean
@@ -1507,11 +1508,14 @@ class PSpecData(object):
     def rephase_to_dset(self, dset_index=0, inplace=True):
         """
         Rephase visibility data in self.dsets to the LST grid of dset[dset_index] 
-        using hera_cal.utils.lst_rephase. Each integration in all other dsets are 
+        using hera_cal.utils.lst_rephase. Each integration in all other dsets is 
         phased to the center of the corresponding LST bin (by index) in dset[dset_index].
 
-        Will only phase if the dataset's phase type is 'drift'. Note that if you intend
-        to use Jy_to_mK(), it must be run after rephase_to_dset().
+        Will only phase if the dataset's phase type is 'drift'. This is because the rephasing
+        algorithm assumes the data is drift-phased when applying phasor term.
+
+        Note that PSpecData.Jy_to_mK() must be run after rephase_to_dset(), if one intends
+        to use the former capability at any point.
 
         Parameters
         ----------
