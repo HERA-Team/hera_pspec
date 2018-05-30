@@ -141,7 +141,7 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
     # load data
     if isinstance(data, str):
         uvd = UVData()
-        uvd.read_miriad(dfile)
+        uvd.read_miriad(data)
     elif isinstance(data, UVData):
         uvd = data
 
