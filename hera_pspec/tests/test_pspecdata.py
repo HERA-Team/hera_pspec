@@ -4,7 +4,7 @@ import numpy as np
 import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps, trapz
-from hera_pspec import pspecdata, pspecbeam, conversions
+from hera_pspec import pspecdata, pspecbeam, conversions, container
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 from hera_cal import redcal
@@ -782,11 +782,46 @@ class Test_PSpecData(unittest.TestCase):
 def test_pspec_run():
     fnames = [os.path.join(DATA_PATH, d) for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
                                                    'zen.odd.xx.LST.1.28828.uvOCRSA']]
+    beamfile = os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits")
 
     # test basic execution
-    pspecdata.pspec_run(fnames, "./out.hdf5")
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True)
+    nt.assert_true(isinstance(psc, container.PSpecContainer))
+    nt.assert_equal(psc.groups(), ['dset0_dset1'])
+    nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1'])
+    nt.assert_true(os.path.exists("./out.hdf5"))
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+
+    # test Jy2mK, rephase_to_dset, blpairs and dset_labels
+    cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
+                              rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
+                              pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
+                              dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
+                              cosmo=cosmo)
+    nt.assert_true("foo_bar" in psc.groups())
+    nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
+    uvp = psc.get_pspec("foo_bar", "foo_x_bar")
+    nt.assert_true(uvp.vis_units, "mK")
+    nt.assert_equal(uvp.bl_array, np.array([37038, 52053]))
+    nt.assert_equal(uvp.pol_array, np.array([-5, -5]))
+    nt.assert_equal(uvp.cosmo, cosmo)
+    #nt.assert_equal(uvp.labels, [])
+    #nt.assert_equal(uvp.get_spw_ranges, [])
 
 
+    # test exceptions
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, (1, 2), "./out.hdf5")
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, [1, 2], "./out.hdf5")
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=(1, 2), verbose=False)
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=[1, 2], verbose=False)
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", beam=1, verbose=False)
+
+
+def test_get_argparser():
+    args = pspecdata.get_pspec_run_argparser()
+    a = args.parse_args([['foo'], 'bar'])
 
 
 """
