@@ -164,7 +164,8 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        key : tuple, baseline-pair key
+        key : tuple
+            Contains the baseline-pair key
 
         Returns
         -------
@@ -985,7 +986,7 @@ class UVPSpec(object):
         overwrite : bool, optional
             If True, overwrite self.cosmo if it already exists. Default: False.
 
-        new_beam : PSpecBeamUV or str
+        new_beam : PSpecBeamBase sublcass or str
             pspecbeam.PSpecBeamUV object or path to beam file. The new beam you 
             want to adopt for this UVPSpec object.
 
@@ -1147,8 +1148,8 @@ class UVPSpec(object):
         return True
 
     def __add__(self, other, verbose=False):
-        """ Concatenate the data of two UVPSpec objects together along a single axis """
-        return concate_uvp([self, other], verbose=verbose)
+        """ Combine the data of two UVPSpec objects together along a single axis """
+        return combine_uvpspec([self, other], verbose=verbose)
 
     @property
     def units(self):
@@ -1319,9 +1320,9 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        blpair_groups : list of baseline-pair groups
-            List of list of tuples or integers. All power spectra in a 
-            baseline-pair group are averaged together. If a baseline-pair 
+        blpair_groups : list
+            List of list of baseline-pair group tuples or integers. All power spectra
+            in a baseline-pair group are averaged together. If a baseline-pair 
             exists in more than one group, a warning is raised. Examples::
             
                 blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], 
@@ -1333,8 +1334,9 @@ class UVPSpec(object):
         time_avg : bool, optional
             If True, average power spectra across the time axis. Default: False.
         
-        blpair_weights : list of weights (float or int), optional
-            Relative weight of each baseline-pair when performing the average. 
+        blpair_weights : list, optional
+            List of float or int weights dictating the relative weight of each 
+            baseline-pair when performing the average. 
             This is useful for bootstrapping. This should have the same shape 
             as blpair_groups if specified. The weights are automatically 
             normalized within each baseline-pair group. Default: None (all 
@@ -1458,13 +1460,15 @@ class UVPSpec(object):
         return scalar
 
 
-def concate_uvp(uvps, verbose=True):
+def combine_uvpspec(uvps, verbose=True):
     """
-    Concatenate multiple UVPSpec objects into a single object, combining along one of
-    either spectral window [spw], baseline-pair-times [blpairts], or polarization [pol].
-    Certain meta-data of all of the UVPSpec objs must match exactly. 
-    In addition, one can only concatenate data along a single data axis, with the condition 
-    that all other axes match exactly.
+    Combine (concatenate) multiple UVPSpec objects into a single object, 
+    combining along one of either spectral window [spw], baseline-pair-times 
+    [blpairts], or polarization [pol]. Certain meta-data of all of the UVPSpec 
+    objs must match exactly, see get_uvp_overlap for details.
+    
+    In addition, one can only combine data along a single data axis, with the
+    condition that all other axes match exactly.
 
     Parameters
     ----------
@@ -1637,16 +1641,26 @@ def concate_uvp(uvps, verbose=True):
 def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     """
     Given a list of UVPSpec objects or a list of paths to UVPSpec objects,
-    find a single data axis ['spw', 'blpairts', 'pol'] where *all* objects contain 
-    completely non-overlapping data. Overlapping data are delay spectra that
-    have identical spw, blpair-time and pol metadata between each other.
+    find a single data axis within ['spw', 'blpairts', 'pol'] where *all* 
+    uvpspec objects contain non-overlapping data. Overlapping data are 
+    delay spectra that have identical spw, blpair-time and pol metadata 
+    between each other. If two uvps are completely overlapping (i.e. there
+    is not non-overlapping data axis) an error is raised. If there are
+    multiple non-overlapping data axes between all uvpspec pairs in uvps,
+    an error is raised.
+
+    ALl uvpspec objects must have certain attributes that agree exactly. These include
+    'channel_width', 'telescope_location', 'weighting', 'OmegaP', 'beam_freqs', 'OmegaPP', 
+    'beamfile', 'norm', 'taper', 'vis_units', 'norm_units', 'folded', 'cosmo', 'scalar'
 
     Parameters
     ----------
-    uvps : list of UVPSpec objects or list of string paths to UVPSpec objects
+    uvps : list
+        List of UVPSpec objects or list of string paths to UVPSpec objects
 
     just_meta : boolean, optional
-        If uvps contain list of strings, load only the metadata in to get uvp overlap.
+        If uvps is a list of strings, when loading-in each uvpspec, only
+        load its metadata.
 
     verbose : bool, optional
         print feedback to standard output

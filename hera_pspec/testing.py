@@ -12,7 +12,7 @@ def build_vanilla_uvpspec(beam=None):
 
     Parameters
     ----------
-    beam : PSpecBeamUV object
+    beam : PSpecBeamBase subclass
 
     Returns
     -------
@@ -70,6 +70,7 @@ def build_vanilla_uvpspec(beam=None):
         OmegaP, OmegaPP = beam.get_Omegas(beam.primary_beam.polarization_array[0])
         beam_freqs = beam.beam_freqs
 
+    # HERA coordinates in Karoo Desert, SA
     telescope_location = np.array([5109325.85521063, 
                                    2005235.09142983, 
                                   -3239928.42475397])
@@ -105,21 +106,25 @@ def build_vanilla_uvpspec(beam=None):
 
     return uvp, cosmo
 
-def build_uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
+def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
     Parameters
     ----------
-    data : UVData object or path to miriad file
+    data : UVData object or str
+        This can be a UVData object or a string filepath to a miriad file.
 
-    bls : list of at least 2 baseline tuples
+    bls : list
+        This is a list of at least 2 baseline tuples.
         Ex: [(24, 25), (37, 38), ...]
 
-    spw_ranges : list of spw tuples
-        See PSpecData.pspec docstring
+    spw_ranges : list
+        List of spectral window tuples. See PSpecData.pspec docstring for details.
 
-    beam : PSpecBeamUV object or path to beamfits healpix beam
+    beam : PSpecBeamBase subclass or str
+        This can be a subclass of PSpecBeamBase of a string filepath to a 
+        UVBeam healpix map.
 
     taper : string
         Optional tapering applied to the data before OQE.

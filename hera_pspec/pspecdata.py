@@ -1489,7 +1489,7 @@ class PSpecData(object):
         uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
                       "dataset1: filename: {}, label: {}, history:\n{}\n{}\n" \
                       "dataset2: filename: {}, label: {}, history:\n{}\n{}\n" \
-                      "".format(datetime.datetime.now(), version.git_hash, '-'*20, 
+                      "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20, 
                                 filename1, label1, dset1.history, '-'*20, 
                                 filename2, label2, dset2.history, '-'*20)
         uvp.taper = taper
