@@ -4,7 +4,7 @@ import numpy as np
 import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps, trapz
-from hera_pspec import pspecdata, pspecbeam, conversions, container
+from hera_pspec import pspecdata, pspecbeam, conversions, container, utils
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 from hera_cal import redcal
@@ -601,7 +601,7 @@ class Test_PSpecData(unittest.TestCase):
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
         red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos, low_hi=True))[2]
-        bls1, bls2, blps = pspecdata.construct_blpairs(red_bls, exclude_permutations=True)
+        bls1, bls2, blps = utils.construct_blpairs(red_bls, exclude_permutations=True)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array)
@@ -620,7 +620,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # test select
         red_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
-        bls1, bls2, blp = pspecdata.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
+        bls1, bls2, blp = utils.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=[(20,30), (30,40)], verbose=False)
@@ -748,9 +748,9 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(TypeError, pspecdata.validate_blpairs, [((1, 2), (2, 3))], uvd, None)
 
         bls = [(24,25),(37,38)]
-        bls1, bls2, blpairs = pspecdata.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True)
+        bls1, bls2, blpairs = utils.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True)
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
-        bls1, bls2, blpairs = pspecdata.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True,
+        bls1, bls2, blpairs = utils.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True,
                                                           group=True)
 
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
@@ -784,12 +784,11 @@ def test_pspec_run():
     nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
     nt.assert_true(uvp.vis_units, "mK")
-    nt.assert_equal(uvp.bl_array, np.array([37038, 52053]))
-    nt.assert_equal(uvp.pol_array, np.array([-5, -5]))
+    nt.assert_equal(uvp.bl_array.tolist(), [37038, 52053])
+    nt.assert_equal(uvp.pol_array.tolist(), [-5, -5])
     nt.assert_equal(uvp.cosmo, cosmo)
     #nt.assert_equal(uvp.labels, [])
     #nt.assert_equal(uvp.get_spw_ranges, [])
-
 
     # test exceptions
     nt.assert_raises(AssertionError, pspecdata.pspec_run, (1, 2), "./out.hdf5")
@@ -798,6 +797,8 @@ def test_pspec_run():
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=[1, 2], verbose=False)
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", beam=1, verbose=False)
 
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
 
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()
