@@ -82,10 +82,10 @@ class PSpecData(object):
             of that dict will be used instead.
 
         dsets_std: UVData or list or dict
-            UVData object or list of UVData objects containing the standard
-            deviations (real and imaginary) of data to add to the collection.
-            if dsets is a dict, will assume dsets_std is a dict and if dsets is
-            a list, will assume dsets_std is a list.
+            Optional UVData object or list of UVData objects containing the
+            standard deviations (real and imaginary) of data to add to the
+            collection. If dsets is a dict, will assume dsets_std is a dict
+            and if dsets is a list, will assume dsets_std is a list.
 
         """
         # Check for dicts and unpack into an ordered list if found
@@ -200,7 +200,7 @@ class PSpecData(object):
             raise ValueError("self.wgts does not have same length as self.dsets")
 
         if len(self.dsets_std) != len(self.dsets):
-            raise ValueError("self.dsets_std does not have the same lenght as "
+            raise ValueError("self.dsets_std does not have the same length as "
                              "self.dsets")
 
         # Check if dsets are all the same shape along freq axis
@@ -408,8 +408,8 @@ class PSpecData(object):
 
         Returns
         -------
-        x : array_like
-            Array of data from the requested UVData dataset and baseline.
+        dx : array_like
+            Array of std data from the requested UVData dataset and baseline.
         """
         assert isinstance(key,tuple)
         dset,bl = self.blkey(dset=key[0],bl=key[1:])
@@ -431,7 +431,7 @@ class PSpecData(object):
 
         Returns
         -------
-        x : array_like
+        w : array_like
             Array of weights for the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
@@ -672,53 +672,54 @@ class PSpecData(object):
                     dtype=complex)
 
         R1,R2=0,0
-        N1a,N2a,N1b,N2b=0,0,0,0
+        n1a,n2a,n1b,n2b=0,0,0,0
         #compute noise covariance matrices. Assume diagonal!
                     #compute E^alpha and E^beta
         if isinstance(key1,list):
             for _key in key1:
                 R1+=self.R(_key)
-                N1a+=np.real(self.dx(_key))**2.
-                N1b+=np.imag(self.dx(_key))**2.
+                n1a+=np.real(self.dx(_key))**2.
+                n1b+=np.imag(self.dx(_key))**2.
         else:
             R1=self.R(key1)
-            N1a=np.real(self.dx(key1))**2.
-            N1b=np.imag(self.dx(key1))**2.
+            n1a=np.real(self.dx(key1))**2.
+            n1b=np.imag(self.dx(key1))**2.
 
         if isinstance(key2,list):
-            for _key in key2: R2+=self.R(_key)
-            N2a+=np.real(self.dx(_key))**2.
-            N2b+=np.imag(self.dx(_key))**2.
+            for _key in key2:
+                R2+=self.R(_key):
+                n2a+=np.real(self.dx(_key))**2.
+                n2b+=np.imag(self.dx(_key))**2.
         else:
             R2=self.R(key2)
-            N2a=np.real(self.dx(key2)**2.)
-            N2b=np.imag(self.dx(key2)**2.)
+            n2a=np.real(self.dx(key2)**2.)
+            n2b=np.imag(self.dx(key2)**2.)
 
         #rearange Noise arrays into diagonals with Ntimes
-        n1a=np.zeros((self.spw_Nfreqs,self.spw_Nfreqs,ntimes),dtype=complex)
-        n1b=np.zeros_like(n1a)
-        n2a=np.zeros_like(n1a)
-        n2b=np.zeros_like(n1a)
+        N1a=np.zeros((self.spw_Nfreqs,self.spw_Nfreqs,ntimes),dtype=complex)
+        N1b=np.zeros_like(N1a)
+        N2a=np.zeros_like(N1a)
+        N2b=np.zeros_like(N1a)
         for t,tind in enumerate(time_indices):
-            n1a[:,:,t]=np.diag(N1a[:,tind])
-            n1b[:,:,t]=np.diag(N1b[:,tind])
-            n2a[:,:,t]=np.diag(N2a[:,tind])
-            n2b[:,:,t]=np.diag(N2b[:,tind])
+            N1a[:,:,t]=np.diag(n1a[:,tind])
+            N1b[:,:,t]=np.diag(n1b[:,tind])
+            N2a[:,:,t]=np.diag(n2a[:,tind])
+            N2b[:,:,t]=np.diag(n2b[:,tind])
         if taper != 'none':
             tapering_fct=\
             np.diag(aipy.dsp.gen_window(self.spw_Nfreqs,taper))
-            R1=np.dot(tapering_fct,R1)
-            R2=np.dot(tapering_fct,R2)
+            R1=np.dot(R1,tapering_fct)
+            R2=np.dot(R2,tapering_fct)
 
         Qalpha=self.get_Q(alpha,self.spw_Nfreqs)
         Qbeta=self.get_Q(beta,self.spw_Nfreqs)
         Ealpha=np.einsum('ab,bc,cd',R1.T.conj(),Qalpha,R2)
         Ebeta=np.einsum('ab,bc,cd',R1.T.conj(),Qbeta,R2)
         qc=\
-        (np.einsum('ab,bce,cd,dae->e',Ealpha,n2a,Ebeta,n1a)\
-        +np.einsum('ab,bce,cd,dae->e',Ealpha,n2b,Ebeta,n1a)\
-        +np.einsum('ab,bce,cd,dae->e',Ealpha,n2a,Ebeta,n1b)\
-        +np.einsum('ab,bce,cd,dae->e',Ealpha,n2b,Ebeta,n1b))
+        (np.einsum('ab,bce,cd,dae->e',Ealpha,N2a,Ebeta,N1a)\
+        +np.einsum('ab,bce,cd,dae->e',Ealpha,N2b,Ebeta,N1a)\
+        +np.einsum('ab,bce,cd,dae->e',Ealpha,N2a,Ebeta,N1b)\
+        +np.einsum('ab,bce,cd,dae->e',Ealpha,N2b,Ebeta,N1b))
         return qc/4.
 
 
