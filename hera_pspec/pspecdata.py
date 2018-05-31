@@ -692,7 +692,7 @@ class PSpecData(object):
 
         if isinstance(key2,list):
             for _key in key2:
-                R2+=self.R(_key):
+                R2+=self.R(_key)
                 n2a+=np.real(self.dx(_key))**2.
                 n2b+=np.imag(self.dx(_key))**2.
         else:
