@@ -193,7 +193,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.add(self.uvd, None)
         print(ds) # print populated psd
     
-    def test_get_Q(self):
+    def test_get_Q_alt(self):
         """
         Test the Q = dC/dp function.
         """
@@ -203,8 +203,10 @@ class Test_PSpecData(unittest.TestCase):
         y_vect = np.random.normal(size=vect_length) \
                + 1.j * np.random.normal(size=vect_length)
 
+        self.ds.spw_Nfreqs = vect_length
+
         for i in range(vect_length):
-            Q_matrix = self.ds.get_Q(i, vect_length)
+            Q_matrix = self.ds.get_Q_alt(i)
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
             xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
@@ -219,10 +221,39 @@ class Test_PSpecData(unittest.TestCase):
             self.assertAlmostEqual(np.imag(xQx), 0.)
 
         x_vect = np.ones(vect_length)
-        Q_matrix = self.ds.get_Q(vect_length/2, vect_length)
+        Q_matrix = self.ds.get_Q_alt(vect_length/2)
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
         # Sending in sinusoids for x and y should give delta functions
+
+
+        # Now do all the same tests from above but for a different number
+        # of delay channels
+        self.ds.set_Ndlys(vect_length-3)
+        for i in range(vect_length-3):
+            Q_matrix = self.ds.get_Q_alt(i)
+            xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
+            yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
+            xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
+            
+            # Test that Q matrix has the right shape
+            self.assertEqual(Q_matrix.shape, (vect_length, vect_length))
+            
+            # Test that x^t Q y == conj(y^t Q x)
+            self.assertAlmostEqual(xQy, np.conjugate(yQx))
+            
+            # x^t Q x should be real
+            self.assertAlmostEqual(np.imag(xQx), 0.)
+
+        x_vect = np.ones(vect_length)
+        Q_matrix = self.ds.get_Q_alt((vect_length-2)/2-1)
+        xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
+        self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
+        # Sending in sinusoids for x and y should give delta functions
+
+        # Make sure that error is raised when asking for a delay mode outside
+        # of the range of delay bins
+        nt.assert_raises(IndexError, self.ds.get_Q_alt, vect_length-1)
 
     def test_get_MW(self):
         n = 17
@@ -320,6 +351,11 @@ class Test_PSpecData(unittest.TestCase):
                 key1 = (0, 24, 38)
                 key2 = (1, 25, 38)
 
+                self.ds.set_Ndlys(Nfreq/3)
+                H = self.ds.get_H(key1, key2, taper=taper)
+                self.assertEqual(H.shape, (Nfreq/3,Nfreq/3)) # Test shape
+
+                self.ds.set_Ndlys()
                 H = self.ds.get_H(key1, key2, taper=taper)
                 self.assertEqual(H.shape, (Nfreq,Nfreq)) # Test shape
 
@@ -338,8 +374,9 @@ class Test_PSpecData(unittest.TestCase):
                 key1 = (0, 24, 38)
                 key2 = (1, 25, 38)
 
+                self.ds.set_Ndlys(Nfreq-2)
                 G = self.ds.get_G(key1, key2)
-                self.assertEqual(G.shape, (Nfreq,Nfreq)) # Test shape
+                self.assertEqual(G.shape, (Nfreq-2,Nfreq-2)) # Test shape
                 print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
 
@@ -370,8 +407,8 @@ class Test_PSpecData(unittest.TestCase):
                     # Test that all elements of G are positive up to numerical 
                     # noise with the threshold set to 10 orders of magnitude 
                     # down from the smallest value on the diagonal
-                    for i in range(Nfreq):
-                        for j in range(Nfreq):
+                    for i in range(Nfreq-2):
+                        for j in range(Nfreq-2):
                             self.assertGreaterEqual(G[i,j], 
                                        -min_diagonal * multiplicative_tolerance)
                 else:

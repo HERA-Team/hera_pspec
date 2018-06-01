@@ -54,7 +54,7 @@ def cov(d1, w1, d2=None, w2=None):
     C -= np.outer(x1, x2.conj())
     return C
 
-def get_delays(freqs):
+def get_delays(freqs, n_dlys=None):
     """
     Return an array of delays, tau, corresponding to the bins of the delay 
     power spectrum given by frequency array.
@@ -63,13 +63,24 @@ def get_delays(freqs):
     ----------
     freqs : ndarray of frequencies in Hz
 
+    n_dlys : number of delay bins, optional
+        Default: None, which then assumes that the number of bins is
+        equal to the number of frequency channels.
+
     Returns
     -------
     delays : array_like
         Delays, tau. Units: seconds.
     """
+    Delta_nu = np.median(np.diff(freqs))
+    n_freqs = freqs.size
+
+    if n_dlys == None: # assume that n_dlys = n_freqs if not specified
+        n_dlys = n_freqs
+
     # Calculate the delays
-    delay = np.fft.fftshift(np.fft.fftfreq(freqs.size, d=np.median(np.diff(freqs))))
+    delay = np.fft.fftshift(np.fft.fftfreq(n_dlys, d=Delta_nu))
+
     return delay
 
 
