@@ -2,7 +2,7 @@ import numpy as np
 import md5
 import yaml
 from conversions import Cosmo_Conversions
-
+import traceback
 
 def hash(w):
     """
@@ -207,17 +207,41 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
     return spw_range
     
 
-def log(msg, lvl=0):
+def log(msg, f=None, lvl=0, tb=None, verbose=True):
     """
     Add a message to the log (just prints to the terminal for now).
     
     Parameters
     ----------
+    msg : str
+        Message string to print.
+
+    f : file descriptor
+        file descriptor to write message to.
+
     lvl : int, optional
         Indent level of the message. Each level adds two extra spaces. 
         Default: 0.
+
+    tb : traceback object, optional
+        Traceback object to print with traceback.format_tb()
+
+    verbose : bool, optional
+        if True, print msg. Even if False, still writes to file
+        if f is provided.
     """
-    print("%s%s" % ("  "*lvl, msg))
+    # catch for traceback provided
+    if tb is not None:
+        msg += "\n{}\n".format(traceback.format_tb(tb)[0])
+
+    # print
+    output = "%s%s" % ("  "*lvl, msg)
+    if verbose:
+        print(output)
+
+    # write
+    if f is not None:
+        f.write(output)
 
 
 def load_config(config_file):
