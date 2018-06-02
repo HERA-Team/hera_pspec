@@ -269,3 +269,48 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
         uvdS.check()
 
     return uvdS
+
+
+def choose_inp_dsets(dsets, pstokes):
+    """
+    Given a list of UVData objects with dipole linear polarizations,
+    and a desired output pstokes, return the two UVData objects from
+    the input dsets that can be used in construct_pstokes to make 
+    the desired pseudo-Stokes visibility. If a single UVData object 
+    has multiple polarizations, this function only uses its first.
+
+    Parameters
+    ----------
+    dsets : list
+        List of UVData objects with linear dipole polarizations
+
+    pstokes : str or int
+        Pseudo-stokes polarization one wants to form out of input dsets.
+        Ex. 'pI', or 'pU', or 1, ...
+
+    Returns
+    -------
+    inp_dsets : list
+        List of two UVData objects from the input dsets that can be fed
+        to construct_pstokes to make the desired pseudo-Stokes visibility.
+    """
+    # type check
+    assert isinstance(dsets, list), "dsets must be fed as a list of UVData objects"
+    assert np.all(isinstance(d, UVData) for d in dsets), "dsets must be fed as a list of UVData objects"
+
+    # get polarization of each dset
+    pols = [d.polarization_array[0] for d in dsets]
+
+    # convert pstokes to integer if a string
+    if isinstance(pstokes, (str, np.str)):
+        pstokes = pyuvdata.utils.polstr2num(pstokes)
+    assert pstokes in [1, 2, 3, 4], "pstokes must be fed as a pseudo-Stokes parameter"
+
+    # get two necessary dipole pols given pstokes
+    desired_pols = pol_weights[pstokes].keys()
+    assert desired_pols[0] in pols and desired_pols[1] in pols, "necessary input pols {} and {} not found in dsets".format(*desired_pols)
+
+    inp_dsets = [dsets[pols.index(desired_pols[0])], dsets[pols.index(desired_pols[1])]]
+
+    return inp_dsets
+
