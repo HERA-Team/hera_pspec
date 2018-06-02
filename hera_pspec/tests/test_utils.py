@@ -8,6 +8,7 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 
+
 def test_cov():
     # load another data file
     uvd = UVData()
@@ -143,8 +144,30 @@ def test_log():
     """
     Test that log() prints output.
     """
+    # print
     utils.log("message")
     utils.log("message", lvl=2)
+
+    # logfile
+    logf = open("logf.log", "w")
+    utils.log("message", f=logf, verbose=False)
+    logf.close()
+    with open("logf.log", "r") as f:
+        nt.assert_equal(f.readlines()[0], "message")
+
+    # traceback
+    logf = open("logf.log", "w")
+    try:
+        raise NameError
+    except NameError:
+        err, _, tb = sys.exc_info()
+        utils.log("raised an exception", f=logf, tb=tb, verbose=False)
+    logf.close()
+    with open("logf.log", "r") as f:
+        log = ''.join(f.readlines())
+        nt.assert_true("NameError" in log and "raised an exception" in log)
+    os.remove("logf.log")
+
 
 def test_hash():
     """
