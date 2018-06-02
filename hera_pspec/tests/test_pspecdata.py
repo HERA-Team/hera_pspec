@@ -154,7 +154,9 @@ class Test_PSpecData(unittest.TestCase):
         Test adding non UVData object.
         """
         nt.assert_raises(TypeError, self.ds.add, 1, 1)
-
+        #test TypeError if dsets is dict but dsets_std is not
+        nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,[0])
+        nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,{'e':0})
     def test_labels(self):
         """
         Test that dataset labels work.
@@ -625,11 +627,11 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
-        # test wgt exception
-        ds.wgts = ds.wgts[:1]
-        nt.assert_raises(ValueError, ds.validate_datasets)
         # test std exception
         ds.dsets_std=ds.dsets_std[:1]
+        nt.assert_raises(ValueError, ds.validate_datasets)
+        # test wgt exception
+        ds.wgts = ds.wgts[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
         # test warnings
         uvd = copy.deepcopy(self.d[0])
@@ -843,6 +845,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = self.uvd + uvd1
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('xy','xy')], spw_ranges=[(10, 24)], verbose=False)
+
 
         # test with nsamp set to zero
         uvd = copy.deepcopy(self.uvd)
