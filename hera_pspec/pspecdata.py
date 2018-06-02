@@ -1132,8 +1132,8 @@ class PSpecData(object):
         """
         summed_G = np.sum(self.get_G(key1, key2), axis=1)
         summed_H = np.sum(self.get_H(key1, key2, taper, sampling), axis=1)
-        ratio = summed_H / summed_G
-        mean_ratio = np.mean(mean_ratio)
+        ratio = summed_H.real / summed_G.real
+        mean_ratio = np.mean(ratio)
         scatter = np.abs(ratio - mean_ratio)
         if (scatter > 10**-4 * mean_ratio).any():
             raise ValueError("The normalization scalar is band-dependent!")
@@ -1509,6 +1509,7 @@ class PSpecData(object):
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
                     qv = self.q_hat(key1, key2, taper=taper)
+                    print 'hey hey', qv
 
                     # Normalize power spectrum estimate
                     if verbose: print("  Normalizing power spectrum...")
@@ -1518,7 +1519,7 @@ class PSpecData(object):
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
-                        pv *= scalar * scalar_delay_adjustment(key1, key2, taper=taper, sampling=sampling)
+                        pv *= scalar * self.scalar_delay_adjustment(key1, key2, taper=taper, sampling=sampling)
 
                     # Get baseline keys
                     if isinstance(blp, list):
