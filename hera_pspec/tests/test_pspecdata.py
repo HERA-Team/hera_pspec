@@ -255,6 +255,17 @@ class Test_PSpecData(unittest.TestCase):
         # of the range of delay bins
         nt.assert_raises(IndexError, self.ds.get_Q_alt, vect_length-1)
 
+        # Ensure that in the special case where the number of channels equals
+        # the number of delay bins, the FFT method gives the same answer as
+        # the explicit construction method
+        multiplicative_tolerance = 0.001
+        self.ds.set_Ndlys(vect_length)
+        for alpha in range(vect_length):
+            Q_matrix_fft = self.ds.get_Q_alt(alpha)
+            Q_matrix = self.ds.get_Q_alt(alpha, allow_fft=False)
+            Q_diff_norm = np.linalg.norm(Q_matrix - Q_matrix_fft)
+            self.assertLessEqual(Q_diff_norm, multiplicative_tolerance)
+
     def test_get_MW(self):
         n = 17
         random_G = generate_pos_def_all_pos(n)
@@ -291,6 +302,8 @@ class Test_PSpecData(unittest.TestCase):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.Nfreqs
         Ntime = self.ds.Ntimes
+        Ndlys = Nfreq - 3
+        self.ds.spw_Ndlys = Ndlys
         
         # Set baselines to use for tests
         key1 = (0, 24, 38)
@@ -306,12 +319,12 @@ class Test_PSpecData(unittest.TestCase):
                 
                 # Calculate q_hat for a pair of baselines and test output shape
                 q_hat_a = self.ds.q_hat(key1, key2, taper=taper)
-                self.assertEqual(q_hat_a.shape, (Nfreq, Ntime))
+                self.assertEqual(q_hat_a.shape, (Ndlys, Ntime))
                 
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
                 q_hat_b = self.ds.q_hat(key2, key1, taper=taper)
                 q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
-                for i in range(Nfreq):
+                for i in range(Ndlys):
                     for j in range(Ntime):
                         self.assertAlmostEqual(q_hat_diff[i,j].real, 
                                                q_hat_diff[i,j].real)
@@ -319,12 +332,12 @@ class Test_PSpecData(unittest.TestCase):
                                                q_hat_diff[i,j].imag)
                 
                 # Check that lists of keys are handled properly
-                q_hat_aa = self.ds.q_hat(key1, key4, taper=taper) # q_hat(k1, k2+k2)
-                q_hat_bb = self.ds.q_hat(key4, key1, taper=taper) # q_hat(k2+k2, k1)
-                q_hat_cc = self.ds.q_hat(key3, key4, taper=taper) # q_hat(k1+k1, k2+k2)
+                q_hat_aa = self.ds.q_hat(key1, key4, taper=taper) # q_hat(x1, x2+x2)
+                q_hat_bb = self.ds.q_hat(key4, key1, taper=taper) # q_hat(x2+x2, x1)
+                q_hat_cc = self.ds.q_hat(key3, key4, taper=taper) # q_hat(x1+x1, x2+x2)
                 
-                # Effectively checks that q_hat(2*k1, 2*k2) = 4*q_hat(k1, k2)
-                for i in range(Nfreq):
+                # Effectively checks that q_hat(2*x1, 2*x2) = 4*q_hat(x1, x2)
+                for i in range(Ndlys):
                     for j in range(Ntime):
                         self.assertAlmostEqual(q_hat_a[i,j].real, 
                                                0.25 * q_hat_cc[i,j].real)
@@ -721,23 +734,20 @@ class Test_PSpecData(unittest.TestCase):
         scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
         data1 = d1.get_data(bls1[0])
         data2 = d2.get_data(bls2[0])
-        legacy = np.fft.fftshift(np.fft.ifft(data1, axis=1) * np.conj(np.fft.ifft(data2, axis=1)) * scalar, axes=1)[0]
+        legacy = np.fft.fftshift(np.conj(np.fft.fft(data1, axis=1)) * np.fft.fft(data2, axis=1) * scalar / len(freqs)**2, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
         uvp = ds.pspec(bls1, bls2, (0, 1), pols=('xx','xx'), taper='none', input_data_weight='identity', norm='I', sampling=True)
         oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         # assert answers are same to within 3%
-        #print np.real(oqe)
-        #print np.real(legacy)
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
-
         # taper
         window = windows.blackmanharris(len(freqs))
         NEB = Bp / trapz(window**2, x=freqs)
         scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
         data1 = d1.get_data(bls1[0])
         data2 = d2.get_data(bls2[0])
-        legacy = np.fft.fftshift(np.fft.ifft(data1*window[None, :], axis=1) * np.conj(np.fft.ifft(data2*window[None, :], axis=1)) * scalar, axes=1)[0]
+        legacy = np.fft.fftshift(np.conj(np.fft.fft(data1*window[None, :], axis=1)) * np.fft.fft(data2*window[None, :], axis=1) * scalar / len(freqs)**2, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), taper='blackman-harris', input_data_weight='identity', norm='I')

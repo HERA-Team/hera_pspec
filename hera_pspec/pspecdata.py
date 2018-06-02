@@ -562,7 +562,7 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
-    def q_hat(self, key1, key2, use_fft=False, taper='none'):
+    def q_hat(self, key1, key2, allow_fft=False, taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
@@ -586,7 +586,7 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines 
             in the list will be combined with inverse noise weights.
             
-        use_fft : bool, optional
+        allow_fft : bool, optional
             Whether to use a fast FFT summation trick to construct q_hat, or
             a simpler brute-force matrix multiplication. The FFT method assumes
             a delta-fn bin in delay space. It also only works if the number
@@ -616,7 +616,7 @@ class PSpecData(object):
             Rx2 = np.dot(self.R(key2), self.x(key2))
         
         # Whether to use FFT or slow direct method
-        if use_fft:
+        if allow_fft:
             if taper != 'none':
                 tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
                 Rx1 *= tapering_fct[:, None]
@@ -636,6 +636,7 @@ class PSpecData(object):
             q = []
             for i in xrange(self.spw_Ndlys):
                 Q = self.get_Q_alt(i)
+                print 'nom nom nom nom', key1, key2
                 RQR = np.einsum('ab,bc,cd',
                                 self.R(key1).T.conj(), Q, self.R(key2))
                 x1 = self.x(key1).conj()
@@ -912,7 +913,7 @@ class PSpecData(object):
 
         return M, W
 
-    def get_Q_alt(self, mode):
+    def get_Q_alt(self, mode, allow_fft=True):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha,
         EXCEPT without the primary beam factors. This is Q_alt as defined
@@ -937,6 +938,11 @@ class PSpecData(object):
         mode : int
             Central wavenumber (index) of the bandpower, p_alpha.
 
+        allow_fft : boolean, optional
+            If set to True, allows a shortcut FFT method when
+            the number of delay bins equals the number of delay channels.
+            Default: True
+
         Return
         -------
         Q : array_like
@@ -949,10 +955,9 @@ class PSpecData(object):
             raise IndexError("Cannot compute Q matrix for a mode outside"
                              "of allowed range of delay modes.")
 
-        if self.spw_Ndlys == self.spw_Nfreqs:
+        if (self.spw_Ndlys == self.spw_Nfreqs) and (allow_fft == True):
             _m = np.zeros((self.spw_Nfreqs,), dtype=np.complex)
             _m[mode] = 1. # delta function at specific delay mode
-
             # FFT to transform to frequency space
             m = np.fft.fft(np.fft.ifftshift(_m))
         else:
@@ -1509,7 +1514,6 @@ class PSpecData(object):
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
                     qv = self.q_hat(key1, key2, taper=taper)
-                    print 'hey hey', qv
 
                     # Normalize power spectrum estimate
                     if verbose: print("  Normalizing power spectrum...")
