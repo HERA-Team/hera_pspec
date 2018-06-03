@@ -614,37 +614,28 @@ class PSpecData(object):
             for _key in key2: Rx2 += np.dot(self.R(_key), self.x(_key))
         else:
             Rx2 = np.dot(self.R(key2), self.x(key2))
+
+        # Apply taper if asked for
+        if taper != 'none':
+            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
+            Rx1 *= tapering_fct[:, None]
+            Rx2 *= tapering_fct[:, None]
         
-        # Whether to use FFT or slow direct method
-        if allow_fft:
-            if taper != 'none':
-                tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
-                Rx1 *= tapering_fct[:, None]
-                Rx2 *= tapering_fct[:, None]
-
-            _Rx1 = np.fft.fft(Rx1.conj(), axis=0)
-            _Rx2 = np.fft.fft(Rx2.conj(), axis=0)
+        # use FFT if possible and allowed
+        if allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
+            _Rx1 = np.fft.fft(Rx1, axis=0)
+            _Rx2 = np.fft.fft(Rx2, axis=0)
             
-            return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
-                                 * np.fft.fftshift(_Rx2, axes=0) )
+            return 0.5 * np.fft.fftshift(_Rx1, axes=0).conj() * np.fft.fftshift(_Rx2, axes=0)
         else:
-            # get taper if provided
-            if taper != 'none':
-                tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
-
-            # Slow method, used to explicitly cross-check FFT code
             q = []
             for i in xrange(self.spw_Ndlys):
                 Q = self.get_Q_alt(i)
-                print 'nom nom nom nom', key1, key2
-                RQR = np.einsum('ab,bc,cd',
-                                self.R(key1).T.conj(), Q, self.R(key2))
-                x1 = self.x(key1).conj()
-                x2 = self.x(key2)
-                if taper != 'none':
-                    x1 = x1 * tapering_fct[:, None]
-                    x2 = x2 * tapering_fct[:, None]
-                qi = np.sum(x1*np.dot(RQR, x2), axis=0)
+                # Taking the diagonal here is equivalent to not taking cross
+                # multiplications across different times. If this gets too
+                # slow, can be sped up by not computing off-diagonal terms
+                # before taking the diagonal
+                qi = np.diag(np.dot(Rx1.T.conj(), np.dot(Q, Rx2)))
                 q.append(qi)
             return 0.5 * np.array(q)
 
@@ -673,6 +664,11 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
+
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None")
+
         G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
@@ -749,6 +745,11 @@ class PSpecData(object):
         H : array_like, complex
             Dimensions (Nfreqs, Nfreqs).
         """
+
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None")
+
         H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)

@@ -197,6 +197,7 @@ class Test_PSpecData(unittest.TestCase):
         """
         Test the Q = dC/dp function.
         """
+
         vect_length = 50
         x_vect = np.random.normal(size=vect_length) \
                + 1.j * np.random.normal(size=vect_length)
@@ -207,6 +208,10 @@ class Test_PSpecData(unittest.TestCase):
 
         for i in range(vect_length):
             Q_matrix = self.ds.get_Q_alt(i)
+            # Test that if the number of delay bins hasn't been set
+            # the code defaults to putting that equal to Nfreqs
+            self.assertEqual(self.ds.spw_Ndlys, self.ds.spw_Nfreqs)
+
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
             xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
@@ -343,9 +348,16 @@ class Test_PSpecData(unittest.TestCase):
                                                0.25 * q_hat_cc[i,j].real)
                         self.assertAlmostEqual(q_hat_a[i,j].imag, 
                                                0.25 * q_hat_cc[i,j].imag)
-                
-                # Check that the slow method is the same as the FFT method
-                q_hat_a_slow = self.ds.q_hat(key1, key2, use_fft=False, taper=taper)
+        
+
+        self.ds.spw_Ndlys = Nfreq
+        # Check that the slow method is the same as the FFT method
+        for input_data_weight in ['identity', 'iC']:
+            self.ds.set_R(input_data_weight)
+            # Loop over list of taper functions
+            for taper in taper_selection:
+                q_hat_a_slow = self.ds.q_hat(key1, key2, allow_fft=False, taper=taper)
+                q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True, taper=taper)
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
@@ -356,21 +368,24 @@ class Test_PSpecData(unittest.TestCase):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.Nfreqs
         multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+
+        # Check that warning is raised if Ndlys isn't set
+        self.assertRaises(ValueError, self.ds.get_H, key1, key2)
 
         for input_data_weight in ['identity','iC']:
             for taper in taper_selection:
                 print 'input_data_weight', input_data_weight
                 self.ds.set_R(input_data_weight)
-                key1 = (0, 24, 38)
-                key2 = (1, 25, 38)
 
                 self.ds.set_Ndlys(Nfreq/3)
                 H = self.ds.get_H(key1, key2, taper=taper)
-                self.assertEqual(H.shape, (Nfreq/3,Nfreq/3)) # Test shape
+                self.assertEqual(H.shape, (Nfreq/3, Nfreq/3)) # Test shape
 
                 self.ds.set_Ndlys()
                 H = self.ds.get_H(key1, key2, taper=taper)
-                self.assertEqual(H.shape, (Nfreq,Nfreq)) # Test shape
+                self.assertEqual(H.shape, (Nfreq, Nfreq)) # Test shape
 
     def test_get_G(self):
         """
@@ -379,17 +394,19 @@ class Test_PSpecData(unittest.TestCase):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.Nfreqs
         multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+
+        # Check that warning is raised if Ndlys isn't set
+        self.assertRaises(ValueError, self.ds.get_G, key1, key2)
 
         for input_data_weight in ['identity','iC']:
             for taper in taper_selection:
                 print 'input_data_weight', input_data_weight
                 self.ds.set_R(input_data_weight)
-                key1 = (0, 24, 38)
-                key2 = (1, 25, 38)
-
                 self.ds.set_Ndlys(Nfreq-2)
                 G = self.ds.get_G(key1, key2)
-                self.assertEqual(G.shape, (Nfreq-2,Nfreq-2)) # Test shape
+                self.assertEqual(G.shape, (Nfreq-2, Nfreq-2)) # Test shape
                 print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
 
@@ -509,6 +526,18 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(NotImplementedError, self.ds.get_V_gaussian, 
                          (0,1), (0,1))
         
+    def test_scalar_delay_adjustment(self):
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+
+        # Test that when:
+        # i) Nfreqs = Ndlys, ii) Sampling, iii) No tapering, iv) R is identity
+        # are all satisfied, the scalar adjustment factor is unity
+        self.ds.set_R('identity')
+        self.ds.spw_Ndlys = self.ds.spw_Nfreqs
+        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
+        self.assertAlmostEqual(adjustment, 1.0)
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
