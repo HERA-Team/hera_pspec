@@ -52,13 +52,34 @@ algorithm :
     bltol : 1.0   # baseline redundancy tolerance in meters
 
   # RFI Flagging
-  rfi :
-    algorithm : "xrfi"
+  xrfi :
+    file_ext : 'R'              # file extension
+    run_xrfi : True             # run xrfi if True
+    xrfi_params:                # if run_xrfi, set xrfi parameters
+      Kt : 10
+      Kf : 15
+      sig_init : 6
+      sig_adj : 2
 
   # Xtalk Subtraction
   xtalk :
     file_ext : "T"        # file extension of xtalk-subtracted data
     xtalk_ext : ".xtalk"   # file extension of xtalk-spectrum
+    dly_filter : True     # RFI flag and delay filter xtalk spectrum
+    rfi_params :           # if dly_inpaint, these are the xrfi params
+      sig_init : 2
+      sig_adj : 1
+      Kf : 20  
+      Kt : 1  
+    dly_params :       # if dly_inpaint, these are the delay filter params
+      min_dly : 1500.0
+      horizon : 0.0
+      tol : 0.000000001
+      maxiter : 100
+      window : 'blackman-harris'
+      flag_nchan_low : 25
+      flag_nchan_high : 25
+      gain : 0.1
 
   # Time Averaging
   tavg : 
@@ -75,14 +96,14 @@ algorithm :
     filt_file_ext : "D"
     inpaint_file_ext : "P"
     filt_params : # kwarg parameters in hera_cal.delay_filer.run_filter
-      standoff : 15.0
+      standoff : 50.0
       horizon : 1.0
       min_dly : 0.0
       tol : 0.00000001
       maxiter : 100
       window : 'tukey'
-      skip_wgt : 0.1
-      flag_nchan_low : 0
-      flag_nchan_high : 0
+      skip_wgt : 0.5
+      flag_nchan_low : 50
+      flag_nchan_high : 50
       gain : 0.1
 
