@@ -57,7 +57,7 @@ hp.utils.log("Starting preprocess pipeline on {}\n{}\n".format(time, '-'*60), f=
 hp.utils.log(json.dumps(cf, indent=1) + '\n', f=lf, verbose=verbose)
 
 # Create multiprocesses
-if multiprocess:
+if multiproc:
     pool = multiprocess.Pool(nproc)
     M = pool.map
 else:
@@ -93,7 +93,7 @@ if reformat:
         try:
             if not bl_len_range[0] < lens[j] < bl_len_range[1]:
                 return 0
-            outname = reformat_outfile.format(len=int(round(lens[j])), deg=int(round(angs[j])), pol=datapols[i], suffix=data_suffix)
+            outname = reformat_outfile.format(len=int(round(lens[j])), deg=int(round(angs[j])), pol=datapols[i][0], suffix=data_suffix)
             outname = os.path.join(out_dir, outname)
             if os.path.exists(outname) and overwrite == False:
                 return 1
@@ -112,7 +112,7 @@ if reformat:
         exit_codes = M(bl_reformat, range(len(reds)))
 
         # print to log
-        hp.utils.log("\nbaseline reformatting exit codes for pol {}:\n {}".format(datapols[i], exit_codes), f=lf, verbose=verbose)
+        hp.utils.log("\nbaseline reformatting exit codes for pol {}:\n {}".format(datapols[i][0], exit_codes), f=lf, verbose=verbose)
 
     # edit data template
     input_data_template = os.path.join(out_dir, new_data_template.format(pol='{pol}', suffix=data_suffix))

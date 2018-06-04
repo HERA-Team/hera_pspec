@@ -26,7 +26,7 @@ analysis :
   form_pstokes : True    # form pseudo-Stokes visibilities
   fg_filt : True         # foreground filter (and/or data-inpaint)
 
-  multiprocess : False    # use multiprocess module
+  multiproc : False    # use multiprocess module
   nproc : 8               # number of processes to spawn
 
 #---------------------------------------------------------------
