@@ -1,7 +1,7 @@
 import numpy as np
 from collections import OrderedDict as odict
 from hera_pspec import uvpspec_utils as uvputils
-#from hera_pspec import UVPSpec
+from hera_pspec import utils
 import random
 import copy
 
@@ -693,4 +693,158 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
     
     # Return list of averaged spectra for now
     return uvp_avg, blpair_wgts_list
+
+
+def bootstrap_average_group(psc, group, sample_id, blpairs, 
+                            combine_averages=False, sample_separately=False, 
+                            time_avg=False, seed=None, output_group='avg', 
+                            overwrite=False, psc_out=None, verbose=False):
+    """
+    Generate a set of bootstrap-sampled averages for a set of delay spectra 
+    in a container. The bootstrap-averaged spectra will be stored in a new 
+    group named '<output_group>/<group>'.
     
+    Parameters
+    ----------
+    psc : PSpecContainer
+        Object containing input power spectra, to be bootstrap averaged.
+    
+    group : str
+        Name of group in the PSpecContainer to bootstrap average over.
+    
+    sample_id : str
+        String identifying this bootstrap sample. This is used as the name of 
+        the averaged power spectrum in the container. If `combine_averages` is 
+        False, the sample_id will be prefixed by the original name of each
+        power spectrum.
+    
+    blpairs : list of tuples
+        List of tuples specifying the baseline pairs to include in the averages.
+    
+    combine_averages : bool, optional
+        Whether to combine the averages for all spectra in the group. If False, 
+        the averaging will only be done per file. Default: False.
+    
+    sample_separately : bool, optional
+        Whether to perform the bootstrap sampling of blpairs and times 
+        independently on each UVPSpec object in the container (True), or 
+        whether the samples should be drawn over the full set of UVPSpec 
+        objects (False). In the latter case, a given bootstrap average can 
+        include more samples from some UVPSpec objects than others. See 
+        `bootstrap_average_blpairs` for more information. Default: False 
+        (samples over all UVPSpec objects in the PSpecContainer group).
+    
+    time_avg : bool, optional
+        Whether the power spectra should be averaged over times (True), or left 
+        as separate time samples (False). Default: True.
+    
+    seed : int, optional
+        Random seed to use when generating bootstrap samples. If None, no seed 
+        is set and the default `numpy.random` behavior is used. Default: None.
+    
+    output_group : str, optional
+        Name of the top-level group in the PSpecContainer to output bootstrap-
+        averaged power spectra into. Default: 'avg'.
+    
+    overwrite : bool, optional
+        If a bootstrap-averaged power spectrum already exists in the container, 
+        whether to overwrite it. Default: False.
+    
+    psc_out : PSpecContainer, optional
+        If specified, the bootstrap averaged spectra will be added to the 
+        specified PSpecContainer. If None, they are added to the input 
+        container 'psc'. Default: None.
+    
+    verbose : bool, optional
+        If True, output information like filenames and groupnames to stdout. 
+        Default: False.
+    """
+    # Get all delay spectra in the group
+    uvp_list = psc.get_pspec(group=group)
+    psnames = psc.spectra(group=group)
+    
+    # Construct baseline-pair groups
+    blpair_groups = []
+    
+    # How should blpairs be specified?
+    # (1) None = do all redundant groups in each UVPSpec
+    # (2) Prototype blpair: do all in redundant group identified by a prototype
+    # (3) Explicit blpair groups
+    if blpairs is None:
+        raise NotImplementedError("Not currently able to identify redundant "
+                                  "groups inside a UVPSpec object. This will "
+                                  "be enabled when utils.group_redundant() is "
+                                  "implemented.")
+        # utils.group_redundant()
+    else:
+        # Must be a list of either integers/tuples, or lists of integers/tuples
+        if not isinstance(blpairs, list):
+            raise TypeError("blpairs must be a list of integers or lists "
+                            "(of integers/tuples)")
+        if isinstance(blpairs[0], int) or isinstance(blpairs[0], tuple):
+            # Use each list item as a prototype for a redundant group
+            raise NotImplementedError("Not currently able to use prototype "
+                                      "baseline-pair specifications.")
+        else:
+            # Baseline-pairs are specified explicitly
+            _blpairs = []
+            for grp in blpairs:
+                assert isinstance(grp, list), "All elements of blpairs must " \
+                                              "be of the same type."
+                _grp = []
+                for blp in grp:
+                    if isinstance(blp, tuple):
+                        blp = uvputils._antnums_to_blpair(blp)
+                    if not isinstance(blp, int):
+                        raise TypeError("blpair '%s' is not an integer." % blp)
+                    _grp.append(blp)
+                _blpairs.append(_grp)
+            blpair_groups = _blpairs
+    
+    # Print blpairs if verbose
+    utils.log("%d blpair groups specified" % len(blpair_groups), 
+              lvl=1, verbose=verbose)
+    if verbose:
+        for i, grp in enumerate(blpair_groups):
+            utils.log("Grp %03d: %s" % (i, grp), lvl=2, verbose=verbose)
+    
+    # Construct a set of bootstrap-averaged delay spectra
+    if sample_separately:
+        # Perform the bootstrap sampling on each UVPSpec object separately
+        utils.log("sample_separately=True", lvl=1, verbose=verbose)
+        uvp_avg_list = []
+        for uvp in uvp_list:
+            _uvp, blpair_wgts = grouping.bootstrap_average_blpairs(
+                                                   [uvp,], blpair_groups, 
+                                                   time_avg=time_avg, seed=seed)
+            uvp_avg_list += _uvp
+    else:
+        # Sample across all delay spectra from all UVPSpec objects in the group
+        utils.log("sample_separately=False", lvl=1, verbose=verbose)
+        uvp_avg_list, blpair_wgts = grouping.bootstrap_average_blpairs(
+                                                   uvp_list, blpair_groups, 
+                                                   time_avg=time_avg, seed=seed)
+    
+    # Combine the averages from each UVPSpec into a single average over all 
+    # UVPSpec objects in the group
+    if combine_averages:
+        # TODO: This should use the new ability to combine UVPSpec objects
+        raise NotImplementedError("Cannot combine UVPSpec objects yet.")
+        #uvp_avg_list = ...
+    
+    # Output to the same (input) PSpecContainer if no output container specified
+    if psc_out is None: psc_out = psc
+    
+    # Save bootstrap averaged power spectrum to the container
+    root_group = "%s/%s" % (output_group, group)
+    utils.log("Outputting bootstrap averages to root group: %s" % root_group, 
+              lvl=1, verbose=verbose)
+    if combine_averages: psnames = ['combined',]
+    assert len(psnames) == len(uvp_avg_list)
+    for i, _psname in enumerate(psnames):
+        psname = "%s_%s" % (_psname, sample_id)
+        utils.log("Output pspec: %s" % psname, lvl=2, verbose=verbose)
+        psc_out.set_pspec(root_group, psname, uvp_avg_list[i], overwrite=overwrite)
+    
+    
+
