@@ -1650,6 +1650,44 @@ class PSpecData(object):
                 dset.data_array[:, :, :, j] *= factors[p][None, None, :]
             dset.vis_units = 'mK'
 
+    def trim_dset_lsts(self, lst_tol=6):
+        """
+        Assuming all datasets in self.dsets are locked to the same LST grid (but
+        each may have a constant offset), trim LSTs from each dset that aren't found
+        in all other dsets (within some decimal tolerance specified by lst_tol). 
+
+        Warning: this edits the data in dsets in-place, and is not reversible.
+
+        Parameters
+        ----------
+        lst_tol : float
+            Decimal tolerance [radians] for comparing float-valued LST bins.
+        """
+        # ensure each dset has same dLST within tolerance / Ntimes
+        dlst = np.median(np.diff(np.unique(self.dsets[0].lst_array)))
+        for dset in self.dsets:
+            _dlst = np.median(np.diff(np.unique(dset.lst_array)))
+            if not np.isclose(dlst, _dlst, atol=10**(-lst_tol) / dset.Ntimes):
+                print "not all datasets in self.dsets are on the same LST grid, cannot LST trim."
+                return
+
+        # get lst array of each dataset and turn into string and add to common_lsts
+        lst_arrs = []
+        common_lsts = set()
+        for i, dset in enumerate(self.dsets):
+            lsts = ["{lst:0.{tol}f}".format(lst=l, tol=lst_tol) for l in dset.lst_array]
+            lst_arrs.append(lsts)
+            if i == 0:
+                common_lsts = common_lsts.union(set(lsts))
+            else:
+                common_lsts = common_lsts.intersection(set(lsts))
+
+        # iterate through dsets and trim off integrations whose lst isn't in common_lsts
+        for i, dset in enumerate(self.dsets):
+            trim_inds = np.array([l not in common_lsts for l in lst_arrs[i]])
+            if np.any(trim_inds):
+                self.dsets[i].select(times=dset.time_array[~trim_inds])
+
 
 def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
     """
