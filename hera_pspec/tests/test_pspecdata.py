@@ -550,6 +550,26 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(ds.dsets[1].vis_units, "UNCALIB")
         nt.assert_not_equal(ds.dsets[0].get_data(24, 25, 'xx')[30, 30], ds.dsets[1].get_data(24, 25, 'pI')[30, 30])
 
+    def test_trim_dset_lsts(self):
+        fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
+        uvd1 = UVData()
+        uvd1.read_miriad(fname)
+        uvd2 = copy.deepcopy(uvd1)
+        uvd2.lst_array = (uvd2.lst_array + 10 * np.median(np.diff(np.unique(uvd2.lst_array)))) % (2*np.pi)
+        # test basic execution
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
+        ds.trim_dset_lsts()
+        nt.assert_true(ds.dsets[0].Ntimes, 52)
+        nt.assert_true(ds.dsets[1].Ntimes, 52)
+        nt.assert_true(np.all( (2458042.178948477 < ds.dsets[0].time_array) \
+                        + (ds.dsets[0].time_array < 2458042.1843023109)))
+        # test exception
+        uvd2.lst_array += np.linspace(0, 1e-3, uvd2.Nblts)
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
+        ds.trim_dset_lsts()
+        nt.assert_true(ds.dsets[0].Ntimes, 60)
+        nt.assert_true(ds.dsets[1].Ntimes, 60)
+
     def test_units(self):
         ds = pspecdata.PSpecData()
         # test exception
