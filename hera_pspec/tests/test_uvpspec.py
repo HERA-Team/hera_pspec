@@ -148,6 +148,11 @@ class Test_UVPSpec(unittest.TestCase):
         blp = self.uvp.get_blpair_seps()
         nt.assert_equal(len(blp), 30)
         nt.assert_true(np.isclose(blp, 14.60, rtol=1e-1, atol=1e-1).all())
+        # get redundant baseline groups
+        red_grps, bl_lens = self.uvp.get_redundant_groups()
+        # None of the bls are redundant (separate group for each)
+        nt.assert_equal(len(red_grps), 3)
+        nt.assert_true(np.isclose(bl_lens, 14.60, rtol=1e-1, atol=1e-1).all())
         # get kvecs
         k_perp, k_para = self.uvp.get_kperps(0), self.uvp.get_kparas(0)
         nt.assert_equal(len(k_perp), 30)
