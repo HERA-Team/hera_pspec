@@ -292,10 +292,8 @@ class UVPSpec(object):
         bls = self.bl_array # unique baselines in this object
         
         # Get baseline lengths and angles
-        bl_vecs = self.get_ENU_bl_vecs() # ordering is the same as bl_array
+        bl_vecs = self.get_ENU_bl_vecs().T # ordering is the same as bl_array
         bl_len = np.sqrt(bl_vecs[0]**2. + bl_vecs[1]**2. + bl_vecs[2]**2.)
-        #theta = np.atan(bl_vecs[1] / bl_vecs[0]) * 180./np.pi
-        
         bl_idxs = [[0,]] # Put the index of the first bl in the first group
         
         # Loop over baselines and assign to suitable groups
