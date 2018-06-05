@@ -1,9 +1,9 @@
 import numpy as np
-import md5
-import yaml
+import md5, yaml
 from conversions import Cosmo_Conversions
 import operator
 from hera_cal import redcal
+from hera_pspec import uvpspec_utils as uvputils
 import itertools
 import argparse
 
@@ -66,26 +66,38 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
     ----------
     bls : list of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]
 
-    exclude_auto_bls: boolean, if True, exclude all baselines crossed with itself from the final blpairs list
+    exclude_auto_bls: bool, optional
+        If True, exclude all baselines crossed with itself from the final 
+        blpairs list. Default: False.
 
-    exclude_permutations : boolean, if True, exclude permutations and only form combinations of the bls list.
-        For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, but makes this example clearer)
-        and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
-        If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
-        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.   
+    exclude_permutations : bool, optional
+        If True, exclude permutations and only form combinations of the bls 
+        list. Default: False.
         
-    group : boolean, optional
-        if True, group each consecutive Nblps_per_group blpairs into sub-lists
+        For example, if bls = [1, 2, 3] (note this isn't the proper form of 
+        bls, but makes this example clearer) and exclude_permutations = False, 
+        then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
+        
+        If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 
+        23, 33]. Furthermore, if exclude_auto_bls = True then 11, 22, and 33 
+        would additionally be excluded.
+        
+    group : bool, optional
+        if True, group each consecutive Nblps_per_group blpairs into sub-lists.
 
-    Nblps_per_group : integer, number of baseline-pairs to put into each sub-group
+    Nblps_per_group : int
+        Number of baseline-pairs to put into each sub-group.
 
     Returns (bls1, bls2, blpairs)
     -------
-    bls1 : list of baseline tuples from the zeroth index of the blpair
+    bls1 : list of tuples 
+        List of baseline tuples from the zeroth index of the blpair.
 
-    bls2 : list of baseline tuples from the first index of the blpair
+    bls2 : list of tuples
+        List of baseline tuples from the first index of the blpair.
 
-    blpairs : list of blpair tuples
+    blpairs : list of tuples
+        List of blpair tuples.
     """
     # assert form
     assert isinstance(bls, list) and isinstance(bls[0], tuple), "bls must be fed as list of baseline tuples"
@@ -131,11 +143,13 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
     return bls1, bls2, blpairs
 
 
-def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=True, 
-              exclude_permutations=True, group=False, Nblps_per_group=1, bl_len_range=(0, 1e10)):
+def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, 
+              xant_flag_thresh=0.95, exclude_auto_bls=True, 
+              exclude_permutations=True, group=False, Nblps_per_group=1, 
+              bl_len_range=(0, 1e10)):
     """
-    Use hera_cal.redcal to get matching redundant baselines groups from uvd1 and uvd2
-    within the specified baseline tolerance, not including flagged ants.
+    Use hera_cal.redcal to get matching redundant baselines groups from uvd1 
+    and uvd2 within the specified baseline tolerance, not including flagged ants.
 
     Parameters
     ----------
@@ -284,6 +298,70 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         blpairs.extend(blps)
 
     return baselines1, baselines2, blpairs, xants1, xants2
+
+
+def group_redundant(bls=None, blpairs=None, bl_tol=1.0, bl_len_range=(0, 1e10)):
+    """
+    Take an ungrouped list of baselines or baseline pairs and group into 
+    redundant sets.
+    
+    Parameters
+    ----------
+    bls : list of tuples/ints, optional
+        List of baseline tuples or integers to group. (Use either this or the 
+        blpairs argument.)
+    
+    blpairs : list of tuples/ints, optional
+        List of baseline-pair tuples or integers to group.
+    
+    bl_tol : float, optional
+        Baseline-vector redundancy tolerance in meters.
+    
+    bl_len_range : tuple of float, optional
+        Tuple containing minimum baseline length and maximum baseline length 
+        [meters] to keep in baseline type selection.
+    
+    Returns
+    -------
+    
+    """
+    raise NotImplementedError("Pending changes in pyuvdata.")
+    
+    if bls is None and blpairs is None:
+        raise ValueError("Must specify either bls or blpairs.")
+    
+    # Convert bls or blpairs to standardized integer format
+    if bls is not None:
+        assert isinstance(bls, list), \
+            "Must pass bls as a list of tuples/integers."
+        
+        # Convert bl tuples to integers
+        _bls = []
+        for _bl in bls:
+            if isinstance(_bl, tuple): _bl = uvputils._antnums_to_bl(_bl)
+            _bls.append(_bl)
+        bls = np.unique(_bls) # Get only unique bls
+        
+    else:
+        assert isinstance(blpairs, list), \
+            "Must pass blpairs as a list of tuples/integers."
+        
+        # Convert blpair tuples to integers
+        _blps = []
+        for _blp in blpairs:
+            if isinstance(_blp, tuple): _blp = uvputils._antnums_to_blpair(_blp)
+            _blps.append(_blp)
+        blpairs = np.unique(_blps) # Get only unique blpairs
+        
+        # Split blpairs list into 2 baseline lists
+        bls1 = np.floor(blpairs / 1e6).astype(int)
+        bls2 = (blpairs - bls1).astype(int)
+        bls_unique = np.unique(np.concatenate(bls1, bls2))
+    
+    # get reds
+    #reds = redcal.get_pos_reds(antpos, bl_error_tol=bl_tol, low_hi=True)
+    #FIXME: This needs to wait for Nick's PR on pyuvdata to get antenna 
+    # positions without needing to load a data file
 
 
 def get_delays(freqs):
