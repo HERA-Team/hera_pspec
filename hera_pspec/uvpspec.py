@@ -275,7 +275,53 @@ class UVPSpec(object):
             blp_avg_sep[inds] = avg_sep
 
         return blp_avg_sep
-
+    
+    
+    def get_redundant_groups(self, bl_tol=1.0):
+        """
+        Get a list of redundant baseline groups within this UVPSpec object. 
+        Baselines are classed as redundant if they have baseline vectors that 
+        match within some tolerance.
+        
+        Parameters
+        ----------
+        bl_tol : float, optional
+            Baseline-vector redundancy tolerance in meters. Default: 1.0.
+        
+        """
+        bls = self.bl_array # unique baselines in this object
+        
+        # Get baseline lengths and angles
+        bl_vecs = self.get_ENU_bl_vecs() # ordering is the same as bl_array
+        bl_len = np.sqrt(bl_vecs[0]**2. + bl_vecs[1]**2. + bl_vecs[2]**2.)
+        #theta = np.atan(bl_vecs[1] / bl_vecs[0]) * 180./np.pi
+        
+        bl_idxs = [[0,]] # Put the index of the first bl in the first group
+        
+        # Loop over baselines and assign to suitable groups
+        for i in range(1, bls.size):
+            found_group = False
+            
+            # Loop over existing groups
+            for j, grp in enumerate(bl_idxs):
+                # Add to group if |x_i - x_j| < bl_tol for all x,y,z
+                if np.all(np.abs(bl_vecs[grp[0]] - bl_vecs[i]) <= bl_tol):
+                    bl_idxs[j].append(i)
+                    found_group = True
+                    break
+            
+            # If no suitable group was found, add to a new one
+            if not found_group: bl_idxs.append([i,])
+            
+        # Build list of bl IDs from the bl_idxs list
+        blgroups = [[bls[i] for i in grp] for grp in bl_idxs]
+        
+        # Get mean baseline length within this group
+        avg_bl_len = [np.mean([bl_len[i] for i in grp]) for grp in bl_idxs]
+        
+        return blgroups, avg_bl_len
+    
+    
     def get_kperps(self, spw, little_h=True):
         """
         Get transverse (perpendicular) cosmological wavevector for each
