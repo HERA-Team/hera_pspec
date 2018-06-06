@@ -532,7 +532,7 @@ class PSpecData(object):
             self.R = self.I
         elif R_matrix == "iC":
             self.R = self.iC
-        elif R_matrix == "diagonal":
+        elif R_matrix == "identity_with_flags"
             self.R = self.diag_inv_covar
         else:
             self.R = R_matrix
