@@ -525,13 +525,14 @@ class PSpecData(object):
         R_matrix : string or matrix
             If set to "identity", sets R = I
             If set to "iC", sets R = C^-1
+            If set to "identity_with_flags", sets R = diagonal according to pspecdata weights
             Otherwise, accepts a user inputted dictionary
         """
         if R_matrix == "identity":
             self.R = self.I
         elif R_matrix == "iC":
             self.R = self.iC
-        elif R_matrix == "identity_with_flags"
+        elif R_matrix == "diagonal":
             self.R = self.diag_inv_covar
         else:
             self.R = R_matrix
