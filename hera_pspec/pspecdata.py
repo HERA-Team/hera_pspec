@@ -516,11 +516,13 @@ class PSpecData(object):
         """
         for k in d: self._iC[k] = d[k]
 
-    def diag_inv_covar(self, key, diag=None):
+    def diag_inv_covar(self, key):
         """
         Returns diagonal inverse covariance. If the diagonal is not specified
         explicitly, this will use the weights associated with the datasets,
         averaged over time.
+
+        If no weights are provided, this defaults to identity weighting
 
         Parameters
         ----------
@@ -529,26 +531,22 @@ class PSpecData(object):
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
 
-        diag : float, array-like
-            Array containing elements of the diagonal. Default: none, which
-            then assumes 1/<weights>_t, where <weights>_t are the weights
-            that came with the input data, averaged over time.
-
         Returns
         -------
         diag_inv_covar : array_like
             Inverse diagonal covariance matrix, dimension (Nfreqs, Nfreqs).
         """
+
         assert isinstance(key, tuple)
         # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
 
         if not self._diag_inv_covar.has_key(key):
-            if diag == None:
-                self._diag_inv_covar[key] = np.diag(np.mean(self.w(key), axis=1))
+            if (self.w(key) == None).any():
+                self._diag_inv_covar[key] = np.identity(self.spw_Nfreqs)
             else:
-                self._diag_inv_covar[key] = 1. / np.diag(diag)
+                self._diag_inv_covar[key] = np.diag(np.mean(self.w(key), axis=1))
         return self._diag_inv_covar[key]
     
     def set_R(self, R_matrix):
@@ -560,13 +558,14 @@ class PSpecData(object):
         R_matrix : string or matrix
             If set to "identity", sets R = I
             If set to "iC", sets R = C^-1
+            If set to "identity_with_flags", sets R = diagonal according to pspecdata weights
             Otherwise, accepts a user inputted dictionary
         """
         if R_matrix == "identity":
             self.R = self.I
         elif R_matrix == "iC":
             self.R = self.iC
-        elif R_matrix == "identity_with_flags"
+        elif R_matrix == "diagonal":
             self.R = self.diag_inv_covar
         else:
             self.R = R_matrix
