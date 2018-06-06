@@ -247,8 +247,7 @@ class PSpecData(object):
             keys will be removed. Default: None.
         """
         if keys is None:
-            self._C, self._I, self._iC = {}, {}, {}
-            self._iCt = {}
+            self._C, self._I, self._iC, self._diag_inv_covar = {}, {}, {}, {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -256,6 +255,8 @@ class PSpecData(object):
                 try: del(self._I[k])
                 except(KeyError): pass
                 try: del(self._iC[k])
+                except(KeyError): pass
+                try: del(self._diag_inv_covar[k])
                 except(KeyError): pass
 
     def dset_idx(self, dset):
@@ -508,6 +509,41 @@ class PSpecData(object):
             self.iC().
         """
         for k in d: self._iC[k] = d[k]
+
+    def diag_inv_covar(self, key, diag=None):
+        """
+        Returns diagonal inverse covariance. If the diagonal is not specified
+        explicitly, this will use the weights associated with the datasets,
+        averaged over time.
+
+        Parameters
+        ----------
+        key : tuple
+            Tuple containing indices of dataset and baselines. The first item
+            specifies the index (ID) of a dataset in the collection, while
+            subsequent indices specify the baseline index, in _key2inds format.
+
+        diag : float, array-like
+            Array containing elements of the diagonal. Default: none, which
+            then assumes 1/<weights>_t, where <weights>_t are the weights
+            that came with the input data, averaged over time.
+
+        Returns
+        -------
+        diag_inv_covar : array_like
+            Inverse diagonal covariance matrix, dimension (Nfreqs, Nfreqs).
+        """
+        assert isinstance(key, tuple)
+        # parse key
+        dset, bl = self.parse_blkey(key)
+        key = (dset,) + (bl,)
+
+        if not self._diag_inv_covar.has_key(key):
+            if diag == None:
+                self._diag_inv_covar[key] = np.diag(np.mean(self.w(key), axis=1))
+            else:
+                self._diag_inv_covar[key] = 1. / np.diag(diag)
+        return self._diag_inv_covar[key]
     
     def set_R(self, R_matrix):
         """
@@ -524,6 +560,8 @@ class PSpecData(object):
             self.R = self.I
         elif R_matrix == "iC":
             self.R = self.iC
+        elif R_matrix == "identity_with_flags"
+            self.R = self.diag_inv_covar
         else:
             self.R = R_matrix
     
