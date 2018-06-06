@@ -784,6 +784,77 @@ class Test_PSpecData(unittest.TestCase):
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
 
+    def test_diag_inv_covar(self):
+        # generate ds and weights
+        uvd = copy.deepcopy(self.uvd)
+        test_wgts = copy.deepcopy(self.uvd)
+        test_wgts.data_array = np.ones_like((test_wgts.data_array), dtype=np.float)
+        Nfreq = uvd.data_array.shape[2]
+
+        # Basic test of shape
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[test_wgts, test_wgts], beam=self.bm)
+        test_R = ds.diag_inv_covar((1, 37, 38, 'XX'))
+        self.assertEqual(test_R.shape, (Nfreq, Nfreq))
+
+        # First test that the flagging option does nothing if there are no flags (i.e., all weights equal one)
+        bls1 = [(24, 25)]
+        bls2 = [(37, 38)]
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[test_wgts, test_wgts], beam=self.bm, labels=['red', 'blue'])
+        uvp_unflagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
+        uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
+                                little_h=True, verbose=False)
+
+        qe_unflagged = uvp_unflagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+
+        # assert answers are same to within 0.1%
+        nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
+
+        # Test that when flagged, the data within a channel really don't have any effect on the final result
+        test_wgts_flagged = copy.deepcopy(test_wgts)
+        test_wgts_flagged.data_array[:,:,40:60] = 0. # Flag 20 channels
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[test_wgts_flagged, test_wgts_flagged], beam=self.bm)
+        uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
+                                little_h=True, verbose=False)
+
+        uvd.data_array[:,:,40:60] *= 9234.913
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[test_wgts_flagged, test_wgts_flagged], beam=self.bm)
+        uvp_flagged_mod = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
+                                little_h=True, verbose=False)
+
+        qe_flagged_mod = uvp_flagged_mod.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]        
+
+        # assert answers are same to within 0.1%
+        nt.assert_true(np.isclose(np.real(qe_flagged_mod)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
+
+        # Test below commented out because this sort of aggressive symmetrization is not yet implemented.
+        # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2) 
+        # # is equivalent to flagging for both x1 and x2.
+        # test_wgts_flagged = copy.deepcopy(test_wgts)
+        # test_wgts_flagged.data_array[:,:,40:60] = 0. # Flag 20 channels
+        # ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[test_wgts_flagged, test_wgts_flagged], beam=self.bm)
+        # print "mode alpha"
+        # uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
+        #                         little_h=True, verbose=False)
+        # ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, test_wgts_flagged], beam=self.bm)
+        # print "mode beta"
+        # uvp_flagged_asymm = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
+        #                         little_h=True, verbose=False)
+
+        # qe_flagged_asymm = uvp_flagged_asymm .get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        # qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+
+        # #print np.real(qe_flagged_asymm)/np.real(qe_flagged)
+
+        # # assert answers are same to within 3%
+        # nt.assert_true(np.isclose(np.real(qe_flagged_asymm)/np.real(qe_flagged), 1, atol=0.03, rtol=0.03).all())
+
+
+
+        print uvd.data_array.shape
+
     def test_validate_blpairs(self):
         # test exceptions
         uvd = copy.deepcopy(self.uvd)
