@@ -253,8 +253,7 @@ class PSpecData(object):
             keys will be removed. Default: None.
         """
         if keys is None:
-            self._C, self._I, self._iC = {}, {}, {}
-            self._iCt = {}
+            self._C, self._I, self._iC, self._diag_inv_covar = {}, {}, {}, {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -262,6 +261,8 @@ class PSpecData(object):
                 try: del(self._I[k])
                 except(KeyError): pass
                 try: del(self._iC[k])
+                except(KeyError): pass
+                try: del(self._diag_inv_covar[k])
                 except(KeyError): pass
 
     def dset_idx(self, dset):
@@ -530,6 +531,8 @@ class PSpecData(object):
             self.R = self.I
         elif R_matrix == "iC":
             self.R = self.iC
+        elif R_matrix == "identity_with_flags"
+            self.R = self.diag_inv_covar
         else:
             self.R = R_matrix
 
