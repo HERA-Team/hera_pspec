@@ -516,6 +516,39 @@ class PSpecData(object):
         """
         for k in d: self._iC[k] = d[k]
 
+    def diag_inv_covar(self, key):
+        """
+        Returns diagonal inverse covariance. If the diagonal is not specified
+        explicitly, this will use the weights associated with the datasets,
+        averaged over time.
+
+        If no weights are provided, this defaults to identity weighting
+
+        Parameters
+        ----------
+        key : tuple
+            Tuple containing indices of dataset and baselines. The first item
+            specifies the index (ID) of a dataset in the collection, while
+            subsequent indices specify the baseline index, in _key2inds format.
+
+        Returns
+        -------
+        diag_inv_covar : array_like
+            Inverse diagonal covariance matrix, dimension (Nfreqs, Nfreqs).
+        """
+
+        assert isinstance(key, tuple)
+        # parse key
+        dset, bl = self.parse_blkey(key)
+        key = (dset,) + (bl,)
+
+        if not self._diag_inv_covar.has_key(key):
+            if (self.w(key) == None).any():
+                self._diag_inv_covar[key] = np.identity(self.spw_Nfreqs)
+            else:
+                self._diag_inv_covar[key] = np.diag(np.mean(self.w(key), axis=1))
+        return self._diag_inv_covar[key]
+    
     def set_R(self, R_matrix):
         """
         Set the weighting matrix R for later use in q_hat.
@@ -532,7 +565,7 @@ class PSpecData(object):
             self.R = self.I
         elif R_matrix == "iC":
             self.R = self.iC
-        elif R_matrix == "identity_with_flags"
+        elif R_matrix == "diagonal":
             self.R = self.diag_inv_covar
         else:
             self.R = R_matrix
