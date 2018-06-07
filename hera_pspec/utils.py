@@ -133,7 +133,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
 
 
 def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=True, 
-              exclude_permutations=True, group=False, Nblps_per_group=1, bl_len_range=(0, 1e10)):
+              exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10)):
     """
     Use hera_cal.redcal to get matching redundant baselines groups from uvd1 and uvd2
     within the specified baseline tolerance, not including flagged ants.
@@ -166,10 +166,9 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33]. 
         Furthermore, if exclude_auto_bls = True then 11, 22, and 33 are excluded.   
         
-    group : boolean, optional
-        if True, group each consecutive Nblps_per_group blpairs into sub-lists
-
-    Nblps_per_group : integer, number of baseline-pairs to put into each sub-group
+    Nblps_per_group : integer
+        Number of baseline-pairs to put into each sub-group. No grouping if None.
+        Default: None
 
     bl_len_range : tuple of float, optional
         Tuple containing minimum baseline length and maximum baseline length [meters]
@@ -274,7 +273,7 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         blps = zip(bls1, bls2)
 
         # group if desired
-        if group:
+        if Nblps_per_group is not None:
             Ngrps = int(np.ceil(float(len(blps)) / Nblps_per_group))
             bls1 = [bls1[Nblps_per_group*i:Nblps_per_group*(i+1)] for i in range(Ngrps)]
             bls2 = [bls2[Nblps_per_group*i:Nblps_per_group*(i+1)] for i in range(Ngrps)]
