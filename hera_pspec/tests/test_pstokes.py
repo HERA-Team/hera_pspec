@@ -75,12 +75,16 @@ class Test_pstokes:
         # check except for same polarizations
         nt.assert_raises(AssertionError, pstokes.construct_pstokes, dset1=uvd1, dset2=uvd1, pstokes='pI')
 
-    def test_choose_inp_dsets(self):
+    def test_filter_dset_on_stokes_pol(self):
         dsets = [self.uvd1, self.uvd2]
-        out = pstokes.choose_inp_dsets(dsets, 'pI')
+        out = pstokes.filter_dset_on_stokes_pol(dsets, 'pI')
         nt.assert_equal(out[0].polarization_array[0], -5)
         nt.assert_equal(out[1].polarization_array[0], -6)
-        nt.assert_raises(AssertionError, pstokes.choose_inp_dsets, dsets, 'pV')
+        nt.assert_raises(AssertionError, pstokes.filter_dset_on_stokes_pol, dsets, 'pV')
+        dsets = [self.uvd2, self.uvd1]
+        out2 = pstokes.filter_dset_on_stokes_pol(dsets, 'pI')
+        nt.assert_true(out == out2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -271,13 +271,13 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     return uvdS
 
 
-def choose_inp_dsets(dsets, pstokes):
+def filter_dset_on_stokes_pol(dsets, pstokes):
     """
     Given a list of UVData objects with dipole linear polarizations,
     and a desired output pstokes, return the two UVData objects from
     the input dsets that can be used in construct_pstokes to make 
     the desired pseudo-Stokes visibility. If a single UVData object 
-    has multiple polarizations, this function only uses its first.
+    has multiple polarizations, this function only considers its first.
 
     Parameters
     ----------
