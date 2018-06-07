@@ -1694,8 +1694,8 @@ class PSpecData(object):
 def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None, 
               spw_ranges=None, pol_pairs=None, blpairs=None, 
               input_data_weight='identity', norm='I', taper='none',
-              exclude_auto_bls=True, exclude_permutations=True, group=False, 
-              Nblps_per_group=1, bl_len_range=(0, 1e10), bl_error_tol=1.0, 
+              exclude_auto_bls=True, exclude_permutations=True, 
+              Nblps_per_group=None, bl_len_range=(0, 1e10), bl_error_tol=1.0, 
               beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True,
               overwrite=True, verbose=True, history=''):
     """
@@ -1716,7 +1716,8 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
 
     dset_labels : list
         List of strings to label the input datasets. These labels form
-        the psname of each UVPSpec object.
+        the psname of each UVPSpec object. Default is "dset0_x_dset1"
+        where 0 and 1 are replaced with the dset index in dsets.
 
     dset_pairs : list of len-2 integer tuples
         List of tuples specifying the dset pairs to use in OQE estimation.
@@ -1744,32 +1745,31 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
 
     input_data_weight : string
         Data weighting to use in OQE. See PSpecData.pspec for details.
+        Default: 'identity'
 
     norm : string
         Normalization scheme to use in OQE. See PSpecData.pspec for details.
+        Default: 'I'
 
     taper : string
         Tapering to apply to data in OQE. See PSpecData.pspec for details.
+        Default: 'none'
 
     exclude_auto_bls : boolean
         If blpairs is None, redundant baseline groups will be formed and
         all cross-multiplies will be constructed. In doing so, if
         exclude_auto_bls is True, eliminate all instances of a bl crossed 
-        with itself.
+        with itself. Default: True
 
     exclude_permutations : boolean
         If blpairs is None, redundant baseline groups will be formed and
         all cross-multiplies will be constructed. In doing so, if
         exclude_permutations is True, eliminates instances of
-        (bl_B, bl_A) if (bl_A, bl_B) also exists.
-
-    group : boolean
-        If True and blpairs is None, group the list of blpairs into 
-        subgroups. See utils.calc_reds() for details.
+        (bl_B, bl_A) if (bl_A, bl_B) also exists. Default: True
 
     Nblps_per_group : integer
-        If blpairs is None and group is True, this is the number of
-        baselinepairs in each subgroup.
+        If blpairs is None, group blpairs into sub-groups of baseline-pairs
+        of this size. See utils.calc_reds() for details. Default: None
 
     bl_len_range : len-2 float tuple
         A tuple containing the minimum and maximum baseline length to use
@@ -1899,7 +1899,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
                                        filter_blpairs=True,
                                        exclude_auto_bls=exclude_auto_bls,
                                        exclude_permutations=exclude_permutations,
-                                       group=group, Nblps_per_group=Nblps_per_group,
+                                       Nblps_per_group=Nblps_per_group,
                                        bl_len_range=bl_len_range)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
