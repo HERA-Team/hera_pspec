@@ -148,8 +148,7 @@ class Test_Utils(unittest.TestCase):
 
         # basic execution
         (bls1, bls2, blps, xants1,
-         xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True,
-                                   group=False)  
+         xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True)  
         nt.assert_equal(len(bls1), len(bls2), 15)
         nt.assert_equal(blps, zip(bls1, bls2))
         nt.assert_equal(xants1, xants2)
@@ -158,24 +157,24 @@ class Test_Utils(unittest.TestCase):
         # test xant_flag_thresh
         (bls1, bls2, blps, xants1,
          xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=True, exclude_permutations=True,
-                                   group=False, xant_flag_thresh=0.0)  
+                                   xant_flag_thresh=0.0)  
         nt.assert_equal(len(bls1), len(bls2), 0)
 
         # test bl_len_range
         (bls1, bls2, blps, xants1,
          xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True,
-                                   group=False, bl_len_range=(0, 15.0))  
+                                   bl_len_range=(0, 15.0))  
         nt.assert_equal(len(bls1), len(bls2), 12)
         (bls1, bls2, blps, xants1,
          xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=True, exclude_permutations=True,
-                                   group=False, bl_len_range=(0, 15.0))  
+                                   bl_len_range=(0, 15.0))  
         nt.assert_equal(len(bls1), len(bls2), 5)
         nt.assert_true(np.all([bls1[i] != bls2[i] for i in range(len(blps))]))
 
         # test grouping
         (bls1, bls2, blps, xants1,
          xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True,
-                                   group=True, Nblps_per_group=2)  
+                                   Nblps_per_group=2)  
         nt.assert_equal(len(blps), 10)
         nt.assert_true(isinstance(blps[0], list))
         nt.assert_equal(blps[0], [((24, 37), (25, 38)), ((24, 37), (24, 37))])
