@@ -1,6 +1,6 @@
 import nose.tools as nt
 from hera_pspec.data import DATA_PATH
-from hera_pspec import testing, uvpspec, conversions, pspecbeam
+from hera_pspec import testing, uvpspec, conversions, pspecbeam, utils
 import os
 from pyuvdata import UVData
 import numpy as np
