@@ -2,7 +2,7 @@
 import numpy as np
 import copy, operator, itertools
 from collections import OrderedDict as odict
-from hera_pspec import uvpspec, pspecdata, conversions, pspecbeam
+from hera_pspec import uvpspec, pspecdata, conversions, pspecbeam, utils
 from pyuvdata import UVData
 
 
@@ -158,7 +158,7 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
     # get red bls
-    bls1, bls2, _ = pspecdata.construct_blpairs(bls, exclude_auto_bls=True)
+    bls1, bls2, _ = utils.construct_blpairs(bls, exclude_auto_bls=True)
 
     # run pspec
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges, 
