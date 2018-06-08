@@ -335,6 +335,31 @@ class UVPSpec(object):
 
         return k_para
 
+    def get_blpairs(self):
+        """
+        Returns a list of all blpair tuples in the data_array.
+        """
+        return [self.blpair_to_antnums(blp) for blp in np.unique(self.blpair_array)]
+
+    def get_all_keys(self):
+        """
+        Returns a list of all possible tuple keys in the data_array, in the format:
+        
+        (spectral window, baseline-pair, polarization-string)
+        """
+        # get unique blpair tuples
+        blps = self.get_blpairs()
+
+        all_keys = []
+
+        # loop over spw and pols and add to keys
+        for spw in range(self.Nspws):
+            for p in self.pol_array:
+                pstr = uvutils.polnum2str(p)
+                all_keys.extend([(spw, blp, pstr) for blp in blps])
+
+        return all_keys
+
     def convert_to_deltasq(self, little_h=True, inplace=True):
         """
         Convert from P(k) to Delta^2(k) by multiplying by k^3 / (2pi^2).

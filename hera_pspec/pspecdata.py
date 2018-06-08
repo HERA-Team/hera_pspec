@@ -4,7 +4,7 @@ import pyuvdata
 import copy, operator, itertools
 from collections import OrderedDict as odict
 import hera_cal as hc
-from hera_pspec import uvpspec, utils, version
+from hera_pspec import uvpspec, utils, version, pspecbeam
 from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
 
@@ -1278,9 +1278,9 @@ class PSpecData(object):
             A list of spectral window channel ranges to select within the total 
             bandwidth of the datasets, each of which forms an independent power 
             spectrum estimate. Example: [(220, 320), (650, 775)].
-            Each tuple should contain a start and stop channel used to index 
-            the `freq_array` of each dataset. The default (None) is to use the 
-            entire band provided in each dataset.
+            Each tuple should contain a start (inclusive) and stop (exclusive) 
+            channel used to index the `freq_array` of each dataset. The default 
+            (None) is to use the entire band provided in each dataset.
         
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
@@ -1350,6 +1350,8 @@ class PSpecData(object):
         dset2 = self.dsets[self.dset_idx(dsets[1])]
 
         # assert form of bls1 and bls2
+        assert isinstance(bls1, list), "bls1 and bls2 must be fed as a list of antpair tuples"
+        assert isinstance(bls2, list), "bls1 and bls2 must be fed as a list of antpair tuples"
         assert len(bls1) == len(bls2), "length of bls1 must equal length of bls2"
         for i in range(len(bls1)):
             if isinstance(bls1[i], tuple):
@@ -1548,8 +1550,9 @@ class PSpecData(object):
                     nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
                     nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
 
-                    # take average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
-                    pol_ints.extend(np.mean([nsamp1, nsamp2], axis=0) * dset1.integration_time)
+                    # take inverse average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
+                    # inverse avg is done b/c nsamp_1 ~ 1/sigma_1 and nsamp_2 ~ 1/sigma_2 where sigma is a proxy for std of noise
+                    pol_ints.extend(1./np.mean([1./nsamp1.clip(1e-10, np.inf), 1./nsamp2.clip(1e-10, np.inf)], axis=0) * dset1.integration_time)
 
                     # combined weight is geometric mean
                     pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
@@ -1654,12 +1657,14 @@ class PSpecData(object):
     def rephase_to_dset(self, dset_index=0, inplace=True):
         """
         Rephase visibility data in self.dsets to the LST grid of dset[dset_index] 
-        using hera_cal.utils.lst_rephase. 
+        using hera_cal.utils.lst_rephase. Each integration in all other dsets is 
+        phased to the center of the corresponding LST bin (by index) in dset[dset_index].
 
-        Each integration in all other dsets are phased to the center of the 
-        corresponding LST bin (by index) in dset[dset_index].
+        Will only phase if the dataset's phase type is 'drift'. This is because the rephasing
+        algorithm assumes the data is drift-phased when applying phasor term.
 
-        Will only phase if the dataset's phase type is 'drift'.
+        Note that PSpecData.Jy_to_mK() must be run after rephase_to_dset(), if one intends
+        to use the former capability at any point.
 
         Parameters
         ----------
@@ -1745,6 +1750,45 @@ class PSpecData(object):
 
         if inplace is False:
             return dsets
+
+    def Jy_to_mK(self, beam=None):
+        """
+        Convert internal datasets from a Jy-scale to mK scale using a primary beam
+        model if available. Note that if you intend to rephase_to_dset(), Jy to mK conversion
+        must be done after that step.
+
+        Parameters
+        ----------
+        beam : 
+        """
+        # get all unique polarizations of all the datasets
+        pols = set(np.ravel([dset.polarization_array for dset in self.dsets]))
+
+        # assign beam
+        if beam is None:
+            beam = self.primary_beam
+        else:
+            if self.primary_beam is not None:
+                print "Warning: feeding a beam model when self.primary_beam already exists..."
+
+        # assert type of beam
+        assert isinstance(beam, pspecbeam.PSpecBeamBase), "beam model must be a subclass of pspecbeam.PSpecBeamBase"
+
+        # iterate over all pols and get conversion factors
+        factors = {}
+        for p in pols:
+            factors[p] = beam.Jy_to_mK(self.freqs, pol=p)
+
+        # iterate over datasets and apply factor
+        for i, dset in enumerate(self.dsets):
+            # check dset vis units
+            if dset.vis_units != 'Jy':
+                print "Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units)
+                continue
+            for j, p in enumerate(dset.polarization_array):
+                dset.data_array[:, :, :, j] *= factors[p][None, None, :]
+            dset.vis_units = 'mK'
+
 
 def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
     """
