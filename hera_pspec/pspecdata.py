@@ -1,12 +1,15 @@
 import numpy as np
 import aipy
-import pyuvdata
+from pyuvdata import UVData
 import copy, operator, itertools
 from collections import OrderedDict as odict
 import hera_cal as hc
-from hera_pspec import uvpspec, utils, version, pspecbeam
+from hera_pspec import uvpspec, utils, version, pspecbeam, container
 from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
+import datetime
+import time
+import argparse
 
 
 class PSpecData(object):
@@ -93,8 +96,8 @@ class PSpecData(object):
             wgts = _wgts
             
         # Convert input args to lists if possible
-        if isinstance(dsets, pyuvdata.UVData): dsets = [dsets,]
-        if isinstance(wgts, pyuvdata.UVData): wgts = [wgts,]
+        if isinstance(dsets, UVData): dsets = [dsets,]
+        if isinstance(wgts, UVData): wgts = [wgts,]
         if isinstance(labels, str): labels = [labels,]
         if wgts is None: wgts = [wgts,]
         if isinstance(dsets, tuple): dsets = list(dsets)
@@ -110,9 +113,9 @@ class PSpecData(object):
 
         # Check that everything is a UVData object
         for d, w in zip(dsets, wgts):
-            if not isinstance(d, pyuvdata.UVData):
+            if not isinstance(d, UVData):
                 raise TypeError("Only UVData objects can be used as datasets.")
-            if not isinstance(w, pyuvdata.UVData) and w is not None:
+            if not isinstance(w, UVData) and w is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "weights.")
 
@@ -165,8 +168,11 @@ class PSpecData(object):
 
         # Check if dsets are all the same shape along freq axis
         Nfreqs = [d.Nfreqs for d in self.dsets]
+        channel_widths = [d.channel_width for d in self.dsets]
         if np.unique(Nfreqs).size > 1:
             raise ValueError("all dsets must have the same Nfreqs")
+        if np.unique(channel_widths).size > 1:
+            raise ValueError("all dsets must have the same channel_widths")
 
         # Check shape along time axis
         Ntimes = [d.Ntimes for d in self.dsets]
@@ -222,7 +228,7 @@ class PSpecData(object):
         
         
         # get iterable
-        key = pyuvdata.utils.get_iterable(key)
+        key = uvutils.get_iterable(key)
         if isinstance(key, str):
             key = (key,)
 
@@ -1352,7 +1358,8 @@ class PSpecData(object):
         # assert form of bls1 and bls2
         assert isinstance(bls1, list), "bls1 and bls2 must be fed as a list of antpair tuples"
         assert isinstance(bls2, list), "bls1 and bls2 must be fed as a list of antpair tuples"
-        assert len(bls1) == len(bls2), "length of bls1 must equal length of bls2"
+        assert len(bls1) == len(bls2) and len(bls1) > 0, "length of bls1 must equal length of bls2 and be > 0"
+
         for i in range(len(bls1)):
             if isinstance(bls1[i], tuple):
                 assert isinstance(bls2[i], tuple), "bls1[{}] type must match bls2[{}] type".format(i, i)
@@ -1509,7 +1516,6 @@ class PSpecData(object):
                         pass
                     else:
                         if verbose: print("  Building G...")
-                        print key1, "---", key2
                         Gv = self.get_G(key1, key2)
                         Hv = self.get_H(key1, key2, taper=taper, sampling=sampling)
                         built_GH = True
@@ -1617,14 +1623,28 @@ class PSpecData(object):
         uvp.pol_array = np.array(spw_pol, np.int)
         uvp.Npols = len(spw_pol)
         uvp.scalar_array = np.array(sclr_arr)
-        uvp.channel_width = dset1.channel_width
+        uvp.channel_width = dset1.channel_width  # all dsets are validated to agree
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
-        uvp.history = dset1.history + dset2.history + history
+        filename1 = getattr(dset1.extra_keywords, 'filename', None)
+        filename2 = getattr(dset2.extra_keywords, 'filename', None)
+        label1 = self.labels[self.dset_idx(dsets[0])]
+        label2 = self.labels[self.dset_idx(dsets[1])]
+        uvp.labels = sorted(set([label1, label2]))
+        uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int) \
+                            * uvp.labels.index(label1)
+        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int) \
+                            * uvp.labels.index(label2)
+        uvp.labels = np.array(uvp.labels, np.str)
+        uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
+                      "dataset1: filename: {}, label: {}, history:\n{}\n{}\n" \
+                      "dataset2: filename: {}, label: {}, history:\n{}\n{}\n" \
+                      "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20, 
+                                filename1, label1, dset1.history, '-'*20, 
+                                filename2, label2, dset2.history, '-'*20)
         uvp.taper = taper
         uvp.norm = norm
-        uvp.git_hash = version.git_hash
         
         if self.primary_beam is not None:
             # attach cosmology
@@ -1634,14 +1654,6 @@ class PSpecData(object):
             uvp.OmegaP, uvp.OmegaPP = self.primary_beam.get_Omegas(uvp.pol_array)
             if hasattr(self.primary_beam, 'filename'):
                 uvp.beamfile = self.primary_beam.filename
-        if hasattr(dset1.extra_keywords, 'filename'):
-            uvp.filename1 = dset1.extra_keywords['filename']
-        if hasattr(dset2.extra_keywords, 'filename'):
-            uvp.filename2 = dset2.extra_keywords['filename']
-        lbl1 = self.labels[self.dset_idx(dsets[0])]
-        lbl2 = self.labels[self.dset_idx(dsets[1])]
-        if lbl1 is not None: uvp.label1 = lbl1
-        if lbl2 is not None: uvp.label2 = lbl2
 
         # fill data arrays
         uvp.data_array = data_array
@@ -1789,79 +1801,321 @@ class PSpecData(object):
                 dset.data_array[:, :, :, j] *= factors[p][None, None, :]
             dset.vis_units = 'mK'
 
+    def trim_dset_lsts(self, lst_tol=6):
+        """
+        Assuming all datasets in self.dsets are locked to the same LST grid (but
+        each may have a constant offset), trim LSTs from each dset that aren't found
+        in all other dsets (within some decimal tolerance specified by lst_tol). 
 
-def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
+        Warning: this edits the data in dsets in-place, and is not reversible.
+
+        Parameters
+        ----------
+        lst_tol : float
+            Decimal tolerance [radians] for comparing float-valued LST bins.
+        """
+        # ensure each dset has same dLST within tolerance / Ntimes
+        dlst = np.median(np.diff(np.unique(self.dsets[0].lst_array)))
+        for dset in self.dsets:
+            _dlst = np.median(np.diff(np.unique(dset.lst_array)))
+            if not np.isclose(dlst, _dlst, atol=10**(-lst_tol) / dset.Ntimes):
+                print "not all datasets in self.dsets are on the same LST grid, cannot LST trim."
+                return
+
+        # get lst array of each dataset and turn into string and add to common_lsts
+        lst_arrs = []
+        common_lsts = set()
+        for i, dset in enumerate(self.dsets):
+            lsts = ["{lst:0.{tol}f}".format(lst=l, tol=lst_tol) for l in dset.lst_array]
+            lst_arrs.append(lsts)
+            if i == 0:
+                common_lsts = common_lsts.union(set(lsts))
+            else:
+                common_lsts = common_lsts.intersection(set(lsts))
+
+        # iterate through dsets and trim off integrations whose lst isn't in common_lsts
+        for i, dset in enumerate(self.dsets):
+            trim_inds = np.array([l not in common_lsts for l in lst_arrs[i]])
+            if np.any(trim_inds):
+                self.dsets[i].select(times=dset.time_array[~trim_inds])
+
+
+def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None, 
+              spw_ranges=None, pol_pairs=None, blpairs=None, 
+              input_data_weight='identity', norm='I', taper='none',
+              exclude_auto_bls=True, exclude_permutations=True, 
+              Nblps_per_group=None, bl_len_range=(0, 1e10), bl_error_tol=1.0, 
+              beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True,
+              overwrite=True, verbose=True, history=''):
     """
-    Construct a list of baseline-pairs from a baseline-group. This function can be used to easily convert a 
-    single list of baselines into the input needed by PSpecData.pspec(bls1, bls2, ...).
+    Create a PSpecData object, run OQE delay spectrum estimation and write 
+    results to a PSpecContainer object.
 
     Parameters
     ----------
-    bls : list of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]
+    dsets : list
+        Contains UVData objects or string filepaths to miriad files
 
-    exclude_auto_bls: boolean, if True, exclude all baselines crossed with itself from the final blpairs list
+    filename : str
+        Output filepath for HDF5 PSpecContainer object
 
-    exclude_permutations : boolean, if True, exclude permutations and only form combinations of the bls list.
-        For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, but makes this example clearer)
-        and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
-        If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
-        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.   
-        
-    group : boolean, optional
-        if True, group each consecutive Nblps_per_group blpairs into sub-lists
+    groupname : str
+        Groupname of the subdirectory in the HDF5 container to store the 
+        UVPSpec objects in. Default is a concatenation the dset_labels.
 
-    Nblps_per_group : integer, number of baseline-pairs to put into each sub-group
+    dset_labels : list
+        List of strings to label the input datasets. These labels form
+        the psname of each UVPSpec object. Default is "dset0_x_dset1"
+        where 0 and 1 are replaced with the dset index in dsets.
 
-    Returns (bls1, bls2, blpairs)
+    dset_pairs : list of len-2 integer tuples
+        List of tuples specifying the dset pairs to use in OQE estimation.
+        Default is to form all N_choose_2 pairs from input dsets.
+
+    spw_ranges : list of len-2 integer tuples
+        List of tuples specifying the spectral window range. See
+        PSpecData.pspec() for details. Default is the entire band.
+
+    pol_pairs : list of len-2 tuples
+        List of string or integer tuples specifying the polarization
+        pairs to use in OQE with each dataset pair in dset_pairs.
+        Default is to get all unique pols in the datasets and to form
+        all auto-pol pairs. See PSpecData.pspec() for details.
+
+    blpairs : list of tuples
+        List of tuples specifying the desired baseline pairs to use in OQE.
+        Ex. [((1, 2), (3, 4)), ((1, 2), (5, 6)), ...]
+        The first bl in a tuple is drawn from zeroth index of a tuple in 
+        dset_pairs, while the second bl is drawn from the first index.
+        See pspecdata.construct_blpairs for details. If None, the default
+        behavior is to use the antenna positions in each UVData object to 
+        construct lists of redundant baseline groups to to take all
+        cross-multiplies in each redundant baseline group.
+
+    input_data_weight : string
+        Data weighting to use in OQE. See PSpecData.pspec for details.
+        Default: 'identity'
+
+    norm : string
+        Normalization scheme to use in OQE. See PSpecData.pspec for details.
+        Default: 'I'
+
+    taper : string
+        Tapering to apply to data in OQE. See PSpecData.pspec for details.
+        Default: 'none'
+
+    exclude_auto_bls : boolean
+        If blpairs is None, redundant baseline groups will be formed and
+        all cross-multiplies will be constructed. In doing so, if
+        exclude_auto_bls is True, eliminate all instances of a bl crossed 
+        with itself. Default: True
+
+    exclude_permutations : boolean
+        If blpairs is None, redundant baseline groups will be formed and
+        all cross-multiplies will be constructed. In doing so, if
+        exclude_permutations is True, eliminates instances of
+        (bl_B, bl_A) if (bl_A, bl_B) also exists. Default: True
+
+    Nblps_per_group : integer
+        If blpairs is None, group blpairs into sub-groups of baseline-pairs
+        of this size. See utils.calc_reds() for details. Default: None
+
+    bl_len_range : len-2 float tuple
+        A tuple containing the minimum and maximum baseline length to use
+        in utils.calc_reds call. Only used if blpairs is None.
+
+    bl_error_tol : float
+        Baseline vector error tolerance when constructing redundant groups.
+
+    beam : PSpecBeam object, UVBeam object or string
+        Beam model to use in OQE. Can be a PSpecBeam object or a filepath
+        to a beamfits healpix map (see pyuvdata.UVBeam)
+
+    cosmo : conversions.Cosmo_Conversions object
+        A Cosmo_Conversions object to use as the cosmology when normalizing
+        the power spectra. Default is a Planck cosmology. 
+        See conversions.Cosmo_Conversions for details.
+    
+    rephase_to_dset : integer
+        Integer index of the anchor dataset when rephasing all other datasets.
+        This adds a phasor correction to all others dataset to phase the 
+        visibility data to the LST-grid of this dataset. Default behavior
+        is no rephasing.
+
+    Jy2mK : boolean
+        If True, use the beam model provided to convert the units of each
+        dataset from Jy to milli-Kelvin. If the visibility data are not in Jy,
+        this correction is not applied.
+
+    overwrite : boolean
+        If True, overwrite outputs if they exist on disk.
+
+    verbose : boolean
+        If True, report feedback to standard output.
+
+    history : str
+        String to add to history of each UVPSpec object.
+
+    Returns
     -------
-    bls1 : list of baseline tuples from the zeroth index of the blpair
-
-    bls2 : list of baseline tuples from the first index of the blpair
-
-    blpairs : list of blpair tuples
+    psc : PSpecContainer object
+        A container for the output UVPSpec objects, which themselves contain the 
+        power spectra and their metadata.
     """
-    # assert form
-    assert isinstance(bls, list) and isinstance(bls[0], tuple), "bls must be fed as list of baseline tuples"
+    # type check
+    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
+    if isinstance(dsets, (str, np.str, UVData)):
+        dsets = [dsets]
+    assert isinstance(dsets, (list, tuple, np.ndarray)), err_msg
+    Ndsets = len(dsets)
 
-    # form blpairs w/o explicitly forming auto blpairs
-    # however, if there are repeated bl in bls, there will be auto bls in blpairs
-    if exclude_permutations:
-        blpairs = list(itertools.combinations(bls, 2))
+    # polarizations check
+    if pol_pairs is not None:
+        pols = sorted(set(np.ravel(pol_pairs)))
     else:
-        blpairs = list(itertools.permutations(bls, 2))
+        pols = None
 
-    # explicitly add in auto baseline pairs
-    blpairs.extend(zip(bls, bls))
+    # baselines check
+    if blpairs is not None:
+        err_msg = "blpairs must be fed as a list of baseline-pair tuples, Ex: [((1, 2), (3, 4)), ...]"
+        assert isinstance(blpairs, list), err_msg
+        assert np.all([isinstance(blp, tuple) for blp in blpairs]), err_msg
+        bls1 = [blp[0] for blp in blpairs]
+        bls2 = [blp[1] for blp in blpairs]
+        bls = sorted(set(bls1 + bls2))
+    else:
+        # get redundant baseline groups
+        bls = None
 
-    # iterate through and eliminate all autos if desired
-    if exclude_auto_bls:
-        new_blpairs = []
-        for blp in blpairs:
-            if blp[0] != blp[1]:
-                new_blpairs.append(blp)
-        blpairs = new_blpairs
+    # load data if fed as filepaths
+    if isinstance(dsets[0], (str, np.str)):
+        # load data into UVData objects if fed as list of strings
+        t0 = time.time()
+        _dsets = []
+        for d in dsets:
+            uvd = UVData()
+            uvd.read_miriad(d, ant_pairs_nums=bls, polarizations=pols)
+            _dsets.append(uvd)
+        dsets = _dsets
+        utils.log("Loaded data in %1.1f sec." % (time.time() - t0), lvl=1, verbose=verbose)
+    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
+    assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
-    # create bls1 and bls2 list
-    bls1 = map(lambda blp: blp[0], blpairs)
-    bls2 = map(lambda blp: blp[1], blpairs)
+    # configure polarization
+    if pol_pairs is None:
+        unique_pols = reduce(operator.and_, [set(d.polarization_array) for d in dsets])
+        pol_pairs = [(up, up) for up in unique_pols]
 
-    # group baseline pairs if desired
-    if group:
-        Nblps = len(blpairs)
-        Ngrps = int(np.ceil(float(Nblps) / Nblps_per_group))
-        new_blps = []
-        new_bls1 = []
-        new_bls2 = []
-        for i in range(Ngrps):
-            new_blps.append(blpairs[i*Nblps_per_group:(i+1)*Nblps_per_group])
-            new_bls1.append(bls1[i*Nblps_per_group:(i+1)*Nblps_per_group])
-            new_bls2.append(bls2[i*Nblps_per_group:(i+1)*Nblps_per_group])
+    assert len(pol_pairs) > 0, "no pol_pairs specified"
 
-        bls1 = new_bls1
-        bls2 = new_bls2
-        blpairs = new_blps
+    # load beam
+    if isinstance(beam, (str, np.str)):
+        beam = pspecbeam.PSpecBeamUV(beam, cosmo=cosmo)
 
-    return bls1, bls2, blpairs
+    # beam and cosmology check
+    if beam is not None:
+        assert isinstance(beam, pspecbeam.PSpecBeamBase)
+        if cosmo is not None:
+            beam.cosmo = cosmo
+
+    # package into PSpecData
+    ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], beam=beam)
+
+    # Rephase if desired
+    if rephase_to_dset is not None:
+        ds.rephase_to_dset(rephase_to_dset)
+
+    # perform Jy to mK conversion if desired
+    if Jy2mK:
+        ds.Jy_to_mK()
+
+    # Construct dataset pairs to operate on
+    if dset_pairs is None:
+        dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+    if dset_labels is None:
+        dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
+    err_msg = "dset_pairs must be fed as a list of len-2 integer tuples"
+    assert isinstance(dset_pairs, list), err_msg
+    assert np.all([isinstance(d, tuple) for d in dset_pairs]), err_msg
+
+    # Get baseline-pairs to use for each dataset pair
+    bls1_list, bls2_list = [], []
+    for i, dsetp in enumerate(dset_pairs):
+        # get bls if blpairs not fed
+        if blpairs is None:
+            (bls1, bls2, blps, xants1, 
+             xants2) = utils.calc_reds(dsets[dsetp[0]], dsets[dsetp[1]],
+                                       filter_blpairs=True,
+                                       exclude_auto_bls=exclude_auto_bls,
+                                       exclude_permutations=exclude_permutations,
+                                       Nblps_per_group=Nblps_per_group,
+                                       bl_len_range=bl_len_range)
+            bls1_list.append(bls1)
+            bls2_list.append(bls2)
+
+        # ensure fed blpairs exist in each of the datasets
+        else:
+            dset1_bls = dsets[dsetp[0]].get_antpairs()
+            dset2_bls = dsets[dsetp[1]].get_antpairs()
+            _bls1 = []
+            _bls2 = []
+            for _bl1, _bl2 in zip(bls1, bls2):
+                if (_bl1 in dset1_bls or _bl1[::-1] in dset1_bls) \
+                    and (_bl2 in dset2_bls or _bls2[::-1] in dset2_bls):
+                    _bls1.append(_bl1)
+                    _bls2.append(_bl2)
+
+            bls1_list.append(_bls1)
+            bls2_list.append(_bls2)
+
+    # Open PSpecContainer to store all output in
+    psc = container.PSpecContainer(filename, mode='rw')
+
+    # assign group name
+    if groupname is None:
+        groupname = '_'.join(dset_labels)
+
+    # Loop over dataset combinations
+    for i, dset_idxs in enumerate(dset_pairs):
+
+        # Run OQE
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, spw_ranges=spw_ranges,
+                       input_data_weight=input_data_weight, norm=norm, taper=taper, history=history)
+
+        # Store output
+        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], dset_labels[dset_idxs[1]])
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
+
+    return psc
+
+
+def get_pspec_run_argparser():
+    a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
+
+    a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
+    a.add_argument("filename", type=str, help="Output filename of HDF5 container.")
+    a.add_argument("--groupname", default=None, type=str, help="Groupname for the UVPSpec objects in the HDF5 container.")
+    a.add_argument("--dset_pairs", default=None, type=tuple, nargs='*', help="List of len-2 integer tuples of dset pairings for OQE.")
+    a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
+    a.add_argument("--spw_ranges", default=None, type=tuple, nargs='*', help="List of len-2 integer tuples of spectral window selections for OQE.")
+    a.add_argument("--pol_pairs", default=None, type=tuple, nargs='*', help="List of len-2 integer of string tuples of polarization pairs for OQE.")
+    a.add_argument("--blpairs", default=None, type=tuple, nargs='*', help="List of integer tuples containing baseline pair to run OQE on. Ex: [((1, 2), (3, 4)), ((1, 2), (5, 6)), ...]")
+    a.add_argument("--input_data_weight", default='identity', type=str, help="Data weighting for OQE. See PSpecData.pspec for details.")
+    a.add_argument("--norm", default='I', type=str, help='M-matrix normalization type for OQE. See PSpecData.pspec for details.')
+    a.add_argument("--taper", default='none', type=str, help="Taper function to use in OQE delay transform. See PSpecData.pspec for details.")
+    a.add_argument("--beam", default=None, type=str, help="Filepath to UVBeam healpix map of antenna beam.")
+    a.add_argument("--cosmo", default=None, nargs='*', type=float, help="List of float values for [Om_L, Om_b, Om_c, H0, Om_M, Om_k].")
+    a.add_argument("--rephase_to_dset", default=None, type=int, help="dset integer index to phase all other dsets to. Default is no rephasing.")
+    a.add_argument("--Jy2mK", default=False, action='store_true', help="Convert datasets from Jy to mK if a beam model is provided.")
+    a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
+    a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')
+    a.add_argument("--group", default=False, action='store_true', help="If blpairs is not provided, group baseline pairs together.")
+    a.add_argument("--Nblps_per_group", default=1, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
+    a.add_argument("--bl_len_range", default=(0, 1e10), type=tuple, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
+    a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
+    a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
+    a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
+    return a
 
 
 def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
@@ -1874,18 +2128,18 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     blpairs : list of baseline-pair tuples, Ex. [((1,2),(1,2)), ((2,3),(2,3))]
         See docstring of PSpecData.pspec() for details on format.
 
-    uvd1 : pyuvdata.UVData instance containing visibility data that first bl in blpair will draw from
+    uvd1 : UVData instance containing visibility data that first bl in blpair will draw from
 
-    uvd2 : pyuvdata.UVData instance containing visibility data that second bl in blpair will draw from
+    uvd2 : UVData instance containing visibility data that second bl in blpair will draw from
 
     baseline_tol : float, distance tolerance for notion of baseline "redundancy" in meters
     
     verbose : bool, if True report feedback to stdout
     """
     # ensure uvd1 and uvd2 are UVData objects
-    if isinstance(uvd1, pyuvdata.UVData) == False:
+    if isinstance(uvd1, UVData) == False:
         raise TypeError("uvd1 must be a pyuvdata.UVData instance")
-    if isinstance(uvd2, pyuvdata.UVData) == False:
+    if isinstance(uvd2, UVData) == False:
         raise TypeError("uvd2 must be a pyuvdata.UVData instance")
 
     # get antenna position dictionary

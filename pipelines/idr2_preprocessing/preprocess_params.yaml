@@ -1,0 +1,109 @@
+# preprocess_params.yaml
+#
+# hera_pspec IDR2.1 preprocessing pipeline
+# configuration file
+
+#---------------------------------------------------------------
+# IO Parameters
+#---------------------------------------------------------------
+io :
+  work_dir : './'         # directory to work in
+  out_dir : './'          # directory to dump all output in
+  logfile : 'preprocess_out.log'  # logfile   
+  errfile : 'preprocess_err.log' # error file
+  joinlog : False       # redirect error output into logfile
+  overwrite : True     # overwrite
+  verbose : True        # report feedback to standard output
+
+#---------------------------------------------------------------
+# Analysis Parameters
+#---------------------------------------------------------------
+analysis : 
+  reformat : True        # reformat data by baseline type
+  rfi_flag : False        # RFI-Flag data
+  xtalk_sub : True       # xtalk subtraction
+  time_avg : True        # time average data
+  form_pstokes : True    # form pseudo-Stokes visibilities
+  fg_filt : True         # foreground filter (and/or data-inpaint)
+
+  multiproc : False    # use multiprocess module
+  nproc : 8               # number of processes to spawn
+
+#---------------------------------------------------------------
+# Data Parameters
+#---------------------------------------------------------------
+data :
+  pols :                  # linear polarizations of data
+    - 'xx'
+    - 'yy'
+  # full path to a data template with {pol}
+  input_data_template : '../../hera_pspec/data/zen.all.{pol}.LST.1.06964.uvA'
+
+#---------------------------------------------------------------
+# Algorithm Parameters
+#---------------------------------------------------------------
+algorithm :
+
+  # Data Reformatting
+  reformat : 
+    reformat_outfile : "zen.all.{len:03d}_{deg:03d}.{pol}.HH.{suffix}"   # outfile template
+    new_data_template : "zen.all.*.{pol}.HH.{suffix}" # new data template to use        
+    bl_len_range : [0, 10000.0]  # [min, max] range of baseline lengths to extract [meters]
+    bltol : 1.0   # baseline redundancy tolerance in meters
+
+  # RFI Flagging
+  xrfi :
+    file_ext : 'R'              # file extension
+    run_xrfi : True             # run xrfi if True
+    xrfi_params:                # if run_xrfi, set xrfi parameters
+      Kt : 10
+      Kf : 15
+      sig_init : 6
+      sig_adj : 2
+
+  # Xtalk Subtraction
+  xtalk :
+    file_ext : "T"        # file extension of xtalk-subtracted data
+    xtalk_ext : ".xtalk"   # file extension of xtalk-spectrum
+    dly_filter : True     # RFI flag and delay filter xtalk spectrum
+    rfi_params :           # if dly_inpaint, these are the xrfi params
+      sig_init : 2
+      sig_adj : 1
+      Kf : 20  
+      Kt : 1  
+    dly_params :       # if dly_inpaint, these are the delay filter params
+      min_dly : 1500.0
+      horizon : 0.0
+      tol : 0.000000001
+      maxiter : 100
+      window : 'blackman-harris'
+      flag_nchan_low : 25
+      flag_nchan_high : 25
+      gain : 0.1
+
+  # Time Averaging
+  tavg : 
+    file_ext : "F"        # file extension of time-averaged data
+    t_window : 400.0      # width of averaging window in seconds
+    tavg_rephase : True   # rephase data to window-center LST before average
+
+  # Forming pStokes
+  pstokes : 
+    outstokes : ['pI', 'pQ']
+
+  # Foreground Filtering
+  fg_filt : 
+    filt_file_ext : "D"
+    inpaint_file_ext : "P"
+    filt_params : # kwarg parameters in hera_cal.delay_filer.run_filter
+      standoff : 50.0
+      horizon : 1.0
+      min_dly : 0.0
+      tol : 0.00000001
+      maxiter : 100
+      window : 'tukey'
+      skip_wgt : 0.5
+      flag_nchan_low : 50
+      flag_nchan_high : 50
+      gain : 0.1
+

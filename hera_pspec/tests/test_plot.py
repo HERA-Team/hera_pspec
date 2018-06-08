@@ -3,7 +3,7 @@ import nose.tools as nt
 import matplotlib
 import numpy as np
 import os, copy, sys
-from hera_pspec import pspecdata, pspecbeam, conversions, plot
+from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 
@@ -42,7 +42,7 @@ class Test_Plot(unittest.TestCase):
 
         # Construct list of baseline pairs to calculate power spectra for
         bls = [(24,25), (37,38), (38,39),]
-        self.bls1, self.bls2, blp = pspecdata.construct_blpairs(
+        self.bls1, self.bls2, blp = utils.construct_blpairs(
                         bls, exclude_permutations=False, exclude_auto_bls=True)
         
         # Calculate the power spectrum

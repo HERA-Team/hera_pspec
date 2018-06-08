@@ -4,7 +4,7 @@ import numpy as np
 import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps, trapz
-from hera_pspec import pspecdata, pspecbeam, conversions
+from hera_pspec import pspecdata, pspecbeam, conversions, container, utils
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 from hera_cal import redcal
@@ -629,6 +629,26 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(ds.dsets[1].vis_units, "UNCALIB")
         nt.assert_not_equal(ds.dsets[0].get_data(24, 25, 'xx')[30, 30], ds.dsets[1].get_data(24, 25, 'pI')[30, 30])
 
+    def test_trim_dset_lsts(self):
+        fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
+        uvd1 = UVData()
+        uvd1.read_miriad(fname)
+        uvd2 = copy.deepcopy(uvd1)
+        uvd2.lst_array = (uvd2.lst_array + 10 * np.median(np.diff(np.unique(uvd2.lst_array)))) % (2*np.pi)
+        # test basic execution
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
+        ds.trim_dset_lsts()
+        nt.assert_true(ds.dsets[0].Ntimes, 52)
+        nt.assert_true(ds.dsets[1].Ntimes, 52)
+        nt.assert_true(np.all( (2458042.178948477 < ds.dsets[0].time_array) \
+                        + (ds.dsets[0].time_array < 2458042.1843023109)))
+        # test exception
+        uvd2.lst_array += np.linspace(0, 1e-3, uvd2.Nblts)
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
+        ds.trim_dset_lsts()
+        nt.assert_true(ds.dsets[0].Ntimes, 60)
+        nt.assert_true(ds.dsets[1].Ntimes, 60)
+
     def test_units(self):
         ds = pspecdata.PSpecData()
         # test exception
@@ -680,7 +700,7 @@ class Test_PSpecData(unittest.TestCase):
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
         red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos, low_hi=True))[2]
-        bls1, bls2, blps = pspecdata.construct_blpairs(red_bls, exclude_permutations=True)
+        bls1, bls2, blps = utils.construct_blpairs(red_bls, exclude_permutations=True)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array)
@@ -699,7 +719,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # test select
         red_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
-        bls1, bls2, blp = pspecdata.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
+        bls1, bls2, blp = utils.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=[(20,30), (30,40)], verbose=False)
@@ -826,9 +846,9 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(TypeError, pspecdata.validate_blpairs, [((1, 2), (2, 3))], uvd, None)
 
         bls = [(24,25),(37,38)]
-        bls1, bls2, blpairs = pspecdata.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True)
+        bls1, bls2, blpairs = utils.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True)
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
-        bls1, bls2, blpairs = pspecdata.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True,
+        bls1, bls2, blpairs = utils.construct_blpairs(bls, exclude_permutations=False, exclude_auto_bls=True,
                                                           group=True)
 
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
@@ -836,6 +856,52 @@ class Test_PSpecData(unittest.TestCase):
         # test non-redundant
         blpairs = [((24, 25), (24, 38))]
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
+
+def test_pspec_run():
+    fnames = [os.path.join(DATA_PATH, d) for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
+                                                   'zen.odd.xx.LST.1.28828.uvOCRSA']]
+    beamfile = os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits")
+
+    # test basic execution
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True)
+    nt.assert_true(isinstance(psc, container.PSpecContainer))
+    nt.assert_equal(psc.groups(), ['dset0_dset1'])
+    nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1'])
+    nt.assert_true(os.path.exists("./out.hdf5"))
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+
+    # test Jy2mK, rephase_to_dset, blpairs and dset_labels
+    cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
+                              rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
+                              pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
+                              dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
+                              cosmo=cosmo)
+    nt.assert_true("foo_bar" in psc.groups())
+    nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
+    uvp = psc.get_pspec("foo_bar", "foo_x_bar")
+    nt.assert_true(uvp.vis_units, "mK")
+    nt.assert_equal(uvp.bl_array.tolist(), [37038, 52053])
+    nt.assert_equal(uvp.pol_array.tolist(), [-5, -5])
+    nt.assert_equal(uvp.cosmo, cosmo)
+    #nt.assert_equal(uvp.labels, [])
+    #nt.assert_equal(uvp.get_spw_ranges, [])
+
+    # test exceptions
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, (1, 2), "./out.hdf5")
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, [1, 2], "./out.hdf5")
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=(1, 2), verbose=False)
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=[1, 2], verbose=False)
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", beam=1, verbose=False)
+
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+
+def test_get_argparser():
+    args = pspecdata.get_pspec_run_argparser()
+    a = args.parse_args([['foo'], 'bar'])
+
 
 """
 # LEGACY MONTE CARLO TESTS
