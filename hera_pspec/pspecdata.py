@@ -45,6 +45,7 @@ class PSpecData(object):
         self.Nfreqs = None
         self.spw_range = None
         self.spw_Nfreqs = None
+        self.spw_Ndlys = None
         
         # Set R to identity by default
         self.R = self.I
@@ -548,7 +549,26 @@ class PSpecData(object):
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
 
-    def q_hat(self, key1, key2, use_fft=True, taper='none'):
+    def set_Ndlys(self, ndlys=None):
+        """
+        Set the number of delay bins used.
+
+        Parameters
+        ----------
+        ndlys : integer
+            Number of delay bins. Default: None, sets number of delay
+            bins equal to the number of frequency channels
+        """
+
+        if ndlys == None:
+            self.spw_Ndlys = self.spw_Nfreqs
+        else:
+            # Check that one is not trying to estimate more delay channels than there are frequencies
+            if self.spw_Nfreqs < ndlys:
+                raise ValueError("Cannot estimate more delays than there are frequency channels")
+            self.spw_Ndlys = ndlys
+
+    def q_hat(self, key1, key2, allow_fft=False, taper='none'):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
@@ -572,10 +592,11 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines 
             in the list will be combined with inverse noise weights.
             
-        use_fft : bool, optional
+        allow_fft : bool, optional
             Whether to use a fast FFT summation trick to construct q_hat, or
             a simpler brute-force matrix multiplication. The FFT method assumes
-            a delta-fn bin in delay space. Default: True.
+            a delta-fn bin in delay space. It also only works if the number
+            of delay bins is equal to the number of frequencies. Default: False.
 
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
@@ -599,36 +620,28 @@ class PSpecData(object):
             for _key in key2: Rx2 += np.dot(self.R(_key), self.x(_key))
         else:
             Rx2 = np.dot(self.R(key2), self.x(key2))
+
+        # Apply taper if asked for
+        if taper != 'none':
+            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
+            Rx1 *= tapering_fct[:, None]
+            Rx2 *= tapering_fct[:, None]
         
-        # Whether to use FFT or slow direct method
-        if use_fft:
-            if taper != 'none':
-                tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
-                Rx1 *= tapering_fct[:, None]
-                Rx2 *= tapering_fct[:, None]
-
-            _Rx1 = np.fft.fft(Rx1.conj(), axis=0)
-            _Rx2 = np.fft.fft(Rx2.conj(), axis=0)
+        # use FFT if possible and allowed
+        if allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
+            _Rx1 = np.fft.fft(Rx1, axis=0)
+            _Rx2 = np.fft.fft(Rx2, axis=0)
             
-            return 0.5 * np.conj(  np.fft.fftshift(_Rx1, axes=0).conj() 
-                                 * np.fft.fftshift(_Rx2, axes=0) )
+            return 0.5 * np.fft.fftshift(_Rx1, axes=0).conj() * np.fft.fftshift(_Rx2, axes=0)
         else:
-            # get taper if provided
-            if taper != 'none':
-                tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
-
-            # Slow method, used to explicitly cross-check FFT code
             q = []
-            for i in xrange(self.spw_Nfreqs):
-                Q = self.get_Q(i, self.spw_Nfreqs)
-                RQR = np.einsum('ab,bc,cd',
-                                self.R(key1).T.conj(), Q, self.R(key2))
-                x1 = self.x(key1).conj()
-                x2 = self.x(key2)
-                if taper != 'none':
-                    x1 = x1 * tapering_fct[:, None]
-                    x2 = x2 * tapering_fct[:, None]
-                qi = np.sum(x1*np.dot(RQR, x2), axis=0)
+            for i in xrange(self.spw_Ndlys):
+                Q = self.get_Q_alt(i)
+                # Taking the diagonal here is equivalent to not taking cross
+                # multiplications across different times. If this gets too
+                # slow, can be sped up by not computing off-diagonal terms
+                # before taking the diagonal
+                qi = np.diag(np.dot(Rx1.T.conj(), np.dot(Q, Rx2)))
                 q.append(qi)
             return 0.5 * np.array(q)
 
@@ -636,14 +649,14 @@ class PSpecData(object):
         """
         Calculates
 
-            G_ab = (1/2) Tr[R_1 Q_a R_2 Q_b],
+            G_ab = (1/2) Tr[R_1 Q^alt_a R_2 Q^alt_b],
 
         which is needed for normalizing the power spectrum (see HERA memo #44).
 
         Note that in the limit that R_1 = R_2 = C^-1, this reduces to the Fisher
         matrix
 
-            F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
+            F_ab = 1/2 Tr [C^-1 Q^alt_a C^-1 Q^alt_b] (arXiv:1502.06016, Eq. 17)
 
         Parameters
         ----------
@@ -657,24 +670,29 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        G = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs), dtype=np.complex)
+
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None")
+
+        G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
 
         iR1Q, iR2Q = {}, {}
-        for ch in xrange(self.spw_Nfreqs): # this loop is nchan^3
-            Q = self.get_Q(ch, self.spw_Nfreqs)
+        for ch in xrange(self.spw_Ndlys):
+            Q = self.get_Q_alt(ch)
             iR1Q[ch] = np.dot(R1, Q) # R_1 Q
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
 
-        for i in xrange(self.spw_Nfreqs): # this loop goes as nchan^4
-            for j in xrange(self.spw_Nfreqs):
+        for i in xrange(self.spw_Ndlys):
+            for j in xrange(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
                 G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
 
         return G / 2.
 
-    def get_H(self, key1, key2, taper='none'):
+    def get_H(self, key1, key2, taper='none', sampling=False):
         """
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -696,6 +714,18 @@ class PSpecData(object):
         where gamma is the tapering function. Again, see HERA memo #44 for
         details.
 
+        The sampling option determines whether one is assuming that the
+        output points are integrals over k bins or samples at specific
+        k values. The effect is to add a dampening of widely separated
+        frequency correlations with the addition of the term
+
+            sinc(pi \Delta eta (nu_i - nu_j))
+
+        Note that numpy uses the engineering definition of sinc, where
+        sinc(x) = sin(pi x) / (pi x), whereas in the line above and in
+        all of our documentation, we use the physicist definition where
+        sinc(x) = sin(x) / x
+
         Note that in the limit that R_1 = R_2 = C^-1 and Q_a is used instead
         of Q_a^alt, this reduces to the Fisher matrix
 
@@ -712,12 +742,21 @@ class PSpecData(object):
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
 
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
+
         Returns
         -------
         H : array_like, complex
             Dimensions (Nfreqs, Nfreqs).
         """
-        H = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs), dtype=np.complex)
+
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None")
+
+        H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
 
@@ -725,18 +764,29 @@ class PSpecData(object):
             tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
             tapering_matrix = np.diag(tapering_fct)
 
+        if not sampling:
+            sinc_matrix = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs))
+            for i in range(self.spw_Nfreqs):
+                for j in range(self.spw_Nfreqs):
+                    sinc_matrix[i,j] = np.float(i - j)
+            sinc_matrix = np.sinc(sinc_matrix / np.float(self.spw_Ndlys))
+
         iR1Q_alt, iR2Q = {}, {}
-        for ch in xrange(self.spw_Nfreqs): # this loop is nchan^3
-            Q_alt = self.get_Q(ch, self.spw_Nfreqs)
+        for ch in xrange(self.spw_Ndlys):
+            Q_alt = self.get_Q_alt(ch)
             iR1Q_alt[ch] = np.dot(R1, Q_alt) # R_1 Q_alt
             if taper != 'none':
-                Q_tapered = np.dot(tapering_matrix, np.dot(Q_alt, tapering_matrix))
-                iR2Q[ch] = np.dot(R2, Q_tapered) # R_2 Q
+                Q = np.dot(tapering_matrix, np.dot(Q_alt, tapering_matrix))
             else:
-                iR2Q[ch] = np.dot(R2, Q_alt) # R_2 Q
+                Q = Q_alt
 
-        for i in xrange(self.spw_Nfreqs): # this loop goes as nchan^4
-            for j in xrange(self.spw_Nfreqs):
+            if not sampling:
+                Q *= sinc_matrix
+
+            iR2Q[ch] = np.dot(R2, Q) # R_2 Q
+
+        for i in xrange(self.spw_Ndlys): # this loop goes as nchan^4
+            for j in xrange(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
                 H[i,j] += np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
 
@@ -870,38 +920,63 @@ class PSpecData(object):
 
         return M, W
 
-    def get_Q(self, mode, n_k):
+    def get_Q_alt(self, mode, allow_fft=True):
         """
-        Response of the covariance to a given bandpower, dC / dp_alpha.
+        Response of the covariance to a given bandpower, dC / dp_alpha,
+        EXCEPT without the primary beam factors. This is Q_alt as defined
+        in HERA memo #44, so it's not dC / dp_alpha, strictly, but is just
+        the part that does the Fourier transforms.
 
         Assumes that Q will operate on a visibility vector in frequency space.
-        In other words, produces a matrix Q that performs a two-sided Fourier
-        transform and extracts a particular Fourier mode.
+        In the limit that self.spw_Ndlys equals self.spw_Nfreqs, this will
+        produce a matrix Q that performs a two-sided FFT and extracts a
+        particular Fourier mode.
 
         (Computing x^t Q y is equivalent to Fourier transforming x and y
         separately, extracting one element of the Fourier transformed vectors,
         and then multiplying them.)
+
+        When self.spw_Ndlys < self.spw_Nfreqs, the effect is similar except
+        the delay bins need not be in the locations usually mandated
+        by the FFT algorithm.
 
         Parameters
         ----------
         mode : int
             Central wavenumber (index) of the bandpower, p_alpha.
 
-        n_k : int
-            Number of k bins that will be used in power spectrum.
+        allow_fft : boolean, optional
+            If set to True, allows a shortcut FFT method when
+            the number of delay bins equals the number of delay channels.
+            Default: True
 
-        Returns
+        Return
         -------
         Q : array_like
             Response matrix for bandpower p_alpha.
         """
-        _m = np.zeros((n_k,), dtype=np.complex)
-        _m[mode] = 1. # delta function at specific delay mode
+        if self.spw_Ndlys == None:
+            self.set_Ndlys()
 
-        # FFT to transform to frequency space
-        m = np.fft.fft(np.fft.ifftshift(_m))
-        Q = np.einsum('i,j', m, m.conj()) # dot it with its conjugate
-        return Q
+        if mode >= self.spw_Ndlys:
+            raise IndexError("Cannot compute Q matrix for a mode outside"
+                             "of allowed range of delay modes.")
+
+        if (self.spw_Ndlys == self.spw_Nfreqs) and (allow_fft == True):
+            _m = np.zeros((self.spw_Nfreqs,), dtype=np.complex)
+            _m[mode] = 1. # delta function at specific delay mode
+            # FFT to transform to frequency space
+            m = np.fft.fft(np.fft.ifftshift(_m))
+        else:
+            if self.spw_Ndlys % 2 == 0:
+                start_idx = -self.spw_Ndlys/2
+            else:
+                start_idx = -(self.spw_Ndlys - 1)/2
+            m = (start_idx + mode) * np.arange(self.spw_Nfreqs)
+            m = np.exp(-2j * np.pi * m / self.spw_Ndlys)
+
+        Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
+        return Q_alt
 
     def p_hat(self, M, q):
         """
@@ -974,7 +1049,8 @@ class PSpecData(object):
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate delays.")
         else:
-            return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]]) * 1e9 # convert to ns    
+            return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
+                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns    
         
     def scalar(self, pol, taper='none', little_h=True, 
                num_steps=2000, beam=None):
@@ -1033,6 +1109,55 @@ class PSpecData(object):
                                                num_steps=num_steps)
         return scalar
 
+    def scalar_delay_adjustment(self, key1, key2, taper='none', sampling=False):
+        """
+        Computes an adjustment factor for the pspec scalar that is needed
+        when the number of delay bins is not equal to the number of
+        frequency channels.
+
+        This adjustment is necessary because
+        \sum_gamma tr[Q^alt_alpha Q^alt_gamma] = N_freq**2
+        is something that is true only when N_freqs = N_dlys.
+
+        In general, the result is still independent of alpha, but is
+        no longer given by N_freq**2. (Nor is it just N_dlys**2!)
+
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two 
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
+
+        taper : str, optional
+            Tapering (window) function to apply to the data. Takes the same
+            arguments as aipy.dsp.gen_window(). Default: 'none'.
+
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
+
+        Returns
+        -------
+        adjustment : float
+
+        """
+        summed_G = np.sum(self.get_G(key1, key2), axis=1)
+        summed_H = np.sum(self.get_H(key1, key2, taper, sampling), axis=1)
+        ratio = summed_H.real / summed_G.real
+        mean_ratio = np.mean(ratio)
+        scatter = np.abs(ratio - mean_ratio)
+        if (scatter > 10**-4 * mean_ratio).any():
+            raise ValueError("The normalization scalar is band-dependent!")
+
+        adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
+
+        if taper != 'none':
+            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
+            adjustment *= np.mean(tapering_fct**2)
+
+        return adjustment
+
     def validate_pol(self, dsets, pol_pair):
         """
         Validate polarization and returns the index of the datasets so that 
@@ -1087,9 +1212,9 @@ class PSpecData(object):
 
         return valid
 
-    def pspec(self, bls1, bls2, dsets, pols, input_data_weight='identity', norm='I', 
-              taper='none', little_h=True, spw_ranges=None, verbose=True, 
-              history=''):
+    def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, input_data_weight='identity',
+              norm='I', taper='none', sampling=False, little_h=True, spw_ranges=None,
+              verbose=True, history=''):
         """
         Estimate the delay power spectrum from a pair of datasets contained in 
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -1128,6 +1253,11 @@ class PSpecData(object):
             Only auto/equal polarization pairs are implemented at the moment. 
             It uses the polarizations of the UVData onjects (specified in dsets)
             by default only if the UVData object consists of equal polarizations.
+
+        n_dlys : list of integer, optional
+            The number of delay bins to use. The order in the list corresponds
+            to the order in spw_ranges.
+            Default: None, which then sets n_dlys = number of frequencies.
     
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
@@ -1142,9 +1272,13 @@ class PSpecData(object):
             Tapering (window) function to apply to the data. Takes the same
             arguments as aipy.dsp.gen_window(). Default: 'none'.
 
+        sampling : boolean, optional
+            Whether output pspec values are samples at various delay bins
+            or are integrated bandpowers over delay bins. Default: False
+
         little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+            Whether to have cosmological length units be h^-1 Mpc or Mpc
+            Default: h^-1 Mpc
 
         spw_ranges : list of tuples, optional
             A list of spectral window channel ranges to select within the total 
@@ -1201,6 +1335,7 @@ class PSpecData(object):
         
             blpairs = [ [(A, D), (B, E)], (C, F)]
         """
+
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
 
@@ -1250,6 +1385,18 @@ class PSpecData(object):
         else:
             assert np.isclose(map(lambda t: len(t), spw_ranges), 2).all(), "spw_ranges must be fed as a list of length-2 tuples"
 
+        # if using default setting of number of delay bins equal to number of frequency channels
+        if n_dlys is None:
+            n_dlys = [None for i in range(len(spw_ranges))]
+
+        # if using the whole band in the dataset, then there should just be one n_dly parameter specified
+        if spw_ranges is None and n_dlys != None:
+            assert len(n_dlys) == 1, "Only one spw, so cannot specify more than one n_dly value"
+
+        # assert that the same number of ndlys has been specified as the number of spws
+        if (spw_ranges != None) and (n_dlys != None):
+            assert len(spw_ranges) == len(n_dlys), "Need to specify number of delay bins for each spw"
+
         # setup polarization selection
         if isinstance(pols, tuple):
             pols = [pols]
@@ -1285,6 +1432,9 @@ class PSpecData(object):
             if verbose:
                 print( "\nSetting spectral range: {}".format(spw_ranges[i]))
             self.set_spw(spw_ranges[i])
+
+            # set number of delay bins
+            self.set_Ndlys(n_dlys[i])
 
             # clear covariance cache
             self.clear_cov_cache()
@@ -1367,7 +1517,7 @@ class PSpecData(object):
                     else:
                         if verbose: print("  Building G...")
                         Gv = self.get_G(key1, key2)
-                        Hv = self.get_H(key1, key2, taper=taper)
+                        Hv = self.get_H(key1, key2, taper=taper, sampling=sampling)
                         built_GH = True
 
                     # Calculate unnormalized bandpowers
@@ -1382,8 +1532,7 @@ class PSpecData(object):
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
-                        pv *= scalar
-                        Mv *= scalar
+                        pv *= scalar * self.scalar_delay_adjustment(key1, key2, taper=taper, sampling=sampling)
 
                     # Get baseline keys
                     if isinstance(blp, list):
