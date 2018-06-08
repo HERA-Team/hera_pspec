@@ -601,6 +601,34 @@ class Test_PSpecData(unittest.TestCase):
         blp = (0, ((37,39),(37,39)), 'XX')
         nt.assert_true(np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min())
 
+    def test_Jy_to_mK(self):
+        # test basic execution
+        uvd = self.uvd
+        uvd.vis_units = 'Jy'
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], 
+                                 wgts=[None, None], beam=self.bm)
+        ds.Jy_to_mK()
+        nt.assert_true(ds.dsets[0].vis_units, 'mK')
+        nt.assert_true(ds.dsets[1].vis_units, 'mK')
+        nt.assert_true(uvd.get_data(24, 25, 'xx')[30, 30] / ds.dsets[0].get_data(24, 25, 'xx')[30, 30] < 1.0)
+
+        # test feeding beam
+        ds2 = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], 
+                                 wgts=[None, None], beam=self.bm)
+        ds2.Jy_to_mK(beam=self.bm)
+        nt.assert_equal(ds.dsets[0], ds2.dsets[0])
+
+        # test vis_units no Jansky
+        uvd2 = copy.deepcopy(uvd)
+        uvd2.polarization_array[0] = 1
+        uvd2.vis_units = 'UNCALIB'
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)], 
+                                 wgts=[None, None], beam=self.bm)
+        ds.Jy_to_mK()
+        nt.assert_equal(ds.dsets[0].vis_units, "mK")
+        nt.assert_equal(ds.dsets[1].vis_units, "UNCALIB")
+        nt.assert_not_equal(ds.dsets[0].get_data(24, 25, 'xx')[30, 30], ds.dsets[1].get_data(24, 25, 'pI')[30, 30])
+
     def test_units(self):
         ds = pspecdata.PSpecData()
         # test exception
@@ -733,6 +761,13 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('xy','xy')], spw_ranges=[(10, 24)], verbose=False)
  
+        # test with nsamp set to zero
+        uvd = copy.deepcopy(self.uvd)
+        uvd.nsample_array[uvd.antpair2ind(24, 25)] = 0.0
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [('xx', 'xx')])
+        nt.assert_true(np.all(np.isclose(uvp.integration_array[0], 0.0)))
+
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
         d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2], 
