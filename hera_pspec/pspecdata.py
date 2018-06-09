@@ -710,9 +710,9 @@ class PSpecData(object):
             np.diag(aipy.dsp.gen_window(self.spw_Nfreqs,taper))
             R1=np.dot(R1,tapering_fct)
             R2=np.dot(R2,tapering_fct)
+            Qalpha=self.get_Q_alt(alpha)
+            Qbeta=self.get_Q_alt(beta)
 
-        Qalpha=self.get_Q(alpha,self.spw_Nfreqs)
-        Qbeta=self.get_Q(beta,self.spw_Nfreqs)
         Ealpha=np.einsum('ab,bc,cd',R1.T.conj(),Qalpha,R2)
         Ebeta=np.einsum('ab,bc,cd',R1.T.conj(),Qbeta,R2)
         qc=\
@@ -1158,6 +1158,22 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
+    def cov_p_hat(self,M,q_cov):
+        """
+        Covariance estimate between two different band powers p_alpha and p_beta
+        given by M_{alpha i} M^*_{beta,j} C_q^{ij} where C_q^{ij} is the q-covariance
+
+        Parameters
+        ----------
+        M: array_like
+            Normalization matrix, M.
+        q_cov: array_like
+            covariance between bandpowers in q_alpha and q_beta
+        """
+        return np.einsum('ab,cd,bd->ac',M,M,q_cov)
+
+
+
     def units(self, little_h=True):
         """
         Return the units of the power spectrum. These are inferred from the
@@ -1375,7 +1391,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, input_data_weight='identity',
               norm='I', taper='none', sampling=False, little_h=True, spw_ranges=None,
-              verbose=True, history=''):
+              verbose=True, history='',covariance=False):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -1577,6 +1593,7 @@ class PSpecData(object):
         data_array = odict()
         wgt_array = odict()
         integration_array = odict()
+        cov_array = odict()
         time1 = []
         time2 = []
         lst1 = []
@@ -1608,6 +1625,7 @@ class PSpecData(object):
             spw_ints = []
             spw_scalar = []
             spw_pol = []
+            spw_cov = []
 
             d = self.delays() * 1e-9
             dlys.extend(d)
@@ -1634,6 +1652,7 @@ class PSpecData(object):
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
+                pol_cov=[]
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
@@ -1696,6 +1715,32 @@ class PSpecData(object):
                         if verbose: print("  Computing and multiplying scalar...")
                         pv *= scalar * self.scalar_delay_adjustment(key1, key2, taper=taper, sampling=sampling)
 
+                    #Generate the covariance matrix if error bars provided
+                    store_cov=True
+                    if covariance and not None in self.dsets_std:
+                        if verbose: print(" Building q_hat covariance...")
+                        cov_qv=np.zeros((self.spw_Ndlys,
+                                         self.spw_Ndlys,
+                                         self.Ntimes),dtype=complex)
+                        amat,bmat=np.meshgrid(range(self.spw_Ndlys),
+                                              range(self.spw_Ndlys)).astype(int)
+                        for tnum in range(self.Ntimes):
+                            cov_qv[:,:,tnum]=np.vectorize(lambda a,b:\
+                            self.cov_q_hat(a,b,key1,key2,time_indices=[tnum],
+                            taper=taper)\
+                            (amat,bmat)
+                        if verbose: print(" Building p_hat covariance...")
+                        cov_pv=self.cov_p_hat(Mv,cov_qv)
+                        cov_pv*=\
+                        (scalar * self.scalar_delay_adjustment(key1, key2,
+                                                               taper=taper,
+                                                               sampling=sampling))**2.
+                        pol_cov.extend(cov_pv)
+                    else:
+                        store_cov=False #don't store incomplete covariance.
+                        pol_cov.extend(None)
+
+
                     # Get baseline keys
                     if isinstance(blp, list):
                         bl1 = blp[0][0]
@@ -1742,12 +1787,13 @@ class PSpecData(object):
                 spw_data.append(pol_data)
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
-
+                spw_cov.append(pol_cov)
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
             data_array[i] = spw_data
+            cov_array[i] = spw_cov
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
@@ -1819,6 +1865,9 @@ class PSpecData(object):
 
         # fill data arrays
         uvp.data_array = data_array
+        uvp.store_cov=store_cov
+        if store_cov:
+            uvp.cov_array = cov_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))
@@ -2255,7 +2304,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     return psc
 
 
-def get_pspec_run_argparser():
+def spec_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
     a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
