@@ -97,7 +97,7 @@ class UVPSpec(object):
         # all parameters must fall into one and only one of the following groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys",
                             "Npols", "Nfreqs", "history", "Nbls", "channel_width", "weighting",
-                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile" ,'folded']
+                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile" ,'folded',"store_cov"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array",
                           'lst_avg_array', 'time_avg_array', "lst_2_array", "time_1_array",
                           "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
