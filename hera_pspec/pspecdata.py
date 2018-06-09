@@ -1738,7 +1738,6 @@ class PSpecData(object):
                         pol_cov.extend(cov_pv)
                     else:
                         store_cov=False #don't store incomplete covariance.
-                        pol_cov.extend(None)
 
 
                     # Get baseline keys
