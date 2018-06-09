@@ -1498,11 +1498,16 @@ def combine_uvpspec(uvps, verbose=True):
     Nblpairts = len(new_blpts)
     Npols = len(new_pols)
 
+
+    #store covariance only if all uvps have stored covariance.
+    u.store_cov = np.logical_and(np.array([uvp.store_cov for uvp in uvps]))
     # create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
     u.wgt_array = odict()
     u.nsample_array = odict()
+    if u.store_cov:
+        u.cov_array = odict()
     u.scalar_array = np.empty((Nspws, Npols), np.float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     for i, spw in enumerate(new_spws):
@@ -1510,6 +1515,8 @@ def combine_uvpspec(uvps, verbose=True):
         u.integration_array[i] = np.empty((Nblpairts, Npols), np.float64)
         u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
+        if u.store_cov:
+            u.cov_array[i]=np.empty((Nblpairst,spw[2],spw[2],Npols),np.complex128)
         spw_Nfreqs = spw[-1]
         spw_freqs = np.linspace(*spw, endpoint=False)
         spw_dlys = np.fft.fftshift(np.fft.fftfreq(spw_Nfreqs, np.median(np.diff(spw_freqs))))
@@ -1555,7 +1562,8 @@ def combine_uvpspec(uvps, verbose=True):
                     u.nsample_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.label_1_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
                     u.label_2_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
-
+                    if u.store_cov:
+                        u.cov_array[i][j,:,:,k]=uvps[l].cov_array[m][n,:,:,q]
         for j, blpt in enumerate(new_blpts):
             n = uvp_blpts[0].index(blpt)
             u.time_1_array[j] = uvps[0].time_1_array[n]
@@ -1575,6 +1583,8 @@ def combine_uvpspec(uvps, verbose=True):
                 for k, p in enumerate(new_pols):
                     q = uvp_pols[l].index(p)
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
+                    if u.store_cov:
+                        u.cov_array[i][j,:,:,k]=uvps[l].cov_array[m][n,:,:,q]
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].integration_array[m][n, q]
@@ -1599,6 +1609,8 @@ def combine_uvpspec(uvps, verbose=True):
                 for j, blpt in enumerate(new_blpts):
                     n = uvp_blpts[l].index(blpt)
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
+                    if u.store_cov:
+                        u.data_array[i][j,:,:,k]=uvps[l].data_array[m][n,:,:,q]
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].integration_array[m][n, q]
