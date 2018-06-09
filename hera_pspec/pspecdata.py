@@ -121,7 +121,7 @@ class PSpecData(object):
         if isinstance(dsets, UVData): dsets = [dsets,]
         if isinstance(wgts, UVData): wgts = [wgts,]
         if isinstance(labels, str): labels = [labels,]
-        if isinstance(dsets_std,pyuvdata.UVData): dsets_std=[dsets_std,]
+        if isinstance(dsets_std,UVData): dsets_std=[dsets_std,]
         if wgts is None: wgts = [wgts,]
         if dsets_std is None: dsets_std=[dsets_std for m in range(len(dsets))]
         if isinstance(dsets, tuple): dsets = list(dsets)
@@ -749,6 +749,7 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
+
 
         allow_fft : bool, optional
 
@@ -2010,6 +2011,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
               beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True,
               overwrite=True, verbose=True, history=''):
     """
+
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
 
@@ -2092,7 +2094,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
 
     beam : PSpecBeam object, UVBeam object or string
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
-        to a beamfits healpix map (see pyuvdata.UVBeam)
+        to a beamfits healpix map (see UVBeam)
 
     cosmo : conversions.Cosmo_Conversions object
         A Cosmo_Conversions object to use as the cosmology when normalizing
@@ -2302,9 +2304,9 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     """
     # ensure uvd1 and uvd2 are UVData objects
     if isinstance(uvd1, UVData) == False:
-        raise TypeError("uvd1 must be a pyuvdata.UVData instance")
+        raise TypeError("uvd1 must be a UVData instance")
     if isinstance(uvd2, UVData) == False:
-        raise TypeError("uvd2 must be a pyuvdata.UVData instance")
+        raise TypeError("uvd2 must be a UVData instance")
 
     # get antenna position dictionary
     ap1, a1 = uvd1.get_ENU_antpos(pick_data_ants=True)
