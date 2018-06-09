@@ -1500,7 +1500,7 @@ def combine_uvpspec(uvps, verbose=True):
 
 
     #store covariance only if all uvps have stored covariance.
-    u.store_cov = np.logical_all(np.array([uvp.store_cov for uvp in uvps]))
+    u.store_cov = np.all(np.array([uvp.store_cov for uvp in uvps]))
     # create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
