@@ -22,7 +22,7 @@ import pyuvdata.utils as uvutils
 import os
 import sys
 import glob
-import multiprocess
+import multiprocessing
 import yaml
 from datetime import datetime
 import uvtools as uvt
@@ -58,7 +58,7 @@ hp.utils.log(json.dumps(cf, indent=1) + '\n', f=lf, verbose=verbose)
 
 # Create multiprocesses
 if multiproc:
-    pool = multiprocess.Pool(nproc)
+    pool = multiprocessing.Pool(nproc)
     M = pool.map
 else:
     M = map
