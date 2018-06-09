@@ -139,7 +139,8 @@ class PSpecData(object):
         self.freqs = self.dsets[0].freq_array[0]
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
-
+        self.spw_Ndlys = self.spw_Nfreqs
+    
     def __str__(self):
         """
         Print basic info about this PSpecData object.
@@ -515,7 +516,7 @@ class PSpecData(object):
 
         The logical_OR step implies that all time-dependent flagging 
         patterns are automatically broadcasted across all times. If 
-        this property is undesirable, see the PSpecData.unify_dset_flags() 
+        this property is undesirable, see the PSpecData.broadcast_dset_flags() 
         method to manually broadcast or un-broadcast flags ahead of time.
 
         Parameters
@@ -789,6 +790,10 @@ class PSpecData(object):
                 # tr(R_2 Q_i R_1 Q_j)
                 G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
 
+        # check if all zeros, in which case turn into identity
+        if np.count_nonzero(G) == 0:
+            G = np.eye(self.spw_Ndlys)
+
         return G / 2.
 
     def get_H(self, key1, key2, sampling=False):
@@ -880,6 +885,10 @@ class PSpecData(object):
             for j in xrange(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
                 H[i,j] += np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
+
+        # check if all zeros, in which case turn into identity
+        if np.count_nonzero(H) == 0:
+            H = np.eye(self.spw_Ndlys)
 
         return H / 2.
 
@@ -1088,37 +1097,84 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
-    def unify_dset_flags(self, time_thresh=0.2, unflag=False):
+    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, unflag=False):
         """
         For each dataset in self.dset, update the flag_array such that
-        the flagging patterns are time-independent for each baseline.
-        For each frequency pixel, if the fraction of flagged times exceeds
-        time_thresh, all times are flagged. If it does not, the specific
-        integrations with flags in that freq channel are removed from this 
-        and all other dsets.
-        One can also unflag the data entirely if desired.
+        the flagging patterns are time-independent for each baseline given
+        a selection for spectral windows.
 
+        For each frequency pixel in a selected spw, if the fraction of flagged
+        times exceeds time_thresh, then all times are flagged. If it does not, 
+        the specific integrations which hold flags in the spw are flagged across
+        all frequencies in the spw.
+
+        Additionally, one can also unflag the flag_array entirely if desired.
+
+        Note: that although technically allowed, this may give unexpected results
+        if multiple spectral windows in spw_ranges have frequency overlap.
+
+        Note: it is generally not recommended to set time_thresh > 0.5, which
+        could lead to substantial amounts of data being flagged.
+    
         Parameters
         ----------
+        spw_ranges : list of tuples
+            list of len-2 spectral window tuples, specifying the start (inclusive)
+            and stop (exclusive) index of the frequency array for each spw.
+            Default is to use the whole band
 
+        time_thresh : float
+            Fractional threshold of flagged pixels across time needed to flag all times
+            per freq channel. It is not recommend to set this greater than 0.5
 
+        unflag : bool
+            If True, unflag all data in the spectral window.
         """
         # validate datasets
         self.validate_datasets()
 
-        # unflag
-        if unflag:
-            # iterate over datasets
-            for dset in self.dsets:
+        # clear matrix cache (which may be holding weight matrices Y)
+        self.clear_cache()
+
+        # spw type check
+        if spw_ranges is None:
+            spw_ranges = [(0, self.Nfreqs)]
+        assert isinstance(spw_ranges, list), "spw_ranges must be fed as a list of tuples"
+
+        # iterate over datasets
+        for dset in self.dsets:
+            # iterate over spw ranges
+            for spw in spw_ranges:
+                self.set_spw(spw)
                 # unflag
-                dset.flag_array[:] = False
-            return
-
-        # enact time threshold on flag waterfalls
-
-
-
-
+                if unflag:
+                    # unflag for all times
+                    dset.flag_array[:, :, self.spw_range[0]:self.spw_range[1], :] = False
+                    continue
+                # enact time threshold on flag waterfalls
+                # iterate over polarizations
+                for i in range(dset.Npols):
+                    # iterate over unique baselines
+                    ubl = np.unique(dset.baseline_array)
+                    for bl in ubl:
+                        # get baseline-times indices
+                        bl_inds = np.where(np.in1d(dset.baseline_array, bl))[0]
+                        # get flag waterfall
+                        flags = dset.flag_array[bl_inds, 0, :, i].copy()
+                        Ntimes = float(flags.shape[0])
+                        Nfreqs = float(flags.shape[1])
+                        # get time- and freq-continguous flags
+                        freq_contig_flgs = np.sum(flags, axis=1) / Nfreqs > 0.999999
+                        Ntimes_noncontig = np.sum(~freq_contig_flgs, dtype=np.float)
+                        # get freq channels where non-contiguous flags exceed threshold
+                        exceeds_thresh = np.sum(flags[~freq_contig_flgs], axis=0, dtype=np.float) / Ntimes_noncontig > time_thresh
+                        # flag channels for all times that exceed time_thresh
+                        dset.flag_array[bl_inds, :, np.where(exceeds_thresh)[0][:, None], i] = True
+                        # for pixels that have flags but didn't meet broadcasting limit
+                        # flag the integration within the spw
+                        flags[:, np.where(exceeds_thresh)[0]] = False
+                        flag_ints = np.max(flags[:, self.spw_range[0]:self.spw_range[1]], axis=1)
+                        dset.flag_array[bl_inds[flag_ints], :, self.spw_range[0]:self.spw_range[1], i] = True
 
     def units(self, little_h=True):
         """
@@ -1261,9 +1317,16 @@ class PSpecData(object):
         adjustment : float
 
         """
+        # get ratio
         summed_G = np.sum(self.get_G(key1, key2), axis=1)
         summed_H = np.sum(self.get_H(key1, key2, sampling), axis=1)
         ratio = summed_H.real / summed_G.real
+
+        # fill infs and nans from zeros in summed_G
+        ratio[np.isnan(ratio)] = 1.0
+        ratio[np.isinf(ratio)] = 1.0
+
+        # get mean ratio
         mean_ratio = np.mean(ratio)
         scatter = np.abs(ratio - mean_ratio)
         if (scatter > 10**-4 * mean_ratio).any():
@@ -1677,7 +1740,7 @@ class PSpecData(object):
 
                     # take inverse average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
                     # inverse avg is done b/c nsamp_1 ~ 1/sigma_1 and nsamp_2 ~ 1/sigma_2 where sigma is a proxy for std of noise
-                    pol_ints.extend(1./np.mean([1./nsamp1.clip(1e-10, np.inf), 1./nsamp2.clip(1e-10, np.inf)], axis=0) * dset1.integration_time)
+                    pol_ints.extend(1./np.mean([1./nsamp1, 1./nsamp2], axis=0) * dset1.integration_time)
 
                     # combined weight is geometric mean
                     pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
