@@ -142,13 +142,13 @@ class PSpecData(object):
         if labels is not None: assert(len(dsets) == len(labels))
 
         # Check that everything is a UVData object
-        for d, w in zip(dsets, wgts):
+        for d, w, s in zip(dsets, wgts, dsets_std):
             if not isinstance(d, UVData):
                 raise TypeError("Only UVData objects can be used as datasets.")
             if not isinstance(w, UVData) and w is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "weights.")
-            if not isinstance(s,pyuvdata.UVData) and s is not None:
+            if not isinstance(s,UVData) and s is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "error sets")
 
