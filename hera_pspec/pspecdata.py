@@ -1741,7 +1741,7 @@ class PSpecData(object):
                         for tnum in range(self.Ntimes):
                             cov_qv[:,:,tnum]=np.vectorize(lambda a,b:\
                             self.cov_q_hat(a,b,key1,key2,time_indices=[tnum],
-                            taper=taper)\
+                            taper=taper))\
                             (amat,bmat)
                         if verbose: print(" Building p_hat covariance...")
                         cov_pv=self.cov_p_hat(Mv,cov_qv)
