@@ -710,9 +710,8 @@ class PSpecData(object):
             np.diag(aipy.dsp.gen_window(self.spw_Nfreqs,taper))
             R1=np.dot(R1,tapering_fct)
             R2=np.dot(R2,tapering_fct)
-            Qalpha=self.get_Q_alt(alpha)
-            Qbeta=self.get_Q_alt(beta)
-
+        Qalpha=self.get_Q_alt(alpha)
+        Qbeta=self.get_Q_alt(beta)
         Ealpha=np.einsum('ab,bc,cd',R1.T.conj(),Qalpha,R2)
         Ebeta=np.einsum('ab,bc,cd',R1.T.conj(),Qbeta,R2)
         qc=\
@@ -1805,6 +1804,7 @@ class PSpecData(object):
         uvp = uvpspec.UVPSpec()
 
         # fill meta-data
+        uvp.store_cov=store_cov
         uvp.time_1_array = np.array(time1)
         uvp.time_2_array = np.array(time2)
         uvp.time_avg_array = np.mean([uvp.time_1_array, uvp.time_2_array], axis=0)
@@ -1864,7 +1864,6 @@ class PSpecData(object):
 
         # fill data arrays
         uvp.data_array = data_array
-        uvp.store_cov=store_cov
         if store_cov:
             uvp.cov_array = cov_array
         uvp.integration_array = integration_array
