@@ -7,12 +7,13 @@ Copyright (c) 2018 The HERA Collaboration
 This script is used in the IDR2.1 power
 spectrum pipeline as a pre-processing step after
 calibration, RFI-flagging and LSTbinning. This
-additional processing includes RFI-flagging, crosstalk subtraction, 
+additional processing includes RFI-flagging, timeavg subtraction, 
 fringe-rate filtering, pseudo-stokes visibility formation,
 and foreground filtering.
 
 See preprocess_params.yaml for relevant parameter selections.
 """
+import multiprocess
 import numpy as np
 import hera_cal as hc
 import hera_pspec as hp
@@ -22,7 +23,6 @@ import pyuvdata.utils as uvutils
 import os
 import sys
 import glob
-import multiprocessing
 import yaml
 from datetime import datetime
 import uvtools as uvt
@@ -51,14 +51,14 @@ lf = open(logfile, "w")
 if joinlog:
     ef = lf
 else:
-    ef = open(errfile, "w")
+    ef = open(os.path.join(out_dir, errfile), "w")
 time = datetime.utcnow()
 hp.utils.log("Starting preprocess pipeline on {}\n{}\n".format(time, '-'*60), f=lf, verbose=verbose)
 hp.utils.log(json.dumps(cf, indent=1) + '\n', f=lf, verbose=verbose)
 
 # Create multiprocesses
 if multiproc:
-    pool = multiprocessing.Pool(nproc)
+    pool = multiprocess.Pool(nproc)
     M = pool.map
 else:
     M = map
@@ -88,26 +88,27 @@ if reformat:
         if angs[i] < 0:
             angs[i] = (angs[i] + 180) % 360
 
-    # setup bl reformat function
-    def bl_reformat(j):
-        try:
-            if not bl_len_range[0] < lens[j] < bl_len_range[1]:
-                return 0
-            outname = reformat_outfile.format(len=int(round(lens[j])), deg=int(round(angs[j])), pol=datapols[i][0], suffix=data_suffix)
-            outname = os.path.join(out_dir, outname)
-            if os.path.exists(outname) and overwrite == False:
-                return 1
-            uvd = UVData()
-            uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
-            uvd.write_miriad(outname, clobber=True)
-        except:
-            err, _, tb = sys.exc_info()
-            hp.utils.log("\n{} threw {} Exception with traceback:".format(outname, err), f=ef, tb=tb, verbose=verbose)
-            return 1
-        return 0
-
     # iterate over polarization group
     for i, dfs in enumerate(datafiles):
+
+        # setup bl reformat function
+        def bl_reformat(j, datapols=datapols, dfs=dfs, lens=lens, angs=angs, reds=reds, p=cf['algorithm']['reformat']):
+            try:
+                if not p['bl_len_range'][0] < lens[j] < p['bl_len_range'][1]:
+                    return 0
+                outname = reformat_outfile.format(len=int(round(lens[j])), deg=int(round(angs[j])), pol=datapols[i][0], suffix=data_suffix)
+                outname = os.path.join(out_dir, outname)
+                if os.path.exists(outname) and overwrite == False:
+                    return 1
+                uvd = UVData()
+                uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
+                uvd.write_miriad(outname, clobber=True)
+            except:
+                err, _, tb = sys.exc_info()
+                hp.utils.log("\n{} threw {} Exception with traceback:".format(outname, err), f=ef, tb=tb, verbose=verbose)
+                return 1
+            return 0
+
         # distribute across baseline types
         exit_codes = M(bl_reformat, range(len(reds)))
 
@@ -133,7 +134,7 @@ if rfi_flag:
     datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=True)
 
     # setup RFI function
-    def run_xrfi(i):
+    def run_xrfi(i, datafiles=datafiles, p=cf['algorithm']['xrfi']):
         try:
             # setup delay filter class as container
             df = datafiles[i]
@@ -143,10 +144,10 @@ if rfi_flag:
             # RFI flag if desired
             if run_xrfi:
                 for k in F.data.keys():
-                    new_f = hq.xrfi.xrfi(F.data[k], f=F.flags[k], **xrfi_params)
+                    new_f = hq.xrfi.xrfi(F.data[k], f=F.flags[k], **p['xrfi_params'])
                     F.flags[k] += new_f
             # write to file
-            outname = os.path.join(out_dir, os.path.basename(df) + file_ext)
+            outname = os.path.join(out_dir, os.path.basename(df) + p['file_ext'])
             hc.io.update_vis(df, outname, filetype_in='miriad', filetype_out='miriad', data=F.data, flags=F.flags,
                              add_to_history='', clobber=overwrite)
 
@@ -156,85 +157,85 @@ if rfi_flag:
             return 1
         return 0
 
-    # run xtalk sub on each datafile
+    # run tavg sub on each datafile
     exit_codes = M(run_xrfi, range(len(datafiles)))
 
     # print to log
     hp.utils.log("\nRFI flag exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
 
-    input_data_template += file_ext
+    input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
 
     time = datetime.utcnow()
     hp.utils.log("\nfinished RFI flagging: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
 
 
 #-------------------------------------------------------------------------------
-# Crosstalk Subtraction
+# Time Average Subtraction
 #-------------------------------------------------------------------------------
-if xtalk_sub:
+if timeavg_sub:
     # get algorithm parameters
-    globals().update(cf['algorithm']['xtalk'])
+    globals().update(cf['algorithm']['timeavg_sub'])
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting crosstalk subtraction: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nstarting time-average subtraction: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # get datafiles
     datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=True)
 
-    # write xtalk sub function
-    def xtalk_sub(j):
+    # write tavg sub function
+    def tavg_sub(i, datafiles=datafiles, p=cf['algorithm']['timeavg_sub']):
         try:
             # get datafile
-            df = datafiles[j]
+            df = datafiles[i]
             # instantiate FRF object
             F = hc.frf.FRFilter()
             # load data
             F.load_data(df)
-            # perform full time-average to get xtalk spectrum
+            # perform full time-average to get spectrum
             F.timeavg_data(1e10, rephase=False, verbose=verbose)
             # Delay Filter if desired
-            if dly_filter:
+            if p['dly_filter']:
                 # RFI Flag
                 for k in F.avg_data.keys():
                     # RFI Flag
-                    new_f = hq.xrfi.xrfi(F.avg_data[k], f=F.avg_flags[k], **rfi_params)
+                    new_f = hq.xrfi.xrfi(F.avg_data[k], f=F.avg_flags[k], **p['rfi_params'])
                     F.avg_flags[k] += new_f
                 # Delay Filter
                 DF = hc.delay_filter.Delay_Filter()
-                DF.load_data(F.inp_uvdata)
+                DF.load_data(F.input_uvdata)
                 DF.data = F.avg_data
                 DF.flags = F.avg_flags
-                DF.run_filter(**dly_params)
-                # Replace xtalk spectrum with CLEAN model
+                DF.run_filter(**p['dly_params'])
+                # Replace timeavg spectrum with CLEAN model
                 F.avg_data = DF.CLEAN_models
                 for k in F.avg_flags.keys():
                     F.avg_flags[k][:] = False
-            # subtract xtalk spectrum from data
+            # subtract timeavg spectrum from data
             for k in F.data.keys():
                 F.data[k] -= F.avg_data[k]
-            # write xtalk specctrum
-            xtalk_file = xtalk_ext.join(os.path.splittext(os.path.basenname(df)))
-            xtalk_file = os.path.join(out_dir, xtalk_file)
-            F.write_data(xtalk_file, write_avg=True, overwrite=overwrite)
-            # write xtalk-subtracted data
-            out_df = os.path.join(out_dir, os.path.basename(df) + file_ext)
+            # write timeavg specctrum
+            tavg_file = p['tavg_ext'].join(os.path.splitext(os.path.basename(df)))
+            tavg_file = os.path.join(out_dir, tavg_file)
+            F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
+            # write tavg-subtracted data
+            out_df = os.path.join(out_dir, os.path.basename(df) + p['file_ext'])
             F.write_data(out_df, write_avg=False, overwrite=overwrite)
         except:
             err, _, tb = sys.exc_info()
-            hp.utils.log("\n{} threw {} Exception with traceback:".format(df, err), f=ef, tb=tb, verbose=verbose)
+            hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
             return 1
 
         return 0
 
-    # run xtalk sub on each datafile
-    exit_codes = M(xtalk_sub, range(len(datafiles)))
+    # run timeavg sub on each datafile
+    exit_codes = M(tavg_sub, range(len(datafiles)))
 
     # print to log
-    hp.utils.log("\nxtalk subtraction exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
+    hp.utils.log("\ntime-average subtraction exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
 
-    input_data_template += file_ext
+    input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
 
     time = datetime.utcnow()
-    hp.utils.log("\nfinished crosstalk subtraction: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+    hp.utils.log("\nfinished time-average subtraction: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
 
 #-------------------------------------------------------------------------------
 # Time Averaging (i.e. Fringe Rate Filtering)
@@ -249,22 +250,22 @@ if time_avg:
     datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=True)
 
     # write time_avg function
-    def time_average(j):
+    def time_average(i, datafiles=datafiles, p=cf['algorithm']['tavg']):
         try:
             # get datafile
-            df = datafiles[j]
+            df = datafiles[i]
             # instantiate FRF object
             F = hc.frf.FRFilter()
             # load data
             F.load_data(df, filetype='miriad')
             # perform time average
-            F.timeavg_data(t_window, rephase=tavg_rephase, verbose=verbose)
+            F.timeavg_data(p['t_window'], rephase=p['tavg_rephase'], verbose=verbose)
             # write data
-            out_df = os.path.join(out_dir, os.path.basename(df) + file_ext)
+            out_df = os.path.join(out_dir, os.path.basename(df) + p['file_ext'])
             F.write_data(out_df, write_avg=True, overwrite=overwrite)
         except:
             err, _, tb = sys.exc_info()
-            hp.utils.log("\n{} threw {} Exception with traceback:".format(df, err), f=ef, tb=tb, verbose=verbose)
+            hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
             return 1
 
         return 0
@@ -275,7 +276,7 @@ if time_avg:
     # print to log
     hp.utils.log("\ntime average exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
 
-    input_data_template += file_ext
+    input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
 
     time = datetime.utcnow()
     hp.utils.log("\nfinished time averaging: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
@@ -293,7 +294,7 @@ if form_pstokes:
     datafiles, datapols = uvt.utils.search_data(input_data_template, pols, reverse_nesting=True)
 
     # write pseudo-Stokes function
-    def make_pstokes(i):
+    def make_pstokes(i, datafiles=datafiles, datapols=datapols, p=cf['algorithm']['pstokes']):
         try:
             # get all pol files for unique datafile
             dfs = datafiles[i]
@@ -305,20 +306,20 @@ if form_pstokes:
                 uvd.read_miriad(df)
                 dsets.append(uvd)
             # iterate over outstokes
-            for pstokes in outstokes:
+            for pstokes in p['outstokes']:
                 try:
-                    ds = hp.pstokes.choose_inp_dsets(dsets, pstokes)
+                    ds = hp.pstokes.filter_dset_on_stokes_pol(dsets, pstokes)
                     ps = hp.pstokes.construct_pstokes(ds[0], ds[1], pstokes=pstokes)
                     outfile = os.path.basename(dfs[0]).replace(".{}.".format(dps[0]), ".{}.".format(pstokes))
                     outfile = os.path.join(out_dir, outfile)
                     ps.write_miriad(outfile, clobber=overwrite)
                 except AssertionError:
-                    err, _, tb = sys.exc_info()
-                    hp.utils.log("datafile {} outstokes {} threw {} Exception with traceback:".format(dfs[0], pstokes, err), f=ef, tb=tb, verbose=verbose)
                     pass
         except:
-            pass
+            err, _, tb = sys.exc_info()
+            hp.utils.log("datafile {} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
             return 1
+
         return 0
 
     # iterate over unique datafiles and construct pstokes
@@ -346,7 +347,7 @@ if fg_filt:
     datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=True)
 
     # write fgfilt function
-    def fg_filter(i):
+    def fg_filter(i, datafiles=datafiles, p=cf['algorithm']['fg_filt']):
         try:
             # get datafile
             df = datafiles[i]
@@ -354,16 +355,16 @@ if fg_filt:
             DF = hc.delay_filter.Delay_Filter()
             DF.load_data(df, filetype='miriad')
             # run filter
-            DF.run_filter(**cf['algorithm']['fg_filt']['filt_params'])
+            DF.run_filter(**p['filt_params'])
             # write filtered term
-            outfile = os.path.join(out_dir, os.path.basename(df) + filt_file_ext)
-            DF.write_filtered_data(outfile, filetype_out='miriad', clobber=overwrite, add_to_history="Foreground Filtered with: {}".format(json.dumps(cf['algorithm']['fg_filt']['filt_params'])))
+            outfile = os.path.join(out_dir, os.path.basename(df) + p['filt_file_ext'])
+            DF.write_filtered_data(outfile, filetype_out='miriad', clobber=overwrite, add_to_history="Foreground Filtered with: {}".format(json.dumps(p['filt_params'])))
             # write original data with in-paint
-            outfile = os.path.join(out_dir, os.path.basename(df) + inpaint_file_ext)
-            DF.write_filtered_data(outfile, filetype_out='miriad', clobber=overwrite, write_filled_data=True, add_to_history="FG model flag inpainted with: {}".format(json.dumps(cf['algorithm']['fg_filt']['filt_params'])))
+            outfile = os.path.join(out_dir, os.path.basename(df) + p['inpaint_file_ext'])
+            DF.write_filtered_data(outfile, filetype_out='miriad', clobber=overwrite, write_filled_data=True, add_to_history="FG model flag inpainted with: {}".format(json.dumps(p['filt_params'])))
         except:
             err, _, tb = sys.exc_info()
-            hp.utils.log("datafile {} threw {} Exception with traceback:".format(df, err), f=ef, tb=tb, verbose=verbose)
+            hp.utils.log("datafile {} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
             return 1
         return 0
 

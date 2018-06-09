@@ -21,7 +21,7 @@ io :
 analysis : 
   reformat : True        # reformat data by baseline type
   rfi_flag : False        # RFI-Flag data
-  xtalk_sub : True       # xtalk subtraction
+  timeavg_sub : True       # full time-avg subtraction
   time_avg : True        # time average data
   form_pstokes : True    # form pseudo-Stokes visibilities
   fg_filt : True         # foreground filter (and/or data-inpaint)
@@ -52,7 +52,7 @@ algorithm :
     bltol : 1.0   # baseline redundancy tolerance in meters
 
   # RFI Flagging
-  xrfi :
+  timeavg_sub :
     file_ext : 'R'              # file extension
     run_xrfi : True             # run xrfi if True
     xrfi_params:                # if run_xrfi, set xrfi parameters
@@ -61,17 +61,17 @@ algorithm :
       sig_init : 6
       sig_adj : 2
 
-  # Xtalk Subtraction
-  xtalk :
-    file_ext : "T"        # file extension of xtalk-subtracted data
-    xtalk_ext : ".xtalk"   # file extension of xtalk-spectrum
-    dly_filter : True     # RFI flag and delay filter xtalk spectrum
+  # Time-Avg Subtraction
+  timeavg_sub :
+    file_ext : "T"        # file extension of timeavg-subtracted data
+    tavg_ext : ".tavg"   # file extension of timeavg-spectrum
+    dly_filter : True     # RFI flag and delay filter timeavg spectrum
     rfi_params :           # if dly_inpaint, these are the xrfi params
       sig_init : 2
       sig_adj : 1
       Kf : 20  
       Kt : 1  
-    dly_params :       # if dly_inpaint, these are the delay filter params
+    dly_params :       # if dly_filter, these are the delay filter params
       min_dly : 1500.0
       horizon : 0.0
       tol : 0.000000001
