@@ -2300,7 +2300,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     return psc
 
 
-def spec_run_argparser():
+def get_pspec_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
     a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
