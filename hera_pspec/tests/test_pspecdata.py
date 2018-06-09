@@ -880,6 +880,7 @@ class Test_PSpecData(unittest.TestCase):
                                 little_h=True, verbose=False)
         qe_unflagged = uvp_unflagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
 
