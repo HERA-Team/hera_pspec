@@ -1088,6 +1088,38 @@ class PSpecData(object):
         """
         return np.dot(M, q)
 
+    def unify_dset_flags(self, time_thresh=0.2, unflag=False):
+        """
+        For each dataset in self.dset, update the flag_array such that
+        the flagging patterns are time-independent for each baseline.
+        For each frequency pixel, if the fraction of flagged times exceeds
+        time_thresh, all times are flagged. If it does not, the specific
+        integrations with flags in that freq channel are removed from this 
+        and all other dsets.
+        One can also unflag the data entirely if desired.
+
+        Parameters
+        ----------
+
+
+        """
+        # validate datasets
+        self.validate_datasets()
+
+        # unflag
+        if unflag:
+            # iterate over datasets
+            for dset in self.dsets:
+                # unflag
+                dset.flag_array[:] = False
+            return
+
+        # enact time threshold on flag waterfalls
+
+
+
+
+
     def units(self, little_h=True):
         """
         Return the units of the power spectrum. These are inferred from the
