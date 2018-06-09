@@ -71,10 +71,10 @@ def build_vanilla_uvpspec(beam=None):
         beam_freqs = beam.beam_freqs
 
     # HERA coordinates in Karoo Desert, SA
-    telescope_location = np.array([5109325.85521063, 
-                                   2005235.09142983, 
+    telescope_location = np.array([5109325.85521063,
+                                   2005235.09142983,
                                   -3239928.42475397])
-
+    store_cov=False
     cosmo = conversions.Cosmo_Conversions()
 
     data_array, wgt_array, integration_array, nsample_array = {}, {}, {}, {}
@@ -85,23 +85,23 @@ def build_vanilla_uvpspec(beam=None):
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
 
-    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts', 
-              'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array', 
-              'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array', 
+    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts',
+              'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array',
+              'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array',
               'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
-              'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 
-              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
-              'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array', 
+              'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
+              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm',
+              'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array',
               'cosmo', 'scalar_array', 'labels', 'norm_units', 'labels', 'label_1_array',
-              'label_2_array']
+              'label_2_array','store_cov']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
-    
+
     # Set all parameters
     for p in params:
         setattr(uvp, p, locals()[p])
-    
+
     uvp.check()
 
     return uvp, cosmo
@@ -123,7 +123,7 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
         List of spectral window tuples. See PSpecData.pspec docstring for details.
 
     beam : PSpecBeamBase subclass or str
-        This can be a subclass of PSpecBeamBase of a string filepath to a 
+        This can be a subclass of PSpecBeamBase of a string filepath to a
         UVBeam healpix map.
 
     taper : string
@@ -161,8 +161,7 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
     bls1, bls2, _ = utils.construct_blpairs(bls, exclude_auto_bls=True)
 
     # run pspec
-    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges, 
+    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges,
                    taper=taper, verbose=verbose)
 
     return uvp
-
