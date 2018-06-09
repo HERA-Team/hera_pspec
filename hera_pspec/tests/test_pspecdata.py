@@ -373,9 +373,6 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        # Check that warning is raised if Ndlys isn't set
-        self.assertRaises(ValueError, self.ds.get_H, key1, key2)
-
         for input_data_weight in ['identity','iC']:
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
@@ -399,9 +396,6 @@ class Test_PSpecData(unittest.TestCase):
         multiplicative_tolerance = 1.
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-
-        # Check that warning is raised if Ndlys isn't set
-        self.assertRaises(ValueError, self.ds.get_G, key1, key2)
 
         for input_data_weight in ['identity','iC']:
             self.ds.set_weighting(input_data_weight)
@@ -844,6 +838,26 @@ class Test_PSpecData(unittest.TestCase):
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
 
+    def test_broadcast_dset_flags(self):
+        # setup
+        fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+        uvd = UVData()
+        uvd.read_miriad(fname)
+        Nfreq = uvd.data_array.shape[2]
+
+        # test basic execution
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.2)
+        nt.assert_false(ds.dsets[0].get_flags(24, 25)[:, 550:650].any())
+
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2)
+        nt.assert_true(ds.dsets[0].get_flags(24, 25)[:, 550:650].any())
+
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2, unflag=True)
+        nt.assert_false(ds.dsets[0].get_flags(24, 25)[:, :].any())
+
     def test_RFI_flag_propagation(self):
         # generate ds and weights
         uvd = copy.deepcopy(self.uvd)
@@ -853,7 +867,7 @@ class Test_PSpecData(unittest.TestCase):
         # Basic test of shape
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         test_R = ds.R((1, 37, 38, 'XX'))
-        self.assertEqual(test_R.shape, (Nfreq, Nfreq))
+        nt.assert_equal(test_R.shape, (Nfreq, Nfreq))
 
         # First test that turning-off flagging does nothing if there are no flags in the data
         bls1 = [(24, 25)]
@@ -861,8 +875,8 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm, labels=['red', 'blue'])
         uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
-        ds.unify_dset_flags()
-        uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        ds.broadcast_dset_flags(unflag=True)
+        uvp_unflagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         qe_unflagged = uvp_unflagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
@@ -870,13 +884,14 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
 
         # Test that when flagged, the data within a channel really don't have any effect on the final result
-        uvd.flag_array[uvd.antpair2ind(24, 25)] = True
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        uvd2 = copy.deepcopy(uvd)
+        uvd2.flag_array[uvd.antpair2ind(24, 25)] = True
+        ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
-        uvd.data_array[uvd.antpair2ind(24, 25)] *= 9234.913
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        uvd2.data_array[uvd.antpair2ind(24, 25)] *= 9234.913
+        ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp_flagged_mod = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
@@ -884,7 +899,7 @@ class Test_PSpecData(unittest.TestCase):
         qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]        
 
         # assert answers are same to within 0.1%
-        nt.assert_true(np.isclose(np.real(qe_flagged_mod)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
+        nt.assert_true(np.isclose(np.real(qe_flagged_mod), np.real(qe_flagged), atol=0.001, rtol=0.001).all())
 
         # Test below commented out because this sort of aggressive symmetrization is not yet implemented.
         # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2) 
