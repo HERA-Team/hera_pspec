@@ -1543,7 +1543,7 @@ class PSpecData(object):
         assert isinstance(dsets[0], (int, np.int)) and isinstance(dsets[1], (int, np.int)), "dsets must contain integer indices"
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
-
+        store_cov=False
         # assert form of bls1 and bls2
         assert isinstance(bls1, list), "bls1 and bls2 must be fed as a list of antpair tuples"
         assert isinstance(bls2, list), "bls1 and bls2 must be fed as a list of antpair tuples"
@@ -1729,7 +1729,6 @@ class PSpecData(object):
                         pv *= scalar * self.scalar_delay_adjustment(key1, key2, taper=taper, sampling=sampling)
 
                     #Generate the covariance matrix if error bars provided
-                    store_cov=True
                     if covariance and not None in self.dsets_std:
                         if verbose: print(" Building q_hat covariance...")
                         cov_qv=np.zeros((self.spw_Ndlys,
@@ -1749,8 +1748,7 @@ class PSpecData(object):
                                                                taper=taper,
                                                                sampling=sampling))**2.
                         pol_cov.extend(cov_pv)
-                    else:
-                        store_cov=False #don't store incomplete covariance.
+                        store_cov=True #don't store incomplete covariance.
 
 
                     # Get baseline keys
