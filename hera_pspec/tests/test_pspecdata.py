@@ -878,6 +878,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.broadcast_dset_flags(unflag=True)
         uvp_unflagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
+
         qe_unflagged = uvp_unflagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
 

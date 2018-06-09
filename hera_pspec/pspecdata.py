@@ -640,6 +640,7 @@ class PSpecData(object):
         """
         self.taper = taper
 
+
     def set_spw(self, spw_range):
         """
         Set the spectral window range.
