@@ -92,7 +92,7 @@ if reformat:
     for i, dfs in enumerate(datafiles):
 
         # setup bl reformat function
-        def bl_reformat(j, datapols=datapols, dfs=dfs, lens=lens, angs=angs, reds=reds, p=cf['algorithm']['reformat']):
+        def bl_reformat(j, i=i, datapols=datapols, dfs=dfs, lens=lens, angs=angs, reds=reds, p=cf['algorithm']['reformat']):
             try:
                 if not p['bl_len_range'][0] < lens[j] < p['bl_len_range'][1]:
                     return 0
@@ -105,7 +105,7 @@ if reformat:
                 uvd.write_miriad(outname, clobber=True)
             except:
                 err, _, tb = sys.exc_info()
-                hp.utils.log("\n{} threw {} Exception with traceback:".format(outname, err), f=ef, tb=tb, verbose=verbose)
+                hp.utils.log("\njob {} threw {} Exception with traceback:".format(j, err), f=ef, tb=tb, verbose=verbose)
                 return 1
             return 0
 
