@@ -417,9 +417,9 @@ class PSpecData(object):
             Array of std data from the requested UVData dataset and baseline.
         """
         assert isinstance(key,tuple)
-        dset,bl = self.parse_blkey(dset=key[0],bl=key[1:])
-        spwmin,spwmax = self.spw_range[0], self.spw_range[1]
-        return self.dsets_std[dset].get_data(bl).T[spwmin:spwmax,:]
+        dset,bl = self.parse_blkey(key)
+        spw = slice(self.spw_range[0], self.spw_range[1])
+        return self.dsets_std[dset].get_data(bl).T[spw]
 
 
     def w(self, key):
