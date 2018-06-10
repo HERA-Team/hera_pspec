@@ -207,8 +207,11 @@ if timeavg_sub:
                 DF.run_filter(**p['dly_params'])
                 # Replace timeavg spectrum with CLEAN model
                 F.avg_data = DF.CLEAN_models
+                # unflag all frequencies
                 for k in F.avg_flags.keys():
-                    F.avg_flags[k][:] = False
+                    # only unflag spectra from non-xants
+                    if np.min(F.avg_flags[k]) == False:
+                        F.avg_flags[k][:] = False
             # subtract timeavg spectrum from data
             for k in F.data.keys():
                 F.data[k] -= F.avg_data[k]
