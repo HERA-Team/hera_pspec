@@ -96,7 +96,7 @@ if reformat:
             try:
                 if not p['bl_len_range'][0] < lens[j] < p['bl_len_range'][1]:
                     return 0
-                outname = reformat_outfile.format(len=int(round(lens[j])), deg=int(round(angs[j])), pol=datapols[i][0], suffix=data_suffix)
+                outname = p['reformat_outfile'].format(len=int(round(lens[j])), deg=int(round(angs[j])), pol=datapols[i][0], suffix=data_suffix)
                 outname = os.path.join(out_dir, outname)
                 if os.path.exists(outname) and overwrite == False:
                     return 1
