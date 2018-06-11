@@ -877,7 +877,7 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
         dsets_std=[uvd_std,uvd_std], beam=self.bm)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, n_dlys=4, covariance=True)
+                                little_h=True, verbose=True, spw_ranges=[(10,14)], covariance=True)
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
