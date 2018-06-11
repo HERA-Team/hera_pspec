@@ -874,7 +874,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd_std=copy.deepcopy(self.uvd_std)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
         dsets_std=[uvd_std,uvd_std], beam=self.bm)
-        uvp = ds.psec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, n_dlys=4, covariance=True)
 
     def test_normalization(self):
