@@ -119,6 +119,10 @@ class Test_PSpecData(unittest.TestCase):
         self.uvd.read_miriad(os.path.join(DATA_PATH,
                                           "zen.2458042.17772.xx.HH.uvXA"))
 
+        self.uvd_std = uv.UVData()
+        self.uvd_std.read_miriad(os.path.join(DATA_PATH,
+                                          "zen.2458042.17772.std.xx.HH.uvXA"))
+
     def tearDown(self):
         pass
 
@@ -355,6 +359,18 @@ class Test_PSpecData(unittest.TestCase):
         self.assertTrue(np.isclose(q_hat_cov_a[0],
                         0.,atol=1e-6))
 
+    def test_cov_p_hat(self):
+        """
+        Test cov_p_hat, verify on identity.
+        """
+        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
+        cov_p=self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),5.*np.identity(10))
+        for p in range(10):
+            for q in range(10):
+                if p==q:
+                    self.assertTrue(np.isclose(30.,cov_p[p,q],atol=1e-6))
+                else:
+                    self.assertTrue(np.isclose(0.,cov_p[p,q],atol=1e-6))
 
 
     def test_q_hat(self):
@@ -783,7 +799,6 @@ class Test_PSpecData(unittest.TestCase):
         bls2 = [[(24, 25)], (52, 53)]
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
-
         # test select
         red_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
         bls1, bls2, blp = utils.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
@@ -856,6 +871,13 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [('xx', 'xx')])
         nt.assert_true(np.all(np.isclose(uvp.integration_array[0], 0.0)))
 
+        # test covariance calculation runs with small number of delays
+        uvd = copy.deepcopy(self.uvd)
+        uvd_std=copy.deepcopy(self.uvd_std)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
+        dsets_std=[uvd_std,uvd_std], beam=self.bm)
+        uvp = ds.psec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, n_dlys=4, covariance=True)
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
