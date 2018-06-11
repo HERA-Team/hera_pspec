@@ -1735,7 +1735,9 @@ class PSpecData(object):
                                          self.spw_Ndlys,
                                          self.Ntimes),dtype=complex)
                         amat,bmat=np.meshgrid(range(self.spw_Ndlys),
-                                              range(self.spw_Ndlys)).astype(int)
+                                              range(self.spw_Ndlys))
+                        amat=amat.astype(int)
+                        bmat=bmat.astype(int)
                         for tnum in range(self.Ntimes):
                             cov_qv[:,:,tnum]=np.vectorize(lambda a,b:\
                             self.cov_q_hat(a,b,key1,key2,time_indices=[tnum],
