@@ -138,7 +138,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
 
 
 def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=True, 
-              exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10)):
+              exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
     """
     Use hera_cal.redcal to get matching redundant baselines groups from uvd1 and uvd2
     within the specified baseline tolerance, not including flagged ants.
@@ -175,9 +175,13 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         Number of baseline-pairs to put into each sub-group. No grouping if None.
         Default: None
 
-    bl_len_range : tuple of float, optional
-        Tuple containing minimum baseline length and maximum baseline length [meters]
+    bl_len_range : tuple, optional
+        len-2 tuple containing minimum baseline length and maximum baseline length [meters]
         to keep in baseline type selection
+
+    bl_deg_range : tuple, optional
+        len-2 tuple containing (minimum, maximum) baseline angle in degrees to keep in
+        baseline selection
 
     Returns
     -------
@@ -260,11 +264,25 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         # filter based on xants, existance in uvd1 and uvd2 and bl_len_range
         bls1, bls2 = [], []
         for bl1, bl2 in _blps:
+            # get baseline length and angle
             bl1i = uvd1.antnums_to_baseline(*bl1)
             bl2i = uvd1.antnums_to_baseline(*bl2)
-            bl_len = np.mean(map(lambda bl: np.linalg.norm(antpos[bl[0]]-antpos[bl[1]]), [bl1, bl2]))
+            bl1v = (antpos[bl1[0]] - antpos[bl1[1]])[:2]
+            bl2v = (antpos[bl2[0]] - antpos[bl2[1]])[:2]
+            bl1_len, bl2_len = np.linalg.norm(bl1v), np.linalg.norm(bl2v)
+            bl1_deg = np.arctan2(*bl1v[::-1]) * 180 / np.pi
+            if bl1_deg < 0: bl1_deg = (bl1_deg + 180) % 360
+            bl2_deg = np.arctan2(*bl2v[::-1]) * 180 / np.pi
+            if bl2_deg < 0: bl2_deg = (bl2_deg + 180) % 360
+            bl_len = np.mean([bl1_len, bl2_len])
+            bl_deg = np.mean([bl1_deg, bl2_deg])
+            # filter based on length cut
             if bl_len < bl_len_range[0] or bl_len > bl_len_range[1]:
                 continue
+            # filter based on angle cut
+            if bl_deg < bl_deg_range[0] or bl_deg > bl_deg_range[1]:
+                continue
+            # filter on other things
             if filter_blpairs:
                 if (bl1i not in uvd1.baseline_array or bl1[0] in xants1 or bl1[1] in xants1) \
                    or (bl2i not in uvd2.baseline_array or bl2[0] in xants2 or bl2[1] in xants2):
@@ -512,8 +530,8 @@ def flatten(nested_list):
     return [item for sublist in nested_list for item in sublist]
 
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=True, 
-                        exclude_permutations=True, bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
-                        xants=None, verbose=True):
+                         exclude_permutations=True, bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
+                         xants=None, verbose=True):
     """
     Given a list of miriad file templates and selections for
     polarization and group labels, construct a master list of
