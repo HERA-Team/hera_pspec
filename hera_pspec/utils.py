@@ -552,8 +552,8 @@ def flatten(nested_list):
 
 
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=True, 
-                         exclude_permutations=True, bl_len_range=(0, 1e10), 
-                         bl_deg_range=(0, 180), xants=None, verbose=True):
+                        exclude_permutations=True, bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
+                        xants=None, verbose=True):
     """
     Given a list of miriad file templates and selections for
     polarization and group labels, construct a master list of
@@ -754,3 +754,4 @@ def get_blvec_reds(blvecs, bl_error_tol=0):
     red_bl_tag = [red_bl_tag[i] for i in order]
 
     return red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag
+
