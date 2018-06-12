@@ -378,7 +378,7 @@ if time_avg:
         Nfiles = int(np.ceil(Ntimes / float(file_Ntimes)))
         times = [times[i*file_Ntimes:(i+1)*file_Ntimes] for i in range(Nfiles)]
 
-        def split_files(j, pol=pol, tavg_files=tavg_files, times=times, p=cf['algorithm']['tavg']):
+        def reformat_files(j, pol=pol, tavg_files=tavg_files, times=times, p=cf['algorithm']['tavg']):
             try:
                 uvd = UVData()
                 uvd.read_miriad(tavg_files, time_range=[times[j].min()-1e-8, times[j].max()+1e-8])
@@ -392,10 +392,15 @@ if time_avg:
 
             return 0
 
-        exit_codes = M(split_files, range(len(times)))
+        exit_codes = M(reformat_files, range(len(times)))
+
+        # clean up time averaged files
+        for f in tavg_files:
+            if os.path.exists(f):
+                shutil.rmtree(f)
 
         # print to log
-        hp.utils.log("\npol {} time split files exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
+        hp.utils.log("\npol {} time reformat files exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
 
     input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
 
