@@ -364,9 +364,7 @@ if time_avg:
         hp.utils.log("\npol {} time average exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
 
         # collate averaged data into time chunks
-        if i == 0:
-            data_suffix += file_ext
-        tavg_files = os.path.join(out_dir, "zen.{group}.{pol}.*.{suffix}".format(group=groupname, pol=pol, suffix=data_suffix))
+        tavg_files = os.path.join(out_dir, "zen.{group}.{pol}.*.{suffix}".format(group=groupname, pol=pol, suffix=data_suffix + file_ext))
         tavg_files = sorted(glob.glob(tavg_files))
 
         # pick one file to get full time information from
@@ -384,7 +382,7 @@ if time_avg:
                 uvd = UVData()
                 uvd.read_miriad(tavg_files, time_range=[times[j].min()-1e-8, times[j].max()+1e-8])
                 lst = uvd.lst_array[0]
-                outfile = os.path.join(out_dir, "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=groupname, pol=pol, LST=lst, suffix=data_suffix))
+                outfile = os.path.join(out_dir, "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=groupname, pol=pol, LST=lst, suffix=data_suffix + data_suffix))
                 uvd.write_miriad(outfile, clobber=overwrite)
             except:
                 err, _, tb = sys.exc_info()
@@ -404,6 +402,7 @@ if time_avg:
         hp.utils.log("\npol {} time reformat files exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
 
     input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
+    data_suffix += file_ext
 
     time = datetime.utcnow()
     hp.utils.log("\nfinished time averaging: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
