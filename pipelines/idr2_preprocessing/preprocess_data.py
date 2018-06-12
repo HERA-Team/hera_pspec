@@ -27,6 +27,9 @@ import yaml
 from datetime import datetime
 import uvtools as uvt
 import json
+import itertools
+import aipy
+import shutil
 
 #-------------------------------------------------------------------------------
 # Parse YAML Configuration File
@@ -73,7 +76,7 @@ if reformat:
     hp.utils.log("\n{}\nstarting baseline reformatting: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # get datafiles
-    datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=False)
+    datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname), pols, matched_pols=False, reverse_nesting=False, flatten=False)
 
     # choose first file and get all red baseline groups and their info
     uvd = UVData()
@@ -131,7 +134,7 @@ if rfi_flag:
     hp.utils.log("\n{}\nstarting RFI flagging: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # get datafiles
-    datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=True)
+    datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname), pols, matched_pols=False, reverse_nesting=False, flatten=True)
 
     # setup RFI function
     def run_xrfi(i, datafiles=datafiles, p=cf['algorithm']['xrfi']):
@@ -155,6 +158,7 @@ if rfi_flag:
             err, _, tb = sys.exc_info()
             hp.utils.log("\n{} threw {} Exception with traceback:".format(outname, err), f=ef, tb=tb, verbose=verbose)
             return 1
+
         return 0
 
     # run tavg sub on each datafile
@@ -164,10 +168,10 @@ if rfi_flag:
     hp.utils.log("\nRFI flag exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
 
     input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
+    data_suffix += file_ext
 
     time = datetime.utcnow()
     hp.utils.log("\nfinished RFI flagging: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
-
 
 #-------------------------------------------------------------------------------
 # Time Average Subtraction
@@ -179,66 +183,128 @@ if timeavg_sub:
     hp.utils.log("\n{}\nstarting time-average subtraction: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # get datafiles
-    datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=True)
+    datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
 
-    # write tavg sub function
-    def tavg_sub(i, datafiles=datafiles, p=cf['algorithm']['timeavg_sub']):
-        try:
-            # get datafile
-            df = datafiles[i]
-            # instantiate FRF object
-            F = hc.frf.FRFilter()
-            # load data
-            F.load_data(df)
-            # perform full time-average to get spectrum
-            F.timeavg_data(1e10, rephase=False, verbose=verbose)
-            # Delay Filter if desired
-            if p['dly_filter']:
-                # RFI Flag
-                for k in F.avg_data.keys():
+    # load a datafile and get antenna numbers
+    _, _, uvd = uvutils.get_miriad_antpos(datafiles[0][0])
+    antpos, ants = uvd.get_ENU_antpos()
+    antpos_dict = dict(zip(ants, antpos))
+
+    # get redundant baselines
+    reds = hc.redcal.get_pos_reds(antpos_dict, bl_error_tol=1.0, low_hi=True)
+    lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
+    angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
+    angs = [(a + 180) % 360 if a < 0 else a for a in angs]
+
+    # iterate over pols
+    for i, dfs in enumerate(datafiles):
+        pol = datapols[i][0]
+
+        # write full tavg function
+        def full_tavg(j, pol=pol, lens=lens, angs=angs, reds=reds, dfs=dfs, p=cf['algorithm']['timeavg_sub']):
+            try:
+                # load data into uvdata
+                uvd = UVData()
+                uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
+                # instantiate FRF object
+                F = hc.frf.FRFilter()
+                # load data
+                F.load_data(uvd)
+                # perform full time-average to get spectrum
+                F.timeavg_data(1e10, rephase=False, verbose=verbose)
+                # Delay Filter if desired
+                if p['dly_filter']:
                     # RFI Flag
-                    new_f = hq.xrfi.xrfi(F.avg_data[k], f=F.avg_flags[k], **p['rfi_params'])
-                    F.avg_flags[k] += new_f
-                # Delay Filter
-                DF = hc.delay_filter.Delay_Filter()
-                DF.load_data(F.input_uvdata)
-                DF.data = F.avg_data
-                DF.flags = F.avg_flags
-                DF.run_filter(**p['dly_params'])
-                # Replace timeavg spectrum with CLEAN model
-                F.avg_data = DF.CLEAN_models
-                # unflag all frequencies
-                for k in F.avg_flags.keys():
-                    # only unflag spectra from non-xants
-                    if np.min(F.avg_flags[k]) == False:
-                        F.avg_flags[k][:] = False
-            # subtract timeavg spectrum from data
-            for k in F.data.keys():
-                F.data[k] -= F.avg_data[k]
-            # write timeavg specctrum
-            tavg_file = p['tavg_ext'].join(os.path.splitext(os.path.basename(df)))
-            tavg_file = os.path.join(out_dir, tavg_file)
-            F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
-            # write tavg-subtracted data
-            out_df = os.path.join(out_dir, os.path.basename(df) + p['file_ext'])
-            F.write_data(out_df, write_avg=False, overwrite=overwrite)
-        except:
-            err, _, tb = sys.exc_info()
-            hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
-            return 1
+                    for k in F.avg_data.keys():
+                        # RFI Flag
+                        new_f = hq.xrfi.xrfi(F.avg_data[k], f=F.avg_flags[k], **p['rfi_params'])
+                        F.avg_flags[k] += new_f
+                    # Delay Filter
+                    DF = hc.delay_filter.Delay_Filter()
+                    DF.load_data(F.input_uvdata)
+                    DF.data = F.avg_data
+                    DF.flags = F.avg_flags
+                    DF.run_filter(**p['dly_params'])
+                    # Replace timeavg spectrum with CLEAN model
+                    F.avg_data = DF.CLEAN_models
+                    # unflag all frequencies
+                    for k in F.avg_flags.keys():
+                        # only unflag spectra from non-xants
+                        if np.min(F.avg_flags[k]) == False:
+                            F.avg_flags[k][:] = False
+                # write timeavg specctrum
+                _len = lens[j]
+                _deg = angs[j]
+                tavg_file = "zen.{group}.{pol}.{len:03d}_{deg:03d}.{tavg_tag}.{suffix}".format(group=groupname, pol=pol, len=int(_len), deg=int(_deg), tavg_tag=p['tavg_tag'], suffix=data_suffix)
+                tavg_file = os.path.join(out_dir, tavg_file)
+                F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
+            except:
+                err, _, tb = sys.exc_info()
+                hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+                return 1
 
-        return 0
+            return 0
 
-    # run timeavg sub on each datafile
-    exit_codes = M(tavg_sub, range(len(datafiles)))
+        # run function
+        exit_codes = M(full_tavg, range(len(reds)))
 
-    # print to log
-    hp.utils.log("\ntime-average subtraction exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
+        # collate tavg spectra into a single file
+        tavgfiles = sorted(glob.glob(os.path.join(out_dir, "zen.{group}.{pol}.*.{tavg_tag}.{suffix}".format(group=groupname, pol=pol, tavg_tag=tavg_tag, suffix=data_suffix))))
+        uvd = UVData()
+        uvd.read_miriad(tavgfiles)
+        tavg_out = os.path.join(out_dir, "zen.{group}.{pol}.{tavg_tag}.{suffix}".format(group=groupname, pol=pol, tavg_tag=tavg_tag, suffix=data_suffix))
+        uvd.write_miriad(tavg_out, clobber=overwrite)
+        for tf in tavgfiles:
+            if os.path.exists(tf):
+                shutil.rmtree(tf)
 
-    input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
+        # print to log
+        hp.utils.log("\npol {} time-average spectra exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
+
+        # write tavg subtraction function
+        def tavg_sub(j, dfs=dfs, pol=pol, tavg_file=tavg_out, p=cf['algorithm']['timeavg_sub']):
+            try:
+                # load data file
+                uvd = UVData()
+                df = dfs[j]
+                uvd.read_miriad(df)
+                # get full tavg spectra
+                tavg = UVData()
+                tavg.read_miriad(tavg_file)
+                # subtract timeavg spectrum from data
+                for bl in np.unique(uvd.baseline_array):
+                    bl_inds = np.where(uvd.baseline_array == bl)[0]
+                    polnum = uvutils.polstr2num(pol)
+                    pol_ind = np.where(uvd.polarization_array == polnum)[0]
+                    if bl in tavg.baseline_array:
+                        uvd.data_array[bl_inds, :, :, pol_ind] -= tavg.get_data(bl)[None]
+                    else:
+                        if verbose:
+                            print "baseline {} not found in time-averaged spectrum".format(bl)
+                            uvd.flag_array[bl_inds, :, :, pol_ind] = True
+
+                # write tavg-subtracted data
+                out_df = os.path.join(out_dir, os.path.basename(df) + p['file_ext'])
+                uvd.history += "\nTime-Average subtracted."
+                uvd.write_miriad(out_df, clobber=overwrite)
+            except:
+                err, _, tb = sys.exc_info()
+                hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+                return 1
+
+            return 0
+
+        # run function
+        exit_codes = M(tavg_sub, range(len(dfs)))
+
+        # print to log
+        hp.utils.log("\npol {} time-average subtraction exit codes:\n {}".format(datapols[i][0], exit_codes), f=lf, verbose=verbose)
 
     time = datetime.utcnow()
-    hp.utils.log("\nfinished time-average subtraction: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+    hp.utils.log("\nfinished full time-average spectra and subtraction: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+
+    input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
+    data_suffix += file_ext
 
 #-------------------------------------------------------------------------------
 # Time Averaging (i.e. Fringe Rate Filtering)
@@ -250,34 +316,86 @@ if time_avg:
     hp.utils.log("\n{}\nstarting time averaging: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # get datafiles
-    datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=True)
+    datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
 
-    # write time_avg function
-    def time_average(i, datafiles=datafiles, p=cf['algorithm']['tavg']):
-        try:
-            # get datafile
-            df = datafiles[i]
-            # instantiate FRF object
-            F = hc.frf.FRFilter()
-            # load data
-            F.load_data(df, filetype='miriad')
-            # perform time average
-            F.timeavg_data(p['t_window'], rephase=p['tavg_rephase'], verbose=verbose)
-            # write data
-            out_df = os.path.join(out_dir, os.path.basename(df) + p['file_ext'])
-            F.write_data(out_df, write_avg=True, overwrite=overwrite)
-        except:
-            err, _, tb = sys.exc_info()
-            hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
-            return 1
+    # load a datafile and get antenna numbers
+    _, _, uvd = uvutils.get_miriad_antpos(datafiles[0][0])
+    antpos, ants = uvd.get_ENU_antpos()
+    antpos_dict = dict(zip(ants, antpos))
 
-        return 0
+    # get redundant baselines
+    reds = hc.redcal.get_pos_reds(antpos_dict, bl_error_tol=1.0, low_hi=True)
+    lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
+    angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
+    angs = [(a + 180) % 360 if a < 0 else a for a in angs]
 
-    # iterate over datafiles
-    exit_codes = M(time_average, range(len(datafiles)))
+    # iterate over pol groups
+    for i, dfs in enumerate(datafiles):
+        pol = datapols[i][0]
 
-    # print to log
-    hp.utils.log("\ntime average exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
+        def time_average(j, dfs=dfs, pol=pol, lens=lens, angs=angs, reds=reds, p=cf['algorithm']['tavg']):
+            try:
+                # load data into uvdata
+                uvd = UVData()
+                uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
+                # instantiate FRF object
+                F = hc.frf.FRFilter()
+                # load data
+                F.load_data(uvd)
+                # perform time-average
+                F.timeavg_data(p['t_window'], rephase=p['tavg_rephase'], verbose=verbose)
+                # write timeavg spectrum
+                _len = lens[j]
+                _deg = angs[j]
+                tavg_file = "zen.{group}.{pol}.{len:03d}_{deg:03d}.{suffix}".format(group=groupname, pol=pol, len=int(_len), deg=int(_deg), suffix=data_suffix)
+                tavg_file = os.path.join(out_dir, tavg_file + p['file_ext'])
+                F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
+            except:
+                err, _, tb = sys.exc_info()
+                hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+                return 1
+
+            return 0
+
+        # distribute jobs across baselinetype
+        exit_codes = M(time_average, range(len(reds)))
+
+        # print to log
+        hp.utils.log("\npol {} time average exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
+
+        # collate averaged data into time chunks
+        data_suffix += file_ext
+        tavg_files = os.path.join(out_dir, "zen.{group}.{pol}.*.{suffix}".format(group=groupname, pol=pol, suffix=data_suffix))
+        tavg_files = sorted(glob.glob(tavg_files))
+
+        # pick one file to get full time information from
+        uvd = UVData()
+        uvd.read_miriad(tavg_files[-1])
+        times = np.unique(uvd.time_array)
+        Ntimes = len(times)
+
+        # break into subfiles
+        Nfiles = int(np.ceil(Ntimes / float(file_Ntimes)))
+        times = [times[i*file_Ntimes:(i+1)*file_Ntimes] for i in range(Nfiles)]
+
+        def split_files(j, pol=pol, tavg_files=tavg_files, times=times, p=cf['algorithm']['tavg']):
+            try:
+                uvd = UVData()
+                uvd.read_miriad(tavg_files, time_range=[times[j].min()-1e-8, times[j].max()+1e-8])
+                lst = uvd.lst_array[0]
+                outfile = os.path.join(out_dir, "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=groupname, pol=pol, LST=lst, suffix=data_suffix))
+                uvd.write_miriad(outfile, clobber=overwrite)
+            except:
+                err, _, tb = sys.exc_info()
+                hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+                return 1
+
+            return 0
+
+        exit_codes = M(split_files, range(len(times)))
+
+        # print to log
+        hp.utils.log("\npol {} time split files exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
 
     input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
 
@@ -294,7 +412,7 @@ if form_pstokes:
     hp.utils.log("\n{}\nstarting pseudo-stokes: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # get datafiles with reversed nesting
-    datafiles, datapols = uvt.utils.search_data(input_data_template, pols, reverse_nesting=True)
+    datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, reverse_nesting=True)
 
     # write pseudo-Stokes function
     def make_pstokes(i, datafiles=datafiles, datapols=datapols, p=cf['algorithm']['pstokes']):
@@ -317,7 +435,8 @@ if form_pstokes:
                     outfile = os.path.join(out_dir, outfile)
                     ps.write_miriad(outfile, clobber=overwrite)
                 except AssertionError:
-                    pass
+                    if verbose:
+                        print "failed to make pstokes {} for job {}".format(pstokes, i)
         except:
             err, _, tb = sys.exc_info()
             hp.utils.log("datafile {} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
@@ -347,7 +466,7 @@ if fg_filt:
     hp.utils.log("\n{}\nstarting foreground filtering: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # get flattened datafiles
-    datafiles, datapols = uvt.utils.search_data(input_data_template, pols, matched_pols=False, reverse_nesting=False, flatten=True)
+    datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=True)
 
     # write fgfilt function
     def fg_filter(i, datafiles=datafiles, p=cf['algorithm']['fg_filt']):
