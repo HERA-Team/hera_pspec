@@ -53,7 +53,7 @@ algorithm :
     bltol : 1.0   # baseline redundancy tolerance in meters
 
   # RFI Flagging
-  timeavg_sub :
+  rfi_flag :
     file_ext : 'R'              # file extension
     run_xrfi : True             # run xrfi if True
     xrfi_params:                # if run_xrfi, set xrfi parameters
