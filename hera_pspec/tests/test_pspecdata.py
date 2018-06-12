@@ -278,11 +278,37 @@ class Test_PSpecData(unittest.TestCase):
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
         
-        for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
-            if mode == 'G^-1':
-                # # Test that the window functions are delta functions
-                # self.assertEqual(diagonal_or_not(W), True)
-                nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode=mode)
+        for mode in ['H^-1', 'G^-1/2', 'I', 'L^-1']:
+            if mode == 'H^-1':
+                # Test that if we have full-rank matrices, the resulting window functions
+                # are indeed delta functions
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                Hinv = np.linalg.inv(random_H)
+                for i in range(n):
+                    self.assertAlmostEqual(W[i,i], 1.)
+                    for j in range(n):
+                        self.assertAlmostEqual(M[i,j], Hinv[i,j])
+
+                # When the matrices are not full rank, test that the window functions
+                # are at least properly normalized.
+                deficient_H = np.ones((3,3))
+                M, W = self.ds.get_MW(deficient_H, deficient_H, mode=mode)
+                norm = np.sum(W, axis=1)
+                for i in range(3):
+                    self.assertAlmostEqual(norm[i], 1.)
+
+                # Check that a warning is raised when H matrix is not square
+                rectangle_H = np.ones((4,3))
+                nt.assert_raises(np.linalg.LinAlgError, self.ds.get_MW, random_G, rectangle_H, mode=mode)
+
+                # Check that the method ignores G
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode)
+                for i in range(n):
+                    for j in range(n):
+                        self.assertAlmostEqual(M[i,j], M_other[i,j])
+                        self.assertAlmostEqual(W[i,j], W_other[i,j])
+
             elif mode == 'G^-1/2':
                 # # Test that the error covariance is diagonal
                 # error_covariance = np.dot(M, np.dot(random_G, M.T)) 

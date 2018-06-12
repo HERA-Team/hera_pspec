@@ -931,9 +931,9 @@ class PSpecData(object):
 
         Several choices for M are supported:
             'I':      Set M to be diagonal (e.g. HERA Memo #44)
+            'H^-1':   Set M = H^-1, the (pseudo)inverse response matrix.
 
         These choices will be supported very soon:
-            'G^-1':   Set M = G^-1, the (pseudo)inverse response matrix.
             'G^-1/2': Set M = G^-1/2, the root-inverse response matrix (using SVD).
             'L^-1':   Set M = L^-1, Cholesky decomposition.
 
@@ -974,15 +974,27 @@ class PSpecData(object):
         #     return M, W
 
         # Check that mode is supported
-        modes = ['G^-1', 'G^-1/2', 'I', 'L^-1']
+        modes = ['H^-1', 'G^-1/2', 'I', 'L^-1']
         assert(mode in modes)
 
         # Build M matrix according to specified mode
-        if mode == 'G^-1':
-            raise NotImplementedError("G^-1 mode not currently supported.")
-            # M = np.linalg.pinv(G, rcond=1e-12)
-            # #U,S,V = np.linalg.svd(F)
-            # #M = np.einsum('ij,j,jk', V.T, 1./S, U.T)
+        if mode == 'H^-1':
+
+            try:
+                M = np.linalg.inv(H)
+            except np.linalg.LinAlgError as err:
+                if 'Singular matrix' in str(err):
+                    M = np.linalg.pinv(H)
+                    raise_warning("Warning: Window function matrix is singular "
+                                  "and cannot be inverted, so using "
+                                  " pseudoinverse instead.")
+                else:
+                    raise np.linalg.LinAlgError("Linear algebra error with H matrix "
+                                                "during MW computation.")
+
+            W = np.dot(M, H)
+            W_norm = np.sum(W, axis=1)
+            W = (W.T / W_norm).T
 
         elif mode == 'G^-1/2':
             raise NotImplementedError("G^-1/2 mode not currently supported.")
@@ -1232,7 +1244,7 @@ class PSpecData(object):
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
                                     n_dlys=self.spw_Ndlys) * 1e9 # convert to ns    
         
-    def scalar(self, pol, little_h=True, num_steps=2000, beam=None):
+    def scalar(self, pol, little_h=True, num_steps=2000, beam=None, taper_override='no_override'):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set 
@@ -1259,8 +1271,13 @@ class PSpecData(object):
                 Default: 10000
 
         beam : PSpecBeam object
-            Option to use a manually-fed PSpecBeam object instead of using 
-            self.primary_beam.
+                Option to use a manually-fed PSpecBeam object instead of using 
+                self.primary_beam.
+
+        taper_override : str, optional
+                Option to override the taper chosen in self.taper (does not
+                overwrite self.taper; just applies to this function).
+                Default: no_override
 
         Returns
         -------
@@ -1273,15 +1290,21 @@ class PSpecData(object):
         start = freqs[0]
         end = freqs[0] + np.median(np.diff(freqs)) * len(freqs)
 
+        # Override the taper if desired
+        if taper_override == 'no_override':
+            taper = self.taper
+        else:
+            taper = taper_override
+
         # calculate scalar
         if beam is None:
             scalar = self.primary_beam.compute_pspec_scalar(
                                         start, end, len(freqs), pol=pol,
-                                        taper=self.taper, little_h=little_h, 
+                                        taper=taper, little_h=little_h, 
                                         num_steps=num_steps)
         else:
             scalar = beam.compute_pspec_scalar(start, end, len(freqs), 
-                                               pol=pol, taper=self.taper, 
+                                               pol=pol, taper=taper, 
                                                little_h=little_h, 
                                                num_steps=num_steps)
         return scalar
@@ -1663,7 +1686,12 @@ class PSpecData(object):
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
                     # using zero'th indexed poalrization as cross polarized beam are not yet implemented
-                    scalar = self.scalar(p[0], little_h=True)
+                    if norm == 'H^-1':
+                        # If using decorrelation, the H^-1 normalization already deals with the taper,
+                        # so we need to override the taper when computing the scalar
+                        scalar = self.scalar(p[0], little_h=True, taper_override='none')
+                    else:
+                        scalar = self.scalar(p[0], little_h=True)
                 else: 
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized", 
@@ -1715,7 +1743,12 @@ class PSpecData(object):
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
-                        pv *= scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling)
+                        pv *= scalar
+
+                    # Wide bin adjustment of scalar, which is only needed for the diagonal norm
+                    # matrix mode (i.e., norm = 'I')
+                    if norm == 'I':
+                        pv *= self.scalar_delay_adjustment(key1, key2, sampling=sampling)
 
                     # Get baseline keys
                     if isinstance(blp, list):
