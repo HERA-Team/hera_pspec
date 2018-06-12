@@ -364,7 +364,8 @@ if time_avg:
         hp.utils.log("\npol {} time average exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
 
         # collate averaged data into time chunks
-        data_suffix += file_ext
+        if i == 0:
+            data_suffix += file_ext
         tavg_files = os.path.join(out_dir, "zen.{group}.{pol}.*.{suffix}".format(group=groupname, pol=pol, suffix=data_suffix))
         tavg_files = sorted(glob.glob(tavg_files))
 
