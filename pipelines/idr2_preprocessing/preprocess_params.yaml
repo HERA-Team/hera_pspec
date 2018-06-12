@@ -19,7 +19,7 @@ io :
 # Analysis Parameters
 #---------------------------------------------------------------
 analysis : 
-  reformat : True        # reformat data by baseline type
+  reformat : False        # reformat data by baseline type
   rfi_flag : False        # RFI-Flag data
   timeavg_sub : True       # full time-avg subtraction
   time_avg : True        # time average data
@@ -33,11 +33,12 @@ analysis :
 # Data Parameters
 #---------------------------------------------------------------
 data :
-  pols :                  # linear polarizations of data
+  pols :                  # list of linear polarizations of data
     - 'xx'
     - 'yy'
-  # full path to a data template with {pol}
-  input_data_template : '../../hera_pspec/data/zen.all.{pol}.LST.1.06964.uvA'
+  groupname : "all"       # a single groupname
+  # full path to a data template with {pol} and {group}
+  input_data_template : '../../hera_pspec/data/zen.{group}.{pol}.LST.1.06964.uvA'
 
 #---------------------------------------------------------------
 # Algorithm Parameters
@@ -46,8 +47,8 @@ algorithm :
 
   # Data Reformatting
   reformat : 
-    reformat_outfile : "zen.all.{len:03d}_{deg:03d}.{pol}.HH.{suffix}"   # outfile template
-    new_data_template : "zen.all.*.{pol}.HH.{suffix}" # new data template to use        
+    reformat_outfile : "zen.{group}.{len:03d}_{deg:03d}.{pol}.{suffix}"   # outfile template
+    new_data_template : "zen.{group}.*.{pol}.{suffix}" # new data template to use        
     bl_len_range : [0, 10000.0]  # [min, max] range of baseline lengths to extract [meters]
     bltol : 1.0   # baseline redundancy tolerance in meters
 
@@ -64,7 +65,7 @@ algorithm :
   # Time-Avg Subtraction
   timeavg_sub :
     file_ext : "T"        # file extension of timeavg-subtracted data
-    tavg_ext : ".tavg"   # file extension of timeavg-spectrum
+    tavg_tag : "tavg"   # filename tag of timeavg-spectrum
     dly_filter : True     # RFI flag and delay filter timeavg spectrum
     rfi_params :           # if dly_inpaint, these are the xrfi params
       sig_init : 2
@@ -84,7 +85,8 @@ algorithm :
   # Time Averaging
   tavg : 
     file_ext : "F"        # file extension of time-averaged data
-    t_window : 400.0      # width of averaging window in seconds
+    t_window : 200.0      # width of averaging window in seconds
+    file_Ntimes : 10        # output file duration in seconds: Ntimes ~ t_file / t_window
     tavg_rephase : True   # rephase data to window-center LST before average
 
   # Forming pStokes
@@ -99,7 +101,7 @@ algorithm :
       standoff : 50.0
       horizon : 1.0
       min_dly : 0.0
-      tol : 0.00000001
+      tol : 0.000000001
       maxiter : 100
       window : 'tukey'
       skip_wgt : 0.5
