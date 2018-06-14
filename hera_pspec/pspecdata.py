@@ -1744,7 +1744,8 @@ class PSpecData(object):
                             taper=taper))\
                             (amat,bmat)
                         if verbose: print(" Building p_hat covariance...")
-                        cov_pv=self.cov_p_hat(Mv,cov_qv)
+                        for tnum in range(self.Ntimes):
+                            cov_pv=self.cov_p_hat(Mv,cov_qv[:,:,tnum])
                         cov_pv*=\
                         (scalar * self.scalar_delay_adjustment(key1, key2,
                                                                taper=taper,
@@ -2065,13 +2066,13 @@ class PSpecData(object):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
 
 
-def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None,
+def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None, dset_pairs=None,
               spw_ranges=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=True, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True,
-              overwrite=True, verbose=True, history=''):
+              overwrite=True, verbose=True, covariance=False, history=''):
     """
 
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -2089,6 +2090,10 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     groupname : str
         Groupname of the subdirectory in the HDF5 container to store the
         UVPSpec objects in. Default is a concatenation the dset_labels.
+
+    dsets_std : list
+        Contains UVData objects or string filepaths to miriad files.
+        Default is none.
 
     dset_labels : list
         List of strings to label the input datasets. These labels form
@@ -2229,6 +2234,25 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
+    #check dsets_std input
+    if dsets_std is not None:
+        if isinstance(dsets_std,(str,np.str,UVData)):
+            dsets_std=[dsets_std]
+        assert isinstance(dsets_std,(list,tuple,np.ndarray)),err_msg
+        assert len(dsets_std) == Ndsets
+        #if path strings provided, read in UVData objects.
+        if isinstance(dsets_std[0],(str,np.str)):
+            t0=time.time()
+            _dsets_std=[]
+            for d in dsets_std:
+                uvd=UVData()
+                uvd.read_miriad(d,ant_pair_nums=bls,polarizations=pols)
+                _dsets_std.append(uvd)
+            dsets_std = _dsets_std
+            utils.log("Loaded std data in %1.1f sec."%(time.time()-t0),lvl=1,verbose=verbose)
+        err_msg="dsets_std must be fed as a list of dataset string paths or UVData objects."
+        assert np.all([isinstance(d,UVData) for d in dsets]), err_msg
+
     # configure polarization
     if pol_pairs is None:
         unique_pols = reduce(operator.and_, [set(d.polarization_array) for d in dsets])
@@ -2247,7 +2271,7 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
             beam.cosmo = cosmo
 
     # package into PSpecData
-    ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], beam=beam)
+    ds = PSpecData(dsets=dsets, wgts=[None for d in dsets],dsets_std=dsets_std, beam=beam)
 
     # Rephase if desired
     if rephase_to_dset is not None:
