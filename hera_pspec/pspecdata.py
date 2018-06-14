@@ -1731,27 +1731,27 @@ class PSpecData(object):
                     #Generate the covariance matrix if error bars provided
                     if covariance and not None in self.dsets_std:
                         if verbose: print(" Building q_hat covariance...")
-                        cov_qv=np.zeros((self.spw_Ndlys,
+                        cov_qv=np.zeros((self.Ntimes,
                                          self.spw_Ndlys,
-                                         self.Ntimes),dtype=complex)
+                                         self.spw_Ndlys),dtype=complex)
                         amat,bmat=np.meshgrid(range(self.spw_Ndlys),
                                               range(self.spw_Ndlys))
                         amat=amat.astype(int)
                         bmat=bmat.astype(int)
                         for tnum in range(self.Ntimes):
-                            cov_qv[:,:,tnum]=np.vectorize(lambda a,b:\
+                            cov_qv[tnum,:,:]=np.vectorize(lambda a,b:\
                             self.cov_q_hat(a,b,key1,key2,time_indices=[tnum],
                             taper=taper))\
                             (amat,bmat)
                         if verbose: print(" Building p_hat covariance...")
                         for tnum in range(self.Ntimes):
-                            cov_pv=self.cov_p_hat(Mv,cov_qv[:,:,tnum])
+                            cov_pv=self.cov_p_hat(Mv,cov_qv[tnum,:,:])
                         cov_pv*=\
                         (scalar * self.scalar_delay_adjustment(key1, key2,
                                                                taper=taper,
                                                                sampling=sampling))**2.
                         pol_cov.extend(cov_pv)
-                        store_cov=True #don't store incomplete covariance.
+                        store_cov=True
 
 
                     # Get baseline keys
@@ -1805,6 +1805,7 @@ class PSpecData(object):
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
+            spw_cov = np.moveaxis(np.array(spw_cov),0 , -1)
             data_array[i] = spw_data
             cov_array[i] = spw_cov
             wgt_array[i] = spw_wgts
