@@ -76,7 +76,7 @@ def build_vanilla_uvpspec(beam=None):
                                    2005235.09142983,
                                   -3239928.42475397])
 
-    store_cov=covariance
+    store_cov=True
     cosmo = conversions.Cosmo_Conversions()
 
     data_array, wgt_array, integration_array, nsample_array, cov_array = {}, {}, {}, {}, {}
