@@ -928,6 +928,10 @@ class UVPSpec(object):
             group.create_dataset("nsample_spw{}".format(i),
                                  data=self.nsample_array[i],
                                  dtype=np.float)
+            if self.store_cov:
+                group.create_dataset("cov_spw{}".format(i),
+                                     data=self.cov_array[i],
+                                     dtype=np.complex)
 
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
