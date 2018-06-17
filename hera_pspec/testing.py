@@ -13,6 +13,7 @@ def build_vanilla_uvpspec(beam=None):
     Parameters
     ----------
     beam : PSpecBeamBase subclass
+    covariance: if true, compute covariance
 
     Returns
     -------
@@ -74,16 +75,20 @@ def build_vanilla_uvpspec(beam=None):
     telescope_location = np.array([5109325.85521063,
                                    2005235.09142983,
                                   -3239928.42475397])
-    store_cov=False
+
+    store_cov=covariance
     cosmo = conversions.Cosmo_Conversions()
 
-    data_array, wgt_array, integration_array, nsample_array = {}, {}, {}, {}
+    data_array, wgt_array, integration_array, nsample_array, cov_array = {}, {}, {}, {}, {}
     for s in spws:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
         wgt_array[s] = np.ones((Nblpairts, Ndlys, 2, Npols), dtype=np.float)
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
+        cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+         for m in range(Nblpairts)] for n in range(Npols)]),0,-1)
+
 
     params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts',
               'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array',
@@ -93,7 +98,7 @@ def build_vanilla_uvpspec(beam=None):
               'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm',
               'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array',
               'cosmo', 'scalar_array', 'labels', 'norm_units', 'labels', 'label_1_array',
-              'label_2_array','store_cov']
+              'label_2_array','store_cov','cov_array']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
