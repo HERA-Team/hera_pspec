@@ -240,7 +240,7 @@ if timeavg_sub:
                 F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
             except:
                 err, _, tb = sys.exc_info()
-                hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+                hp.utils.log("\n{} threw {} Exception with traceback:".format(j, err), f=ef, tb=tb, verbose=verbose)
                 return 1
 
             return 0
@@ -382,7 +382,7 @@ if time_avg:
                 uvd = UVData()
                 uvd.read_miriad(tavg_files, time_range=[times[j].min()-1e-8, times[j].max()+1e-8])
                 lst = uvd.lst_array[0]
-                outfile = os.path.join(out_dir, "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=groupname, pol=pol, LST=lst, suffix=data_suffix + data_suffix))
+                outfile = os.path.join(out_dir, "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=groupname, pol=pol, LST=lst, suffix=data_suffix + p['file_ext']))
                 uvd.write_miriad(outfile, clobber=overwrite)
             except:
                 err, _, tb = sys.exc_info()
