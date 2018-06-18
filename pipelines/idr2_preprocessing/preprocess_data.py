@@ -180,7 +180,7 @@ if timeavg_sub:
     # get algorithm parameters
     globals().update(cf['algorithm']['timeavg_sub'])
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting time-average subtraction: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nstarting full time-average spectra and subtraction: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # get datafiles
     datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
