@@ -580,11 +580,12 @@ class PSpecData(object):
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and 
         diagonal tapering matrix (T):
 
-        R = T^t Y^t W Y T
+        R = sqrt(T^t) sqrt(Y^t) K sqrt(Y) sqrt(T)
 
-        where T is a diagonal matrix holding sqrt(taper) and Y is a diagonal
-        matrix holding sqrt(flags). The W matrix comes from either I or iC
-        depending on self.data_weighting, and T is informed by self.taper.
+        where T is a diagonal matrix holding the taper and Y is a diagonal
+        matrix holding flag weights. The K matrix comes from either I or iC
+        depending on self.data_weighting, T is informed by self.taper and Y
+        is taken from self.Y().
 
         Parameters
         ----------
@@ -602,23 +603,23 @@ class PSpecData(object):
         if not self._R.has_key(Rkey):
             # form sqrt(taper) matrix
             if self.taper == 'none':
-                T = np.ones(self.spw_Nfreqs).reshape(1, -1)
+                sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
-                T = np.sqrt(aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)).reshape(1, -1)
+                sqrtT = np.sqrt(aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)).reshape(1, -1)
 
             # get flag weight vector: straight multiplication of vectors mimics matrix multiplication
-            Y = np.sqrt(self.Y(key).diagonal().reshape(1, -1))
+            sqrtY = np.sqrt(self.Y(key).diagonal().reshape(1, -1))
 
             # replace possible nans with zero (when something dips negative in sqrt for some reason)
-            T[np.isnan(T)] = 0.0
-            Y[np.isnan(Y)] = 0.0
+            sqrtT[np.isnan(sqrtT)] = 0.0
+            sqrtY[np.isnan(sqrtY)] = 0.0
 
             # form R matrix
             if self.data_weighting == 'identity':
-                self._R[Rkey] = T.T * Y.T * self.I(key) * Y * T
+                self._R[Rkey] = sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT
 
             elif self.data_weighting == 'iC':
-                self._R[Rkey] = T.T * Y.T * self.iC(key) * Y * T
+                self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
 
         return self._R[Rkey]
 
