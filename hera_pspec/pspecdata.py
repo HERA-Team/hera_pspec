@@ -531,8 +531,8 @@ class PSpecData(object):
         Returns
         -------
         Y : array_like
-            spw_Nfreqs x spw_Nfreqs diagonal matrix holding logical_OR of flags
-            across time as a float-type. 
+            spw_Nfreqs x spw_Nfreqs diagonal matrix holding AND of flags
+            across all times for each freq channel. 
         """
         assert isinstance(key, tuple)
         # parse key
