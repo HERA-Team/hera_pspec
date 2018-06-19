@@ -95,7 +95,7 @@ if reformat:
     for i, dfs in enumerate(datafiles):
 
         # setup bl reformat function
-        def bl_reformat(j, i=i, datapols=datapols, dfs=dfs, lens=lens, angs=angs, reds=reds, p=cf['algorithm']['reformat']):
+        def bl_reformat(j, i=i, datapols=datapols, dfs=dfs, lens=lens, angs=angs, reds=reds, data_suffix=data_suffix, p=cf['algorithm']['reformat']):
             try:
                 if not p['bl_len_range'][0] < lens[j] < p['bl_len_range'][1]:
                     return 0
@@ -201,7 +201,7 @@ if timeavg_sub:
         pol = datapols[i][0]
 
         # write full tavg function
-        def full_tavg(j, pol=pol, lens=lens, angs=angs, reds=reds, dfs=dfs, p=cf['algorithm']['timeavg_sub']):
+        def full_tavg(j, pol=pol, lens=lens, angs=angs, reds=reds, dfs=dfs, data_suffix=data_suffix, p=cf['algorithm']['timeavg_sub']):
             try:
                 # load data into uvdata
                 uvd = UVData()
@@ -333,7 +333,7 @@ if time_avg:
     for i, dfs in enumerate(datafiles):
         pol = datapols[i][0]
 
-        def time_average(j, dfs=dfs, pol=pol, lens=lens, angs=angs, reds=reds, p=cf['algorithm']['tavg']):
+        def time_average(j, dfs=dfs, pol=pol, lens=lens, angs=angs, reds=reds, data_suffix=data_suffix, p=cf['algorithm']['tavg']):
             try:
                 # load data into uvdata
                 uvd = UVData()
@@ -377,7 +377,7 @@ if time_avg:
         Nfiles = int(np.ceil(Ntimes / float(file_Ntimes)))
         times = [times[i*file_Ntimes:(i+1)*file_Ntimes] for i in range(Nfiles)]
 
-        def reformat_files(j, pol=pol, tavg_files=tavg_files, times=times, p=cf['algorithm']['tavg']):
+        def reformat_files(j, pol=pol, tavg_files=tavg_files, times=times, data_suffix=data_suffix, p=cf['algorithm']['tavg']):
             try:
                 uvd = UVData()
                 uvd.read_miriad(tavg_files, time_range=[times[j].min()-1e-8, times[j].max()+1e-8])
