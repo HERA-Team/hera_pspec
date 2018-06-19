@@ -860,12 +860,32 @@ class Test_PSpecData(unittest.TestCase):
         ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2, unflag=True)
         nt.assert_false(ds.dsets[0].get_flags(24, 25)[:, :].any())
 
-        # test single integration being thrown out
+        # test single integration being flagged within spw
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25)[3], 0, 600, 0] = True
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.25, unflag=False)
         nt.assert_true(ds.dsets[0].get_flags(24, 25)[3, 400:800].all())
         nt.assert_false(ds.dsets[0].get_flags(24, 25)[3, :].all())
+
+        # test pspec run sets flagged integration to have zero weight
+        uvd.flag_array[uvd.antpair2ind(24, 25)[3], 0, 400, :] = True
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=0.25)
+        uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
+                        spw_ranges=[(400, 450)], verbose=False)
+        # assert flag broadcast above hits weight arrays in uvp
+        nt.assert_true(np.all(np.isclose(uvp.get_wgts(0, ((24, 25), (24, 25)), 'xx')[3], 0.0)))
+        # assert flag broadcast above hits integration arrays
+        nt.assert_true(np.isclose(uvp.get_integrations(0, ((24, 25), (24, 25)), 'xx')[3], 0.0))
+        # average spectra
+        avg_uvp = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
+        # repeat but change data in flagged portion
+        ds.dsets[0].data_array[uvd.antpair2ind(24, 25)[3], 0, 400:450, :] *= 100
+        uvp2 = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
+                        spw_ranges=[(400, 450)], verbose=False)
+        avg_uvp2 = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
+        # assert average before and after are the same!
+        nt.assert_equal(avg_uvp, avg_uvp2)
 
     def test_RFI_flag_propagation(self):
         # generate ds and weights
