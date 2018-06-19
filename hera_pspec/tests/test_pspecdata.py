@@ -845,18 +845,27 @@ class Test_PSpecData(unittest.TestCase):
         uvd.read_miriad(fname)
         Nfreq = uvd.data_array.shape[2]
 
-        # test basic execution
+        # test basic execution w/ a spw selection
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.2)
         nt.assert_false(ds.dsets[0].get_flags(24, 25)[:, 550:650].any())
 
+        # test w/ no spw selection
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
         ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2)
         nt.assert_true(ds.dsets[0].get_flags(24, 25)[:, 550:650].any())
 
+        # test unflagging
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
         ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2, unflag=True)
         nt.assert_false(ds.dsets[0].get_flags(24, 25)[:, :].any())
+
+        # test single integration being thrown out
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25)[3], 0, 600, 0] = True
+        ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.25, unflag=False)
+        nt.assert_true(ds.dsets[0].get_flags(24, 25)[3, 400:800].all())
+        nt.assert_false(ds.dsets[0].get_flags(24, 25)[3, :].all())
 
     def test_RFI_flag_propagation(self):
         # generate ds and weights

@@ -508,16 +508,18 @@ class PSpecData(object):
 
     def Y(self, key):
         """
-        Return the flag (binary) weighting (diagonal) matrix, Y. This matrix
-        is calculated by taking the logical_OR of flags across all times
+        Return the weighting (diagonal) matrix, Y. This matrix
+        is calculated by taking the logical AND of flags across all times
         given the dset-baseline-pol specification in 'key', converted
         into a float, and inserted along the diagonal of an 
         spw_Nfreqs x spw_Nfreqs matrix. 
 
-        The logical_OR step implies that all time-dependent flagging 
-        patterns are automatically broadcasted across all times. If 
-        this property is undesirable, see the PSpecData.broadcast_dset_flags() 
-        method to manually broadcast or un-broadcast flags ahead of time.
+        The logical AND step implies that all time-dependent flagging 
+        patterns are automatically broadcasted across all times. This broadcasting
+        follows the principle that, for each freq channel, if at least a single time
+        is unflagged, then the channel is treated as unflagged for all times. Power
+        spectra from certain times, however, can be given zero weight by setting the 
+        nsample array to be zero at those times (see self.broadcast_dset_flags).
 
         Parameters
         ----------
@@ -538,7 +540,9 @@ class PSpecData(object):
         key = (dset,) + (bl,)
 
         if not self._Y.has_key(key):
-            self._Y[key] = np.diag(np.min(self.w(key), axis=1))
+            self._Y[key] = np.diag(np.max(self.w(key), axis=1))
+            if not np.all(np.isclose(self._Y[key], 0.0) + np.isclose(self._Y[key], 1.0)):
+                raise NotImplementedError("Non-binary weights not currently implmented")
         return self._Y[key]
 
     def set_iC(self, d):
@@ -576,7 +580,7 @@ class PSpecData(object):
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and 
         diagonal tapering matrix (T):
 
-        R = T^t * Y^t * W * Y * T
+        R = T^t Y^t W Y T
 
         where T is a diagonal matrix holding sqrt(taper) and Y is a diagonal
         matrix holding sqrt(flags). The W matrix comes from either I or iC
@@ -602,7 +606,7 @@ class PSpecData(object):
             else:
                 T = np.sqrt(aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)).reshape(1, -1)
 
-            # get flag weight vector
+            # get flag weight vector: straight multiplication of vectors mimics matrix multiplication
             Y = np.sqrt(self.Y(key).diagonal().reshape(1, -1))
 
             # replace possible nans with zero (when something dips negative in sqrt for some reason)
@@ -1110,7 +1114,7 @@ class PSpecData(object):
 
         Additionally, one can also unflag the flag_array entirely if desired.
 
-        Note: that although technically allowed, this may give unexpected results
+        Note: although technically allowed, this function may give unexpected results
         if multiple spectral windows in spw_ranges have frequency overlap.
 
         Note: it is generally not recommended to set time_thresh > 0.5, which
@@ -1845,7 +1849,7 @@ class PSpecData(object):
 
         # run check
         uvp.check()
-
+        
         return uvp
 
     def rephase_to_dset(self, dset_index=0, inplace=True):
