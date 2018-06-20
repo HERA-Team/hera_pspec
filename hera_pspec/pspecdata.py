@@ -43,7 +43,7 @@ class PSpecData(object):
             PspecBeam object containing information about the primary beam
             Default: None.
         """
-        self.clear_cov_cache()  # Covariance matrix cache
+        self.clear_cache()  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
         self.dsets_std=[]
         self.Nfreqs = None
@@ -51,8 +51,10 @@ class PSpecData(object):
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
 
-        # Set R to identity by default
-        self.R = self.I
+        # set data weighting to identity by default
+        # and taper to none by default
+        self.data_weighting = 'identity'
+        self.taper = 'none'
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
@@ -171,8 +173,8 @@ class PSpecData(object):
         self.freqs = self.dsets[0].freq_array[0]
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
-
-
+        self.spw_Ndlys = self.spw_Nfreqs
+    
     def __str__(self):
         """
         Print basic info about this PSpecData object.
@@ -284,19 +286,18 @@ class PSpecData(object):
         except KeyError:
             return False
 
-    def clear_cov_cache(self, keys=None):
+    def clear_cache(self, keys=None):
         """
-        Clear stored covariance data (or some subset of it).
+        Clear stored matrix data (or some subset of it).
 
         Parameters
         ----------
         keys : list of tuples, optional
-            List of keys to remove from covariance matrix cache. If None, all
+            List of keys to remove from matrix cache. If None, all
             keys will be removed. Default: None.
         """
         if keys is None:
-            self._C, self._I, self._iC = {}, {}, {}
-            self._iCt = {}
+            self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -304,6 +305,10 @@ class PSpecData(object):
                 try: del(self._I[k])
                 except(KeyError): pass
                 try: del(self._iC[k])
+                except(KeyError): pass
+                try: del(self._Y[k])
+                except(KeyError): pass
+                try: del(self._R[k])
                 except(KeyError): pass
 
     def dset_idx(self, dset):
@@ -465,7 +470,7 @@ class PSpecData(object):
             being the ID (index) of the dataset, and subsequent items being the
             baseline indices.
         """
-        self.clear_cov_cache(cov.keys())
+        self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
 
     def C_model(self, key, model='empirical'):
@@ -573,6 +578,45 @@ class PSpecData(object):
             self.set_iC({Ckey:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
         return self._iC[Ckey]
 
+    def Y(self, key):
+        """
+        Return the weighting (diagonal) matrix, Y. This matrix
+        is calculated by taking the logical AND of flags across all times
+        given the dset-baseline-pol specification in 'key', converted
+        into a float, and inserted along the diagonal of an 
+        spw_Nfreqs x spw_Nfreqs matrix. 
+
+        The logical AND step implies that all time-dependent flagging 
+        patterns are automatically broadcasted across all times. This broadcasting
+        follows the principle that, for each freq channel, if at least a single time
+        is unflagged, then the channel is treated as unflagged for all times. Power
+        spectra from certain times, however, can be given zero weight by setting the 
+        nsample array to be zero at those times (see self.broadcast_dset_flags).
+
+        Parameters
+        ----------
+        key : tuple
+            Tuple containing indices of dataset and baselines. The first item
+            specifies the index (ID) of a dataset in the collection, while
+            subsequent indices specify the baseline index, in _key2inds format.
+
+        Returns
+        -------
+        Y : array_like
+            spw_Nfreqs x spw_Nfreqs diagonal matrix holding AND of flags
+            across all times for each freq channel. 
+        """
+        assert isinstance(key, tuple)
+        # parse key
+        dset, bl = self.parse_blkey(key)
+        key = (dset,) + (bl,)
+
+        if not self._Y.has_key(key):
+            self._Y[key] = np.diag(np.max(self.w(key), axis=1))
+            if not np.all(np.isclose(self._Y[key], 0.0) + np.isclose(self._Y[key], 1.0)):
+                raise NotImplementedError("Non-binary weights not currently implmented")
+        return self._Y[key]
+
     def set_iC(self, d):
         """
         Set the cached inverse covariance matrix for a given dataset and
@@ -588,23 +632,90 @@ class PSpecData(object):
         """
         for k in d: self._iC[k] = d[k]
 
-    def set_R(self, R_matrix):
+    def set_R(self, d):
         """
-        Set the weighting matrix R for later use in q_hat.
+        Set the data-weighting matrix for a given dataset and baseline to
+        a specified value for later use in q_hat. 
 
         Parameters
         ----------
-        R_matrix : string or matrix
-            If set to "identity", sets R = I
-            If set to "iC", sets R = C^-1
-            Otherwise, accepts a user inputted dictionary
+        d : dict
+            Dictionary containing data to insert into data-weighting R matrix
+            cache. Keys are tuples, following the same format as the input to
+            self.R().
         """
-        if R_matrix == "identity":
-            self.R = self.I
-        elif R_matrix == "iC":
-            self.R = self.iC
-        else:
-            self.R = R_matrix
+        for k in d: self._R[k] = d[k]
+
+    def R(self, key):
+        """
+        Return the data-weighting matrix R, which is a product of
+        data covariance matrix (I or C^-1), diagonal flag matrix (Y) and 
+        diagonal tapering matrix (T):
+
+        R = sqrt(T^t) sqrt(Y^t) K sqrt(Y) sqrt(T)
+
+        where T is a diagonal matrix holding the taper and Y is a diagonal
+        matrix holding flag weights. The K matrix comes from either I or iC
+        depending on self.data_weighting, T is informed by self.taper and Y
+        is taken from self.Y().
+
+        Parameters
+        ----------
+        key : tuple
+            Tuple containing indices of dataset and baselines. The first item
+            specifies the index (ID) of a dataset in the collection, while
+            subsequent indices specify the baseline index, in _key2inds format.
+        """
+        assert isinstance(key, tuple)
+        # parse key
+        dset, bl = self.parse_blkey(key)
+        key = (dset,) + (bl,)
+        Rkey = key + (self.data_weighting,) + (self.taper,)
+
+        if not self._R.has_key(Rkey):
+            # form sqrt(taper) matrix
+            if self.taper == 'none':
+                sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
+            else:
+                sqrtT = np.sqrt(aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)).reshape(1, -1)
+
+            # get flag weight vector: straight multiplication of vectors mimics matrix multiplication
+            sqrtY = np.sqrt(self.Y(key).diagonal().reshape(1, -1))
+
+            # replace possible nans with zero (when something dips negative in sqrt for some reason)
+            sqrtT[np.isnan(sqrtT)] = 0.0
+            sqrtY[np.isnan(sqrtY)] = 0.0
+
+            # form R matrix
+            if self.data_weighting == 'identity':
+                self._R[Rkey] = sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT
+
+            elif self.data_weighting == 'iC':
+                self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
+
+        return self._R[Rkey]
+
+    def set_weighting(self, data_weighting):
+        """
+        Set data weighting type.
+
+        Parameters
+        ----------
+        data_weighting : str
+            Type of data weightings. Options=['identity', 'iC']
+        """
+        self.data_weighting = data_weighting
+
+    def set_taper(self, taper):
+        """
+        Set data tapering type.
+
+        Parameters
+        ----------
+        taper : str
+            Type of data tapering. See aipy.dsp.gen_window for options.
+        """
+        self.taper = taper
 
     def set_spw(self, spw_range):
         """
@@ -731,7 +842,8 @@ class PSpecData(object):
 
 
 
-    def q_hat(self, key1, key2, allow_fft=False, taper='none'):
+
+    def q_hat(self, key1, key2, allow_fft=False):
         """
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
@@ -747,6 +859,9 @@ class PSpecData(object):
         with respect to the power spectrum, it contains factors of the primary
         beam etc. Q^alt_a strips away all of this, leaving only the barebones
         job of taking a Fourier transform. See HERA memo #44 for details.
+
+        This function uses the state of self.data_weighting and self.taper
+        in constructing q_hat. See PSpecData.pspec for details.
 
         Parameters
         ----------
@@ -764,10 +879,6 @@ class PSpecData(object):
             a simpler brute-force matrix multiplication. The FFT method assumes
             a delta-fn bin in delay space. It also only works if the number
             of delay bins is equal to the number of frequencies. Default: False.
-
-        taper : str, optional
-            Tapering (window) function to apply to the data. Takes the same
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
 
         Returns
         -------
@@ -787,12 +898,6 @@ class PSpecData(object):
             for _key in key2: Rx2 += np.dot(self.R(_key), self.x(_key))
         else:
             Rx2 = np.dot(self.R(key2), self.x(key2))
-
-        # Apply taper if asked for
-        if taper != 'none':
-            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
-            Rx1 *= tapering_fct[:, None]
-            Rx2 *= tapering_fct[:, None]
 
         # use FFT if possible and allowed
         if allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
@@ -858,9 +963,13 @@ class PSpecData(object):
                 # tr(R_2 Q_i R_1 Q_j)
                 G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
 
+        # check if all zeros, in which case turn into identity
+        if np.count_nonzero(G) == 0:
+            G = np.eye(self.spw_Ndlys)
+
         return G / 2.
 
-    def get_H(self, key1, key2, taper='none', sampling=False):
+    def get_H(self, key1, key2, sampling=False):
         """
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -899,16 +1008,15 @@ class PSpecData(object):
 
             F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
 
+        This function uses the state of self.taper in constructing H. 
+        See PSpecData.pspec for details.
+
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
-
-        taper : str, optional
-            Tapering (window) function to apply to the data. Takes the same
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
 
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
@@ -928,10 +1036,6 @@ class PSpecData(object):
         R1 = self.R(key1)
         R2 = self.R(key2)
 
-        if taper != 'none':
-            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
-            tapering_matrix = np.diag(tapering_fct)
-
         if not sampling:
             sinc_matrix = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs))
             for i in range(self.spw_Nfreqs):
@@ -943,10 +1047,7 @@ class PSpecData(object):
         for ch in xrange(self.spw_Ndlys):
             Q_alt = self.get_Q_alt(ch)
             iR1Q_alt[ch] = np.dot(R1, Q_alt) # R_1 Q_alt
-            if taper != 'none':
-                Q = np.dot(tapering_matrix, np.dot(Q_alt, tapering_matrix))
-            else:
-                Q = Q_alt
+            Q = Q_alt
 
             if not sampling:
                 Q *= sinc_matrix
@@ -957,6 +1058,10 @@ class PSpecData(object):
             for j in xrange(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
                 H[i,j] += np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
+
+        # check if all zeros, in which case turn into identity
+        if np.count_nonzero(H) == 0:
+            H = np.eye(self.spw_Ndlys)
 
         return H / 2.
 
@@ -1180,6 +1285,84 @@ class PSpecData(object):
         return np.einsum('ab,cd,bd->ac',M,M,q_cov)
 
 
+    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, unflag=False):
+        """
+        For each dataset in self.dset, update the flag_array such that
+        the flagging patterns are time-independent for each baseline given
+        a selection for spectral windows.
+
+        For each frequency pixel in a selected spw, if the fraction of flagged
+        times exceeds time_thresh, then all times are flagged. If it does not, 
+        the specific integrations which hold flags in the spw are flagged across
+        all frequencies in the spw.
+
+        Additionally, one can also unflag the flag_array entirely if desired.
+
+        Note: although technically allowed, this function may give unexpected results
+        if multiple spectral windows in spw_ranges have frequency overlap.
+
+        Note: it is generally not recommended to set time_thresh > 0.5, which
+        could lead to substantial amounts of data being flagged.
+    
+        Parameters
+        ----------
+        spw_ranges : list of tuples
+            list of len-2 spectral window tuples, specifying the start (inclusive)
+            and stop (exclusive) index of the frequency array for each spw.
+            Default is to use the whole band
+
+        time_thresh : float
+            Fractional threshold of flagged pixels across time needed to flag all times
+            per freq channel. It is not recommend to set this greater than 0.5
+
+        unflag : bool
+            If True, unflag all data in the spectral window.
+        """
+        # validate datasets
+        self.validate_datasets()
+
+        # clear matrix cache (which may be holding weight matrices Y)
+        self.clear_cache()
+
+        # spw type check
+        if spw_ranges is None:
+            spw_ranges = [(0, self.Nfreqs)]
+        assert isinstance(spw_ranges, list), "spw_ranges must be fed as a list of tuples"
+
+        # iterate over datasets
+        for dset in self.dsets:
+            # iterate over spw ranges
+            for spw in spw_ranges:
+                self.set_spw(spw)
+                # unflag
+                if unflag:
+                    # unflag for all times
+                    dset.flag_array[:, :, self.spw_range[0]:self.spw_range[1], :] = False
+                    continue
+                # enact time threshold on flag waterfalls
+                # iterate over polarizations
+                for i in range(dset.Npols):
+                    # iterate over unique baselines
+                    ubl = np.unique(dset.baseline_array)
+                    for bl in ubl:
+                        # get baseline-times indices
+                        bl_inds = np.where(np.in1d(dset.baseline_array, bl))[0]
+                        # get flag waterfall
+                        flags = dset.flag_array[bl_inds, 0, :, i].copy()
+                        Ntimes = float(flags.shape[0])
+                        Nfreqs = float(flags.shape[1])
+                        # get time- and freq-continguous flags
+                        freq_contig_flgs = np.sum(flags, axis=1) / Nfreqs > 0.999999
+                        Ntimes_noncontig = np.sum(~freq_contig_flgs, dtype=np.float)
+                        # get freq channels where non-contiguous flags exceed threshold
+                        exceeds_thresh = np.sum(flags[~freq_contig_flgs], axis=0, dtype=np.float) / Ntimes_noncontig > time_thresh
+                        # flag channels for all times that exceed time_thresh
+                        dset.flag_array[bl_inds, :, np.where(exceeds_thresh)[0][:, None], i] = True
+                        # for pixels that have flags but didn't meet broadcasting limit
+                        # flag the integration within the spw
+                        flags[:, np.where(exceeds_thresh)[0]] = False
+                        flag_ints = np.max(flags[:, self.spw_range[0]:self.spw_range[1]], axis=1)
+                        dset.flag_array[bl_inds[flag_ints], :, self.spw_range[0]:self.spw_range[1], i] = True
 
     def units(self, little_h=True):
         """
@@ -1234,10 +1417,9 @@ class PSpecData(object):
                              "calculate delays.")
         else:
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
-                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns
-
-    def scalar(self, pol, taper='none', little_h=True,
-               num_steps=2000, beam=None):
+                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns    
+        
+    def scalar(self, pol, little_h=True, num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set
@@ -1245,16 +1427,14 @@ class PSpecData(object):
 
         See arxiv:1304.4991 and HERA memo #27 for details.
 
+        This function uses the state of self.taper in constructing scalar.
+        See PSpecData.pspec for details.
+
         Parameters
         ----------
         pol: str
                 Which polarization to compute the scalar for.
                 e.g. 'I', 'Q', 'U', 'V', 'XX', 'YY'...
-
-        taper : str, optional
-                Whether a tapering function (e.g. Blackman-Harris) is being
-                used in the power spectrum estimation.
-                Default: none
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
@@ -1284,16 +1464,16 @@ class PSpecData(object):
         if beam is None:
             scalar = self.primary_beam.compute_pspec_scalar(
                                         start, end, len(freqs), pol=pol,
-                                        taper=taper, little_h=little_h,
+                                        taper=self.taper, little_h=little_h, 
                                         num_steps=num_steps)
         else:
-            scalar = beam.compute_pspec_scalar(start, end, len(freqs),
-                                               pol=pol, taper=taper,
-                                               little_h=little_h,
+            scalar = beam.compute_pspec_scalar(start, end, len(freqs), 
+                                               pol=pol, taper=self.taper, 
+                                               little_h=little_h, 
                                                num_steps=num_steps)
         return scalar
 
-    def scalar_delay_adjustment(self, key1, key2, taper='none', sampling=False):
+    def scalar_delay_adjustment(self, key1, key2, sampling=False):
         """
         Computes an adjustment factor for the pspec scalar that is needed
         when the number of delay bins is not equal to the number of
@@ -1306,16 +1486,15 @@ class PSpecData(object):
         In general, the result is still independent of alpha, but is
         no longer given by N_freq**2. (Nor is it just N_dlys**2!)
 
+        This function uses the state of self.taper in constructing adjustment.
+        See PSpecData.pspec for details.
+
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
-
-        taper : str, optional
-            Tapering (window) function to apply to the data. Takes the same
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
 
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
@@ -1326,9 +1505,16 @@ class PSpecData(object):
         adjustment : float
 
         """
+        # get ratio
         summed_G = np.sum(self.get_G(key1, key2), axis=1)
-        summed_H = np.sum(self.get_H(key1, key2, taper, sampling), axis=1)
+        summed_H = np.sum(self.get_H(key1, key2, sampling), axis=1)
         ratio = summed_H.real / summed_G.real
+
+        # fill infs and nans from zeros in summed_G
+        ratio[np.isnan(ratio)] = 1.0
+        ratio[np.isinf(ratio)] = 1.0
+
+        # get mean ratio
         mean_ratio = np.mean(ratio)
         scatter = np.abs(ratio - mean_ratio)
         if (scatter > 10**-4 * mean_ratio).any():
@@ -1336,8 +1522,8 @@ class PSpecData(object):
 
         adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
 
-        if taper != 'none':
-            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, taper)
+        if self.taper != 'none':
+            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)
             adjustment *= np.mean(tapering_fct**2)
 
         return adjustment
@@ -1478,6 +1664,7 @@ class PSpecData(object):
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
+
         history : str, optional
             history string to attach to UVPSpec object
 
@@ -1524,6 +1711,9 @@ class PSpecData(object):
             blpairs = [ [(A, D), (B, E)], (C, F)]
 
         """
+        # set taper and data weighting
+        self.taper = taper
+        self.data_weighting = input_data_weight
 
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
@@ -1627,7 +1817,7 @@ class PSpecData(object):
             self.set_Ndlys(n_dlys[i])
 
             # clear covariance cache
-            self.clear_cov_cache()
+            self.clear_cache()
             built_GH = False  # haven't built Gv and Hv matrices in this spw loop yet
 
             # setup emtpy data arrays
@@ -1669,8 +1859,8 @@ class PSpecData(object):
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
                     # using zero'th indexed poalrization as cross polarized beam are not yet implemented
-                    scalar = self.scalar(p[0], taper=taper, little_h=True)
-                else:
+                    scalar = self.scalar(p[0], little_h=True)
+                else: 
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized",
                                   verbose=verbose)
@@ -1700,10 +1890,6 @@ class PSpecData(object):
                     if verbose:
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
 
-                    # Set covariance weighting scheme for input data
-                    if verbose: print("  Setting weight matrix for input data...")
-                    self.set_R(input_data_weight)
-
                     # Build Fisher matrix
                     if input_data_weight == 'identity' and built_GH:
                         # in this case, all Gv are the same, so skip if already built for this spw!
@@ -1711,12 +1897,12 @@ class PSpecData(object):
                     else:
                         if verbose: print("  Building G...")
                         Gv = self.get_G(key1, key2)
-                        Hv = self.get_H(key1, key2, taper=taper, sampling=sampling)
+                        Hv = self.get_H(key1, key2, sampling=sampling)
                         built_GH = True
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, taper=taper)
+                    qv = self.q_hat(key1, key2)
 
                     # Normalize power spectrum estimate
                     if verbose: print("  Normalizing power spectrum...")
@@ -1726,7 +1912,7 @@ class PSpecData(object):
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
-                        pv *= scalar * self.scalar_delay_adjustment(key1, key2, taper=taper, sampling=sampling)
+                        pv *= scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling)
 
                     #Generate the covariance matrix if error bars provided
                     if covariance and not None in self.dsets_std:
@@ -1778,7 +1964,7 @@ class PSpecData(object):
 
                     # take inverse average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
                     # inverse avg is done b/c nsamp_1 ~ 1/sigma_1 and nsamp_2 ~ 1/sigma_2 where sigma is a proxy for std of noise
-                    pol_ints.extend(1./np.mean([1./nsamp1.clip(1e-10, np.inf), 1./nsamp2.clip(1e-10, np.inf)], axis=0) * dset1.integration_time)
+                    pol_ints.extend(1./np.mean([1./nsamp1, 1./nsamp2], axis=0) * dset1.integration_time)
 
                     # combined weight is geometric mean
                     pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
@@ -1889,7 +2075,7 @@ class PSpecData(object):
 
         # run check
         uvp.check()
-
+        
         return uvp
 
     def rephase_to_dset(self, dset_index=0, inplace=True):

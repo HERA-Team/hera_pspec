@@ -392,18 +392,19 @@ class Test_PSpecData(unittest.TestCase):
         key4 = [(1, 25, 38), (1, 25, 38)]
 
         for input_data_weight in ['identity', 'iC']:
-            self.ds.set_R(input_data_weight)
-
+            self.ds.set_weighting(input_data_weight)
+            
             # Loop over list of taper functions
             for taper in taper_selection:
+                self.ds.set_taper(taper)
 
                 # Calculate q_hat for a pair of baselines and test output shape
-                q_hat_a = self.ds.q_hat(key1, key2, taper=taper)
+                q_hat_a = self.ds.q_hat(key1, key2)
                 self.assertEqual(q_hat_a.shape, (Ndlys, Ntime))
 
 
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
-                q_hat_b = self.ds.q_hat(key2, key1, taper=taper)
+                q_hat_b = self.ds.q_hat(key2, key1)
                 q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
                 for i in range(Ndlys):
                     for j in range(Ntime):
@@ -413,10 +414,10 @@ class Test_PSpecData(unittest.TestCase):
                                                q_hat_diff[i,j].imag)
 
                 # Check that lists of keys are handled properly
-                q_hat_aa = self.ds.q_hat(key1, key4, taper=taper) # q_hat(x1, x2+x2)
-                q_hat_bb = self.ds.q_hat(key4, key1, taper=taper) # q_hat(x2+x2, x1)
-                q_hat_cc = self.ds.q_hat(key3, key4, taper=taper) # q_hat(x1+x1, x2+x2)
-
+                q_hat_aa = self.ds.q_hat(key1, key4) # q_hat(x1, x2+x2)
+                q_hat_bb = self.ds.q_hat(key4, key1) # q_hat(x2+x2, x1)
+                q_hat_cc = self.ds.q_hat(key3, key4) # q_hat(x1+x1, x2+x2)
+                
                 # Effectively checks that q_hat(2*x1, 2*x2) = 4*q_hat(x1, x2)
                 for i in range(Ndlys):
 
@@ -430,12 +431,13 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.spw_Ndlys = Nfreq
         # Check that the slow method is the same as the FFT method
         for input_data_weight in ['identity', 'iC']:
-            self.ds.set_R(input_data_weight)
+            self.ds.set_weighting(input_data_weight)
             # Loop over list of taper functions
             for taper in taper_selection:
-                q_hat_a_slow = self.ds.q_hat(key1, key2, allow_fft=False, taper=taper)
-                q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True, taper=taper)
 
+                self.ds.set_taper(taper)
+                q_hat_a_slow = self.ds.q_hat(key1, key2, allow_fft=False)
+                q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True)
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
@@ -449,20 +451,18 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        # Check that warning is raised if Ndlys isn't set
-        self.assertRaises(ValueError, self.ds.get_H, key1, key2)
-
         for input_data_weight in ['identity','iC']:
+            self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
+                self.ds.set_taper(taper)
                 print 'input_data_weight', input_data_weight
-                self.ds.set_R(input_data_weight)
 
                 self.ds.set_Ndlys(Nfreq/3)
-                H = self.ds.get_H(key1, key2, taper=taper)
+                H = self.ds.get_H(key1, key2)
                 self.assertEqual(H.shape, (Nfreq/3, Nfreq/3)) # Test shape
 
                 self.ds.set_Ndlys()
-                H = self.ds.get_H(key1, key2, taper=taper)
+                H = self.ds.get_H(key1, key2)
                 self.assertEqual(H.shape, (Nfreq, Nfreq)) # Test shape
 
     def test_get_G(self):
@@ -475,13 +475,12 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        # Check that warning is raised if Ndlys isn't set
-        self.assertRaises(ValueError, self.ds.get_G, key1, key2)
-
         for input_data_weight in ['identity','iC']:
+            self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
+                self.ds.clear_cache()
+                self.ds.set_taper(taper)
                 print 'input_data_weight', input_data_weight
-                self.ds.set_R(input_data_weight)
                 self.ds.set_Ndlys(Nfreq-2)
                 G = self.ds.get_G(key1, key2)
                 self.assertEqual(G.shape, (Nfreq-2, Nfreq-2)) # Test shape
@@ -613,7 +612,7 @@ class Test_PSpecData(unittest.TestCase):
         # Test that when:
         # i) Nfreqs = Ndlys, ii) Sampling, iii) No tapering, iv) R is identity
         # are all satisfied, the scalar adjustment factor is unity
-        self.ds.set_R('identity')
+        self.ds.set_weighting('identity')
         self.ds.spw_Ndlys = self.ds.spw_Nfreqs
         adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
         self.assertAlmostEqual(adjustment, 1.0)
@@ -929,6 +928,123 @@ class Test_PSpecData(unittest.TestCase):
         oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
+
+    def test_broadcast_dset_flags(self):
+        # setup
+        fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+        uvd = UVData()
+        uvd.read_miriad(fname)
+        Nfreq = uvd.data_array.shape[2]
+
+        # test basic execution w/ a spw selection
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.2)
+        nt.assert_false(ds.dsets[0].get_flags(24, 25)[:, 550:650].any())
+
+        # test w/ no spw selection
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2)
+        nt.assert_true(ds.dsets[0].get_flags(24, 25)[:, 550:650].any())
+
+        # test unflagging
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2, unflag=True)
+        nt.assert_false(ds.dsets[0].get_flags(24, 25)[:, :].any())
+
+        # test single integration being flagged within spw
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25)[3], 0, 600, 0] = True
+        ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.25, unflag=False)
+        nt.assert_true(ds.dsets[0].get_flags(24, 25)[3, 400:800].all())
+        nt.assert_false(ds.dsets[0].get_flags(24, 25)[3, :].all())
+
+        # test pspec run sets flagged integration to have zero weight
+        uvd.flag_array[uvd.antpair2ind(24, 25)[3], 0, 400, :] = True
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
+        ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=0.25)
+        uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
+                        spw_ranges=[(400, 450)], verbose=False)
+        # assert flag broadcast above hits weight arrays in uvp
+        nt.assert_true(np.all(np.isclose(uvp.get_wgts(0, ((24, 25), (24, 25)), 'xx')[3], 0.0)))
+        # assert flag broadcast above hits integration arrays
+        nt.assert_true(np.isclose(uvp.get_integrations(0, ((24, 25), (24, 25)), 'xx')[3], 0.0))
+        # average spectra
+        avg_uvp = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
+        # repeat but change data in flagged portion
+        ds.dsets[0].data_array[uvd.antpair2ind(24, 25)[3], 0, 400:450, :] *= 100
+        uvp2 = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
+                        spw_ranges=[(400, 450)], verbose=False)
+        avg_uvp2 = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
+        # assert average before and after are the same!
+        nt.assert_equal(avg_uvp, avg_uvp2)
+
+    def test_RFI_flag_propagation(self):
+        # generate ds and weights
+        uvd = copy.deepcopy(self.uvd)
+        uvd.flag_array[:] = False
+        Nfreq = uvd.data_array.shape[2]
+
+        # Basic test of shape
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
+        test_R = ds.R((1, 37, 38, 'XX'))
+        nt.assert_equal(test_R.shape, (Nfreq, Nfreq))
+
+        # First test that turning-off flagging does nothing if there are no flags in the data
+        bls1 = [(24, 25)]
+        bls2 = [(37, 38)]
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm, labels=['red', 'blue'])
+        uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
+        ds.broadcast_dset_flags(unflag=True)
+        uvp_unflagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
+        qe_unflagged = uvp_unflagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+
+        # assert answers are same to within 0.1%
+        nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
+
+        # Test that when flagged, the data within a channel really don't have any effect on the final result
+        uvd2 = copy.deepcopy(uvd)
+        uvd2.flag_array[uvd.antpair2ind(24, 25)] = True
+        ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
+        uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
+
+        uvd2.data_array[uvd.antpair2ind(24, 25)] *= 9234.913
+        ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
+        uvp_flagged_mod = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
+
+        qe_flagged_mod = uvp_flagged_mod.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]        
+
+        # assert answers are same to within 0.1%
+        nt.assert_true(np.isclose(np.real(qe_flagged_mod), np.real(qe_flagged), atol=0.001, rtol=0.001).all())
+
+        # Test below commented out because this sort of aggressive symmetrization is not yet implemented.
+        # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2) 
+        # # is equivalent to flagging for both x1 and x2.
+        # test_wgts_flagged = copy.deepcopy(test_wgts)
+        # test_wgts_flagged.data_array[:,:,40:60] = 0. # Flag 20 channels
+        # ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[test_wgts_flagged, test_wgts_flagged], beam=self.bm)
+        # print "mode alpha"
+        # uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
+        #                         little_h=True, verbose=False)
+        # ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, test_wgts_flagged], beam=self.bm)
+        # print "mode beta"
+        # uvp_flagged_asymm = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
+        #                         little_h=True, verbose=False)
+
+        # qe_flagged_asymm = uvp_flagged_asymm .get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        # qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+
+        # #print np.real(qe_flagged_asymm)/np.real(qe_flagged)
+
+        # # assert answers are same to within 3%
+        # nt.assert_true(np.isclose(np.real(qe_flagged_asymm)/np.real(qe_flagged), 1, atol=0.03, rtol=0.03).all())
+
+        print uvd.data_array.shape
 
     def test_validate_blpairs(self):
         # test exceptions
