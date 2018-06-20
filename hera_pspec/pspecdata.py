@@ -117,6 +117,7 @@ class PSpecData(object):
             dsets = _dsets
             wgts = _wgts
 
+
         # Convert input args to lists if possible
         if isinstance(dsets, UVData): dsets = [dsets,]
         if isinstance(wgts, UVData): wgts = [wgts,]
@@ -171,6 +172,7 @@ class PSpecData(object):
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
 
+
     def __str__(self):
         """
         Print basic info about this PSpecData object.
@@ -189,6 +191,7 @@ class PSpecData(object):
                 s += "  dset '%s' (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" \
                       % (self.labels[i], i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols)
         return s
+
 
     def validate_datasets(self, verbose=True):
         """
@@ -242,6 +245,8 @@ class PSpecData(object):
             max_diff_dec = np.max(map(lambda d: np.diff(d), itertools.combinations(phase_dec, 2)))
             max_diff = np.sqrt(max_diff_ra**2 + max_diff_dec**2)
             if max_diff > 0.15: raise_warning("Warning: maximum phase-center difference between datasets is > 10 arcmin", verbose=verbose)
+
+
 
     def check_key_in_dset(self, key, dset_ind):
         """
@@ -436,6 +441,7 @@ class PSpecData(object):
         """
         dset, bl = self.parse_blkey(key)
         spw = slice(self.spw_range[0], self.spw_range[1])
+
 
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T[spw]
@@ -744,9 +750,11 @@ class PSpecData(object):
 
         Parameters
         ----------
-        key1, key2 : tuples or lists of tuples
+        key1, key2: tuples or lists of tuples
             Tuples containing indices of dataset and baselines for the two
-            input datavectors. If a list of tuples is provided, the baselines
+            input datavectors for each power spectrum estimate.
+            q_a formed from key1, key2
+            If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
 
@@ -1435,6 +1443,8 @@ class PSpecData(object):
             to the order in spw_ranges.
             Default: None, which then sets n_dlys = number of frequencies.
 
+
+
         input_data_weight : str, optional
             String specifying which weighting matrix to apply to the input
             data. See the options in the set_R() method for details.
@@ -1463,6 +1473,8 @@ class PSpecData(object):
             Each tuple should contain a start (inclusive) and stop (exclusive)
             channel used to index the `freq_array` of each dataset. The default
             (None) is to use the entire band provided in each dataset.
+
+
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
@@ -1626,6 +1638,7 @@ class PSpecData(object):
             spw_pol = []
             spw_cov = []
 
+
             d = self.delays() * 1e-9
             dlys.extend(d)
             spws.extend(np.ones_like(d, np.int) * i)
@@ -1682,6 +1695,7 @@ class PSpecData(object):
                         # interpret blp as baseline-pair
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
+
 
                     if verbose:
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
@@ -1854,6 +1868,7 @@ class PSpecData(object):
                                 filename2, label2, dset2.history, '-'*20)
         uvp.taper = taper
         uvp.norm = norm
+
 
         if self.primary_beam is not None:
             # attach cosmology

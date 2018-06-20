@@ -292,7 +292,6 @@ class Test_PSpecData(unittest.TestCase):
         n = 17
         random_G = generate_pos_def_all_pos(n)
         random_H = generate_pos_def_all_pos(n)
-
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
 
         for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
@@ -385,6 +384,7 @@ class Test_PSpecData(unittest.TestCase):
         Ndlys = Nfreq - 3
         self.ds.spw_Ndlys = Ndlys
 
+
         # Set baselines to use for tests
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
@@ -400,6 +400,7 @@ class Test_PSpecData(unittest.TestCase):
                 # Calculate q_hat for a pair of baselines and test output shape
                 q_hat_a = self.ds.q_hat(key1, key2, taper=taper)
                 self.assertEqual(q_hat_a.shape, (Ndlys, Ntime))
+
 
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
                 q_hat_b = self.ds.q_hat(key2, key1, taper=taper)
@@ -517,6 +518,7 @@ class Test_PSpecData(unittest.TestCase):
                     for i in range(Nfreq-2):
                         for j in range(Nfreq-2):
                             self.assertGreaterEqual(G[i,j],
+
                                        -min_diagonal * multiplicative_tolerance)
                 else:
                     # In general, when R_1 != R_2, there is a more restricted
