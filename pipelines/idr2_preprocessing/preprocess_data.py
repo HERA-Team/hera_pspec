@@ -66,6 +66,9 @@ if multiproc:
 else:
     M = map
 
+# change to working dir
+os.chdir(work_dir)
+
 #-------------------------------------------------------------------------------
 # Reformat Data by Baseline Type
 #-------------------------------------------------------------------------------
@@ -90,6 +93,11 @@ if reformat:
     for i in range(len(angs)):
         if angs[i] < 0:
             angs[i] = (angs[i] + 180) % 360
+
+    # put in autocorrs
+    reds = [zip(uvd.antenna_numbers, uvd.antenna_numbers)] + reds
+    lens = [0] + lens
+    angs = [0] + angs
 
     # iterate over polarization group
     for i, dfs in enumerate(datafiles):
@@ -195,6 +203,11 @@ if timeavg_sub:
     lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
     angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
     angs = [(a + 180) % 360 if a < 0 else a for a in angs]
+
+    # put in autocorrs
+    reds = [zip(uvd.antenna_numbers, uvd.antenna_numbers)] + reds
+    lens = [0] + lens
+    angs = [0] + angs
 
     # iterate over pols
     for i, dfs in enumerate(datafiles):
@@ -328,6 +341,11 @@ if time_avg:
     lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
     angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
     angs = [(a + 180) % 360 if a < 0 else a for a in angs]
+
+    # put in autocorrs
+    reds = [zip(uvd.antenna_numbers, uvd.antenna_numbers)] + reds
+    lens = [0] + lens
+    angs = [0] + angs
 
     # iterate over pol groups
     for i, dfs in enumerate(datafiles):
