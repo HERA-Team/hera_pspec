@@ -44,7 +44,7 @@ def generate_pos_def(n):
 
 def generate_pos_def_all_pos(n):
     """
-    Generate a random positive definite symmetric matrix, with all entries 
+    Generate a random positive definite symmetric matrix, with all entries
     positive.
 
     Parameters
@@ -71,7 +71,7 @@ def diagonal_or_not(mat, places=7):
     ----------
     n : array_like
         Matrix to be tested
-        
+
     Returns
     -------
     diag : bool
@@ -85,20 +85,20 @@ def diagonal_or_not(mat, places=7):
 class Test_PSpecData(unittest.TestCase):
 
     def setUp(self):
-        
+
         # Instantiate empty PSpecData
         self.ds = pspecdata.PSpecData()
-        
+
         # Load datafiles
         self.d = []
         for dfile in dfiles:
             _d = uv.UVData()
             _d.read_miriad(os.path.join(DATA_PATH, dfile))
             self.d.append(_d)
-        
+
         # Set trivial weights
         self.w = [None for _d in dfiles]
-        
+
         # Load beam file
         beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
@@ -106,7 +106,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # load another data file
         self.uvd = uv.UVData()
-        self.uvd.read_miriad(os.path.join(DATA_PATH, 
+        self.uvd.read_miriad(os.path.join(DATA_PATH,
                                           "zen.2458042.17772.xx.HH.uvXA"))
 
     def tearDown(self):
@@ -118,19 +118,19 @@ class Test_PSpecData(unittest.TestCase):
     def test_init(self):
         # Test creating empty PSpecData
         ds = pspecdata.PSpecData()
-        
+
         # Test whether unequal no. of weights is picked up
-        self.assertRaises( AssertionError, 
-                           pspecdata.PSpecData, 
-                           [uv.UVData(), uv.UVData(), uv.UVData()], 
+        self.assertRaises( AssertionError,
+                           pspecdata.PSpecData,
+                           [uv.UVData(), uv.UVData(), uv.UVData()],
                            [uv.UVData(), uv.UVData()] )
-        
+
         # Test passing data and weights of the wrong type
         d_arr = np.ones((6, 8))
         d_lst = [[0,1,2] for i in range(5)]
         d_float = 12.
         d_dict = {'(0,1)':np.arange(5), '(0,2)':np.arange(5)}
-        
+
         self.assertRaises(TypeError, pspecdata.PSpecData, d_arr, d_arr)
         self.assertRaises(TypeError, pspecdata.PSpecData, d_lst, d_lst)
         self.assertRaises(TypeError, pspecdata.PSpecData, d_float, d_float)
@@ -144,27 +144,27 @@ class Test_PSpecData(unittest.TestCase):
         Test adding non UVData object.
         """
         nt.assert_raises(TypeError, self.ds.add, 1, 1)
-    
+
     def test_labels(self):
         """
         Test that dataset labels work.
         """
         # Check that specifying labels does work
-        psd = pspecdata.PSpecData( dsets=[self.d[0], self.d[1],], 
+        psd = pspecdata.PSpecData( dsets=[self.d[0], self.d[1],],
                                    wgts=[self.w[0], self.w[1], ],
                                    labels=['red', 'blue'] )
-        np.testing.assert_array_equal( psd.x(('red', 24, 38)), 
+        np.testing.assert_array_equal( psd.x(('red', 24, 38)),
                                        psd.x((0, 24, 38)) )
-        
+
         # Check specifying labels using dicts
         dsdict = {'a':self.d[0], 'b':self.d[1]}
         psd = pspecdata.PSpecData(dsets=dsdict, wgts=dsdict)
-        self.assertRaises(ValueError, pspecdata.PSpecData, dsets=dsdict, 
+        self.assertRaises(ValueError, pspecdata.PSpecData, dsets=dsdict,
                           wgts=dsdict, labels=['a', 'b'])
-        
+
         # Check that invalid labels raise errors
         self.assertRaises(KeyError, psd.x, ('green', 24, 38))
-    
+
     def test_parse_blkey(self):
         # make a double-pol UVData
         uvd = copy.deepcopy(self.uvd)
@@ -192,7 +192,7 @@ class Test_PSpecData(unittest.TestCase):
         print(ds) # print empty psd
         ds.add(self.uvd, None)
         print(ds) # print populated psd
-    
+
     def test_get_Q_alt(self):
         """
         Test the Q = dC/dp function.
@@ -215,13 +215,13 @@ class Test_PSpecData(unittest.TestCase):
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
             xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
-            
+
             # Test that Q matrix has the right shape
             self.assertEqual(Q_matrix.shape, (vect_length, vect_length))
-            
+
             # Test that x^t Q y == conj(y^t Q x)
             self.assertAlmostEqual(xQy, np.conjugate(yQx))
-            
+
             # x^t Q x should be real
             self.assertAlmostEqual(np.imag(xQx), 0.)
 
@@ -240,13 +240,13 @@ class Test_PSpecData(unittest.TestCase):
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
             xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
-            
+
             # Test that Q matrix has the right shape
             self.assertEqual(Q_matrix.shape, (vect_length, vect_length))
-            
+
             # Test that x^t Q y == conj(y^t Q x)
             self.assertAlmostEqual(xQy, np.conjugate(yQx))
-            
+
             # x^t Q x should be real
             self.assertAlmostEqual(np.imag(xQx), 0.)
 
@@ -277,7 +277,7 @@ class Test_PSpecData(unittest.TestCase):
         random_H = generate_pos_def_all_pos(n)
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
-        
+
         for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
             if mode == 'G^-1':
                 # # Test that the window functions are delta functions
@@ -285,7 +285,7 @@ class Test_PSpecData(unittest.TestCase):
                 nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode=mode)
             elif mode == 'G^-1/2':
                 # # Test that the error covariance is diagonal
-                # error_covariance = np.dot(M, np.dot(random_G, M.T)) 
+                # error_covariance = np.dot(M, np.dot(random_G, M.T))
                 # # FIXME: We should be decorrelating V, not G. See Issue 21
                 # self.assertEqual(diagonal_or_not(error_covariance), True)
                 nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode=mode)
@@ -309,46 +309,46 @@ class Test_PSpecData(unittest.TestCase):
         Ntime = self.ds.Ntimes
         Ndlys = Nfreq - 3
         self.ds.spw_Ndlys = Ndlys
-        
+
         # Set baselines to use for tests
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
-        
+
         for input_data_weight in ['identity', 'iC']:
             self.ds.set_R(input_data_weight)
-            
+
             # Loop over list of taper functions
             for taper in taper_selection:
-                
+
                 # Calculate q_hat for a pair of baselines and test output shape
                 q_hat_a = self.ds.q_hat(key1, key2, taper=taper)
                 self.assertEqual(q_hat_a.shape, (Ndlys, Ntime))
-                
+
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
                 q_hat_b = self.ds.q_hat(key2, key1, taper=taper)
                 q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
                 for i in range(Ndlys):
                     for j in range(Ntime):
-                        self.assertAlmostEqual(q_hat_diff[i,j].real, 
+                        self.assertAlmostEqual(q_hat_diff[i,j].real,
                                                q_hat_diff[i,j].real)
-                        self.assertAlmostEqual(q_hat_diff[i,j].imag, 
+                        self.assertAlmostEqual(q_hat_diff[i,j].imag,
                                                q_hat_diff[i,j].imag)
-                
+
                 # Check that lists of keys are handled properly
                 q_hat_aa = self.ds.q_hat(key1, key4, taper=taper) # q_hat(x1, x2+x2)
                 q_hat_bb = self.ds.q_hat(key4, key1, taper=taper) # q_hat(x2+x2, x1)
                 q_hat_cc = self.ds.q_hat(key3, key4, taper=taper) # q_hat(x1+x1, x2+x2)
-                
+
                 # Effectively checks that q_hat(2*x1, 2*x2) = 4*q_hat(x1, x2)
                 for i in range(Ndlys):
                     for j in range(Ntime):
-                        self.assertAlmostEqual(q_hat_a[i,j].real, 
+                        self.assertAlmostEqual(q_hat_a[i,j].real,
                                                0.25 * q_hat_cc[i,j].real)
-                        self.assertAlmostEqual(q_hat_a[i,j].imag, 
+                        self.assertAlmostEqual(q_hat_a[i,j].imag,
                                                0.25 * q_hat_cc[i,j].imag)
-        
+
 
         self.ds.spw_Ndlys = Nfreq
         # Check that the slow method is the same as the FFT method
@@ -420,7 +420,7 @@ class Test_PSpecData(unittest.TestCase):
 
                     # Test symmetry
                     anti_sym_norm = np.linalg.norm(G - G.T)
-                    self.assertLessEqual(anti_sym_norm, 
+                    self.assertLessEqual(anti_sym_norm,
                                         matrix_scale * multiplicative_tolerance)
 
                     # Test cyclic property of trace, where key1 and key2 can be
@@ -430,27 +430,27 @@ class Test_PSpecData(unittest.TestCase):
                     # the other.
                     G_swapped = self.ds.get_G(key2, key1)
                     G_diff_norm = np.linalg.norm(G - G_swapped)
-                    self.assertLessEqual(G_diff_norm, 
+                    self.assertLessEqual(G_diff_norm,
                                         matrix_scale * multiplicative_tolerance)
                     min_diagonal = np.min(np.diagonal(G))
-                    
-                    # Test that all elements of G are positive up to numerical 
-                    # noise with the threshold set to 10 orders of magnitude 
+
+                    # Test that all elements of G are positive up to numerical
+                    # noise with the threshold set to 10 orders of magnitude
                     # down from the smallest value on the diagonal
                     for i in range(Nfreq-2):
                         for j in range(Nfreq-2):
-                            self.assertGreaterEqual(G[i,j], 
+                            self.assertGreaterEqual(G[i,j],
                                        -min_diagonal * multiplicative_tolerance)
                 else:
-                    # In general, when R_1 != R_2, there is a more restricted 
-                    # symmetry where swapping R_1 and R_2 *and* taking the 
+                    # In general, when R_1 != R_2, there is a more restricted
+                    # symmetry where swapping R_1 and R_2 *and* taking the
                     # transpose gives the same result
                     G_swapped = self.ds.get_G(key2, key1)
                     G_diff_norm = np.linalg.norm(G - G_swapped.T)
-                    self.assertLessEqual(G_diff_norm, 
+                    self.assertLessEqual(G_diff_norm,
                                          matrix_scale * multiplicative_tolerance)
 
-            
+
     '''
     Under Construction
     def test_parseval(self):
@@ -462,7 +462,7 @@ class Test_PSpecData(unittest.TestCase):
         Nfreq = self.d[0].Nfreqs
         data = self.d[0]
         # Use only the requested number of channels
-        data.select(freq_chans=range(Nfreq), ant_pairs_nums=[(24,24),])
+        data.select(freq_chans=range(Nfreq), bls=[(24,24),])
         # Make it so that the test data is unflagged everywhere
         data.flag_array[:] = False
         # Get list of available baselines and LSTs
@@ -497,35 +497,35 @@ class Test_PSpecData(unittest.TestCase):
             (1,24,24): np.eye(Nfreq)
         }
         ds.set_C(exact_cov)
-        
+
         # Calculate OQE power spectrum using true covariance matrix
         tau = np.fft.fftshift( ds.delays() )
         ps, _ = ds.pspec(bls, input_data_weight='iC', norm='I')
         ps_avg = np.fft.fftshift( np.mean(ps[0], axis=1) )
-        
+
         # Calculate integrals for Parseval's theorem
         parseval_real = simps(gsq, x)
         parseval_ft = dx**2. * simps(fsq, k)
         parseval_phat = simps(ps_avg, tau)
-        
+
         # Report on results for different ways of calculating Parseval integrals
         print "Parseval's theorem:"
-        print "  \int [g(x)]^2 dx = %3.6e, %3.6e" % (parseval_real.real, 
+        print "  \int [g(x)]^2 dx = %3.6e, %3.6e" % (parseval_real.real,
                                                      parseval_real.imag)
-        print "  \int [f(k)]^2 dk = %3.6e, %3.6e" % (parseval_ft.real, 
+        print "  \int [f(k)]^2 dk = %3.6e, %3.6e" % (parseval_ft.real,
                                                      parseval_ft.imag)
-        print "  \int p_hat(k) dk = %3.6e, %3.6e" % (parseval_phat.real, 
+        print "  \int p_hat(k) dk = %3.6e, %3.6e" % (parseval_phat.real,
                                                      parseval_phat.imag)
-        
-        # Perform approx. equality test (this is a stochastic quantity, so we 
+
+        # Perform approx. equality test (this is a stochastic quantity, so we
         # only expect equality to ~10^-2 to 10^-3
         np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
     '''
-    
+
     def test_get_V_gaussian(self):
-        nt.assert_raises(NotImplementedError, self.ds.get_V_gaussian, 
+        nt.assert_raises(NotImplementedError, self.ds.get_V_gaussian,
                          (0,1), (0,1))
-        
+
     def test_scalar_delay_adjustment(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
         key1 = (0, 24, 38)
@@ -541,17 +541,17 @@ class Test_PSpecData(unittest.TestCase):
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
-        
-        gauss = pspecbeam.PSpecBeamGauss(0.8, 
+
+        gauss = pspecbeam.PSpecBeamGauss(0.8,
                                   np.linspace(115e6, 130e6, 50, endpoint=False))
         ds2 = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=gauss)
-        
-        # Precomputed results in the following test were done "by hand" 
+
+        # Precomputed results in the following test were done "by hand"
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         # FIXME: Uncomment when pyuvdata support for this is ready
         #scalar = self.ds.scalar()
         #self.assertAlmostEqual(scalar, 3732415176.85 / 10.**9)
-        
+
         # FIXME: Remove this when pyuvdata support for the above is ready
         #self.assertRaises(NotImplementedError, self.ds.scalar)
 
@@ -605,7 +605,7 @@ class Test_PSpecData(unittest.TestCase):
         # test basic execution
         uvd = self.uvd
         uvd.vis_units = 'Jy'
-        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], 
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
                                  wgts=[None, None], beam=self.bm)
         ds.Jy_to_mK()
         nt.assert_true(ds.dsets[0].vis_units, 'mK')
@@ -613,7 +613,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(uvd.get_data(24, 25, 'xx')[30, 30] / ds.dsets[0].get_data(24, 25, 'xx')[30, 30] < 1.0)
 
         # test feeding beam
-        ds2 = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], 
+        ds2 = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
                                  wgts=[None, None], beam=self.bm)
         ds2.Jy_to_mK(beam=self.bm)
         nt.assert_equal(ds.dsets[0], ds2.dsets[0])
@@ -622,7 +622,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = copy.deepcopy(uvd)
         uvd2.polarization_array[0] = 1
         uvd2.vis_units = 'UNCALIB'
-        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)], 
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)],
                                  wgts=[None, None], beam=self.bm)
         ds.Jy_to_mK()
         nt.assert_equal(ds.dsets[0].vis_units, "mK")
@@ -694,7 +694,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(len(uvp.bl_array), len(bls))
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
         nt.assert_equal(uvp.data_array[0].dtype, np.complex128)
-        nt.assert_equal(uvp.data_array[0].shape, (240, 64, 1)) 
+        nt.assert_equal(uvp.data_array[0].shape, (240, 64, 1))
 
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
@@ -710,7 +710,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (52, 53))) in uvp.blpair_array)
         nt.assert_true(uvp.antnums_to_blpair(((52, 53), (24, 25))) not in uvp.blpair_array)
         nt.assert_equal(uvp.Nblpairs, 10)
- 
+
         # test mixed bl group and non blgroup, currently bl grouping of more than 1 blpair doesn't work
         bls1 = [[(24, 25)], (52, 53)]
         bls2 = [[(24, 25)], (52, 53)]
@@ -751,18 +751,18 @@ class Test_PSpecData(unittest.TestCase):
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=[(10, 24)], verbose=False)
-        nt.assert_raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pols=[('xx','yy')])        
+        nt.assert_raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pols=[('xx','yy')])
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('yy','yy')], spw_ranges=[(10, 24)], verbose=False)
-       
+
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), (-5, -5), spw_ranges=[(10, 24)], verbose=False)
- 
+
         # test exceptions
         nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1), ('xx','xx'))
-        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), pols=('yy','yy')) 
+        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), pols=('yy','yy'))
         uvd1 = copy.deepcopy(self.uvd)
         uvd1.polarization_array = np.array([-6])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd1], wgts=[None, None], beam=self.bm)
@@ -777,10 +777,10 @@ class Test_PSpecData(unittest.TestCase):
 
         uvd1 = copy.deepcopy(self.uvd)
         uvd1.polarization_array = np.array([-6])
-        uvd2 = self.uvd + uvd1  
+        uvd2 = self.uvd + uvd1
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('xy','xy')], spw_ranges=[(10, 24)], verbose=False)
- 
+
         # test with nsamp set to zero
         uvd = copy.deepcopy(self.uvd)
         uvd.nsample_array[uvd.antpair2ind(24, 25)] = 0.0
@@ -790,9 +790,9 @@ class Test_PSpecData(unittest.TestCase):
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
-        d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2], 
+        d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2],
                              frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
-        d2 = self.uvd.select(times=np.unique(self.uvd.time_array)[1::2], 
+        d2 = self.uvd.select(times=np.unique(self.uvd.time_array)[1::2],
                              frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
         freqs = np.unique(d1.freq_array)
 
