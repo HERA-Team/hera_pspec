@@ -177,7 +177,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
-        if uvp.store_cove:
+        if uvp.store_cov:
             uvp.cov_array = cov
     except AttributeError:
         # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
