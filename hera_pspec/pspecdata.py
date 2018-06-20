@@ -174,7 +174,7 @@ class PSpecData(object):
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
         self.spw_Ndlys = self.spw_Nfreqs
-    
+
     def __str__(self):
         """
         Print basic info about this PSpecData object.
@@ -583,14 +583,14 @@ class PSpecData(object):
         Return the weighting (diagonal) matrix, Y. This matrix
         is calculated by taking the logical AND of flags across all times
         given the dset-baseline-pol specification in 'key', converted
-        into a float, and inserted along the diagonal of an 
-        spw_Nfreqs x spw_Nfreqs matrix. 
+        into a float, and inserted along the diagonal of an
+        spw_Nfreqs x spw_Nfreqs matrix.
 
-        The logical AND step implies that all time-dependent flagging 
+        The logical AND step implies that all time-dependent flagging
         patterns are automatically broadcasted across all times. This broadcasting
         follows the principle that, for each freq channel, if at least a single time
         is unflagged, then the channel is treated as unflagged for all times. Power
-        spectra from certain times, however, can be given zero weight by setting the 
+        spectra from certain times, however, can be given zero weight by setting the
         nsample array to be zero at those times (see self.broadcast_dset_flags).
 
         Parameters
@@ -604,7 +604,7 @@ class PSpecData(object):
         -------
         Y : array_like
             spw_Nfreqs x spw_Nfreqs diagonal matrix holding AND of flags
-            across all times for each freq channel. 
+            across all times for each freq channel.
         """
         assert isinstance(key, tuple)
         # parse key
@@ -635,7 +635,7 @@ class PSpecData(object):
     def set_R(self, d):
         """
         Set the data-weighting matrix for a given dataset and baseline to
-        a specified value for later use in q_hat. 
+        a specified value for later use in q_hat.
 
         Parameters
         ----------
@@ -649,7 +649,7 @@ class PSpecData(object):
     def R(self, key):
         """
         Return the data-weighting matrix R, which is a product of
-        data covariance matrix (I or C^-1), diagonal flag matrix (Y) and 
+        data covariance matrix (I or C^-1), diagonal flag matrix (Y) and
         diagonal tapering matrix (T):
 
         R = sqrt(T^t) sqrt(Y^t) K sqrt(Y) sqrt(T)
@@ -752,7 +752,7 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
-    def cov_q_hat(self,alpha,beta,key1,key2,time_indices,taper='none'):
+    def cov_q_hat(self,alpha,beta,key1,key2,time_indices):
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
@@ -775,9 +775,6 @@ class PSpecData(object):
 
         time_indices, list of indices for times.
 
-        taper: str, optional
-            Tapering (window) function to apply to the data. Takes the same
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
 
         Returns
         -------
@@ -822,11 +819,7 @@ class PSpecData(object):
             N1b[:,:,t]=np.diag(n1b[:,tind])
             N2a[:,:,t]=np.diag(n2a[:,tind])
             N2b[:,:,t]=np.diag(n2b[:,tind])
-        if taper != 'none':
-            tapering_fct=\
-            np.diag(aipy.dsp.gen_window(self.spw_Nfreqs,taper))
-            R1=np.dot(R1,tapering_fct)
-            R2=np.dot(R2,tapering_fct)
+
         Qalpha=self.get_Q_alt(alpha)
         Qbeta=self.get_Q_alt(beta)
         Ealpha=np.einsum('ab,bc,cd',R1.T.conj(),Qalpha,R2)
@@ -1008,7 +1001,7 @@ class PSpecData(object):
 
             F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
 
-        This function uses the state of self.taper in constructing H. 
+        This function uses the state of self.taper in constructing H.
         See PSpecData.pspec for details.
 
         Parameters
@@ -1292,7 +1285,7 @@ class PSpecData(object):
         a selection for spectral windows.
 
         For each frequency pixel in a selected spw, if the fraction of flagged
-        times exceeds time_thresh, then all times are flagged. If it does not, 
+        times exceeds time_thresh, then all times are flagged. If it does not,
         the specific integrations which hold flags in the spw are flagged across
         all frequencies in the spw.
 
@@ -1303,7 +1296,7 @@ class PSpecData(object):
 
         Note: it is generally not recommended to set time_thresh > 0.5, which
         could lead to substantial amounts of data being flagged.
-    
+
         Parameters
         ----------
         spw_ranges : list of tuples
@@ -1417,8 +1410,8 @@ class PSpecData(object):
                              "calculate delays.")
         else:
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
-                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns    
-        
+                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns
+
     def scalar(self, pol, little_h=True, num_steps=2000, beam=None):
         """
         Computes the scalar function to convert a power spectrum estimate
@@ -1464,12 +1457,12 @@ class PSpecData(object):
         if beam is None:
             scalar = self.primary_beam.compute_pspec_scalar(
                                         start, end, len(freqs), pol=pol,
-                                        taper=self.taper, little_h=little_h, 
+                                        taper=self.taper, little_h=little_h,
                                         num_steps=num_steps)
         else:
-            scalar = beam.compute_pspec_scalar(start, end, len(freqs), 
-                                               pol=pol, taper=self.taper, 
-                                               little_h=little_h, 
+            scalar = beam.compute_pspec_scalar(start, end, len(freqs),
+                                               pol=pol, taper=self.taper,
+                                               little_h=little_h,
                                                num_steps=num_steps)
         return scalar
 
@@ -1860,7 +1853,7 @@ class PSpecData(object):
                 if self.primary_beam is not None:
                     # using zero'th indexed poalrization as cross polarized beam are not yet implemented
                     scalar = self.scalar(p[0], little_h=True)
-                else: 
+                else:
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized",
                                   verbose=verbose)
@@ -1926,16 +1919,15 @@ class PSpecData(object):
                         bmat=bmat.astype(int)
                         for tnum in range(self.Ntimes):
                             cov_qv[tnum,:,:]=np.vectorize(lambda a,b:\
-                            self.cov_q_hat(a,b,key1,key2,time_indices=[tnum],
-                            taper=taper))\
+                            self.cov_q_hat(a,b,key1,key2,time_indices=[tnum]))\
                             (amat,bmat)
                         if verbose: print(" Building p_hat covariance...")
                         for tnum in range(self.Ntimes):
                             cov_pv=self.cov_p_hat(Mv,cov_qv[tnum,:,:])
-                        cov_pv*=\
-                        (scalar * self.scalar_delay_adjustment(key1, key2,
-                                                               taper=taper,
-                                                               sampling=sampling))**2.
+                        if self.primary_beam != None:
+                            cov_pv*=\
+                            (scalar * self.scalar_delay_adjustment(key1, key2,
+                                                                   sampling=sampling))**2.
                         pol_cov.extend(cov_pv)
                         store_cov=True
 
@@ -2075,7 +2067,7 @@ class PSpecData(object):
 
         # run check
         uvp.check()
-        
+
         return uvp
 
     def rephase_to_dset(self, dset_index=0, inplace=True):

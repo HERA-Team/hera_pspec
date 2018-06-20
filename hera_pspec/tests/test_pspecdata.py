@@ -321,8 +321,12 @@ class Test_PSpecData(unittest.TestCase):
         Test that q_hat_cov has the right shape and accepts keys in correct
         format.
         """
+        for d in self.d:
+            d.flag_array[:]=False #ensure that there are no flags!
+        for d_std in self.d_std:
+            d_std.flag_array[:]=False
         self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
-        Nfreq = self.ds.Nfreqs
+        Nfactor = self.ds.Nfreqs
         Ntime = self.ds.Ntimes
 
         key1 = (0,24,38)
@@ -332,30 +336,30 @@ class Test_PSpecData(unittest.TestCase):
         #key4 = [(1,25,38), (1,25,38)]
 
         for input_data_weight in ['identity','iC']:
-            self.ds.set_R(input_data_weight)
+            self.ds.set_weighting(input_data_weight)
 
             for taper in taper_selection:
-                q_hat_cov_a = self.ds.cov_q_hat(0,0,key1,key2,tinds,taper=taper)
+                q_hat_cov_a = self.ds.cov_q_hat(0,0,key1,key2,tinds)
                 self.assertEqual(q_hat_cov_a.shape,np.array(tinds).shape)
 
         """
         Now test that analytic Error calculation gives Nchan^2
         """
-        self.ds.set_R('identity')
-        q_hat_cov_a=self.ds.cov_q_hat(0,0,key1,key2,tinds,taper='none')
+        self.ds.set_weighting('identity')
+        q_hat_cov_a=self.ds.cov_q_hat(0,0,key1,key2,tinds)
         self.assertTrue(np.isclose(q_hat_cov_a[0],
-                        Nfreq**2.,atol=1e-6))
-        q_hat_cov_a=self.ds.cov_q_hat(0,10,key1,key2,tinds,taper='none')
+                        Nfactor**2.,atol=1e-6))
+        q_hat_cov_a=self.ds.cov_q_hat(0,10,key1,key2,tinds)
         self.assertTrue(np.isclose(q_hat_cov_a[0],
                         0.,atol=1e-6))
         """
         Test lists of keys
         """
-        self.ds.set_R('identity')
-        q_hat_cov_a=self.ds.cov_q_hat(0,0,[key1],[key2],tinds,taper='none')
+        self.ds.set_weighting('identity')
+        q_hat_cov_a=self.ds.cov_q_hat(0,0,[key1],[key2],tinds)
         self.assertTrue(np.isclose(q_hat_cov_a[0],
-                        Nfreq**2.,atol=1e-6))
-        q_hat_cov_a=self.ds.cov_q_hat(0,10,[key1],[key2],tinds,taper='none')
+                        Nfactor**2.,atol=1e-6))
+        q_hat_cov_a=self.ds.cov_q_hat(0,10,[key1],[key2],tinds)
         self.assertTrue(np.isclose(q_hat_cov_a[0],
                         0.,atol=1e-6))
 
@@ -393,7 +397,7 @@ class Test_PSpecData(unittest.TestCase):
 
         for input_data_weight in ['identity', 'iC']:
             self.ds.set_weighting(input_data_weight)
-            
+
             # Loop over list of taper functions
             for taper in taper_selection:
                 self.ds.set_taper(taper)
@@ -417,7 +421,7 @@ class Test_PSpecData(unittest.TestCase):
                 q_hat_aa = self.ds.q_hat(key1, key4) # q_hat(x1, x2+x2)
                 q_hat_bb = self.ds.q_hat(key4, key1) # q_hat(x2+x2, x1)
                 q_hat_cc = self.ds.q_hat(key3, key4) # q_hat(x1+x1, x2+x2)
-                
+
                 # Effectively checks that q_hat(2*x1, 2*x2) = 4*q_hat(x1, x2)
                 for i in range(Ndlys):
 
@@ -1017,13 +1021,13 @@ class Test_PSpecData(unittest.TestCase):
                                 little_h=True, verbose=False)
 
         qe_flagged_mod = uvp_flagged_mod.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
-        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]        
+        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
 
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_flagged_mod), np.real(qe_flagged), atol=0.001, rtol=0.001).all())
 
         # Test below commented out because this sort of aggressive symmetrization is not yet implemented.
-        # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2) 
+        # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2)
         # # is equivalent to flagging for both x1 and x2.
         # test_wgts_flagged = copy.deepcopy(test_wgts)
         # test_wgts_flagged.data_array[:,:,40:60] = 0. # Flag 20 channels
