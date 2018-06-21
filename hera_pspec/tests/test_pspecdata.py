@@ -1110,12 +1110,7 @@ def test_pspec_run():
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
 
-    #cover situation where dsets and dsets std are not lists. 
-    psc = pspecdata.pspec_run(fnames[0], "./out.hdf5",dsets_std=fnames_std[0], Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
-                              rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
-                              pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
-                              dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
-                              cosmo=cosmo)
+
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()
     a = args.parse_args([['foo'], 'bar'])

@@ -2376,8 +2376,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     """
     # type check
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
-    if isinstance(dsets, (str, np.str, UVData)):
-        dsets = [dsets]
+    #if isinstance(dsets, (str, np.str, UVData)):
+    #    dsets = [dsets]      AEW: I've commented this out since the code below assumes >1 dataset.
     assert isinstance(dsets, (list, tuple, np.ndarray)), err_msg
     Ndsets = len(dsets)
 
@@ -2415,8 +2415,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     #check dsets_std input
     if dsets_std is not None:
-        if isinstance(dsets_std,(str,np.str,UVData)):
-            dsets_std=[dsets_std]
+        #if isinstance(dsets_std,(str,np.str,UVData)):
+        #    dsets_std=[dsets_std]
         assert isinstance(dsets_std,(list,tuple,np.ndarray)),err_msg
         assert len(dsets_std) == Ndsets
         #if path strings provided, read in UVData objects.
