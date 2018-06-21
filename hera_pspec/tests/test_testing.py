@@ -36,4 +36,4 @@ def test_uvpspec_from_data():
     nt.assert_equal(uvp, uvp2)
     #test std
     uvp = testing.uvpspec_from_data(fname, [(37, 38), (38, 39), (52, 53), (53, 54)],
-                                    data_std=fname_std, beam=beam, spw_ranges=((10,20)))
+                                    data_std=fname_std, beam=beam, spw_ranges=[(20,28)])
