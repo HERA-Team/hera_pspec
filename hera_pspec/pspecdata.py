@@ -55,6 +55,9 @@ class PSpecData(object):
         # and taper to none by default
         self.data_weighting = 'identity'
         self.taper = 'none'
+        #set dsets_std to None if any are None.
+        if not dsets_std is None and None in dsets_std:
+            dsets_std=None
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
