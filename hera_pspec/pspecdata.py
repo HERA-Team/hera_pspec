@@ -2425,7 +2425,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
             _dsets_std=[]
             for d in dsets_std:
                 uvd=UVData()
-                uvd.read_miriad(d,ant_pair_nums=bls,polarizations=pols)
+                uvd.read_miriad(d,bls=bls,polarizations=pols)
                 _dsets_std.append(uvd)
             dsets_std = _dsets_std
             utils.log("Loaded std data in %1.1f sec."%(time.time()-t0),lvl=1,verbose=verbose)

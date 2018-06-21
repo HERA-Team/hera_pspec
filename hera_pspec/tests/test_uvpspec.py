@@ -327,6 +327,7 @@ class Test_UVPSpec(unittest.TestCase):
     def test_combine_uvpspec(self):
         # setup uvp build
         uvd = UVData()
+        uvd_std = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
         uvd_std.read_miriad(os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'))
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits"))
