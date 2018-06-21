@@ -1913,6 +1913,7 @@ class PSpecData(object):
                         cov_qv=np.zeros((self.Ntimes,
                                          self.spw_Ndlys,
                                          self.spw_Ndlys),dtype=complex)
+                        cov_pv=np.zeros_like(cov_qv)
                         amat,bmat=np.meshgrid(range(self.spw_Ndlys),
                                               range(self.spw_Ndlys))
                         amat=amat.astype(int)
@@ -1923,11 +1924,12 @@ class PSpecData(object):
                             (amat,bmat)
                         if verbose: print(" Building p_hat covariance...")
                         for tnum in range(self.Ntimes):
-                            cov_pv=self.cov_p_hat(Mv,cov_qv[tnum,:,:])
+                            cov_pv[tnum]=self.cov_p_hat(Mv,cov_qv[tnum,:,:])
                         if self.primary_beam != None:
                             cov_pv*=\
                             (scalar * self.scalar_delay_adjustment(key1, key2,
                                                                    sampling=sampling))**2.
+                        print('cov_pv='+str(cov_pv.shape))
                         pol_cov.extend(cov_pv)
                         store_cov=True
 

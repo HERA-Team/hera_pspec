@@ -332,8 +332,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvd_std.read_miriad(os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'))
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, spw_ranges=[(20, 30), (60, 90)], beam=beam)
-
+        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, spw_ranges=[(20, 24), (64, 68)], beam=beam)
         # test failure due to overlapping data
         uvp2 = copy.deepcopy(uvp1)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
@@ -342,15 +341,14 @@ class Test_UVPSpec(unittest.TestCase):
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Npols, 2)
         nt.assert_true(len(set(out.pol_array) ^ set([-5, -6])) == 0)
-
         # test multiple non-overlapping data axes
         uvp2.freq_array[0] = 0.0
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test partial data overlap failure
-        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], data_std=uvd_std, spw_ranges=[(20, 30), (60, 90)], beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], data_std=uvd_std, spw_ranges=[(20, 24), (64, 68)], beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 105)], data_std=uvd_std, beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 24), (64, 82)], data_std=uvd_std, beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2 = copy.deepcopy(uvp1)
         uvp2.pol_array[0] = -6
@@ -358,14 +356,14 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test concat across spw
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)], data_std=uvd_std, beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 91)], data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nspws, 3)
         nt.assert_equal(out.Nfreqs, 51)
         nt.assert_equal(out.Nspwdlys, 56)
 
         # test concat across blpairts
-        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 90)], data_std=uvd_std, beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 64)], data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nblpairs, 8)
         nt.assert_equal(out.Nbls, 5)

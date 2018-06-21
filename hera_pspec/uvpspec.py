@@ -1520,7 +1520,7 @@ def combine_uvpspec(uvps, verbose=True):
         u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if u.store_cov:
-            u.cov_array[i]=np.empty((Nblpairst,spw[2],spw[2],Npols),np.complex128)
+            u.cov_array[i]=np.empty((Nblpairts,spw[2],spw[2],Npols),np.complex128)
         spw_Nfreqs = spw[-1]
         spw_freqs = np.linspace(*spw, endpoint=False)
         spw_dlys = np.fft.fftshift(np.fft.fftfreq(spw_Nfreqs, np.median(np.diff(spw_freqs))))
@@ -1614,7 +1614,9 @@ def combine_uvpspec(uvps, verbose=True):
                     n = uvp_blpts[l].index(blpt)
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
                     if u.store_cov:
-                        u.data_array[i][j,:,:,k]=uvps[l].data_array[m][n,:,:,q]
+                        print('u_cov_shape='+str(u.cov_array[i].shape))
+                        print('uvps_cov_shape='+str(uvps[l].cov_array[m].shape))
+                        u.cov_array[i][j, :, :, k]=uvps[l].cov_array[m][n, :, :, q]
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].integration_array[m][n, q]

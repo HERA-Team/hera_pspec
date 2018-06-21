@@ -125,7 +125,7 @@ def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, tape
         Ex: [(24, 25), (37, 38), ...]
 
     data_std: UVData object or str or None
-        Can be UVData object or a string filepath to a miriad file. 
+        Can be UVData object or a string filepath to a miriad file.
 
     spw_ranges : list
         List of spectral window tuples. See PSpecData.pspec docstring for details.
@@ -160,7 +160,10 @@ def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, tape
         uvd_std=data_std
     else:
         uvd_std=None
-
+    if uvd_std is not None:
+        covariance=True
+    else:
+        covariance=False
     # get pol
     pol = uvd.polarization_array[0]
 
@@ -178,6 +181,6 @@ def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, tape
 
     # run pspec
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges,
-                   taper=taper, verbose=verbose)
+                   taper=taper, verbose=verbose,covariance=covariance)
 
     return uvp
