@@ -180,8 +180,6 @@ def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, tape
     bls1, bls2, _ = utils.construct_blpairs(bls, exclude_auto_bls=True)
 
     # run pspec
-    print('running pspec')
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges,
                    taper=taper, verbose=verbose,covariance=covariance)
-    print('done running pspec')
     return uvp
