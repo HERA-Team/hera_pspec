@@ -250,24 +250,24 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 3.0).all())
         nt.assert_equal(uvp2.get_data(0, 1002001002, 'xx').shape, (10, 50))
-        
+
         # Test blpair averaging (with baseline-pair weights)
-        # Results should be identical with different weights here, as the data 
+        # Results should be identical with different weights here, as the data
         # are all the same)
         blpairs = [[1002001002, 1002001002]]
         blpair_wgts = [[2., 0.,]]
-        uvp3a = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, 
+        uvp3a = uvp.average_spectra(blpair_groups=blpairs, time_avg=False,
                                    blpair_weights=None,
                                    inplace=False)
-        uvp3b = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, 
+        uvp3b = uvp.average_spectra(blpair_groups=blpairs, time_avg=False,
                                    blpair_weights=blpair_wgts,
                                    inplace=False)
         #nt.assert_equal(uvp2.Nblpairs, 1)
-        nt.assert_true(np.isclose(uvp3a.get_data(0, 1002001002, 'xx'), 
+        nt.assert_true(np.isclose(uvp3a.get_data(0, 1002001002, 'xx'),
                                   uvp3b.get_data(0, 1002001002, 'xx')).all())
         #nt.assert_equal(uvp2.get_data(0, 1002001002, 'xx').shape, (10, 50))
-        
-        
+
+
         # test time averaging
         uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
         nt.assert_true(uvp2.Ntimes, 1)
@@ -288,7 +288,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvp.fold_spectra)
         nt.assert_equal(len(uvp.get_dlys(0)), 24)
         nt.assert_true(np.isclose(uvp.nsample_array[0], 2.0).all())
-    
+
     def test_str(self):
         a = str(self.uvp)
         nt.assert_true(len(a) > 0)
@@ -328,9 +328,10 @@ class Test_UVPSpec(unittest.TestCase):
         # setup uvp build
         uvd = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        uvd_std=read_miriad(os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'))
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam)
+        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, spw_ranges=[(20, 30), (60, 90)], beam=beam)
 
         # test failure due to overlapping data
         uvp2 = copy.deepcopy(uvp1)
@@ -411,4 +412,3 @@ def test_conj_blpair():
     blpair = uvputils._conj_blpair(1002003004, which='both')
     nt.assert_equal(blpair, 2001004003)
     nt.assert_raises(ValueError, uvputils._conj_blpair, 2001003004, which='foo')
-

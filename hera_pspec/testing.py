@@ -111,7 +111,7 @@ def build_vanilla_uvpspec(beam=None):
 
     return uvp, cosmo
 
-def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
+def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -123,6 +123,9 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
     bls : list
         This is a list of at least 2 baseline tuples.
         Ex: [(24, 25), (37, 38), ...]
+
+    data_std: UVData object or str or None
+        Can be UVData object or a string filepath to a miriad file. 
 
     spw_ranges : list
         List of spectral window tuples. See PSpecData.pspec docstring for details.
@@ -150,6 +153,14 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
     elif isinstance(data, UVData):
         uvd = data
 
+    if isinstance(data_std,str):
+        uvd_std=UVData()
+        uvd_std.read_miriad(data_std)
+    elif isinstance(data_std,UVData):
+        uvd_std=data_std
+    else:
+        uvd_std=None
+
     # get pol
     pol = uvd.polarization_array[0]
 
@@ -160,7 +171,7 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
         beam.cosmo = cosmo
 
     # instantiate pspecdata
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std,uvd_std], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
     # get red bls
     bls1, bls2, _ = utils.construct_blpairs(bls, exclude_auto_bls=True)
