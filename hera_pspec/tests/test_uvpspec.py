@@ -348,9 +348,9 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test partial data overlap failure
-        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], spw_ranges=[(20, 30), (60, 90)], beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], data_std=uvd_std, spw_ranges=[(20, 30), (60, 90)], beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 105)], beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 105)], data_std=uvd_std, beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2 = copy.deepcopy(uvp1)
         uvp2.pol_array[0] = -6
@@ -358,14 +358,14 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test concat across spw
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)], beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)], data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nspws, 3)
         nt.assert_equal(out.Nfreqs, 51)
         nt.assert_equal(out.Nspwdlys, 56)
 
         # test concat across blpairts
-        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 90)], beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 90)], data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nblpairs, 8)
         nt.assert_equal(out.Nbls, 5)
@@ -379,7 +379,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test feed as strings
-        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)], beam=beam)
+        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)], data_std=uvd_std, beam=beam)
         uvp2 = copy.deepcopy(uvp1)
         uvp2.pol_array[0] = -6
         uvp1.write_hdf5('uvp1.hdf5', overwrite=True)
