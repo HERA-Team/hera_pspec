@@ -393,7 +393,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp3.pol_array[0] = -7
         out = uvp1 + uvp2 + uvp3
         nt.assert_equal(out.Npols, 3)
-
+        print('finished testing combine.')
 
 def test_conj_blpair_int():
     conj_blpair = uvputils._conj_blpair_int(1002003004)
