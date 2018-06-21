@@ -348,7 +348,7 @@ class Test_UVPSpec(unittest.TestCase):
         # test partial data overlap failure
         uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], data_std=uvd_std, spw_ranges=[(20, 24), (64, 68)], beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 24), (64, 82)], data_std=uvd_std, beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 24), (64, 68)], data_std=uvd_std, beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2 = copy.deepcopy(uvp1)
         uvp2.pol_array[0] = -6
@@ -359,11 +359,11 @@ class Test_UVPSpec(unittest.TestCase):
         uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 91)], data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nspws, 3)
-        nt.assert_equal(out.Nfreqs, 51)
-        nt.assert_equal(out.Nspwdlys, 56)
+        nt.assert_equal(out.Nfreqs, 14)
+        nt.assert_equal(out.Nspwdlys, 14)
 
         # test concat across blpairts
-        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 64)], data_std=uvd_std, beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 24), (64, 68)], data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nblpairs, 8)
         nt.assert_equal(out.Nbls, 5)

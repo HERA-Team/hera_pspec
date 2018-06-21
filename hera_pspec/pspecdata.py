@@ -1707,10 +1707,8 @@ class PSpecData(object):
         # set taper and data weighting
         self.taper = taper
         self.data_weighting = input_data_weight
-
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
-
         # Currently the "pspec normalization scalar" doesn't work if a
         # non-identity data weighting AND a non-trivial taper are used
         if taper != 'none' and input_data_weight != 'identity':
@@ -1726,7 +1724,7 @@ class PSpecData(object):
         assert isinstance(dsets[0], (int, np.int)) and isinstance(dsets[1], (int, np.int)), "dsets must contain integer indices"
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
-        store_cov=False
+        store_cov=covariance
         # assert form of bls1 and bls2
         assert isinstance(bls1, list), "bls1 and bls2 must be fed as a list of antpair tuples"
         assert isinstance(bls2, list), "bls1 and bls2 must be fed as a list of antpair tuples"
@@ -1750,7 +1748,6 @@ class PSpecData(object):
 
         # validate bl-pair redundancy
         validate_blpairs(bl_pairs, dset1, dset2, baseline_tol=1.0)
-
         # configure spectral window selections
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
@@ -1835,7 +1832,6 @@ class PSpecData(object):
 
                 # validating polarization pair on UVData objects
                 valid = self.validate_pol(dsets, tuple(p))
-
                 if not valid:
                    # storing only one polarization as only equal polarization are allowed at the
                    # moment and UVPSpec object also understands one polarization
@@ -1908,7 +1904,7 @@ class PSpecData(object):
                         pv *= scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling)
 
                     #Generate the covariance matrix if error bars provided
-                    if covariance and not None in self.dsets_std:
+                    if covariance:
                         if verbose: print(" Building q_hat covariance...")
                         cov_qv=np.zeros((self.Ntimes,
                                          self.spw_Ndlys,
@@ -1929,10 +1925,7 @@ class PSpecData(object):
                             cov_pv*=\
                             (scalar * self.scalar_delay_adjustment(key1, key2,
                                                                    sampling=sampling))**2.
-                        print('cov_pv='+str(cov_pv.shape))
                         pol_cov.extend(cov_pv)
-                        store_cov=True
-
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2066,10 +2059,8 @@ class PSpecData(object):
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))
-
         # run check
         uvp.check()
-
         return uvp
 
     def rephase_to_dset(self, dset_index=0, inplace=True):

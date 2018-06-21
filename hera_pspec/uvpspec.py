@@ -1490,7 +1490,6 @@ def combine_uvpspec(uvps, verbose=True):
     (uvps, concat_ax, new_spws, new_blpts, new_pols,
      static_meta) = get_uvp_overlap(uvps, just_meta=False, verbose=verbose)
     Nuvps = len(uvps)
-
     # create a new uvp
     u = UVPSpec()
 
@@ -1614,8 +1613,6 @@ def combine_uvpspec(uvps, verbose=True):
                     n = uvp_blpts[l].index(blpt)
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
                     if u.store_cov:
-                        print('u_cov_shape='+str(u.cov_array[i].shape))
-                        print('uvps_cov_shape='+str(uvps[l].cov_array[m].shape))
                         u.cov_array[i][j, :, :, k]=uvps[l].cov_array[m][n, :, :, q]
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
@@ -1651,7 +1648,6 @@ def combine_uvpspec(uvps, verbose=True):
 
     for k in static_meta.keys():
         setattr(u, k, static_meta[k])
-
     # run check
     u.check()
 
