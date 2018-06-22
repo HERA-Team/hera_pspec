@@ -42,6 +42,9 @@ class UVPSpec(object):
         desc = "Nsample dictionary, if the pspectra have been incoherently averaged (i.e. averaged after squaring), this is " \
                "the effective number of samples in that average (float type). This is not the same as the pyuvdata.UVData nsample_array."
         self._nsample_array = PSpecParam("nsample_array", description=desc, expected_type=np.float64, form="(Nblpairts, Npols)")
+        desc = ("Power spectrum stats array with stats type and spw integer as keys and values as complex ndarrays with same shape"
+                " as data_array")
+        self._stats_array = PSpecParam("stats_array", description=desc,expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
         self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)", expected_type=np.uint16)
         self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nfreqs,)", expected_type=np.float64)
         self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)", expected_type=np.float64)
@@ -55,7 +58,7 @@ class UVPSpec(object):
         self._time_avg_array = PSpecParam("time_avg_array", description="Average of the time_1_array and time_2_array [Julian Date].", form='(Nblpairts,)', expected_type=np.float64)
         self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)", expected_type=np.int64)
         self._scalar_array = PSpecParam("scalar_array", description="Power spectrum normalization scalar from pspecbeam module.", expected_type=np.float64, form="(Nspws, Npols)")
-
+        
         # Baseline attributes
         self._Nbls = PSpecParam("Nbls", description="Number of unique baseline integers.", expected_type=int)
         self._bl_vecs = PSpecParam("bl_vecs", description="ndarray of baseline separation vectors in the ITRF frame [meters]. To get it in ENU frame see self.get_ENU_bl_vecs().", expected_type=np.float64, form="(Nbls,)")
@@ -101,7 +104,7 @@ class UVPSpec(object):
                           "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array", 'labels',
                           'label_1_array', 'label_2_array']
-        self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array"]
+        self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array", "stats_array"]
 
         # define which attributes are considred meta data. Large attrs should be constructed as datasets
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array", 
@@ -390,6 +393,69 @@ class UVPSpec(object):
             spw_ranges.append( (spw_freqs.min(), spw_freqs.min() + Nfreqs * spw_df, Nfreqs) )
 
         return spw_ranges
+
+    def get_stats(self, stat, key, *args):
+        """
+        Returns a statistic from the stats_array dictionary.
+
+        Parameters
+        ----------
+        stat: string
+            The statistic to return.
+
+        spw: int
+            Choice of spectral window.
+        """
+        if not hasattr(self, "stats_array"):
+            raise AttributeError("No stats have been entered to this UVPSpec object")
+
+        if not self.stats_array.has_key(stat):
+            raise AttributeError("stat string not found in stats_array dict")
+
+        spw, blpairts, pol = self.key_to_indices(key, *args)
+        data = self.stats_array[stat]
+
+        # if data has been folded, return only positive delays
+        if self.folded:
+            Ndlys = data[spw].shape[1]
+            return data[spw][blpairts, Ndlys//2+1:, pol]
+
+        # else return all delays
+        else:
+            return data[spw][blpairts, :, pol]
+
+    def set_stats(self, stat, key, array, force=False, *args):
+        """
+        Sets a statistic in the stats_array.
+
+        Parameters
+        ----------
+        stat: string
+            Name of the statistic.
+
+        spw: int
+            Spectral window of the statistic.
+
+        array: ndarray
+            Array housing statistics to set. Must be the same size as data_array.
+
+        force: boolean, optional
+            If true, statistic does not have to be the same size as data_array.
+        """
+        spw, blpairts, pol = self.key_to_indices(key, *args)
+
+        if self.data_array[spw][blpairts, :, pol].shape != array.shape:
+            errmsg = ("Input array (shape %r) must match the shape of data_array"
+                      "spectra (shape (%i, %i)).") % (array.shape,
+                                                      self.Ntimes,
+                                                      self.Ndlys)
+            raise AttributeError(errmsg)
+
+        if not hasattr(self, "stats_array"):
+            self.stats_array = {}
+
+        self.stats_array[stat] = odict([[i, np.zeros(self.data_array[i].shape)] for i in range(self.Nspws)])
+        self.stats_array[stat][spw][blpairts, :, pol] = array
 
     def convert_to_deltasq(self, little_h=True, inplace=True):
         """
