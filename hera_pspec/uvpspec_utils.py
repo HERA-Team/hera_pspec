@@ -174,7 +174,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
                 wgts[s] = uvp.wgt_array[s][blp_select, :, :, pol_select]
                 ints[s] = uvp.integration_array[s][blp_select, pol_select]
                 nsmp[s] = uvp.nsample_array[s][blp_select, pol_select]
- 
+
         uvp.data_array = data
         uvp.wgt_array = wgts
         uvp.integration_array = ints
@@ -182,12 +182,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.stats_array = stats
 
     except AttributeError as e:
-        print e
         # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
         pass
-
-
-
 
 def _blpair_to_antnums(blpair):
     """

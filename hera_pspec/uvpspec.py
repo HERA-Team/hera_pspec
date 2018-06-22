@@ -44,7 +44,7 @@ class UVPSpec(object):
         self._nsample_array = PSpecParam("nsample_array", description=desc, expected_type=np.float64, form="(Nblpairts, Npols)")
         desc = ("Power spectrum stats array with stats type and spw integer as keys and values as complex ndarrays with same shape"
                 " as data_array")
-        self._stats_array = PSpecParam("stats_array", description=desc,expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
+        self._stats_array = PSpecParam("stats_array", description=desc, expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
         self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)", expected_type=np.uint16)
         self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nfreqs,)", expected_type=np.float64)
         self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)", expected_type=np.float64)
@@ -58,7 +58,7 @@ class UVPSpec(object):
         self._time_avg_array = PSpecParam("time_avg_array", description="Average of the time_1_array and time_2_array [Julian Date].", form='(Nblpairts,)', expected_type=np.float64)
         self._blpair_array = PSpecParam("blpair_array", description="Baseline-pair integer for all baseline-pair times.", form="(Nblpairts,)", expected_type=np.int64)
         self._scalar_array = PSpecParam("scalar_array", description="Power spectrum normalization scalar from pspecbeam module.", expected_type=np.float64, form="(Nspws, Npols)")
-        
+
         # Baseline attributes
         self._Nbls = PSpecParam("Nbls", description="Number of unique baseline integers.", expected_type=int)
         self._bl_vecs = PSpecParam("bl_vecs", description="ndarray of baseline separation vectors in the ITRF frame [meters]. To get it in ENU frame see self.get_ENU_bl_vecs().", expected_type=np.float64, form="(Nbls,)")
@@ -98,7 +98,7 @@ class UVPSpec(object):
         # all parameters must fall into one and only one of the following groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys",
                             "Npols", "Nfreqs", "history", "Nbls", "channel_width", "weighting",
-                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile" ,'folded']
+                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile", 'folded']
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array",
                           'lst_avg_array', 'time_avg_array', "lst_2_array", "time_1_array",
                           "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
@@ -348,7 +348,7 @@ class UVPSpec(object):
     def get_all_keys(self):
         """
         Returns a list of all possible tuple keys in the data_array, in the format:
-        
+
         (spectral window, baseline-pair, polarization-string)
         """
         # get unique blpair tuples
@@ -410,7 +410,7 @@ class UVPSpec(object):
         if not hasattr(self, "stats_array"):
             raise AttributeError("No stats have been entered to this UVPSpec object")
 
-        if not self.stats_array.has_key(stat):
+        if stat not in self.stats_array.keys():
             raise AttributeError("stat string not found in stats_array dict")
 
         spw, blpairts, pol = self.key_to_indices(key, *args)
@@ -458,7 +458,7 @@ class UVPSpec(object):
 
         dtype = statistic.dtype
 
-        if not self.stats_array.has_key(stat):
+        if stat not in self.stats_array.keys():
             self.stats_array[stat] = odict([[i, -99.*np.ones(self.data_array[i].shape, dtype=dtype)] for i in range(self.Nspws)])
 
         self.stats_array[stat][spw][blpairts, :, pol] = statistic
