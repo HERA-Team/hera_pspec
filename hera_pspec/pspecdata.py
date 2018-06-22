@@ -442,6 +442,49 @@ class PSpecData(object):
 
         return self._C[Ckey]
 
+    def cross_covar_model(self, key1, key2, model='empirical', conj_1=False, conj_2=True):
+        """
+        Return a covariance model having specified a key and model type.
+
+        Parameters
+        ----------
+        key1, key2 : tuples
+            Tuples containing indices of dataset and baselines. The first item
+            specifies the index (ID) of a dataset in the collection, while
+            subsequent indices specify the baseline index, in _key2inds format.
+
+        model : string, optional
+            Type of covariance model to calculate, if not cached. options=['empirical']
+
+        conj_1 : boolean, optional
+            Whether to conjugate first copy of data in covar or not. Default: False
+
+        conj_2 : boolean, optional
+            Whether to conjugate second copy of data in covar or not. Default: True
+
+        Returns
+        -------
+        cross_covar : array-like
+            Cross covariance model for the specified key.
+        """
+        # type check
+        assert isinstance(key1, tuple), "key1 must be fed as a tuple"
+        assert isinstance(key2, tuple), "key2 must be fed as a tuple"
+        assert isinstance(model, (str, np.str)), "model must be a string"
+        assert model in ['empirical'], "didn't recognize model {}".format(model)
+
+        # parse key
+        dset, bl = self.parse_blkey(key1)
+        key1 = (dset,) + (bl,)
+        dset, bl = self.parse_blkey(key2)
+        key2 = (dset,) + (bl,)
+
+        if model == 'empirical':
+            covar = utils.cov(self.x(key1), self.w(key1),
+                              self.x(key2), self.w(key2),
+                              conj_1=conj_1, conj_2=conj_2)
+        return covar
+
     def I(self, key):
         """
         Return identity covariance matrix.
@@ -892,15 +935,87 @@ class PSpecData(object):
             H = np.eye(self.spw_Ndlys)
 
         return H / 2.
-    
-    def get_V_gaussian(self, key1, key2):
+
+    def get_unnormed_E(self,key1,key2):
         """
-        Calculates the bandpower covariance matrix,
+        Calculates a series of unnormalized E matrices, such that
+
+            q_a = x_1^* E^{12,a} x_2
+
+        so that
+
+            E^{12,a} = (1/2) R_1 Q^a R_2.
+
+        In principle, this could be used to actually estimate q-hat. In other
+        words, we could call this function to get E, and then sandwich it with
+        two data vectors to get q_a. However, this should be slower than the
+        implementation in q_hat. So this should only be used as a helper
+        method for methods such as get_unnormed_V.
+
+        Note for the future: There may be advantages to doing the
+        matrix multiplications separately
+
+
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two 
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
+
+        Returns
+        -------
+        E : array_like, complex
+            Set of E matrices, with dimensions (Ndlys, Nfreqs, Nfreqs).
+
+        """
+
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None")
+
+        E_matrices = np.zeros((self.spw_Ndlys, self.spw_Nfreqs, self.spw_Nfreqs),
+                               dtype=np.complex)
+        R1 = self.R(key1)
+        R2 = self.R(key2)
+        for dly_idx in range(self.spw_Ndlys):
+            E_matrices[dly_idx] = np.einsum('ij,jk,kl', R1, self.get_Q_alt(dly_idx), R2)
+
+        return 0.5 * E_matrices
+    
+    def get_unnormed_V(self, key1, key2, model='empirical'):
+        """
+        Calculates the covariance matrix for unnormed bandpowers (i.e., the q
+        vectors). If the data were real and x_1 = x_2, the expression would be
         
-            V_ab = tr(C E_a C E_b)
-            
-        FIXME: Must check factor of 2 with Wick's theorem for complex vectors,
-        and also check expression for when x_1 != x_2.
+            V_ab = 2 tr(C E_a C E_b), where E_a = (1/2) R Q^a R
+
+        When the data are complex, the expression becomes considerably more
+        complicated. Define
+
+            E^{12,a} = (1/2) R_1 Q^a R_2
+            C^1 = Cov(x1)
+            C^2 = Cov(x2)
+            P^{12} = <x1 x2> - <x1><x2>
+            S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
+
+        Then
+
+            V_ab = tr(E^{12,a} C^2 E^{21,b} C^1)
+                    + tr(E^{12,a} P^{21} E^{12,b *} S^{21})
+
+        Note that
+            E^{12,a}_{ij}.conj = E^{21,a}_{ji}
+
+        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by default
+
+        Note for future: Although the V matrix should be Hermitian by construction,
+        in practice there are precision issues and the Hermiticity is violated at
+        ~ 1 part in 10^15. (Which is ~the expected roundoff error). If something
+        messes up, it may be worth investigating this more.
+
+        Note for the future: If this ends up too slow, Cholesky tricks can be
+        employed to speed up the computation by a factor of a few.
         
         Parameters
         ----------
@@ -908,15 +1023,33 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two 
             input datavectors. If a list of tuples is provided, the baselines 
             in the list will be combined with inverse noise weights.
+
+        model : str
+            How the covariances of the input data should be estimated.
         
         Returns
         -------
         V : array_like, complex
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        raise NotImplementedError()
 
-    def get_MW(self, G, H, mode='I'):
+        # Collect all the relevant pieces
+        E_matrices = self.get_unnormed_E(key1, key2)
+        C1 = self.C_model(key1)
+        C2 = self.C_model(key2)
+        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
+        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
+
+        E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
+        E12C2 = np.dot(E_matrices, C2)
+        auto_term = np.einsum('aij,bji', E12C2, E21C1)
+        E12starS21 = np.dot(E_matrices.conj(), S21)
+        E12P21 = np.dot(E_matrices, P21)
+        cross_term = np.einsum('aij,bji', E12P21, E12starS21)
+
+        return auto_term + cross_term
+
+    def get_MW(self, G, H, mode='I', band_covar=None):
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -932,9 +1065,9 @@ class PSpecData(object):
         Several choices for M are supported:
             'I':      Set M to be diagonal (e.g. HERA Memo #44)
             'H^-1':   Set M = H^-1, the (pseudo)inverse response matrix.
+            'V^-1/2': Set M = V^-1/2, the root-inverse response matrix (using SVD).
 
         These choices will be supported very soon:
-            'G^-1/2': Set M = G^-1/2, the root-inverse response matrix (using SVD).
             'L^-1':   Set M = L^-1, Cholesky decomposition.
 
         As written, the window functions will not be correclty normalized; it needs
@@ -953,6 +1086,11 @@ class PSpecData(object):
         mode : str, optional
             Definition to use for M. Must be one of the options listed above.
             Default: 'I'.
+
+        band_covar : array_like, optional
+            Covariance matrix of the unnormalized bandpowers (i.e., q). Used only
+            if requesting the V^-1/2 normalization.
+            Default: None
 
         Returns
         -------
@@ -974,7 +1112,7 @@ class PSpecData(object):
         #     return M, W
 
         # Check that mode is supported
-        modes = ['H^-1', 'G^-1/2', 'I', 'L^-1']
+        modes = ['H^-1', 'V^-1/2', 'I', 'L^-1']
         assert(mode in modes)
 
         # Build M matrix according to specified mode
@@ -996,10 +1134,20 @@ class PSpecData(object):
             W_norm = np.sum(W, axis=1)
             W = (W.T / W_norm).T
 
-        elif mode == 'G^-1/2':
-            raise NotImplementedError("G^-1/2 mode not currently supported.")
-            # U,S,V = np.linalg.svd(G)
-            # M = np.einsum('ij,j,jk', V.T, 1./np.sqrt(S), U.T)
+        elif mode == 'V^-1/2':
+            if np.sum(band_covar) == None:
+                raise ValueError("Covariance not supplied for V^-1/2 normalization")
+            # First find the eigenvectors and eigenvalues of the unnormalizd covariance
+            # Then use it to compute V^-1/2
+            eigvals, eigvects = np.linalg.eigh(band_covar)
+            if (eigvals <= 0.).any():
+                raise_warning("At least one non-positive eigenvalue for the "
+                              "unnormed bandpower covariance matrix.")
+            V_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
+
+            W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H), axis=1))
+            M = np.dot(W_norm, V_minus_half)
+            W = np.dot(M, H)
 
         elif mode == 'I':
             # This is not the M matrix as is rigorously defined in the
@@ -1737,7 +1885,11 @@ class PSpecData(object):
 
                     # Normalize power spectrum estimate
                     if verbose: print("  Normalizing power spectrum...")
-                    Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
+                    if norm == 'V^-1/2':
+                        V_mat = self.get_unnormed_V(key1, key2)
+                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
+                    else:
+                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar

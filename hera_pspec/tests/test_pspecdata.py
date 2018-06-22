@@ -271,14 +271,135 @@ class Test_PSpecData(unittest.TestCase):
             Q_diff_norm = np.linalg.norm(Q_matrix - Q_matrix_fft)
             self.assertLessEqual(Q_diff_norm, multiplicative_tolerance)
 
+    def test_get_unnormed_E(self):
+        """
+        Test the E function
+        """
+        # Test that error is raised if spw_Ndlys is not set
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'])
+        ds.spw_Ndlys = None
+        nt.assert_raises(ValueError, ds.get_unnormed_E, 'placeholder', 'placeholder')
+
+        # Test that if R1 = R2, then the result is Hermitian
+        ds.spw_Ndlys = 7
+        random_R = generate_pos_def_all_pos(ds.spw_Nfreqs)
+        wgt_matrix_dict = {} # The keys here have no significance except they are formatted right
+        wgt_matrix_dict[('red', (24, 25))] = random_R
+        wgt_matrix_dict[('blue', (24, 25))] = random_R
+        ds.set_R(wgt_matrix_dict)
+        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        multiplicative_tolerance = 0.0000001
+        for matrix in E_matrices:
+            diff_norm = np.linalg.norm(matrix.T.conj() - matrix)
+            self.assertLessEqual(diff_norm, multiplicative_tolerance)
+
+        # Test that if R1 != R2, then i) E^{12,dagger} = E^{21}
+        random_R2 = generate_pos_def_all_pos(ds.spw_Nfreqs)
+        wgt_matrix_dict = {}
+        wgt_matrix_dict[('red', (24, 25))] = random_R
+        wgt_matrix_dict[('blue', (24, 25))] = random_R2
+        ds.set_R(wgt_matrix_dict)
+        E12_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        E21_matrices = ds.get_unnormed_E(('blue', (24, 25)), ('red', (24, 25)))
+        multiplicative_tolerance = 0.0000001
+        for mat12,mat21 in zip(E12_matrices,E21_matrices):
+            diff_norm = np.linalg.norm(mat12.T.conj() - mat21)
+            self.assertLessEqual(diff_norm, multiplicative_tolerance)
+
+        # Test that if there is only one delay bin and R1 = R2 = I, then
+        # the E matrices are all 0.5s exept in flagged channels.
+        ds.spw_Ndlys = 1
+        wgt_matrix_dict = {}
+        wgt_matrix_dict[('red', (24, 25))] = np.eye(ds.spw_Nfreqs)
+        wgt_matrix_dict[('blue', (24, 25))] = np.eye(ds.spw_Nfreqs)
+        flags1 = np.diag(ds.Y(('red', (24, 25))))
+        flags2 = np.diag(ds.Y(('blue', (24, 25))))
+        ds.set_R(wgt_matrix_dict)
+        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        multiplicative_tolerance = 0.0000001
+        for matrix in E_matrices:
+            for i in range(ds.spw_Nfreqs):
+                for j in range(ds.spw_Nfreqs):
+                    if flags1[i] * flags2[j] == 0: # either channel flagged
+                        self.assertAlmostEqual(matrix[i,j], 0.)
+                    else:
+                        self.assertAlmostEqual(matrix[i,j], 0.5)
+
+    def test_cross_covar_model(self):
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'])
+        key1 = ('red', (24, 25), 'xx')
+        key2 = ('blue', (25, 38), 'xx')
+
+        nt.assert_raises(AssertionError, ds.cross_covar_model, key1, key2, model='other_string')
+        nt.assert_raises(AssertionError, ds.cross_covar_model, key1, 'a_string')
+
+        conj1_conj1 = ds.cross_covar_model(key1, key1, conj_1=True, conj_2=True)
+        conj1_real1 = ds.cross_covar_model(key1, key1, conj_1=True, conj_2=False)
+        real1_conj1 = ds.cross_covar_model(key1, key1, conj_1=False, conj_2=True)
+        real1_real1 = ds.cross_covar_model(key1, key1, conj_1=False, conj_2=False)
+
+        # Check matrix sizes
+        for matrix in [conj1_conj1, conj1_real1, real1_conj1, real1_real1]:
+            self.assertEqual(matrix.shape, (ds.spw_Nfreqs, ds.spw_Nfreqs))
+
+        for i in range(ds.spw_Nfreqs):
+            for j in range(ds.spw_Nfreqs):
+                # Check that the matrices that ought to be Hermitian are indeed Hermitian
+                self.assertAlmostEqual(conj1_real1.conj().T[i,j], conj1_real1[i,j])
+                self.assertAlmostEqual(real1_conj1.conj().T[i,j], real1_conj1[i,j])
+                # Check that real_real and conj_conj are complex conjugates of each other
+                # Also check that they are symmetric
+                self.assertAlmostEqual(real1_real1.conj()[i,j], conj1_conj1[i,j])
+                self.assertAlmostEqual(real1_real1[j,i], real1_real1[i,j])
+                self.assertAlmostEqual(conj1_conj1[j,i], conj1_conj1[i,j])
+
+
+        real1_real2 = ds.cross_covar_model(key1, key2, conj_1=False, conj_2=False)
+        real2_real1 = ds.cross_covar_model(key2, key1, conj_1=False, conj_2=False)
+        conj1_conj2 = ds.cross_covar_model(key1, key2, conj_1=True, conj_2=True)
+        conj2_conj1 = ds.cross_covar_model(key2, key1, conj_1=True, conj_2=True)
+        conj1_real2 = ds.cross_covar_model(key1, key2, conj_1=True, conj_2=False)
+        conj2_real1 = ds.cross_covar_model(key2, key1, conj_1=True, conj_2=False)
+        real1_conj2 = ds.cross_covar_model(key1, key2, conj_1=False, conj_2=True)
+        real2_conj1 = ds.cross_covar_model(key2, key1, conj_1=False, conj_2=True)
+
+        # And some similar tests for cross covariances
+        for i in range(ds.spw_Nfreqs):
+            for j in range(ds.spw_Nfreqs):
+                self.assertAlmostEqual(real1_real2.T[i,j], real2_real1[i,j])
+                self.assertAlmostEqual(conj1_conj2.T[i,j], conj2_conj1[i,j])
+                self.assertAlmostEqual(conj1_real2.conj()[j,i], conj2_real1[i,j])
+                self.assertAlmostEqual(real1_conj2.conj()[j,i], real2_conj1[i,j])
+
+    def test_get_unnormed_V(self):
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
+        key1 = ('red', (24, 25), 'xx')
+        key2 = ('blue', (25, 38), 'xx')
+        self.ds.spw_Ndlys = 5
+
+        V = self.ds.get_unnormed_V(key1, key2)
+        # Check size
+        self.assertEqual(V.shape, (self.ds.spw_Ndlys,self.ds.spw_Ndlys))
+        # Test hermiticity. Generally this is only good to about 1 part in 10^15.
+        # If this is an issue downstream, should investigate more in the future.
+        tol = 1e-10
+        frac_non_herm = abs(V.conj().T - V)/abs(V)
+        for i in range(self.ds.spw_Ndlys):
+            for j in range(self.ds.spw_Ndlys):
+                self.assertLessEqual(frac_non_herm[i,j], tol)
+
+
     def test_get_MW(self):
         n = 17
         random_G = generate_pos_def_all_pos(n)
         random_H = generate_pos_def_all_pos(n)
+        random_V = generate_pos_def_all_pos(n)
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
         
-        for mode in ['H^-1', 'G^-1/2', 'I', 'L^-1']:
+        for mode in ['H^-1', 'V^-1/2', 'I', 'L^-1']:
             if mode == 'H^-1':
                 # Test that if we have full-rank matrices, the resulting window functions
                 # are indeed delta functions
@@ -309,21 +430,28 @@ class Test_PSpecData(unittest.TestCase):
                         self.assertAlmostEqual(M[i,j], M_other[i,j])
                         self.assertAlmostEqual(W[i,j], W_other[i,j])
 
-            elif mode == 'G^-1/2':
-                # # Test that the error covariance is diagonal
-                # error_covariance = np.dot(M, np.dot(random_G, M.T)) 
-                # # FIXME: We should be decorrelating V, not G. See Issue 21
-                # self.assertEqual(diagonal_or_not(error_covariance), True)
-                nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode=mode)
+            elif mode == 'V^-1/2':
+                # Test that we are checking for the presence of a covariance matrix
+                nt.assert_raises(ValueError, self.ds.get_MW, random_G, random_H, mode=mode)
+                # Test that the error covariance is diagonal
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V)
+                band_covar = np.dot(M, np.dot(random_V, M.T))
+                self.assertEqual(diagonal_or_not(band_covar), True)
+
             elif mode == 'I':
                 # Test that the norm matrix is diagonal
                 M, W = self.ds.get_MW(random_G, random_H, mode=mode)
                 self.assertEqual(diagonal_or_not(M), True)
-                self.assertEqual(M.shape, (n,n))
-                self.assertEqual(W.shape, (n,n))
-                test_norm = np.sum(W, axis=1)
-                for norm in test_norm:
-                    self.assertAlmostEqual(norm, 1.)
+            
+            # Test sizes for everyone
+            self.assertEqual(M.shape, (n,n))
+            self.assertEqual(W.shape, (n,n))
+
+            # Window function matrices should have each row sum to unity
+            # regardless of the mode chosen
+            test_norm = np.sum(W, axis=1)
+            for norm in test_norm:
+                self.assertAlmostEqual(norm, 1.)
 
     def test_q_hat(self):
         """
@@ -546,10 +674,6 @@ class Test_PSpecData(unittest.TestCase):
         # only expect equality to ~10^-2 to 10^-3
         np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
     '''
-    
-    def test_get_V_gaussian(self):
-        nt.assert_raises(NotImplementedError, self.ds.get_V_gaussian, 
-                         (0,1), (0,1))
         
     def test_scalar_delay_adjustment(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
