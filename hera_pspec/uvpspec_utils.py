@@ -156,12 +156,19 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         wgts = odict()
         ints = odict()
         nsmp = odict()
+        stats = odict()
+        statnames = [f[f.find("_")+1: f.rfind("_")] for f in h5file.keys() if f.startswith("stats")]
+        for sts in np.unique(np.array(statnames)):
+            stats[sts] = odict()
+
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 data[s] = h5file['data_spw{}'.format(s)][blp_select, :, pol_select]
                 wgts[s] = h5file['wgt_spw{}'.format(s)][blp_select, :, :, pol_select]
                 ints[s] = h5file['integration_spw{}'.format(s)][blp_select, pol_select]
                 nsmp[s] = h5file['nsample_spw{}'.format(s)][blp_select, pol_select]
+                for sts in statnames:
+                    stats[sts][s] = h5file["stats_{}_{}".format(sts, s)][blp_select, pol_select]
             else:
                 data[s] = uvp.data_array[s][blp_select, :, pol_select]
                 wgts[s] = uvp.wgt_array[s][blp_select, :, :, pol_select]
@@ -172,7 +179,10 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
-    except AttributeError:
+        uvp.stats_array = stats
+
+    except AttributeError as e:
+        print e
         # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
         pass
 

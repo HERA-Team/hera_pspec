@@ -104,16 +104,17 @@ class UVPSpec(object):
                           "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array", 'labels',
                           'label_1_array', 'label_2_array']
-        self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array", "stats_array"]
+        self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array"]
+        self._dicts_of_dicts = ["stats_array"]
 
         # define which attributes are considred meta data. Large attrs should be constructed as datasets
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array", 
                             "bl_vecs", "bl_array", 'lst_avg_array', 'time_avg_array', 'OmegaP', 'OmegaPP']
-        self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets))
+        self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets) - set(self._dicts_of_dicts))
         self._meta = sorted(set(self._meta_dsets).union(set(self._meta_attrs)))
 
         # check all params are covered
-        assert len(set(self._all_params) - set(self._dicts) - set(self._immutables) - set(self._ndarrays)) == 0
+        assert len(set(self._all_params) - set(self._dicts) - set(self._immutables) - set(self._ndarrays) - set(self._dicts_of_dicts)) == 0
 
         # Default parameter values
         self.folded = False
@@ -424,7 +425,7 @@ class UVPSpec(object):
         else:
             return data[spw][blpairts, :, pol]
 
-    def set_stats(self, stat, key, array, force=False, *args):
+    def set_stats(self, stat, key, statistic, force=False, *args):
         """
         Sets a statistic in the stats_array.
 
@@ -436,26 +437,31 @@ class UVPSpec(object):
         spw: int
             Spectral window of the statistic.
 
-        array: ndarray
+        statistic: ndarray
             Array housing statistics to set. Must be the same size as data_array.
 
         force: boolean, optional
             If true, statistic does not have to be the same size as data_array.
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
+        statistic = np.asarray(statistic)
 
-        if self.data_array[spw][blpairts, :, pol].shape != array.shape:
+        if self.data_array[spw][blpairts, :, pol].shape != statistic.shape:
             errmsg = ("Input array (shape %r) must match the shape of data_array"
-                      "spectra (shape (%i, %i)).") % (array.shape,
+                      "spectra (shape (%i, %i)).") % (statistic.shape,
                                                       self.Ntimes,
                                                       self.Ndlys)
-            raise AttributeError(errmsg)
+            raise ValueError(errmsg)
 
         if not hasattr(self, "stats_array"):
-            self.stats_array = {}
+            self.stats_array = odict()
 
-        self.stats_array[stat] = odict([[i, np.zeros(self.data_array[i].shape)] for i in range(self.Nspws)])
-        self.stats_array[stat][spw][blpairts, :, pol] = array
+        dtype = statistic.dtype
+
+        if not self.stats_array.has_key(stat):
+            self.stats_array[stat] = odict([[i, -99.*np.ones(self.data_array[i].shape, dtype=dtype)] for i in range(self.Nspws)])
+
+        self.stats_array[stat][spw][blpairts, :, pol] = statistic
 
     def convert_to_deltasq(self, little_h=True, inplace=True):
         """
@@ -960,6 +966,7 @@ class UVPSpec(object):
             Whether to run a validity check on the UVPSpec object before 
             writing it to the HDF5 group. Default: True.
         """
+
         # Run check
         if run_check: self.check()
         
@@ -992,7 +999,14 @@ class UVPSpec(object):
             group.create_dataset("nsample_spw{}".format(i), 
                                  data=self.nsample_array[i], 
                                  dtype=np.float)
-    
+
+        if hasattr(self, "stats_array"):
+            for s in self.stats_array.keys():
+                data = self.stats_array[s]
+                for i in np.unique(self.spw_array):
+                    group.create_dataset("stats_{}_{}".format(s, i),
+                                         data=data[i], dtype=data[i].dtype)
+
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
         Write a UVPSpec object to HDF5 file.
@@ -1155,6 +1169,13 @@ class UVPSpec(object):
                             except:
                                 raise AssertionError(err_msg)
 
+                    elif p in self._dicts_of_dicts:
+                        assert isinstance(getattr(self, p), (dict, odict))
+                        for k in getattr(self, p).keys():
+                            assert isinstance(getattr(self, p)[k], (dict, odict))
+                            for j in getattr(self, p)[k].keys():
+                                assert isinstance(getattr(self, p)[k][j], np.ndarray)
+                        
     def _clear(self):
         """
         Clear UVPSpec of all parameters. Warning: this cannot be undone.
