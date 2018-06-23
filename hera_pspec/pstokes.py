@@ -18,7 +18,7 @@ pol_weights = {
     4: odict([(-7, -1.j), (-8, 1.j)])
 }
 
-def miriad2pyuvdata(dset, antenna_nums=None, ant_pairs_nums=None, polarizations=None,
+def miriad2pyuvdata(dset, antenna_nums=None, bls=None, polarizations=None,
                     ant_str=None, time_range=None):
     """
     Reads-in a Miriad filepath to a UVData object
@@ -31,7 +31,7 @@ def miriad2pyuvdata(dset, antenna_nums=None, ant_pairs_nums=None, polarizations=
     antenna_nums: integer list
         The antennas numbers to read into the object.
 
-    ant_pairs_nums: list of tuples
+    bls: list of tuples
         A list of antenna number tuples (e.g. [(0,1), (3,2)])
         specifying baselines to read into the object. Ordering of the
         numbers within the tuple does not matter. A single antenna iterable
@@ -40,7 +40,7 @@ def miriad2pyuvdata(dset, antenna_nums=None, ant_pairs_nums=None, polarizations=
     ant_str: str
         A string containing information about what kinds of visibility data
         to read-in.  Can be 'auto', 'cross', 'all'. Cannot provide ant_str if
-        antenna_nums and/or ant_pairs_nums is not None.
+        antenna_nums and/or bls is not None.
 
     polarizations: integer or string list
         List of polarization integers or strings to read-in.
@@ -55,14 +55,14 @@ def miriad2pyuvdata(dset, antenna_nums=None, ant_pairs_nums=None, polarizations=
     uvd : pyuvdata.UVData object
     """
     uvd = pyuvdata.UVData()
-    uvd.read_miriad(dset, antenna_nums=antenna_nums, ant_pairs_nums=ant_pairs_nums, 
+    uvd.read_miriad(dset, antenna_nums=antenna_nums, bls=bls,
                     polarizations=polarizations, ant_str=ant_str, time_range=time_range)
     return uvd
 
 
 def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI'):
     """
-    Combines UVData visibilities to form the desired pseudo-stokes visibilities. 
+    Combines UVData visibilities to form the desired pseudo-stokes visibilities.
     It returns UVData object containing the pseudo-stokes visibilities
 
     Parameters
@@ -76,15 +76,15 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI'):
         form Stokes visibilities
 
     pol1 : Polarization, type: str
-        Polarization of the first UVData object to use in constructing 
+        Polarization of the first UVData object to use in constructing
         pStokes visibility.
 
     pol2 : Polarization, type: str
-        Polarization of the second UVData object to use in constructing 
+        Polarization of the second UVData object to use in constructing
         pStokes visibility.
 
     pstokes: Pseudo-stokes polarization to form, type: str
-        Pseudo stokes polarization to form, can be 'pI' or 'pQ' or 'pU' or 'pV'. 
+        Pseudo stokes polarization to form, can be 'pI' or 'pQ' or 'pU' or 'pV'.
         Default: pI
 
     Returns
@@ -142,11 +142,11 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI'):
     return uvdS
 
 
-def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=None, 
-                      ant_pairs_nums=None, polarizations=None, ant_str=None, time_range=None,
+def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=None,
+                      bls=None, polarizations=None, ant_str=None, time_range=None,
                       history=''):
     """
-    Validates datasets required to construct desired visibilities and 
+    Validates datasets required to construct desired visibilities and
     constructs desired pseudo-Stokes visibilities. These are formed
     via the following expression
 
@@ -155,7 +155,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
         | V_pU |    = 0.5 * | 0  1  1  0 | * | V_YX |
         ( V_pV )            ( 0 -i  i  0 )   ( V_YY )
 
-    In constructing a given pseudo-Stokes visibilities, the XX or XY polarization is 
+    In constructing a given pseudo-Stokes visibilities, the XX or XY polarization is
     taken from dset1, and the YX or YY pol is taken from dset2.
 
     Parameters
@@ -169,7 +169,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
         form Stokes visibilities
 
     pstokes: Stokes polarization, type: str
-        Pseudo stokes polarization to form, can be 'pI' or 'pQ' or 'pU' or 'pV'. 
+        Pseudo stokes polarization to form, can be 'pI' or 'pQ' or 'pU' or 'pV'.
         Default: pI
 
     run_check: boolean
@@ -179,7 +179,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     antenna_nums: integer list
         The antennas numbers to read into the object.
 
-    ant_pairs_nums: list of tuples
+    bls: list of tuples
         A list of antenna number tuples (e.g. [(0,1), (3,2)])
         specifying baselines to read into the object. Ordering of the
         numbers within the tuple does not matter. A single antenna iterable
@@ -188,7 +188,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     ant_str: str
         A string containing information about what kinds of visibility data
         to read-in.  Can be 'auto', 'cross', 'all'. Cannot provide ant_str if
-        antenna_nums and/or ant_pairs_nums is not None.
+        antenna_nums and/or bls is not None.
 
     polarizations: integer or string list
         List of polarization integers or strings to read-in.
@@ -208,13 +208,13 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     # convert dset1 and dset2 to UVData objects if they are miriad files
     if isinstance(dset1, pyuvdata.UVData) == False:
         assert isinstance(dset1, (str, np.str)), "dset1 must be fed as a string or UVData object"
-        uvd1 = miriad2pyuvdata(dset1, antenna_nums=antenna_nums, ant_pairs_nums=ant_pairs_nums,
+        uvd1 = miriad2pyuvdata(dset1, antenna_nums=antenna_nums, bls=bls,
                                polarizations=polarizations, ant_str=ant_str, time_range=time_range)
     else:
         uvd1 = dset1
     if isinstance(dset2, pyuvdata.UVData) == False:
         assert isinstance(dset2, (str, np.str)), "dset2 must be fed as a string or UVData object"
-        uvd2 = miriad2pyuvdata(dset2, antenna_nums=antenna_nums, ant_pairs_nums=ant_pairs_nums,
+        uvd2 = miriad2pyuvdata(dset2, antenna_nums=antenna_nums, bls=bls,
                                polarizations=polarizations, ant_str=ant_str, time_range=time_range)
     else:
         uvd2 = dset2
@@ -251,7 +251,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     req_pol1 = st_keys[0]
     req_pol2 = st_keys[1]
 
-    # check polarizations of UVData objects are consistent with the required polarization 
+    # check polarizations of UVData objects are consistent with the required polarization
     # to form the desired pseudo Stokes visibilities. If multiple exist, downselect on polarization.
     assert req_pol1 in uvd1.polarization_array, "Polarization {} not found in dset1 object".format(req_pol1)
     if uvd1.Npols > 1:
@@ -275,8 +275,8 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
     """
     Given a list of UVData objects with dipole linear polarizations,
     and a desired output pstokes, return the two UVData objects from
-    the input dsets that can be used in construct_pstokes to make 
-    the desired pseudo-Stokes visibility. If a single UVData object 
+    the input dsets that can be used in construct_pstokes to make
+    the desired pseudo-Stokes visibility. If a single UVData object
     has multiple polarizations, this function only considers its first.
 
     Parameters
@@ -313,4 +313,3 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
     inp_dsets = [dsets[pols.index(desired_pols[0])], dsets[pols.index(desired_pols[1])]]
 
     return inp_dsets
-
