@@ -360,6 +360,8 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_taper(taper)
                 q_hat_a_slow = self.ds.q_hat(key1, key2, allow_fft=False)
                 q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True)
+                print q_hat_a
+                print 'hey'
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
