@@ -161,9 +161,9 @@ def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, tape
     else:
         uvd_std=None
     if uvd_std is not None:
-        covariance=True
+        store_cov=True
     else:
-        covariance=False
+        store_cov=False
     # get pol
     pol = uvd.polarization_array[0]
 
@@ -181,5 +181,5 @@ def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, tape
 
     # run pspec
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges,
-                   taper=taper, verbose=verbose,covariance=covariance)
+                   taper=taper, verbose=verbose,store_cov=store_cov)
     return uvp

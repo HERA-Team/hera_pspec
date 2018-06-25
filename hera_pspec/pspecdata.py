@@ -755,7 +755,7 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
-    def cov_q_hat(self,alpha,beta,key1,key2,time_indices):
+    def cov_q_hat(self,key1,key2):
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
@@ -783,10 +783,8 @@ class PSpecData(object):
         -------
         cov_q_hat, matrix with covariances between un-normalized band powers
         """
-        ntimes=len(time_indices)
 
-        qc=np.zeros(ntimes,
-                    dtype=complex)
+        qc=np.zeros((self.Ntimes,self.spw_Ndlys,self.spw_Ndlys),dtype=complex)
 
         R1,R2=0,0
         n1a,n2a,n1b,n2b=0,0,0,0
@@ -812,26 +810,19 @@ class PSpecData(object):
             n2a=np.real(self.dx(key2)**2.)
             n2b=np.imag(self.dx(key2)**2.)
 
-        #rearange Noise arrays into diagonals with Ntimes
-        N1a=np.zeros((self.spw_Nfreqs,self.spw_Nfreqs,ntimes),dtype=complex)
-        N1b=np.zeros_like(N1a)
-        N2a=np.zeros_like(N1a)
-        N2b=np.zeros_like(N1a)
-        for t,tind in enumerate(time_indices):
-            N1a[:,:,t]=np.diag(n1a[:,tind])
-            N1b[:,:,t]=np.diag(n1b[:,tind])
-            N2a[:,:,t]=np.diag(n2a[:,tind])
-            N2b[:,:,t]=np.diag(n2b[:,tind])
-
-        Qalpha=self.get_Q_alt(alpha)
-        Qbeta=self.get_Q_alt(beta)
-        Ealpha=np.einsum('ab,bc,cd',R1.T.conj(),Qalpha,R2)
-        Ebeta=np.einsum('ab,bc,cd',R1.T.conj(),Qbeta,R2)
-        qc=\
-        (np.einsum('ab,bce,cd,dae->e',Ealpha,N2a,Ebeta,N1a)\
-        +np.einsum('ab,bce,cd,dae->e',Ealpha,N2b,Ebeta,N1a)\
-        +np.einsum('ab,bce,cd,dae->e',Ealpha,N2a,Ebeta,N1b)\
-        +np.einsum('ab,bce,cd,dae->e',Ealpha,N2b,Ebeta,N1b))
+        N1=np.zeros((self.spw_Nfreqs,self.spw_Nfreqs),dtype=complex)
+        N2=np.zeros_like(N1)
+        Qalphas=np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[np.newaxis,:,:,:],self.spw_Ndlys,axis=0)
+        Qbetas=np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[:,np.newaxis,:,:],self.spw_Ndlys,axis=1)
+        #Q_alpha/Q_beta are N_dlys x N_freq x N_freq
+        Ealphas=np.matmul(R1.T.conj(),np.matmul(Qalphas,R2))
+        Ebetas=np.matmul(R1.T.conj(),np.matmul(Qbetas,R2))
+        #E_alpha/E_beta ar N_dlys x N_freq  x N_freq
+        for tind in range(self.Ntimes):
+            N1[:,:]=np.diag(n1a[:,tind]+n1b[:,tind])
+            N2[:,:]=np.diag(n2a[:,tind]+n2b[:,tind])
+            #total covariance is sum of real and imaginary covariances
+            qc[tind]=np.trace(np.matmul(Ealphas,np.matmul(N1,np.matmul(Ebetas,N2))),axis1=2,axis2=3)
         return qc/4.
 
 
@@ -1580,7 +1571,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, input_data_weight='identity',
               norm='I', taper='none', sampling=False, little_h=True, spw_ranges=None,
-              verbose=True, history='',covariance=False):
+              verbose=True, history='',store_cov=False):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -1727,7 +1718,6 @@ class PSpecData(object):
         assert isinstance(dsets[0], (int, np.int)) and isinstance(dsets[1], (int, np.int)), "dsets must contain integer indices"
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
-        store_cov=covariance
         # assert form of bls1 and bls2
         assert isinstance(bls1, list), "bls1 and bls2 must be fed as a list of antpair tuples"
         assert isinstance(bls2, list), "bls1 and bls2 must be fed as a list of antpair tuples"
@@ -1907,23 +1897,12 @@ class PSpecData(object):
                         pv *= scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling)
 
                     #Generate the covariance matrix if error bars provided
-                    if covariance:
+                    if store_cov:
                         if verbose: print(" Building q_hat covariance...")
-                        cov_qv=np.zeros((self.Ntimes,
-                                         self.spw_Ndlys,
-                                         self.spw_Ndlys),dtype=complex)
+                        cov_qv=self.cov_q_hat(key1,key2)
                         cov_pv=np.zeros_like(cov_qv)
-                        amat,bmat=np.meshgrid(range(self.spw_Ndlys),
-                                              range(self.spw_Ndlys))
-                        amat=amat.astype(int)
-                        bmat=bmat.astype(int)
                         for tnum in range(self.Ntimes):
-                            cov_qv[tnum,:,:]=np.vectorize(lambda a,b:\
-                            self.cov_q_hat(a,b,key1,key2,time_indices=[tnum]))\
-                            (amat,bmat)
-                        if verbose: print(" Building p_hat covariance...")
-                        for tnum in range(self.Ntimes):
-                            cov_pv[tnum]=self.cov_p_hat(Mv,cov_qv[tnum,:,:])
+                            cov_pv[tnum]=self.cov_p_hat(Mv,cov_qv[tnum])
                         if self.primary_beam != None:
                             cov_pv*=\
                             (scalar * self.scalar_delay_adjustment(key1, key2,
@@ -2247,7 +2226,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
               exclude_auto_bls=True, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True,
-              overwrite=True, verbose=True, covariance=False, history=''):
+              overwrite=True, verbose=True, store_cov=False, history=''):
     """
 
     Create a PSpecData object, run OQE delay spectrum estimation and write
