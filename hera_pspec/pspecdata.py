@@ -755,7 +755,7 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
-    def cov_q_hat(self,key1,key2):
+    def cov_q_hat(self,key1,key2,time_indices=None):
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
@@ -776,16 +776,26 @@ class PSpecData(object):
             two input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
-        time_indices, list of indices for times.
+        time_indices, list of indices of times to include or just a single time.
+        default, None -> compute covariance for all times.
 
 
         Returns
         -------
         cov_q_hat, matrix with covariances between un-normalized band powers
         """
+        if time_indices is None:
+            time_indices=[tind for tind in range(self.Ntimes)]
+        elif isinstance(time_indices,int):
+            time_indices=[time_indices]
+        if not isinstance(time_indices,list):
+            raise ValueError("time_indices must be an integer or list of integers.")
+        #check time_indices
+        for tind in time_indices:
+            if not (tind>=0 and tind<=self.Ntimes):
+                raise ValueError("Invalid time index provided.")
 
-        qc=np.zeros((self.Ntimes,self.spw_Ndlys,self.spw_Ndlys),dtype=complex)
-
+        qc=np.zeros((len(time_indices),self.spw_Ndlys,self.spw_Ndlys),dtype=complex)
         R1,R2=0,0
         n1a,n2a,n1b,n2b=0,0,0,0
         #compute noise covariance matrices. Assume diagonal!
@@ -818,11 +828,11 @@ class PSpecData(object):
         Ealphas=np.matmul(R1.T.conj(),np.matmul(Qalphas,R2))
         Ebetas=np.matmul(R1.T.conj(),np.matmul(Qbetas,R2))
         #E_alpha/E_beta ar N_dlys x N_freq  x N_freq
-        for tind in range(self.Ntimes):
+        for indnum,tind in enumerate(time_indices):
             N1[:,:]=np.diag(n1a[:,tind]+n1b[:,tind])
             N2[:,:]=np.diag(n2a[:,tind]+n2b[:,tind])
             #total covariance is sum of real and imaginary covariances
-            qc[tind]=np.trace(np.matmul(Ealphas,np.matmul(N1,np.matmul(Ebetas,N2))),axis1=2,axis2=3)
+            qc[indnum]=np.trace(np.matmul(Ealphas,np.matmul(N1,np.matmul(Ebetas,N2))),axis1=2,axis2=3)
         return qc/4.
 
 
@@ -1269,8 +1279,10 @@ class PSpecData(object):
         q_cov: array_like
             covariance between bandpowers in q_alpha and q_beta
         """
-        return np.einsum('ab,cd,bd->ac',M,M,q_cov)
-
+        p_cov=np.zeros_like(q_cov)
+        for tnum in range(len(p_cov)):
+            p_cov[tnum]=np.einsum('ab,cd,bd->ac',M,M,q_cov[tnum])
+        return p_cov
 
     def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, unflag=False):
         """
@@ -1900,9 +1912,7 @@ class PSpecData(object):
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
                         cov_qv=self.cov_q_hat(key1,key2)
-                        cov_pv=np.zeros_like(cov_qv)
-                        for tnum in range(self.Ntimes):
-                            cov_pv[tnum]=self.cov_p_hat(Mv,cov_qv[tnum])
+                        cov_pv=self.cov_p_hat(Mv,cov_qv)
                         if self.primary_beam != None:
                             cov_pv*=\
                             (scalar * self.scalar_delay_adjustment(key1, key2,

@@ -355,22 +355,23 @@ class Test_PSpecData(unittest.TestCase):
         Test lists of keys
         """
         self.ds.set_weighting('identity')
-        qc=self.ds.cov_q_hat([key1],[key2])
+        qc=self.ds.cov_q_hat([key1],[key2],time_indices=[0])
         self.assertTrue(np.allclose(qc,
                         Nfactor**2.*np.repeat(np.identity(self.ds.spw_Ndlys)[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
-
+        self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,200)
+        self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,"watch out!")
     def test_cov_p_hat(self):
         """
         Test cov_p_hat, verify on identity.
         """
         self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
-        cov_p=self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),5.*np.identity(10))
+        cov_p=self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),np.array([5.*np.identity(10)]))
         for p in range(10):
             for q in range(10):
                 if p==q:
-                    self.assertTrue(np.isclose(30.,cov_p[p,q],atol=1e-6))
+                    self.assertTrue(np.isclose(30.,cov_p[0,p,q],atol=1e-6))
                 else:
-                    self.assertTrue(np.isclose(0.,cov_p[p,q],atol=1e-6))
+                    self.assertTrue(np.isclose(0.,cov_p[0,p,q],atol=1e-6))
 
 
     def test_q_hat(self):
