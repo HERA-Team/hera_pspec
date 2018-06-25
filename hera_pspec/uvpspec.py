@@ -410,9 +410,6 @@ class UVPSpec(object):
         if not hasattr(self, "stats_array"):
             raise AttributeError("No stats have been entered to this UVPSpec object")
 
-        if stat not in self.stats_array.keys():
-            raise AttributeError("stat string not found in stats_array dict")
-
         spw, blpairts, pol = self.key_to_indices(key, *args)
         data = self.stats_array[stat]
 
@@ -425,7 +422,7 @@ class UVPSpec(object):
         else:
             return data[spw][blpairts, :, pol]
 
-    def set_stats(self, stat, key, statistic, force=False, *args):
+    def set_stats(self, stat, key, statistic, *args):
         """
         Sets a statistic in the stats_array.
 
@@ -438,10 +435,8 @@ class UVPSpec(object):
             Spectral window of the statistic.
 
         statistic: ndarray
-            Array housing statistics to set. Must be the same size as data_array.
-
-        force: boolean, optional
-            If true, statistic does not have to be the same size as data_array.
+            Array with statistics to set. Must be same shape as the same slice
+            of data_array.
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
         statistic = np.asarray(statistic)
@@ -457,9 +452,9 @@ class UVPSpec(object):
             self.stats_array = odict()
 
         dtype = statistic.dtype
-
         if stat not in self.stats_array.keys():
-            self.stats_array[stat] = odict([[i, -99.*np.ones(self.data_array[i].shape, dtype=dtype)] for i in range(self.Nspws)])
+            self.stats_array[stat] = odict([[i, -99.*np.ones(self.data_array[i].shape, dtype=dtype)]
+                                            for i in range(self.Nspws)])
 
         self.stats_array[stat][spw][blpairts, :, pol] = statistic
 
@@ -1383,7 +1378,7 @@ class UVPSpec(object):
         return P_N
 
     def average_spectra(self, blpair_groups=None, time_avg=False, 
-                        blpair_weights=None, inplace=True):
+                        blpair_weights=None, error_field=None, inplace=True):
         """
         Average power spectra across the baseline-pair-time axis, weighted by 
         each spectrum's integration time.
@@ -1428,7 +1423,13 @@ class UVPSpec(object):
             as blpair_groups if specified. The weights are automatically 
             normalized within each baseline-pair group. Default: None (all 
             baseline pairs have unity weights).
-        
+
+        error_field: string, optional
+            If errorbars have been entered into stats_array, will do a weighted
+            sum to shrink the error bars down to the size of the averaged
+            data_array. If errors have not been provided for every point,
+            it will only use error bars that have been provided.
+
         inplace : bool, optional
             If True, edit data in self, else make a copy and return. Default: 
             True.
@@ -1443,12 +1444,14 @@ class UVPSpec(object):
         """
         if inplace:
             grouping.average_spectra(self, blpair_groups=blpair_groups, 
-                                     time_avg=time_avg, 
+                                     time_avg=time_avg,
+                                     error_field=error_field, 
                                      blpair_weights=blpair_weights, 
                                      inplace=True)
         else:
             return grouping.average_spectra(self, blpair_groups=blpair_groups, 
-                                            time_avg=time_avg, 
+                                            time_avg=time_avg,
+                                            error_field=error_field,
                                             blpair_weights=blpair_weights, 
                                             inplace=False)
 

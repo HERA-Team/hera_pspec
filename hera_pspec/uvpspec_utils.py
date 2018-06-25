@@ -156,10 +156,6 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         wgts = odict()
         ints = odict()
         nsmp = odict()
-        stats = odict()
-        statnames = [f[f.find("_")+1: f.rfind("_")] for f in h5file.keys() if f.startswith("stats")]
-        for sts in np.unique(np.array(statnames)):
-            stats[sts] = odict()
 
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
@@ -167,19 +163,36 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
                 wgts[s] = h5file['wgt_spw{}'.format(s)][blp_select, :, :, pol_select]
                 ints[s] = h5file['integration_spw{}'.format(s)][blp_select, pol_select]
                 nsmp[s] = h5file['nsample_spw{}'.format(s)][blp_select, pol_select]
-                for sts in statnames:
-                    stats[sts][s] = h5file["stats_{}_{}".format(sts, s)][blp_select, pol_select]
             else:
                 data[s] = uvp.data_array[s][blp_select, :, pol_select]
                 wgts[s] = uvp.wgt_array[s][blp_select, :, :, pol_select]
                 ints[s] = uvp.integration_array[s][blp_select, pol_select]
                 nsmp[s] = uvp.nsample_array[s][blp_select, pol_select]
 
+        stats = odict()
+        # If h5file, read in stats data
+        if h5file is not None:
+            statnames = [f[f.find("_")+1: f.rfind("_")] for f in h5file.keys() if f.startswith("stats")]
+            for sts in np.unique(np.array(statnames)):
+                stats[sts] = odict()
+                for s in np.unique(uvp.spw_array):
+                    stats[sts][s] = h5file["stats_{}_{}".format(sts, s)][blp_select, :, pol_select]
+            if len(stats) is not 0:
+                uvp.stats_array = stats
+
+        # Otherwise, keep whatever uvp already has
+        elif hasattr(uvp, "stats_array"):
+            for k in uvp.stats_array.keys():
+                stats[k] = odict()
+                for s in np.unique(uvp.spw_array):
+                    stats[k][s] = uvp.stats_array[k][s][blp_select, :, pol_select]
+            uvp.stats_array = stats
+                    
+
         uvp.data_array = data
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
-        uvp.stats_array = stats
 
     except AttributeError as e:
         # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data

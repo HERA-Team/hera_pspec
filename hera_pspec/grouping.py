@@ -229,7 +229,8 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
 
 
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False, 
-                    blpair_weights=None, normalize_weights=True, inplace=True):
+                    blpair_weights=None, error_field=None,
+                    normalize_weights=True, inplace=True):
     """
     Average power spectra across the baseline-pair-time axis, weighted by 
     each spectrum's integration time.
@@ -274,7 +275,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         blpair_groups if specified. The weights are automatically normalized 
         within each baseline-pair group. Default: None (all baseline pairs have 
         unity weights).
-    
+
+    error_field: string, optional
+            If errorbars have been entered into stats_array, will do a weighted
+            sum to shrink the error bars down to the size of the averaged
+            data_array. If errors have not been provided for every point,
+            it will only use error bars that have been provided.
+
     normalize_weights: bool, optional
         Whether to normalize the baseline-pair weights so that:
            Sum(blpair_weights) = N_blpairs
@@ -339,7 +346,14 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             except:
                 raise IndexError("blpair_weights must have the same shape as "
                                  "blpair_groups")
-    
+
+    stat_l = []
+    if error_field is not None:
+        stat_l = [error_field]
+        if hasattr(uvp, "stats_array"):
+            if error_field not in uvp.stats_array.keys():
+                raise KeyError("error_field not found in stats_array keys.")
+
     # For baseline pairs not in blpair_groups, add them as their own group
     extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
     blpair_groups += map(lambda blp: [blp], extra_blpairs)
@@ -348,18 +362,23 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     # Create new data arrays
     data_array, wgts_array = odict(), odict()
     ints_array, nsmp_array = odict(), odict()
+    stats_array = odict([[stat, odict()] for stat in stat_l])
 
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
         spw_data, spw_wgts, spw_ints, spw_nsmp = [], [], [], []
+        spw_stats = odict([[stat, []] for stat in stat_l])
 
         # Iterate over polarizations
         for i, p in enumerate(uvp.pol_array):
             pol_data, pol_wgts, pol_ints, pol_nsmp = [], [], [], []
+            pol_stats = odict([[stat, []] for stat in stat_l])
+
 
             # Iterate over baseline-pair groups
             for j, blpg in enumerate(blpair_groups):
                 bpg_data, bpg_wgts, bpg_ints, bpg_nsmp = [], [], [], []
+                bpg_stats = odict([[stat, []] for stat in stat_l])
                 w_list = []
                 
                 # Sum over all weights within this baseline group to get 
@@ -386,6 +405,14 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     wgts = uvp.get_wgts(spw, blp, p)
                     ints = uvp.get_integrations(spw, blp, p)[:, None]
                     w = (ints * np.sqrt(nsmp))
+
+                    # Get error bar weights and set invalid ones to zero.
+                    errws = {}
+                    for stat in stat_l:
+                        errs = uvp.get_stats(stat, (spw, blp, p))
+                        errs[np.where(errs > 0.)] = 1. / errs[np.where(errs > 0.)] ** 2.
+                        errs[np.where(errs == -99.)] = 0.
+                        errws[stat] = errs
                     
                     # Take time average if desired
                     if time_avg:
@@ -395,9 +422,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                            / np.sum(w, axis=0).clip(1e-10, np.inf)[:, None])[None] 
                       ints = (np.sum(ints * w, axis=0) \
                            / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
-                      nsmp = np.sum(nsmp, axis=0)[None]
+                      nsmp = np.sum(nsmp, axis=0)[None]                       
                       w = np.sum(w, axis=0)[None]
-                    
+
+                      for stat in stat_l:
+                        errws[stat] = np.sum(errws[stat], axis=0)[None]
+
                     # Add multiple copies of data for each baseline according 
                     # to the weighting/multiplicity
                     for m in range(int(blpg_wgts[k])):
@@ -405,6 +435,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         bpg_wgts.append(wgts * w[:, None])
                         bpg_ints.append(ints * w)
                         bpg_nsmp.append(nsmp)
+                        [bpg_stats[stat].append(errws[stat]) for stat in stat_l]
                         w_list.append(w)
 
                 # Take integration-weighted averages, with clipping to deal 
@@ -417,20 +448,32 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 bpg_ints = np.sum(bpg_ints, axis=0) \
                          / np.sum(w_list, axis=0).clip(1e-10, np.inf)
                 w_list = np.sum(w_list, axis=0)
+
+                # For errors that aren't 0, sum weights and take inverse square
+                # root. Otherwise, set to invalid value -99.
+                for stat in stat_l:
+                    arr = np.sum(bpg_stats[stat], axis=0)
+                    arr[np.where(arr == 0.)] = -99.
+                    arr[np.where(arr > 0.)] = arr[np.where(arr > 0.)] ** (-0.5)
+                    bpg_stats[stat] =  arr
                 
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
+                [pol_stats[stat].extend(bpg_stats[stat]) for stat in stat_l]
 
             # Append to lists (spectral window)
             spw_data.append(pol_data); spw_wgts.append(pol_wgts)
             spw_ints.append(pol_ints); spw_nsmp.append(pol_nsmp)
+            [spw_stats[stat].append(pol_stats[stat]) for stat in stat_l]
 
         # Append to dictionaries
         data_array[spw] = np.moveaxis(spw_data, 0, -1)
         wgts_array[spw] = np.moveaxis(spw_wgts, 0, -1)
         ints_array[spw] = np.moveaxis(spw_ints, 0, -1)[:, 0, :]
         nsmp_array[spw] = np.moveaxis(spw_nsmp, 0, -1)[:, 0, :]
+        for stat in stat_l:
+            stats_array[stat][spw] = np.moveaxis(spw_stats[stat], 0, -1)
 
     # Iterate over blpair groups one more time to assign metadata
     time_1, time_2, time_avg_arr  = [], [], []
@@ -494,13 +537,17 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     if hasattr(uvp_in, 'label1'): uvp.label1 = uvp_in.label1
     if hasattr(uvp_in, 'label2'): uvp.label2 = uvp_in.label2
 
+    if error_field is not None:
+        uvp.stats_array = stats_array
+    elif hasattr(uvp, "stats_array"):
+        delattr(uvp, "stats_array")
+
     # Validity check
     uvp.check()
     
     # Return
     if inplace == False:
         return uvp
-    
 
 def fold_spectra(uvp):
     """

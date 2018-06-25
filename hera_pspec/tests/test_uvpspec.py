@@ -85,6 +85,22 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), 'XX'), (0, ((1, 3), (1, 3)), 'XX'),
                                (0, ((2, 3), (2, 3)), 'XX')])
 
+    def test_stats_array(self):
+        # test get_data and set_data
+        keys = self.uvp.get_all_keys()
+        nt.assert_raises(ValueError, self.uvp.set_stats, "errors", keys[0], np.linspace(0, 1, 2))
+        nt.assert_raises(AttributeError, self.uvp.get_stats, "__", keys[0])
+        errs = np.ones((self.uvp.Ntimes, self.uvp.Ndlys))
+        self.uvp.set_stats("errors", keys[0], errs)
+        e = self.uvp.get_stats("errors", keys[0])
+        nt.assert_true(np.all(self.uvp.get_stats("errors", keys[0]) == errs))
+        nt.assert_true(np.all(self.uvp.get_stats("errors", keys[1]) == -99.*errs))
+
+        #self.uvp.set_stats("errors", keys[0], -99.)
+        blpairs = self.uvp.get_blpairs()
+        u = self.uvp.average_spectra([blpairs], time_avg=False, error_field="errors", inplace=False)
+        nt.assert_true(np.all(u.get_stats("errors", keys[0])[0] == np.ones(u.Ndlys)))
+        
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
         uvp.convert_to_deltasq(little_h=True)
