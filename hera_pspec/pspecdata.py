@@ -785,11 +785,8 @@ class PSpecData(object):
             q = []
             for i in xrange(self.spw_Ndlys):
                 Q = self.get_Q_alt(i)
-                # Taking the diagonal here is equivalent to not taking cross
-                # multiplications across different times. If this gets too
-                # slow, can be sped up by not computing off-diagonal terms
-                # before taking the diagonal
-                qi = np.diag(np.dot(Rx1.T.conj(), np.dot(Q, Rx2)))
+                QRx2 = np.dot(Q, Rx2)
+                qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
                 q.append(qi)
             return 0.5 * np.array(q)
 
