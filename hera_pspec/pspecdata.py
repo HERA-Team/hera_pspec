@@ -1390,11 +1390,11 @@ class PSpecData(object):
 
         valid = True
         if pol_pair[0] not in dset1.polarization_array:
-            print "dset {} does not contain data for polarization {}".format(dset_ind1, pol_pair[0])
+            print("dset {} does not contain data for polarization {}".format(dset_ind1, pol_pair[0]))
             valid = False
 
         if pol_pair[1] not in dset2.polarization_array:
-            print "dset {} does not contain data for polarization {}".format(dset_ind2, pol_pair[1])
+            print("dset {} does not contain data for polarization {}".format(dset_ind2, pol_pair[1]))
             valid = False
 
         return valid
@@ -1655,7 +1655,7 @@ class PSpecData(object):
                 if not valid:
                    # storing only one polarization as only equal polarization are allowed at the
                    # moment and UVPSpec object also understands one polarization
-                   print ("Polarization pair: {} failed the validation test, continuing...".format(p_str))
+                   print("Polarization pair: {} failed the validation test, continuing...".format(p_str))
                    continue
 
                 # UVPSpec only takes a single pol currently
@@ -1915,7 +1915,7 @@ class PSpecData(object):
 
             # skip if dataset is not drift phased
             if dset.phase_type != 'drift':
-                print "skipping dataset {} b/c it isn't drift phased".format(i)
+                print("Skipping dataset {} b/c it isn't drift phased".format(i))
 
             # convert UVData to DataContainers. Note this doesn't make
             # a copy of the data
@@ -1968,7 +1968,7 @@ class PSpecData(object):
             beam = self.primary_beam
         else:
             if self.primary_beam is not None:
-                print "Warning: feeding a beam model when self.primary_beam already exists..."
+                print("Warning: feeding a beam model when self.primary_beam already exists...")
 
         # assert type of beam
         assert isinstance(beam, pspecbeam.PSpecBeamBase), "beam model must be a subclass of pspecbeam.PSpecBeamBase"
@@ -1982,7 +1982,7 @@ class PSpecData(object):
         for i, dset in enumerate(self.dsets):
             # check dset vis units
             if dset.vis_units != 'Jy':
-                print "Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units)
+                print("Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units))
                 continue
             for j, p in enumerate(dset.polarization_array):
                 dset.data_array[:, :, :, j] *= factors[p][None, None, :]
@@ -2006,7 +2006,7 @@ class PSpecData(object):
         for dset in self.dsets:
             _dlst = np.median(np.diff(np.unique(dset.lst_array)))
             if not np.isclose(dlst, _dlst, atol=10**(-lst_tol) / dset.Ntimes):
-                print "not all datasets in self.dsets are on the same LST grid, cannot LST trim."
+                print("Not all datasets in self.dsets are on the same LST grid, cannot LST trim.")
                 return
 
         # get lst array of each dataset and turn into string and add to common_lsts

@@ -1,10 +1,10 @@
 from setuptools import setup
-import sys
-import os
+import os, sys, json
 from hera_pspec import version
-import json
 
-data = [version.git_origin, version.git_hash, version.git_description, version.git_branch]
+data = [ version.git_origin, version.git_hash, version.git_description, 
+         version.git_branch ]
+data = [d.decode("utf-8") for d in data] # Convert to utf-8 encoding
 with open(os.path.join('hera_pspec', 'GIT_INFO'), 'w') as outfile:
     json.dump(data, outfile)
 
@@ -38,4 +38,4 @@ setup_args = {
 }
 
 if __name__ == '__main__':
-    apply(setup, (), setup_args)
+    setup(**setup_args)

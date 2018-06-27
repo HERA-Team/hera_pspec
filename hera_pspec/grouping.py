@@ -151,7 +151,7 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
         has_times = [np.isin(common_times, uvp.time_avg_array) 
                      for uvp in uvp_list]
         common_times = common_times[np.all(has_times, axis=0)]
-        print "common_times:", common_times
+        print("common_times:", common_times)
     
     # Get baseline-pairs that are common to all
     if blpairs:
@@ -159,14 +159,14 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
         has_blpairs = [np.isin(common_blpairs, uvp.blpair_array) 
                        for uvp in uvp_list]
         common_blpairs = common_blpairs[np.all(has_blpairs, axis=0)]
-        print "common_blpairs:", common_blpairs
+        print("common_blpairs:", common_blpairs)
     
     # Get polarizations that are common to all
     if pols:
         common_pols = np.unique(uvp_list[0].pol_array)
         has_pols = [np.isin(common_pols, uvp.pol_array) for uvp in uvp_list]
         common_pols = common_pols[np.all(has_pols, axis=0)]
-        print "common_pols:", common_pols
+        print("common_pols:", common_pols)
     
     # Get common spectral windows (the entire window must match)
     # Each row of common_spws is a list of that spw's index in each UVPSpec
@@ -193,7 +193,7 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
             if missing: continue
             common_spws.append(found_spws)
         common_spws = np.array(common_spws).T # Transpose
-        print "common_spws:", common_spws
+        print("common_spws:", common_spws)
         
     # Check that this won't be an empty selection
     if spws and len(common_spws) == 0:

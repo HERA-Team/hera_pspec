@@ -947,7 +947,7 @@ class UVPSpec(object):
         if os.path.exists(filepath) and overwrite is False:
             raise IOError("{} exists, not overwriting...".format(filepath))
         elif os.path.exists(filepath) and overwrite is True:
-            print "{} exists, overwriting...".format(filepath)
+            print("{} exists, overwriting...".format(filepath))
             os.remove(filepath)
         
         # Write file
@@ -1002,15 +1002,15 @@ class UVPSpec(object):
               or not hasattr(self, 'OmegaPP') \
               or not hasattr(self, 'beam_freqs')) \
               and new_beam is None:
-                print "In order to set the cosmology, self.OmegaP, " \
+                print("In order to set the cosmology, self.OmegaP, " \
                       "self.OmegaPP and self.beam_freqs must exist, or you " \
                       "need to pass a PSpecBeamUV object or a path to a beam " \
-                      "file as new_beam."
+                      "file as new_beam.")
                 return
 
         # overwrite beam quantities
         if new_beam is not None:
-            if verbose: print "Updating beam data with {}".format(new_beam)
+            if verbose: print("Updating beam data with {}".format(new_beam))
             if isinstance(new_beam, (str, np.str)):
                 # PSpecBeamUV will adopt a default cosmology upon instantiation, 
                 # but this doesn't matterfor what we need from it
@@ -1142,8 +1142,8 @@ class UVPSpec(object):
                                getattr(other, p)[i]).all()
         except AssertionError:
             if verbose: 
-                print "UVPSpec parameter '{}' not equivalent between {} and {}" \
-                      "".format(p, self.__repr__(), other.__repr__())
+                print("UVPSpec parameter '{}' not equivalent between {} and {}" \
+                      "".format(p, self.__repr__(), other.__repr__()) )
             return False
 
         return True
@@ -1758,7 +1758,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
             concat_ax = ['spw', 'blpairts', 'pol'][matches.index(False)]
             data_concat_axes[(i, j)] = concat_ax
             if verbose:
-                print "uvp {} and {} are concatable across {} axis".format(i, j, concat_ax)
+                print("uvp {} and {} are concatable across {} axis".format(i, j, concat_ax))
 
     # assert all uvp pairs have the same (single) non-overlap (concat) axis
     err_msg = "Non-overlapping data in uvps span multiple data axes:\n{}" \

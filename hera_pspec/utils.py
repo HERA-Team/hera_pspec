@@ -1,19 +1,8 @@
 import numpy as np
-import md5
-import yaml
-from conversions import Cosmo_Conversions
-import traceback
-import operator
+from hera_pspec.conversions import Cosmo_Conversions
 from hera_cal import redcal
-import itertools
-import argparse
+import yaml, traceback, operator, itertools, argparse
 
-def hash(w):
-    """
-    Return an MD5 hash of a set of weights.
-    """
-    DeprecationWarning("utils.hash is deprecated.")
-    return md5.md5(w.copy(order='C')).digest()
 
 def cov(d1, w1, d2=None, w2=None):
     """
