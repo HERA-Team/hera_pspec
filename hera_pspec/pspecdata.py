@@ -907,11 +907,8 @@ class PSpecData(object):
             q = []
             for i in xrange(self.spw_Ndlys):
                 Q = self.get_Q_alt(i)
-                # Taking the diagonal here is equivalent to not taking cross
-                # multiplications across different times. If this gets too
-                # slow, can be sped up by not computing off-diagonal terms
-                # before taking the diagonal
-                qi = np.diag(np.dot(Rx1.T.conj(), np.dot(Q, Rx2)))
+                QRx2 = np.dot(Q, Rx2)
+                qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
                 q.append(qi)
             return 0.5 * np.array(q)
 
@@ -2525,8 +2522,7 @@ def get_pspec_run_argparser():
     a.add_argument("--Jy2mK", default=False, action='store_true', help="Convert datasets from Jy to mK if a beam model is provided.")
     a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
     a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')
-    a.add_argument("--group", default=False, action='store_true', help="If blpairs is not provided, group baseline pairs together.")
-    a.add_argument("--Nblps_per_group", default=1, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
+    a.add_argument("--Nblps_per_group", default=None, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
     a.add_argument("--bl_len_range", default=(0, 1e10), type=tuple, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")

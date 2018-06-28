@@ -15,7 +15,6 @@ def hash(w):
     DeprecationWarning("utils.hash is deprecated.")
     return md5.md5(w.copy(order='C')).digest()
 
-
 def cov(d1, w1, d2=None, w2=None):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size 
@@ -74,7 +73,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
         and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
         If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
         Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.   
-        
+
     group : boolean, optional
         if True, group each consecutive Nblps_per_group blpairs into sub-lists
 
