@@ -109,7 +109,8 @@ class UVPSpec(object):
 
         # define which attributes are considred meta data. Large attrs should be constructed as datasets
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array", 
-                            "bl_vecs", "bl_array", 'lst_avg_array', 'time_avg_array', 'OmegaP', 'OmegaPP']
+                            "bl_vecs", "bl_array", 'lst_avg_array', 'time_avg_array', 'OmegaP', 'OmegaPP',
+                            "label_1_array", "label_2_array"]
         self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets) - set(self._dicts_of_dicts))
         self._meta = sorted(set(self._meta_dsets).union(set(self._meta_attrs)))
 

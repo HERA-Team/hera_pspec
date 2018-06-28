@@ -177,7 +177,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
                 stats[sts] = odict()
                 for s in np.unique(uvp.spw_array):
                     stats[sts][s] = h5file["stats_{}_{}".format(sts, s)][blp_select, :, pol_select]
-            if len(stats) is not 0:
+            if len(statnames) is not 0:
                 uvp.stats_array = stats
 
         # Otherwise, keep whatever uvp already has
