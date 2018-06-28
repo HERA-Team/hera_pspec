@@ -1458,7 +1458,8 @@ class PSpecData(object):
                                                num_steps=num_steps)
         return scalar
 
-    def scalar_delay_adjustment(self, key1, key2, sampling=False):
+    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False, 
+                                Gv=None, Hv=None):
         """
         Computes an adjustment factor for the pspec scalar that is needed
         when the number of delay bins is not equal to the number of
@@ -1476,23 +1477,32 @@ class PSpecData(object):
 
         Parameters
         ----------
-        key1, key2 : tuples or lists of tuples
+        key1, key2 : tuples or lists of tuples, optional
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
-            in the list will be combined with inverse noise weights.
+            in the list will be combined with inverse noise weights. If Gv and 
+            Hv are specified, these arguments will be ignored. Default: None.
 
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
+        
+        Gv, Hv : array_like, optional
+            If specified, use these arrays instead of calling self.get_G() and 
+            self.get_H(). Using precomputed Gv and Hv will speed up this 
+            function significantly. Default: None.
 
         Returns
         -------
         adjustment : float
 
         """
+        if Gv is None: Gv = self.get_G(key1, key2)
+        if Hv is None: Hv = self.get_H(key1, key2, sampling)
+        
         # get ratio
-        summed_G = np.sum(self.get_G(key1, key2), axis=1)
-        summed_H = np.sum(self.get_H(key1, key2, sampling), axis=1)
+        summed_G = np.sum(Gv, axis=1)
+        summed_H = np.sum(Hv, axis=1)
         ratio = summed_H.real / summed_G.real
 
         # fill infs and nans from zeros in summed_G
@@ -1901,7 +1911,7 @@ class PSpecData(object):
                     # Wide bin adjustment of scalar, which is only needed for the diagonal norm
                     # matrix mode (i.e., norm = 'I')
                     if norm == 'I':
-                        pv *= self.scalar_delay_adjustment(key1, key2, sampling=sampling)
+                        pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2366,7 +2376,8 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
             uvd.read_miriad(d, bls=bls, polarizations=pols)
             _dsets.append(uvd)
         dsets = _dsets
-        utils.log("Loaded data in %1.1f sec." % (time.time() - t0), lvl=1, verbose=verbose)
+        utils.log("Loaded data in %1.1f sec." % (time.time() - t0), 
+                  lvl=1, verbose=verbose)
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
@@ -2443,17 +2454,20 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     # assign group name
     if groupname is None:
         groupname = '_'.join(dset_labels)
-
+    
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
-
         # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, spw_ranges=spw_ranges,
-                       input_data_weight=input_data_weight, norm=norm, taper=taper, history=history)
-
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, 
+                       spw_ranges=spw_ranges,
+                       input_data_weight=input_data_weight, 
+                       norm=norm, taper=taper, history=history)
+        
         # Store output
-        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], dset_labels[dset_idxs[1]])
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
+        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], 
+                                  dset_labels[dset_idxs[1]])
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
+                      overwrite=overwrite)
 
     return psc
 
