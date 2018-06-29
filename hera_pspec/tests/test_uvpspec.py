@@ -100,7 +100,10 @@ class Test_UVPSpec(unittest.TestCase):
         blpairs = self.uvp.get_blpairs()
         u = self.uvp.average_spectra([blpairs], time_avg=False, error_field="errors", inplace=False)
         nt.assert_true(np.all(u.get_stats("errors", keys[0])[0] == np.ones(u.Ndlys)))
-        
+        self.uvp.set_stats("who?", keys[0], errs)
+        u = self.uvp.average_spectra([blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False)
+        nt.assert_true(np.all( u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0])))
+
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
         uvp.convert_to_deltasq(little_h=True)

@@ -276,11 +276,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         within each baseline-pair group. Default: None (all baseline pairs have 
         unity weights).
 
-    error_field: string, optional
-            If errorbars have been entered into stats_array, will do a weighted
-            sum to shrink the error bars down to the size of the averaged
-            data_array. If errors have not been provided for every point,
-            it will only use error bars that have been provided.
+    error_field: string or list, optional
+        If errorbars have been entered into stats_array, will do a weighted
+        sum to shrink the error bars down to the size of the averaged
+        data_array. Error_field strings be keys of stats_array. If list,
+        does this for every specified key. Every stats_array key that is
+        not specified is thrown out of the new averaged object.
 
     normalize_weights: bool, optional
         Whether to normalize the baseline-pair weights so that:
@@ -347,12 +348,18 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 raise IndexError("blpair_weights must have the same shape as "
                                  "blpair_groups")
 
-    stat_l = []
-    if error_field is not None:
+    # stat_l is a list of supplied error_fields, to sum over.
+    if isinstance(error_field, (list, tuple, np.ndarray)):
+        stat_l = list(error_field)
+    elif isinstance(error_field, (str, np.str)):
         stat_l = [error_field]
+    else:
+        stat_l = []
+
+    for stat in stat_l:
         if hasattr(uvp, "stats_array"):
-            if error_field not in uvp.stats_array.keys():
-                raise KeyError("error_field not found in stats_array keys.")
+            if stat not in uvp.stats_array.keys():
+                raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
 
     # For baseline pairs not in blpair_groups, add them as their own group
     extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
@@ -410,8 +417,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     errws = {}
                     for stat in stat_l:
                         errs = uvp.get_stats(stat, (spw, blp, p))
-                        errs[np.where(errs > 0.)] = 1. / errs[np.where(errs > 0.)] ** 2.
-                        errs[np.where(errs == -99.)] = 0.
+                        no_data = np.isclose(errs, -99., 1e-10)
+                        errs[~no_data] = 1. / errs[~no_data] ** 2.
+                        errs[no_data] = 0.
                         errws[stat] = errs
                     
                     # Take time average if desired
@@ -453,8 +461,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 # root. Otherwise, set to invalid value -99.
                 for stat in stat_l:
                     arr = np.sum(bpg_stats[stat], axis=0)
-                    arr[np.where(arr == 0.)] = -99.
-                    arr[np.where(arr > 0.)] = arr[np.where(arr > 0.)] ** (-0.5)
+                    not_valid = np.isclose(arr, 0., 1e-10)
+                    arr[not_valid] = -99.
+                    arr[~not_valid] = arr[~not_valid] ** (-0.5)
                     bpg_stats[stat] =  arr
                 
                 # Append to lists (polarization)

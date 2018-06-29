@@ -44,7 +44,7 @@ class UVPSpec(object):
         self._nsample_array = PSpecParam("nsample_array", description=desc, expected_type=np.float64, form="(Nblpairts, Npols)")
         desc = ("Power spectrum stats array with stats type and spw integer as keys and values as complex ndarrays with same shape"
                 " as data_array")
-        self._stats_array = PSpecParam("stats_array", description=desc, expected_type=dict, form="(Nblpairts, Ndlys, Npols)")
+        self._stats_array = PSpecParam("stats_array", description=desc, expected_type=np.complex128, form="(Nblpairts, Ndlys, Npols)")
         self._spw_array = PSpecParam("spw_array", description="Spw integer array.", form="(Nspwdlys,)", expected_type=np.uint16)
         self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nfreqs,)", expected_type=np.float64)
         self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)", expected_type=np.float64)
@@ -1172,6 +1172,14 @@ class UVPSpec(object):
                             for j in getattr(self, p)[k].keys():
                                 assert isinstance(getattr(self, p)[k][j], np.ndarray)
                         
+                        try:
+                            dic = getattr(self, p)
+                            for name in dic.keys():
+                                for spw in dic[name].keys():
+                                    dic[name][spw] = a.expected_type(dic[name][spw])
+                            setattr(self, p , dic)
+                        except:
+                            raise AssertionError(err_msg)
     def _clear(self):
         """
         Clear UVPSpec of all parameters. Warning: this cannot be undone.
@@ -1425,11 +1433,12 @@ class UVPSpec(object):
             normalized within each baseline-pair group. Default: None (all 
             baseline pairs have unity weights).
 
-        error_field: string, optional
+        error_field: string or list, optional
             If errorbars have been entered into stats_array, will do a weighted
             sum to shrink the error bars down to the size of the averaged
-            data_array. If errors have not been provided for every point,
-            it will only use error bars that have been provided.
+            data_array. Error_field strings be keys of stats_array. If list,
+            does this for every specified key. Every stats_array key that is
+            not specified is thrown out of the new averaged object.
 
         inplace : bool, optional
             If True, edit data in self, else make a copy and return. Default: 
