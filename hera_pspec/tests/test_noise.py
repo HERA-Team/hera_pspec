@@ -16,7 +16,7 @@ class Test_Sensitivity(unittest.TestCase):
 
     def setUp(self):
         self.cosmo = conversions.Cosmo_Conversions()
-        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'))
+        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_pstokes_power.beamfits'))
         self.sense = noise.Sensitivity(beam=self.beam, cosmo=self.cosmo)
 
     def tearDown(self):
@@ -57,7 +57,7 @@ class Test_Sensitivity(unittest.TestCase):
         t_int = 10.7
         P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, form='Pk')
         nt.assert_true(isinstance(P_N, (float, np.float)))
-        nt.assert_true(np.isclose(P_N, 906609626029.72791))
+        nt.assert_true(np.isclose(P_N, 908472312787.53491))
         # calculate DelSq
         Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form='DelSq')
         nt.assert_equal(Dsq.shape, (10,))

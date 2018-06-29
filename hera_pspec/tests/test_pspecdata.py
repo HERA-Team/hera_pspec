@@ -619,14 +619,14 @@ class Test_PSpecData(unittest.TestCase):
 
         # test vis_units no Jansky
         uvd2 = copy.deepcopy(uvd)
-        uvd2.polarization_array[0] = 1
+        uvd2.polarization_array[0] = -6
         uvd2.vis_units = 'UNCALIB'
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)],
                                  wgts=[None, None], beam=self.bm)
         ds.Jy_to_mK()
         nt.assert_equal(ds.dsets[0].vis_units, "mK")
         nt.assert_equal(ds.dsets[1].vis_units, "UNCALIB")
-        nt.assert_not_equal(ds.dsets[0].get_data(24, 25, 'xx')[30, 30], ds.dsets[1].get_data(24, 25, 'pI')[30, 30])
+        nt.assert_not_equal(ds.dsets[0].get_data(24, 25, 'xx')[30, 30], ds.dsets[1].get_data(24, 25, 'yy')[30, 30])
 
     def test_trim_dset_lsts(self):
         fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
@@ -804,12 +804,12 @@ class Test_PSpecData(unittest.TestCase):
         cosmo = conversions.Cosmo_Conversions()
 
         # Set to mK scale
-        d1.data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
-        d2.data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
+        d1.data_array *= beam.Jy_to_mK(freqs, pol='XX')[None, None, :, None]
+        d2.data_array *= beam.Jy_to_mK(freqs, pol='XX')[None, None, :, None]
 
         # Compare using no taper
-        OmegaP = beam.power_beam_int()
-        OmegaPP = beam.power_beam_sq_int()
+        OmegaP = beam.power_beam_int(pol='XX')
+        OmegaPP = beam.power_beam_sq_int(pol='XX')
         OmegaP = interp1d(beam.beam_freqs/1e6, OmegaP)(freqs/1e6)
         OmegaPP = interp1d(beam.beam_freqs/1e6, OmegaPP)(freqs/1e6)
         NEB = 1.0

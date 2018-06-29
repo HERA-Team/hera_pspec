@@ -297,7 +297,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp)
         # test basic execution
         s = uvp.compute_scalar(0, 'xx', num_steps=1000, noise_scalar=False)
-        nt.assert_almost_equal(s/552336586.23970914, 1.0, places=5)
+        nt.assert_almost_equal(s/553995277.90425551, 1.0, places=5)
         # test execptions
         del uvp.OmegaP
         nt.assert_raises(AssertionError, uvp.compute_scalar, 0, -5)
