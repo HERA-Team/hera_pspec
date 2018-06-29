@@ -157,27 +157,28 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         ints = odict()
         nsmp = odict()
         cov = odict()
+        store_cov = hasattr(uvp, 'cov_array')
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 data[s] = h5file['data_spw{}'.format(s)][blp_select, :, pol_select]
                 wgts[s] = h5file['wgt_spw{}'.format(s)][blp_select, :, :, pol_select]
                 ints[s] = h5file['integration_spw{}'.format(s)][blp_select, pol_select]
                 nsmp[s] = h5file['nsample_spw{}'.format(s)][blp_select, pol_select]
-                if uvp.store_cov:
-                    cov[s] = h5file['cov_spw{}'.format(s)][blp_select,:,:,pol_select]
+                if store_cov:
+                    cov[s] = h5file['cov_spw{}'.format(s)][blp_select, :, :, pol_select]
             else:
                 data[s] = uvp.data_array[s][blp_select, :, pol_select]
                 wgts[s] = uvp.wgt_array[s][blp_select, :, :, pol_select]
                 ints[s] = uvp.integration_array[s][blp_select, pol_select]
                 nsmp[s] = uvp.nsample_array[s][blp_select, pol_select]
-                if uvp.store_cov:
-                    cov[s] = uvp.cov_array[s][blp_select,:,:,pol_select]
+                if store_cov:
+                    cov[s] = uvp.cov_array[s][blp_select, :, :, pol_select]
 
         uvp.data_array = data
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
-        if uvp.store_cov:
+        if store_cov:
             uvp.cov_array = cov
     except AttributeError:
         # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
