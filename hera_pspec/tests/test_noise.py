@@ -16,7 +16,7 @@ class Test_Sensitivity(unittest.TestCase):
 
     def setUp(self):
         self.cosmo = conversions.Cosmo_Conversions()
-        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits'))
+        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'))
         self.sense = noise.Sensitivity(beam=self.beam, cosmo=self.cosmo)
 
     def tearDown(self):

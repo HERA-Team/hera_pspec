@@ -10,7 +10,7 @@ from hera_pspec import grouping
 class Test_grouping(unittest.TestCase):
 
     def setUp(self):
-        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.beam = pspecbeam.PSpecBeamUV(beamfile)
         uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam)
         uvp.check()

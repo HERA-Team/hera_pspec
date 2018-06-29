@@ -100,9 +100,9 @@ class Test_PSpecData(unittest.TestCase):
         self.w = [None for _d in dfiles]
 
         # Load beam file
-        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
-        self.bm.filename = 'NF_HERA_Beams.beamfits'
+        self.bm.filename = 'HERA_NF_dipole_power.beamfits'
 
         # load another data file
         self.uvd = uv.UVData()
@@ -976,7 +976,7 @@ class Test_PSpecData(unittest.TestCase):
 def test_pspec_run():
     fnames = [os.path.join(DATA_PATH, d) for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
                                                    'zen.odd.xx.LST.1.28828.uvOCRSA']]
-    beamfile = os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits")
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
 
     # test basic execution
     psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True)
