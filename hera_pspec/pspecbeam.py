@@ -364,6 +364,14 @@ class PSpecBeamUV(PSpecBeamBase):
         This is subclassed from PSpecBeamBase to take in a pyuvdata
         UVBeam filepath or object.
 
+        Note: If one wants to use this object for linear dipole
+        polarizations (e.g. XX, XY, YX, YY) then one can feed
+        uvbeam as a dipole power beam or an efield beam. If, however,
+        one wants to use this for pseudo-Stokes polarizations
+        (e.g. pI, pQ, pU, pV), one must feed uvbeam as a pstokes
+        power beam. See pyuvdata.UVBeam for details on forming
+        pstokes power beams from an efield beam.
+
         Parameters
         ----------
         uvbeam: str or UVBeam object
