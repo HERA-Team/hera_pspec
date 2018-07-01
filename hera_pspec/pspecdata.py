@@ -2437,12 +2437,12 @@ class PSpecData(object):
 
 
 def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None, dset_pairs=None,
-              spw_ranges=None, pol_pairs=None, blpairs=None,
+              psname_ext=None, spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=True, exclude_permutations=True,
-              Nblps_per_group=None, bl_len_range=(0, 1e10), bl_error_tol=1.0,
-              beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True,
-              overwrite=True, verbose=True, store_cov=False, history=''):
+              Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
+              beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
+              time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
     """
 
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -2630,18 +2630,6 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     # load data if fed as filepaths
     if isinstance(dsets[0], (str, np.str)):
-<<<<<<< HEAD
-        # load data into UVData objects if fed as list of strings
-        t0 = time.time()
-        _dsets = []
-        for d in dsets:
-            uvd = UVData()
-            uvd.read_miriad(d, bls=bls, polarizations=pols)
-            _dsets.append(uvd)
-        dsets = _dsets
-        utils.log("Loaded data in %1.1f sec." % (time.time() - t0), 
-                  lvl=1, verbose=verbose)
-=======
         try:
             # load data into UVData objects if fed as list of strings
             t0 = time.time()
@@ -2652,13 +2640,13 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
                 uvd.read_miriad(dset, bls=bls, polarizations=pols)
                 _dsets.append(uvd)
             dsets = _dsets
-            utils.log("Loaded data in %1.1f sec." % (time.time() - t0), lvl=1, verbose=verbose)
+            utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
+                      lvl=1, verbose=verbose)
         except ValueError:
             # at least one of the dset loads failed due to no data being present
             utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
             return
 
->>>>>>> updated pspec_run for better handling of dset loading
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
@@ -2762,32 +2750,21 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
-<<<<<<< HEAD
-        # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, 
-                       spw_ranges=spw_ranges,
-                       input_data_weight=input_data_weight, 
-                       norm=norm, taper=taper, history=history)
-        
-        # Store output
-        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], 
-                                  dset_labels[dset_idxs[1]])
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
-                      overwrite=overwrite)
-=======
-
         # check bls lists aren't empty
         if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
             continue
 
         # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, spw_ranges=spw_ranges, n_dlys=n_dlys,
-                       input_data_weight=input_data_weight, norm=norm, taper=taper, history=history, verbose=verbose)
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
+                       spw_ranges=spw_ranges, n_dlys=n_dlys,
+                       input_data_weight=input_data_weight, norm=norm,
+                       taper=taper, history=history)
 
         # Store output
-        psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]], dset_labels[dset_idxs[1]], psname_ext)
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
->>>>>>> updated pspec_run for better handling of dset loading
+        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], 
+                                  dset_labels[dset_idxs[1]])
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
+                      overwrite=overwrite)
 
     return psc
 
