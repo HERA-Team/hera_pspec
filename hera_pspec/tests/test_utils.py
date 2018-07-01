@@ -8,7 +8,6 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 
-
 def test_cov():
     # load another data file
     uvd = UVData()
@@ -183,6 +182,27 @@ class Test_Utils(unittest.TestCase):
         uvd2 = copy.deepcopy(uvd)
         uvd2.antenna_positions[0] += 2
         nt.assert_raises(AssertionError, utils.calc_reds, uvd, uvd2)
+
+    def test_config_pspec_blpairs(self):
+        # test basic execution
+        uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], verbose=False)
+        nt.assert_equal(len(groupings), 1)
+        nt.assert_equal(groupings.keys()[0], (('xx', 'even'), ('xx', 'odd')))
+        nt.assert_equal(len(groupings.values()[0]), 11833)
+
+        # test multiple, some non-existant pairs
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx'), ('yy', 'yy')], [('even', 'odd'), ('even', 'odd')], verbose=False)
+        nt.assert_equal(len(groupings), 1)
+        nt.assert_equal(groupings.keys()[0], (('xx', 'even'), ('xx', 'odd')))
+
+        # test xants
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], xants=[0, 1, 2], verbose=False)
+        nt.assert_equal(len(groupings.values()[0]), 9735)
+
+        # test exceptions
+        nt.assert_raises(AssertionError, utils.config_pspec_blpairs, uv_template, [('xx', 'xx'), ('xx', 'xx')], [('even', 'odd')], verbose=False)
+        
 
 def test_log():
     """
