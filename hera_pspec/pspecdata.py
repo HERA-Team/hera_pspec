@@ -1,7 +1,7 @@
 import numpy as np
 import aipy
 from pyuvdata import UVData
-import copy, operator, itertools
+import copy, operator, itertools, sys
 from collections import OrderedDict as odict
 import hera_cal as hc
 from hera_pspec import uvpspec, utils, version, pspecbeam, container
@@ -2436,12 +2436,12 @@ class PSpecData(object):
 
 
 def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None, dset_pairs=None,
-              spw_ranges=None, pol_pairs=None, blpairs=None,
+              psname_ext=None, spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=True, exclude_permutations=True,
-              Nblps_per_group=None, bl_len_range=(0, 1e10), bl_error_tol=1.0,
-              beam=None, cosmo=None, rephase_to_dset=None, Jy2mK=True,
-              overwrite=True, verbose=True, store_cov=False, history=''):
+              Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
+              beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
+              time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
     """
 
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -2473,9 +2473,16 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         List of tuples specifying the dset pairs to use in OQE estimation.
         Default is to form all N_choose_2 pairs from input dsets.
 
+    psname_ext : string
+        A string extension for the psname in the container object.
+
     spw_ranges : list of len-2 integer tuples
         List of tuples specifying the spectral window range. See
         PSpecData.pspec() for details. Default is the entire band.
+
+    n_dlys : list
+        List of integers denoting number of delays to use per spectral window.
+        Same length as spw_ranges.
 
     pol_pairs : list of len-2 tuples
         List of string or integer tuples specifying the polarization
@@ -2525,6 +2532,10 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         A tuple containing the minimum and maximum baseline length to use
         in utils.calc_reds call. Only used if blpairs is None.
 
+    bl_deg_range : len-2 float tuple
+        A tuple containing the min and max baseline angle (ENU frame in degrees)
+        to use in utils.calc_reds. Total range is between 0 and 180 degrees.
+
     bl_error_tol : float
         Baseline vector error tolerance when constructing redundant groups.
 
@@ -2542,6 +2553,17 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         This adds a phasor correction to all others dataset to phase the
         visibility data to the LST-grid of this dataset. Default behavior
         is no rephasing.
+
+    trim_dset_lsts : boolean
+        If True, look for constant offset in LST between all dsets, and trim
+        non-overlapping LSTs.
+
+    broadcast_dset_flags : boolean
+        If True, broadcast dset flags across time using fractional time_thresh.
+
+    time_thresh : float
+        Fractional flagging threshold to trigger broadcast across time if
+        broadcast_dset_flags is True.
 
     Jy2mK : boolean
         If True, use the beam model provided to convert the units of each
@@ -2569,7 +2591,12 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     #if isinstance(dsets, (str, np.str, UVData)):
     #    dsets = [dsets]      AEW: I've commented this out since the code below assumes >1 dataset.
     assert isinstance(dsets, (list, tuple, np.ndarray)), err_msg
-    Ndsets = len(dsets)
+
+    # parse psname
+    if psname_ext is not None:
+        assert isinstance(psname_ext, (str, np.str))
+    else:
+        psname_ext = ''
 
     # polarizations check
     if pol_pairs is not None:
@@ -2589,18 +2616,33 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         # get redundant baseline groups
         bls = None
 
+    # Construct dataset pairs to operate on
+    Ndsets = len(dsets)
+    if dset_pairs is None:
+        dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+
+    if dset_labels is None:
+        dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
+
     # load data if fed as filepaths
     if isinstance(dsets[0], (str, np.str)):
-        # load data into UVData objects if fed as list of strings
-        t0 = time.time()
-        _dsets = []
-        for d in dsets:
-            uvd = UVData()
-            uvd.read_miriad(d, bls=bls, polarizations=pols)
-            _dsets.append(uvd)
-        dsets = _dsets
-        utils.log("Loaded data in %1.1f sec." % (time.time() - t0), 
-                  lvl=1, verbose=verbose)
+        try:
+            # load data into UVData objects if fed as list of strings
+            t0 = time.time()
+            _dsets = []
+            for i, dset in enumerate(dsets):
+                # read data
+                uvd = UVData()
+                uvd.read_miriad(dset, bls=bls, polarizations=pols)
+                _dsets.append(uvd)
+            dsets = _dsets
+            utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
+                      lvl=1, verbose=verbose)
+        except ValueError:
+            # at least one of the dset loads failed due to no data being present
+            utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
+            return
+
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
@@ -2647,15 +2689,19 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     if rephase_to_dset is not None:
         ds.rephase_to_dset(rephase_to_dset)
 
+    # trim dset LSTs
+    if trim_dset_lsts:
+        ds.trim_dset_lsts()
+
+    # broadcast flags
+    if broadcast_dset_flags:
+        ds.broadcast_dset_flags(time_thresh=time_thresh)
+
     # perform Jy to mK conversion if desired
     if Jy2mK:
         ds.Jy_to_mK()
 
-    # Construct dataset pairs to operate on
-    if dset_pairs is None:
-        dset_pairs = list(itertools.combinations(range(Ndsets), 2))
-    if dset_labels is None:
-        dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
+    # check dset pair type
     err_msg = "dset_pairs must be fed as a list of len-2 integer tuples"
     assert isinstance(dset_pairs, list), err_msg
     assert np.all([isinstance(d, tuple) for d in dset_pairs]), err_msg
@@ -2671,7 +2717,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
                                        exclude_auto_bls=exclude_auto_bls,
                                        exclude_permutations=exclude_permutations,
                                        Nblps_per_group=Nblps_per_group,
-                                       bl_len_range=bl_len_range)
+                                       bl_len_range=bl_len_range,
+                                       bl_deg_range=bl_deg_range)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
 
@@ -2699,17 +2746,19 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
+        # check bls lists aren't empty
+        if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
+            continue
+
         # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, 
-                       spw_ranges=spw_ranges,
-                       input_data_weight=input_data_weight, 
-                       norm=norm, taper=taper, history=history)
-        
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
+                       spw_ranges=spw_ranges, n_dlys=n_dlys,
+                       input_data_weight=input_data_weight, norm=norm,
+                       taper=taper, history=history)
+
         # Store output
-        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], 
-                                  dset_labels[dset_idxs[1]])
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
-                      overwrite=overwrite)
+        psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]], dset_labels[dset_idxs[1]], psname_ext)
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
 
     return psc
 
@@ -2723,6 +2772,7 @@ def get_pspec_run_argparser():
     a.add_argument("--dset_pairs", default=None, type=tuple, nargs='*', help="List of len-2 integer tuples of dset pairings for OQE.")
     a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
     a.add_argument("--spw_ranges", default=None, type=tuple, nargs='*', help="List of len-2 integer tuples of spectral window selections for OQE.")
+    a.add_argument("--n_dlys", default=None, type=int, nargs='*', help="List of integers specifying number of delays to use per spectral window selection.")
     a.add_argument("--pol_pairs", default=None, type=tuple, nargs='*', help="List of len-2 integer of string tuples of polarization pairs for OQE.")
     a.add_argument("--blpairs", default=None, type=tuple, nargs='*', help="List of integer tuples containing baseline pair to run OQE on. Ex: [((1, 2), (3, 4)), ((1, 2), (5, 6)), ...]")
     a.add_argument("--input_data_weight", default='identity', type=str, help="Data weighting for OQE. See PSpecData.pspec for details.")
@@ -2731,11 +2781,15 @@ def get_pspec_run_argparser():
     a.add_argument("--beam", default=None, type=str, help="Filepath to UVBeam healpix map of antenna beam.")
     a.add_argument("--cosmo", default=None, nargs='*', type=float, help="List of float values for [Om_L, Om_b, Om_c, H0, Om_M, Om_k].")
     a.add_argument("--rephase_to_dset", default=None, type=int, help="dset integer index to phase all other dsets to. Default is no rephasing.")
+    a.add_argument("--trim_dset_lsts", default=False, action='store_true', help="Trim non-overlapping dset LSTs.")
+    a.add_argument("--broadcast_dset_flags", default=False, action='store_true', help="Broadcast dataset flags across time according to time_thresh.")
+    a.add_argument("--time_thresh", default=0.2, type=float, help="Fractional flagging threshold across time to trigger flag broadcast if broadcast_dset_flags is True")
     a.add_argument("--Jy2mK", default=False, action='store_true', help="Convert datasets from Jy to mK if a beam model is provided.")
     a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
     a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')
     a.add_argument("--Nblps_per_group", default=None, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
     a.add_argument("--bl_len_range", default=(0, 1e10), type=tuple, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
+    a.add_argument("--bl_deg_range", default=(0, 180), type=tuple, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
