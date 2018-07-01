@@ -194,7 +194,8 @@ if timeavg_sub:
     datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
 
     # load a datafile and get antenna numbers
-    _, _, uvd = uvutils.get_miriad_antpos(datafiles[0][0])
+    uvd = UVData()
+    uvd.read_miriad_metadata(datafiles[0][0])
     antpos, ants = uvd.get_ENU_antpos()
     antpos_dict = dict(zip(ants, antpos))
 
@@ -296,6 +297,9 @@ if timeavg_sub:
                             print "baseline {} not found in time-averaged spectrum".format(bl)
                             uvd.flag_array[bl_inds, :, :, pol_ind] = True
 
+                # put uniq_bls in if it doesn't exist
+                if not uvd.extra_keywords.has_key('uniq_bls'):
+                    uvd.extra_keywords['uniq_bls'] = json.dumps(np.unique(uvd.baseline_array).tolist())
                 # write tavg-subtracted data
                 out_df = os.path.join(out_dir, os.path.basename(df) + p['file_ext'])
                 uvd.history += "\nTime-Average subtracted."
@@ -332,7 +336,8 @@ if time_avg:
     datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
 
     # load a datafile and get antenna numbers
-    _, _, uvd = uvutils.get_miriad_antpos(datafiles[0][0])
+    uvd = UVData()
+    uvd.read_miriad_metadata(datafiles[0][0])
     antpos, ants = uvd.get_ENU_antpos()
     antpos_dict = dict(zip(ants, antpos))
 
