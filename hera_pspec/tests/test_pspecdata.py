@@ -979,21 +979,24 @@ def test_pspec_run():
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
 
     # test basic execution
-    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True)
-    nt.assert_true(isinstance(psc, container.PSpecContainer))
-    nt.assert_equal(psc.groups(), ['dset0_dset1'])
-    nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1'])
-    nt.assert_true(os.path.exists("./out.hdf5"))
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+                              bl_len_range=(14, 15), bl_deg_range=(50, 70), psname_ext='_0')
+    nt.assert_true(isinstance(psc, container.PSpecContainer))
+    nt.assert_equal(psc.groups(), ['dset0_dset1'])
+    nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1_0'])
+    nt.assert_true(os.path.exists("./out.hdf5"))
 
-    # test Jy2mK, rephase_to_dset, blpairs and dset_labels
+    # test Jy2mK, rephase_to_dset, trim_dset_lsts, broadcast_dset_flags, blpairs and dset_labels
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
     psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
                               rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
                               pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
                               dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
-                              cosmo=cosmo)
+                              cosmo=cosmo, trim_dset_lsts=True, broadcast_dset_flags=True, time_thresh=0.1)
     nt.assert_true("foo_bar" in psc.groups())
     nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
@@ -1003,6 +1006,22 @@ def test_pspec_run():
     nt.assert_equal(uvp.cosmo, cosmo)
     #nt.assert_equal(uvp.labels, [])
     #nt.assert_equal(uvp.get_spw_ranges, [])
+
+    # test when no data is loaded in dset
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+                              blpairs=[((500, 501), (600, 601))])
+    nt.assert_equal(psc, None)
+    nt.assert_false(os.path.exists("./out.h5"))
+
+    # test when data is loaded, but no blpairs match
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+                              blpairs=[((37, 38), (600, 601))])
+    nt.assert_true(psc is not None)
+    nt.assert_equal(len(psc.groups()), 0)
 
     # test exceptions
     nt.assert_raises(AssertionError, pspecdata.pspec_run, (1, 2), "./out.hdf5")
