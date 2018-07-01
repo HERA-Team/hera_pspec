@@ -358,29 +358,48 @@ class PSpecBeamGauss(PSpecBeamBase):
 
 class PSpecBeamUV(PSpecBeamBase):
 
-    def __init__(self, beam_fname, cosmo=None):
+    def __init__(self, uvbeam, cosmo=None):
         """
         Object to store the primary beam for a pspec observation.
         This is subclassed from PSpecBeamBase to take in a pyuvdata
-        UVBeam object.
+        UVBeam filepath or object.
+
+        Note: If one wants to use this object for linear dipole
+        polarizations (e.g. XX, XY, YX, YY) then one can feed
+        uvbeam as a dipole power beam or an efield beam. If, however,
+        one wants to use this for pseudo-Stokes polarizations
+        (e.g. pI, pQ, pU, pV), one must feed uvbeam as a pstokes
+        power beam. See pyuvdata.UVBeam for details on forming
+        pstokes power beams from an efield beam.
 
         Parameters
         ----------
-        beam_fname: str
-            Path to a pyuvdata UVBeam file.
+        uvbeam: str or UVBeam object
+            Path to a pyuvdata UVBeam file or a UVBeam object.
         
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not 
             specified. Default: None.
         """
-        self.primary_beam = UVBeam()
-        self.primary_beam.read_beamfits(beam_fname)
+        # setup uvbeam object
+        if isinstance(uvbeam, str):
+            uvb = UVBeam()
+            uvb.read_beamfits(uvbeam)
+        else:
+            uvb = uvbeam
 
-        self.beam_freqs = self.primary_beam.freq_array[0]
+        # get frequencies and set cosmology
+        self.beam_freqs = uvb.freq_array[0]
         if cosmo is not None:
             self.cosmo = cosmo
         else:
             self.cosmo = conversions.Cosmo_Conversions()
+
+        # setup primary power beam
+        self.primary_beam = uvb
+        if uvb.beam_type == 'efield':
+            self.primary_beam.efield_to_power(inplace=True)
+            self.primary_beam.peak_normalize()
 
     def power_beam_int(self, pol='pI'):
         """
@@ -404,7 +423,7 @@ class PSpecBeamUV(PSpecBeamBase):
             Scalar integral over beam solid angle.
         """
         if hasattr(self.primary_beam, 'get_beam_area'):
-            return self.primary_beam.get_beam_area(pol)
+            return np.real(self.primary_beam.get_beam_area(pol))
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
 
@@ -429,7 +448,7 @@ class PSpecBeamUV(PSpecBeamBase):
         primary_beam_area: float, array-like
         """
         if hasattr(self.primary_beam, 'get_beam_area'):
-            return self.primary_beam.get_beam_sq_area(pol)
+            return np.real(self.primary_beam.get_beam_sq_area(pol))
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
 

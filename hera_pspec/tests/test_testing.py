@@ -12,7 +12,7 @@ def test_build_vanilla_uvpspec():
     nt.assert_true(isinstance(cosmo, conversions.Cosmo_Conversions))
     nt.assert_equal(uvp.cosmo, cosmo)
 
-    beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits'))
+    beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'))
     uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
     beam_OP = beam.get_Omegas(uvp.pol_array[0])[0]
     nt.assert_equal(beam_OP.tolist(), uvp.OmegaP.tolist())
@@ -21,7 +21,7 @@ def test_uvpspec_from_data():
     fname = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     uvd = UVData()
     uvd.read_miriad(fname)
-    beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+    beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
     beam = pspecbeam.PSpecBeamUV(beamfile)
 
     uvp = testing.uvpspec_from_data(fname, [(37, 38), (38, 39), (52, 53), (53, 54)], beam=beam)
