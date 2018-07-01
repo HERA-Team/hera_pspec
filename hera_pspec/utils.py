@@ -552,8 +552,8 @@ def flatten(nested_list):
 
 
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=True, 
-                         exclude_permutations=True, bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
-                         xants=None, verbose=True):
+                         exclude_permutations=True, bl_len_range=(0, 1e10), 
+                         bl_deg_range=(0, 180), xants=None, verbose=True):
     """
     Given a list of miriad file templates and selections for
     polarization and group labels, construct a master list of
