@@ -12,6 +12,7 @@ import os
 import aipy
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
+from pyuvdata import UVData
 
 
 def hash(w):
@@ -529,19 +530,14 @@ def flatten(nested_list):
     """
     return [item for sublist in nested_list for item in sublist]
 
+
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=True, 
-                         exclude_permutations=True, bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
-                         xants=None, verbose=True):
+                         exclude_permutations=True, bl_len_range=(0, 1e10), 
+                         bl_deg_range=(0, 180), xants=None, verbose=True):
     """
     Given a list of miriad file templates and selections for
     polarization and group labels, construct a master list of
     blpair-group-pol pairs using utils.construct_reds().
-
-    Note: currently, each file to-be-searched for must contain a single
-    baseline type, and must have the baseline length and angle (ENU in meters)
-    in the filename separated by an underscore: 
-    e.g. "zen.{len:.0f}_{deg:.0f}.{pol}.{group}.HH.uv" There also must be only 
-    one underscore in the filename.
 
     A baseline-pair is formed by self-matching unique-files in the
     glob-parsed master list, and then string-formatting-in appropriate 
@@ -551,17 +547,50 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
 
     Parameters
     ----------
+    uv_templates : list
+        List of glob-parseable string templates, each of which must have
+        a {pol} and {group} field.
 
+    pol_pairs : list
+        List of len-2 polarization tuples to use in forming cross spectra.
+        Ex: [('xx', 'xx'), ('yy', 'yy'), ...]
 
+    group_pairs : list
+        List of len-2 group tuples to use in forming cross spectra.
+        Ex: [('grp1', 'grp1'), ('grp2', 'grp2'), ...]
+
+    exclude_auto_bls : bool
+        If True, exclude all baselines paired with itself.
+
+    exclude_permutations : bool
+        If True, exclude baseline2_cross_baseline1 if
+        baseline1_cross_baseline2 exists.
+
+    bl_len_range : len-2 tuple
+        A len-2 integer tuple specifying the range of baseline lengths
+        (meters in ENU frame) to consider.
+
+    bl_deg_range : len-2 tuple
+        A len-2 integer tuple specifying the range of baseline angles
+        (degrees in ENU frame) to consider.
+
+    xants : list
+        A list of integer antenna numbers to exclude.
+
+    verbose : bool
+        If True, print feedback to stdout.
 
     Returns
     -------
-
+    groupings : dict
+        A dictionary holding pol and group pair (tuple) as keys
+        and a list of baseline-pairs as values.
     """
     # type check
     if isinstance(uv_templates, (str, np.str)):
         uv_templates = [uv_templates]
-    assert len(pol_pairs) == len(group_pairs), "len(pol_pairs) must equal len(group_pairs)"
+    assert len(pol_pairs) == len(group_pairs), "len(pol_pairs) must equal "\
+                                               "len(group_pairs)"
 
     # get unique pols and groups
     pols = sorted(set([item for sublist in pol_pairs for item in sublist]))
@@ -580,20 +609,16 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                     pol_grps.append((pol, group))
                 # insert into unique_files with {pol} and {group} re-inserted
                 for _file in files:
-                    _unique_file = _file.replace(".{pol}.".format(pol=pol), ".{pol}.").replace(".{group}.".format(group=group), ".{group}.")
+                    _unique_file = _file.replace(".{pol}.".format(pol=pol), 
+                        ".{pol}.").replace(".{group}.".format(group=group), ".{group}.")
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
     unique_files = sorted(unique_files)
 
-    # iterate over unique files and get their baseline length and angle
-    lens, angs = [], []
-    for uf in unique_files:
-        lens.append(float(uf.split('_')[0].split('.')[-1]))
-        angs.append(float(uf.split('_')[1].split('.')[0]))
-
     # use a single file from unique_files and a single pol-group combination to get antenna positions
     _file = unique_files[0].format(pol=pol_grps[0][0], group=pol_grps[0][1])
-    _, _, uvd = uvutils.get_miriad_antpos(_file)
+    uvd = UVData()
+    uvd.read_miriad_metadata(_file)
 
     # get baseline pairs
     (_bls1, _bls2, _, _, 
@@ -605,7 +630,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     if xants is not None:
         bls1, bls2 = [], []
         for bl1, bl2 in zip(_bls1, _bls2):
-            if bl1 not in xants and bl2 not in xants:
+            if bl1[0] not in xants and bl1[1] not in xants and bl2[0] not in xants and bl2[1] not in xants:
                 bls1.append(bl1)
                 bls2.append(bl2)
     else:
@@ -613,15 +638,15 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     blps = zip(bls1, bls2)
 
     # iterate over pol-group pairs that exist
-    keys = odict()
+    groupings = odict()
     for pp, gp in zip(pol_pairs, group_pairs):
         if (pp[0], gp[0]) not in pol_grps or (pp[1], gp[1]) not in pol_grps:
             if verbose:
                 print "pol_pair {} and group_pair {} not found in data files".format(pp, gp)
             continue
-        keys[(pp, gp)] = blps
+        groupings[tuple(zip(pp, gp))] = blps
 
-    return keys
+    return groupings
 
 
 
