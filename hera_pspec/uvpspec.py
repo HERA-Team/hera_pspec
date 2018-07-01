@@ -1150,7 +1150,7 @@ class UVPSpec(object):
 
     def __add__(self, other, verbose=False):
         """ Combine the data of two UVPSpec objects together along a single axis """
-        return uvputils.combine_uvpspec([self, other], verbose=verbose)
+        return combine_uvpspec([self, other], verbose=verbose)
 
     @property
     def units(self):
@@ -1459,4 +1459,408 @@ class UVPSpec(object):
                                                  noise_scalar=noise_scalar)
 
         return scalar
+
+def combine_uvpspec(uvps, verbose=True):
+    """
+    Combine (concatenate) multiple UVPSpec objects into a single object, 
+    combining along one of either spectral window [spw], baseline-pair-times 
+    [blpairts], or polarization [pol]. Certain meta-data of all of the UVPSpec 
+    objs must match exactly, see get_uvp_overlap for details.
+    
+    In addition, one can only combine data along a single data axis, with the
+    condition that all other axes match exactly.
+
+    Parameters
+    ----------
+    uvps : list 
+        A list of UVPSpec objects to combine.
+
+    Returns
+    -------
+    u : UVPSpec object
+        A UVPSpec object with the data of all the inputs combined.
+    """
+    # Perform type checks and get concatenation axis
+    (uvps, concat_ax, new_spws, new_blpts, new_pols,
+     static_meta) = get_uvp_overlap(uvps, just_meta=False, verbose=verbose)
+    Nuvps = len(uvps)
+
+    # Create a new uvp
+    u = UVPSpec()
+
+    # Sort new data axes
+    new_spws = sorted(new_spws)
+    new_blpts = sorted(new_blpts)
+    new_pols = sorted(new_pols)
+    Nspws = len(new_spws)
+    Nblpairts = len(new_blpts)
+    Npols = len(new_pols)
+
+    # Create new empty data arrays and fill spw arrays
+    u.data_array = odict()
+    u.integration_array = odict()
+    u.wgt_array = odict()
+    u.nsample_array = odict()
+    u.scalar_array = np.empty((Nspws, Npols), np.float)
+    u.freq_array, u.spw_array, u.dly_array = [], [], []
+    
+    # Loop over spectral windows
+    for i, spw in enumerate(new_spws):
+        
+        # Initialize new arrays
+        u.data_array[i] = np.empty((Nblpairts, spw[2], Npols), np.complex128)
+        u.integration_array[i] = np.empty((Nblpairts, Npols), np.float64)
+        u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
+        u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
+        
+        # Set frequencies and delays
+        spw_Nfreqs = spw[-1]
+        spw_freqs = np.linspace(*spw, endpoint=False)
+        spw_dlys = np.fft.fftshift(
+                        np.fft.fftfreq(spw_Nfreqs, 
+                                       np.median(np.diff(spw_freqs)) ) )
+        u.spw_array.extend(np.ones(spw_Nfreqs, np.int32) * i)
+        u.freq_array.extend(spw_freqs)
+        u.dly_array.extend(spw_dlys)
+    
+    # Convert to numpy arrays    
+    u.spw_array = np.array(u.spw_array)
+    u.freq_array = np.array(u.freq_array)
+    u.dly_array = np.array(u.dly_array)
+    u.pol_array = np.array(new_pols)
+    
+    # Number of spectral windows, delays etc.
+    u.Nspws = Nspws
+    u.Nblpairts = Nblpairts
+    u.Npols = Npols
+    u.Nfreqs = len(np.unique(u.freq_array))
+    u.Nspwdlys = len(u.spw_array)
+    u.Ndlys = len(np.unique(u.dly_array))
+    
+    # Prepare time and label arrays
+    u.time_1_array, u.time_2_array = np.empty(Nblpairts, np.float), \
+                                     np.empty(Nblpairts, np.float)
+    u.time_avg_array, u.lst_avg_array = np.empty(Nblpairts, np.float), \
+                                        np.empty(Nblpairts, np.float)
+    u.lst_1_array, u.lst_2_array = np.empty(Nblpairts, np.float), \
+                                   np.empty(Nblpairts, np.float)
+    u.blpair_array = np.empty(Nblpairts, np.int64)
+    u.labels = sorted(set(np.concatenate([uvp.labels for uvp in uvps])))
+    u.label_1_array = np.empty((Nspws, Nblpairts, Npols), np.int32)
+    u.label_2_array = np.empty((Nspws, Nblpairts, Npols), np.int32)
+
+    # get each uvp's data axes
+    uvp_spws = [_uvp.get_spw_ranges() for _uvp in uvps]
+    uvp_blpts = [zip(_uvp.blpair_array, _uvp.time_avg_array) for _uvp in uvps]
+    uvp_pols = [_uvp.pol_array.tolist() for _uvp in uvps]
+    
+    # Construct dict of label indices, to be used for re-ordering later
+    u_lbls = {lbl: ll for ll, lbl in enumerate(u.labels)}
+    
+    # fill in data arrays depending on concat ax
+    if concat_ax == 'spw':
+        
+        # Concatenate spectral windows
+        for i, spw in enumerate(new_spws):
+            l = [spw in _u for _u in uvp_spws].index(True)
+            m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+            
+            # Lookup indices of new_blpts in the uvp_blpts[l] array
+            blpts_idxs = uvputils._fast_lookup_blpairts(uvp_blpts[l], new_blpts)
+            if i == 0: blpts_idxs0 = blpts_idxs.copy()
+            
+            # Loop over polarizations
+            for k, p in enumerate(new_pols):
+                q = uvp_pols[l].index(p)
+                u.scalar_array[i,k] = uvps[l].scalar_array[m,q]
+                
+                # Loop over blpair-times
+                for j, blpt in enumerate(new_blpts):
+                    n = blpts_idxs[j]
+                    
+                    # Data/weight/integration arrays
+                    u.data_array[i][j,:,k] = uvps[l].data_array[m][n,:,q]
+                    u.wgt_array[i][j,:,:,k] = uvps[l].wgt_array[m][n,:,:,q]
+                    u.integration_array[i][j,k] = uvps[l].integration_array[m][n, q]
+                    u.nsample_array[i][j,k] = uvps[l].integration_array[m][n,q]
+                    
+                    # Labels
+                    lbl1 = uvps[l].label_1_array[m,n,q]
+                    lbl2 = uvps[l].label_2_array[m,n,q]
+                    u.label_1_array[i,j,k] = u_lbls[uvps[l].labels[lbl1]]
+                    u.label_2_array[i,j,k] = u_lbls[uvps[l].labels[lbl2]]
+        
+        # Populate new LST, time, and blpair arrays
+        for j, blpt in enumerate(new_blpts):
+            n = blpts_idxs0[j]
+            u.time_1_array[j] = uvps[0].time_1_array[n]
+            u.time_2_array[j] = uvps[0].time_2_array[n]
+            u.time_avg_array[j] = uvps[0].time_avg_array[n]
+            u.lst_1_array[j] = uvps[0].lst_1_array[n]
+            u.lst_2_array[j] = uvps[0].lst_2_array[n]
+            u.lst_avg_array[j] = uvps[0].lst_avg_array[n]
+            u.blpair_array[j] = uvps[0].blpair_array[n]
+
+    elif concat_ax == 'blpairts':
+        
+        # Get mapping of blpair-time indices between old UVPSpec objects and 
+        # the new one
+        blpts_idxs = np.concatenate( 
+                        [uvputils._fast_lookup_blpairts(_blpts, new_blpts)
+                         for _blpts in uvp_blpts] )
+        
+        # Concatenate blpair-times
+        for j, blpt in enumerate(new_blpts):
+            
+            l = [blpt in _blpts for _blpts in uvp_blpts].index(True)
+            n = blpts_idxs[j]
+            
+            # Loop over spectral windows
+            for i, spw in enumerate(new_spws):
+                m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+                
+                # Loop over polarizations
+                for k, p in enumerate(new_pols):
+                    q = uvp_pols[l].index(p)
+                    u.data_array[i][j,:,k] = uvps[l].data_array[m][n,:,q]
+                    u.wgt_array[i][j,:,:,k] = uvps[l].wgt_array[m][n,:,:,q]
+                    u.integration_array[i][j,k] = uvps[l].integration_array[m][n,q]
+                    u.nsample_array[i][j,k] = uvps[l].integration_array[m][n,q]
+                    
+                    # Labels
+                    lbl1 = uvps[l].label_1_array[m,n,q]
+                    lbl2 = uvps[l].label_2_array[m,n,q]
+                    u.label_1_array[i,j,k] = u_lbls[uvps[l].labels[lbl1]]
+                    u.label_2_array[i,j,k] = u_lbls[uvps[l].labels[lbl2]]
+            
+            # Populate new LST, time, and blpair arrays
+            u.time_1_array[j] = uvps[l].time_1_array[n]
+            u.time_2_array[j] = uvps[l].time_2_array[n]
+            u.time_avg_array[j] = uvps[l].time_avg_array[n]
+            u.lst_1_array[j] = uvps[l].lst_1_array[n]
+            u.lst_2_array[j] = uvps[l].lst_2_array[n]
+            u.lst_avg_array[j] = uvps[l].lst_avg_array[n]
+            u.blpair_array[j] = uvps[l].blpair_array[n]
+
+    elif concat_ax == 'pol':
+        
+        # Concatenate polarizations
+        for k, p in enumerate(new_pols):
+            l = [p in _pols for _pols in uvp_pols].index(True)
+            q = uvp_pols[l].index(p)
+            
+            # Get mapping of blpair-time indices between old UVPSpec objects 
+            # and the new one
+            blpts_idxs = uvputils._fast_lookup_blpairts(uvp_blpts[l], new_blpts)
+            if k == 0: blpts_idxs0 = blpts_idxs.copy() 
+            
+            # Loop over spectral windows
+            for i, spw in enumerate(new_spws):
+                m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+                u.scalar_array[i,k] = uvps[l].scalar_array[m,q]
+                
+                # Loop over blpair-times
+                for j, blpt in enumerate(new_blpts):
+                    n = blpts_idxs[j]
+                    u.data_array[i][j,:,k] = uvps[l].data_array[m][n,:,q]
+                    u.wgt_array[i][j,:,:,k] = uvps[l].wgt_array[m][n,:,:,q]
+                    u.integration_array[i][j,k] = uvps[l].integration_array[m][n,q]
+                    u.nsample_array[i][j,k] = uvps[l].integration_array[m][n,q]
+                    
+                    # Labels
+                    lbl1 = uvps[l].label_1_array[m,n,q]
+                    lbl2 = uvps[l].label_2_array[m,n,q]
+                    u.label_1_array[i,j,k] = u_lbls[uvps[l].labels[lbl1]]
+                    u.label_2_array[i,j,k] = u_lbls[uvps[l].labels[lbl2]]
+
+        for j, blpt in enumerate(new_blpts):
+            n = blpts_idxs0[j]
+            u.time_1_array[j] = uvps[0].time_1_array[n]
+            u.time_2_array[j] = uvps[0].time_2_array[n]
+            u.time_avg_array[j] = uvps[0].time_avg_array[n]
+            u.lst_1_array[j] = uvps[0].lst_1_array[n]
+            u.lst_2_array[j] = uvps[0].lst_2_array[n]
+            u.lst_avg_array[j] = uvps[0].lst_avg_array[n]
+            u.blpair_array[j] = uvps[0].blpair_array[n]
+    
+    # Set baselines
+    u.Nblpairs = len(np.unique(u.blpair_array))
+    uvp_bls = [uvp.bl_array for uvp in uvps]
+    new_bls = sorted(reduce(operator.or_, [set(bls) for bls in uvp_bls]))
+    u.bl_array = np.array(new_bls)
+    u.Nbls = len(u.bl_array)
+    u.bl_vecs = []
+    for b, bl in enumerate(new_bls):
+        l = [bl in _bls for _bls in uvp_bls].index(True)
+        h = [bl == _bl for _bl in uvp_bls[l]].index(True)
+        u.bl_vecs.append(uvps[l].bl_vecs[h])
+    u.bl_vecs = np.array(u.bl_vecs)
+    u.Ntimes = len(np.unique(u.time_avg_array))
+    u.history = reduce(operator.add, [uvp.history for uvp in uvps])
+    u.labels = np.array(u.labels, np.str)
+    
+    for k in static_meta.keys():
+        setattr(u, k, static_meta[k])
+    
+    # Run check to make sure the new UVPSpec object is valid
+    u.check()
+    return u
+
+
+def get_uvp_overlap(uvps, just_meta=True, verbose=True):
+    """
+    Given a list of UVPSpec objects or a list of paths to UVPSpec objects,
+    find a single data axis within ['spw', 'blpairts', 'pol'] where *all* 
+    uvpspec objects contain non-overlapping data. Overlapping data are 
+    delay spectra that have identical spw, blpair-time and pol metadata 
+    between each other. If two uvps are completely overlapping (i.e. there
+    is not non-overlapping data axis) an error is raised. If there are
+    multiple non-overlapping data axes between all uvpspec pairs in uvps,
+    an error is raised.
+
+    All uvpspec objects must have certain attributes that agree exactly. These 
+    include:
+        'channel_width', 'telescope_location', 'weighting', 'OmegaP', 
+        'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 'taper', 'vis_units', 
+        'norm_units', 'folded', 'cosmo', 'scalar'
+
+    Parameters
+    ----------
+    uvps : list
+        List of UVPSpec objects or list of string paths to UVPSpec objects
+
+    just_meta : boolean, optional
+        If uvps is a list of strings, when loading-in each uvpspec, only
+        load its metadata.
+
+    verbose : bool, optional
+        print feedback to standard output
+
+    Returns
+    -------
+    uvps : list
+        List of input UVPSpec objects 
+
+    concat_ax : str
+        Data axis ['spw', 'blpairts', 'pols'] across data can be concatenated
+
+    unique_spws : list
+        List of unique spectral window tuples (spw_freq_start, spw_freq_end, 
+        spw_Nfreqs) across all input uvps
+
+    unique_blpts : list
+        List of unique baseline-pair-time tuples (blpair_integer, 
+        time_avg_array JD float) across all input uvps
+
+    unique_pols : list
+        List of unique polarization integers across all input uvps
+    """
+    # type check
+    assert isinstance(uvps, (list, tuple, np.ndarray)), \
+        "uvps must be fed as a list"
+    assert isinstance(uvps[0], (UVPSpec, str, np.str)), \
+        "uvps must be fed as a list of UVPSpec objects or strings"
+    Nuvps = len(uvps)
+
+    # load uvps if fed as strings
+    if isinstance(uvps[0], (str, np.str)):
+        _uvps = []
+        for u in uvps:
+            uvp = UVPSpec()
+            uvp.read_hdf5(u, just_meta=just_meta)
+            _uvps.append(uvp)
+        uvps = _uvps
+
+    # ensure static metadata agree between all objects
+    static_meta = ['channel_width', 'telescope_location', 'weighting', 
+                   'OmegaP', 'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 
+                   'taper', 'vis_units', 'norm_units', 'folded', 'cosmo']
+    for m in static_meta:
+        for u in uvps[1:]:
+            if hasattr(uvps[0], m) and hasattr(u, m):
+                assert uvps[0].__eq__(u, params=[m]), \
+                    "Cannot concatenate UVPSpec objs: not all agree on '{}' attribute".format(m)
+            else:
+                assert not hasattr(uvps[0], m) and not hasattr(u, m), \
+                    "Cannot concatenate UVPSpec objs: not all agree on '{}' attribute".format(m)
+
+    static_meta = odict([(k, getattr(uvps[0], k, None)) for k in static_meta 
+                                    if getattr(uvps[0], k, None) is not None])
+    
+    # create unique data axis lists
+    unique_spws = []
+    unique_blpts = []
+    unique_pols = []
+    data_concat_axes = odict()
+
+    blpts_comb = [] # Combined blpair + time
+    # find unique items
+    for uvp1 in uvps:
+        for s in uvp1.get_spw_ranges():
+            if s not in unique_spws: unique_spws.append(s)
+        for p in uvp1.pol_array: 
+            if p not in unique_pols: unique_pols.append(p)
+
+        uvp1_blpts = zip(uvp1.blpair_array, uvp1.time_avg_array)
+        uvp1_blpts_comb = [bl[0] + 1.j*bl[1] for bl in uvp1_blpts]
+        blpts_comb.extend(uvp1_blpts_comb)
+
+    unique_blpts_comb = np.unique(blpts_comb)
+    unique_blpts = [(int(blt.real), blt.imag) for blt in unique_blpts_comb]
+
+    # iterate over uvps
+    for i, uvp1 in enumerate(uvps):
+        # get uvp1 sets and append to unique lists
+        uvp1_spws = uvp1.get_spw_ranges()
+        uvp1_blpts = zip(uvp1.blpair_array, uvp1.time_avg_array)
+        uvp1_pols = uvp1.pol_array
+
+        # iterate over uvps
+        for j, uvp2 in enumerate(uvps):
+            if j <= i: continue
+            # get uvp2 sets
+            uvp2_spws = uvp2.get_spw_ranges()
+            uvp2_blpts = zip(uvp2.blpair_array, uvp2.time_avg_array)
+            uvp2_pols = uvp2.pol_array
+
+            # determine if uvp1 and uvp2 are an identical match
+            spw_match = len(set(uvp1_spws) ^ set(uvp2_spws)) == 0
+            blpts_match = len(set(uvp1_blpts) ^ set(uvp2_blpts)) == 0
+            pol_match = len(set(uvp1_pols) ^ set(uvp2_pols)) == 0
+
+            # ensure no partial-overlaps
+            if not spw_match:
+                assert len(set(uvp1_spws) & set(uvp2_spws)) == 0, \
+                    "uvp {} and {} have partial overlap across spw, cannot combine".format(i, j)
+            if not blpts_match:
+                assert len(set(uvp1_blpts) & set(uvp2_blpts)) == 0, \
+                    "uvp {} and {} have partial overlap across blpairts, cannot combine".format(i, j)
+            if not pol_match:
+                assert len(set(uvp1_pols) & set(uvp2_pols)) == 0, \
+                    "uvp {} and {} have partial overlap across pol, cannot combine".format(i, j)
+
+            # assert all except 1 axis overlaps
+            matches = [spw_match, blpts_match, pol_match]
+            assert sum(matches) != 3, \
+                "uvp {} and {} have completely overlapping data, cannot combine".format(i, j)
+            assert sum(matches) > 1, \
+                "uvp {} and {} are non-overlapping across multiple data axes, cannot combine".format(i, j)
+            concat_ax = ['spw', 'blpairts', 'pol'][matches.index(False)]
+            data_concat_axes[(i, j)] = concat_ax
+            if verbose:
+                print "uvp {} and {} are concatable across {} axis".format(i, j, concat_ax)
+
+    # assert all uvp pairs have the same (single) non-overlap (concat) axis
+    err_msg = "Non-overlapping data in uvps span multiple data axes:\n{}" \
+              "".format("\n".join(map(lambda i: "{} & {}: {}".format(i[0][0], i[0][1], i[1]), data_concat_axes.items())))
+    assert len(set(data_concat_axes.values())) == 1, err_msg
+
+    # perform additional checks given concat ax
+    if concat_ax == 'blpairts':
+        # check scalar_array
+        assert np.all([np.isclose(uvps[0].scalar_array, u.scalar_array) for u in uvps[1:]]), "" \
+               "scalar_array must be the same for all uvps given concatenation along blpairts."
+
+    return uvps, concat_ax, unique_spws, unique_blpts, unique_pols, static_meta
+
 

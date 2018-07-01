@@ -334,47 +334,47 @@ class Test_UVPSpec(unittest.TestCase):
 
         # test failure due to overlapping data
         uvp2 = copy.deepcopy(uvp1)
-        nt.assert_raises(AssertionError, uvputils.combine_uvpspec, [uvp1, uvp2])
+        nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         # test success across pol
         uvp2.pol_array[0] = -6
-        out = uvputils.combine_uvpspec([uvp1, uvp2], verbose=False)
+        out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Npols, 2)
         nt.assert_true(len(set(out.pol_array) ^ set([-5, -6])) == 0)
 
         # test multiple non-overlapping data axes
         uvp2.freq_array[0] = 0.0
-        nt.assert_raises(AssertionError, uvputils.combine_uvpspec, [uvp1, uvp2])
+        nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test partial data overlap failure
         uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], spw_ranges=[(20, 30), (60, 90)], beam=beam)
-        nt.assert_raises(AssertionError, uvputils.combine_uvpspec, [uvp1, uvp2])
+        nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 105)], beam=beam)
-        nt.assert_raises(AssertionError, uvputils.combine_uvpspec, [uvp1, uvp2])
+        nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2 = copy.deepcopy(uvp1)
         uvp2.pol_array[0] = -6
-        uvp2 = uvputils.combine_uvpspec([uvp1, uvp2], verbose=False)
-        nt.assert_raises(AssertionError, uvputils.combine_uvpspec, [uvp1, uvp2])
+        uvp2 = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
+        nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test concat across spw
         uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)], beam=beam)
-        out = uvputils.combine_uvpspec([uvp1, uvp2], verbose=False)
+        out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nspws, 3)
         nt.assert_equal(out.Nfreqs, 51)
         nt.assert_equal(out.Nspwdlys, 56)
 
         # test concat across blpairts
         uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 90)], beam=beam)
-        out = uvputils.combine_uvpspec([uvp1, uvp2], verbose=False)
+        out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nblpairs, 8)
         nt.assert_equal(out.Nbls, 5)
 
         # test failure due to variable static metadata
         uvp2.weighting = 'foo'
-        nt.assert_raises(AssertionError, uvputils.combine_uvpspec, [uvp1, uvp2])
+        nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2.weighting = 'identity'
         del uvp2.OmegaP
         del uvp2.OmegaPP
-        nt.assert_raises(AssertionError, uvputils.combine_uvpspec, [uvp1, uvp2])
+        nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test feed as strings
         uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)], beam=beam)
@@ -382,7 +382,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp2.pol_array[0] = -6
         uvp1.write_hdf5('uvp1.hdf5', overwrite=True)
         uvp2.write_hdf5('uvp2.hdf5', overwrite=True)
-        out = uvputils.combine_uvpspec(['uvp1.hdf5', 'uvp2.hdf5'], verbose=False)
+        out = uvpspec.combine_uvpspec(['uvp1.hdf5', 'uvp2.hdf5'], verbose=False)
         nt.assert_true(out.Npols, 2)
         for ff in ['uvp1.hdf5', 'uvp2.hdf5']:
             if os.path.exists(ff):
