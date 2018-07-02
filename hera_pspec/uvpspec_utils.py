@@ -385,3 +385,44 @@ def _conj_blpair(blpair, which='both'):
 
     return conj_blpair
 
+def _fast_lookup_blpairts(src_blpts, query_blpts, time_prec=8):
+    """
+    Helper function to allow fast lookups of array indices for large arrays of 
+    blpair-time tuples.
+    
+    Parameters
+    ----------
+    src_blpts : list of tuples or array_like
+        List of tuples or array of shape (N, 2), containing a list of (blpair, 
+        time) couplets.
+    
+    query_blpts : list of tuples or array_like
+        List of tuples or array of shape (M, 2), containing a list of (blpair, 
+        time) couplets that you want to find the indices of in source_blpts.
+    
+    time_prec : int, optional
+        Number of decimals to round time array to when performing float 
+        comparision. Default: 8.
+    
+    Returns
+    -------
+    blpts_idxs : array_like
+        Array of integers of size (M,), which are indices in the source_blpts 
+        array for each item in query_blpts.
+    """
+    # This function works by using a small hack -- the blpair-times are turned 
+    # into complex numbers of the form (blpair + 1.j*time), allowing numpy 
+    # array lookup functions to be used
+    src_blpts = np.asarray(src_blpts)
+    query_blpts = np.asarray(query_blpts)
+    src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
+    query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
+    # Applies rounding to time values to ensure reliable float comparisons
+    
+    # Do np.where comparison for all new_blpts
+    # (indices stored in second array returned by np.where)
+    blpts_idxs = np.where(src_blpts == query_blpts[:,np.newaxis])[1]
+    
+    return blpts_idxs
+    
+
