@@ -26,9 +26,9 @@ class Test_Plot(unittest.TestCase):
         uvd.read_miriad(os.path.join(DATA_PATH, dfiles[0]))
         
         # Load beam file
-        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
-        self.bm.filename = 'NF_HERA_Beams.beamfits'
+        self.bm.filename = 'HERA_NF_dipole_power.beamfits'
         
         # We only actually have 1 data file here, so slide the time axis by one 
         # integration to avoid noise bias

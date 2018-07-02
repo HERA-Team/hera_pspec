@@ -110,9 +110,9 @@ class Test_PSpecData(unittest.TestCase):
         self.w = [None for _d in dfiles]
 
         # Load beam file
-        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
-        self.bm.filename = 'NF_HERA_Beams.beamfits'
+        self.bm.filename = 'HERA_NF_dipole_power.beamfits'
 
         # load another data file
         self.uvd = uv.UVData()
@@ -703,14 +703,14 @@ class Test_PSpecData(unittest.TestCase):
 
         # test vis_units no Jansky
         uvd2 = copy.deepcopy(uvd)
-        uvd2.polarization_array[0] = 1
+        uvd2.polarization_array[0] = -6
         uvd2.vis_units = 'UNCALIB'
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)],
                                  wgts=[None, None], beam=self.bm)
         ds.Jy_to_mK()
         nt.assert_equal(ds.dsets[0].vis_units, "mK")
         nt.assert_equal(ds.dsets[1].vis_units, "UNCALIB")
-        nt.assert_not_equal(ds.dsets[0].get_data(24, 25, 'xx')[30, 30], ds.dsets[1].get_data(24, 25, 'pI')[30, 30])
+        nt.assert_not_equal(ds.dsets[0].get_data(24, 25, 'xx')[30, 30], ds.dsets[1].get_data(24, 25, 'yy')[30, 30])
 
     def test_trim_dset_lsts(self):
         fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
@@ -896,12 +896,12 @@ class Test_PSpecData(unittest.TestCase):
         cosmo = conversions.Cosmo_Conversions()
 
         # Set to mK scale
-        d1.data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
-        d2.data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
+        d1.data_array *= beam.Jy_to_mK(freqs, pol='XX')[None, None, :, None]
+        d2.data_array *= beam.Jy_to_mK(freqs, pol='XX')[None, None, :, None]
 
         # Compare using no taper
-        OmegaP = beam.power_beam_int()
-        OmegaPP = beam.power_beam_sq_int()
+        OmegaP = beam.power_beam_int(pol='XX')
+        OmegaPP = beam.power_beam_sq_int(pol='XX')
         OmegaP = interp1d(beam.beam_freqs/1e6, OmegaP)(freqs/1e6)
         OmegaPP = interp1d(beam.beam_freqs/1e6, OmegaPP)(freqs/1e6)
         NEB = 1.0
@@ -1068,9 +1068,9 @@ class Test_PSpecData(unittest.TestCase):
 def test_pspec_run():
     fnames = [os.path.join(DATA_PATH, d) for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
                                                    'zen.odd.xx.LST.1.28828.uvOCRSA']]
-    beamfile = os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits")
-    fnames_std=[os.path.join(DATA_PATH,d) for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
-                                                    'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
+
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+
     # test basic execution
     psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True)
     nt.assert_true(isinstance(psc, container.PSpecContainer))
