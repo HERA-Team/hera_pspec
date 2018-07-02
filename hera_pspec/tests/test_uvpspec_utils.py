@@ -20,6 +20,17 @@ def test_conj_blpair():
     nt.assert_equal(blpair, 2001004003)
     nt.assert_raises(ValueError, uvputils._conj_blpair, 2001003004, which='foo')
 
+def test_fast_is_in():
+    blps = [ 2001003004, 2001003004, 2001003004, 2001003004, 
+             1002004003, 1002004003, 1002004003, 1002004003,
+             2001004003, 2001004003, 1002004003, 2001003004 ]
+    times = [ 0.1, 0.15, 0.2, 0.25, 
+              0.1, 0.15, 0.2, 0.25, 
+              0.1, 0.15, 0.3, 0.3, ]
+    src_blpts = np.array(zip(blps, times))
+
+    nt.assert_true(uvputils._fast_is_in(src_blpts, [(1002004003, 0.2)])[0])
+
 def test_fast_lookup_blpairts():
     # Construct array of blpair-time tuples (including some out of order)
     blps = [ 2001003004, 2001003004, 2001003004, 2001003004, 

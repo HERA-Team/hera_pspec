@@ -1708,10 +1708,13 @@ def combine_uvpspec(uvps, verbose=True):
                         [uvputils._fast_lookup_blpairts(_blpts, new_blpts)
                          for _blpts in uvp_blpts] )
         
+        is_in = [uvputils._fast_is_in(_blpts, new_blpts)
+                 for _blpts in uvp_blpts]
+
         # Concatenate blpair-times
         for j, blpt in enumerate(new_blpts):
             
-            l = [blpt in _blpts for _blpts in uvp_blpts].index(True)
+            l = [isn[j] for isn in is_in].index(True)
             n = blpts_idxs[j]
             
             # Loop over spectral windows
