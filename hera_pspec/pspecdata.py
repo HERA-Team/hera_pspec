@@ -442,6 +442,49 @@ class PSpecData(object):
 
         return self._C[Ckey]
 
+    def cross_covar_model(self, key1, key2, model='empirical', conj_1=False, conj_2=True):
+        """
+        Return a covariance model having specified a key and model type.
+
+        Parameters
+        ----------
+        key1, key2 : tuples
+            Tuples containing indices of dataset and baselines. The first item
+            specifies the index (ID) of a dataset in the collection, while
+            subsequent indices specify the baseline index, in _key2inds format.
+
+        model : string, optional
+            Type of covariance model to calculate, if not cached. options=['empirical']
+
+        conj_1 : boolean, optional
+            Whether to conjugate first copy of data in covar or not. Default: False
+
+        conj_2 : boolean, optional
+            Whether to conjugate second copy of data in covar or not. Default: True
+
+        Returns
+        -------
+        cross_covar : array-like, spw_Nfreqs x spw_Nfreqs
+            Cross covariance model for the specified key.
+        """
+        # type check
+        assert isinstance(key1, tuple), "key1 must be fed as a tuple"
+        assert isinstance(key2, tuple), "key2 must be fed as a tuple"
+        assert isinstance(model, (str, np.str)), "model must be a string"
+        assert model in ['empirical'], "didn't recognize model {}".format(model)
+
+        # parse key
+        dset, bl = self.parse_blkey(key1)
+        key1 = (dset,) + (bl,)
+        dset, bl = self.parse_blkey(key2)
+        key2 = (dset,) + (bl,)
+
+        if model == 'empirical':
+            covar = utils.cov(self.x(key1), self.w(key1),
+                              self.x(key2), self.w(key2),
+                              conj_1=conj_1, conj_2=conj_2)
+        return covar
+
     def I(self, key):
         """
         Return identity covariance matrix.
@@ -894,15 +937,97 @@ class PSpecData(object):
 
         return H / 2.
 
-    def get_V_gaussian(self, key1, key2):
+    def get_unnormed_E(self,key1,key2):
         """
-        Calculates the bandpower covariance matrix,
+        Calculates a series of unnormalized E matrices, such that
 
-            V_ab = tr(C E_a C E_b)
+            q_a = x_1^* E^{12,a} x_2
 
-        FIXME: Must check factor of 2 with Wick's theorem for complex vectors,
-        and also check expression for when x_1 != x_2.
+        so that
 
+            E^{12,a} = (1/2) R_1 Q^a R_2.
+
+        In principle, this could be used to actually estimate q-hat. In other
+        words, we could call this function to get E, and then sandwich it with
+        two data vectors to get q_a. However, this should be slower than the
+        implementation in q_hat. So this should only be used as a helper
+        method for methods such as get_unnormed_V.
+
+        Note for the future: There may be advantages to doing the
+        matrix multiplications separately
+
+
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two 
+            input datavectors. If a list of tuples is provided, the baselines 
+            in the list will be combined with inverse noise weights.
+
+        Returns
+        -------
+        E : array_like, complex
+            Set of E matrices, with dimensions (Ndlys, Nfreqs, Nfreqs).
+
+        """
+
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None")
+
+        E_matrices = np.zeros((self.spw_Ndlys, self.spw_Nfreqs, self.spw_Nfreqs),
+                               dtype=np.complex)
+        R1 = self.R(key1)
+        R2 = self.R(key2)
+        for dly_idx in range(self.spw_Ndlys):
+            QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
+            E_matrices[dly_idx] = np.dot(R1, QR2)
+
+        return 0.5 * E_matrices
+    
+    def get_unnormed_V(self, key1, key2, model='empirical'):
+        """
+        Calculates the covariance matrix for unnormed bandpowers (i.e., the q
+        vectors). If the data were real and x_1 = x_2, the expression would be
+        
+            V_ab = 2 tr(C E_a C E_b), where E_a = (1/2) R Q^a R
+
+        When the data are complex, the expression becomes considerably more
+        complicated. Define
+
+            E^{12,a} = (1/2) R_1 Q^a R_2
+            C^1 = <x1 x1^dagger> - <x1><x1^dagger>
+            C^2 = <x2 x2^dagger> - <x2><x2^dagger>
+            P^{12} = <x1 x2> - <x1><x2>
+            S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
+
+        Then
+
+            V_ab = tr(E^{12,a} C^2 E^{21,b} C^1)
+                    + tr(E^{12,a} P^{21} E^{12,b *} S^{21})
+
+        Note that
+            E^{12,a}_{ij}.conj = E^{21,a}_{ji}
+
+        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by default.
+        (So while the pointy brackets <...> should in principle be ensemble averages,
+        in practice the code performs averages in time.)
+
+        Empirical covariance estimates are in principle a little risky, as they
+        can potentially induce signal loss. This is probably ok if we are just
+        looking intending to look at V. It is most dangerous when C_emp^-1 is
+        applied to the data. The application of using this to form do a V^-1/2
+        decorrelation is probably medium risk. But this has yet to be proven, and
+        results coming from V^-1/2 should be interpreted with caution.
+
+        Note for future: Although the V matrix should be Hermitian by construction,
+        in practice there are precision issues and the Hermiticity is violated at
+        ~ 1 part in 10^15. (Which is ~the expected roundoff error). If something
+        messes up, it may be worth investigating this more.
+
+        Note for the future: If this ends up too slow, Cholesky tricks can be
+        employed to speed up the computation by a factor of a few.
+        
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
@@ -910,14 +1035,32 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
+        model : str, default: 'empirical'
+            How the covariances of the input data should be estimated.
+        
         Returns
         -------
         V : array_like, complex
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        raise NotImplementedError()
 
-    def get_MW(self, G, H, mode='I'):
+        # Collect all the relevant pieces
+        E_matrices = self.get_unnormed_E(key1, key2)
+        C1 = self.C_model(key1)
+        C2 = self.C_model(key2)
+        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
+        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
+
+        E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
+        E12C2 = np.dot(E_matrices, C2)
+        auto_term = np.einsum('aij,bji', E12C2, E21C1)
+        E12starS21 = np.dot(E_matrices.conj(), S21)
+        E12P21 = np.dot(E_matrices, P21)
+        cross_term = np.einsum('aij,bji', E12P21, E12starS21)
+
+        return auto_term + cross_term
+
+    def get_MW(self, G, H, mode='I', band_covar=None):
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -932,10 +1075,10 @@ class PSpecData(object):
 
         Several choices for M are supported:
             'I':      Set M to be diagonal (e.g. HERA Memo #44)
+            'H^-1':   Set M = H^-1, the (pseudo)inverse response matrix.
+            'V^-1/2': Set M = V^-1/2, the root-inverse response matrix (using SVD).
 
         These choices will be supported very soon:
-            'G^-1':   Set M = G^-1, the (pseudo)inverse response matrix.
-            'G^-1/2': Set M = G^-1/2, the root-inverse response matrix (using SVD).
             'L^-1':   Set M = L^-1, Cholesky decomposition.
 
         As written, the window functions will not be correclty normalized; it needs
@@ -954,6 +1097,12 @@ class PSpecData(object):
         mode : str, optional
             Definition to use for M. Must be one of the options listed above.
             Default: 'I'.
+
+        band_covar : array_like, optional
+            Covariance matrix of the unnormalized bandpowers (i.e., q). Used only
+            if requesting the V^-1/2 normalization. Use get_unnormed_V to get the
+            covariance to put in here, or provide your own array.
+            Default: None
 
         Returns
         -------
@@ -975,20 +1124,42 @@ class PSpecData(object):
         #     return M, W
 
         # Check that mode is supported
-        modes = ['G^-1', 'G^-1/2', 'I', 'L^-1']
+        modes = ['H^-1', 'V^-1/2', 'I', 'L^-1']
         assert(mode in modes)
 
         # Build M matrix according to specified mode
-        if mode == 'G^-1':
-            raise NotImplementedError("G^-1 mode not currently supported.")
-            # M = np.linalg.pinv(G, rcond=1e-12)
-            # #U,S,V = np.linalg.svd(F)
-            # #M = np.einsum('ij,j,jk', V.T, 1./S, U.T)
+        if mode == 'H^-1':
 
-        elif mode == 'G^-1/2':
-            raise NotImplementedError("G^-1/2 mode not currently supported.")
-            # U,S,V = np.linalg.svd(G)
-            # M = np.einsum('ij,j,jk', V.T, 1./np.sqrt(S), U.T)
+            try:
+                M = np.linalg.inv(H)
+            except np.linalg.LinAlgError as err:
+                if 'Singular matrix' in str(err):
+                    M = np.linalg.pinv(H)
+                    raise_warning("Warning: Window function matrix is singular "
+                                  "and cannot be inverted, so using "
+                                  " pseudoinverse instead.")
+                else:
+                    raise np.linalg.LinAlgError("Linear algebra error with H matrix "
+                                                "during MW computation.")
+
+            W = np.dot(M, H)
+            W_norm = np.sum(W, axis=1)
+            W = (W.T / W_norm).T
+
+        elif mode == 'V^-1/2':
+            if np.sum(band_covar) == None:
+                raise ValueError("Covariance not supplied for V^-1/2 normalization")
+            # First find the eigenvectors and eigenvalues of the unnormalizd covariance
+            # Then use it to compute V^-1/2
+            eigvals, eigvects = np.linalg.eigh(band_covar)
+            if (eigvals <= 0.).any():
+                raise_warning("At least one non-positive eigenvalue for the "
+                              "unnormed bandpower covariance matrix.")
+            V_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
+
+            W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H), axis=1))
+            M = np.dot(W_norm, V_minus_half)
+            W = np.dot(M, H)
 
         elif mode == 'I':
             # This is not the M matrix as is rigorously defined in the
@@ -1233,7 +1404,7 @@ class PSpecData(object):
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
                                     n_dlys=self.spw_Ndlys) * 1e9 # convert to ns    
         
-    def scalar(self, pol, little_h=True, num_steps=2000, beam=None):
+    def scalar(self, pol, little_h=True, num_steps=2000, beam=None, taper_override='no_override'):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set
@@ -1260,8 +1431,13 @@ class PSpecData(object):
                 Default: 10000
 
         beam : PSpecBeam object
-            Option to use a manually-fed PSpecBeam object instead of using
-            self.primary_beam.
+                Option to use a manually-fed PSpecBeam object instead of using 
+                self.primary_beam.
+
+        taper_override : str, optional
+                Option to override the taper chosen in self.taper (does not
+                overwrite self.taper; just applies to this function).
+                Default: no_override
 
         Returns
         -------
@@ -1273,6 +1449,12 @@ class PSpecData(object):
         freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]
         start = freqs[0]
         end = freqs[0] + np.median(np.diff(freqs)) * len(freqs)
+
+        # Override the taper if desired
+        if taper_override == 'no_override':
+            taper = self.taper
+        else:
+            taper = taper_override
 
         # calculate scalar
         if beam is None:
@@ -1287,7 +1469,8 @@ class PSpecData(object):
                                                num_steps=num_steps)
         return scalar
 
-    def scalar_delay_adjustment(self, key1, key2, sampling=False):
+    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False, 
+                                Gv=None, Hv=None):
         """
         Computes an adjustment factor for the pspec scalar that is needed
         when the number of delay bins is not equal to the number of
@@ -1305,23 +1488,32 @@ class PSpecData(object):
 
         Parameters
         ----------
-        key1, key2 : tuples or lists of tuples
+        key1, key2 : tuples or lists of tuples, optional
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
-            in the list will be combined with inverse noise weights.
+            in the list will be combined with inverse noise weights. If Gv and 
+            Hv are specified, these arguments will be ignored. Default: None.
 
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
+        
+        Gv, Hv : array_like, optional
+            If specified, use these arrays instead of calling self.get_G() and 
+            self.get_H(). Using precomputed Gv and Hv will speed up this 
+            function significantly. Default: None.
 
         Returns
         -------
         adjustment : float
 
         """
+        if Gv is None: Gv = self.get_G(key1, key2)
+        if Hv is None: Hv = self.get_H(key1, key2, sampling)
+        
         # get ratio
-        summed_G = np.sum(self.get_G(key1, key2), axis=1)
-        summed_H = np.sum(self.get_H(key1, key2, sampling), axis=1)
+        summed_G = np.sum(Gv, axis=1)
+        summed_H = np.sum(Hv, axis=1)
         ratio = summed_H.real / summed_G.real
 
         # fill infs and nans from zeros in summed_G
@@ -1664,7 +1856,12 @@ class PSpecData(object):
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
                     # using zero'th indexed poalrization as cross polarized beam are not yet implemented
-                    scalar = self.scalar(p[0], little_h=True)
+                    if norm == 'H^-1':
+                        # If using decorrelation, the H^-1 normalization already deals with the taper,
+                        # so we need to override the taper when computing the scalar
+                        scalar = self.scalar(p[0], little_h=True, taper_override='none')
+                    else:
+                        scalar = self.scalar(p[0], little_h=True)
                 else: 
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized",
@@ -1710,13 +1907,22 @@ class PSpecData(object):
 
                     # Normalize power spectrum estimate
                     if verbose: print("  Normalizing power spectrum...")
-                    Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
+                    if norm == 'V^-1/2':
+                        V_mat = self.get_unnormed_V(key1, key2)
+                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
+                    else:
+                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
-                        pv *= scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling)
+                        pv *= scalar
+
+                    # Wide bin adjustment of scalar, which is only needed for the diagonal norm
+                    # matrix mode (i.e., norm = 'I')
+                    if norm == 'I':
+                        pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2181,7 +2387,8 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
             uvd.read_miriad(d, bls=bls, polarizations=pols)
             _dsets.append(uvd)
         dsets = _dsets
-        utils.log("Loaded data in %1.1f sec." % (time.time() - t0), lvl=1, verbose=verbose)
+        utils.log("Loaded data in %1.1f sec." % (time.time() - t0), 
+                  lvl=1, verbose=verbose)
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
@@ -2258,17 +2465,20 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
     # assign group name
     if groupname is None:
         groupname = '_'.join(dset_labels)
-
+    
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
-
         # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, spw_ranges=spw_ranges,
-                       input_data_weight=input_data_weight, norm=norm, taper=taper, history=history)
-
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, 
+                       spw_ranges=spw_ranges,
+                       input_data_weight=input_data_weight, 
+                       norm=norm, taper=taper, history=history)
+        
         # Store output
-        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], dset_labels[dset_idxs[1]])
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
+        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], 
+                                  dset_labels[dset_idxs[1]])
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
+                      overwrite=overwrite)
 
     return psc
 

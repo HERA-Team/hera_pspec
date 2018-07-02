@@ -49,7 +49,7 @@ before_script:
   - "export MPLBACKEND=agg"
   - sleep 3
 
-script: nosetests hera_pspec --with-coverage --cover-package=hera_pspec
+script: nosetests hera_pspec --with-coverage --cover-package=hera_pspec --verbose
 
 after_success:
   - coveralls
