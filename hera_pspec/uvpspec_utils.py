@@ -371,12 +371,13 @@ def _fast_lookup_blpairts(src_blpts, query_blpts):
     
     Parameters
     ----------
-    src_blpts : array_like
-        Array of size (N, 2), containing a list of (blpair, time) couplets.
+    src_blpts : list of tuples or array_like
+        List of tuples or array of shape (N, 2), containing a list of (blpair, 
+        time) couplets.
     
-    query_blpts : array_like
-        Array of size (M, 2), containing a list of (blpair, time) couplets that 
-        you want to find the indices of in source_blpts.
+    query_blpts : list of tuples or array_like
+        List of tuples or array of shape (M, 2), containing a list of (blpair, 
+        time) couplets that you want to find the indices of in source_blpts.
     
     Returns
     -------
@@ -387,8 +388,8 @@ def _fast_lookup_blpairts(src_blpts, query_blpts):
     # This function works by using a small hack -- the blpair-times are turned 
     # into complex numbers of the form (blpair + 1.j*time), allowing numpy 
     # array lookup functions to be used
-    src_blpts = np.array(src_blpts)
-    query_blpts = np.array(query_blpts)
+    src_blpts = np.asarray(src_blpts)
+    query_blpts = np.asarray(query_blpts)
     src_blpts = src_blpts[:,0] + 1.j*src_blpts[:,1]
     query_blpts = query_blpts[:,0] + 1.j*query_blpts[:,1]
     
