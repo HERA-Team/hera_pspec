@@ -10,6 +10,7 @@ from pyuvdata import utils as uvutils
 import datetime
 import time
 import argparse
+import ast
 
 
 class PSpecData(object):
@@ -2327,20 +2328,33 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
 def get_pspec_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
+    def list_of_int_tuples(v):
+        v = map(lambda x: tuple(map(int, x.split())), v.split(","))
+        return v
+
+    def list_of_str_tuples(v):
+        v = map(lambda x: tuple(map(str, x.split())), v.split(","))
+        return v
+
+    def list_of_tuple_tuples(v):
+        v = map(lambda x: tuple(map(int, x.split())), v.split(","))
+        v = map(lambda x: (x[:2], x[2:]), v)
+        return v
+
     a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
     a.add_argument("filename", type=str, help="Output filename of HDF5 container.")
     a.add_argument("--groupname", default=None, type=str, help="Groupname for the UVPSpec objects in the HDF5 container.")
-    a.add_argument("--dset_pairs", default=None, type=tuple, nargs='*', help="List of len-2 integer tuples of dset pairings for OQE.")
+    a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE wrapped in quotes. Ex: '0 0, 1 1' --> [(0, 0), (1, 1), ...]")
     a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
-    a.add_argument("--spw_ranges", default=None, type=tuple, nargs='*', help="List of len-2 integer tuples of spectral window selections for OQE.")
-    a.add_argument("--n_dlys", default=None, type=int, nargs='*', help="List of integers specifying number of delays to use per spectral window selection.")
-    a.add_argument("--pol_pairs", default=None, type=tuple, nargs='*', help="List of len-2 integer of string tuples of polarization pairs for OQE.")
-    a.add_argument("--blpairs", default=None, type=tuple, nargs='*', help="List of integer tuples containing baseline pair to run OQE on. Ex: [((1, 2), (3, 4)), ((1, 2), (5, 6)), ...]")
+    a.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections wrapped in quotes. Ex: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
+    a.add_argument("--n_dlys", default=None, type=int, nargs='+', help="List of integers specifying number of delays to use per spectral window selection.")
+    a.add_argument("--pol_pairs", default=None, type=list_of_str_tuples, help="List of pol-string pairs to use in OQE wrapped in quotes. Ex: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]")
+    a.add_argument("--blpairs", default=None, type=list_of_tuple_tuples, help="List of baseline-pair antenna integers to run OQE on. Ex: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]")
     a.add_argument("--input_data_weight", default='identity', type=str, help="Data weighting for OQE. See PSpecData.pspec for details.")
     a.add_argument("--norm", default='I', type=str, help='M-matrix normalization type for OQE. See PSpecData.pspec for details.')
     a.add_argument("--taper", default='none', type=str, help="Taper function to use in OQE delay transform. See PSpecData.pspec for details.")
     a.add_argument("--beam", default=None, type=str, help="Filepath to UVBeam healpix map of antenna beam.")
-    a.add_argument("--cosmo", default=None, nargs='*', type=float, help="List of float values for [Om_L, Om_b, Om_c, H0, Om_M, Om_k].")
+    a.add_argument("--cosmo", default=None, nargs='+', type=float, help="List of float values for [Om_L, Om_b, Om_c, H0, Om_M, Om_k].")
     a.add_argument("--rephase_to_dset", default=None, type=int, help="dset integer index to phase all other dsets to. Default is no rephasing.")
     a.add_argument("--trim_dset_lsts", default=False, action='store_true', help="Trim non-overlapping dset LSTs.")
     a.add_argument("--broadcast_dset_flags", default=False, action='store_true', help="Broadcast dataset flags across time according to time_thresh.")
@@ -2349,8 +2363,8 @@ def get_pspec_run_argparser():
     a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
     a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')
     a.add_argument("--Nblps_per_group", default=None, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
-    a.add_argument("--bl_len_range", default=(0, 1e10), type=tuple, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
-    a.add_argument("--bl_deg_range", default=(0, 180), type=tuple, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
+    a.add_argument("--bl_len_range", default=(0, 1e10), nargs='+', type=float, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
+    a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
