@@ -2778,7 +2778,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, spw_ranges=spw_ranges, n_dlys=n_dlys,
-                       input_data_weight=input_data_weight, norm=norm, taper=taper, history=history)
+                       input_data_weight=input_data_weight, norm=norm, taper=taper, history=history, verbose=verbose)
 
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]], dset_labels[dset_idxs[1]], psname_ext)
