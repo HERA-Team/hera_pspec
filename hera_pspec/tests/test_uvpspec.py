@@ -15,7 +15,7 @@ from pyuvdata import UVData
 class Test_UVPSpec(unittest.TestCase):
 
     def setUp(self):
-        beamfile = os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits')
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.beam = pspecbeam.PSpecBeamUV(beamfile)
         uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam)
         self.uvp = uvp
@@ -316,7 +316,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp)
         # test basic execution
         s = uvp.compute_scalar(0, 'xx', num_steps=1000, noise_scalar=False)
-        nt.assert_almost_equal(s/552336586.23970914, 1.0, places=5)
+        nt.assert_almost_equal(s/553995277.90425551, 1.0, places=5)
         # test execptions
         del uvp.OmegaP
         nt.assert_raises(AssertionError, uvp.compute_scalar, 0, -5)
@@ -347,7 +347,7 @@ class Test_UVPSpec(unittest.TestCase):
         # setup uvp build
         uvd = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
-        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "NF_HERA_Beams.beamfits"))
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
         uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam)
 
