@@ -1070,7 +1070,8 @@ def test_pspec_run():
                                                    'zen.odd.xx.LST.1.28828.uvOCRSA']]
 
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-
+    fnames_std=[os.path.join(DATA_PATH,d) for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
+                                                    'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
     # test basic execution
     psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True)
     nt.assert_true(isinstance(psc, container.PSpecContainer))
