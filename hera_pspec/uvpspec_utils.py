@@ -366,7 +366,8 @@ def _conj_blpair(blpair, which='both'):
 
 def _fast_is_in(src_blpts, query_blpts, time_prec=8):
     """
-    Helper function to allow fast "in" checks for baseline pair times.
+    Helper function to rapidly check if a given blpair-time couplet is in an 
+    array.
     
     Parameters
     ----------
