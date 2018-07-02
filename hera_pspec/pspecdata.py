@@ -464,7 +464,7 @@ class PSpecData(object):
 
         Returns
         -------
-        cross_covar : array-like
+        cross_covar : array-like, spw_Nfreqs x spw_Nfreqs
             Cross covariance model for the specified key.
         """
         # type check
@@ -980,7 +980,8 @@ class PSpecData(object):
         R1 = self.R(key1)
         R2 = self.R(key2)
         for dly_idx in range(self.spw_Ndlys):
-            E_matrices[dly_idx] = np.einsum('ij,jk,kl', R1, self.get_Q_alt(dly_idx), R2)
+            QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
+            E_matrices[dly_idx] = np.dot(R1, QR2)
 
         return 0.5 * E_matrices
     
@@ -995,8 +996,8 @@ class PSpecData(object):
         complicated. Define
 
             E^{12,a} = (1/2) R_1 Q^a R_2
-            C^1 = Cov(x1)
-            C^2 = Cov(x2)
+            C^1 = <x1 x1^dagger> - <x1><x1^dagger>
+            C^2 = <x2 x2^dagger> - <x2><x2^dagger>
             P^{12} = <x1 x2> - <x1><x2>
             S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
 
@@ -1008,7 +1009,16 @@ class PSpecData(object):
         Note that
             E^{12,a}_{ij}.conj = E^{21,a}_{ji}
 
-        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by default
+        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by default.
+        (So while the pointy brackets <...> should in principle be ensemble averages,
+        in practice the code performs averages in time.)
+
+        Empirical covariance estimates are in principle a little risky, as they
+        can potentially induce signal loss. This is probably ok if we are just
+        looking intending to look at V. It is most dangerous when C_emp^-1 is
+        applied to the data. The application of using this to form do a V^-1/2
+        decorrelation is probably medium risk. But this has yet to be proven, and
+        results coming from V^-1/2 should be interpreted with caution.
 
         Note for future: Although the V matrix should be Hermitian by construction,
         in practice there are precision issues and the Hermiticity is violated at
@@ -1025,7 +1035,7 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
-        model : str
+        model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
         
         Returns
@@ -1090,7 +1100,8 @@ class PSpecData(object):
 
         band_covar : array_like, optional
             Covariance matrix of the unnormalized bandpowers (i.e., q). Used only
-            if requesting the V^-1/2 normalization.
+            if requesting the V^-1/2 normalization. Use get_unnormed_V to get the
+            covariance to put in here, or provide your own array.
             Default: None
 
         Returns

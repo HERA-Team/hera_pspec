@@ -531,7 +531,6 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
-                print 'input_data_weight', input_data_weight
 
                 self.ds.set_Ndlys(Nfreq/3)
                 H = self.ds.get_H(key1, key2)
@@ -556,11 +555,11 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.clear_cache()
                 self.ds.set_taper(taper)
-                print 'input_data_weight', input_data_weight
+                #print 'input_data_weight', input_data_weight
                 self.ds.set_Ndlys(Nfreq-2)
                 G = self.ds.get_G(key1, key2)
                 self.assertEqual(G.shape, (Nfreq-2, Nfreq-2)) # Test shape
-                print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
+                #print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
 
                 if input_data_weight == 'identity':
