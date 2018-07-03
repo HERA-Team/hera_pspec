@@ -12,7 +12,7 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     uvp : UVPSpec object with at least meta-data in required params loaded in.
         If only meta-data is loaded in then h5file must be specified.
 
-    bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
+    bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3)
         Select all baseline-pairs whose first _or_ second baseline are in bls list.
         This changes if only_pairs_in_bls == True.
 
@@ -56,7 +56,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
 
     spws : list of spectral window integers to select
 
-    bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3) 
+    bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3)
         Select all baseline-pairs whose first _or_ second baseline are in bls list.
         This changes if only_pairs_in_bls == True.
 
@@ -65,7 +65,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
 
     blpairs : list of baseline-pair tuples or integers to keep, if bls is also fed, this list is concatenated
         onto the baseline-pair list constructed from from the bls selection
-    
+
     times : float ndarray of times from the time_avg_array to keep
 
     pols : list of polarization strings or integers to keep. See pyuvdata.utils.polstr2num for acceptable options.
@@ -129,7 +129,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
             bl_select = reduce(operator.add, map(lambda b: uvp.bl_array==b, bl_array))
             uvp.bl_array = uvp.bl_array[bl_select]
             uvp.bl_vecs = uvp.bl_vecs[bl_select]
-            uvp.Nbls = len(uvp.bl_array)        
+            uvp.Nbls = len(uvp.bl_array)
 
     if pols is not None:
         # assert form
@@ -156,22 +156,30 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         wgts = odict()
         ints = odict()
         nsmp = odict()
+        cov = odict()
+        store_cov = hasattr(uvp, 'cov_array')
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 data[s] = h5file['data_spw{}'.format(s)][blp_select, :, pol_select]
                 wgts[s] = h5file['wgt_spw{}'.format(s)][blp_select, :, :, pol_select]
                 ints[s] = h5file['integration_spw{}'.format(s)][blp_select, pol_select]
                 nsmp[s] = h5file['nsample_spw{}'.format(s)][blp_select, pol_select]
+                if store_cov:
+                    cov[s] = h5file['cov_spw{}'.format(s)][blp_select, :, :, pol_select]
             else:
                 data[s] = uvp.data_array[s][blp_select, :, pol_select]
                 wgts[s] = uvp.wgt_array[s][blp_select, :, :, pol_select]
                 ints[s] = uvp.integration_array[s][blp_select, pol_select]
                 nsmp[s] = uvp.nsample_array[s][blp_select, pol_select]
- 
+                if store_cov:
+                    cov[s] = uvp.cov_array[s][blp_select, :, :, pol_select]
+
         uvp.data_array = data
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
+        if store_cov:
+            uvp.cov_array = cov
     except AttributeError:
         # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
         pass
@@ -306,7 +314,7 @@ def _conj_blpair_int(blpair):
     Returns
     --------
     conj_blpair : <12 int
-        conjugated baseline-pair integer. 
+        conjugated baseline-pair integer.
         Ex: ((ant1, ant2), (ant3, ant4)) --> ((ant3, ant4), (ant1, ant2))
     """
     antnums = _blpair_to_antnums(blpair)
@@ -326,7 +334,7 @@ def _conj_bl_int(bl):
     Returns
     --------
     conj_bl : i6 int
-        conjugated baseline integer. 
+        conjugated baseline integer.
         Ex: (ant1, ant2) --> (ant2, ant1)
     """
     antnums = _bl_to_antnums(bl)
@@ -363,6 +371,7 @@ def _conj_blpair(blpair, which='both'):
         raise ValueError("didn't recognize {}".format(which))
 
     return conj_blpair
+
 
 def _fast_is_in(src_blpts, query_blpts, time_prec=8):
     """

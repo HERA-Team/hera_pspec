@@ -16,7 +16,7 @@ class UVPSpec(object):
     """
     def __init__(self):
         """
-        An object for storing power spectra and associated metadata generated 
+        An object for storing power spectra and associated metadata generated
         by hera_pspec.
         """
         # Summary attributes
@@ -33,6 +33,8 @@ class UVPSpec(object):
         # Data attributes
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
+        desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
+        self._cov_array = PSpecParam("cov_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
@@ -78,7 +80,6 @@ class UVPSpec(object):
         self._OmegaPP = PSpecParam("OmegaP", description="Integral of unitless beam power squared over the sky [steradians].", form="(Nbeam_freqs, Npols)", expected_type=np.float64)
         self._beam_freqs = PSpecParam("beam_freqs", description="Frequency bins of the OmegaP and OmegaPP beam-integral arrays [Hz].", form="(Nbeam_freqs,)", expected_type=np.float64)
         self._cosmo = PSpecParam("cosmo", description="Instance of conversion.Cosmo_Conversions class.", expected_type=conversions.Cosmo_Conversions)
-
         # collect all parameters: required and non-required
         self._all_params = sorted(map(lambda p: p[1:], fnmatch.filter(self.__dict__.keys(), '_*')))
 
@@ -88,23 +89,24 @@ class UVPSpec(object):
                             "spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array",
                             "lst_2_array", "time_1_array", "time_2_array", "blpair_array", "Nbls",
                             "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting",
-                            "vis_units", "norm_units", "taper", "norm", "nsample_array", 'lst_avg_array', 
+                            "vis_units", "norm_units", "taper", "norm", "nsample_array", 'lst_avg_array',
                             'time_avg_array', 'folded', "scalar_array", "labels", "label_1_array",
-                            "label_2_array"]
+                            "label_2_array","store_cov"]
 
         # all parameters must fall into one and only one of the following groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys",
                             "Npols", "Nfreqs", "history", "Nbls", "channel_width", "weighting",
-                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile" ,'folded']
+                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile" ,'folded',"store_cov"]
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array",
                           'lst_avg_array', 'time_avg_array', "lst_2_array", "time_1_array",
                           "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
                           "bl_vecs", "bl_array", "telescope_location", "scalar_array", 'labels',
                           'label_1_array', 'label_2_array']
-        self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array"]
+        self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array", "cov_array"]
 
         # define which attributes are considred meta data. Large attrs should be constructed as datasets
-        self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array", 
+
+        self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "bl_vecs", "bl_array", 'lst_avg_array', 'time_avg_array', 'OmegaP', 'OmegaPP',
                             "label_1_array", "label_2_array"]
         self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets))
@@ -126,7 +128,7 @@ class UVPSpec(object):
 
         (spw, blpair-integer, pol)
 
-        where spw is the spectral window integer, ant1 etc. are integers, 
+        where spw is the spectral window integer, ant1 etc. are integers,
         and pol is either a polarization string (ex. 'XX') or integer (ex. -5).
 
         Parameters
@@ -160,7 +162,7 @@ class UVPSpec(object):
 
         (spw, blpair-integer, pol)
 
-        where spw is the spectral window integer, ant1 etc. are integers, 
+        where spw is the spectral window integer, ant1 etc. are integers,
         and pol is either a polarization string (ex. 'XX') or integer (ex. -5).
 
         Parameters
@@ -171,7 +173,7 @@ class UVPSpec(object):
         Returns
         -------
         wgts : float ndarray
-            Has shape (2, Ntimes, Ndlys), where the zeroth axis holds 
+            Has shape (2, Ntimes, Ndlys), where the zeroth axis holds
             [wgt_1, wgt_2] in that order.
         """
         spw, blpairts, pol = self.key_to_indices(key, *args)
@@ -188,7 +190,7 @@ class UVPSpec(object):
 
             (spw, blpair-integer, pol)
 
-        where spw is the spectral window integer, ant1 etc. are integers, 
+        where spw is the spectral window integer, ant1 etc. are integers,
         and pol is either a polarization string (ex. 'XX') or integer (ex. -5).
 
         Parameters
@@ -215,7 +217,7 @@ class UVPSpec(object):
 
         (spw, blpair-integer, pol)
 
-        where spw is the spectral window integer, ant1 etc. are integers, 
+        where spw is the spectral window integer, ant1 etc. are integers,
         and pol is either a polarization string (ex. 'XX') or integer (ex. -5).
 
         Parameters
@@ -248,7 +250,7 @@ class UVPSpec(object):
 
     def get_blpair_seps(self):
         """
-        For each baseline-pair, get the average baseline separation in ENU 
+        For each baseline-pair, get the average baseline separation in ENU
         frame in meters.
 
         Returns
@@ -345,7 +347,7 @@ class UVPSpec(object):
     def get_all_keys(self):
         """
         Returns a list of all possible tuple keys in the data_array, in the format:
-        
+
         (spectral window, baseline-pair, polarization-string)
         """
         # get unique blpair tuples
@@ -374,7 +376,7 @@ class UVPSpec(object):
         -------
         spw_ranges : list of len-3 tuples (freq_start, freq_end, Nfreqs) in Hz
             Contains start, stop and bin-width of frequencies [Hz] of each spectral window.
-            To turn this into the frequency array of the spectral window use 
+            To turn this into the frequency array of the spectral window use
                 spw_freqs = np.linspace(freq_start, freq_end, Nfreqs, endpoint=False)
         """
         # type check
@@ -402,7 +404,7 @@ class UVPSpec(object):
         Parameters
         ----------
         inplace : boolean
-            If True edit and overwrite arrays in self, else make a copy of 
+            If True edit and overwrite arrays in self, else make a copy of
             self and return.
         """
         # copy object
@@ -439,7 +441,7 @@ class UVPSpec(object):
         Returns
         -------
         antnums : tuple
-            Nested tuple containing baseline-pair antenna numbers. 
+            Nested tuple containing baseline-pair antenna numbers.
             Ex. ((ant1, ant2), (ant3, ant4))
         """
         return uvputils._blpair_to_antnums(blpair)
@@ -497,7 +499,7 @@ class UVPSpec(object):
     def blpair_to_indices(self, blpair):
         """
         Convert a baseline-pair nested tuple ((ant1, ant2), (ant3, ant4)) or
-        a baseline-pair integer into indices to index the blpairts axis of 
+        a baseline-pair integer into indices to index the blpairts axis of
         data_array.
 
         Parameters
@@ -523,8 +525,8 @@ class UVPSpec(object):
         Convert a spectral window integer into a list of indices to index
         into the spwdlys axis of dly_array and/or freq_array.
 
-        If self.folded == False, return indices for both positive and negative 
-        delay bins, else if self.folded == True, returns indices for only 
+        If self.folded == False, return indices for both positive and negative
+        delay bins, else if self.folded == True, returns indices for only
         positive delay bins.
 
         Parameters
@@ -554,7 +556,7 @@ class UVPSpec(object):
         Parameters
         ----------
         pol : str or int
-            Polarization string (ex. 'XX') or integer (ex. -5), or a list of 
+            Polarization string (ex. 'XX') or integer (ex. -5), or a list of
             strs or ints.
 
         Returns
@@ -580,9 +582,9 @@ class UVPSpec(object):
 
     def time_to_indices(self, time, blpairs=None):
         """
-        Convert a time [Julian Date] from self.time_avg_array to an array that 
-        indexes the elements at which it appears in that array. Can optionally 
-        take a blpair selection to further select the indices at which both 
+        Convert a time [Julian Date] from self.time_avg_array to an array that
+        indexes the elements at which it appears in that array. Can optionally
+        take a blpair selection to further select the indices at which both
         that time and blpair are satisfied.
 
         Parameters
@@ -591,13 +593,13 @@ class UVPSpec(object):
             Julian Date time from self.time_avg_array, Ex: 2458042.12242
 
         blpairs : tuple or int, optional
-            List of blpair tuples or integers that further selects the elements 
+            List of blpair tuples or integers that further selects the elements
             at which both time and blpairs are satisfied.
 
         Returns
         -------
         indices : integer ndarray
-            Contains indices at which selection is satisfied along the 
+            Contains indices at which selection is satisfied along the
             blpairts axis.
         """
         time_select = np.isclose(self.time_avg_array, time, rtol=1e-10)
@@ -622,20 +624,20 @@ class UVPSpec(object):
 
         (spw, blpair-integer, pol)
 
-        where spw is the spectral window integer, ant1 etc. are integers, 
+        where spw is the spectral window integer, ant1 etc. are integers,
         and pol is either a polarization string (ex. 'XX') or integer (ex. -5).
 
-        One can also expand this key into the kwarg slots, such that 
+        One can also expand this key into the kwarg slots, such that
         key=spw, key2=blpair, and key3=pol.
-    
+
         The key can also be a dictionary in the form::
-        
+
           key = {
             'spw' : spw_integer,
             'blpair' : ((ant1, ant2), (ant3, ant4))
             'pol' : pol_string
             }
-        
+
         and it will parse the dictionary for you.
 
         Parameters
@@ -647,10 +649,10 @@ class UVPSpec(object):
         -------
         spw : int
             Spectral window index.
-        
+
         blpairts : list
             List of integers to apply along blpairts axis.
-        
+
         pol : int
             Polarization index.
         """
@@ -681,7 +683,7 @@ class UVPSpec(object):
         # convert pol to int if str
         if type(pol) in (str, np.str):
             pol = uvutils.polstr2num(pol)
-        
+
         # check attributes exist in data
         assert spw in self.spw_array, "spw {} not found in data".format(spw)
         assert blpair in self.blpair_array, "blpair {} not found in data".format(blpair)
@@ -694,7 +696,7 @@ class UVPSpec(object):
 
         return spw, blpairts, pol
 
-    def select(self, spws=None, bls=None, only_pairs_in_bls=True, blpairs=None, 
+    def select(self, spws=None, bls=None, only_pairs_in_bls=True, blpairs=None,
                times=None, pols=None, inplace=True):
         """
         Select function for selecting out certain slices of the data.
@@ -702,13 +704,13 @@ class UVPSpec(object):
         Parameters
         ----------
         spws : list, optional
-            List of spectral window integers to select. If None, all will be 
+            List of spectral window integers to select. If None, all will be
             selected. Default: None.
 
         bls : list of i6 baseline integers or baseline tuples, optional
-            Example: (2,3). Select all baseline-pairs whose first _or_ second 
+            Example: (2,3). Select all baseline-pairs whose first _or_ second
             baseline are in bls list. This changes if only_pairs_in_bls == True.
-            If None, all baselines are selected (subject to other options). 
+            If None, all baselines are selected (subject to other options).
             Default: None.
 
         only_pairs_in_bls : bool, optional
@@ -716,28 +718,28 @@ class UVPSpec(object):
             are found in bls list. Default: True.
 
         blpairs : list of baseline-pair tuples or integers, optional
-            List of baseline-pairs to keep. If bls is also fed, this list is 
-            concatenated onto the baseline-pair list constructed from the 
-            bls selection. If None, all valid baseline pairs are selected. 
+            List of baseline-pairs to keep. If bls is also fed, this list is
+            concatenated onto the baseline-pair list constructed from the
+            bls selection. If None, all valid baseline pairs are selected.
             Default: None.
 
         times : array_like, optional
-            Float ndarray of times from the time_avg_array to select. If None, 
+            Float ndarray of times from the time_avg_array to select. If None,
             all times are kept. Default: None.
 
         pols : list of str or int, optional
-            List of polarizations to keep. See pyuvdata.utils.polstr2num for 
-            acceptable options. If None, all polarizations are kept. Default: 
+            List of polarizations to keep. See pyuvdata.utils.polstr2num for
+            acceptable options. If None, all polarizations are kept. Default:
             None.
 
         inplace : bool, optional
-            If True, edit and overwrite arrays in self, else make a copy of 
+            If True, edit and overwrite arrays in self, else make a copy of
             self and return. Default: True.
-        
+
         Returns
         -------
         uvp : UVPSpec, optional
-            If inplace=False, return a new UVPSpec object containing only the 
+            If inplace=False, return a new UVPSpec object containing only the
             selected data.
         """
         if inplace:
@@ -745,8 +747,8 @@ class UVPSpec(object):
         else:
             uvp = copy.deepcopy(self)
 
-        uvputils._select(uvp, spws=spws, bls=bls, 
-                         only_pairs_in_bls=only_pairs_in_bls, 
+        uvputils._select(uvp, spws=spws, bls=bls,
+                         only_pairs_in_bls=only_pairs_in_bls,
                          blpairs=blpairs, times=times, pols=pols)
 
         if inplace == False:
@@ -754,9 +756,9 @@ class UVPSpec(object):
 
     def get_ENU_bl_vecs(self):
         """
-        Return baseline vector array in TOPO (ENU) frame in meters, with 
+        Return baseline vector array in TOPO (ENU) frame in meters, with
         matched ordering of self.bl_vecs.
-        
+
         Returns
         -------
         blvecs : array_like
@@ -765,44 +767,44 @@ class UVPSpec(object):
         return uvutils.ENU_from_ECEF(
                         (self.bl_vecs + self.telescope_location).T, \
                         *uvutils.LatLonAlt_from_XYZ(self.telescope_location)).T
-    
-    
-    def read_from_group(self, grp, just_meta=False, spws=None, bls=None, 
-                        blpairs=None, times=None, pols=None, 
+
+
+    def read_from_group(self, grp, just_meta=False, spws=None, bls=None,
+                        blpairs=None, times=None, pols=None,
                         only_pairs_in_bls=False):
         """
         Clear current UVPSpec object and load in data from specified HDF5 group.
-        
+
         Parameters
         ----------
         grp : HDF5 group
             HDF5 group to load data from.
 
         just_meta : bool, optional
-            If True, read-in metadata but ignore data, wgts and integration 
+            If True, read-in metadata but ignore data, wgts and integration
             arrays. Default: False.
 
         spws : list of tuple, optional
-            List of spectral window integers to select. Default: None (loads 
+            List of spectral window integers to select. Default: None (loads
             all channels).
 
         bls : list of i6 baseline integers or baseline tuples
-            Select all baseline-pairs whose first _or_ second baseline are in 
+            Select all baseline-pairs whose first _or_ second baseline are in
             the list. This changes if only_pairs_in_bls == True.
             Example tuple: (2, 3). Default: None (loads all bl pairs).
-        
+
         blpairs : list of baseline-pair tuples or integers
-            List of baseline pairs to keep. If bls is also fed, this list is 
-            concatenated onto the baseline-pair list constructed from from the 
+            List of baseline pairs to keep. If bls is also fed, this list is
+            concatenated onto the baseline-pair list constructed from from the
             bls selection.
- 
+
         times : float ndarray
             Times from the time_avg_array to keep.
-        
+
         pols : list of str or int
-            List of polarization strings or integers to keep. See 
+            List of polarization strings or integers to keep. See
             pyuvdata.utils.polstr2num for acceptable options.
-        
+
         only_pairs_in_bls : bool, optional
             If True, keep only baseline-pairs whose first _and_ second baseline
             are found in the 'bls' list. Default: False.
@@ -821,12 +823,12 @@ class UVPSpec(object):
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
             uvputils._select(self, spws=spws, bls=bls,
-                             only_pairs_in_bls=only_pairs_in_bls, 
+                             only_pairs_in_bls=only_pairs_in_bls,
                              blpairs=blpairs, times=times, pols=pols)
         else:
-            uvputils._select(self, spws=spws, bls=bls, 
-                             only_pairs_in_bls=only_pairs_in_bls, 
-                             blpairs=blpairs, times=times, pols=pols, 
+            uvputils._select(self, spws=spws, bls=bls,
+                             only_pairs_in_bls=only_pairs_in_bls,
+                             blpairs=blpairs, times=times, pols=pols,
                              h5file=grp)
 
         # handle cosmo
@@ -837,7 +839,7 @@ class UVPSpec(object):
 
 
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
-                  blpairs=None, times=None, pols=None, 
+                  blpairs=None, times=None, pols=None,
                   only_pairs_in_bls=False):
         """
         Clear current UVPSpec object and load in data from an HDF5 file.
@@ -848,59 +850,59 @@ class UVPSpec(object):
             Path to HDF5 file to read from.
 
         just_meta : bool, optional
-            If True, read-in metadata but ignore data, wgts and integration 
+            If True, read-in metadata but ignore data, wgts and integration
             arrays. Default: False.
 
         spws : list of tuple, optional
-            List of spectral window integers to select. Default: None (loads 
+            List of spectral window integers to select. Default: None (loads
             all channels).
 
         bls : list of i6 baseline integers or baseline tuples
-            Select all baseline-pairs whose first _or_ second baseline are in 
+            Select all baseline-pairs whose first _or_ second baseline are in
             the list. This changes if only_pairs_in_bls == True.
             Example tuple: (2, 3). Default: None (loads all bl pairs).
 
         blpairs : list of baseline-pair tuples or integers
-            List of baseline pairs to keep. If bls is also fed, this list is 
-            concatenated onto the baseline-pair list constructed from from the 
+            List of baseline pairs to keep. If bls is also fed, this list is
+            concatenated onto the baseline-pair list constructed from from the
             bls selection.
- 
+
         times : float ndarray
             Times from the time_avg_array to keep.
-        
+
         pols : list of str or int
-            List of polarization strings or integers to keep. See 
+            List of polarization strings or integers to keep. See
             pyuvdata.utils.polstr2num for acceptable options.
-        
+
         only_pairs_in_bls : bool, optional
             If True, keep only baseline-pairs whose first _and_ second baseline
             are found in the 'bls' list. Default: False.
         """
         # Open file descriptor and read data
         with h5py.File(filepath, 'r') as f:
-            self.read_from_group(f, just_meta=just_meta, spws=spws, bls=bls, 
+            self.read_from_group(f, just_meta=just_meta, spws=spws, bls=bls,
                                  only_pairs_in_bls=only_pairs_in_bls)
-    
+
     def write_to_group(self, group, run_check=True):
         """
         Write UVPSpec data into an HDF5 group.
-        
+
         Parameters
         ----------
         group : HDF5 group
-            The handle of the HDF5 group that the UVPSpec object should be 
+            The handle of the HDF5 group that the UVPSpec object should be
             written into.
-        
+
         run_check : bool, optional
-            Whether to run a validity check on the UVPSpec object before 
+            Whether to run a validity check on the UVPSpec object before
             writing it to the HDF5 group. Default: True.
         """
         # Run check
         if run_check: self.check()
-        
+
         # Check whether the group already contains info
         # TODO
-        
+
         # Write meta data
         for k in self._meta_attrs:
             if hasattr(self, k):
@@ -915,19 +917,23 @@ class UVPSpec(object):
 
         # Iterate over spectral windows and create datasets
         for i in np.unique(self.spw_array):
-            group.create_dataset("data_spw{}".format(i), 
-                                 data=self.data_array[i], 
+            group.create_dataset("data_spw{}".format(i),
+                                 data=self.data_array[i],
                                  dtype=np.complex)
-            group.create_dataset("wgt_spw{}".format(i), 
-                                 data=self.wgt_array[i], 
+            group.create_dataset("wgt_spw{}".format(i),
+                                 data=self.wgt_array[i],
                                  dtype=np.float)
-            group.create_dataset("integration_spw{}".format(i), 
-                                 data=self.integration_array[i], 
+            group.create_dataset("integration_spw{}".format(i),
+                                 data=self.integration_array[i],
                                  dtype=np.float)
-            group.create_dataset("nsample_spw{}".format(i), 
-                                 data=self.nsample_array[i], 
+            group.create_dataset("nsample_spw{}".format(i),
+                                 data=self.nsample_array[i],
                                  dtype=np.float)
-    
+            if self.store_cov:
+                group.create_dataset("cov_spw{}".format(i),
+                                     data=self.cov_array[i],
+                                     dtype=np.complex)
+
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
         Write a UVPSpec object to HDF5 file.
@@ -949,33 +955,33 @@ class UVPSpec(object):
         elif os.path.exists(filepath) and overwrite is True:
             print "{} exists, overwriting...".format(filepath)
             os.remove(filepath)
-        
+
         # Write file
         with h5py.File(filepath, 'w') as f:
             self.write_to_group(f, run_check=run_check)
 
 
-    def set_cosmology(self, new_cosmo, overwrite=False, new_beam=None, 
+    def set_cosmology(self, new_cosmo, overwrite=False, new_beam=None,
                       verbose=True):
         """
-        Set the cosmology for this UVPSpec object by passing an instance of 
-        conversions.Cosmo_Conversions and assigning it to self.cosmo, in 
-        addition to re-computing power spectrum normalization quantities like 
-        self.scalar_array. Because this will attempt to recompute the 
-        scalar_array, the beam-related metadata (OmegaP, OmegaPP and 
+        Set the cosmology for this UVPSpec object by passing an instance of
+        conversions.Cosmo_Conversions and assigning it to self.cosmo, in
+        addition to re-computing power spectrum normalization quantities like
+        self.scalar_array. Because this will attempt to recompute the
+        scalar_array, the beam-related metadata (OmegaP, OmegaPP and
         beam_freqs) must exist in self.
-        
-        If they do not, or if you'd like to overwrite them with a new beam, you 
+
+        If they do not, or if you'd like to overwrite them with a new beam, you
         can pass a UVBeam object or path to a beam file via the new_beam kwarg.
 
-        If self.cosmo already exists then you are attempting to overwrite the 
-        currently adopted cosmology, which will only proceed if overwrite is 
+        If self.cosmo already exists then you are attempting to overwrite the
+        currently adopted cosmology, which will only proceed if overwrite is
         True.
-        
-        If overwrite == True, then this module will overwrite self.cosmo. It 
-        will also recompute the power spectrum normalization scalar (using 
-        pspecbeam) and will overwrite the values in self.scalar_array. It will 
-        then propagate these re-normalization changes into the data_array by 
+
+        If overwrite == True, then this module will overwrite self.cosmo. It
+        will also recompute the power spectrum normalization scalar (using
+        pspecbeam) and will overwrite the values in self.scalar_array. It will
+        then propagate these re-normalization changes into the data_array by
         multiplying the data by (new_scalar_array / old_scalar_array).
 
         Parameters
@@ -988,7 +994,7 @@ class UVPSpec(object):
             If True, overwrite self.cosmo if it already exists. Default: False.
 
         new_beam : PSpecBeamBase sublcass or str
-            pspecbeam.PSpecBeamUV object or path to beam file. The new beam you 
+            pspecbeam.PSpecBeamUV object or path to beam file. The new beam you
             want to adopt for this UVPSpec object.
 
         verbose : bool, optional
@@ -1012,7 +1018,7 @@ class UVPSpec(object):
         if new_beam is not None:
             if verbose: print "Updating beam data with {}".format(new_beam)
             if isinstance(new_beam, (str, np.str)):
-                # PSpecBeamUV will adopt a default cosmology upon instantiation, 
+                # PSpecBeamUV will adopt a default cosmology upon instantiation,
                 # but this doesn't matterfor what we need from it
                 new_beam = pspecbeam.PSpecBeamUV(new_beam)
             self.OmegaP, self.OmegaPP = new_beam.get_Omegas(self.pol_array)
@@ -1029,7 +1035,7 @@ class UVPSpec(object):
             print("Updating scalar array and re-normalizing power spectra")
         for spw in range(self.Nspws):
             for j, pol in enumerate(self.pol_array):
-                scalar = self.compute_scalar(spw, pol, num_steps=1000, 
+                scalar = self.compute_scalar(spw, pol, num_steps=1000,
                                              little_h=True, noise_scalar=False)
 
                 # renormalize power spectra with new scalar
@@ -1044,9 +1050,9 @@ class UVPSpec(object):
 
     def check(self, just_meta=False):
         """
-        Run checks to make sure metadata and data arrays are properly defined 
+        Run checks to make sure metadata and data arrays are properly defined
         and in the right format. Raises AssertionErrors if checks fail.
-        
+
         Parameters
         ----------
         just_meta : bool, optional
@@ -1097,7 +1103,7 @@ class UVPSpec(object):
         for p in self._all_params:
             if hasattr(self, p):
                 delattr(self, p)
-    
+
     def __str__(self):
         """
         Output useful info about UVPSpec object.
@@ -1112,7 +1118,7 @@ class UVPSpec(object):
                     s += "%18s: shape %s\n" % (k, y.shape)
                 else:
                     s += "%18s: %s\n" % (k, y)
-        
+
         s += "\n DATASETS\n"
         s += "-"*12 + "\n"
         for k in self._meta_dsets:
@@ -1141,7 +1147,7 @@ class UVPSpec(object):
                         assert np.isclose(getattr(self, p)[i], \
                                getattr(other, p)[i]).all()
         except AssertionError:
-            if verbose: 
+            if verbose:
                 print "UVPSpec parameter '{}' not equivalent between {} and {}" \
                       "".format(p, self.__repr__(), other.__repr__())
             return False
@@ -1157,32 +1163,32 @@ class UVPSpec(object):
         """Return power spectrum units. See self.vis_units and self.norm_units."""
         return "({})^2 {}".format(self.vis_units, self.norm_units)
 
-    def generate_noise_spectra(self, spw, pol, Tsys, blpairs=None, little_h=True, 
+    def generate_noise_spectra(self, spw, pol, Tsys, blpairs=None, little_h=True,
                                form='Pk', num_steps=2000, real=True):
         """
-        Generate the expected 1-sigma noise power spectrum given a selection of 
-        spectral window, system temp., and polarization. This estimate is 
+        Generate the expected 1-sigma noise power spectrum given a selection of
+        spectral window, system temp., and polarization. This estimate is
         constructed as:
 
         P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
               [mK^2 h^-3 Mpc^3]
 
-        where scalar is the cosmological and beam scalar (i.e. X2Y * Omega_eff) 
-        calculated from pspecbeam with noise_scalar = True, integration_time is 
-        in seconds and comes from self.integration_array and Nincoherent is the 
-        number of incoherent averaging samples and comes from 
+        where scalar is the cosmological and beam scalar (i.e. X2Y * Omega_eff)
+        calculated from pspecbeam with noise_scalar = True, integration_time is
+        in seconds and comes from self.integration_array and Nincoherent is the
+        number of incoherent averaging samples and comes from
         self.nsample_array.
 
-        If the polarization specified is a pseudo Stokes pol (I, Q, U or V) 
+        If the polarization specified is a pseudo Stokes pol (I, Q, U or V)
         then an extra factor of 2 is divided.
         If form == 'DelSq' then a factor of k^3 / (2pi^2) is multiplied.
-        If real is True, a factor of sqrt(2) is divided to account for 
+        If real is True, a factor of sqrt(2) is divided to account for
         discarding imaginary noise component.
 
-        For more details, see hera_pspec.noise.Sensitivity.calc_P_N, and 
+        For more details, see hera_pspec.noise.Sensitivity.calc_P_N, and
         Cheng et al. 2018.
 
-        The default units of P_N are mK^2 h^-3 Mpc^3 (if little_h=True and 
+        The default units of P_N are mK^2 h^-3 Mpc^3 (if little_h=True and
         form='Pk'), but is different if those kwargs are altered.
 
         Parameters
@@ -1191,14 +1197,14 @@ class UVPSpec(object):
             Spectral window index to generate noise curve for.
 
         pol : str or int
-            Polarization selection in form of str (e.g. 'I' or 'Q' or 'xx') or 
+            Polarization selection in form of str (e.g. 'I' or 'Q' or 'xx') or
             int (e.g. -5 or -6).
 
         Tsys : float
             System temperature in Kelvin.
 
         blpairs : list
-            List of unique blair tuples or i12 integers to calculate noise 
+            List of unique blair tuples or i12 integers to calculate noise
             spectrum for default is to calculate for baseline pairs.
 
         little_h : bool, optional
@@ -1206,23 +1212,23 @@ class UVPSpec(object):
             Default: h^-1 Mpc
 
         form : str, optional
-            Form of power spectra, whetehr P(k) or Delta^2(k). Valid options 
+            Form of power spectra, whetehr P(k) or Delta^2(k). Valid options
             are 'Pk' or 'DelSq'. Default: 'Pk'.
 
         num_steps : int, optional
-            Number of frequency bins to use in integrating power spectrum 
+            Number of frequency bins to use in integrating power spectrum
             scalar in pspecbeam. Default: 2000.
 
         real : bool, optional
-            If True assumes the real component of complex power spectrum is 
-            used, and will divide P_N by an extra sqrt(2). Otherwise, assume 
+            If True assumes the real component of complex power spectrum is
+            used, and will divide P_N by an extra sqrt(2). Otherwise, assume
             power spectra are complex and keep P_N as is. Default: True.
 
         Returns
         -------
         P_N : dict
-            Dictionary containing blpair integers as keys and float ndarrays 
-            of noise power spectra as values, with ndarrays having shape 
+            Dictionary containing blpair integers as keys and float ndarrays
+            of noise power spectra as values, with ndarrays having shape
             (Ntimes, Ndlys).
         """
         # Assert polarization type
@@ -1236,7 +1242,7 @@ class UVPSpec(object):
         freqs = self.freq_array[self.spw_to_indices(spw)]
 
         # Calculate scalar
-        scalar = self.compute_scalar(spw, pol, num_steps=num_steps, 
+        scalar = self.compute_scalar(spw, pol, num_steps=num_steps,
                                      little_h=little_h, noise_scalar=True)
 
         # Get k vectors
@@ -1274,18 +1280,18 @@ class UVPSpec(object):
                     k = None
 
                 # Get noise power spectrum
-                pn = noise.calc_P_N(scalar, Tsys, t_int, k=k, 
+                pn = noise.calc_P_N(scalar, Tsys, t_int, k=k,
                                     Nincoherent=n_samp, form=form)
 
                 # Put into appropriate form
                 if form == 'Pk':
                     pn = np.ones(len(dlys), np.float) * pn
 
-                # If pseudo stokes pol (as opposed to linear or circular pol), 
+                # If pseudo stokes pol (as opposed to linear or circular pol),
                 # divide by extra factor of 2
                 if isinstance(pol, (np.str, str)):
                     pol = uvutils.polstr2num(pol)
-                
+
                 if pol in (1, 2, 3, 4): pn /= 2.0 # pseudo stokes pol
                 if real: pn /= np.sqrt(2) # if real divide by sqrt(2)
 
@@ -1296,86 +1302,86 @@ class UVPSpec(object):
 
         return P_N
 
-    def average_spectra(self, blpair_groups=None, time_avg=False, 
+    def average_spectra(self, blpair_groups=None, time_avg=False,
                         blpair_weights=None, inplace=True):
         """
-        Average power spectra across the baseline-pair-time axis, weighted by 
+        Average power spectra across the baseline-pair-time axis, weighted by
         each spectrum's integration time.
-        
-        This is an "incoherent" average, in the sense that this averages power 
-        spectra, rather than visibility data. The 'nsample_array' and 
+
+        This is an "incoherent" average, in the sense that this averages power
+        spectra, rather than visibility data. The 'nsample_array' and
         'integration_array' will be updated to reflect the averaging.
 
-        In the case of averaging across baseline pairs, the resultant averaged 
-        spectrum is assigned to the zeroth blpair in the group. In the case of 
-        time averaging, the time and LST arrays are assigned to the mean of the 
+        In the case of averaging across baseline pairs, the resultant averaged
+        spectrum is assigned to the zeroth blpair in the group. In the case of
+        time averaging, the time and LST arrays are assigned to the mean of the
         averaging window.
 
-        Note that this is designed to be separate from spherical binning in k: 
-        here we are not connecting k_perp modes to k_para modes. However, if 
-        blpairs holds groups of iso baseline separation, then this is 
+        Note that this is designed to be separate from spherical binning in k:
+        here we are not connecting k_perp modes to k_para modes. However, if
+        blpairs holds groups of iso baseline separation, then this is
         equivalent to cylindrical binning in 3D k-space.
 
-        If you want help constructing baseline-pair groups from baseline 
+        If you want help constructing baseline-pair groups from baseline
         groups, see self.get_blpair_groups_from_bl_groups.
 
         Parameters
         ----------
         blpair_groups : list
             List of list of baseline-pair group tuples or integers. All power spectra
-            in a baseline-pair group are averaged together. If a baseline-pair 
+            in a baseline-pair group are averaged together. If a baseline-pair
             exists in more than one group, a warning is raised. Examples::
-            
-                blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], 
-                                  [((4, 6), (4, 6))]] 
-                
+
+                blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))],
+                                  [((4, 6), (4, 6))]]
+
                 blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
-        
-        
+
+
         time_avg : bool, optional
             If True, average power spectra across the time axis. Default: False.
-        
+
         blpair_weights : list, optional
-            List of float or int weights dictating the relative weight of each 
-            baseline-pair when performing the average. 
-            This is useful for bootstrapping. This should have the same shape 
-            as blpair_groups if specified. The weights are automatically 
-            normalized within each baseline-pair group. Default: None (all 
+            List of float or int weights dictating the relative weight of each
+            baseline-pair when performing the average.
+            This is useful for bootstrapping. This should have the same shape
+            as blpair_groups if specified. The weights are automatically
+            normalized within each baseline-pair group. Default: None (all
             baseline pairs have unity weights).
-        
+
         inplace : bool, optional
-            If True, edit data in self, else make a copy and return. Default: 
+            If True, edit data in self, else make a copy and return. Default:
             True.
 
         Notes
         -----
-        Currently, every baseline-pair in a blpair group must have the same 
-        Ntimes, unless time_avg=True. Future versions may support 
-        baseline-pair averaging of heterogeneous time arrays. This includes 
-        the scenario of repeated blpairs (e.g. in bootstrapping), which will 
+        Currently, every baseline-pair in a blpair group must have the same
+        Ntimes, unless time_avg=True. Future versions may support
+        baseline-pair averaging of heterogeneous time arrays. This includes
+        the scenario of repeated blpairs (e.g. in bootstrapping), which will
         return multiple copies of their time_array.
         """
         if inplace:
-            grouping.average_spectra(self, blpair_groups=blpair_groups, 
-                                     time_avg=time_avg, 
-                                     blpair_weights=blpair_weights, 
+            grouping.average_spectra(self, blpair_groups=blpair_groups,
+                                     time_avg=time_avg,
+                                     blpair_weights=blpair_weights,
                                      inplace=True)
         else:
-            return grouping.average_spectra(self, blpair_groups=blpair_groups, 
-                                            time_avg=time_avg, 
-                                            blpair_weights=blpair_weights, 
+            return grouping.average_spectra(self, blpair_groups=blpair_groups,
+                                            time_avg=time_avg,
+                                            blpair_weights=blpair_weights,
                                             inplace=False)
 
     def fold_spectra(self):
         """
-        Average bandpowers from matching positive and negative delay bins onto a 
-        purely positive delay axis. Negative delay bins are still populated, but 
+        Average bandpowers from matching positive and negative delay bins onto a
+        purely positive delay axis. Negative delay bins are still populated, but
         are filled with zero power. This is an in-place operation.
-        
-        Will only work if self.folded == False, i.e. data is currently unfolded 
-        across negative and positive delay. Because this averages the data, the 
-        nsample array is multiplied by a factor of 2. 
-        
+
+        Will only work if self.folded == False, i.e. data is currently unfolded
+        across negative and positive delay. Because this averages the data, the
+        nsample array is multiplied by a factor of 2.
+
         WARNING: This operation cannot be undone.
         """
         grouping.fold_spectra(self)
@@ -1386,19 +1392,19 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        blgroups : list 
-            List of baseline groups, which themselves are lists of baseline 
+        blgroups : list
+            List of baseline groups, which themselves are lists of baseline
             tuples or baseline i6 integers.
             Ex: [ [(1, 2), (2, 3), (3, 4)], [(1, 4), (2, 5)] ]
 
         only_pairs_in_bls : bool, optional
-            If True, select only baseline-pairs whose first _and_ second 
+            If True, select only baseline-pairs whose first _and_ second
             baseline are both found in each baseline group. Default: False.
 
         Returns
         -------
-        blpair_groups : list 
-            List of blpair groups, which themselves are lists of blpair 
+        blpair_groups : list
+            List of blpair groups, which themselves are lists of blpair
             integers.
         """
         blpair_groups = []
@@ -1410,12 +1416,12 @@ class UVPSpec(object):
 
         return blpair_groups
 
-    
-    def compute_scalar(self, spw, pol, num_steps=1000, little_h=True, 
+
+    def compute_scalar(self, spw, pol, num_steps=1000, little_h=True,
                        noise_scalar=False):
         """
-        Compute power spectrum normalization scalar given an adopted cosmology 
-        and a beam model. See pspecbeam.PSpecBeamBase.compute_pspec_scalar for 
+        Compute power spectrum normalization scalar given an adopted cosmology
+        and a beam model. See pspecbeam.PSpecBeamBase.compute_pspec_scalar for
         details.
 
         Parameters
@@ -1427,15 +1433,15 @@ class UVPSpec(object):
             Which polarization to calculate the scalar for.
 
         num_steps : int, optional
-            Number of integration bins along frequency in computing scalar. 
+            Number of integration bins along frequency in computing scalar.
             Default: 1000.
-        
+
         little_h : bool, optional
             Whether to use h^-1 units or not. Default: True.
-        
+
         noise_scalar : bool, optional
-            If True calculate noise pspec scalar, else calculate normal pspec 
-            scalar. See pspecbeam.py for difference between normal scalar and 
+            If True calculate noise pspec scalar, else calculate normal pspec
+            scalar. See pspecbeam.py for difference between normal scalar and
             noise scalar. Default: False.
 
         Returns
@@ -1454,25 +1460,25 @@ class UVPSpec(object):
         # compute scalar
         OP = self.OmegaP[:, self.pol_to_indices(pol)].squeeze()
         OPP = self.OmegaPP[:, self.pol_to_indices(pol)].squeeze()
-        scalar = pspecbeam._compute_pspec_scalar(self.cosmo, self.beam_freqs, OPP / OP**2, spw_freqs, 
-                                                 num_steps=num_steps, taper=self.taper, little_h=little_h, 
+        scalar = pspecbeam._compute_pspec_scalar(self.cosmo, self.beam_freqs, OPP / OP**2, spw_freqs,
+                                                 num_steps=num_steps, taper=self.taper, little_h=little_h,
                                                  noise_scalar=noise_scalar)
 
         return scalar
 
 def combine_uvpspec(uvps, verbose=True):
     """
-    Combine (concatenate) multiple UVPSpec objects into a single object, 
-    combining along one of either spectral window [spw], baseline-pair-times 
-    [blpairts], or polarization [pol]. Certain meta-data of all of the UVPSpec 
+    Combine (concatenate) multiple UVPSpec objects into a single object,
+    combining along one of either spectral window [spw], baseline-pair-times
+    [blpairts], or polarization [pol]. Certain meta-data of all of the UVPSpec
     objs must match exactly, see get_uvp_overlap for details.
-    
+
     In addition, one can only combine data along a single data axis, with the
     condition that all other axes match exactly.
 
     Parameters
     ----------
-    uvps : list 
+    uvps : list
         A list of UVPSpec objects to combine.
 
     Returns
@@ -1496,11 +1502,17 @@ def combine_uvpspec(uvps, verbose=True):
     Nblpairts = len(new_blpts)
     Npols = len(new_pols)
 
+
+    # store covariance only if all uvps have stored covariance.
+    store_cov = np.all([hasattr(uvp,'cov_array') for uvp in uvps])
     # Create new empty data arrays and fill spw arrays
+
     u.data_array = odict()
     u.integration_array = odict()
     u.wgt_array = odict()
     u.nsample_array = odict()
+    if store_cov:
+        u.cov_array = odict()
     u.scalar_array = np.empty((Nspws, Npols), np.float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     
@@ -1512,6 +1524,8 @@ def combine_uvpspec(uvps, verbose=True):
         u.integration_array[i] = np.empty((Nblpairts, Npols), np.float64)
         u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
+        if store_cov:
+            u.cov_array[i]=np.empty((Nblpairts, spw[2], spw[2], Npols), np.complex128)
         
         # Set frequencies and delays
         spw_Nfreqs = spw[-1]
@@ -1522,12 +1536,14 @@ def combine_uvpspec(uvps, verbose=True):
         u.spw_array.extend(np.ones(spw_Nfreqs, np.int32) * i)
         u.freq_array.extend(spw_freqs)
         u.dly_array.extend(spw_dlys)
+
     
     # Convert to numpy arrays    
     u.spw_array = np.array(u.spw_array)
     u.freq_array = np.array(u.freq_array)
     u.dly_array = np.array(u.dly_array)
     u.pol_array = np.array(new_pols)
+
     
     # Number of spectral windows, delays etc.
     u.Nspws = Nspws
@@ -1576,6 +1592,7 @@ def combine_uvpspec(uvps, verbose=True):
                 
                 # Loop over blpair-times
                 for j, blpt in enumerate(new_blpts):
+                  
                     n = blpts_idxs[j]
                     
                     # Data/weight/integration arrays
@@ -1589,7 +1606,8 @@ def combine_uvpspec(uvps, verbose=True):
                     lbl2 = uvps[l].label_2_array[m,n,q]
                     u.label_1_array[i,j,k] = u_lbls[uvps[l].labels[lbl1]]
                     u.label_2_array[i,j,k] = u_lbls[uvps[l].labels[lbl2]]
-        
+                    if store_cov:
+                      u.cov_array[i][j, :, :, k]=uvps[l].cov_array[m][n, :, :, q]
         # Populate new LST, time, and blpair arrays
         for j, blpt in enumerate(new_blpts):
             n = blpts_idxs0[j]
@@ -1625,7 +1643,10 @@ def combine_uvpspec(uvps, verbose=True):
                 # Loop over polarizations
                 for k, p in enumerate(new_pols):
                     q = uvp_pols[l].index(p)
+
                     u.data_array[i][j,:,k] = uvps[l].data_array[m][n,:,q]
+                    if store_cov:
+                        u.cov_array[i][j, :, :, k]=uvps[l].cov_array[m][n, :, :, q]
                     u.wgt_array[i][j,:,:,k] = uvps[l].wgt_array[m][n,:,:,q]
                     u.integration_array[i][j,k] = uvps[l].integration_array[m][n,q]
                     u.nsample_array[i][j,k] = uvps[l].integration_array[m][n,q]
@@ -1666,6 +1687,8 @@ def combine_uvpspec(uvps, verbose=True):
                 for j, blpt in enumerate(new_blpts):
                     n = blpts_idxs[j]
                     u.data_array[i][j,:,k] = uvps[l].data_array[m][n,:,q]
+                    if store_cov:
+                      u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
                     u.wgt_array[i][j,:,:,k] = uvps[l].wgt_array[m][n,:,:,q]
                     u.integration_array[i][j,k] = uvps[l].integration_array[m][n,q]
                     u.nsample_array[i][j,k] = uvps[l].integration_array[m][n,q]
@@ -1713,13 +1736,14 @@ def combine_uvpspec(uvps, verbose=True):
 def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     """
     Given a list of UVPSpec objects or a list of paths to UVPSpec objects,
-    find a single data axis within ['spw', 'blpairts', 'pol'] where *all* 
-    uvpspec objects contain non-overlapping data. Overlapping data are 
-    delay spectra that have identical spw, blpair-time and pol metadata 
+    find a single data axis within ['spw', 'blpairts', 'pol'] where *all*
+    uvpspec objects contain non-overlapping data. Overlapping data are
+    delay spectra that have identical spw, blpair-time and pol metadata
     between each other. If two uvps are completely overlapping (i.e. there
     is not non-overlapping data axis) an error is raised. If there are
     multiple non-overlapping data axes between all uvpspec pairs in uvps,
     an error is raised.
+
 
     All uvpspec objects must have certain attributes that agree exactly. These 
     include:
@@ -1742,6 +1766,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     Returns
     -------
     uvps : list
+
         List of input UVPSpec objects 
 
     concat_ax : str
@@ -1775,6 +1800,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         uvps = _uvps
 
     # ensure static metadata agree between all objects
+
     static_meta = ['channel_width', 'telescope_location', 'weighting', 
                    'OmegaP', 'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 
                    'taper', 'vis_units', 'norm_units', 'folded', 'cosmo']
@@ -1817,6 +1843,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         uvp1_spws = uvp1.get_spw_ranges()
         uvp1_blpts = zip(uvp1.blpair_array, uvp1.time_avg_array)
         uvp1_pols = uvp1.pol_array
+
 
         # iterate over uvps
         for j, uvp2 in enumerate(uvps):
@@ -1865,5 +1892,6 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
                "scalar_array must be the same for all uvps given concatenation along blpairts."
 
     return uvps, concat_ax, unique_spws, unique_blpts, unique_pols, static_meta
+
 
 
