@@ -316,10 +316,10 @@ class Test_PSpecData(unittest.TestCase):
                     self.assertAlmostEqual(norm, 1.)
 
 
-    def test_cov_q(self):
+    def test_cov_q(self,ndlys=10):
         """
         Test that q_hat_cov has the right shape and accepts keys in correct
-        format.
+        format. Also validate with arbitrary number of delays.
         """
         for d in self.d:
             d.flag_array[:]=False #ensure that there are no flags!
@@ -329,12 +329,17 @@ class Test_PSpecData(unittest.TestCase):
             d_std.select(times=np.unique(d_std.time_array)[:10],frequencies=d_std.freq_array[0,:16])
         self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
         self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
-        Nfactor = self.ds.Nfreqs
         Ntime = self.ds.Ntimes
-
+        self.ds.set_Ndlys(ndlys)
+        #Here is the analytic covariance matrix...
+        chan_x,chan_y=np.meshgrid(range(self.ds.Nfreqs),range(self.ds.Nfreqs))
+        cov_analytic=np.zeros((self.ds.spw_Ndlys,self.ds.spw_Ndlys),dtype=np.complex128)
+        for alpha in range(self.ds.spw_Ndlys):
+            for beta in range(self.ds.spw_Ndlys):
+                cov_analytic[alpha,beta]=np.exp(-2j*np.pi*(alpha-beta)*(chan_x-chan_y)/self.ds.spw_Ndlys).sum()
         key1 = (0,24,38)
         key2 = (1,25,38)
-
+        print(cov_analytic)
 
         for input_data_weight in ['identity','iC']:
             self.ds.set_weighting(input_data_weight)
@@ -350,14 +355,14 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.set_weighting('identity')
         qc=self.ds.cov_q_hat(key1,key2)
         self.assertTrue(np.allclose(qc,
-                        Nfactor**2.*np.repeat(np.identity(self.ds.spw_Ndlys)[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
+                        np.repeat(cov_analytic[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
         """
         Test lists of keys
         """
         self.ds.set_weighting('identity')
         qc=self.ds.cov_q_hat([key1],[key2],time_indices=[0])
         self.assertTrue(np.allclose(qc,
-                        Nfactor**2.*np.repeat(np.identity(self.ds.spw_Ndlys)[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
+                        np.repeat(cov_analytic[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
         self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,200)
         self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,"watch out!")
     def test_cov_p_hat(self):

@@ -824,10 +824,13 @@ class PSpecData(object):
         N2=np.zeros_like(N1)
         Qalphas=np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[np.newaxis,:,:,:],self.spw_Ndlys,axis=0)
         Qbetas=np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[:,np.newaxis,:,:],self.spw_Ndlys,axis=1)
-        #Q_alpha/Q_beta are N_dlys x N_freq x N_freq
+        #Q_alpha/Q_beta are N_dlys x N_dlys x N_freq x N_freq
+        #taking advantage of broadcast rules!
+        #matmul only applies to the last two dimensions
+        #and stacks everything else!
         Ealphas=np.matmul(R1.T.conj(),np.matmul(Qalphas,R2))
         Ebetas=np.matmul(R1.T.conj(),np.matmul(Qbetas,R2))
-        #E_alpha/E_beta ar N_dlys x N_freq  x N_freq
+        #E_alpha/E_beta ar N_dlys x N_dlys x N_freq  x N_freq
         for indnum,tind in enumerate(time_indices):
             N1[:,:]=np.diag(n1a[:,tind]+n1b[:,tind])
             N2[:,:]=np.diag(n2a[:,tind]+n2b[:,tind])
