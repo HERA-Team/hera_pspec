@@ -13,6 +13,7 @@ def build_vanilla_uvpspec(beam=None):
     Parameters
     ----------
     beam : PSpecBeamBase subclass
+    covariance: if true, compute covariance
 
     Returns
     -------
@@ -71,42 +72,46 @@ def build_vanilla_uvpspec(beam=None):
         beam_freqs = beam.beam_freqs
 
     # HERA coordinates in Karoo Desert, SA
-    telescope_location = np.array([5109325.85521063, 
-                                   2005235.09142983, 
+    telescope_location = np.array([5109325.85521063,
+                                   2005235.09142983,
                                   -3239928.42475397])
 
+    store_cov=True
     cosmo = conversions.Cosmo_Conversions()
 
-    data_array, wgt_array, integration_array, nsample_array = {}, {}, {}, {}
+    data_array, wgt_array, integration_array, nsample_array, cov_array = {}, {}, {}, {}, {}
     for s in spws:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
         wgt_array[s] = np.ones((Nblpairts, Ndlys, 2, Npols), dtype=np.float)
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
+        cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+         for m in range(Nblpairts)] for n in range(Npols)]),0,-1)
 
-    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts', 
-              'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array', 
-              'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array', 
+
+    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts',
+              'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array',
+              'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array',
               'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
-              'integration_array', 'bl_array', 'bl_vecs', 'telescope_location', 
-              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm', 
-              'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array', 
+              'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
+              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm',
+              'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array',
               'cosmo', 'scalar_array', 'labels', 'norm_units', 'labels', 'label_1_array',
-              'label_2_array']
+              'label_2_array','store_cov','cov_array']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
-    
+
     # Set all parameters
     for p in params:
         setattr(uvp, p, locals()[p])
-    
+
     uvp.check()
 
     return uvp, cosmo
 
-def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
+def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -119,11 +124,14 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
         This is a list of at least 2 baseline tuples.
         Ex: [(24, 25), (37, 38), ...]
 
+    data_std: UVData object or str or None
+        Can be UVData object or a string filepath to a miriad file.
+
     spw_ranges : list
         List of spectral window tuples. See PSpecData.pspec docstring for details.
 
     beam : PSpecBeamBase subclass or str
-        This can be a subclass of PSpecBeamBase of a string filepath to a 
+        This can be a subclass of PSpecBeamBase of a string filepath to a
         UVBeam healpix map.
 
     taper : string
@@ -145,6 +153,17 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
     elif isinstance(data, UVData):
         uvd = data
 
+    if isinstance(data_std,str):
+        uvd_std=UVData()
+        uvd_std.read_miriad(data_std)
+    elif isinstance(data_std,UVData):
+        uvd_std=data_std
+    else:
+        uvd_std=None
+    if uvd_std is not None:
+        store_cov=True
+    else:
+        store_cov=False
     # get pol
     pol = uvd.polarization_array[0]
 
@@ -155,14 +174,12 @@ def uvpspec_from_data(data, bls, spw_ranges=None, beam=None, taper='none', cosmo
         beam.cosmo = cosmo
 
     # instantiate pspecdata
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std,uvd_std], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
     # get red bls
     bls1, bls2, _ = utils.construct_blpairs(bls, exclude_auto_bls=True)
 
     # run pspec
-    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges, 
-                   taper=taper, verbose=verbose)
-
+    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges,
+                   taper=taper, verbose=verbose,store_cov=store_cov)
     return uvp
-

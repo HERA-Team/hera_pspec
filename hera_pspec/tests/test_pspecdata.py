@@ -16,6 +16,10 @@ dfiles = [
     'zen.2458042.12552.xx.HH.uvXAA',
     'zen.2458042.12552.xx.HH.uvXAA'
 ]
+dfiles_std = [
+    'zen.2458042.12552.std.xx.HH.uvXAA',
+    'zen.2458042.12552.std.xx.HH.uvXAA'
+]
 
 # List of tapering function to use in tests
 taper_selection = ['none', 'blackman',]
@@ -95,6 +99,12 @@ class Test_PSpecData(unittest.TestCase):
             _d = uv.UVData()
             _d.read_miriad(os.path.join(DATA_PATH, dfile))
             self.d.append(_d)
+        # Load standard deviations
+        self.d_std=[]
+        for dfile in dfiles_std:
+            _d = uv.UVData()
+            _d.read_miriad(os.path.join(DATA_PATH,dfile))
+            self.d_std.append(_d)
 
         # Set trivial weights
         self.w = [None for _d in dfiles]
@@ -108,6 +118,10 @@ class Test_PSpecData(unittest.TestCase):
         self.uvd = uv.UVData()
         self.uvd.read_miriad(os.path.join(DATA_PATH,
                                           "zen.2458042.17772.xx.HH.uvXA"))
+
+        self.uvd_std = uv.UVData()
+        self.uvd_std.read_miriad(os.path.join(DATA_PATH,
+                                          "zen.2458042.17772.std.xx.HH.uvXA"))
 
     def tearDown(self):
         pass
@@ -144,7 +158,9 @@ class Test_PSpecData(unittest.TestCase):
         Test adding non UVData object.
         """
         nt.assert_raises(TypeError, self.ds.add, 1, 1)
-
+        #test TypeError if dsets is dict but dsets_std is not
+        nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,[0])
+        nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,{'e':0})
     def test_labels(self):
         """
         Test that dataset labels work.
@@ -152,7 +168,7 @@ class Test_PSpecData(unittest.TestCase):
         # Check that specifying labels does work
         psd = pspecdata.PSpecData( dsets=[self.d[0], self.d[1],],
                                    wgts=[self.w[0], self.w[1], ],
-                                   labels=['red', 'blue'] )
+                                   labels=['red', 'blue'])
         np.testing.assert_array_equal( psd.x(('red', 24, 38)),
                                        psd.x((0, 24, 38)) )
 
@@ -194,6 +210,7 @@ class Test_PSpecData(unittest.TestCase):
         print(ds) # print populated psd
 
     def test_get_Q_alt(self):
+
         """
         Test the Q = dC/dp function.
         """
@@ -271,33 +288,251 @@ class Test_PSpecData(unittest.TestCase):
             Q_diff_norm = np.linalg.norm(Q_matrix - Q_matrix_fft)
             self.assertLessEqual(Q_diff_norm, multiplicative_tolerance)
 
+    def test_get_unnormed_E(self):
+        """
+        Test the E function
+        """
+        # Test that error is raised if spw_Ndlys is not set
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'])
+        ds.spw_Ndlys = None
+        nt.assert_raises(ValueError, ds.get_unnormed_E, 'placeholder', 'placeholder')
+
+        # Test that if R1 = R2, then the result is Hermitian
+        ds.spw_Ndlys = 7
+        random_R = generate_pos_def_all_pos(ds.spw_Nfreqs)
+        wgt_matrix_dict = {} # The keys here have no significance except they are formatted right
+        wgt_matrix_dict[('red', (24, 25))] = random_R
+        wgt_matrix_dict[('blue', (24, 25))] = random_R
+        ds.set_R(wgt_matrix_dict)
+        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        multiplicative_tolerance = 0.0000001
+        for matrix in E_matrices:
+            diff_norm = np.linalg.norm(matrix.T.conj() - matrix)
+            self.assertLessEqual(diff_norm, multiplicative_tolerance)
+
+        # Test that if R1 != R2, then i) E^{12,dagger} = E^{21}
+        random_R2 = generate_pos_def_all_pos(ds.spw_Nfreqs)
+        wgt_matrix_dict = {}
+        wgt_matrix_dict[('red', (24, 25))] = random_R
+        wgt_matrix_dict[('blue', (24, 25))] = random_R2
+        ds.set_R(wgt_matrix_dict)
+        E12_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        E21_matrices = ds.get_unnormed_E(('blue', (24, 25)), ('red', (24, 25)))
+        multiplicative_tolerance = 0.0000001
+        for mat12,mat21 in zip(E12_matrices,E21_matrices):
+            diff_norm = np.linalg.norm(mat12.T.conj() - mat21)
+            self.assertLessEqual(diff_norm, multiplicative_tolerance)
+
+        # Test that if there is only one delay bin and R1 = R2 = I, then
+        # the E matrices are all 0.5s exept in flagged channels.
+        ds.spw_Ndlys = 1
+        wgt_matrix_dict = {}
+        wgt_matrix_dict[('red', (24, 25))] = np.eye(ds.spw_Nfreqs)
+        wgt_matrix_dict[('blue', (24, 25))] = np.eye(ds.spw_Nfreqs)
+        flags1 = np.diag(ds.Y(('red', (24, 25))))
+        flags2 = np.diag(ds.Y(('blue', (24, 25))))
+        ds.set_R(wgt_matrix_dict)
+        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        multiplicative_tolerance = 0.0000001
+        for matrix in E_matrices:
+            for i in range(ds.spw_Nfreqs):
+                for j in range(ds.spw_Nfreqs):
+                    if flags1[i] * flags2[j] == 0: # either channel flagged
+                        self.assertAlmostEqual(matrix[i,j], 0.)
+                    else:
+                        self.assertAlmostEqual(matrix[i,j], 0.5)
+
+    def test_cross_covar_model(self):
+        uvd = copy.deepcopy(self.uvd)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'])
+        key1 = ('red', (24, 25), 'xx')
+        key2 = ('blue', (25, 38), 'xx')
+
+        nt.assert_raises(AssertionError, ds.cross_covar_model, key1, key2, model='other_string')
+        nt.assert_raises(AssertionError, ds.cross_covar_model, key1, 'a_string')
+
+        conj1_conj1 = ds.cross_covar_model(key1, key1, conj_1=True, conj_2=True)
+        conj1_real1 = ds.cross_covar_model(key1, key1, conj_1=True, conj_2=False)
+        real1_conj1 = ds.cross_covar_model(key1, key1, conj_1=False, conj_2=True)
+        real1_real1 = ds.cross_covar_model(key1, key1, conj_1=False, conj_2=False)
+
+        # Check matrix sizes
+        for matrix in [conj1_conj1, conj1_real1, real1_conj1, real1_real1]:
+            self.assertEqual(matrix.shape, (ds.spw_Nfreqs, ds.spw_Nfreqs))
+
+        for i in range(ds.spw_Nfreqs):
+            for j in range(ds.spw_Nfreqs):
+                # Check that the matrices that ought to be Hermitian are indeed Hermitian
+                self.assertAlmostEqual(conj1_real1.conj().T[i,j], conj1_real1[i,j])
+                self.assertAlmostEqual(real1_conj1.conj().T[i,j], real1_conj1[i,j])
+                # Check that real_real and conj_conj are complex conjugates of each other
+                # Also check that they are symmetric
+                self.assertAlmostEqual(real1_real1.conj()[i,j], conj1_conj1[i,j])
+                self.assertAlmostEqual(real1_real1[j,i], real1_real1[i,j])
+                self.assertAlmostEqual(conj1_conj1[j,i], conj1_conj1[i,j])
+
+
+        real1_real2 = ds.cross_covar_model(key1, key2, conj_1=False, conj_2=False)
+        real2_real1 = ds.cross_covar_model(key2, key1, conj_1=False, conj_2=False)
+        conj1_conj2 = ds.cross_covar_model(key1, key2, conj_1=True, conj_2=True)
+        conj2_conj1 = ds.cross_covar_model(key2, key1, conj_1=True, conj_2=True)
+        conj1_real2 = ds.cross_covar_model(key1, key2, conj_1=True, conj_2=False)
+        conj2_real1 = ds.cross_covar_model(key2, key1, conj_1=True, conj_2=False)
+        real1_conj2 = ds.cross_covar_model(key1, key2, conj_1=False, conj_2=True)
+        real2_conj1 = ds.cross_covar_model(key2, key1, conj_1=False, conj_2=True)
+
+        # And some similar tests for cross covariances
+        for i in range(ds.spw_Nfreqs):
+            for j in range(ds.spw_Nfreqs):
+                self.assertAlmostEqual(real1_real2.T[i,j], real2_real1[i,j])
+                self.assertAlmostEqual(conj1_conj2.T[i,j], conj2_conj1[i,j])
+                self.assertAlmostEqual(conj1_real2.conj()[j,i], conj2_real1[i,j])
+                self.assertAlmostEqual(real1_conj2.conj()[j,i], real2_conj1[i,j])
+
+    def test_get_unnormed_V(self):
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
+        key1 = ('red', (24, 25), 'xx')
+        key2 = ('blue', (25, 38), 'xx')
+        self.ds.spw_Ndlys = 5
+
+        V = self.ds.get_unnormed_V(key1, key2)
+        # Check size
+        self.assertEqual(V.shape, (self.ds.spw_Ndlys,self.ds.spw_Ndlys))
+        # Test hermiticity. Generally this is only good to about 1 part in 10^15.
+        # If this is an issue downstream, should investigate more in the future.
+        tol = 1e-10
+        frac_non_herm = abs(V.conj().T - V)/abs(V)
+        for i in range(self.ds.spw_Ndlys):
+            for j in range(self.ds.spw_Ndlys):
+                self.assertLessEqual(frac_non_herm[i,j], tol)
+
+
     def test_get_MW(self):
         n = 17
         random_G = generate_pos_def_all_pos(n)
         random_H = generate_pos_def_all_pos(n)
+        random_V = generate_pos_def_all_pos(n)
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
+        
+        for mode in ['H^-1', 'V^-1/2', 'I', 'L^-1']:
+            if mode == 'H^-1':
+                # Test that if we have full-rank matrices, the resulting window functions
+                # are indeed delta functions
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                Hinv = np.linalg.inv(random_H)
+                for i in range(n):
+                    self.assertAlmostEqual(W[i,i], 1.)
+                    for j in range(n):
+                        self.assertAlmostEqual(M[i,j], Hinv[i,j])
 
-        for mode in ['G^-1', 'G^-1/2', 'I', 'L^-1']:
-            if mode == 'G^-1':
-                # # Test that the window functions are delta functions
-                # self.assertEqual(diagonal_or_not(W), True)
-                nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode=mode)
-            elif mode == 'G^-1/2':
-                # # Test that the error covariance is diagonal
-                # error_covariance = np.dot(M, np.dot(random_G, M.T))
-                # # FIXME: We should be decorrelating V, not G. See Issue 21
-                # self.assertEqual(diagonal_or_not(error_covariance), True)
-                nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode=mode)
+                # When the matrices are not full rank, test that the window functions
+                # are at least properly normalized.
+                deficient_H = np.ones((3,3))
+                M, W = self.ds.get_MW(deficient_H, deficient_H, mode=mode)
+                norm = np.sum(W, axis=1)
+                for i in range(3):
+                    self.assertAlmostEqual(norm[i], 1.)
+
+                # Check that a warning is raised when H matrix is not square
+                rectangle_H = np.ones((4,3))
+                nt.assert_raises(np.linalg.LinAlgError, self.ds.get_MW, random_G, rectangle_H, mode=mode)
+
+                # Check that the method ignores G
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode)
+                for i in range(n):
+                    for j in range(n):
+                        self.assertAlmostEqual(M[i,j], M_other[i,j])
+                        self.assertAlmostEqual(W[i,j], W_other[i,j])
+
+            elif mode == 'V^-1/2':
+                # Test that we are checking for the presence of a covariance matrix
+                nt.assert_raises(ValueError, self.ds.get_MW, random_G, random_H, mode=mode)
+                # Test that the error covariance is diagonal
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V)
+                band_covar = np.dot(M, np.dot(random_V, M.T))
+                self.assertEqual(diagonal_or_not(band_covar), True)
+
             elif mode == 'I':
                 # Test that the norm matrix is diagonal
                 M, W = self.ds.get_MW(random_G, random_H, mode=mode)
                 self.assertEqual(diagonal_or_not(M), True)
-                self.assertEqual(M.shape, (n,n))
-                self.assertEqual(W.shape, (n,n))
-                test_norm = np.sum(W, axis=1)
-                for norm in test_norm:
-                    self.assertAlmostEqual(norm, 1.)
+            
+            # Test sizes for everyone
+            self.assertEqual(M.shape, (n,n))
+            self.assertEqual(W.shape, (n,n))
+
+            # Window function matrices should have each row sum to unity
+            # regardless of the mode chosen
+            test_norm = np.sum(W, axis=1)
+            for norm in test_norm:
+                self.assertAlmostEqual(norm, 1.)
+
+
+    def test_cov_q(self,ndlys=13):
+        """
+        Test that q_hat_cov has the right shape and accepts keys in correct
+        format. Also validate with arbitrary number of delays.
+        """
+        for d in self.d:
+            d.flag_array[:]=False #ensure that there are no flags!
+            d.select(times=np.unique(d.time_array)[:10],frequencies=d.freq_array[0,:16])
+        for d_std in self.d_std:
+            d_std.flag_array[:]=False
+            d_std.select(times=np.unique(d_std.time_array)[:10],frequencies=d_std.freq_array[0,:16])
+        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
+        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
+        Ntime = self.ds.Ntimes
+        self.ds.set_Ndlys(ndlys)
+        #Here is the analytic covariance matrix...
+        chan_x,chan_y=np.meshgrid(range(self.ds.Nfreqs),range(self.ds.Nfreqs))
+        cov_analytic=np.zeros((self.ds.spw_Ndlys,self.ds.spw_Ndlys),dtype=np.complex128)
+        for alpha in range(self.ds.spw_Ndlys):
+            for beta in range(self.ds.spw_Ndlys):
+                cov_analytic[alpha,beta]=np.exp(-2j*np.pi*(alpha-beta)*(chan_x-chan_y)/self.ds.spw_Ndlys).sum()
+        key1 = (0,24,38)
+        key2 = (1,25,38)
+        print(cov_analytic)
+
+        for input_data_weight in ['identity','iC']:
+            self.ds.set_weighting(input_data_weight)
+
+            for taper in taper_selection:
+                qc = self.ds.cov_q_hat(key1,key2)
+                self.assertTrue(np.allclose(np.array(list(qc.shape)),
+                np.array([self.ds.Ntimes,self.ds.spw_Ndlys,self.ds.spw_Ndlys]),atol=1e-6))
+
+        """
+        Now test that analytic Error calculation gives Nchan^2
+        """
+        self.ds.set_weighting('identity')
+        qc=self.ds.cov_q_hat(key1,key2)
+        self.assertTrue(np.allclose(qc,
+                        np.repeat(cov_analytic[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
+        """
+        Test lists of keys
+        """
+        self.ds.set_weighting('identity')
+        qc=self.ds.cov_q_hat([key1],[key2],time_indices=[0])
+        self.assertTrue(np.allclose(qc,
+                        np.repeat(cov_analytic[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
+        self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,200)
+        self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,"watch out!")
+    def test_cov_p_hat(self):
+        """
+        Test cov_p_hat, verify on identity.
+        """
+        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
+        cov_p=self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),np.array([5.*np.identity(10)]))
+        for p in range(10):
+            for q in range(10):
+                if p==q:
+                    self.assertTrue(np.isclose(30.,cov_p[0,p,q],atol=1e-6))
+                else:
+                    self.assertTrue(np.isclose(0.,cov_p[0,p,q],atol=1e-6))
+
 
     def test_q_hat(self):
         """
@@ -310,6 +545,7 @@ class Test_PSpecData(unittest.TestCase):
         Ndlys = Nfreq - 3
         self.ds.spw_Ndlys = Ndlys
 
+
         # Set baselines to use for tests
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
@@ -318,7 +554,7 @@ class Test_PSpecData(unittest.TestCase):
 
         for input_data_weight in ['identity', 'iC']:
             self.ds.set_weighting(input_data_weight)
-            
+
             # Loop over list of taper functions
             for taper in taper_selection:
                 self.ds.set_taper(taper)
@@ -326,6 +562,7 @@ class Test_PSpecData(unittest.TestCase):
                 # Calculate q_hat for a pair of baselines and test output shape
                 q_hat_a = self.ds.q_hat(key1, key2)
                 self.assertEqual(q_hat_a.shape, (Ndlys, Ntime))
+
 
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
                 q_hat_b = self.ds.q_hat(key2, key1)
@@ -341,9 +578,10 @@ class Test_PSpecData(unittest.TestCase):
                 q_hat_aa = self.ds.q_hat(key1, key4) # q_hat(x1, x2+x2)
                 q_hat_bb = self.ds.q_hat(key4, key1) # q_hat(x2+x2, x1)
                 q_hat_cc = self.ds.q_hat(key3, key4) # q_hat(x1+x1, x2+x2)
-                
+
                 # Effectively checks that q_hat(2*x1, 2*x2) = 4*q_hat(x1, x2)
                 for i in range(Ndlys):
+
                     for j in range(Ntime):
                         self.assertAlmostEqual(q_hat_a[i,j].real,
                                                0.25 * q_hat_cc[i,j].real)
@@ -357,6 +595,7 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             # Loop over list of taper functions
             for taper in taper_selection:
+
                 self.ds.set_taper(taper)
                 q_hat_a_slow = self.ds.q_hat(key1, key2, allow_fft=False)
                 q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True)
@@ -377,7 +616,6 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
-                print 'input_data_weight', input_data_weight
 
                 self.ds.set_Ndlys(Nfreq/3)
                 H = self.ds.get_H(key1, key2)
@@ -402,11 +640,11 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.clear_cache()
                 self.ds.set_taper(taper)
-                print 'input_data_weight', input_data_weight
+                #print 'input_data_weight', input_data_weight
                 self.ds.set_Ndlys(Nfreq-2)
                 G = self.ds.get_G(key1, key2)
                 self.assertEqual(G.shape, (Nfreq-2, Nfreq-2)) # Test shape
-                print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
+                #print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
 
                 if input_data_weight == 'identity':
@@ -439,6 +677,7 @@ class Test_PSpecData(unittest.TestCase):
                     for i in range(Nfreq-2):
                         for j in range(Nfreq-2):
                             self.assertGreaterEqual(G[i,j],
+
                                        -min_diagonal * multiplicative_tolerance)
                 else:
                     # In general, when R_1 != R_2, there is a more restricted
@@ -521,10 +760,6 @@ class Test_PSpecData(unittest.TestCase):
         np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
     '''
 
-    def test_get_V_gaussian(self):
-        nt.assert_raises(NotImplementedError, self.ds.get_V_gaussian,
-                         (0,1), (0,1))
-
     def test_scalar_delay_adjustment(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
         key1 = (0, 24, 38)
@@ -537,6 +772,7 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.spw_Ndlys = self.ds.spw_Nfreqs
         adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
         self.assertAlmostEqual(adjustment, 1.0)
+
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
@@ -563,6 +799,9 @@ class Test_PSpecData(unittest.TestCase):
         # test time exception
         uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds.validate_datasets)
+        # test std exception
+        ds.dsets_std=ds.dsets_std[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
         # test wgt exception
         ds.wgts = ds.wgts[:1]
@@ -684,7 +923,7 @@ class Test_PSpecData(unittest.TestCase):
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm, labels=['red', 'blue'])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm, labels=['red', 'blue'])
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
@@ -715,7 +954,6 @@ class Test_PSpecData(unittest.TestCase):
         bls2 = [[(24, 25)], (52, 53)]
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
-
         # test select
         red_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
         bls1, bls2, blp = utils.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
@@ -780,12 +1018,21 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('xy','xy')], spw_ranges=[(10, 24)], verbose=False)
 
+
         # test with nsamp set to zero
         uvd = copy.deepcopy(self.uvd)
         uvd.nsample_array[uvd.antpair2ind(24, 25)] = 0.0
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [('xx', 'xx')])
         nt.assert_true(np.all(np.isclose(uvp.integration_array[0], 0.0)))
+
+        # test covariance calculation runs with small number of delays
+        uvd = copy.deepcopy(self.uvd)
+        uvd_std=copy.deepcopy(self.uvd_std)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
+        dsets_std=[uvd_std,uvd_std], beam=self.bm)
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -907,6 +1154,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.broadcast_dset_flags(unflag=True)
         uvp_unflagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
+
         qe_unflagged = uvp_unflagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
         qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
 
@@ -926,13 +1174,13 @@ class Test_PSpecData(unittest.TestCase):
                                 little_h=True, verbose=False)
 
         qe_flagged_mod = uvp_flagged_mod.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
-        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]        
+        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
 
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_flagged_mod), np.real(qe_flagged), atol=0.001, rtol=0.001).all())
 
         # Test below commented out because this sort of aggressive symmetrization is not yet implemented.
-        # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2) 
+        # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2)
         # # is equivalent to flagging for both x1 and x2.
         # test_wgts_flagged = copy.deepcopy(test_wgts)
         # test_wgts_flagged.data_array[:,:,40:60] = 0. # Flag 20 channels
@@ -976,8 +1224,10 @@ class Test_PSpecData(unittest.TestCase):
 def test_pspec_run():
     fnames = [os.path.join(DATA_PATH, d) for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
                                                    'zen.odd.xx.LST.1.28828.uvOCRSA']]
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
 
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    fnames_std=[os.path.join(DATA_PATH,d) for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
+                                                    'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
     # test basic execution
     psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True)
     nt.assert_true(isinstance(psc, container.PSpecContainer))
@@ -989,7 +1239,7 @@ def test_pspec_run():
 
     # test Jy2mK, rephase_to_dset, blpairs and dset_labels
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
-    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5",dsets_std=fnames_std, Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
                               rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
                               pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
                               dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
@@ -1013,6 +1263,7 @@ def test_pspec_run():
 
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
+
 
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()
