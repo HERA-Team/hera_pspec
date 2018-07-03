@@ -185,8 +185,6 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         pass
 
 
-
-
 def _blpair_to_antnums(blpair):
     """
     Convert baseline-pair integer to nested tuple of antenna numbers.
@@ -373,3 +371,84 @@ def _conj_blpair(blpair, which='both'):
         raise ValueError("didn't recognize {}".format(which))
 
     return conj_blpair
+
+
+def _fast_is_in(src_blpts, query_blpts, time_prec=8):
+    """
+    Helper function to rapidly check if a given blpair-time couplet is in an 
+    array.
+    
+    Parameters
+    ----------
+    src_blpts : list of tuples or array_like
+        List of tuples or array of shape (N, 2), containing a list of (blpair, 
+        time) couplets.
+    
+    query_blpts : list of tuples or array_like
+        List of tuples or array of shape (M, 2), containing a list of (blpair, 
+        time) which will be looked up in src_blpts
+    
+    time_prec : int, optional
+        Number of decimals to round time array to when performing float 
+        comparision. Default: 8.
+    
+    Returns
+    -------
+    is_in_arr: list of bools
+        A list of booleans, which indicate which query_blpts are in src_blpts.
+    """
+    # This function converts baseline-pair-times, a tuple (blp, time) 
+    # to a complex number blp + 1j * time, so that "in" function is much
+    # faster.
+    src_blpts = np.asarray(src_blpts)
+    query_blpts = np.asarray(query_blpts)
+
+    # Slice to create complex array
+    src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
+    query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
+
+    # see if q complex number is in src_blpts
+    return [q in src_blpts for q in query_blpts]
+
+
+def _fast_lookup_blpairts(src_blpts, query_blpts, time_prec=8):
+    """
+    Helper function to allow fast lookups of array indices for large arrays of 
+    blpair-time tuples.
+    
+    Parameters
+    ----------
+    src_blpts : list of tuples or array_like
+        List of tuples or array of shape (N, 2), containing a list of (blpair, 
+        time) couplets.
+    
+    query_blpts : list of tuples or array_like
+        List of tuples or array of shape (M, 2), containing a list of (blpair, 
+        time) couplets that you want to find the indices of in source_blpts.
+    
+    time_prec : int, optional
+        Number of decimals to round time array to when performing float 
+        comparision. Default: 8.
+    
+    Returns
+    -------
+    blpts_idxs : array_like
+        Array of integers of size (M,), which are indices in the source_blpts 
+        array for each item in query_blpts.
+    """
+    # This function works by using a small hack -- the blpair-times are turned 
+    # into complex numbers of the form (blpair + 1.j*time), allowing numpy 
+    # array lookup functions to be used
+    src_blpts = np.asarray(src_blpts)
+    query_blpts = np.asarray(query_blpts)
+    src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
+    query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
+    # Applies rounding to time values to ensure reliable float comparisons
+    
+    # Do np.where comparison for all new_blpts
+    # (indices stored in second array returned by np.where)
+    blpts_idxs = np.where(src_blpts == query_blpts[:,np.newaxis])[1]
+    
+    return blpts_idxs
+    
+

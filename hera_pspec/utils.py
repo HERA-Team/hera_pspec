@@ -15,14 +15,19 @@ def hash(w):
     DeprecationWarning("utils.hash is deprecated.")
     return md5.md5(w.copy(order='C')).digest()
 
-def cov(d1, w1, d2=None, w2=None):
+def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size 
     (M,N), then the output is M x M. In other words, the second axis is the 
     axis that is averaged over in forming the covariance (e.g. a time axis).
 
     If d2 is provided and d1 != d2, then this computes the cross-variance, 
-    i.e. <d1 d2^dagger>
+    i.e. <d1 d2^dagger> - <d1> <d2>^dagger
+
+    The fact that the second copy is complex conjugated is the default behaviour,
+    which can be altered by the conj_1 and the conj_2 kwargs. If conj_1 = False
+    and conj_2 = False, then <d1 d2^t> is computed, whereas if conj_1 = True
+    and conj_2 = True, then <d1^* d2^t*> is computed. (Minus the mean terms).
 
     Parameters
     ----------
@@ -30,10 +35,15 @@ def cov(d1, w1, d2=None, w2=None):
         Data vector of size (M,N), where N is the length of the "averaging axis"
     w1 : integer
         Weights for averaging d1
-    d2 : array_like
+    d2 : array_like, optional
         Data vector of size (M,N), where N is the length of the "averaging axis"
-    w2 : integer
-        Weights for averaging d1
+        Default: None
+    w2 : integer, optional
+        Weights for averaging d1. Default: None
+    conj_1 : boolean, optional
+        Whether to conjugate d1 or not. Default: False
+    conj_2 : boolean, optional
+        Whether to conjugate d2 or not. Default: True
 
     Returns
     -------
@@ -50,11 +60,21 @@ def cov(d1, w1, d2=None, w2=None):
     x1 = d1sum / np.where(d1wgt > 0, d1wgt, 1)
     x2 = d2sum / np.where(d2wgt > 0, d2wgt, 1)
     x1.shape = (-1,1); x2.shape = (-1,1)
+
+    z1 = w1*d1
+    z2 = w2*d2
+
+    if conj_1:
+        z1 = z1.conj()
+        x1 = x1.conj()
+    if conj_2:
+        z2 = z2.conj()
+        x2 = x2.conj()
     
-    C = np.dot(w1*d1, (w2*d2).conj().T)
+    C = np.dot(z1, z2.T)
     W = np.dot(w1, w2.T)
     C /= np.where(W > 0, W, 1)
-    C -= np.outer(x1, x2.conj())
+    C -= np.outer(x1, x2)
     return C
 
 def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
