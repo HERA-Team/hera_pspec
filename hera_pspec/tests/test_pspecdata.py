@@ -471,7 +471,7 @@ class Test_PSpecData(unittest.TestCase):
                 self.assertAlmostEqual(norm, 1.)
 
 
-    def test_cov_q(self,ndlys=10):
+    def test_cov_q(self,ndlys=13):
         """
         Test that q_hat_cov has the right shape and accepts keys in correct
         format. Also validate with arbitrary number of delays.
