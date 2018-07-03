@@ -94,7 +94,7 @@ class Test_UVPSpec(unittest.TestCase):
         self.uvp.set_stats("errors", keys[0], errs)
         e = self.uvp.get_stats("errors", keys[0])
         nt.assert_true(np.all(self.uvp.get_stats("errors", keys[0]) == errs))
-        nt.assert_true(np.all(self.uvp.get_stats("errors", keys[1]) == -99.*errs))
+        nt.assert_true(np.all(np.isnan(self.uvp.get_stats("errors", keys[1]))))
 
         #self.uvp.set_stats("errors", keys[0], -99.)
         blpairs = self.uvp.get_blpairs()
@@ -103,6 +103,12 @@ class Test_UVPSpec(unittest.TestCase):
         self.uvp.set_stats("who?", keys[0], errs)
         u = self.uvp.average_spectra([blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False)
         nt.assert_true(np.all( u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0])))
+        u.select(times=np.unique(u.time_avg_array)[:20])
+        if os.path.exists('./ex.hdf5'):
+            os.remove('./ex.hdf5')
+        u.write_hdf5('./ex.hdf5')
+        u.read_hdf5('./ex.hdf5')
+        os.remove('./ex.hdf5')
 
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)

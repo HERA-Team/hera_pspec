@@ -416,8 +416,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # Get error bar weights and set invalid ones to zero.
                     errws = {}
                     for stat in stat_l:
-                        errs = uvp.get_stats(stat, (spw, blp, p))
-                        no_data = np.isclose(errs, -99., 1e-10)
+                        errs = uvp.get_stats(stat, (spw, blp, p)).copy()
+                        no_data = np.isnan(errs)
                         errs[~no_data] = 1. / errs[~no_data] ** 2.
                         errs[no_data] = 0.
                         errws[stat] = errs
@@ -462,7 +462,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 for stat in stat_l:
                     arr = np.sum(bpg_stats[stat], axis=0)
                     not_valid = np.isclose(arr, 0., 1e-10)
-                    arr[not_valid] = -99.
+                    arr[not_valid] *= np.nan
                     arr[~not_valid] = arr[~not_valid] ** (-0.5)
                     bpg_stats[stat] =  arr
                 

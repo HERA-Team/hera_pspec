@@ -411,17 +411,11 @@ class UVPSpec(object):
         if not hasattr(self, "stats_array"):
             raise AttributeError("No stats have been entered to this UVPSpec object")
 
+        assert stat in self.stats_array.keys(), "Statistic name not found in stat keys."
+
         spw, blpairts, pol = self.key_to_indices(key, *args)
         data = self.stats_array[stat]
-
-        # if data has been folded, return only positive delays
-        if self.folded:
-            Ndlys = data[spw].shape[1]
-            return data[spw][blpairts, Ndlys//2+1:, pol]
-
-        # else return all delays
-        else:
-            return data[spw][blpairts, :, pol]
+        return data[spw][blpairts, :, pol]
 
     def set_stats(self, stat, key, statistic, *args):
         """
@@ -454,8 +448,8 @@ class UVPSpec(object):
 
         dtype = statistic.dtype
         if stat not in self.stats_array.keys():
-            self.stats_array[stat] = odict([[i, -99.*np.ones(self.data_array[i].shape, dtype=dtype)]
-                                            for i in range(self.Nspws)])
+            self.stats_array[stat] = odict([[i, np.nan * np.ones(self.data_array[i].shape, dtype=dtype)]
+                                             for i in range(self.Nspws)])
 
         self.stats_array[stat][spw][blpairts, :, pol] = statistic
 
@@ -1172,14 +1166,10 @@ class UVPSpec(object):
                             for j in getattr(self, p)[k].keys():
                                 assert isinstance(getattr(self, p)[k][j], np.ndarray)
                         
-                        try:
-                            dic = getattr(self, p)
-                            for name in dic.keys():
-                                for spw in dic[name].keys():
-                                    dic[name][spw] = a.expected_type(dic[name][spw])
-                            setattr(self, p , dic)
-                        except:
-                            raise AssertionError(err_msg)
+                                try:
+                                    getattr(self, p)[k][j] = a.expected_type(getattr(self, p)[k][j])
+                                except:
+                                    raise AssertionError(err_msg)
     def _clear(self):
         """
         Clear UVPSpec of all parameters. Warning: this cannot be undone.
