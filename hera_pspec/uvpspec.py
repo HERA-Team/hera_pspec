@@ -807,6 +807,10 @@ class UVPSpec(object):
             If True, keep only baseline-pairs whose first _and_ second baseline
             are found in the 'bls' list. Default: False.
         """
+        # Make sure the group is a UVPSpec object
+        assert 'pspec_type' in grp.attrs, "This object is not a UVPSpec object"
+        assert grp.attrs['pspec_type'] == 'UVPSpec', "This object is not a UVPSpec object"
+        
         # Clear all data in the current object
         self._clear()
 
@@ -928,6 +932,9 @@ class UVPSpec(object):
                                  data=self.nsample_array[i], 
                                  dtype=np.float)
     
+        # denote as a uvpspec object
+        group.attrs['pspec_type'] = group.__class__.__name__
+
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
         Write a UVPSpec object to HDF5 file.
@@ -1579,6 +1586,9 @@ def combine_uvpspec(uvps, verbose=True):
                     u.nsample_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.label_1_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
                     u.label_2_array[i, j, k] = u.labels.index(uvps[l].labels[uvps[l].label_1_array[m, n, q]])
+                    if j == 0:
+                        # only update once
+                        u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
 
             u.time_1_array[j] = uvps[l].time_1_array[n]
             u.time_2_array[j] = uvps[l].time_2_array[n]
