@@ -128,6 +128,7 @@ class UVPSpec(object):
                             "OmegaP", "OmegaPP", "label_1_array",
                             "label_2_array"]
         self._meta_attrs = sorted(set(self._all_params) - set(self._dicts) - set(self._meta_dsets) - set(self._dicts_of_dicts))
+
         self._meta = sorted(set(self._meta_dsets).union(set(self._meta_attrs)))
 
         # check all params are covered
@@ -956,7 +957,6 @@ class UVPSpec(object):
 
         self.check(just_meta=just_meta)
 
-
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
                   blpairs=None, times=None, pols=None,
                   only_pairs_in_bls=False):
@@ -1036,23 +1036,24 @@ class UVPSpec(object):
                 group.create_dataset(k, data=getattr(self, k))
 
         # Iterate over spectral windows and create datasets
+        store_cov = hasattr(self, 'cov_array')
         for i in np.unique(self.spw_array):
             group.create_dataset("data_spw{}".format(i),
                                  data=self.data_array[i],
-                                 dtype=np.complex)
+                                 dtype=np.complex128)
             group.create_dataset("wgt_spw{}".format(i),
                                  data=self.wgt_array[i],
-                                 dtype=np.float)
+                                 dtype=np.float64)
             group.create_dataset("integration_spw{}".format(i),
                                  data=self.integration_array[i],
-                                 dtype=np.float)
+                                 dtype=np.float64)
             group.create_dataset("nsample_spw{}".format(i),
                                  data=self.nsample_array[i],
                                  dtype=np.float)
             if hasattr(self, "cov_array"):
                 group.create_dataset("cov_spw{}".format(i),
                                      data=self.cov_array[i],
-                                     dtype=np.complex)
+                                     dtype=np.complex128)
 
         # Store any statistics arrays
         if hasattr(self, "stats_array"):
@@ -1762,7 +1763,7 @@ def combine_uvpspec(uvps, verbose=True):
                     u.label_1_array[i,j,k] = u_lbls[uvps[l].labels[lbl1]]
                     u.label_2_array[i,j,k] = u_lbls[uvps[l].labels[lbl2]]
                     if store_cov:
-                      u.cov_array[i][j, :, :, k]=uvps[l].cov_array[m][n, :, :, q]
+                      u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
         # Populate new LST, time, and blpair arrays
         for j, blpt in enumerate(new_blpts):
             n = blpts_idxs0[j]
@@ -1801,7 +1802,7 @@ def combine_uvpspec(uvps, verbose=True):
 
                     u.data_array[i][j,:,k] = uvps[l].data_array[m][n,:,q]
                     if store_cov:
-                        u.cov_array[i][j, :, :, k]=uvps[l].cov_array[m][n, :, :, q]
+                        u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
                     u.wgt_array[i][j,:,:,k] = uvps[l].wgt_array[m][n,:,:,q]
                     u.integration_array[i][j,k] = uvps[l].integration_array[m][n,q]
                     u.nsample_array[i][j,k] = uvps[l].integration_array[m][n,q]
