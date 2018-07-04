@@ -157,7 +157,10 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         ints = odict()
         nsmp = odict()
         cov = odict()
-        store_cov = 'cov_spw0' in h5file
+        if h5file is not None:
+            store_cov = 'cov_spw0' in h5file
+        else:
+            store_cov = hasattr(uvp, 'cov_array')
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 data[s] = h5file['data_spw{}'.format(s)][blp_select, :, pol_select]
