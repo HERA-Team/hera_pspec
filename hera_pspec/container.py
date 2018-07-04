@@ -2,6 +2,9 @@ import numpy as np
 import h5py
 from hera_pspec.uvpspec import UVPSpec
 import hera_pspec.version as version
+from hera_pspec import utils
+import argparse
+
 
 class PSpecContainer(object):
     """
@@ -31,8 +34,7 @@ class PSpecContainer(object):
         # Open file ready for reading and/or writing
         self.data = None
         self._open()
-    
-    
+
     def _open(self):
         """
         Open HDF5 file ready for reading/writing.
@@ -41,10 +43,16 @@ class PSpecContainer(object):
         # allow non-destructive operations!
         mode = 'a' if self.mode == 'rw' else 'r'
         self.data = h5py.File(self.filename, mode)
+
+        # Update header info
         if self.mode == 'rw':
+            # Update header
             self._update_header()
-    
-    
+            
+            # Denote as Container
+            if 'pspec_type' not in self.data.attrs.keys():
+                self.data.attrs['pspec_type'] = self.__class__.__name__
+
     def _store_pspec(self, pspec_group, uvp):
         """
         Store a UVPSpec object as group of datasets within the HDF5 file.
@@ -65,8 +73,7 @@ class PSpecContainer(object):
         
         # Write UVPSpec to group
         uvp.write_to_group(pspec_group, run_check=True)
-        
-    
+
     def _load_pspec(self, pspec_group):
         """
         Load a new UVPSpec object from a HDF5 group.
@@ -94,7 +101,6 @@ class PSpecContainer(object):
         uvp.read_from_group(pspec_group)
         return uvp
     
-    
     def _update_header(self):
         """
         Update the header in the HDF5 file with useful metadata, including the 
@@ -110,9 +116,9 @@ class PSpecContainer(object):
             if hdr.attrs['hera_pspec.git_hash'] != version.git_hash:
                 print("WARNING: HDF5 file was created by a different version "
                       "of hera_pspec.")
-        hdr.attrs['hera_pspec.git_hash'] = version.git_hash
-        
-    
+        else:
+            hdr.attrs['hera_pspec.git_hash'] = version.git_hash
+
     def set_pspec(self, group, psname, pspec, overwrite=False):
         """
         Store a delay power spectrum in the container.
@@ -309,3 +315,89 @@ class PSpecContainer(object):
             self.data.close()
         except:
             pass
+
+
+def merge_spectra(psc, uvp_split_str='_x_', ext_split_str='_', verbose=True):
+    """
+    Iterate through a PSpecContainer and, within each group,
+    merge spectra of similar name but different psname extension.
+
+    Power spectra to-be-merged are assumed to follow the naming convention
+
+    dset1_x_dset2_ext1, dset1_x_dset2_ext2, ...
+
+    where _x_ is the default uvp_split_str, and _ is the default ext_split_str.
+    The spectra are first split by uvp_split_str, and then by ext_split_str. In
+    this particular case, all instances of dset1_x_dset2* will be merged together.
+
+    Parameters:
+    -----------
+    uvp_split_str : str
+        The pattern used to split dset1 from dset2 in the psname.
+
+    ext_split_str : str
+        The pattern used to split the dset name from its extension in the psname.
+    """
+    from hera_pspec import uvpspec
+    # load container
+    if isinstance(psc, (str, np.str)):
+        psc = PSpecContainer(psc, mode='rw')
+    else:
+        assert isinstance(psc, PSpecContainer)
+
+    # get groups
+    groups = psc.groups()
+    assert len(groups) > 0, "no groups exist in this Container object"
+
+    # Iterate over groups
+    for grp in groups:
+        # Get spectra in this group
+        spectra = psc.data[grp].keys()
+
+        # Get unique spectra by splitting and then re-joining
+        unique_spectra = []
+        for spc in spectra:
+            sp = utils.flatten([s.split(ext_split_str) for s in spc.split(uvp_split_str)])[:2]
+            sp = uvp_split_str.join(sp)
+            if sp not in unique_spectra:
+                unique_spectra.append(sp)
+
+        # Iterate over each unique spectra, and merge all spectra extensions
+        for spc in unique_spectra:
+            # get merge list
+            to_merge = [spectra[i] for i in np.where([spc in _sp for _sp in spectra])[0]]
+            try:
+                # merge
+                uvps = [psc.get_pspec(grp, uvp) for uvp in to_merge]
+                merged_uvp = uvpspec.combine_uvpspec(uvps, verbose=verbose)
+                # write to file
+                psc.set_pspec(grp, spc, merged_uvp, overwrite=True)
+                # if successful merge, remove uvps
+                for uvp in to_merge:
+                    if uvp != spc:
+                        del psc.data[grp][uvp]
+            except:
+                # merge failed, so continue
+                if verbose:
+                    print "uvp merge failed for spectra {}/{}".format(grp, spc)
+
+
+def get_merge_spectra_argparser():
+    a = argparse.ArgumentParser(
+        description="argument parser for hera_pspec.container.merge_spectra")
+    
+    # Add list of arguments
+    a.add_argument("filename", type=str, 
+                   help="Filename of HDF5 container (PSpecContainer) containing "
+                        "groups / input power spectra.")
+   
+    a.add_argument("--uvp_split_str", default='_x_', type=str, help='The pattern used to split dset1 '
+                   'from dset2 in the psname.')
+    a.add_argument("--ext_split_str", default='_', type=str, help='The pattern used to split the dset '
+                   'names from their extension in the psname (if it exists).')
+    a.add_argument("--verbose", type=bool, default=False, action='store_true', help='Report feedback to stdout.')
+    
+    return a
+
+
+
