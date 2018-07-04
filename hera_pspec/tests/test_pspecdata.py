@@ -99,11 +99,12 @@ class Test_PSpecData(unittest.TestCase):
             _d = uv.UVData()
             _d.read_miriad(os.path.join(DATA_PATH, dfile))
             self.d.append(_d)
+
         # Load standard deviations
-        self.d_std=[]
+        self.d_std = []
         for dfile in dfiles_std:
             _d = uv.UVData()
-            _d.read_miriad(os.path.join(DATA_PATH,dfile))
+            _d.read_miriad(os.path.join(DATA_PATH, dfile))
             self.d_std.append(_d)
 
         # Set trivial weights
@@ -161,6 +162,7 @@ class Test_PSpecData(unittest.TestCase):
         #test TypeError if dsets is dict but dsets_std is not
         nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,[0])
         nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,{'e':0})
+
     def test_labels(self):
         """
         Test that dataset labels work.
@@ -214,7 +216,6 @@ class Test_PSpecData(unittest.TestCase):
         """
         Test the Q = dC/dp function.
         """
-
         vect_length = 50
         x_vect = np.random.normal(size=vect_length) \
                + 1.j * np.random.normal(size=vect_length)
@@ -247,7 +248,6 @@ class Test_PSpecData(unittest.TestCase):
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
         # Sending in sinusoids for x and y should give delta functions
-
 
         # Now do all the same tests from above but for a different number
         # of delay channels
@@ -470,69 +470,67 @@ class Test_PSpecData(unittest.TestCase):
             for norm in test_norm:
                 self.assertAlmostEqual(norm, 1.)
 
-
-    def test_cov_q(self,ndlys=13):
+    def test_cov_q(self, ndlys=13):
         """
         Test that q_hat_cov has the right shape and accepts keys in correct
         format. Also validate with arbitrary number of delays.
         """
         for d in self.d:
-            d.flag_array[:]=False #ensure that there are no flags!
-            d.select(times=np.unique(d.time_array)[:10],frequencies=d.freq_array[0,:16])
+            d.flag_array[:] = False #ensure that there are no flags!
+            d.select(times=np.unique(d.time_array)[:10], frequencies=d.freq_array[0, :16])
         for d_std in self.d_std:
-            d_std.flag_array[:]=False
-            d_std.select(times=np.unique(d_std.time_array)[:10],frequencies=d_std.freq_array[0,:16])
-        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
-        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
+            d_std.flag_array[:] = False
+            d_std.select(times=np.unique(d_std.time_array)[:10], frequencies=d_std.freq_array[0, :16])
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, dsets_std=self.d_std)
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, dsets_std=self.d_std)
         Ntime = self.ds.Ntimes
         self.ds.set_Ndlys(ndlys)
-        #Here is the analytic covariance matrix...
-        chan_x,chan_y=np.meshgrid(range(self.ds.Nfreqs),range(self.ds.Nfreqs))
-        cov_analytic=np.zeros((self.ds.spw_Ndlys,self.ds.spw_Ndlys),dtype=np.complex128)
+        # Here is the analytic covariance matrix...
+        chan_x, chan_y = np.meshgrid(range(self.ds.Nfreqs), range(self.ds.Nfreqs))
+        cov_analytic = np.zeros((self.ds.spw_Ndlys, self.ds.spw_Ndlys), dtype=np.complex128)
         for alpha in range(self.ds.spw_Ndlys):
             for beta in range(self.ds.spw_Ndlys):
-                cov_analytic[alpha,beta]=np.exp(-2j*np.pi*(alpha-beta)*(chan_x-chan_y)/self.ds.spw_Ndlys).sum()
-        key1 = (0,24,38)
-        key2 = (1,25,38)
+                cov_analytic[alpha, beta] = np.exp(-2j*np.pi*(alpha-beta)*(chan_x-chan_y)/self.ds.spw_Ndlys).sum()
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
         print(cov_analytic)
 
         for input_data_weight in ['identity','iC']:
             self.ds.set_weighting(input_data_weight)
-
             for taper in taper_selection:
                 qc = self.ds.cov_q_hat(key1,key2)
                 self.assertTrue(np.allclose(np.array(list(qc.shape)),
-                np.array([self.ds.Ntimes,self.ds.spw_Ndlys,self.ds.spw_Ndlys]),atol=1e-6))
+                np.array([self.ds.Ntimes, self.ds.spw_Ndlys, self.ds.spw_Ndlys]), atol=1e-6))
 
         """
         Now test that analytic Error calculation gives Nchan^2
         """
         self.ds.set_weighting('identity')
-        qc=self.ds.cov_q_hat(key1,key2)
+        qc = self.ds.cov_q_hat(key1, key2)
         self.assertTrue(np.allclose(qc,
-                        np.repeat(cov_analytic[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
+                        np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
         """
         Test lists of keys
         """
         self.ds.set_weighting('identity')
-        qc=self.ds.cov_q_hat([key1],[key2],time_indices=[0])
+        qc=self.ds.cov_q_hat([key1], [key2], time_indices=[0])
         self.assertTrue(np.allclose(qc,
-                        np.repeat(cov_analytic[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
-        self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,200)
-        self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,"watch out!")
+                        np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
+        self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, 200)
+        self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, "watch out!")
+
     def test_cov_p_hat(self):
         """
         Test cov_p_hat, verify on identity.
         """
-        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
-        cov_p=self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),np.array([5.*np.identity(10)]))
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, dsets_std=self.d_std)
+        cov_p = self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),np.array([5.*np.identity(10)]))
         for p in range(10):
             for q in range(10):
-                if p==q:
-                    self.assertTrue(np.isclose(30.,cov_p[0,p,q],atol=1e-6))
+                if p == q:
+                    self.assertTrue(np.isclose(30., cov_p[0, p, q], atol=1e-6))
                 else:
-                    self.assertTrue(np.isclose(0.,cov_p[0,p,q],atol=1e-6))
-
+                    self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
 
     def test_q_hat(self):
         """
@@ -1028,11 +1026,12 @@ class Test_PSpecData(unittest.TestCase):
 
         # test covariance calculation runs with small number of delays
         uvd = copy.deepcopy(self.uvd)
-        uvd_std=copy.deepcopy(self.uvd_std)
+        uvd_std = copy.deepcopy(self.uvd_std)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
-        dsets_std=[uvd_std,uvd_std], beam=self.bm)
+                                 dsets_std=[uvd_std, uvd_std], beam=self.bm)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
+        nt.assert_true(hasattr(uvp, 'cov_array'))
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -1246,7 +1245,8 @@ def test_pspec_run():
                               rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
                               pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
                               dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
-                              cosmo=cosmo, trim_dset_lsts=True, broadcast_dset_flags=True, time_thresh=0.1)
+                              cosmo=cosmo, trim_dset_lsts=True, broadcast_dset_flags=True, time_thresh=0.1,
+                              store_cov=True)
     nt.assert_true("foo_bar" in psc.groups())
     nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
@@ -1254,6 +1254,8 @@ def test_pspec_run():
     nt.assert_equal(uvp.bl_array.tolist(), [37038, 52053])
     nt.assert_equal(uvp.pol_array.tolist(), [-5, -5])
     nt.assert_equal(uvp.cosmo, cosmo)
+    nt.assert_true(hasattr(uvp, 'cov_array'))
+    nt.assert_equal(set(uvp.labels), set(['bar', 'foo']))
     #nt.assert_equal(uvp.labels, [])
     #nt.assert_equal(uvp.get_spw_ranges, [])
 
@@ -1283,7 +1285,6 @@ def test_pspec_run():
 
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-
 
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()

@@ -1,4 +1,3 @@
-
 import numpy as np
 import copy, operator
 from collections import OrderedDict as odict
@@ -44,7 +43,8 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     return blp_select
 
 
-def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, times=None, pols=None, h5file=None):
+def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, times=None,
+            pols=None, h5file=None):
 
     """
     Select function for selecting out certain slices of the data, as well as loading in data from HDF5 file.
@@ -162,8 +162,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         ints = odict()
         nsmp = odict()
         cov = odict()
-        store_cov = hasattr(uvp, 'cov_array')
-
+        store_cov = 'cov_spw0' in h5file
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 data[s] = h5file['data_spw{}'.format(s)][blp_select, :, pol_select]
