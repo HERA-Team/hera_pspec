@@ -924,6 +924,10 @@ class UVPSpec(object):
             If True, keep only baseline-pairs whose first _and_ second baseline
             are found in the 'bls' list. Default: False.
         """
+        # Make sure the group is a UVPSpec object
+        assert 'pspec_type' in grp.attrs, "This object is not a UVPSpec object"
+        assert grp.attrs['pspec_type'] == 'UVPSpec', "This object is not a UVPSpec object"
+        
         # Clear all data in the current object
         self._clear()
 
@@ -1057,7 +1061,9 @@ class UVPSpec(object):
                 for i in np.unique(self.spw_array):
                     group.create_dataset("stats_{}_{}".format(s, i),
                                          data=data[i], dtype=data[i].dtype)
-
+    
+        # denote as a uvpspec object
+        group.attrs['pspec_type'] = group.__class__.__name__
 
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """

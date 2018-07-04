@@ -216,6 +216,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         # load meta-data
         pass
 
+
 def _blpair_to_antnums(blpair):
     """
     Convert baseline-pair integer to nested tuple of antenna numbers.
