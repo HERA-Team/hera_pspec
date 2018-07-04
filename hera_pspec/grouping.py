@@ -1,9 +1,12 @@
 import numpy as np
 from collections import OrderedDict as odict
 from hera_pspec import uvpspec_utils as uvputils
-#from hera_pspec import UVPSpec
+from hera_pspec import utils, version
 import random
 import copy
+import argparse
+from astropy import stats as astats
+import os
 
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
@@ -228,9 +231,9 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
     if not inplace: return out_list
 
 
-def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
-                    blpair_weights=None, error_field=None,
-                    normalize_weights=True, inplace=True):
+def average_spectra(uvp_in, blpair_groups=None, time_avg=False, 
+                    blpair_weights=None, normalize_weights=True, inplace=True,
+                    add_to_history=''):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
     each spectrum's integration time.
@@ -291,6 +294,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     inplace : bool, optional
         If True, edit data in self, else make a copy and return. Default:
         True.
+
+    add_to_history : str, optional
+        Added text to add to file history.
 
     Notes
     -----
@@ -579,12 +585,16 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     elif hasattr(uvp, "stats_array"):
         delattr(uvp, "stats_array")
 
+    # Add to history
+    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
+
     # Validity check
     uvp.check()
 
     # Return
     if inplace == False:
         return uvp
+
 
 def fold_spectra(uvp):
     """
@@ -732,14 +742,16 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
     """
     # Validate input data
     from hera_pspec import UVPSpec
-    if isinstance(uvp_list, UVPSpec): uvp_list = [uvp_list,]
+    single_uvp = False
+    if isinstance(uvp_list, UVPSpec):
+        single_uvp = True
+        uvp_list = [uvp_list,]
     assert isinstance(uvp_list, list), \
            "uvp_list must be a list of UVPSpec objects"
 
     # Check that uvp_list contains UVPSpec objects with the correct dimensions
-    for uvp in uvp_list:
-        assert isinstance(uvp, UVPSpec), \
-               "uvp_list must be a list of UVPSpec objects"
+    assert np.all([isinstance(uvp, UVPSpec) for uvp in uvp_list]), \
+           "uvp_list must be a list of UVPSpec objects"
 
     # Check for same length of time axis if no time averaging will be done
     if not time_avg:
@@ -760,7 +772,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
                         for blpg in blpair_groups]
         blpair_groups = new_blp_grps
 
-    # Homogenise input UVPSpec objects in terms of available polarizations
+    # Homogenise input UVPSpec objects in terms of available polarizations 
     # and spectral windows
     if len(uvp_list) > 1:
         uvp_list = select_common(uvp_list, spws=True, pols=True, inplace=False)
@@ -783,8 +795,8 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
     # Set random seed if specified
     if seed is not None: np.random.seed(seed)
 
-    # Sample with replacement from the full list of available baseline-pairs
-    # in each group, and create a blpair_group and blpair_weights entry for
+    # Sample with replacement from the full list of available baseline-pairs 
+    # in each group, and create a blpair_group and blpair_weights entry for 
     # each UVPSpec object
     blpair_grps_list = [[] for uvp in uvp_list]
     blpair_wgts_list = [[] for uvp in uvp_list]
@@ -797,7 +809,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
         avail_flat = [blp for lst in avail for blp in lst]
         num_avail = len(avail_flat)
 
-        # Draw set of random integers (with replacement) and convert into
+        # Draw set of random integers (with replacement) and convert into 
         # list of weights for each blpair in each UVPSpec
         draw = np.random.randint(low=0, high=num_avail, size=num_avail)
         wgt = np.array([(draw == i).sum() for i in range(num_avail)])
@@ -811,7 +823,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
             blpair_wgts_list[i].append( list(_wgts) )
             j += n_blps
 
-    # Loop over UVPSpec objects and calculate averages in each blpair group,
+    # Loop over UVPSpec objects and calculate averages in each blpair group, 
     # using the bootstrap-sampled blpair weights
     uvp_avg = []
     for i, uvp in enumerate(uvp_list):
@@ -821,4 +833,265 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
         uvp_avg.append(_uvp)
 
     # Return list of averaged spectra for now
-    return uvp_avg, blpair_wgts_list
+    if single_uvp:
+        return uvp_avg[0], blpair_wgts_list[0]
+    else:
+        return uvp_avg, blpair_wgts_list
+
+
+def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=1000, seed=0,
+                              normal_std=True, robust_std=True, conf_ints=None, bl_error_tol=1.0,
+                              add_to_history='', verbose=False):
+    """
+    Given a UVPSpec object, generate bootstrap resamples of its average
+    and calculate their spread as an estimate of the errorbar on the
+    uniformly averaged data.
+
+    Parameters:
+    -----------
+    uvp : UVPSpec object
+        A UVPSpec object from which to bootstrap resample & average.
+
+    blpair_groups : list
+        A list of baseline-pair groups to bootstrap resample over. Default
+        behavior is to calculate and use redundant baseline groups.
+
+    time_avg : boolean
+        If True, average spectra before bootstrap resampling
+
+    Nsamples : int
+        Number of times to perform bootstrap resample in estimating errorbar.
+
+    seed : int
+        Random seed to use in bootstrap resampling.
+    
+    normal_std : bool
+        If True, calculate an error estimate from numpy.std
+
+    robust_std : bool
+        If True, calculate an error estimate from astropy.stats.biweight_midvariance
+
+    conf_ints : list
+        A list of integer confidence interval percentages (0 < conf_int < 100) to use
+        as an error estimate, using numpy.percentile
+
+    bl_error_tol : float
+        Redundancy error tolerance of redundant groups if blpair_groups is None.
+
+    add_to_history : str
+        String to add to history of output uvp_avg object.
+
+    verbose : bool
+        If True, report feedback to stdout.
+    
+    Returns:
+    --------
+    uvp_avg : UVPSpec object
+        A uvp holding the uniformaly averaged data in data_array, and the various error
+        estimates calculated from the bootstrap resampling.
+    """
+    from hera_pspec import UVPSpec
+    # type check
+    assert isinstance(uvp, (UVPSpec, str, np.str)), "uvp must be fed as a UVPSpec object or filepath"
+    if isinstance(uvp, (str, np.str)):
+        _uvp = UVPSpec()
+        _uvp.read_hdf5(uvp)
+        uvp = _uvp
+
+    # Check for blpair_groups
+    if blpair_groups is None:
+        blpair_groups, _, _, _ = utils.get_blvec_reds(uvp, bl_error_tol=bl_error_tol)
+
+    # Uniform average
+    uvp_avg = average_spectra(uvp, blpair_groups=blpair_groups, time_avg=time_avg, inplace=False)
+
+    # Iterate over Nsamples and create bootstrap resamples
+    uvp_boots = []
+    uvp_wgts = []
+    for i in range(Nsamples):
+        # resample
+        boot, wgt = bootstrap_average_blpairs(uvp, blpair_groups=blpair_groups, time_avg=time_avg, seed=seed)
+        uvp_boots.append(boot)
+        uvp_wgts.append(wgt)
+
+    # get all keys in uvp_avg and get data from each uvp_boot
+    keys = uvp_avg.get_all_keys()
+    uvp_boot_data = odict([(k, np.array(map(lambda u: u.get_data(k), uvp_boots))) for k in keys])
+
+    # calculate various error estimates
+    stats_array = odict()
+    if normal_std:
+        stats_array["normal_std"] = odict()
+        for k in keys:
+            stats_array["normal_std"][k] = np.std(uvp_boot_data[k].real, axis=0) \
+                                            + 1j*np.std(uvp_boot_data[k].imag, axis=0)
+    if robust_std:
+        stats_array["robust_std"] = odict()
+        for k in keys:
+            stats_array["robust_std"][k] = np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].real, axis=0)) \
+                                            + 1j*np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].imag, axis=0))
+    if conf_ints is not None:
+        for ci in conf_ints:
+            ci_tag = "conf_int_{:05.2f}".format(ci)
+            stats_array[ci_tag]
+            for k in keys:
+                stats_array[ci_tag][k] = np.percentile(uvp_boot_data[k].real, ci, axis=0) \
+                                            + 1j*np.percentile(uvp_boot_data[k].imag, ci, axis=0)
+
+    # Set stats array in uvp_avg
+
+    # Update history
+    uvp_avg.history = "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}" \
+                      "".format(version.git_hash[:15], Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
+
+    return uvp_avg, uvp_boots, uvp_wgts
+
+
+def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Nsamples=1000, seed=0,
+                  normal_std=True, robust_std=True, conf_ints=None, keep_samples=False,
+                  bl_error_tol=1.0, overwrite=False, add_to_history='', verbose=True):
+    """
+    Run bootstrap resampling on a PSpecContainer object to estimate errorbars.
+    For each group/spectrum specified in the PSpecContainer, this function produces
+        1. uniform average of UVPSpec objects in the group
+        2. various error estimates from the bootstrap resamples
+       (3.) series of bootstrap resamples of UVPSpec average (optional)
+
+    The output of 1. and 2. are placed in a *_avg spectrum, while the output of 3.
+    is placed in *_bs0, *_bs1, *_bs2 etc. objects. 
+
+    Parameters:
+    -----------
+    filename : str or PSpecContainer object
+        PSpecContainer object to run bootstrapping on.
+
+    spectra : list
+        A list of power spectra names (with group prefix) to run bootstrapping on.
+        Default is all spectra in object. Ex. ["group1/psname1", "group1/psname2", ...]
+
+    blpair_groups : list
+        A list of baseline-pair groups to bootstrap over. Default is to solve for and use
+        redundant baseline groups. Ex: [ [((1, 2), (2, 3)), ((1, 2), (3, 4))], 
+                                         [((1, 3), (2, 4)), ((1, 3), (3, 5))],
+                                         ...
+                                        ]
+
+    time_avg : bool
+        If True, perform time-average of power spectra in averaging step.
+
+    Nsamples : int
+        The number of samples in bootstrap resampling to generate.
+
+    seed : int
+        The random seed to initialize with before drwaing bootstrap samples.
+
+    normal_std : bool
+        If True, use np.std to calculate a "normal" standard deviation of BS samples.
+
+    robust_std : bool
+        If True, use astropy.stats.biweight_midvariance(..., c=9.0) to get a "robust"
+        standard deviation of the BS samples.
+
+    conf_ints : list
+        A list of confidence interval percentages (0 < ci < 100) to calculate from
+        BS samples using np.percentile.
+
+    keep_samples : bool
+        If True, store each bootstrap resample in PSpecContainer object with *_bs# suffix.
+
+    bl_error_tol : float
+        If calculating redundant baseline groups, this is the redundancy tolerance in meters.
+
+    overwrite : bool
+        If True, overwrite output files if they already exist.
+
+    add_to_history : str
+        String to append to history in bootstrap_resample_error() call.
+
+    verbose : bool
+        If True, report feedback to stdout.
+    """
+    from hera_pspec import uvpspec
+    from hera_pspec import PSpecContainer
+    # type check
+    if isinstance(filename, (str, np.str)):
+        psc = PSpecContainer(filename)
+    elif isinstance(filename, PSpecContainer):
+        psc = filename
+    else:
+        raise AssertionError("filename must be a PSpecContainer or filepath to one")
+
+    # get groups in psc
+    groups = psc.groups()
+    assert len(groups) > 0, "No groups exist in PSpecContainer"
+
+    # get spectra if not fed
+    all_spectra = utils.flatten([map(lambda s: os.path.join(grp, s), psc.spectra(grp)) for grp in groups])
+    if spectra is None:
+        spectra = all_spectra
+    else:
+        spectra = [spc for spc in spectra if spc in all_spectra]
+        assert len(spectra) > 0, "no specified spectra exist in PSpecContainer"
+
+    # iterate over spectra
+    for spc_name in spectra:
+        # split group and spectra names
+        grp, spc = spc_name.split('/')
+
+        # run boostrap_resampled_error
+        uvp = psc.get_pspec(grp, spc)
+        (uvp_avg, uvp_boots,
+         uvp_wgts) = bootstrap_resampled_error(uvp, blpair_groups=blpair_groups, time_avg=time_avg,
+                                              Nsamples=Nsamples, seed=seed, normal_std=normal_std,
+                                              robust_std=robust_std, conf_ints=conf_ints,
+                                              bl_error_tol=bl_error_tol, add_to_history=add_to_history,
+                                              verbose=verbose)
+
+        # set averaged uvp
+        psc.set_pspec(grp, spc+"_avg", uvp_avg, overwrite=overwrite)
+
+        # if keep_samples write uvp_boots
+        if keep_samples:
+            for i, uvpb in enumerate(uvp_boots):
+                psc.set_pspec(grp, spc+"_bs{}".format(i), uvpb, overwrite=overwrite)
+                
+
+def get_bootstrap_run_argparser():
+    a = argparse.ArgumentParser(
+           description="argument parser for grouping.bootstrap_run()")
+    
+    def list_of_lists_of_tuples(s):
+        s = map(lambda x: map(int, x.split()), s.split(','))
+        return s
+
+    # Add list of arguments
+    a.add_argument("filename", type=str, 
+                   help="Filename of HDF5 container (PSpecContainer) containing "
+                        "input power spectra.")
+    a.add_argument("--spectra", default=None, type=str, nargs='+',
+                   help="List of power spectra names (with group prefix) to bootstrap over.")
+    a.add_argument("--blpair_groups", default=None, type=list_of_lists_of_tuples,
+                   help="List of baseline-pair groups (must be space-delimited blpair integers) "
+                        "wrapped in quotes to use in resampling. Default is to solve for and use redundant groups (recommended)."
+                        "Ex: --blpair_groups '101102103104 102103014015, 101013102104' --> "
+                        "[ [((1, 2), (3, 4)), ((2, 3), (4, 5))], [((1, 3), (2, 4))], ...]")
+    a.add_argument("--time_avg", default=False, type=bool, help="Perform time-average in averaging step.")
+    a.add_argument("--Nsamples", default=100, type=int, help="Number of bootstrap resamples to generate.")
+    a.add_argument("--seed", default=0, type=int, help="random seed to initialize bootstrap resampling with.")
+    a.add_argument("--normal_std", default=True, type=bool,
+                    help="Whether to calculate a 'normal' standard deviation (np.std).")
+    a.add_argument("--robust_std", default=False, type=bool,
+                    help="Whether to calculate a 'robust' standard deviation (astropy.stats.biweight_midvariance).")
+    a.add_argument("--conf_ints", default=None, type=float, nargs='+',
+                    help="Confidence intervals (precentage from 0 < ci < 100) to calculate.")
+    a.add_argument("--keep_samples", default=False, action='store_true', type=bool,
+                    help="If True, store bootstrap resamples in PSpecContainer object with *_bs# extension.")
+    a.add_argument("--bl_error_tol", type=float, default=1.0,
+                    help="Baseline redudancy tolerance if calculating redundant groups.")
+    a.add_argument("--overwrite", default=False, action='store_true', type=bool, help="overwrite outputs if they exist.")
+    a.add_argument("--add_to_history", default='', type=str, help="String to add to history of power spectra.")
+    a.add_argument("--verbose", default=False, action='store_true', help="report feedback to stdout.")
+    
+    return a
+
+>>>>>>> first round of code edits for grouping.bootstrap_run function

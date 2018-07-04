@@ -213,5 +213,9 @@ class Test_grouping(unittest.TestCase):
                                times=True, pols=True, inplace=True)
         self.assertEqual(uvp1, uvp2)
         
+
+def test_get_pspec_bootstrap_argparser():
+    a = grouping.get_pspec_bootstrap_argparser()
+
 if __name__ == "__main__":
     unittest.main()
