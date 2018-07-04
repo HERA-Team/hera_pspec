@@ -559,6 +559,14 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     polarization and group labels, construct a master list of
     blpair-group-pol pairs using utils.construct_reds().
 
+    A group is a fieldname in the visibility files that denotes the
+    "type" of dataset. For example, the group field in the following files
+        zen.even.LST.1.01.xx.HH.uv
+        zen.odd.LST.1.01.xx.HH.uv
+    are the "even" and "odd" field, and specifies the two time binning groups.
+    To form cross spectra between these two files, one would feed a group_pair
+    of: group_pairs = [('even', 'odd'), ...].
+
     A baseline-pair is formed by self-matching unique-files in the
     glob-parsed master list, and then string-formatting-in appropriate 
     pol and group selections given pol_pairs and group_pairs. Those two
@@ -577,6 +585,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
 
     group_pairs : list
         List of len-2 group tuples to use in forming cross spectra.
+        See top of doc-string for an explanation of a "group" in this context.
         Ex: [('grp1', 'grp1'), ('grp2', 'grp2'), ...]
 
     exclude_auto_bls : bool

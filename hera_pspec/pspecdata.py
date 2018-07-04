@@ -2476,7 +2476,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         Default is to form all N_choose_2 pairs from input dsets.
 
     psname_ext : string
-        A string extension for the psname in the container object.
+        A string extension for the psname in the PSpecContainer object.
+        Example: 'group/psname{}'.format(psname_ext)
 
     spw_ranges : list of len-2 integer tuples
         List of tuples specifying the spectral window range. See
@@ -2564,8 +2565,9 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         If True, broadcast dset flags across time using fractional time_thresh.
 
     time_thresh : float
-        Fractional flagging threshold to trigger broadcast across time if
-        broadcast_dset_flags is True.
+        Fractional flagging threshold, above which a broadcast of flags across
+        time is triggered (if broadcast_dset_flags == True). This is done
+        independently for each baseline's visibility waterfall.
 
     Jy2mK : boolean
         If True, use the beam model provided to convert the units of each
@@ -2627,6 +2629,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
     else:
         assert not np.any(['_' in dl for dl in dset_labels]), "cannot accept underscores in input dset_labels: {}".format(dset_labels)
+        # enforce unique dset labels
+        assert len(set(dset_labels)) == len(dset_labels), "Found repeated dest labels: each one must be unique"
 
     # load data if fed as filepaths
     if isinstance(dsets[0], (str, np.str)):
@@ -2635,6 +2639,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
             t0 = time.time()
             _dsets = []
             for i, dset in enumerate(dsets):
+                utils.log("Reading {} / {} datasets...".format(i+1, Ndsets), lvl=1, verbose=verbose)
                 # read data
                 uvd = UVData()
                 uvd.read_miriad(dset, bls=bls, polarizations=pols)
