@@ -1775,9 +1775,9 @@ class PSpecData(object):
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
 
-        # raise error if none of pols are consistent witht the UVData objects
-        if len(spw_pol)==0:
-            raise ValueError("None of the specified polarization pair match that of the UVData objects")
+            # raise error if none of pols are consistent witht the UVData objects
+            if len(spw_pol)==0:
+                raise ValueError("None of the specified polarization pair match that of the UVData objects")
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
@@ -2052,6 +2052,8 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
         List of strings to label the input datasets. These labels form
         the psname of each UVPSpec object. Default is "dset0_x_dset1"
         where 0 and 1 are replaced with the dset index in dsets.
+        Note: it is not advised to put underscores in the dset label names,
+        as some downstream functions assume this to be the case.
 
     dset_pairs : list of len-2 integer tuples
         List of tuples specifying the dset pairs to use in OQE estimation.
@@ -2206,6 +2208,8 @@ def pspec_run(dsets, filename, groupname=None, dset_labels=None, dset_pairs=None
 
     if dset_labels is None:
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
+    else:
+        assert not np.any(['_' in dl for dl in dset_labels]), "cannot accept underscores in input dset_labels: {}".format(dset_labels)
 
     # load data if fed as filepaths
     if isinstance(dsets[0], (str, np.str)):
@@ -2367,6 +2371,7 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
+    a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
     return a
 
