@@ -91,12 +91,12 @@ class UVPSpec(object):
                             "bl_vecs", "bl_array", "channel_width", "telescope_location", "weighting",
                             "vis_units", "norm_units", "taper", "norm", "nsample_array", 'lst_avg_array',
                             'time_avg_array', 'folded', "scalar_array", "labels", "label_1_array",
-                            "label_2_array","store_cov"]
+                            "label_2_array"]
 
         # all parameters must fall into one and only one of the following groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys", "Nspws", "Ndlys",
                             "Npols", "Nfreqs", "history", "Nbls", "channel_width", "weighting",
-                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile" ,'folded',"store_cov"]
+                            "vis_units", "norm", "norm_units", "taper", "cosmo", "beamfile", 'folded']
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array", "lst_1_array",
                           'lst_avg_array', 'time_avg_array', "lst_2_array", "time_1_array",
                           "time_2_array", "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
@@ -105,7 +105,6 @@ class UVPSpec(object):
         self._dicts = ["data_array", "wgt_array", "integration_array", "nsample_array", "cov_array"]
 
         # define which attributes are considred meta data. Large attrs should be constructed as datasets
-
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array", "time_2_array", "blpair_array",
                             "bl_vecs", "bl_array", 'lst_avg_array', 'time_avg_array', 'OmegaP', 'OmegaPP',
                             "label_1_array", "label_2_array"]
@@ -837,7 +836,6 @@ class UVPSpec(object):
 
         self.check(just_meta=just_meta)
 
-
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
                   blpairs=None, times=None, pols=None,
                   only_pairs_in_bls=False):
@@ -916,23 +914,24 @@ class UVPSpec(object):
                 group.create_dataset(k, data=getattr(self, k))
 
         # Iterate over spectral windows and create datasets
+        store_cov = hasattr(self, 'cov_array')
         for i in np.unique(self.spw_array):
             group.create_dataset("data_spw{}".format(i),
                                  data=self.data_array[i],
-                                 dtype=np.complex)
+                                 dtype=np.complex128)
             group.create_dataset("wgt_spw{}".format(i),
                                  data=self.wgt_array[i],
-                                 dtype=np.float)
+                                 dtype=np.float64)
             group.create_dataset("integration_spw{}".format(i),
                                  data=self.integration_array[i],
-                                 dtype=np.float)
+                                 dtype=np.float64)
             group.create_dataset("nsample_spw{}".format(i),
                                  data=self.nsample_array[i],
-                                 dtype=np.float)
-            if self.store_cov:
+                                 dtype=np.float64)
+            if store_cov:
                 group.create_dataset("cov_spw{}".format(i),
                                      data=self.cov_array[i],
-                                     dtype=np.complex)
+                                     dtype=np.complex128)
 
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
@@ -1502,11 +1501,10 @@ def combine_uvpspec(uvps, verbose=True):
     Nblpairts = len(new_blpts)
     Npols = len(new_pols)
 
-
     # store covariance only if all uvps have stored covariance.
     store_cov = np.all([hasattr(uvp,'cov_array') for uvp in uvps])
-    # Create new empty data arrays and fill spw arrays
 
+    # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
     u.wgt_array = odict()
@@ -1525,7 +1523,7 @@ def combine_uvpspec(uvps, verbose=True):
         u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if store_cov:
-            u.cov_array[i]=np.empty((Nblpairts, spw[2], spw[2], Npols), np.complex128)
+            u.cov_array[i] = np.empty((Nblpairts, spw[2], spw[2], Npols), np.complex128)
         
         # Set frequencies and delays
         spw_Nfreqs = spw[-1]
@@ -1607,7 +1605,7 @@ def combine_uvpspec(uvps, verbose=True):
                     u.label_1_array[i,j,k] = u_lbls[uvps[l].labels[lbl1]]
                     u.label_2_array[i,j,k] = u_lbls[uvps[l].labels[lbl2]]
                     if store_cov:
-                      u.cov_array[i][j, :, :, k]=uvps[l].cov_array[m][n, :, :, q]
+                      u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
         # Populate new LST, time, and blpair arrays
         for j, blpt in enumerate(new_blpts):
             n = blpts_idxs0[j]
@@ -1646,7 +1644,7 @@ def combine_uvpspec(uvps, verbose=True):
 
                     u.data_array[i][j,:,k] = uvps[l].data_array[m][n,:,q]
                     if store_cov:
-                        u.cov_array[i][j, :, :, k]=uvps[l].cov_array[m][n, :, :, q]
+                        u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
                     u.wgt_array[i][j,:,:,k] = uvps[l].wgt_array[m][n,:,:,q]
                     u.integration_array[i][j,k] = uvps[l].integration_array[m][n,q]
                     u.nsample_array[i][j,k] = uvps[l].integration_array[m][n,q]
