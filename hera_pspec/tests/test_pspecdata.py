@@ -1279,6 +1279,7 @@ def test_pspec_run():
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=(1, 2), verbose=False)
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=[1, 2], verbose=False)
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", beam=1, verbose=False)
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", dset_labels=['hi', 'hi'], verbose=False)
 
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
