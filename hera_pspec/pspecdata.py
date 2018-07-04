@@ -2772,6 +2772,7 @@ def get_pspec_run_argparser():
 
     a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
     a.add_argument("filename", type=str, help="Output filename of HDF5 container.")
+    a.add_argument("--dsets_std", nargs='*', default=None, type=str, help="List of miriad filepaths to visibility standard deviations.")
     a.add_argument("--groupname", default=None, type=str, help="Groupname for the UVPSpec objects in the HDF5 container.")
     a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE wrapped in quotes. Ex: '0 0, 1 1' --> [(0, 0), (1, 1), ...]")
     a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
@@ -2795,6 +2796,7 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_len_range", default=(0, 1e10), nargs='+', type=float, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
     a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
+    a.add_argument("--store_cov", default=False, action='store_true', type=bool, help="Compute and store covariance of bandpowers given dsets_std files.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
