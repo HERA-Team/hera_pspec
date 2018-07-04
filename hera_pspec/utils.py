@@ -669,4 +669,88 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     return groupings
 
 
+def get_blvec_reds(blvecs, bl_error_tol=0):
+    """
+    Given a blvecs dictionary, form groups of baseline-pair objects based on
+    redundancy in ENU coordinates.
 
+    Parameters:
+    -----------
+    blvecs : dictionary (or UVPSpec object)
+        A dictionary with baseline vectors as values. Alternatively, this
+        can be a UVPSpec object with baseline-pairs and baseline vectors.
+
+    bl_error_tol : int
+        Redundancy tolerance of baseline vector in meters.
+
+    Returns:
+    --------
+    red_bl_grp : list
+        A list of baseline groups, ordered by ascending baseline length.
+
+    red_bl_len : list
+        A list of baseline lengths in meters for each bl group
+
+    red_bl_ang : list
+        A list of baseline angles in degrees for each bl group
+
+    red_bl_tag : list
+        A list of baseline string tags denoting bl length and angle
+    """
+    from hera_pspec import UVPSpec
+    # type check
+    assert isinstance(blvecs, (dict, odict, UVPSpec)), "blpairs must be fed as a dict or UVPSpec"
+    if isinstance(blvecs, UVPSpec):
+        # get baseline vectors
+        uvp = blvecs
+        bls = uvp.bl_array
+        bl_vecs = uvp.get_ENU_bl_vecs()[:, :2]
+        blvecs = dict(zip(map(uvp.bl_to_antnums, bls), bl_vecs))
+        # get baseline-pairs
+        blpairs = uvp.get_blpairs()
+        # form dictionary
+        _blvecs = odict()
+        for blp in blpairs:
+            bl1 = blp[0]
+            bl2 = blp[1]
+            _blvecs[blp] = (blvecs[bl1] + blvecs[bl2]) / 2.
+        blvecs = _blvecs
+
+    # create empty lists
+    red_bl_grp = []
+    red_bl_vec = []
+    red_bl_len = []
+    red_bl_ang = []
+    red_bl_tag = []
+
+    # iterate over each baseline in blvecs
+    for bl in blvecs.keys():
+        # get bl vector and properties
+        bl_vec = blvecs[bl][:2]
+        bl_len = np.linalg.norm(bl_vec)
+        bl_ang = np.arctan2(*bl_vec[::-1]) * 180 / np.pi
+        if bl_ang < 0: bl_ang = (bl_ang + 180) % 360
+        bl_tag = "{:03.0f}_{:03.0f}".format(bl_len, bl_ang)
+
+        # append to list if unique within tolerance
+        match = [np.all(np.isclose(blv, bl_vec, bl_error_tol)) for blv in red_bl_vec]
+        if np.any(match):
+            match_id = np.where(match)[0][0]
+            red_bl_grp[match_id].append(bl)
+
+        # else create new list
+        else:
+            red_bl_grp.append([bl])
+            red_bl_vec.append(bl_vec)
+            red_bl_len.append(bl_len)
+            red_bl_ang.append(bl_ang)
+            red_bl_tag.append(bl_tag)
+
+    # order based on tag
+    order = np.argsort(red_bl_tag)
+    red_bl_grp = [red_bl_grp[i] for i in order]
+    red_bl_len = [red_bl_len[i] for i in order]
+    red_bl_ang = [red_bl_ang[i] for i in order]
+    red_bl_tag = [red_bl_tag[i] for i in order]
+
+    return red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag
