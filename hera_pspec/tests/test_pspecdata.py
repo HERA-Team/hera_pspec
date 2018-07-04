@@ -154,6 +154,16 @@ class Test_PSpecData(unittest.TestCase):
         # Test exception when not a UVData instance
         self.assertRaises(TypeError, ds.add, [1], [None])
 
+        # Test get weights when fed a UVData for weights
+        ds = pspecdata.PSpecData(dsets=[self.uvd, self.uvd], wgts=[self.uvd, self.uvd])
+        key = (0, (24, 25), 'xx')
+        nt.assert_true(np.all(np.isclose(ds.x(key), ds.w(key))))
+
+        # Test some exceptions
+        ds = pspecdata.PSpecData()
+        nt.assert_raises(ValueError, ds.get_G, key, key)
+        nt.assert_raises(ValueError, ds.get_H, key, key)
+
     def test_add_data(self):
         """
         Test adding non UVData object.
@@ -1266,6 +1276,16 @@ def test_pspec_run():
                               blpairs=[((500, 501), (600, 601))])
     nt.assert_equal(psc, None)
     nt.assert_false(os.path.exists("./out.h5"))
+    uvds = []
+    for f in fnames:
+        uvd = UVData()
+        uvd.read_miriad(f)
+        uvds.append(uvd)
+    psc = pspecdata.pspec_run(uvds, "./out.hdf5", dsets_std=fnames_std, Jy2mK=False, verbose=False, overwrite=True,
+                              blpairs=[((500, 501), (600, 601))])
+    nt.assert_equal(psc, None)
+    nt.assert_false(os.path.exists("./out.h5"))
+
 
     # test when data is loaded, but no blpairs match
     if os.path.exists("./out.hdf5"):
