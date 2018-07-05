@@ -317,7 +317,7 @@ class PSpecContainer(object):
             pass
 
 
-def merge_spectra(psc, uvp_split_str='_x_', ext_split_str='_', verbose=True):
+def merge_spectra(psc, dset_split_str='_x_', ext_split_str='_', verbose=True):
     """
     Iterate through a PSpecContainer and, within each group,
     merge spectra of similar name but different psname extension.
@@ -326,13 +326,17 @@ def merge_spectra(psc, uvp_split_str='_x_', ext_split_str='_', verbose=True):
 
     dset1_x_dset2_ext1, dset1_x_dset2_ext2, ...
 
-    where _x_ is the default uvp_split_str, and _ is the default ext_split_str.
-    The spectra are first split by uvp_split_str, and then by ext_split_str. In
+    where _x_ is the default dset_split_str, and _ is the default ext_split_str.
+    The spectra names are first split by dset_split_str, and then by ext_split_str. In
     this particular case, all instances of dset1_x_dset2* will be merged together.
+
+    In order to merge spectra names with no dset distinction and only an extension,
+    feed dset_split_str as '' or None. Example, to merge together: uvp_1, uvp_2, uvp_3
+    feed dset_split_str=None and ext_split_str='_'.
 
     Parameters:
     -----------
-    uvp_split_str : str
+    dset_split_str : str
         The pattern used to split dset1 from dset2 in the psname.
 
     ext_split_str : str
@@ -357,8 +361,11 @@ def merge_spectra(psc, uvp_split_str='_x_', ext_split_str='_', verbose=True):
         # Get unique spectra by splitting and then re-joining
         unique_spectra = []
         for spc in spectra:
-            sp = utils.flatten([s.split(ext_split_str) for s in spc.split(uvp_split_str)])[:2]
-            sp = uvp_split_str.join(sp)
+            if dset_split_str == '' or dset_split_str is None:
+                sp = spc.split(ext_split_str)[0]
+            else:
+                sp = utils.flatten([s.split(ext_split_str) for s in spc.split(dset_split_str)])[:2]
+                sp = dset_split_str.join(sp)
             if sp not in unique_spectra:
                 unique_spectra.append(sp)
 
@@ -391,13 +398,10 @@ def get_merge_spectra_argparser():
                    help="Filename of HDF5 container (PSpecContainer) containing "
                         "groups / input power spectra.")
    
-    a.add_argument("--uvp_split_str", default='_x_', type=str, help='The pattern used to split dset1 '
+    a.add_argument("--dset_split_str", default='_x_', type=str, help='The pattern used to split dset1 '
                    'from dset2 in the psname.')
     a.add_argument("--ext_split_str", default='_', type=str, help='The pattern used to split the dset '
                    'names from their extension in the psname (if it exists).')
-    a.add_argument("--verbose", type=bool, default=False, action='store_true', help='Report feedback to stdout.')
+    a.add_argument("--verbose", default=False, action='store_true', help='Report feedback to stdout.')
     
     return a
-
-
-
