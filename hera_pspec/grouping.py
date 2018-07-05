@@ -562,7 +562,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups=None, time_avg=False, seed
     Generate a bootstrap-sampled average over a set of power spectra. The 
     sampling is done over user-defined groups of baseline pairs (with 
     replacement).
-    
+
     Multiple UVPSpec objects can be passed to this function. The bootstrap 
     sampling is carried out over all of the available baseline-pairs (in a 
     user-specified group) across all UVPSpec objects. (This means that each 
@@ -707,7 +707,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups=None, time_avg=False, seed
         return uvp_avg, blpair_wgts_list
 
 
-def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=1000, seed=0,
+def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=1000, seed=None,
                               normal_std=True, robust_std=True, conf_ints=None, bl_error_tol=1.0,
                               add_to_history='', verbose=False):
     """
@@ -773,12 +773,15 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
     # Uniform average
     uvp_avg = average_spectra(uvp, blpair_groups=blpair_groups, time_avg=time_avg, inplace=False)
 
+    # initialize a seed
+    if seed is not None: np.random.seed(seed)
+
     # Iterate over Nsamples and create bootstrap resamples
     uvp_boots = []
     uvp_wgts = []
     for i in range(Nsamples):
         # resample
-        boot, wgt = bootstrap_average_blpairs(uvp, blpair_groups=blpair_groups, time_avg=time_avg, seed=seed)
+        boot, wgt = bootstrap_average_blpairs(uvp, blpair_groups=blpair_groups, time_avg=time_avg, seed=None)
         uvp_boots.append(boot)
         uvp_wgts.append(wgt)
 
@@ -801,7 +804,7 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
     if conf_ints is not None:
         for ci in conf_ints:
             ci_tag = "conf_int_{:05.2f}".format(ci)
-            stats_array[ci_tag]
+            stats_array[ci_tag] = odict()
             for k in keys:
                 stats_array[ci_tag][k] = np.percentile(uvp_boot_data[k].real, ci, axis=0) \
                                             + 1j*np.percentile(uvp_boot_data[k].imag, ci, axis=0)
@@ -952,11 +955,11 @@ def get_bootstrap_run_argparser():
                     help="Whether to calculate a 'robust' standard deviation (astropy.stats.biweight_midvariance).")
     a.add_argument("--conf_ints", default=None, type=float, nargs='+',
                     help="Confidence intervals (precentage from 0 < ci < 100) to calculate.")
-    a.add_argument("--keep_samples", default=False, action='store_true', type=bool,
+    a.add_argument("--keep_samples", default=False, action='store_true',
                     help="If True, store bootstrap resamples in PSpecContainer object with *_bs# extension.")
     a.add_argument("--bl_error_tol", type=float, default=1.0,
                     help="Baseline redudancy tolerance if calculating redundant groups.")
-    a.add_argument("--overwrite", default=False, action='store_true', type=bool, help="overwrite outputs if they exist.")
+    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite outputs if they exist.")
     a.add_argument("--add_to_history", default='', type=str, help="String to add to history of power spectra.")
     a.add_argument("--verbose", default=False, action='store_true', help="report feedback to stdout.")
     

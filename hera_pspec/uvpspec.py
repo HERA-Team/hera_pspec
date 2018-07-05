@@ -766,7 +766,6 @@ class UVPSpec(object):
                         (self.bl_vecs + self.telescope_location).T, \
                         *uvutils.LatLonAlt_from_XYZ(self.telescope_location)).T
     
-    
     def read_from_group(self, grp, just_meta=False, spws=None, bls=None, 
                         blpairs=None, times=None, pols=None, 
                         only_pairs_in_bls=False):
@@ -838,7 +837,6 @@ class UVPSpec(object):
             self.cosmo = conversions.Cosmo_Conversions(**ast.literal_eval(self.cosmo))
 
         self.check(just_meta=just_meta)
-
 
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
                   blpairs=None, times=None, pols=None, 
@@ -933,7 +931,7 @@ class UVPSpec(object):
                                  dtype=np.float)
     
         # denote as a uvpspec object
-        group.attrs['pspec_type'] = group.__class__.__name__
+        group.attrs['pspec_type'] = self.__class__.__name__
 
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
@@ -960,7 +958,6 @@ class UVPSpec(object):
         # Write file
         with h5py.File(filepath, 'w') as f:
             self.write_to_group(f, run_check=run_check)
-
 
     def set_cosmology(self, new_cosmo, overwrite=False, new_beam=None, 
                       verbose=True):
