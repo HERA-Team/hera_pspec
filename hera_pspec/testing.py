@@ -111,7 +111,7 @@ def build_vanilla_uvpspec(beam=None):
 
     return uvp, cosmo
 
-def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
+def uvpspec_from_data(data, bl_grps, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -120,9 +120,9 @@ def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, tape
     data : UVData object or str
         This can be a UVData object or a string filepath to a miriad file.
 
-    bls : list
-        This is a list of at least 2 baseline tuples.
-        Ex: [(24, 25), (37, 38), ...]
+    bl_grps : list
+        This is a list of baseline groups (e.g. redundant groups) to form blpairs from.
+        Ex: [[(24, 25), (37, 38), ...], [(24, 26), (37, 39), ...], ... ]
 
     data_std: UVData object or str or None
         Can be UVData object or a string filepath to a miriad file.
@@ -176,8 +176,16 @@ def uvpspec_from_data(data, bls, data_std=None, spw_ranges=None, beam=None, tape
     # instantiate pspecdata
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std,uvd_std], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
-    # get red bls
-    bls1, bls2, _ = utils.construct_blpairs(bls, exclude_auto_bls=True)
+    # get blpair groups
+    assert isinstance(bl_grps, list), "bl_grps must be a list"
+    if not isinstance(bl_grps[0], list): bl_grps = [bl_grps]
+    assert np.all([isinstance(blgrp, list) for blgrp in bl_grps]), "bl_grps must be fed as a list of lists"
+    assert np.all([isinstance(blgrp[0], tuple) for blgrp in bl_grps]), "bl_grps must be fed as a list of lists of tuples"
+    bls1, bls2 = [], []
+    for blgrp in bl_grps:
+        _bls1, _bls2, _ = utils.construct_blpairs(blgrp, exclude_auto_bls=True, exclude_permutations=True)
+        bls1.extend(_bls1)
+        bls2.extend(_bls2)
 
     # run pspec
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges,
