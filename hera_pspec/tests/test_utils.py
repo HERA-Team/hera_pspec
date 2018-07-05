@@ -6,6 +6,7 @@ from hera_pspec.data import DATA_PATH
 from hera_pspec import utils, testing
 from collections import OrderedDict as odict
 from pyuvdata import UVData
+from hera_cal import redcal
 
 
 def test_cov():
@@ -238,3 +239,31 @@ def test_hash():
     Check that MD5 hashing works.
     """
     hsh = utils.hash(np.ones((8,16)))
+
+
+def test_get_blvec_reds():
+    fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
+    uvd = UVData()
+    uvd.read_miriad(fname)
+    antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+    reds = redcal.get_pos_reds(dict(zip(ants, antpos)), low_hi=True)
+    uvp = testing.uvpspec_from_data(fname, reds[:2], spw_ranges=[(10, 40)])
+
+    # test execution w/ dictionary
+    blvecs = dict(zip(uvp.bl_array, uvp.get_ENU_bl_vecs()))
+    (red_bl_grp, red_bl_len, red_bl_ang,
+     red_bl_tag) = utils.get_blvec_reds(blvecs, bl_error_tol=1.0)
+    nt.assert_equal(len(red_bl_grp), 2)
+    nt.assert_equal(red_bl_tag, ['015_060', '015_120'])
+
+    # test w/ a UVPSpec
+    (red_bl_grp, red_bl_len, red_bl_ang,
+     red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=1.0)
+    nt.assert_equal(len(red_bl_grp), 2)
+    nt.assert_equal(red_bl_tag, ['015_060', '015_120'])
+
+    # test w/ zero tolerance: each blpair is its own group
+    (red_bl_grp, red_bl_len, red_bl_ang,
+     red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=0.0)
+    nt.assert_equal(len(red_bl_grp), uvp.Nblpairs)
+

@@ -649,10 +649,11 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     return groupings
 
 
-def get_blvec_reds(blvecs, bl_error_tol=0):
+def get_blvec_reds(blvecs, bl_error_tol=1.0):
     """
     Given a blvecs dictionary, form groups of baseline-pair objects based on
-    redundancy in ENU coordinates.
+    redundancy in ENU coordinates. Note: this only uses the East-North components
+    of the baseline vectors to calculate redundancy.
 
     Parameters:
     -----------
