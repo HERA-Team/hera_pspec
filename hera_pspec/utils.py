@@ -644,7 +644,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
             if verbose:
                 print "pol_pair {} and group_pair {} not found in data files".format(pp, gp)
             continue
-        groupings[tuple(zip(pp, gp))] = blps
+        groupings[(gp, pp)] = blps
 
     return groupings
 
