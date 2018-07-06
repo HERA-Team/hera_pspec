@@ -11,6 +11,7 @@ import datetime
 import time
 import argparse
 import ast
+import glob
 
 
 class PSpecData(object):
@@ -2429,7 +2430,6 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
               beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
     """
-
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
 
@@ -2850,14 +2850,14 @@ def raise_warning(warning, verbose=True):
         print(warning)
 
 def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
-    """ helper function for loading datasets in pspec_run """
+    """ helper function for loading Miriad datasets in pspec_run """
     dsets = []
     Ndsets = len(fnames)
     for i, dset in enumerate(fnames):
         utils.log("Reading {} / {} datasets...".format(i+1, Ndsets), f=logf, lvl=1, verbose=verbose)
         # read data
         uvd = UVData()
-        uvd.read_miriad(dset, bls=bls, polarizations=pols)
+        uvd.read_miriad(glob.glob(dset), bls=bls, polarizations=pols)
         dsets.append(uvd)
     return dsets
 
