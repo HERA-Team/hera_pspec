@@ -1286,7 +1286,6 @@ def test_pspec_run():
     nt.assert_equal(psc, None)
     nt.assert_false(os.path.exists("./out.h5"))
 
-
     # test when data is loaded, but no blpairs match
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
@@ -1294,6 +1293,18 @@ def test_pspec_run():
                               blpairs=[((37, 38), (600, 601))])
     nt.assert_true(psc is not None)
     nt.assert_equal(len(psc.groups()), 0)
+
+    # test glob-parseable input dataset
+    dsets = [os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA"),
+             os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA")]
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(dsets, "./out.hdf5", Jy2mK=False, verbose=True, overwrite=True,
+                              blpairs=[((24, 25), (37, 38))])
+    uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
+    nt.assert_equal(uvp.Ntimes, 120)
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
 
     # test exceptions
     nt.assert_raises(AssertionError, pspecdata.pspec_run, (1, 2), "./out.hdf5")
@@ -1305,6 +1316,7 @@ def test_pspec_run():
 
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
+
 
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()
