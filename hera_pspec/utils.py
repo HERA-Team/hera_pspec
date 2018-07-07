@@ -496,7 +496,7 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
 
 def log(msg, f=None, lvl=0, tb=None, verbose=True):
     """
-    Add a message to the log (just prints to the terminal for now).
+    Add a message to the log.
     
     Parameters
     ----------
@@ -510,16 +510,16 @@ def log(msg, f=None, lvl=0, tb=None, verbose=True):
         Indent level of the message. Each level adds two extra spaces. 
         Default: 0.
 
-    tb : traceback object, optional
-        Traceback object to print with traceback.format_tb()
+    tb : traceback tuple, optional
+        Output of sys.exc_info()
 
     verbose : bool, optional
         if True, print msg. Even if False, still writes to file
         if f is provided.
     """
-    # catch for traceback provided
+    # catch for traceback if provided
     if tb is not None:
-        msg += "\n{}\n".format(traceback.format_tb(tb)[0])
+        msg += "\n{}".format('\n'.join(traceback.format_exception(*tb)))
 
     # print
     output = "%s%s" % ("  "*lvl, msg)
@@ -529,18 +529,36 @@ def log(msg, f=None, lvl=0, tb=None, verbose=True):
     # write
     if f is not None:
         f.write(output)
+        f.flush()
 
 
 def load_config(config_file):
     """
     Load configuration details from a YAML file.
+    All entries of 'None' --> None and all lists
+    of lists become lists of tuples.
     """
+    # define recursive replace function
+    def replace(d):
+        if isinstance(d, (dict, odict)):
+            for k in d.keys():
+                # 'None' and '' turn into None
+                if d[k] == 'None': d[k] = None
+                # list of lists turn into lists of tuples
+                if isinstance(d[k], list) and np.all([isinstance(i, list) for i in d[k]]):
+                    d[k] = [tuple(i) for i in d[k]]
+                elif isinstance(d[k], (dict, odict)): replace(d[k])
+
     # Open and read config file
     with open(config_file, 'r') as cfile:
         try:
             cfg = yaml.load(cfile)
         except yaml.YAMLError as exc:
             raise(exc)
+
+    # Replace entries
+    replace(cfg)
+
     return cfg
 
 
