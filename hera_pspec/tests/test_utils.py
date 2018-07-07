@@ -51,6 +51,13 @@ def test_load_config():
     # Check that missing files cause an error
     nt.assert_raises(IOError, utils.load_config, "file_that_doesnt_exist")
 
+    # Check 'None' and list of lists become Nones and list of tuples
+    nt.assert_equal(cfg['data']['pairs'], [('xx', 'xx'), ('yy', 'yy')])
+    nt.assert_equal(cfg['pspec']['taper'], 'none')
+    nt.assert_equal(cfg['pspec']['groupname'], None)
+    nt.assert_equal(cfg['pspec']['options']['bar'], [('foo', 'bar')])
+    nt.assert_equal(cfg['pspec']['options']['foo'], None)
+
 
 class Test_Utils(unittest.TestCase):
 
@@ -225,8 +232,7 @@ def test_log():
     try:
         raise NameError
     except NameError:
-        err, _, tb = sys.exc_info()
-        utils.log("raised an exception", f=logf, tb=tb, verbose=False)
+        utils.log("raised an exception", f=logf, tb=sys.exc_info(), verbose=False)
     logf.close()
     with open("logf.log", "r") as f:
         log = ''.join(f.readlines())

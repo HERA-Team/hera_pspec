@@ -115,8 +115,7 @@ if reformat:
                 uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
                 uvd.write_miriad(outname, clobber=True)
             except:
-                err, _, tb = sys.exc_info()
-                hp.utils.log("\njob {} threw {} Exception with traceback:".format(j, err), f=ef, tb=tb, verbose=verbose)
+                hp.utils.log("\nBL_REFORMAT job {} errored:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
             return 0
 
@@ -163,8 +162,7 @@ if rfi_flag:
                              add_to_history='', clobber=overwrite)
 
         except:
-            err, _, tb = sys.exc_info()
-            hp.utils.log("\n{} threw {} Exception with traceback:".format(outname, err), f=ef, tb=tb, verbose=verbose)
+            hp.utils.log("\nXRFI job {} errored:".format(outname,), f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
 
         return 0
@@ -253,8 +251,7 @@ if timeavg_sub:
                 tavg_file = os.path.join(out_dir, tavg_file)
                 F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
             except:
-                err, _, tb = sys.exc_info()
-                hp.utils.log("\n{} threw {} Exception with traceback:".format(j, err), f=ef, tb=tb, verbose=verbose)
+                hp.utils.log("\nTAVG job {} errored:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
@@ -305,8 +302,7 @@ if timeavg_sub:
                 uvd.history += "\nTime-Average subtracted."
                 uvd.write_miriad(out_df, clobber=overwrite)
             except:
-                err, _, tb = sys.exc_info()
-                hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+                hp.utils.log("\nTAVG_SUB job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
@@ -375,7 +371,7 @@ if time_avg:
                 F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
             except:
                 err, _, tb = sys.exc_info()
-                hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+                hp.utils.log("\nTIME AVERAGE job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
@@ -408,8 +404,7 @@ if time_avg:
                 outfile = os.path.join(out_dir, "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=groupname, pol=pol, LST=lst, suffix=data_suffix + p['file_ext']))
                 uvd.write_miriad(outfile, clobber=overwrite)
             except:
-                err, _, tb = sys.exc_info()
-                hp.utils.log("\n{} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+                hp.utils.log("\nTIME AVERAGE REFORMAT job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
@@ -466,8 +461,7 @@ if form_pstokes:
                     if verbose:
                         print "failed to make pstokes {} for job {}".format(pstokes, i)
         except:
-            err, _, tb = sys.exc_info()
-            hp.utils.log("datafile {} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+            hp.utils.log("PSTOKES job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
 
         return 0
@@ -513,8 +507,7 @@ if fg_filt:
             outfile = os.path.join(out_dir, os.path.basename(df) + p['inpaint_file_ext'])
             DF.write_filtered_data(outfile, filetype_out='miriad', clobber=overwrite, write_filled_data=True, add_to_history="FG model flag inpainted with: {}".format(json.dumps(p['filt_params'])))
         except:
-            err, _, tb = sys.exc_info()
-            hp.utils.log("datafile {} threw {} Exception with traceback:".format(i, err), f=ef, tb=tb, verbose=verbose)
+            hp.utils.log("FG FILTER job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
         return 0
 
