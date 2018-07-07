@@ -175,7 +175,7 @@ class PSpecData(object):
             ext = 1
             while True:
                 if l in self.labels[:i]:
-                    l = self.labels[i] + "_{:d}".format(ext)
+                    l = self.labels[i] + ".{:d}".format(ext)
                     ext += 1
                 else:
                     self.labels[i] = l
@@ -283,8 +283,6 @@ class PSpecData(object):
             True if the key exists, False otherwise
         """
         #FIXME: Fix this to enable label keys
-
-
         # get iterable
         key = uvutils.get_iterable(key)
         if isinstance(key, str):
@@ -2374,6 +2372,9 @@ class PSpecData(object):
             if self.primary_beam is not None:
                 print "Warning: feeding a beam model when self.primary_beam already exists..."
 
+        # Check beam is not None
+        assert beam is not None, "Beam object is None but attempting to convert Jy -> mK"
+
         # assert type of beam
         assert isinstance(beam, pspecbeam.PSpecBeamBase), "beam model must be a subclass of pspecbeam.PSpecBeamBase"
 
@@ -2859,10 +2860,12 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
             if np.linalg.norm(bl1_vec - bl2_vec) >= baseline_tol:
                 raise_warning("blpair {} exceeds redundancy tolerance of {} m".format(blp, baseline_tol), verbose=verbose)
 
+
 def raise_warning(warning, verbose=True):
     '''warning function'''
     if verbose:
         print(warning)
+
 
 def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
     """ helper function for loading Miriad datasets in pspec_run """
