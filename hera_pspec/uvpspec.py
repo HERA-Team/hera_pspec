@@ -1535,14 +1535,12 @@ def combine_uvpspec(uvps, verbose=True):
         u.freq_array.extend(spw_freqs)
         u.dly_array.extend(spw_dlys)
 
-    
     # Convert to numpy arrays    
     u.spw_array = np.array(u.spw_array)
     u.freq_array = np.array(u.freq_array)
     u.dly_array = np.array(u.dly_array)
     u.pol_array = np.array(new_pols)
 
-    
     # Number of spectral windows, delays etc.
     u.Nspws = Nspws
     u.Nblpairts = Nblpairts

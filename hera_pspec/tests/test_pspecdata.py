@@ -159,6 +159,18 @@ class Test_PSpecData(unittest.TestCase):
         key = (0, (24, 25), 'xx')
         nt.assert_true(np.all(np.isclose(ds.x(key), ds.w(key))))
 
+        # Test labels when adding dsets
+        uvd = self.uvd
+        ds = pspecdata.PSpecData()
+        nt.assert_equal(len(ds.labels), 0)
+        ds.add([uvd, uvd], [None, None])
+        nt.assert_equal(len(ds.labels), 2)
+        ds.add(uvd, None, labels='foo')
+        nt.assert_equal(len(ds.dsets), len(ds.labels), 3)
+        nt.assert_equal(ds.labels, ['dset0', 'dset1', 'foo'])
+        ds.add(uvd, None)
+        nt.assert_equal(ds.labels, ['dset0', 'dset1', 'foo', 'dset3'])
+
         # Test some exceptions
         ds = pspecdata.PSpecData()
         nt.assert_raises(ValueError, ds.get_G, key, key)
@@ -1312,7 +1324,6 @@ def test_pspec_run():
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=(1, 2), verbose=False)
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=[1, 2], verbose=False)
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", beam=1, verbose=False)
-    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", dset_labels=['hi', 'hi'], verbose=False)
 
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")

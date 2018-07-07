@@ -66,7 +66,7 @@ class PSpecData(object):
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
-            self.add(dsets, wgts,dsets_std=dsets_std, labels=labels)
+            self.add(dsets, wgts, dsets_std=dsets_std, labels=labels)
 
         # Store a primary beam
         self.primary_beam = beam
@@ -96,7 +96,6 @@ class PSpecData(object):
             standard deviations (real and imaginary) of data to add to the
             collection. If dsets is a dict, will assume dsets_std is a dict
             and if dsets is a list, will assume dsets_std is a list.
-
         """
         # Check for dicts and unpack into an ordered list if found
         if isinstance(dsets, dict):
@@ -118,7 +117,6 @@ class PSpecData(object):
             else:
                 _dsets_std = [dsets_std[key] for key in labels]
                 dsets_std = _dsets_std
-
 
             # Unpack dsets and wgts dicts
             labels = dsets.keys()
@@ -144,7 +142,6 @@ class PSpecData(object):
             raise TypeError("dsets, dsets_std, and wgts must be UVData"
                             "or lists of UVData")
 
-
         # Make sure enough weights were specified
         assert(len(dsets) == len(wgts))
         assert(len(dsets_std) == len(dsets))
@@ -161,16 +158,28 @@ class PSpecData(object):
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "error sets")
 
+        # Store labels (if they were set)
+        if self.labels is None:
+            self.labels = []
+        if labels is None:
+            labels = ["dset{:d}".format(i) for i in range(len(self.dsets), len(dsets)+len(self.dsets))]
+        self.labels += labels
+
         # Append to list
         self.dsets += dsets
         self.wgts += wgts
         self.dsets_std += dsets_std
 
-        # Store labels (if they were set)
-        if labels is None:
-            self.labels = [None for d in dsets]
-        else:
-            self.labels += labels
+        # Check for repeated labels, and make them unique
+        for i, l in enumerate(self.labels):
+            ext = 1
+            while True:
+                if l in self.labels[:i]:
+                    l = self.labels[i] + "_{:d}".format(ext)
+                    ext += 1
+                else:
+                    self.labels[i] = l
+                    break
 
         # Store no. frequencies and no. times
         self.Nfreqs = self.dsets[0].Nfreqs
@@ -2611,9 +2620,6 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     if dset_labels is None:
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
-    else:
-        # enforce unique dset labels
-        assert len(set(dset_labels)) == len(dset_labels), "Found repeated dest labels: each one must be unique"
 
     # load data if fed as filepaths
     if isinstance(dsets[0], (str, np.str)):
