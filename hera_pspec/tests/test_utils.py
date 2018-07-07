@@ -8,7 +8,6 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 
-
 def test_cov():
     # load another data file
     uvd = UVData()
@@ -50,6 +49,13 @@ def test_load_config():
     
     # Check that missing files cause an error
     nt.assert_raises(IOError, utils.load_config, "file_that_doesnt_exist")
+
+    # Check 'None' and list of lists become Nones and list of tuples
+    nt.assert_equal(cfg['data']['pairs'], [('xx', 'xx'), ('yy', 'yy')])
+    nt.assert_equal(cfg['pspec']['taper'], 'none')
+    nt.assert_equal(cfg['pspec']['groupname'], None)
+    nt.assert_equal(cfg['pspec']['options']['bar'], [('foo', 'bar')])
+    nt.assert_equal(cfg['pspec']['options']['foo'], None)
 
 
 class Test_Utils(unittest.TestCase):
@@ -184,6 +190,27 @@ class Test_Utils(unittest.TestCase):
         uvd2.antenna_positions[0] += 2
         nt.assert_raises(AssertionError, utils.calc_reds, uvd, uvd2)
 
+    def test_config_pspec_blpairs(self):
+        # test basic execution
+        uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], verbose=False)
+        nt.assert_equal(len(groupings), 1)
+        nt.assert_equal(groupings.keys()[0], (('even', 'odd'), ('xx', 'xx')))
+        nt.assert_equal(len(groupings.values()[0]), 11833)
+
+        # test multiple, some non-existant pairs
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx'), ('yy', 'yy')], [('even', 'odd'), ('even', 'odd')], verbose=False)
+        nt.assert_equal(len(groupings), 1)
+        nt.assert_equal(groupings.keys()[0], (('even', 'odd'), ('xx', 'xx')))
+
+        # test xants
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], xants=[0, 1, 2], verbose=False)
+        nt.assert_equal(len(groupings.values()[0]), 9735)
+
+        # test exceptions
+        nt.assert_raises(AssertionError, utils.config_pspec_blpairs, uv_template, [('xx', 'xx'), ('xx', 'xx')], [('even', 'odd')], verbose=False)
+        
+
 def test_log():
     """
     Test that log() prints output.
@@ -204,8 +231,7 @@ def test_log():
     try:
         raise NameError
     except NameError:
-        err, _, tb = sys.exc_info()
-        utils.log("raised an exception", f=logf, tb=tb, verbose=False)
+        utils.log("raised an exception", f=logf, tb=sys.exc_info(), verbose=False)
     logf.close()
     with open("logf.log", "r") as f:
         log = ''.join(f.readlines())
