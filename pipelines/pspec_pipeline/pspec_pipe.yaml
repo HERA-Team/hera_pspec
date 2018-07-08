@@ -25,9 +25,10 @@ io :
 # Analysis Parameters
 #---------------------------------------------------------------
 analysis : 
-  run_split       : False       # Run jacknife split
-  run_pspec       : False       # Run power spectrum estimation
+  run_diff        : False       # Run visibility data difference
+  run_pspec       : True        # Run power spectrum estimation
   run_bootstrap   : True        # Run bootstrapping for errorbars
+  run_stats       : False       # Run statistical comparisons
   multiproc       : False       # use multiprocess module
   nproc           : 8           # number of processes to spawn
 
@@ -55,8 +56,8 @@ data :
 #---------------------------------------------------------------
 algorithm :
 
-  # jacknife split
-  split :
+  # jacknife data difference
+  diff :
     split_type : "antenna"
 
   # pspec pipeline
@@ -96,5 +97,7 @@ algorithm :
     bl_error_tol : 1.0
     maxiter : 1
 
+  # statistical pipeline
+  stats :
 
 

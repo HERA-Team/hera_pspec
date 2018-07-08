@@ -37,6 +37,7 @@ install:
   - pip install git+https://github.com/HERA-Team/hera_qm.git
   - pip install git+https://github.com/HERA-Team/uvtools.git
   - pip install git+https://github.com/HERA-Team/hera_cal.git
+  - pip install git+https://github.com/HERA-Team/hera_stats.git
   - pip install healpy
   - pip install scikit-learn
   - pip install h5py

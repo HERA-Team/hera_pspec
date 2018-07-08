@@ -14,6 +14,7 @@ import numpy as np
 import hera_cal as hc
 import hera_pspec as hp
 import hera_qm as hq
+import hera_stats as hs
 from pyuvdata import UVData
 import pyuvdata.utils as uvutils
 import os
@@ -68,13 +69,13 @@ else:
 os.chdir(work_dir)
 
 #-------------------------------------------------------------------------------
-# Run Jacknife Split
+# Run Jacknife Data Difference
 #-------------------------------------------------------------------------------
-if run_split:
+if run_diff:
     # get algorithm parameters
-    globals().update(cf['algorithm']['split'])
+    globals().update(cf['algorithm']['diff'])
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting {} jacknife split: {}\n".format("-"*60, split_type, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nstarting {} visibility data difference: {}\n".format("-"*60, diff_type, time), f=lf, verbose=verbose)
 
     raise NotImplementedError
 
@@ -299,6 +300,30 @@ if run_bootstrap:
     # print to log
     time = datetime.utcnow()
     hp.utils.log("\nFinished BOOTSTRAP pipeline: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+
+
+#-------------------------------------------------------------------------------
+# Run Statistical Evaluation Pipeline
+#-------------------------------------------------------------------------------
+if run_stats:
+    # get algorithm parameters
+    globals().update(cf['algorithm']['stats'])
+    time = datetime.utcnow()
+    hp.utils.log("\n{}\nstarting statistical evaluation pipeline: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+
+    raise NotImplementedError
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
