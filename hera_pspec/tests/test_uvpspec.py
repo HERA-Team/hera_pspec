@@ -313,6 +313,18 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvp.fold_spectra)
         nt.assert_equal(len(uvp.get_dlys(0)), 24)
         nt.assert_true(np.isclose(uvp.nsample_array[0], 2.0).all())
+        #also run the odd case
+        uvd = UVData()
+        uvd_std = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        uvd_std.read_miriad(os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'))
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+        bls = [(37, 38), (38, 39), (52, 53)]
+        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, spw_ranges=[(0,17)], beam=beam)
+        uvp1.fold_spectra()
+        cov_folded = uvp1.get_cov(0, ((37, 38), (38, 39)), 'xx')
+        data_folded = uvp1.get_data(0, ((37,38), (38, 39)), 'xx')
+
 
     def test_str(self):
         a = str(self.uvp)
@@ -418,7 +430,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp3.pol_array[0] = -7
         out = uvp1 + uvp2 + uvp3
         nt.assert_equal(out.Npols, 3)
-        
+
     def test_combine_uvpspec_std(self):
             # setup uvp build
             uvd = UVData()
