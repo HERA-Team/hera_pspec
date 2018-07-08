@@ -612,6 +612,9 @@ def fold_spectra(uvp):
         # get number of dly bins
         Ndlys = len(uvp.get_dlys(spw))
 
+        # This section could be streamlined considerably since there is a lot of
+        # code overlap between the even and odd Ndlys cases. 
+
         if Ndlys % 2 == 0:
             # even number of dlys
             left = uvp.data_array[spw][:, 1:Ndlys//2, :][:, ::-1, :]
@@ -620,6 +623,18 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
 
+            # fold covariance array if it exists.
+            if hasattr(uvp,'cov_array'):
+                leftleft = uvp.cov_array[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
+                leftright = uvp.cov_array[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                rightleft = uvp.cov_array[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
+                rightright = uvp.cov_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                uvp.cov_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                         +leftright\
+                                                                         +rightleft\
+                                                                         +rightright)
+                uvp.cov_array[spw][:, :Ndlys/2, :, :] = 0.0
+                uvp.cov_array[spw][:, :, :Ndlys/2, : :] = 0.0
         else:
             # odd number of dlys
             left = uvp.data_array[spw][:, :Ndlys//2, :][:, ::-1, :]
@@ -627,6 +642,18 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, Ndlys//2+1:, :] = np.mean([left, right], axis=0)
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
+            # fold covariance array if it exists.
+            if hasattr(uvp,'cov_array'):
+                leftleft = uvp.cov_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
+                leftright = uvp.cov_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                rightleft = uvp.cov_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                rightright = uvp.cov_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                uvp.cov_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                         +leftright\
+                                                                         +rightleft\
+                                                                         +rightright)
+                uvp.cov_array[spw][:, :Ndlys/2, :, :] = 0.0
+                uvp.cov_array[spw][:, :, :Ndlys/2, : :] = 0.0
 
     uvp.folded = True
 

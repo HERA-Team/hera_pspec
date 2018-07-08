@@ -164,7 +164,11 @@ class UVPSpec(object):
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
         if hasattr(self,'cov_array'):
-            return self.cov_array[spw][blpairts, :, :, pol]
+            if self.folded:
+                Ndlys = self.data_array[spw].shape[1]
+                return self.cov_array[spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, pol]
+            else:
+                return self.cov_array[spw][blpairts, :, :, pol]
         else:
             raise AttributeError("No covariance array has been calculated.")
 
