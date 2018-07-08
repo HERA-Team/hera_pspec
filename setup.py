@@ -33,7 +33,9 @@ setup_args = {
     'install_requires': ['numpy>=1.10', 'scipy>=0.19',],
     'include_package_data': True,
     'scripts': ['scripts/pspec_run.py', 'scripts/pspec_red.py',
-                'pipelines/idr2_preprocessing/preprocess_data.py']
+                'pipelines/idr2_preprocessing/preprocess_data.py',
+                'pipelines/pspec_pipeline/pspec_pipe.py'],
+    'zip_safe':     False,
 }
 
 if __name__ == '__main__':
