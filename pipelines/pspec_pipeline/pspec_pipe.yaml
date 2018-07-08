@@ -28,7 +28,6 @@ analysis :
   run_diff        : False       # Run visibility data difference
   run_pspec       : True        # Run power spectrum estimation
   run_bootstrap   : True        # Run bootstrapping for errorbars
-  run_stats       : False       # Run statistical comparisons
   multiproc       : False       # use multiprocess module
   nproc           : 8           # number of processes to spawn
 
@@ -96,8 +95,5 @@ algorithm :
     keep_samples : False
     bl_error_tol : 1.0
     maxiter : 1
-
-  # statistical pipeline
-  stats :
 
 

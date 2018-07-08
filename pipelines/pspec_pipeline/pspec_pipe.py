@@ -14,7 +14,6 @@ import numpy as np
 import hera_cal as hc
 import hera_pspec as hp
 import hera_qm as hq
-import hera_stats as hs
 from pyuvdata import UVData
 import pyuvdata.utils as uvutils
 import os
@@ -283,17 +282,4 @@ if run_bootstrap:
     # print to log
     time = datetime.utcnow()
     hp.utils.log("\nFinished BOOTSTRAP pipeline: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
-
-
-#-------------------------------------------------------------------------------
-# Run Statistical Evaluation Pipeline
-#-------------------------------------------------------------------------------
-if run_stats:
-    # get algorithm parameters
-    globals().update(cf['algorithm']['stats'])
-    time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting statistical evaluation pipeline: {}\n".format("-"*60, time), f=lf, verbose=verbose)
-
-    raise NotImplementedError
-
 
