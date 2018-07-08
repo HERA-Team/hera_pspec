@@ -12,7 +12,7 @@ echo "starting power spectrum pipeline: $(date)"
 
 # put a lock on parameter file, run pspec_pipe.py, unlock file
 chmod 444 pspec_pipe.yaml
-python pspec_pipe.py pspec_pipe.yaml
+pspec_pipe.py pspec_pipe.yaml
 chmod 775 pspec_pipe.yaml
 
 # end script
