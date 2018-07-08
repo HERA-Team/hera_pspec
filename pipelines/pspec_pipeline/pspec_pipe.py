@@ -135,6 +135,7 @@ if run_pspec:
 
     # run function over jobs
     exit_codes = np.array(M(pspec, range(len(jobs))))
+    time = datetime.utcnow()
 
     # inspect for failures
     if np.all(exit_codes != 0):
@@ -168,6 +169,62 @@ if run_pspec:
     time = datetime.utcnow()
     hp.utils.log("\nFinished PSPEC pipeline: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
 
+    # Merge power spectrum files from separate jobs
+    hp.utils.log("\nStarting power spectrum file merge: {}\n{}".format(time, '-'*60), f=lf, verbose=verbose)
+
+    # Get all groups
+    groups = psc.groups()
+
+    # Define merge function
+    def merge(i, filename=filename, groups=groups):
+        try:
+            psc = hp.PSpecContainer(filename, mode='rw')
+            grp = groups[i]
+            spectra = [os.path.join(grp, sp) for sp in psc.get_spectra(grp)]
+            hp.utils.merge_pspec(psc, spectra=spectra)
+        except:
+            hp.utils.log("\nPSPEC MERGE job {} errored with:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+            return 1
+
+        return 0
+
+    # run function over jobs
+    exit_codes = np.array(M(merge, range(len(groups))))
+    time = datetime.utcnow()
+
+    # inspect for failures
+    if np.all(exit_codes != 0):
+        # everything failed, raise error
+        hp.utils.log("\n{}\nAll PSPEC MERGE jobs failed w/ exit codes\n {}: {}\n".format("-"*60, exit_codes, time), f=lf, verbose=verbose)
+        raise ValueError("All PSPEC MERGE jobs failed")
+
+    # if only a few, try re-run
+    failures = np.where(exit_codes != 0)[0]
+    counter = 1
+    while True:
+        if not np.all(exit_codes == 0):
+            if counter >= maxiter:
+                # break after certain number of tries
+                break
+            # run function over jobs that failed
+            exit_codes = np.array(M(merge, failures))
+            # update counter
+            counter += 1
+            # update failures
+            failures = failures[exit_codes != 0]
+        else:
+            # all passed
+            break
+
+    # print failures if they exist
+    if len(failures) > 0:
+        hp.utils.log("\nSome PSPEC MERGE jobs failed after {} tries:\n{}".format(maxiter, '\n'.join(["job {}: {}".format(i, str(jobs.keys()[i])) for i in failures])), f=lf, verbose=verbose)
+
+    # print to log
+    time = datetime.utcnow()
+    hp.utils.log("\nFinished PSPEC pipeline: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+
+
 #-------------------------------------------------------------------------------
 # Run Bootstrap Pipeline
 #-------------------------------------------------------------------------------
@@ -175,14 +232,73 @@ if run_bootstrap:
     # get algorithm parameters
     globals().update(cf['algorithm']['bootstrap'])
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting bootstrap resampling: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nStarting BOOTSTRAP resampling pipeline: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
-    # get datafiles
-    datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname), pols, matched_pols=False, reverse_nesting=False, flatten=False)
+    # open container
+    psc = hp.PSpecContainer(filename, mode='r')
+
+    # get groups
+    groups = psc.get_groups()
+    del psc
+
+    # define bootstrap function
+    def bootstrap(i, filename=filename, groups=groups, p=cf['algorithm']['bootstrap']):
+        try:
+            # get container
+            psc = hp.PSpecContainer(filename, mode='rw')
+
+            # get spectra
+            group = groups[i]
+            spectra = psc.spectra(group)
+
+            # run bootstrap
+            hp.grouping.bootstrap_run(psc, spectra=spectra, time_avg=p['time_avg'], Nsamples=p['Nsamples'],
+                                      seed=p['seed'], normal_std=p['normal_std'], robust_std=p['robust_std'],
+                                      conf_ints=p['conf_ints'], keep_samples=p['keep_samples'],
+                                      bl_error_tol=p['bl_error_tol'], overwrite=overwrite, verbose=verbose)
 
 
+        except:
+            hp.utils.log("\nBOOTSTRAP job {} errored with:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+            return 1
 
+        return 0
 
+    # run function over jobs
+    exit_codes = np.array(M(bootstrap, range(len(groups))))
+    time = datetime.utcnow()
+
+    # inspect for failures
+    if np.all(exit_codes != 0):
+        # everything failed, raise error
+        hp.utils.log("\n{}\nAll BOOTSTRAP jobs failed w/ exit codes\n {}: {}\n".format("-"*60, exit_codes, time), f=lf, verbose=verbose)
+        raise ValueError("All BOOTSTRAP jobs failed")
+
+    # if only a few, try re-run
+    failures = np.where(exit_codes != 0)[0]
+    counter = 1
+    while True:
+        if not np.all(exit_codes == 0):
+            if counter >= maxiter:
+                # break after certain number of tries
+                break
+            # run function over jobs that failed
+            exit_codes = np.array(M(bootstrap, failures))
+            # update counter
+            counter += 1
+            # update failures
+            failures = failures[exit_codes != 0]
+        else:
+            # all passed
+            break
+
+    # print failures if they exist
+    if len(failures) > 0:
+        hp.utils.log("\nSome BOOTSTRAP jobs failed after {} tries:\n{}".format(maxiter, '\n'.join(["job {}: {}".format(i, str(jobs.keys()[i])) for i in failures])), f=lf, verbose=verbose)
+
+    # print to log
+    time = datetime.utcnow()
+    hp.utils.log("\nFinished BOOTSTRAP pipeline: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
 
 
 

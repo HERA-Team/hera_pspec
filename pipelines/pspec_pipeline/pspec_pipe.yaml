@@ -86,6 +86,15 @@ algorithm :
 
   # bootstrap pipeline
   bootstrap :
+    time_avg : True
+    Nsamples : 100
+    seed : None
+    normal_std : True
+    robust_std : True
+    conf_ints : None
+    keep_samples : False
+    bl_error_tol : 1.0
+    maxiter : 1
 
 
 
