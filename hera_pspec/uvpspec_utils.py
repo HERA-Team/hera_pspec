@@ -2,6 +2,7 @@ import numpy as np
 import copy, operator
 from collections import OrderedDict as odict
 
+
 def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     """
     Get baseline pair matches from a list of baseline antenna-pairs in a UVPSpec object.
@@ -73,16 +74,20 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
     h5file : h5py file descriptor, used for loading in selection of data from HDF5 file
     """
     if spws is not None:
-        # spectral window selection
-        spw_select = uvp.spw_to_indices(spws)
+        spw_freq_select = uvp.spw_to_freq_indices(spws)
+        spw_dly_select = uvp.spw_to_dly_indices(spws)
+        spw_select = uvp.spw_indices(spws)
+        uvp.spw_freq_array = uvp.spw_freq_array[spw_freq_select]
+        uvp.spw_dly_array = uvp.spw_dly_array[spw_dly_select]
         uvp.spw_array = uvp.spw_array[spw_select]
-        uvp.freq_array = uvp.freq_array[spw_select]
-        uvp.dly_array = uvp.dly_array[spw_select]
-        uvp.Nspws = len(np.unique(uvp.spw_array))
+        uvp.freq_array = uvp.freq_array[spw_freq_select]
+        uvp.dly_array = uvp.dly_array[spw_dly_select]
         uvp.Ndlys = len(np.unique(uvp.dly_array))
-        uvp.Nspwdlys = len(uvp.spw_array)
+        uvp.Nspws = len(np.unique(uvp.spw_array))
+        uvp.Nspwdlys = len(uvp.spw_dly_array)
+        uvp.Nspwfreqs = len(uvp.spw_freq_array)
         if hasattr(uvp, 'scalar_array'):
-            uvp.scalar_array = uvp.scalar_array[spws, :]
+            uvp.scalar_array = uvp.scalar_array[spw_select, :]
 
     if bls is not None:
         # get blpair baselines in integer form
@@ -209,13 +214,11 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
+        if store_cov:
+            uvp.cov_array = cov
 
-        # Check for covariance array
-        if store_cov: uvp.cov_array = cov
-
-    except AttributeError as e:
-        # If no h5file fed and hasattr(uvp, data_array) is False then just
-        # load meta-data
+    except AttributeError:
+        # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
         pass
 
 

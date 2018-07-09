@@ -1980,7 +1980,8 @@ class PSpecData(object):
         time2 = []
         lst1 = []
         lst2 = []
-        spws = []
+        dly_spws = []
+        freq_spws = []
         dlys = []
         freqs = []
         sclr_arr = []
@@ -2010,10 +2011,11 @@ class PSpecData(object):
             spw_cov = []
 
             d = self.delays() * 1e-9
+            f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
             dlys.extend(d)
-            spws.extend(np.ones_like(d, np.int) * i)
-            freqs.extend(
-                dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]] )
+            dly_spws.extend(np.ones_like(d, np.int16) * i)
+            freq_spws.extend(np.ones_like(f, np.int16) * i)
+            freqs.extend(f)
 
             # Loop over polarizations
             for j, p in enumerate(pols):
@@ -2198,12 +2200,15 @@ class PSpecData(object):
         antpos = dict(zip(dset1.antenna_numbers, dset1.antenna_positions))
         uvp.bl_vecs = np.array(map(lambda bl: antpos[bl[0]] - antpos[bl[1]], bls_arr))
         uvp.Nbls = len(uvp.bl_array)
-        uvp.spw_array = np.array(spws)
+        uvp.spw_dly_array = np.array(dly_spws)
+        uvp.spw_freq_array = np.array(freq_spws)
+        uvp.Nspws = len(np.unique(dly_spws))
+        uvp.spw_array = np.arange(uvp.Nspws, dtype=np.int16)
         uvp.freq_array = np.array(freqs)
         uvp.dly_array = np.array(dlys)
-        uvp.Nspws = len(np.unique(spws))
         uvp.Ndlys = len(np.unique(dlys))
-        uvp.Nspwdlys = len(spws)
+        uvp.Nspwdlys = len(uvp.spw_dly_array)
+        uvp.Nspwfreqs = len(uvp.spw_freq_array)
         uvp.Nfreqs = len(np.unique(freqs))
         uvp.pol_array = np.array(spw_pol, np.int)
         uvp.Npols = len(spw_pol)
