@@ -115,15 +115,12 @@ if reformat:
                 uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
                 uvd.write_miriad(outname, clobber=True)
             except:
-                hp.utils.log("\nBL_REFORMAT job {} errored:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
             return 0
 
-        # distribute across baseline types
-        exit_codes = M(bl_reformat, range(len(reds)))
-
-        # print to log
-        hp.utils.log("\nbaseline reformatting exit codes for pol {}:\n {}".format(datapols[i][0], exit_codes), f=lf, verbose=verbose)
+        # launch jobs
+        failures = job_monitor(bl_reformat, range(len(reds)), "BL REFORMAT: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
 
     # edit data template
     input_data_template = os.path.join(out_dir, new_data_template.format(pol='{pol}', suffix=data_suffix))
@@ -162,17 +159,15 @@ if rfi_flag:
                              add_to_history='', clobber=overwrite)
 
         except:
-            hp.utils.log("\nXRFI job {} errored:".format(outname,), f=ef, tb=sys.exc_info(), verbose=verbose)
+            hp.utils.log("\njob {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
 
         return 0
 
-    # run tavg sub on each datafile
-    exit_codes = M(run_xrfi, range(len(datafiles)))
+    # launch jobs
+    failures = hp.utils.job_monitor(run_xrfi, range(len(datafiles)), "XRFI", lf=lf, maxiter=maxiter, verbose=verbose)
 
-    # print to log
-    hp.utils.log("\nRFI flag exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
-
+    # update template
     input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
     data_suffix += file_ext
 
@@ -251,13 +246,13 @@ if timeavg_sub:
                 tavg_file = os.path.join(out_dir, tavg_file)
                 F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
             except:
-                hp.utils.log("\nTAVG job {} errored:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
 
-        # run function
-        exit_codes = M(full_tavg, range(len(reds)))
+        # launch jobs
+        failures = hp.utils.job_monitor(full_tavg, range(len(reds)), "FULL TAVG: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
 
         # collate tavg spectra into a single file
         tavgfiles = sorted(glob.glob(os.path.join(out_dir, "zen.{group}.{pol}.*.{tavg_tag}.{suffix}".format(group=groupname, pol=pol, tavg_tag=tavg_tag, suffix=data_suffix))))
@@ -302,16 +297,13 @@ if timeavg_sub:
                 uvd.history += "\nTime-Average subtracted."
                 uvd.write_miriad(out_df, clobber=overwrite)
             except:
-                hp.utils.log("\nTAVG_SUB job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
 
-        # run function
-        exit_codes = M(tavg_sub, range(len(dfs)))
-
-        # print to log
-        hp.utils.log("\npol {} time-average subtraction exit codes:\n {}".format(datapols[i][0], exit_codes), f=lf, verbose=verbose)
+        # launch jobs
+        failures = hp.utils.job_monitor(tavg_sub, range(len(dfs)), "TAVG SUB: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
 
     time = datetime.utcnow()
     hp.utils.log("\nfinished full time-average spectra and subtraction: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
@@ -370,17 +362,13 @@ if time_avg:
                 tavg_file = os.path.join(out_dir, tavg_file + p['file_ext'])
                 F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
             except:
-                err, _, tb = sys.exc_info()
-                hp.utils.log("\nTIME AVERAGE job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
 
-        # distribute jobs across baselinetype
-        exit_codes = M(time_average, range(len(reds)))
-
-        # print to log
-        hp.utils.log("\npol {} time average exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
+        # launch jobs
+        failures = hp.utils.job_monitor(time_average, range(len(reds)), "TIME AVERAGE: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
 
         # collate averaged data into time chunks
         tavg_files = os.path.join(out_dir, "zen.{group}.{pol}.*.{suffix}".format(group=groupname, pol=pol, suffix=data_suffix + file_ext))
@@ -404,20 +392,18 @@ if time_avg:
                 outfile = os.path.join(out_dir, "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=groupname, pol=pol, LST=lst, suffix=data_suffix + p['file_ext']))
                 uvd.write_miriad(outfile, clobber=overwrite)
             except:
-                hp.utils.log("\nTIME AVERAGE REFORMAT job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
 
-        exit_codes = M(reformat_files, range(len(times)))
+        # launch jobs
+        failures = hp.utils.job_monitor(reformat_files, range(len(times)), "TAVG REFORMAT: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
 
         # clean up time averaged files
         for f in tavg_files:
             if os.path.exists(f):
                 shutil.rmtree(f)
-
-        # print to log
-        hp.utils.log("\npol {} time reformat files exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
 
     input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
     data_suffix += file_ext
@@ -461,16 +447,13 @@ if form_pstokes:
                     if verbose:
                         print "failed to make pstokes {} for job {}".format(pstokes, i)
         except:
-            hp.utils.log("PSTOKES job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+            hp.utils.log("job {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
 
         return 0
 
-    # iterate over unique datafiles and construct pstokes
-    exit_codes = M(make_pstokes, range(len(datafiles)))
-
-    # print to log
-    hp.utils.log("\npseudo stokes exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
+    # launch jobs
+    failures = hp.utils.job_monitor(make_pstokes, range(len(datafiles)), "PSTOKES", lf=lf, maxiter=maxiter, verbose=verbose)
 
     # add pstokes pols to pol list for downstream calculations
     pols += outstokes
@@ -507,15 +490,12 @@ if fg_filt:
             outfile = os.path.join(out_dir, os.path.basename(df) + p['inpaint_file_ext'])
             DF.write_filtered_data(outfile, filetype_out='miriad', clobber=overwrite, write_filled_data=True, add_to_history="FG model flag inpainted with: {}".format(json.dumps(p['filt_params'])))
         except:
-            hp.utils.log("FG FILTER job {} errored:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+            hp.utils.log("job {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
         return 0
 
-    # iterate over datafiles and filter
-    exit_codes = M(fg_filter, range(len(datafiles)))
-
-    # print to log
-    hp.utils.log("\nfg filtering exit codes:\n {}".format(exit_codes), f=lf, verbose=verbose)
+    # launch jobs
+    failures = hp.utils.job_monitor(fg_filter, range(len(datafiles)), "FG FILTER", lf=lf, maxiter=maxiter, verbose=verbose)
 
     time = datetime.utcnow()
     hp.utils.log("\nfinished foreground-filtering: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
