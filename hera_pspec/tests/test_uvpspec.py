@@ -417,7 +417,7 @@ class Test_UVPSpec(unittest.TestCase):
         # test concat across blpairts
         uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 90)], beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
-        nt.assert_equal(out.Nblpairs, 8)
+        nt.assert_equal(out.Nblpairs, 4)
         nt.assert_equal(out.Nbls, 5)
 
         # test failure due to variable static metadata
@@ -487,7 +487,7 @@ class Test_UVPSpec(unittest.TestCase):
             # test concat across blpairts
             uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 24), (64, 68)], data_std=uvd_std, beam=beam)
             out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
-            nt.assert_equal(out.Nblpairs, 8)
+            nt.assert_equal(out.Nblpairs, 4)
             nt.assert_equal(out.Nbls, 5)
 
             # test failure due to variable static metadata

@@ -111,7 +111,8 @@ def build_vanilla_uvpspec(beam=None):
 
     return uvp, cosmo
 
-def uvpspec_from_data(data, bl_grps, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
+
+def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
