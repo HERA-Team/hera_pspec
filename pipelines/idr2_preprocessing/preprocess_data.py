@@ -112,7 +112,7 @@ if reformat:
                 if os.path.exists(outname) and overwrite == False:
                     return 1
                 uvd = UVData()
-                uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
+                uvd.read_miriad(dfs, bls=reds[j])
                 uvd.write_miriad(outname, clobber=True)
             except:
                 hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
@@ -120,7 +120,7 @@ if reformat:
             return 0
 
         # launch jobs
-        failures = job_monitor(bl_reformat, range(len(reds)), "BL REFORMAT: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
+        failures = job_monitor(bl_reformat, range(len(reds)), "BL REFORMAT: pol {}".format(pol), M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
     # edit data template
     input_data_template = os.path.join(out_dir, new_data_template.format(pol='{pol}', suffix=data_suffix))
@@ -165,7 +165,7 @@ if rfi_flag:
         return 0
 
     # launch jobs
-    failures = hp.utils.job_monitor(run_xrfi, range(len(datafiles)), "XRFI", lf=lf, maxiter=maxiter, verbose=verbose)
+    failures = hp.utils.job_monitor(run_xrfi, range(len(datafiles)), "XRFI", M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
     # update template
     input_data_template = os.path.join(out_dir, os.path.basename(input_data_template) + file_ext)
@@ -212,7 +212,12 @@ if timeavg_sub:
             try:
                 # load data into uvdata
                 uvd = UVData()
-                uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
+                # read data, catch ValueError
+                try:
+                    uvd.read_miriad(dfs, bls=reds[j], polarizations=[pol])
+                except ValueError:
+                    hp.utils.log("job {} failed b/c no data is present given bls and/or pol selection".format(j))
+                    return 0
                 # instantiate FRF object
                 F = hc.frf.FRFilter()
                 # load data
@@ -252,20 +257,17 @@ if timeavg_sub:
             return 0
 
         # launch jobs
-        failures = hp.utils.job_monitor(full_tavg, range(len(reds)), "FULL TAVG: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
+        failures = hp.utils.job_monitor(full_tavg, range(len(reds)), "FULL TAVG: pol {}".format(pol), M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
         # collate tavg spectra into a single file
         tavgfiles = sorted(glob.glob(os.path.join(out_dir, "zen.{group}.{pol}.*.{tavg_tag}.{suffix}".format(group=groupname, pol=pol, tavg_tag=tavg_tag, suffix=data_suffix))))
         uvd = UVData()
-        uvd.read_miriad(tavgfiles)
+        uvd.read_miriad(tavgfiles[::-1])
         tavg_out = os.path.join(out_dir, "zen.{group}.{pol}.{tavg_tag}.{suffix}".format(group=groupname, pol=pol, tavg_tag=tavg_tag, suffix=data_suffix))
         uvd.write_miriad(tavg_out, clobber=overwrite)
         for tf in tavgfiles:
             if os.path.exists(tf):
                 shutil.rmtree(tf)
-
-        # print to log
-        hp.utils.log("\npol {} time-average spectra exit codes:\n {}".format(pol, exit_codes), f=lf, verbose=verbose)
 
         # write tavg subtraction function
         def tavg_sub(j, dfs=dfs, pol=pol, tavg_file=tavg_out, p=cf['algorithm']['timeavg_sub']):
@@ -303,7 +305,7 @@ if timeavg_sub:
             return 0
 
         # launch jobs
-        failures = hp.utils.job_monitor(tavg_sub, range(len(dfs)), "TAVG SUB: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
+        failures = hp.utils.job_monitor(tavg_sub, range(len(dfs)), "TAVG SUB: pol {}".format(pol), M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
     time = datetime.utcnow()
     hp.utils.log("\nfinished full time-average spectra and subtraction: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
@@ -348,7 +350,12 @@ if time_avg:
             try:
                 # load data into uvdata
                 uvd = UVData()
-                uvd.read_miriad(dfs, ant_pairs_nums=reds[j])
+                # read data, catch ValueError
+                try:
+                    uvd.read_miriad(dfs, bls=reds[j], polarizations=[pol])
+                except ValueError:
+                    hp.utils.log("job {} failed b/c no data is present given bls and/or pol selection".format(j))
+                    return 0
                 # instantiate FRF object
                 F = hc.frf.FRFilter()
                 # load data
@@ -362,13 +369,13 @@ if time_avg:
                 tavg_file = os.path.join(out_dir, tavg_file + p['file_ext'])
                 F.write_data(tavg_file, write_avg=True, overwrite=overwrite)
             except:
-                hp.utils.log("\njob {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
 
         # launch jobs
-        failures = hp.utils.job_monitor(time_average, range(len(reds)), "TIME AVERAGE: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
+        failures = hp.utils.job_monitor(time_average, range(len(reds)), "TIME AVERAGE: pol {}".format(pol), M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
         # collate averaged data into time chunks
         tavg_files = os.path.join(out_dir, "zen.{group}.{pol}.*.{suffix}".format(group=groupname, pol=pol, suffix=data_suffix + file_ext))
@@ -387,18 +394,18 @@ if time_avg:
         def reformat_files(j, pol=pol, tavg_files=tavg_files, times=times, data_suffix=data_suffix, p=cf['algorithm']['tavg']):
             try:
                 uvd = UVData()
-                uvd.read_miriad(tavg_files, time_range=[times[j].min()-1e-8, times[j].max()+1e-8])
+                uvd.read_miriad(tavg_files[::-1], time_range=[times[j].min()-1e-8, times[j].max()+1e-8], polarizations=[pol])
                 lst = uvd.lst_array[0]
                 outfile = os.path.join(out_dir, "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=groupname, pol=pol, LST=lst, suffix=data_suffix + p['file_ext']))
                 uvd.write_miriad(outfile, clobber=overwrite)
             except:
-                hp.utils.log("\njob {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
 
         # launch jobs
-        failures = hp.utils.job_monitor(reformat_files, range(len(times)), "TAVG REFORMAT: pol {}".format(pol), lf=lf, maxiter=maxiter, verbose=verbose)
+        failures = hp.utils.job_monitor(reformat_files, range(len(times)), "TAVG REFORMAT: pol {}".format(pol), M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
         # clean up time averaged files
         for f in tavg_files:
@@ -453,7 +460,7 @@ if form_pstokes:
         return 0
 
     # launch jobs
-    failures = hp.utils.job_monitor(make_pstokes, range(len(datafiles)), "PSTOKES", lf=lf, maxiter=maxiter, verbose=verbose)
+    failures = hp.utils.job_monitor(make_pstokes, range(len(datafiles)), "PSTOKES", M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
     # add pstokes pols to pol list for downstream calculations
     pols += outstokes
@@ -492,10 +499,11 @@ if fg_filt:
         except:
             hp.utils.log("job {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
+            
         return 0
 
     # launch jobs
-    failures = hp.utils.job_monitor(fg_filter, range(len(datafiles)), "FG FILTER", lf=lf, maxiter=maxiter, verbose=verbose)
+    failures = hp.utils.job_monitor(fg_filter, range(len(datafiles)), "FG FILTER", M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
     time = datetime.utcnow()
     hp.utils.log("\nfinished foreground-filtering: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)

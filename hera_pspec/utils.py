@@ -844,9 +844,9 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
 
     # print failures if they exist
     if len(failures) > 0:
-        log("\nSome {} jobs failed after {} tries:\n{}".format(action, maxiter, failures), f=lf, verbose=verbose)
+        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name, maxiter, failures), f=lf, verbose=verbose)
     else:
-        log("\nAll {} jobs ran through".format(action), f=lf, verbose=verbose)
+        log("\nAll {} jobs ran through".format(action_name), f=lf, verbose=verbose)
 
     return failures
 
