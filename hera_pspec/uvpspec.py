@@ -947,6 +947,9 @@ class UVPSpec(object):
         if hasattr(self, 'cosmo'):
             self.cosmo = conversions.Cosmo_Conversions(**ast.literal_eval(self.cosmo))
 
+        if not hasattr(self, 'store_cov'):
+            self.store_cov = False
+
         self.check(just_meta=just_meta)
 
 
