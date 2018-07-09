@@ -39,6 +39,7 @@ data :
   groupname : "all"       # a single groupname
   # full path to a data template with {pol} and {group}
   input_data_template : '../../hera_pspec/data/zen.{group}.{pol}.LST.1.06964.uvA'
+  maxiter : 1             # number of maximum job retries
 
 #---------------------------------------------------------------
 # Algorithm Parameters
