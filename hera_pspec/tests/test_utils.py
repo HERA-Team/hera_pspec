@@ -273,3 +273,42 @@ def test_get_blvec_reds():
      red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=0.0)
     nt.assert_equal(len(red_bl_grp), uvp.Nblpairs)
 
+
+def test_job_monitor():
+    # open empty files
+    datafiles = ["./{}".format(i) for i in ['a', 'b', 'c', 'd']]
+    for df in datafiles:
+        with open(df, 'w') as f:
+            pass
+
+    def run_func(i, datafiles=datafiles):
+        # open file, perform action, finish
+        # if rand_num is above 0.7, fail!
+        try:
+            rand_num = np.random.rand(1)[0]
+            if rand_num > 0.7:
+                raise ValueError
+            df = datafiles[i]
+            with open(df, 'a') as f:
+                f.write("Hello World")
+        except:
+            return 1
+
+        return 0
+
+    # set seed
+    np.random.seed(0)
+    # run over datafiles
+    failures = utils.job_monitor(run_func, range(len(datafiles)), "test", maxiter=1, verbose=False)
+    # assert job 1 failed
+    np.testing.assert_array_equal(failures, np.array([1]))
+    # try with reruns
+    np.random.seed(0)
+    failures = utils.job_monitor(run_func, range(len(datafiles)), "test", maxiter=10, verbose=False)
+    # assert no failures now
+    nt.assert_equal(len(failures), 0)
+
+    # remove files
+    for df in datafiles:
+        os.remove(df)
+
