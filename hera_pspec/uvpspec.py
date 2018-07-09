@@ -35,6 +35,7 @@ class UVPSpec(object):
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
         self._cov_array = PSpecParam("cov_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        self._store_cov = PSpecParam("store_cov", description="Indicates whether or not to save the covariance array", expected_type=bool)
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
