@@ -23,9 +23,10 @@ def build_vanilla_uvpspec(beam=None):
 
     Ntimes = 10
     Nfreqs = 50
-    Ndlys = Nfreqs
+    Ndlys = 30
     Nspws = 1
-    Nspwdlys = Nspws * Nfreqs
+    Nspwfreqs = 1 * Nfreqs
+    Nspwdlys = 1 * Ndlys
 
     # [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))]
     blpairs = [1002001002, 2003002003, 1003001003]
@@ -47,10 +48,11 @@ def build_vanilla_uvpspec(beam=None):
     lst_2_array = lst_array
     time_avg_array = time_array
     lst_avg_array = lst_array
-    spws = np.arange(Nspws)
-    spw_array = np.tile(spws, Ndlys)
+    spw_freq_array = np.tile(np.arange(Nspws), Nfreqs)
+    spw_dly_array = np.tile(np.arange(Nspws), Ndlys)
+    spw_array = np.arange(Nspws)
     freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), Nspws)
-    dly_array = np.fft.fftshift(np.repeat(np.fft.fftfreq(Nfreqs, np.median(np.diff(freq_array))), Nspws))
+    dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
     pol_array = np.array([-5])
     Npols = len(pol_array)
     vis_units = 'unknown'
@@ -80,7 +82,7 @@ def build_vanilla_uvpspec(beam=None):
     cosmo = conversions.Cosmo_Conversions()
 
     data_array, wgt_array, integration_array, nsample_array, cov_array = {}, {}, {}, {}, {}
-    for s in spws:
+    for s in spw_array:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
         wgt_array[s] = np.ones((Nblpairts, Ndlys, 2, Npols), dtype=np.float)
@@ -90,7 +92,7 @@ def build_vanilla_uvpspec(beam=None):
          for m in range(Nblpairts)] for n in range(Npols)]),0,-1)
 
 
-    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nblpairs', 'Nblpairts',
+    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws', 'Nblpairs', 'Nblpairts',
               'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array',
               'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array',
               'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
@@ -98,7 +100,7 @@ def build_vanilla_uvpspec(beam=None):
               'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm',
               'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array',
               'cosmo', 'scalar_array', 'labels', 'norm_units', 'labels', 'label_1_array',
-              'label_2_array','store_cov','cov_array']
+              'label_2_array','store_cov','cov_array', 'spw_dly_array', 'spw_freq_array']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
@@ -154,17 +156,18 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, 
     elif isinstance(data, UVData):
         uvd = data
 
-    if isinstance(data_std,str):
-        uvd_std=UVData()
+    if isinstance(data_std, str):
+        uvd_std = UVData()
         uvd_std.read_miriad(data_std)
-    elif isinstance(data_std,UVData):
-        uvd_std=data_std
+    elif isinstance(data_std, UVData):
+        uvd_std = data_std
     else:
-        uvd_std=None
+        uvd_std = None
     if uvd_std is not None:
-        store_cov=True
+        store_cov = True
     else:
-        store_cov=False
+        store_cov = False
+
     # get pol
     pol = uvd.polarization_array[0]
 
@@ -175,7 +178,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, 
         beam.cosmo = cosmo
 
     # instantiate pspecdata
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std,uvd_std], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
     # get blpair groups
     assert isinstance(bl_grps, list), "bl_grps must be a list"

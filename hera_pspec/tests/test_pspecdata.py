@@ -982,7 +982,7 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=[(20,30), (30,40)], verbose=False)
         nt.assert_equal(uvp.Nblpairs, 16)
         nt.assert_equal(uvp.Nspws, 2)
-        uvp2 = uvp.select(spws=[0], bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
+        uvp2 = uvp.select(spws=0, bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
         nt.assert_equal(uvp2.Nspws, 1)
         nt.assert_equal(uvp2.Nblpairs, 7)
         uvp.select(spws=0, bls=(24, 25), only_pairs_in_bls=True, inplace=True)
