@@ -23,10 +23,6 @@ For usage examples and documentation, see http://hera-pspec.readthedocs.io/en/la
 
 For anaconda users, we suggest using conda to install astropy, numpy and scipy.
 
-#### Optional Dependencies
-
-* hera_stats (https://github.com/HERA-Team/hera_stats.git)
-
 ### Installing hera_pspec
 Clone the repo using
 `git clone https://github.com/HERA-Team/hera_pspec.git`
