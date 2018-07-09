@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 """
-psepc_pipe.py
+pspec_pipe.py
 -----------------------------------------
 Copyright (c) 2018 The HERA Collaboration
 
@@ -67,63 +67,6 @@ else:
 # change to working dir
 os.chdir(work_dir)
 
-# define job monitoring function
-def job_monitor(run_func, iterator, action_name, maxiter=1):
-    """
-    Job monitoring function.
-
-    Parameters
-    ----------
-    run_func : function
-        A worker function to run on each element in iterator
-
-    iterator : iterable
-        An iterable whose elements define an individual job launch
-
-    action_name : str
-        The name of the block in the pipeline
-
-    maxiter : int
-        Maximum number of job re-tries for failed jobs.
-
-    Returns
-    -------
-    failures : list
-        A list of failed job indices from iterator
-    """
-    # run function over jobs
-    exit_codes = np.array(M(run_func, iterator))
-    time = datetime.utcnow()
-
-    # inspect for failures
-    if np.all(exit_codes != 0):
-        # everything failed, raise error
-        hp.utils.log("\n{}\nAll {}} jobs failed w/ exit codes\n {}: {}\n".format("-"*60, action_name, exit_codes, time), f=lf, verbose=verbose)
-        raise ValueError("All {}} jobs failed".format(action_name))
-
-    # if not all failed, try re-run
-    failures = np.where(exit_codes != 0)[0]
-    counter = 1
-    while True:
-        if not np.all(exit_codes == 0):
-            if counter >= maxiter:
-                # break after certain number of tries
-                break
-
-            # re-run function over jobs that failed
-            exit_codes = np.array(M(run_func, failures))
-
-            # update counter
-            counter += 1
-
-            # update failures
-            failures = failures[exit_codes != 0]
-
-        else:
-            # all passed
-            break
-
-    return failures
 
 #-------------------------------------------------------------------------------
 # Run Jacknife Data Difference
@@ -192,7 +135,7 @@ if run_pspec:
         return 0
 
     # launch pspec jobs
-    failures = job_monitor(pspec, range(len(jobs)), "PSPEC", maxiter=maxiter)
+    failures = hp.utils.job_monitor(pspec, range(len(jobs)), "PSPEC", lf=lf, maxiter=maxiter, verbose=verbose)
 
     # print failures if they exist
     if len(failures) > 0:
@@ -222,7 +165,7 @@ if run_pspec:
         return 0
 
     # launch pspec merge jobs
-    failures = job_monitor(merge, range(len(groups)), "PSPEC MERGE", maxiter=maxiter)
+    failures = hp.utils.job_monitor(merge, range(len(groups)), "PSPEC MERGE", lf=lf, maxiter=maxiter, verbose=verbose)
 
     # print failures if they exist
     if len(failures) > 0:
@@ -273,7 +216,7 @@ if run_bootstrap:
         return 0
 
     # launch bootstrap jobs
-    failures = job_monitor(bootstrap, range(len(groups)), "BOOTSTRAP", maxiter=maxiter)
+    failures = hp.utils.job_monitor(bootstrap, range(len(groups)), "BOOTSTRAP", lf=lf, maxiter=maxiter, verbose=verbose)
 
     # print failures if they exist
     if len(failures) > 0:
