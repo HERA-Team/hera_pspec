@@ -43,9 +43,6 @@ data :
   pol_pairs :
     - ['xx', 'xx']
 
-  # Define groupnaming convention
-  group_split_str : "_x_"
-
   # full path to data template with {pol} and {group} fields
   data_template : './zen.{group}.?????.{pol}.HH.uvXA'
   std_template : None
@@ -72,7 +69,7 @@ algorithm :
     n_dlys : 
       - 5
     Jy2mK : True
-    rephase_to_dset : "None"
+    rephase_to_dset : None
     trim_dset_lsts : False
     broadcast_dset_flags : True
     time_thresh : 0.2

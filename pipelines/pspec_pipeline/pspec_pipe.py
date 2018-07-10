@@ -41,9 +41,6 @@ globals().update(cf['io'])
 globals().update(cf['data'])
 globals().update(cf['analysis'])
 
-# get common suffix
-data_suffix = os.path.splitext(data_template)[1][1:]
-
 # open logfile
 logfile = os.path.join(out_dir, logfile)
 if os.path.exists(logfile) and overwrite == False:
@@ -186,21 +183,21 @@ if run_bootstrap:
     hp.utils.log("\n{}\nStarting BOOTSTRAP resampling pipeline: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
     # open container
-    psc = hp.PSpecContainer(filename, mode='r')
+    psc = hp.PSpecContainer(outfname, mode='r')
 
     # get groups
-    groups = psc.get_groups()
+    groups = psc.groups()
     del psc
 
     # define bootstrap function
-    def bootstrap(i, filename=filename, groups=groups, p=cf['algorithm']['bootstrap']):
+    def bootstrap(i, filename=outfname, groups=groups, p=cf['algorithm']['bootstrap']):
         try:
             # get container
             psc = hp.PSpecContainer(filename, mode='rw')
 
             # get spectra
             group = groups[i]
-            spectra = psc.spectra(group)
+            spectra = [os.path.join(group, sp) for sp in psc.spectra(group)]
 
             # run bootstrap
             hp.grouping.bootstrap_run(psc, spectra=spectra, time_avg=p['time_avg'], Nsamples=p['Nsamples'],
