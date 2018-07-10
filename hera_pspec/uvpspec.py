@@ -1882,6 +1882,10 @@ def combine_uvpspec(uvps, verbose=True):
                     u.label_1_array[i, j, k] = u_lbls[uvps[l].labels[lbl1]]
                     u.label_2_array[i, j, k] = u_lbls[uvps[l].labels[lbl2]]
             
+                    # scalar array, only do once per spw and pol
+                    if j == 0:
+                        u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
+
             # Populate new LST, time, and blpair arrays
             u.time_1_array[j] = uvps[l].time_1_array[n]
             u.time_2_array[j] = uvps[l].time_2_array[n]
