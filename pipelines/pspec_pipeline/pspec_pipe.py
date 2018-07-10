@@ -67,7 +67,6 @@ else:
 # change to working dir
 os.chdir(work_dir)
 
-
 #-------------------------------------------------------------------------------
 # Run Jacknife Data Difference
 #-------------------------------------------------------------------------------
@@ -149,15 +148,16 @@ if run_pspec:
     hp.utils.log("\nStarting power spectrum file merge: {}\n{}".format(time, '-'*60), f=lf, verbose=verbose)
 
     # Get all groups
+    psc = hp.PSpecContainer(outfname, 'r')
     groups = psc.groups()
+    del psc
 
     # Define merge function
-    def merge(i, filename=filename, groups=groups):
+    def merge(i, groups=groups, filename=outfname):
         try:
             psc = hp.PSpecContainer(filename, mode='rw')
             grp = groups[i]
-            spectra = [os.path.join(grp, sp) for sp in psc.get_spectra(grp)]
-            hp.utils.merge_pspec(psc, spectra=spectra)
+            hp.container.merge_spectra(psc, groups=[grp])
         except:
             hp.utils.log("\nPSPEC MERGE job {} errored with:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
