@@ -35,7 +35,6 @@ class UVPSpec(object):
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
         self._cov_array = PSpecParam("cov_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
-        self._store_cov = PSpecParam("store_cov", description="Indicates whether or not to save the covariance array", expected_type=bool)
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
@@ -102,7 +101,7 @@ class UVPSpec(object):
                             "norm_units", "taper", "norm", "nsample_array",
                             "lst_avg_array", "time_avg_array", "folded",
                             "scalar_array", "labels", "label_1_array",
-                            "label_2_array","store_cov"]
+                            "label_2_array"]
 
         # All parameters must fall into one and only one of the following
         # groups, which are used in __eq__
@@ -110,7 +109,7 @@ class UVPSpec(object):
                             "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                             "Nbls", "channel_width", "weighting", "vis_units",
                             "norm", "norm_units", "taper", "cosmo", "beamfile",
-                            'folded', "store_cov"]
+                            'folded']
         self._ndarrays = ["spw_array", "freq_array", "dly_array", "pol_array",
                           "lst_1_array", "lst_avg_array", "time_avg_array",
                           "lst_2_array", "time_1_array", "time_2_array",
@@ -118,13 +117,11 @@ class UVPSpec(object):
                           "bl_vecs", "bl_array", "telescope_location",
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array"]
-
         self._dicts = ["data_array", "wgt_array", "integration_array",
                        "nsample_array", "cov_array"]
         self._dicts_of_dicts = ["stats_array"]
 
         # define which attributes are considred meta data. Large attrs should be constructed as datasets
-
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array",
                             "time_2_array", "blpair_array", "bl_vecs",
                             "bl_array", "lst_avg_array", "time_avg_array",
@@ -139,7 +136,7 @@ class UVPSpec(object):
         # Default parameter values
         self.folded = False
 
-    def get_cov(self,key,*args):
+    def get_cov(self, key, *args):
         """
         Slice into covariance array with a specified data key in the format
         (spw, ((ant1, ant2),(ant3, ant4)), pol)
@@ -455,10 +452,10 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        stat: string
+        stat : string
             The statistic to return.
 
-        spw: int
+        spw : int
             Choice of spectral window.
         """
         if not hasattr(self, "stats_array"):
@@ -468,6 +465,12 @@ class UVPSpec(object):
 
         spw, blpairts, pol = self.key_to_indices(key, *args)
         data = self.stats_array[stat]
+
+        # if data has been folded, return only positive delays
+        if self.folded:
+            Ndlys = data[spw].shape[1]
+            return data[spw][blpairts, Ndlys//2+1:, pol]
+
         return data[spw][blpairts, :, pol]
 
     def set_stats(self, stat, key, statistic, *args):
@@ -476,13 +479,13 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        stat: string
+        stat : string
             Name of the statistic.
 
-        spw: int
+        spw : int
             Spectral window of the statistic.
 
-        statistic: ndarray
+        statistic : ndarray
             Array with statistics to set. Must be same shape as the same slice
             of data_array.
         """
@@ -947,9 +950,6 @@ class UVPSpec(object):
         if hasattr(self, 'cosmo'):
             self.cosmo = conversions.Cosmo_Conversions(**ast.literal_eval(self.cosmo))
 
-        if not hasattr(self, 'store_cov'):
-            self.store_cov = False
-
         self.check(just_meta=just_meta)
 
 
@@ -1045,7 +1045,7 @@ class UVPSpec(object):
             group.create_dataset("nsample_spw{}".format(i),
                                  data=self.nsample_array[i],
                                  dtype=np.float)
-            if self.store_cov:
+            if hasattr(self, "cov_array"):
                 group.create_dataset("cov_spw{}".format(i),
                                      data=self.cov_array[i],
                                      dtype=np.complex)

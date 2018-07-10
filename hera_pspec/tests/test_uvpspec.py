@@ -87,21 +87,22 @@ class Test_UVPSpec(unittest.TestCase):
 
     def test_stats_array(self):
         # test get_data and set_data
-        keys = self.uvp.get_all_keys()
-        nt.assert_raises(ValueError, self.uvp.set_stats, "errors", keys[0], np.linspace(0, 1, 2))
-        nt.assert_raises(AttributeError, self.uvp.get_stats, "__", keys[0])
-        errs = np.ones((self.uvp.Ntimes, self.uvp.Ndlys))
-        self.uvp.set_stats("errors", keys[0], errs)
-        e = self.uvp.get_stats("errors", keys[0])
-        nt.assert_true(np.all(self.uvp.get_stats("errors", keys[0]) == errs))
-        nt.assert_true(np.all(np.isnan(self.uvp.get_stats("errors", keys[1]))))
+        uvp = copy.deepcopy(self.uvp)
+        keys = uvp.get_all_keys()
+        nt.assert_raises(ValueError, uvp.set_stats, "errors", keys[0], np.linspace(0, 1, 2))
+        nt.assert_raises(AttributeError, uvp.get_stats, "__", keys[0])
+        errs = np.ones((uvp.Ntimes, uvp.Ndlys))
+        uvp.set_stats("errors", keys[0], errs)
+        e = uvp.get_stats("errors", keys[0])
+        nt.assert_true(np.all(uvp.get_stats("errors", keys[0]) == errs))
+        nt.assert_true(np.all(np.isnan(uvp.get_stats("errors", keys[1]))))
 
-        #self.uvp.set_stats("errors", keys[0], -99.)
-        blpairs = self.uvp.get_blpairs()
-        u = self.uvp.average_spectra([blpairs], time_avg=False, error_field="errors", inplace=False)
+        # self.uvp.set_stats("errors", keys[0], -99.)
+        blpairs = uvp.get_blpairs()
+        u = uvp.average_spectra([blpairs], time_avg=False, error_field="errors", inplace=False)
         nt.assert_true(np.all(u.get_stats("errors", keys[0])[0] == np.ones(u.Ndlys)))
-        self.uvp.set_stats("who?", keys[0], errs)
-        u = self.uvp.average_spectra([blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False)
+        uvp.set_stats("who?", keys[0], errs)
+        u = uvp.average_spectra([blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False)
         nt.assert_true(np.all( u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0])))
         u.select(times=np.unique(u.time_avg_array)[:20])
         if os.path.exists('./ex.hdf5'):
@@ -109,6 +110,16 @@ class Test_UVPSpec(unittest.TestCase):
         u.write_hdf5('./ex.hdf5')
         u.read_hdf5('./ex.hdf5')
         os.remove('./ex.hdf5')
+
+        # test folding
+        uvp = copy.deepcopy(self.uvp)
+        errs = np.repeat(np.arange(1, 51)[None], 10, axis=0)
+        uvp.set_stats("test", keys[0], errs)
+        uvp.fold_spectra()
+        # fold by summing in inverse quadrature
+        folded_errs = np.sum([1/errs[:, 1:25][:, ::-1]**2.0, 1/errs[:, 26:]**2.0], axis=0)**(-0.5)
+        np.testing.assert_array_almost_equal(uvp.get_stats("test", keys[0]), folded_errs)
+
 
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
@@ -313,7 +324,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvp.fold_spectra)
         nt.assert_equal(len(uvp.get_dlys(0)), 24)
         nt.assert_true(np.isclose(uvp.nsample_array[0], 2.0).all())
-        #also run the odd case
+        # also run the odd case
         uvd = UVData()
         uvd_std = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))

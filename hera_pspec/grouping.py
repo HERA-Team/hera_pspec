@@ -484,7 +484,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     not_valid = np.isclose(arr, 0., 1e-10)
                     arr[not_valid] *= np.nan
                     arr[~not_valid] = arr[~not_valid] ** (-0.5)
-                    bpg_stats[stat] =  arr
+                    bpg_stats[stat] = arr
 
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
@@ -635,6 +635,15 @@ def fold_spectra(uvp):
                                                                          +rightright)
                 uvp.cov_array[spw][:, :Ndlys/2, :, :] = 0.0
                 uvp.cov_array[spw][:, :, :Ndlys/2, : :] = 0.0
+
+            # fold stats array if it exists: sum in inverse quadrature
+            if hasattr(uvp, 'stats_array'):
+                for stat in uvp.stats_array.keys():
+                    left = uvp.stats_array[stat][spw][:, 1:Ndlys//2, :][:, ::-1, :]
+                    right = uvp.stats_array[stat][spw][:, Ndlys//2+1:, :]
+                    uvp.stats_array[stat][spw][:, Ndlys//2+1:, :] = (np.sum([1/left**2.0, 1/right**2.0], axis=0))**(-0.5)
+                    uvp.data_array[spw][:, :Ndlys//2, :] = np.nan
+
         else:
             # odd number of dlys
             left = uvp.data_array[spw][:, :Ndlys//2, :][:, ::-1, :]
@@ -642,6 +651,7 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, Ndlys//2+1:, :] = np.mean([left, right], axis=0)
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
+
             # fold covariance array if it exists.
             if hasattr(uvp,'cov_array'):
                 leftleft = uvp.cov_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
@@ -654,6 +664,14 @@ def fold_spectra(uvp):
                                                                          +rightright)
                 uvp.cov_array[spw][:, :Ndlys/2, :, :] = 0.0
                 uvp.cov_array[spw][:, :, :Ndlys/2, : :] = 0.0
+
+            # fold stats array if it exists: sum in inverse quadrature
+            if hasattr(uvp, 'stats_array'):
+                for stat in uvp.stats_array.keys():
+                    left = uvp.stats_array[stat][spw][:, :Ndlys//2, :][:, ::-1, :]
+                    right = uvp.stats_array[stat][spw][:, Ndlys//2+1:, :]
+                    uvp.stats_array[stat][spw][:, Ndlys//2+1:, :] = (np.sum([1/left**2.0, 1/right**2.0], axis=0))**(-0.5)
+                    uvp.data_array[spw][:, :Ndlys//2, :] = np.nan
 
     uvp.folded = True
 
