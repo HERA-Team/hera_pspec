@@ -317,9 +317,9 @@ class PSpecContainer(object):
             pass
 
 
-def merge_spectra(psc, dset_split_str='_x_', ext_split_str='_', verbose=True):
+def merge_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_', verbose=True):
     """
-    Iterate through a PSpecContainer and, within each group,
+    Iterate through a PSpecContainer and, within each specified group,
     merge spectra of similar name but different psname extension.
 
     Power spectra to-be-merged are assumed to follow the naming convention
@@ -334,8 +334,11 @@ def merge_spectra(psc, dset_split_str='_x_', ext_split_str='_', verbose=True):
     feed dset_split_str as '' or None. Example, to merge together: uvp_1, uvp_2, uvp_3
     feed dset_split_str=None and ext_split_str='_'.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
+    groups : list
+        A list of groupnames to operate on. Default is all groups.
+
     dset_split_str : str
         The pattern used to split dset1 from dset2 in the psname.
 
@@ -350,8 +353,12 @@ def merge_spectra(psc, dset_split_str='_x_', ext_split_str='_', verbose=True):
         assert isinstance(psc, PSpecContainer)
 
     # get groups
-    groups = psc.groups()
-    assert len(groups) > 0, "no groups exist in this Container object"
+    _groups = psc.groups()
+    if groups is None:
+        groups = _groups
+    else:
+        groups = [grp for grp in groups if grp in _groups]
+    assert len(groups) > 0, "no specified groups exist in this Container object"
 
     # Iterate over groups
     for grp in groups:
