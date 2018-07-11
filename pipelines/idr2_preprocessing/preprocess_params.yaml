@@ -28,6 +28,7 @@ analysis :
 
   multiproc : False    # use multiprocess module
   nproc : 8               # number of processes to spawn
+  maxiter : 1
 
 #---------------------------------------------------------------
 # Data Parameters
@@ -40,6 +41,8 @@ data :
   # full path to a data template with {pol} and {group}
   input_data_template : '../../hera_pspec/data/zen.{group}.{pol}.LST.1.06964.uvA'
   maxiter : 1             # number of maximum job retries
+  bl_len_range : [0, 20]  # data baseline length range [meters]
+  bl_deg_range : [0, 180] # data baseline angle cut [degrees ENU coords]
 
 #---------------------------------------------------------------
 # Algorithm Parameters
@@ -50,7 +53,6 @@ algorithm :
   reformat : 
     reformat_outfile : "zen.{group}.{len:03d}_{deg:03d}.{pol}.{suffix}"   # outfile template
     new_data_template : "zen.{group}.*.{pol}.{suffix}" # new data template to use        
-    bl_len_range : [0, 10000.0]  # [min, max] range of baseline lengths to extract [meters]
     bltol : 1.0   # baseline redundancy tolerance in meters
 
   # RFI Flagging

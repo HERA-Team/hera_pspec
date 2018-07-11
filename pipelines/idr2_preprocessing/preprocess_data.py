@@ -120,7 +120,7 @@ if reformat:
             return 0
 
         # launch jobs
-        failures = job_monitor(bl_reformat, range(len(reds)), "BL REFORMAT: pol {}".format(pol), M=M, lf=lf, maxiter=maxiter, verbose=verbose)
+        failures = hp.utils.job_monitor(bl_reformat, range(len(reds)), "BL REFORMAT: pol {}".format(pol), M=M, lf=lf, maxiter=maxiter, verbose=verbose)
 
     # edit data template
     input_data_template = os.path.join(out_dir, new_data_template.format(pol='{pol}', suffix=data_suffix))
@@ -186,22 +186,9 @@ if timeavg_sub:
     # get datafiles
     datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
 
-    # load a datafile and get antenna numbers
-    uvd = UVData()
-    uvd.read_miriad_metadata(datafiles[0][0])
-    antpos, ants = uvd.get_ENU_antpos()
-    antpos_dict = dict(zip(ants, antpos))
-
-    # get redundant baselines
-    reds = hc.redcal.get_pos_reds(antpos_dict, bl_error_tol=1.0, low_hi=True)
-    lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
-    angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
-    angs = [(a + 180) % 360 if a < 0 else a for a in angs]
-
-    # put in autocorrs
-    reds = [zip(uvd.antenna_numbers, uvd.antenna_numbers)] + reds
-    lens = [0] + lens
-    angs = [0] + angs
+    # get redundant groups as a good split for parallelization
+    reds, lens, angs = hp.utils.get_reds(datafiles[0][0], bl_error_tol=1.0, add_autos=True,
+                                         bl_len_range=bl_len_range, bl_deg_range=bl_deg_range)
 
     # iterate over pols
     for i, dfs in enumerate(datafiles):
@@ -287,9 +274,9 @@ if timeavg_sub:
                     if bl in tavg.baseline_array:
                         uvd.data_array[bl_inds, :, :, pol_ind] -= tavg.get_data(bl)[None]
                     else:
+                        uvd.flag_array[bl_inds, :, :, pol_ind] = True
                         if verbose:
                             print "baseline {} not found in time-averaged spectrum".format(bl)
-                            uvd.flag_array[bl_inds, :, :, pol_ind] = True
 
                 # put uniq_bls in if it doesn't exist
                 if not uvd.extra_keywords.has_key('uniq_bls'):
@@ -325,22 +312,9 @@ if time_avg:
     # get datafiles
     datafiles, datapols = uvt.utils.search_data(input_data_template.format(group=groupname, pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
 
-    # load a datafile and get antenna numbers
-    uvd = UVData()
-    uvd.read_miriad_metadata(datafiles[0][0])
-    antpos, ants = uvd.get_ENU_antpos()
-    antpos_dict = dict(zip(ants, antpos))
-
-    # get redundant baselines
-    reds = hc.redcal.get_pos_reds(antpos_dict, bl_error_tol=1.0, low_hi=True)
-    lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
-    angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
-    angs = [(a + 180) % 360 if a < 0 else a for a in angs]
-
-    # put in autocorrs
-    reds = [zip(uvd.antenna_numbers, uvd.antenna_numbers)] + reds
-    lens = [0] + lens
-    angs = [0] + angs
+    # get redundant groups as a good split for parallelization
+    reds, lens, angs = hp.utils.get_reds(datafiles[0][0], bl_error_tol=1.0, add_autos=True,
+                                         bl_len_range=bl_len_range, bl_deg_range=bl_deg_range)
 
     # iterate over pol groups
     for i, dfs in enumerate(datafiles):
@@ -354,7 +328,7 @@ if time_avg:
                 try:
                     uvd.read_miriad(dfs, bls=reds[j], polarizations=[pol])
                 except ValueError:
-                    hp.utils.log("job {} failed b/c no data is present given bls and/or pol selection".format(j))
+                    hp.utils.log("job {} failed w/ ValueError, probably b/c no data is present given bls and/or pol selection".format(j))
                     return 0
                 # instantiate FRF object
                 F = hc.frf.FRFilter()
@@ -380,6 +354,7 @@ if time_avg:
         # collate averaged data into time chunks
         tavg_files = os.path.join(out_dir, "zen.{group}.{pol}.*.{suffix}".format(group=groupname, pol=pol, suffix=data_suffix + file_ext))
         tavg_files = sorted(glob.glob(tavg_files))
+        assert len(tavg_files) > 0, "len(tavg_files) == 0"
 
         # pick one file to get full time information from
         uvd = UVData()

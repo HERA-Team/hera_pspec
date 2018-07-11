@@ -159,10 +159,10 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
     return bls1, bls2, blpairs
 
 
-def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=True, 
-              exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
+def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=True, 
+                     exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
     """
-    Use hera_cal.redcal to get matching redundant baselines groups from uvd1 and uvd2
+    Use hera_cal.redcal to get matching, redundant baseline-pair groups from uvd1 and uvd2
     within the specified baseline tolerance, not including flagged ants.
 
     Parameters
@@ -273,8 +273,9 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         xants1 = sorted(xants1)
         xants2 = sorted(xants2)
 
-    # get reds
-    reds = redcal.get_pos_reds(antpos, bl_error_tol=bl_tol, low_hi=True)
+    # construct redundant groups
+    reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
+                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
 
     # construct baseline pairs
     baselines1, baselines2, blpairs = [], [], []
@@ -589,7 +590,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     A baseline-pair is formed by self-matching unique-files in the
     glob-parsed master list, and then string-formatting-in appropriate 
     pol and group selections given pol_pairs and group_pairs. Those two
-    files are then passed to utils.calc_reds(..., **kwargs) to construct
+    files are then passed to utils.calc_blpair_reds(..., **kwargs) to construct
     the baseline-pairs for that particular file-matching.
 
     Parameters
@@ -670,7 +671,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
 
     # get baseline pairs
     (_bls1, _bls2, _, _, 
-     _) = calc_reds(uvd, uvd, filter_blpairs=False, exclude_auto_bls=exclude_auto_bls,
+     _) = calc_blpair_reds(uvd, uvd, filter_blpairs=False, exclude_auto_bls=exclude_auto_bls,
                     exclude_permutations=exclude_permutations, bl_len_range=bl_len_range,
                     bl_deg_range=bl_deg_range)
 
@@ -849,4 +850,102 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
         log("\nAll {} jobs ran through".format(action_name), f=lf, verbose=verbose)
 
     return failures
+
+
+def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
+             bl_deg_range=(0, 180), xants=None, add_autos=False):
+    """
+    Given a UVData object, a Miriad filepath or antenna position dictionary,
+    calculate redundant baseline groups using hera_cal.redcal and optionally filter
+    groups based on baseline cuts and xants.
+
+    Parameters
+    ----------
+    uvd : UVData object or str or dictionary
+        UVData object or Miriad filepath string or antenna position dictionary.
+        An antpos dict is formed via dict(zip(ants, ant_vecs)).
+
+    bl_error_tol : float
+        Redundancy tolerance in meters
+
+    pick_data_ants : boolean
+        If True, use only antennas in the UVData to construct reds, else use all
+        antennas present.
+
+    bl_len_range : float tuple
+        A len-2 float tuple specifying baseline length cut in meters
+
+    bl_deg_range : float tuple
+        A len-2 float tuple specifying baseline angle cut in degrees in ENU frame
+
+    xants : list
+        List of bad antenna numbers to exclude
+
+    add_autos : bool
+        If True, add into autocorrelation to redundant groups
+
+    Returns (reds, lens, angs)
+    ------- 
+    reds : list
+        List of redundant baseline (antenna-pair) groups 
+
+    lens : list
+        List of baseline lengths [meters] of each group in reds
+
+    angs : list
+        List of baseline angles [degrees ENU coords] of each group in reds
+    """
+    # handle string and UVData object
+    if isinstance(uvd, (str, np.str, UVData)):
+        # load filepath
+        if isinstance(uvd, (str, np.str)):
+            _uvd = UVData()
+            _uvd.read_miriad_metadata(uvd)
+            uvd = _uvd
+        # get antenna position dictionary
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
+        antpos_dict = dict(zip(ants, antpos))
+    # use antenna position dictionary
+    elif isinstance(uvd, (dict, odict)):
+        antpos_dict = uvd
+
+    # get redundant baselines
+    reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol, low_hi=True)
+    lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
+    angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
+    angs = [(a + 180) % 360 if a < 0 else a for a in angs]
+
+    # put in autocorrs
+    if add_autos:
+        ants = antpos_dict.keys()
+        reds = [zip(ants, ants)] + reds
+        lens = [0] + lens
+        angs = [0] + angs
+
+    # restrict baselines
+    _reds, _lens, _angs = [], [], []
+    for i, (l, a) in enumerate(zip(lens, angs)):
+        if l >= bl_len_range[0] and l <= bl_len_range[1]:
+            if a >= bl_deg_range[0] and a <= bl_deg_range[1]:
+                _reds.append(reds[i])
+                _lens.append(lens[i])
+                _angs.append(angs[i])
+    reds, lens, angs = _reds, _lens, _angs
+
+    # filter based on xants
+    if xants is not None:
+        _reds, _lens, _angs = [], [], []
+        for i, r in enumerate(reds):
+            _r = []
+            for bl in r:
+                if bl[0] not in xants and bl[1] not in xants:
+                    _r.append(bl)
+            if len(_r) > 0:
+                _reds.append(_r)
+                _lens.append(lens[i])
+                _angs.append(angs[i])
+
+        reds, lens, angs = _reds, _lens, _angs
+
+    return reds, lens, angs
 
