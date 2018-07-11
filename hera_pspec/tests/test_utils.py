@@ -148,14 +148,14 @@ class Test_Utils(unittest.TestCase):
         nt.ok_( spw5[0] is not None )
         
 
-    def test_calc_reds(self):
+    def test_calc_blpair_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
         uvd.read_miriad(fname)
 
         # basic execution
         (bls1, bls2, blps, xants1,
-         xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True)  
+         xants2) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True)  
         nt.assert_equal(len(bls1), len(bls2), 15)
         nt.assert_equal(blps, zip(bls1, bls2))
         nt.assert_equal(xants1, xants2)
@@ -163,24 +163,24 @@ class Test_Utils(unittest.TestCase):
 
         # test xant_flag_thresh
         (bls1, bls2, blps, xants1,
-         xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=True, exclude_permutations=True,
+         xants2) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=True, exclude_permutations=True,
                                    xant_flag_thresh=0.0)  
         nt.assert_equal(len(bls1), len(bls2), 0)
 
         # test bl_len_range
         (bls1, bls2, blps, xants1,
-         xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True,
+         xants2) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True,
                                    bl_len_range=(0, 15.0))  
         nt.assert_equal(len(bls1), len(bls2), 12)
         (bls1, bls2, blps, xants1,
-         xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=True, exclude_permutations=True,
+         xants2) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=True, exclude_permutations=True,
                                    bl_len_range=(0, 15.0))  
         nt.assert_equal(len(bls1), len(bls2), 5)
         nt.assert_true(np.all([bls1[i] != bls2[i] for i in range(len(blps))]))
 
         # test grouping
         (bls1, bls2, blps, xants1,
-         xants2) = utils.calc_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True,
+         xants2) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True,
                                    Nblps_per_group=2)  
         nt.assert_equal(len(blps), 10)
         nt.assert_true(isinstance(blps[0], list))
@@ -189,7 +189,34 @@ class Test_Utils(unittest.TestCase):
         # test exceptions
         uvd2 = copy.deepcopy(uvd)
         uvd2.antenna_positions[0] += 2
-        nt.assert_raises(AssertionError, utils.calc_reds, uvd, uvd2)
+        nt.assert_raises(AssertionError, utils.calc_blpair_reds, uvd, uvd2)
+
+    def test_get_reds(self):
+        fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
+        uvd = UVData()
+        uvd.read_miriad_metadata(fname)
+        antpos, ants = uvd.get_ENU_antpos()
+        antpos_d = dict(zip(ants, antpos))
+
+        # test basic execution
+        xants = [0, 1, 2]
+        r, l, a = utils.get_reds(fname, xants=xants)
+        nt.assert_true(np.all([np.all([bl[0] not in xants and bl[1] not in xants for bl in _r]) for _r in r]))
+        nt.assert_equal(len(r), len(a), len(l))
+        nt.assert_equal(len(r), 104)
+
+        r2, l2, a2 = utils.get_reds(uvd, xants=xants)
+        _ = [np.testing.assert_array_equal(_r1, _r2) for _r1, _r2 in zip(r, r2)]
+
+        r2, l2, a2 = utils.get_reds(antpos_d, xants=xants)
+        _ = [np.testing.assert_array_equal(_r1, _r2) for _r1, _r2 in zip(r, r2)]
+
+        # restrict
+        bl_len_range = (14, 16)
+        bl_deg_range = (55, 65)
+        r, l, a = utils.get_reds(uvd, bl_len_range=bl_len_range, bl_deg_range=bl_deg_range)
+        nt.assert_true(np.all([_l > bl_len_range[0] and _l < bl_len_range[1] for _l in l]))
+        nt.assert_true(np.all([_a > bl_deg_range[0] and _a < bl_deg_range[1] for _a in a]))
 
     def test_config_pspec_blpairs(self):
         # test basic execution
