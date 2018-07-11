@@ -65,7 +65,7 @@ else:
 os.chdir(work_dir)
 
 #-------------------------------------------------------------------------------
-# Run Jacknife Data Difference
+# Run Visibility Data Difference
 #-------------------------------------------------------------------------------
 if run_diff:
     # get algorithm parameters
@@ -110,8 +110,8 @@ if run_pspec:
             # parse dsets
             dsets = [dt.format(group=key[0], pol=key[2]), dt.format(group=key[1], pol=key[3])]
             dset_labels = [os.path.basename(d) for d in dsets]
-            if st is not None and st is not '' and st is not 'None':
-                dsets_std = [dt.format(group=key[0], pol=key[2]), dt.format(group=key[1], pol=key[3])]
+            if st is not None:
+                dsets_std = [st.format(group=key[0], pol=key[2]), st.format(group=key[1], pol=key[3])]
             else:
                 dsets_std = None
 
