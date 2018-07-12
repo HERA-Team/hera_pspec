@@ -103,13 +103,17 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(np.all(u.get_stats("errors", keys[0])[0] == np.ones(u.Ndlys)))
         uvp.set_stats("who?", keys[0], errs)
         u = uvp.average_spectra([blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False)
+        u2 = uvp.average_spectra([blpairs], time_avg=True, error_field=["errors", "who?"], inplace=False)
         nt.assert_true(np.all( u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0])))
         u.select(times=np.unique(u.time_avg_array)[:20])
-        if os.path.exists('./ex.hdf5'):
-            os.remove('./ex.hdf5')
+        
+        u3 = uvp.average_spectra([blpairs], time_avg=True, inplace=False)
+        nt.assert_raises(KeyError, uvp.average_spectra, [blpairs], time_avg=True, inplace=False, error_field=["..............."])
+        nt.assert_false(hasattr(u3, "stats_array"))
+        if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
         u.write_hdf5('./ex.hdf5')
         u.read_hdf5('./ex.hdf5')
-        os.remove('./ex.hdf5')
+        os.remove('./ex.hdf5')        
 
         # test folding
         uvp = copy.deepcopy(self.uvp)
@@ -119,7 +123,6 @@ class Test_UVPSpec(unittest.TestCase):
         # fold by summing in inverse quadrature
         folded_errs = np.sum([1/errs[:, 1:25][:, ::-1]**2.0, 1/errs[:, 26:]**2.0], axis=0)**(-0.5)
         np.testing.assert_array_almost_equal(uvp.get_stats("test", keys[0]), folded_errs)
-
 
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
