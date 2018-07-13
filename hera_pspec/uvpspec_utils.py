@@ -125,8 +125,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.Nblpairs = len(np.unique(uvp.blpair_array))
         uvp.Nblpairts = len(uvp.blpair_array)
         if bls is not None:
-            bl_array = np.unique(blpair_bls)
-            bl_select = reduce(operator.add, map(lambda b: uvp.bl_array==b, bl_array))
+            bl_select = [bl in bls for bl in uvp.bl_array]
             uvp.bl_array = uvp.bl_array[bl_select]
             uvp.bl_vecs = uvp.bl_vecs[bl_select]
             uvp.Nbls = len(uvp.bl_array)
