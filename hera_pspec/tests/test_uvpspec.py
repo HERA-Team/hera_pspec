@@ -85,6 +85,45 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), 'XX'), (0, ((1, 3), (1, 3)), 'XX'),
                                (0, ((2, 3), (2, 3)), 'XX')])
 
+    def test_stats_array(self):
+        # test get_data and set_data
+        uvp = copy.deepcopy(self.uvp)
+        keys = uvp.get_all_keys()
+        nt.assert_raises(ValueError, uvp.set_stats, "errors", keys[0], np.linspace(0, 1, 2))
+        nt.assert_raises(AttributeError, uvp.get_stats, "__", keys[0])
+        errs = np.ones((uvp.Ntimes, uvp.Ndlys))
+        uvp.set_stats("errors", keys[0], errs)
+        e = uvp.get_stats("errors", keys[0])
+        nt.assert_true(np.all(uvp.get_stats("errors", keys[0]) == errs))
+        nt.assert_true(np.all(np.isnan(uvp.get_stats("errors", keys[1]))))
+
+        # self.uvp.set_stats("errors", keys[0], -99.)
+        blpairs = uvp.get_blpairs()
+        u = uvp.average_spectra([blpairs], time_avg=False, error_field="errors", inplace=False)
+        nt.assert_true(np.all(u.get_stats("errors", keys[0])[0] == np.ones(u.Ndlys)))
+        uvp.set_stats("who?", keys[0], errs)
+        u = uvp.average_spectra([blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False)
+        u2 = uvp.average_spectra([blpairs], time_avg=True, error_field=["errors", "who?"], inplace=False)
+        nt.assert_true(np.all( u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0])))
+        u.select(times=np.unique(u.time_avg_array)[:20])
+        
+        u3 = uvp.average_spectra([blpairs], time_avg=True, inplace=False)
+        nt.assert_raises(KeyError, uvp.average_spectra, [blpairs], time_avg=True, inplace=False, error_field=["..............."])
+        nt.assert_false(hasattr(u3, "stats_array"))
+        if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
+        u.write_hdf5('./ex.hdf5')
+        u.read_hdf5('./ex.hdf5')
+        os.remove('./ex.hdf5')        
+
+        # test folding
+        uvp = copy.deepcopy(self.uvp)
+        errs = np.repeat(np.arange(1, 51)[None], 10, axis=0)
+        uvp.set_stats("test", keys[0], errs)
+        uvp.fold_spectra()
+        # fold by summing in inverse quadrature
+        folded_errs = np.sum([1/errs[:, 1:25][:, ::-1]**2.0, 1/errs[:, 26:]**2.0], axis=0)**(-0.5)
+        np.testing.assert_array_almost_equal(uvp.get_stats("test", keys[0]), folded_errs)
+
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)
         uvp.convert_to_deltasq(little_h=True)
@@ -288,6 +327,18 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvp.fold_spectra)
         nt.assert_equal(len(uvp.get_dlys(0)), 24)
         nt.assert_true(np.isclose(uvp.nsample_array[0], 2.0).all())
+        # also run the odd case
+        uvd = UVData()
+        uvd_std = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        uvd_std.read_miriad(os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'))
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+        bls = [(37, 38), (38, 39), (52, 53)]
+        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, spw_ranges=[(0,17)], beam=beam)
+        uvp1.fold_spectra()
+        cov_folded = uvp1.get_cov(0, ((37, 38), (38, 39)), 'xx')
+        data_folded = uvp1.get_data(0, ((37,38), (38, 39)), 'xx')
+
 
     def test_str(self):
         a = str(self.uvp)
@@ -393,7 +444,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp3.pol_array[0] = -7
         out = uvp1 + uvp2 + uvp3
         nt.assert_equal(out.Npols, 3)
-        
+
     def test_combine_uvpspec_std(self):
             # setup uvp build
             uvd = UVData()

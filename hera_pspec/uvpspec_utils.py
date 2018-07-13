@@ -158,6 +158,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         nsmp = odict()
         cov = odict()
         store_cov = hasattr(uvp, 'cov_array')
+
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 data[s] = h5file['data_spw{}'.format(s)][blp_select, :, pol_select]
@@ -167,23 +168,48 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
                 if store_cov:
                     cov[s] = h5file['cov_spw{}'.format(s)][blp_select, :, :, pol_select]
             else:
+                if store_cov:
+                    cov[s] = uvp.cov_array[s][blp_select, :, :, pol_select]
                 data[s] = uvp.data_array[s][blp_select, :, pol_select]
                 wgts[s] = uvp.wgt_array[s][blp_select, :, :, pol_select]
                 ints[s] = uvp.integration_array[s][blp_select, pol_select]
                 nsmp[s] = uvp.nsample_array[s][blp_select, pol_select]
-                if store_cov:
-                    cov[s] = uvp.cov_array[s][blp_select, :, :, pol_select]
+
+
+        # Prepare to read stats arrays
+        stats = odict()
+
+        # If h5file, read in stats data
+        if h5file is not None:
+            statnames = [f[f.find("_")+1: f.rfind("_")] for f in h5file.keys()
+                         if f.startswith("stats")]
+            for sts in np.unique(np.array(statnames)):
+                stats[sts] = odict()
+                for s in np.unique(uvp.spw_array):
+                    stats[sts][s] = h5file["stats_{}_{}".format(sts, s)][blp_select, :, pol_select]
+            if len(statnames) is not 0:
+                uvp.stats_array = stats
+
+        # Otherwise, keep whatever uvp already has
+        elif hasattr(uvp, "stats_array"):
+            for k in uvp.stats_array.keys():
+                stats[k] = odict()
+                for s in np.unique(uvp.spw_array):
+                    stats[k][s] = uvp.stats_array[k][s][blp_select, :, pol_select]
+            uvp.stats_array = stats
 
         uvp.data_array = data
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
-        if store_cov:
-            uvp.cov_array = cov
-    except AttributeError:
-        # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
-        pass
 
+        # Check for covariance array
+        if store_cov: uvp.cov_array = cov
+
+    except AttributeError as e:
+        # If no h5file fed and hasattr(uvp, data_array) is False then just
+        # load meta-data
+        pass
 
 def _blpair_to_antnums(blpair):
     """
@@ -375,29 +401,29 @@ def _conj_blpair(blpair, which='both'):
 
 def _fast_is_in(src_blpts, query_blpts, time_prec=8):
     """
-    Helper function to rapidly check if a given blpair-time couplet is in an 
+    Helper function to rapidly check if a given blpair-time couplet is in an
     array.
-    
+
     Parameters
     ----------
     src_blpts : list of tuples or array_like
-        List of tuples or array of shape (N, 2), containing a list of (blpair, 
+        List of tuples or array of shape (N, 2), containing a list of (blpair,
         time) couplets.
-    
+
     query_blpts : list of tuples or array_like
-        List of tuples or array of shape (M, 2), containing a list of (blpair, 
+        List of tuples or array of shape (M, 2), containing a list of (blpair,
         time) which will be looked up in src_blpts
-    
+
     time_prec : int, optional
-        Number of decimals to round time array to when performing float 
+        Number of decimals to round time array to when performing float
         comparision. Default: 8.
-    
+
     Returns
     -------
     is_in_arr: list of bools
         A list of booleans, which indicate which query_blpts are in src_blpts.
     """
-    # This function converts baseline-pair-times, a tuple (blp, time) 
+    # This function converts baseline-pair-times, a tuple (blp, time)
     # to a complex number blp + 1j * time, so that "in" function is much
     # faster.
     src_blpts = np.asarray(src_blpts)
@@ -413,42 +439,40 @@ def _fast_is_in(src_blpts, query_blpts, time_prec=8):
 
 def _fast_lookup_blpairts(src_blpts, query_blpts, time_prec=8):
     """
-    Helper function to allow fast lookups of array indices for large arrays of 
+    Helper function to allow fast lookups of array indices for large arrays of
     blpair-time tuples.
-    
+
     Parameters
     ----------
     src_blpts : list of tuples or array_like
-        List of tuples or array of shape (N, 2), containing a list of (blpair, 
+        List of tuples or array of shape (N, 2), containing a list of (blpair,
         time) couplets.
-    
+
     query_blpts : list of tuples or array_like
-        List of tuples or array of shape (M, 2), containing a list of (blpair, 
+        List of tuples or array of shape (M, 2), containing a list of (blpair,
         time) couplets that you want to find the indices of in source_blpts.
-    
+
     time_prec : int, optional
-        Number of decimals to round time array to when performing float 
+        Number of decimals to round time array to when performing float
         comparision. Default: 8.
-    
+
     Returns
     -------
     blpts_idxs : array_like
-        Array of integers of size (M,), which are indices in the source_blpts 
+        Array of integers of size (M,), which are indices in the source_blpts
         array for each item in query_blpts.
     """
-    # This function works by using a small hack -- the blpair-times are turned 
-    # into complex numbers of the form (blpair + 1.j*time), allowing numpy 
+    # This function works by using a small hack -- the blpair-times are turned
+    # into complex numbers of the form (blpair + 1.j*time), allowing numpy
     # array lookup functions to be used
     src_blpts = np.asarray(src_blpts)
     query_blpts = np.asarray(query_blpts)
     src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
     query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
     # Applies rounding to time values to ensure reliable float comparisons
-    
+
     # Do np.where comparison for all new_blpts
     # (indices stored in second array returned by np.where)
     blpts_idxs = np.where(src_blpts == query_blpts[:,np.newaxis])[1]
-    
-    return blpts_idxs
-    
 
+    return blpts_idxs
