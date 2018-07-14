@@ -19,6 +19,7 @@ You can find the code in the ``hera_pspec`` `GitHub repository <https://github.c
    pspecdata
    uvpspec
    container
+   plot
 
 
 Indices and tables

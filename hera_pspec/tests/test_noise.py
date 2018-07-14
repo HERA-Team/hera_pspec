@@ -16,7 +16,7 @@ class Test_Sensitivity(unittest.TestCase):
 
     def setUp(self):
         self.cosmo = conversions.Cosmo_Conversions()
-        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'NF_HERA_Beams.beamfits'))
+        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_pstokes_power.beamfits'))
         self.sense = noise.Sensitivity(beam=self.beam, cosmo=self.cosmo)
 
     def tearDown(self):
@@ -43,21 +43,21 @@ class Test_Sensitivity(unittest.TestCase):
 
     def test_scalar(self):
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        self.sense.calc_scalar(freqs, 'I', num_steps=5000, little_h=True)
+        self.sense.calc_scalar(freqs, 'pI', num_steps=5000, little_h=True)
         nt.assert_true(np.isclose(freqs, self.sense.subband).all())
-        nt.assert_true(self.sense.pol, 'I')
+        nt.assert_true(self.sense.pol, 'pI')
 
     def test_calc_P_N(self):
         # calculate scalar
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        self.sense.calc_scalar(freqs, 'I', num_steps=5000, little_h=True)
+        self.sense.calc_scalar(freqs, 'pI', num_steps=5000, little_h=True)
         # basic execution 
         k = np.linspace(0, 3, 10)
         Tsys = 500.0
         t_int = 10.7
         P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, form='Pk')
         nt.assert_true(isinstance(P_N, (float, np.float)))
-        nt.assert_true(np.isclose(P_N, 906609626029.72791))
+        nt.assert_true(np.isclose(P_N, 908472312787.53491))
         # calculate DelSq
         Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form='DelSq')
         nt.assert_equal(Dsq.shape, (10,))
