@@ -199,6 +199,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_equal(uvp2.data_array[0].shape, (10, 50, 1))
         nt.assert_almost_equal(uvp2.data_array[0][0,0,0], (1.0020010020000001+0j))
+        nt.assert_true(np.all(uvp2.bl_array == np.array([1002])))
         # blpair select
         uvp = copy.deepcopy(self.uvp)
         uvp2 = uvp.select(blpairs=[1002001002, 2003002003], inplace=False)

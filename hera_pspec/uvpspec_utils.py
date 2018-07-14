@@ -124,12 +124,17 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.Ntimes = len(np.unique(uvp.time_avg_array))
         uvp.Nblpairs = len(np.unique(uvp.blpair_array))
         uvp.Nblpairts = len(uvp.blpair_array)
-        if bls is not None:
-            bl_array = np.unique(blpair_bls)
-            bl_select = reduce(operator.add, map(lambda b: uvp.bl_array==b, bl_array))
-            uvp.bl_array = uvp.bl_array[bl_select]
-            uvp.bl_vecs = uvp.bl_vecs[bl_select]
-            uvp.Nbls = len(uvp.bl_array)
+
+        # Calculate unique baselines from new blpair_array
+        new_blpairs = np.unique(uvp.blpair_array)
+        bl1 = np.floor(new_blpairs / 1e6)
+        new_bls = np.unique([bl1, new_blpairs - bl1*1e6]).astype(np.int32)
+
+        # Set baseline attributes
+        bl_select = [bl in new_bls for bl in uvp.bl_array]
+        uvp.bl_array = uvp.bl_array[bl_select]
+        uvp.bl_vecs = uvp.bl_vecs[bl_select]
+        uvp.Nbls = len(uvp.bl_array)
 
     if pols is not None:
         # assert form
