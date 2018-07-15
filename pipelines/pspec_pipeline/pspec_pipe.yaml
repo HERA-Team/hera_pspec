@@ -47,6 +47,13 @@ data :
   data_template : './zen.{group}.?????.{pol}.HH.uvXA'
   std_template : None
 
+  # baseline type restriction in length (meters) and angle (degrees)
+  bl_len_range : [0, 10000.0]
+  bl_deg_range : [0, 180]
+
+  # denote bad antennas
+  xants : []
+
 #---------------------------------------------------------------
 # Algorithm Parameters
 #---------------------------------------------------------------
@@ -78,11 +85,11 @@ algorithm :
     exclude_permutations : True
     bl_len_range : [0, 20]
     bl_deg_range : [40, 80]
-    xants : [] 
     maxiter : 1
 
   # bootstrap pipeline
   bootstrap :
+    psc_name : "pspec.h5"
     time_avg : True
     Nsamples : 100
     seed : None

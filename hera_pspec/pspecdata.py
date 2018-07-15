@@ -173,7 +173,7 @@ class PSpecData(object):
         # Check for repeated labels, and make them unique
         for i, l in enumerate(self.labels):
             ext = 1
-            while True:
+            while ext < 1e5:
                 if l in self.labels[:i]:
                     l = self.labels[i] + ".{:d}".format(ext)
                     ext += 1
@@ -1840,8 +1840,9 @@ class PSpecData(object):
             (None) is to use the entire band provided in each dataset.
 
         store_cov : boolean, optional
-            If True, solve for covariance between bandpowers and store in
-            output UVPSpec object.
+            If True, calculate an analytic covariance between bandpowers
+            given an input visibility noise model, and store the output
+            in the UVPSpec object.
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
@@ -2378,7 +2379,7 @@ class PSpecData(object):
                 print "Warning: feeding a beam model when self.primary_beam already exists..."
 
         # Check beam is not None
-        assert beam is not None, "Beam object is None but attempting to convert Jy -> mK"
+        assert beam is not None, "Cannot convert Jy --> mK b/c beam object is not defined..."
 
         # assert type of beam
         assert isinstance(beam, pspecbeam.PSpecBeamBase), "beam model must be a subclass of pspecbeam.PSpecBeamBase"
@@ -2529,15 +2530,15 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     Nblps_per_group : integer
         If blpairs is None, group blpairs into sub-groups of baseline-pairs
-        of this size. See utils.calc_reds() for details. Default: None
+        of this size. See utils.calc_blpair_reds() for details. Default: None
 
     bl_len_range : len-2 float tuple
         A tuple containing the minimum and maximum baseline length to use
-        in utils.calc_reds call. Only used if blpairs is None.
+        in utils.calc_blpair_reds call. Only used if blpairs is None.
 
     bl_deg_range : len-2 float tuple
         A tuple containing the min and max baseline angle (ENU frame in degrees)
-        to use in utils.calc_reds. Total range is between 0 and 180 degrees.
+        to use in utils.calc_blpair_reds. Total range is between 0 and 180 degrees.
 
     bl_error_tol : float
         Baseline vector error tolerance when constructing redundant groups.
@@ -2716,13 +2717,13 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         # get bls if blpairs not fed
         if blpairs is None:
             (bls1, bls2, blps, xants1,
-             xants2) = utils.calc_reds(dsets[dsetp[0]], dsets[dsetp[1]],
-                                       filter_blpairs=True,
-                                       exclude_auto_bls=exclude_auto_bls,
-                                       exclude_permutations=exclude_permutations,
-                                       Nblps_per_group=Nblps_per_group,
-                                       bl_len_range=bl_len_range,
-                                       bl_deg_range=bl_deg_range)
+             xants2) = utils.calc_blpair_reds(dsets[dsetp[0]], dsets[dsetp[1]],
+                                              filter_blpairs=True,
+                                              exclude_auto_bls=exclude_auto_bls,
+                                              exclude_permutations=exclude_permutations,
+                                              Nblps_per_group=Nblps_per_group,
+                                              bl_len_range=bl_len_range,
+                                              bl_deg_range=bl_deg_range)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
 

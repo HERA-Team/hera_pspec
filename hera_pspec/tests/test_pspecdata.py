@@ -10,6 +10,7 @@ from pyuvdata import UVData
 from hera_cal import redcal
 from scipy.signal import windows
 from scipy.interpolate import interp1d
+from astropy.time import Time
 
 # Data files to use in tests
 dfiles = [
@@ -836,10 +837,10 @@ class Test_PSpecData(unittest.TestCase):
         # test phasing
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
-        uvd.phase_to_time(2458042)
+        uvd.phase_to_time(Time(2458042, format='jd'))
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
-        uvd2.phase_to_time(2458042.5)
+        uvd2.phase_to_time(Time(2458042.5, format='jd'))
         ds.validate_datasets()
 
     def test_rephase_to_dst(self):
