@@ -263,7 +263,7 @@ def test_bootstrap_run():
 
     # Test basic bootstrap run
     grouping.bootstrap_run(psc, time_avg=True, Nsamples=100, seed=0,
-                           normal_std=True, robust_std=True, conf_ints=[16, 84], keep_samples=True,
+                           normal_std=True, robust_std=True, cintervals=[16, 84], keep_samples=True,
                            bl_error_tol=1.0, overwrite=True, add_to_history='hello!', verbose=False)
     spcs = psc.spectra("grp1")
     # assert all bs samples were written
@@ -301,10 +301,10 @@ def test_get_bootstrap_run_argparser():
     args = grouping.get_bootstrap_run_argparser()
     a = args.parse_args(['fname', '--spectra', 'grp1/uvp1', 'grp1/uvp2', 'grp2/uvp1',
                          '--blpair_groups', '101102103104 101102102103, 102103104105',
-                         '--time_avg', 'True', '--Nsamples', '100', '--conf_ints', '16', '84'])
+                         '--time_avg', 'True', '--Nsamples', '100', '--cintervals', '16', '84'])
     nt.assert_equal(a.spectra, ['grp1/uvp1', 'grp1/uvp2', 'grp2/uvp1'])
     nt.assert_equal(a.blpair_groups, [[101102103104, 101102102103], [102103104105]])
-    nt.assert_equal(a.conf_ints, [16.0, 84.0])
+    nt.assert_equal(a.cintervals, [16.0, 84.0])
 
 
 if __name__ == "__main__":

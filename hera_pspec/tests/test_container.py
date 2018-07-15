@@ -126,7 +126,7 @@ class Test_PSpecContainer(unittest.TestCase):
         ps_store.save()
         
 
-def test_merge_spectra():
+def test_combine_psc_spectra():
     fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
     uvp1 = testing.uvpspec_from_data(fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
     uvp2 = testing.uvpspec_from_data(fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
@@ -137,7 +137,7 @@ def test_merge_spectra():
     psc = PSpecContainer("ex.h5", mode='rw')
     psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "uvp_b", uvp2, overwrite=True)
-    container.merge_spectra(psc, dset_split_str=None, ext_split_str='_')
+    container.combine_psc_spectra(psc, dset_split_str=None, ext_split_str='_')
     nt.assert_equal(psc.spectra('grp1'), [u'uvp'])
 
     # test dset name handling
@@ -148,7 +148,7 @@ def test_merge_spectra():
     psc.set_pspec("grp1", "d1_x_d2_b", uvp2, overwrite=True)
     psc.set_pspec("grp1", "d2_x_d3_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "d2_x_d3_b", uvp2, overwrite=True)
-    container.merge_spectra('ex.h5', dset_split_str='_x_', ext_split_str='_')
+    container.combine_psc_spectra('ex.h5', dset_split_str='_x_', ext_split_str='_')
     nt.assert_equal(psc.spectra('grp1'), [u'd1_x_d2', u'd2_x_d3'])
 
     # test exceptions
@@ -156,18 +156,18 @@ def test_merge_spectra():
         os.remove('ex.h5')
     psc = PSpecContainer("ex.h5", mode='rw')
     # test no group exception
-    nt.assert_raises(AssertionError, container.merge_spectra, psc)
+    nt.assert_raises(AssertionError, container.combine_psc_spectra, psc)
     # test failed combine_uvpspec
     psc.set_pspec("grp1", "d1_x_d2_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "d1_x_d2_b", uvp1, overwrite=True)
-    container.merge_spectra(psc, dset_split_str='_x_', ext_split_str='_')
+    container.combine_psc_spectra(psc, dset_split_str='_x_', ext_split_str='_')
     nt.assert_equal(psc.spectra('grp1'), [u'd1_x_d2_a', u'd1_x_d2_b'])
 
     if os.path.exists("ex.h5"):
         os.remove("ex.h5")
 
-def test_merge_spectra_argparser():
-    args = container.get_merge_spectra_argparser()
+def test_combine_psc_spectra_argparser():
+    args = container.get_combine_psc_spectra_argparser()
     a = args.parse_args(["filename", "--dset_split_str", "_x_", "--ext_split_str", "_"])
     nt.assert_equal(a.filename, "filename")
     nt.assert_equal(a.dset_split_str, "_x_")

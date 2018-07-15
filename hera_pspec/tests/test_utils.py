@@ -194,7 +194,7 @@ class Test_Utils(unittest.TestCase):
     def test_get_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
-        uvd.read_miriad_metadata(fname)
+        uvd.read_miriad(fname, read_data=False)
         antpos, ants = uvd.get_ENU_antpos()
         antpos_d = dict(zip(ants, antpos))
 

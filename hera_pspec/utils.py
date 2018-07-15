@@ -577,21 +577,16 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     """
     Given a list of miriad file templates and selections for
     polarization and group labels, construct a master list of
-    blpair-group-pol pairs using utils.construct_reds().
+    group-pol pairs, and also a list of blpairs for each
+    group-pol pair.
 
     A group is a fieldname in the visibility files that denotes the
     "type" of dataset. For example, the group field in the following files
         zen.even.LST.1.01.xx.HH.uv
         zen.odd.LST.1.01.xx.HH.uv
-    are the "even" and "odd" field, and specifies the two time binning groups.
+    are the "even" and "odd" fields, which specifies the two time-binning groups.
     To form cross spectra between these two files, one would feed a group_pair
-    of: group_pairs = [('even', 'odd'), ...].
-
-    A baseline-pair is formed by self-matching unique-files in the
-    glob-parsed master list, and then string-formatting-in appropriate 
-    pol and group selections given pol_pairs and group_pairs. Those two
-    files are then passed to utils.calc_blpair_reds(..., **kwargs) to construct
-    the baseline-pairs for that particular file-matching.
+    of: group_pairs = [('even', 'odd')] and pol_pairs = [('xx', 'xx')].
 
     Parameters
     ----------
@@ -634,6 +629,12 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     groupings : dict
         A dictionary holding pol and group pair (tuple) as keys
         and a list of baseline-pairs as values.
+
+    Notes
+    -----
+    A group-pol-pair is formed by self-matching unique files in the
+    glob-parsed master list, and then string-formatting-in appropriate 
+    pol and group selections given pol_pairs and group_pairs.
     """
     # type check
     if isinstance(uv_templates, (str, np.str)):
@@ -667,7 +668,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     # use a single file from unique_files and a single pol-group combination to get antenna positions
     _file = unique_files[0].format(pol=pol_grps[0][0], group=pol_grps[0][1])
     uvd = UVData()
-    uvd.read_miriad_metadata(_file)
+    uvd.read_miriad(_file, read_data=False)
 
     # get baseline pairs
     (_bls1, _bls2, _, _, 
@@ -788,18 +789,25 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0):
 
 def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verbose=True):
     """
-    Job monitoring function.
+    Job monitoring function, used to send elements of iterator through calls of run_func.
+    Can be parallelized if the input M function is from the multiprocess module.
 
     Parameters
     ----------
     run_func : function
-        A worker function to run on each element in iterator
+        A worker function to run on each element in iterator. Should return
+        0 if job is successful, otherwise a failure is any non-zero integer.
 
     iterator : iterable
-        An iterable whose elements define an individual job launch
+        An iterable whose elements define an individual job launch, and are
+        passed through to run_func for each individual job.
 
     action_name : str
-        The name of the block in the pipeline
+        A descriptive name for the operation being performed by run_func.
+
+    M : map function
+        A map function used to send elements of iterator through calls to run_func.
+        Default is built-in map function.
 
     lf : file descriptor
         Log-file descriptor to print message to.
@@ -813,7 +821,8 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
     Returns
     -------
     failures : list
-        A list of failed job indices from iterator
+        A list of failed job indices from iterator. Failures are any output of run_func
+        that aren't 0.
     """
     # run function over jobs
     exit_codes = np.array(M(run_func, iterator))
@@ -900,7 +909,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         # load filepath
         if isinstance(uvd, (str, np.str)):
             _uvd = UVData()
-            _uvd.read_miriad_metadata(uvd)
+            _uvd.read_miriad(uvd, read_data=False)
             uvd = _uvd
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)

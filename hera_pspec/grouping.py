@@ -840,7 +840,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
 
 
 def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=1000, seed=None,
-                              normal_std=True, robust_std=True, conf_ints=None, bl_error_tol=1.0,
+                              normal_std=True, robust_std=True, cintervals=None, bl_error_tol=1.0,
                               add_to_history='', verbose=False):
     """
     Given a UVPSpec object, generate bootstrap resamples of its average
@@ -866,14 +866,17 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
         Random seed to use in bootstrap resampling.
     
     normal_std : bool
-        If True, calculate an error estimate from numpy.std
+        If True, calculate an error estimate from numpy.std and store as "normal_std"
+        in the stats_array of the output UVPSpec object.
 
     robust_std : bool
         If True, calculate an error estimate from astropy.stats.biweight_midvariance
+        and store as "robust_std" in the stats_array of the output UVPSpec object.
 
-    conf_ints : list
-        A list of integer confidence interval percentages (0 < conf_int < 100) to use
-        as an error estimate, using numpy.percentile
+    cintervals : list
+        A list of confidence interval percentages (0 < cinterval < 100) to calculate
+        using numpy.percentile and store in the stats_array of the output UVPSpec
+        object as "cinterval_{:05.2f}".format(cinterval).
 
     bl_error_tol : float
         Redundancy error tolerance of redundant groups if blpair_groups is None.
@@ -933,9 +936,9 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
         for k in keys:
             stats_array["robust_std"][k] = np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].real, axis=0)) \
                                             + 1j*np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].imag, axis=0))
-    if conf_ints is not None:
-        for ci in conf_ints:
-            ci_tag = "conf_int_{:05.2f}".format(ci)
+    if cintervals is not None:
+        for ci in cintervals:
+            ci_tag = "cinterval_{:05.2f}".format(ci)
             stats_array[ci_tag] = odict()
             for k in keys:
                 stats_array[ci_tag][k] = np.percentile(uvp_boot_data[k].real, ci, axis=0) \
@@ -951,7 +954,7 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
 
 
 def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Nsamples=1000, seed=0,
-                  normal_std=True, robust_std=True, conf_ints=None, keep_samples=False,
+                  normal_std=True, robust_std=True, cintervals=None, keep_samples=False,
                   bl_error_tol=1.0, overwrite=False, add_to_history='', verbose=True):
     """
     Run bootstrap resampling on a PSpecContainer object to estimate errorbars.
@@ -989,15 +992,17 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
         The random seed to initialize with before drwaing bootstrap samples.
 
     normal_std : bool
-        If True, use np.std to calculate a "normal" standard deviation of BS samples.
+        If True, calculate an error estimate from numpy.std and store as "normal_std"
+        in the stats_array of the output UVPSpec object.
 
     robust_std : bool
-        If True, use astropy.stats.biweight_midvariance(..., c=9.0) to get a "robust"
-        standard deviation of the BS samples.
+        If True, calculate an error estimate from astropy.stats.biweight_midvariance
+        and store as "robust_std" in the stats_array of the output UVPSpec object.
 
-    conf_ints : list
-        A list of confidence interval percentages (0 < ci < 100) to calculate from
-        BS samples using np.percentile.
+    cintervals : list
+        A list of confidence interval percentages (0 < cinterval < 100) to calculate
+        using numpy.percentile and store in the stats_array of the output UVPSpec
+        object as "cinterval_{:05.2f}".format(cinterval).
 
     keep_samples : bool
         If True, store each bootstrap resample in PSpecContainer object with *_bs# suffix.
@@ -1046,7 +1051,7 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
         (uvp_avg, uvp_boots,
          uvp_wgts) = bootstrap_resampled_error(uvp, blpair_groups=blpair_groups, time_avg=time_avg,
                                               Nsamples=Nsamples, seed=seed, normal_std=normal_std,
-                                              robust_std=robust_std, conf_ints=conf_ints,
+                                              robust_std=robust_std, cintervals=cintervals,
                                               bl_error_tol=bl_error_tol, add_to_history=add_to_history,
                                               verbose=verbose)
 
@@ -1085,7 +1090,7 @@ def get_bootstrap_run_argparser():
                     help="Whether to calculate a 'normal' standard deviation (np.std).")
     a.add_argument("--robust_std", default=False, type=bool,
                     help="Whether to calculate a 'robust' standard deviation (astropy.stats.biweight_midvariance).")
-    a.add_argument("--conf_ints", default=None, type=float, nargs='+',
+    a.add_argument("--cintervals", default=None, type=float, nargs='+',
                     help="Confidence intervals (precentage from 0 < ci < 100) to calculate.")
     a.add_argument("--keep_samples", default=False, action='store_true',
                     help="If True, store bootstrap resamples in PSpecContainer object with *_bs# extension.")
