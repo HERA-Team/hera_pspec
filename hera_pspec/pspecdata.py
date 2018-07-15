@@ -2762,8 +2762,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
                        history=history, verbose=verbose)
 
         # Store output
-        psname = '{}_x_{}'.format(dset_labels[dset_idxs[0]], 
-                                  dset_labels[dset_idxs[1]])
+        psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
+                                    dset_labels[dset_idxs[1]], psname_ext)
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
                       overwrite=overwrite)
 
