@@ -93,7 +93,7 @@ class UVPSpec(object):
 
         # Specify required params: these are required for read / write and
         # self.check()
-        self._req_params = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys",
+        self._req_params = ["Ntimes", "Nblpairts", "Nblpairs",
                             "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                             "Nspwdlys", "Nspwfreqs",
                             "data_array", "wgt_array", "integration_array",
@@ -110,7 +110,7 @@ class UVPSpec(object):
         # All parameters must fall into one and only one of the following
         # groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys",
-                            "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
+                            "Nspwfreqs", "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
                             "Nbls", "channel_width", "weighting", "vis_units",
                             "norm", "norm_units", "taper", "cosmo", "beamfile",
                             'folded']
@@ -120,7 +120,7 @@ class UVPSpec(object):
                           "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
                           "bl_vecs", "bl_array", "telescope_location",
                           "scalar_array", "labels", "label_1_array",
-                          "label_2_array"]
+                          "label_2_array", "spw_freq_array", "spw_dly_array"]
         self._dicts = ["data_array", "wgt_array", "integration_array",
                        "nsample_array", "cov_array"]
         self._dicts_of_dicts = ["stats_array"]

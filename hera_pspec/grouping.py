@@ -232,7 +232,8 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
 
 
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False, 
-                    blpair_weights=None, normalize_weights=True, inplace=True,
+                    blpair_weights=None, error_field=None,
+                    normalize_weights=True, inplace=True,
                     add_to_history=''):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
@@ -1101,5 +1102,3 @@ def get_bootstrap_run_argparser():
     a.add_argument("--verbose", default=False, action='store_true', help="report feedback to stdout.")
     
     return a
-
->>>>>>> first round of code edits for grouping.bootstrap_run function

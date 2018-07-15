@@ -117,11 +117,11 @@ class Test_UVPSpec(unittest.TestCase):
 
         # test folding
         uvp = copy.deepcopy(self.uvp)
-        errs = np.repeat(np.arange(1, 51)[None], 10, axis=0)
+        errs = np.repeat(np.arange(1, 31)[None], 10, axis=0)
         uvp.set_stats("test", keys[0], errs)
         uvp.fold_spectra()
         # fold by summing in inverse quadrature
-        folded_errs = np.sum([1/errs[:, 1:25][:, ::-1]**2.0, 1/errs[:, 26:]**2.0], axis=0)**(-0.5)
+        folded_errs = np.sum([1/errs[:, 1:15][:, ::-1]**2.0, 1/errs[:, 16:]**2.0], axis=0)**(-0.5)
         np.testing.assert_array_almost_equal(uvp.get_stats("test", keys[0]), folded_errs)
 
     def test_convert_deltasq(self):
