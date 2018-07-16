@@ -379,11 +379,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     ints_array, nsmp_array = odict(), odict()
     stats_array = odict([[stat, odict()] for stat in stat_l])
 
-    # will average covariance array by default
-    store_cov = hasattr(uvp,"cov_array")
+    # will average covariance array if present
+    store_cov = hasattr(uvp, "cov_array")
     if store_cov:
         cov_array = odict()
-
 
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
@@ -391,6 +390,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         spw_stats = odict([[stat, []] for stat in stat_l])
         if store_cov:
             spw_cov = []
+
         # Iterate over polarizations
         for i, p in enumerate(uvp.pol_array):
             pol_data, pol_wgts, pol_ints, pol_nsmp = [], [], [], []
@@ -484,11 +484,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                             / np.sum(w_list, axis=0)[:,None].clip(1e-10, np.inf)
                 w_list = np.sum(w_list, axis=0)
 
-                # For errors that aren't 0, sum weights and take inverse square
-                # root. Otherwise, set to invalid value -99.
+                # For errors that are > 0, sum weights and take inverse square
+                # root. Otherwise, set to invalid value nan
                 for stat in stat_l:
                     arr = np.sum(bpg_stats[stat], axis=0)
-                    not_valid = np.isclose(arr, 0., 1e-10)
+                    not_valid = np.isclose(arr, 0., 1e-10) + (arr < 0.0)
                     arr[not_valid] *= np.nan
                     arr[~not_valid] = arr[~not_valid] ** (-0.5)
                     bpg_stats[stat] = arr
@@ -578,9 +578,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     uvp.nsample_array = nsmp_array
     if store_cov:
         uvp.cov_array = cov_array
-    if hasattr(uvp_in, 'label1'): uvp.label1 = uvp_in.label1
-    if hasattr(uvp_in, 'label2'): uvp.label2 = uvp_in.label2
-
     if error_field is not None:
         uvp.stats_array = stats_array
     elif hasattr(uvp, "stats_array"):
