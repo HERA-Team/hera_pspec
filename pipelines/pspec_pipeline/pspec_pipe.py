@@ -101,8 +101,11 @@ if params['run_pspec']:
             key = tuple(hp.utils.flatten(pair) + [i])
             jobs[key] = _blps
 
+    # setup output
+    outfname = os.path.join(params['out_dir'], alg['outfname'])
+
     # create pspec worker function
-    def pspec(i, jobs=jobs, params=params, alg=algs['pspec'], ef=ef):
+    def pspec(i, outfname=outfname, jobs=jobs, params=params, alg=algs['pspec'], ef=ef):
         try:
             # get key
             key = jobs.keys()[i]
@@ -115,7 +118,7 @@ if params['run_pspec']:
                 dsets_std = None
 
             # pspec_run
-            hp.pspecdata.pspec_run(dsets, alg['outfname'], dsets_std=dsets_std, dset_labels=dset_labels,
+            hp.pspecdata.pspec_run(dsets, outfname, dsets_std=dsets_std, dset_labels=dset_labels,
                                    dset_pairs=[(0, 1)], spw_ranges=alg['spw_ranges'], n_dlys=alg['n_dlys'],
                                    pol_pairs=params['pol_pairs'], blpairs=jobs[key], input_data_weight=alg['input_data_weight'],
                                    norm=alg['norm'], taper=alg['taper'], beam=alg['beam'], cosmo=alg['cosmo'],
@@ -144,12 +147,12 @@ if params['run_pspec']:
     hp.utils.log("\nStarting power spectrum file merge: {}\n{}".format(time, '-'*60), f=lf, verbose=params['verbose'])
 
     # Get all groups
-    psc = hp.PSpecContainer(algs['pspec']['outfname'], 'r')
+    psc = hp.PSpecContainer(outfname, 'r')
     groups = psc.groups()
     del psc
 
     # Define merge function
-    def merge(i, groups=groups, filename=algs['pspec']['outfname'], ef=ef, params=params):
+    def merge(i, groups=groups, filename=outfname, ef=ef, params=params):
         try:
             psc = hp.PSpecContainer(filename, mode='rw')
             grp = groups[i]
@@ -180,22 +183,23 @@ if params['run_bootstrap']:
     time = datetime.utcnow()
     hp.utils.log("\n{}\nStarting BOOTSTRAP resampling pipeline: {}\n".format("-"*60, time), f=lf, verbose=params['verbose'])
 
-    # ensure outfname is same as psepc
+    # ensure outfname is same as pspec
     if params['run_pspec'] and (algs['pspec']['outfname'] != algs['bootstrap']['psc_name']):
         raise ValueError("bootstrap psc_name {} doesn't equal pspec outfname {}".format(algs['bootstrap']['psc_name'], algs['pspec']['outfname']))
 
     # open container
-    psc = hp.PSpecContainer(algs['bootstrap']['psc_name'], mode='r')
+    psc_name = os.path.join(params['out_dir'], algs['bootstrap']['psc_name'])
+    psc = hp.PSpecContainer(psc_name, mode='r')
 
     # get groups
     groups = psc.groups()
     del psc
 
     # define bootstrap function
-    def bootstrap(i, groups=groups, ef=ef, alg=algs['bootstrap'], params=params):
+    def bootstrap(i, groups=groups, ef=ef, alg=algs['bootstrap'], params=params, psc_name=psc_name):
         try:
             # get container
-            psc = hp.PSpecContainer(alg['psc_name'], mode='rw')
+            psc = hp.PSpecContainer(psc_name, mode='rw')
 
             # get spectra
             group = groups[i]
