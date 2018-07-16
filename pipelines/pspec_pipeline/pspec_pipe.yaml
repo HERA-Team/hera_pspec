@@ -48,7 +48,7 @@ data :
   std_template : None
 
   # baseline type restriction in length (meters) and angle (degrees)
-  bl_len_range : [0, 10000.0]
+  bl_len_range : [0, 20.0]
   bl_deg_range : [0, 180]
 
   # denote bad antennas
@@ -80,7 +80,7 @@ algorithm :
     trim_dset_lsts : False
     broadcast_dset_flags : True
     time_thresh : 0.2
-    Nblps_per_job : 100
+    Nblps_per_job : 200
     exclude_auto_bls : True
     exclude_permutations : True
     bl_len_range : [0, 20]
@@ -95,7 +95,7 @@ algorithm :
     seed : None
     normal_std : True
     robust_std : True
-    conf_ints : None
+    cintervals : None
     keep_samples : False
     bl_error_tol : 1.0
     maxiter : 1

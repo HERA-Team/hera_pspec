@@ -279,7 +279,11 @@ def test_bootstrap_run():
     # assert original uvp is unchanged
     nt.assert_true(uvp == psc.get_pspec("grp1", 'uvp'))
     # check stats array
-    ## TODO
+    np.testing.assert_array_equal([u'cinterval_16.00', u'cinterval_84.00', u'normal_std', u'robust_std'], uvp_avg.stats_array.keys())
+    for stat in [u'cinterval_16.00', u'cinterval_84.00', u'normal_std', u'robust_std']:
+        nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')).shape, (1, 50))
+        nt.assert_false(np.any(np.isnan(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')))))
+        nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')).dtype, np.complex128)
 
     # test exceptions
     del psc

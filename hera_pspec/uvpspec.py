@@ -1847,19 +1847,13 @@ def combine_uvpspec(uvps, verbose=True):
 
     elif concat_ax == 'blpairts':
 
-        # Get mapping of blpair-time indices between old UVPSpec objects and 
-        # the new one
-        blpts_idxs = np.concatenate(
-                        [uvputils._fast_lookup_blpairts(_blpts, new_blpts)
-                         for _blpts in uvp_blpts] )
-
         is_in = [uvputils._fast_is_in(_blpts, new_blpts)
                  for _blpts in uvp_blpts]
 
         # Concatenate blpair-times
         for j, blpt in enumerate(new_blpts):
             l = [isn[j] for isn in is_in].index(True)
-            n = blpts_idxs[j]
+            n = uvp_blpts[l].index(blpt)
 
             # Loop over spectral windows
             for i, spw in enumerate(new_spws):

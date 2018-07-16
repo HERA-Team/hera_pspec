@@ -926,26 +926,24 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
     uvp_boot_data = odict([(k, np.array(map(lambda u: u.get_data(k), uvp_boots))) for k in keys])
 
     # calculate various error estimates
-    stats_array = odict()
     if normal_std:
-        stats_array["normal_std"] = odict()
         for k in keys:
-            stats_array["normal_std"][k] = np.std(uvp_boot_data[k].real, axis=0) \
-                                            + 1j*np.std(uvp_boot_data[k].imag, axis=0)
+            nstd = np.std(uvp_boot_data[k].real, axis=0) + 1j*np.std(uvp_boot_data[k].imag, axis=0)
+            uvp_avg.set_stats("normal_std", k, nstd)
+
     if robust_std:
-        stats_array["robust_std"] = odict()
         for k in keys:
-            stats_array["robust_std"][k] = np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].real, axis=0)) \
-                                            + 1j*np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].imag, axis=0))
+            rstd = np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].real, axis=0)) \
+                    + 1j*np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].imag, axis=0))
+            uvp_avg.set_stats("robust_std", k, rstd)
+
     if cintervals is not None:
         for ci in cintervals:
             ci_tag = "cinterval_{:05.2f}".format(ci)
-            stats_array[ci_tag] = odict()
             for k in keys:
-                stats_array[ci_tag][k] = np.percentile(uvp_boot_data[k].real, ci, axis=0) \
-                                            + 1j*np.percentile(uvp_boot_data[k].imag, ci, axis=0)
-
-    # Set stats array in uvp_avg
+                cint = np.percentile(uvp_boot_data[k].real, ci, axis=0) \
+                        + 1j*np.percentile(uvp_boot_data[k].imag, ci, axis=0)
+                uvp_avg.set_stats(ci_tag, k, cint)
 
     # Update history
     uvp_avg.history = "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}" \

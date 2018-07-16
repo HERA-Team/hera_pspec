@@ -115,7 +115,7 @@ if params['run_pspec']:
                 dsets_std = None
 
             # pspec_run
-            hp.pspecdata.pspec_run(dsets, alg['outfile'], dsets_std=dsets_std, dset_labels=dset_labels,
+            hp.pspecdata.pspec_run(dsets, alg['outfname'], dsets_std=dsets_std, dset_labels=dset_labels,
                                    dset_pairs=[(0, 1)], spw_ranges=alg['spw_ranges'], n_dlys=alg['n_dlys'],
                                    pol_pairs=params['pol_pairs'], blpairs=jobs[key], input_data_weight=alg['input_data_weight'],
                                    norm=alg['norm'], taper=alg['taper'], beam=alg['beam'], cosmo=alg['cosmo'],
@@ -153,7 +153,7 @@ if params['run_pspec']:
         try:
             psc = hp.PSpecContainer(filename, mode='rw')
             grp = groups[i]
-            hp.container.merge_spectra(psc, groups=[grp])
+            hp.container.combine_psc_spectra(psc, groups=[grp], overwrite=params['overwrite'])
         except:
             hp.utils.log("\nPSPEC MERGE job {} errored with:".format(i), f=ef, tb=sys.exc_info(), verbose=params['verbose'])
             return 1
@@ -204,7 +204,7 @@ if params['run_bootstrap']:
             # run bootstrap
             hp.grouping.bootstrap_run(psc, spectra=spectra, time_avg=alg['time_avg'], Nsamples=alg['Nsamples'],
                                       seed=alg['seed'], normal_std=alg['normal_std'], robust_std=alg['robust_std'],
-                                      conf_ints=alg['conf_ints'], keep_samples=alg['keep_samples'],
+                                      cintervals=alg['cintervals'], keep_samples=alg['keep_samples'],
                                       bl_error_tol=alg['bl_error_tol'], overwrite=params['overwrite'], verbose=params['verbose'])
 
 
