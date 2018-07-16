@@ -102,7 +102,7 @@ if params['run_pspec']:
             jobs[key] = _blps
 
     # setup output
-    outfname = os.path.join(params['out_dir'], alg['outfname'])
+    outfname = os.path.join(params['out_dir'], algs['pspec']['outfname'])
 
     # create pspec worker function
     def pspec(i, outfname=outfname, jobs=jobs, params=params, alg=algs['pspec'], ef=ef):
