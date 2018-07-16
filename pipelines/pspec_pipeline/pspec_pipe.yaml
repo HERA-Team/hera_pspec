@@ -48,8 +48,8 @@ data :
   std_template : None
 
   # baseline type restriction in length (meters) and angle (degrees)
-  bl_len_range : [0, 20.0]
-  bl_deg_range : [0, 180]
+  bl_len_range : [0, 16.0]
+  bl_deg_range : [0, 0]
 
   # denote bad antennas
   xants : []
