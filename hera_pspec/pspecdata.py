@@ -2631,8 +2631,6 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
     else:
         assert not np.any(['_' in dl for dl in dset_labels]), "cannot accept underscores in input dset_labels: {}".format(dset_labels)
-        # enforce unique dset labels
-        assert len(set(dset_labels)) == len(dset_labels), "Found repeated dest labels: each one must be unique"
 
     # load data if fed as filepaths
     if isinstance(dsets[0], (str, np.str)):

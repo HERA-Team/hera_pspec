@@ -315,7 +315,8 @@ class PSpecContainer(object):
             pass
 
 
-def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_', verbose=True, overwrite=False):
+def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_',
+                        verbose=True, overwrite=False):
     """
     Iterate through a PSpecContainer and, within each specified group,
     combine UVPSpec (i.e. spectra) of similar name but varying psname extension.
