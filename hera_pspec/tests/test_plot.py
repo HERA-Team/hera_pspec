@@ -145,6 +145,30 @@ class Test_Plot(unittest.TestCase):
         # Should contain 1 line and 1 legend
         elements = [(matplotlib.lines.Line2D, 1), (matplotlib.legend.Legend, 1)]
         self.assertTrue( self.axes_contains(ax2, elements) )
+    
+    def test_plot_waterfall(self):
+        """
+        Test that waterfall can be plotted.
+        """
+        # Unpack the list of baseline-pairs into a Python list
+        blpairs = np.unique(self.uvp.blpair_array)        
+        blps = [blp for blp in blpairs]
+        
+        # Set cosmology and plot in non-delay (i.e. cosmological) units
+        self.uvp.set_cosmology(conversions.Cosmo_Conversions())
+        ax1 = plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx', 
+                                   average_blpairs=True, delay=False)
+        
+        # Plot in Delta^2 units
+        ax2 = plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx', 
+                                   average_blpairs=True, delay=False, 
+                                   deltasq=True)
+        
+        # Try some other arguments
+        ax3 = plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx', 
+                                   average_blpairs=False, delay=False, 
+                                   log=True, vmin=-1., vmax=3., 
+                                   cmap='RdBu')
         
 if __name__ == "__main__":
     unittest.main()
