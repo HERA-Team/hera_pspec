@@ -140,7 +140,7 @@ class UVPSpec(object):
         # Default parameter values
         self.folded = False
 
-    def get_cov(self, key, *args):
+    def get_cov(self, key, omit_flags=False):
         """
         Slice into covariance array with a specified data key in the format
         (spw, ((ant1, ant2),(ant3, ant4)), pol)
@@ -157,12 +157,17 @@ class UVPSpec(object):
         key: tuple
             Baseline-pair key
 
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
         Returns
         -------
         data : complex ndarray
             Shape (Ntimes, Ndlys, Ndlys)
         """
-        spw, blpairts, pol = self.key_to_indices(key, *args)
+        spw, blpairts, pol = self.key_to_indices(key, omit_flags=omit_flags)
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
         if hasattr(self,'cov_array'):
@@ -174,7 +179,7 @@ class UVPSpec(object):
         else:
             raise AttributeError("No covariance array has been calculated.")
 
-    def get_data(self, key, *args):
+    def get_data(self, key, omit_flags=False):
         """
         Slice into data_array with a specified data key in the format
 
@@ -192,12 +197,17 @@ class UVPSpec(object):
         key : tuple
             Baseline-pair key
 
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
         Returns
         -------
         data : complex ndarray
             Shape (Ntimes, Ndlys)
         """
-        spw, blpairts, pol = self.key_to_indices(key, *args)
+        spw, blpairts, pol = self.key_to_indices(key, omit_flags=omit_flags)
 
         # if data has been folded, return only positive delays
         if self.folded:
@@ -208,7 +218,7 @@ class UVPSpec(object):
         else:
             return self.data_array[spw][blpairts, :, pol]
 
-    def get_wgts(self, key, *args):
+    def get_wgts(self, key, omit_flags=False):
         """
         Slice into wgt_array with a specified data key in the format
 
@@ -226,17 +236,22 @@ class UVPSpec(object):
         key : tuple
             Contains the baseline-pair key
 
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
         Returns
         -------
         wgts : float ndarray
             Has shape (2, Ntimes, Ndlys), where the zeroth axis holds
             [wgt_1, wgt_2] in that order.
         """
-        spw, blpairts, pol = self.key_to_indices(key, *args)
+        spw, blpairts, pol = self.key_to_indices(key, omit_flags=omit_flags)
 
         return self.wgt_array[spw][blpairts, :, :, pol]
 
-    def get_integrations(self, key, *args):
+    def get_integrations(self, key, omit_flags=False):
         """
         Slice into integration_array with a specified data key in the format::
 
@@ -254,16 +269,21 @@ class UVPSpec(object):
         key : tuple
             Baseline-pair key
 
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
         Returns
         -------
         data : float ndarray
             Has shape (Ntimes,)
         """
-        spw, blpairts, pol = self.key_to_indices(key, *args)
+        spw, blpairts, pol = self.key_to_indices(key, omit_flags=omit_flags)
 
         return self.integration_array[spw][blpairts, pol]
 
-    def get_nsamples(self, key, *args):
+    def get_nsamples(self, key, omit_flags=False):
         """
         Slice into nsample_array with a specified data key in the format
 
@@ -280,11 +300,16 @@ class UVPSpec(object):
         ----------
         key : tuple, baseline-pair key
 
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
         Returns
         -------
         data : float ndarray with shape (Ntimes,)
         """
-        spw, blpairts, pol = self.key_to_indices(key, *args)
+        spw, blpairts, pol = self.key_to_indices(key, omit_flags=omit_flags)
 
         return self.nsample_array[spw][blpairts, pol]
 
@@ -451,7 +476,7 @@ class UVPSpec(object):
 
         return spw_ranges
 
-    def get_stats(self, stat, key, *args):
+    def get_stats(self, stat, key, omit_flags=False):
         """
         Returns a statistic from the stats_array dictionary.
 
@@ -460,41 +485,52 @@ class UVPSpec(object):
         stat : string
             The statistic to return.
 
-        spw : int
-            Choice of spectral window.
+        key : tuple
+            A spw-blpair-pol key parseable by UVPSpec.key_to_indices.
+
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
+        Returns
+        -------
+        statistic : array_like
+            A 2D (Ntimes, Ndlys) complex array holding desired bandpower statistic.
         """
         if not hasattr(self, "stats_array"):
             raise AttributeError("No stats have been entered to this UVPSpec object")
 
-        assert stat in self.stats_array.keys(), "Statistic name not found in stat keys."
+        assert stat in self.stats_array.keys(), "Statistic name {} not found in stat keys.".format(stat)
 
-        spw, blpairts, pol = self.key_to_indices(key, *args)
-        data = self.stats_array[stat]
+        spw, blpairts, pol = self.key_to_indices(key, omit_flags=omit_flags)
+        statistic = self.stats_array[stat]
 
-        # if data has been folded, return only positive delays
+        # if bandpowers have been folded, return only positive delays
         if self.folded:
-            Ndlys = data[spw].shape[1]
-            return data[spw][blpairts, Ndlys//2+1:, pol]
+            Ndlys = statistic[spw].shape[1]
+            return statistic[spw][blpairts, Ndlys//2+1:, pol]
+        else:
+            return statistic[spw][blpairts, :, pol]
 
-        return data[spw][blpairts, :, pol]
-
-    def set_stats(self, stat, key, statistic, *args):
+    def set_stats(self, stat, key, statistic, ):
         """
-        Sets a statistic in the stats_array.
+        Set a statistic waterfall (Ntimes, Ndlys) in the stats_array
+        given the selection of spw, blpairts and pol in key.
 
         Parameters
         ----------
         stat : string
             Name of the statistic.
 
-        spw : int
-            Spectral window of the statistic.
+        key : tuple
+            A spw-blpair-pol key parseable by UVPSpec.key_to_indices.
 
         statistic : ndarray
-            Array with statistics to set. Must be same shape as the same slice
-            of data_array.
+            2D ndarray with statistics to set. Must conform to shape of the
+            slice of data_array produced by the specified key.
         """
-        spw, blpairts, pol = self.key_to_indices(key, *args)
+        spw, blpairts, pol = self.key_to_indices(key)
         statistic = np.asarray(statistic)
 
         if self.data_array[spw][blpairts, :, pol].shape != statistic.shape:
@@ -798,7 +834,7 @@ class UVPSpec(object):
             time_select *= blp_select
             return np.arange(self.Nblpairts)[time_select]
 
-    def key_to_indices(self, key, *args):
+    def key_to_indices(self, key, omit_flags=False):
         """
         Convert a data key into relevant slice arrays. A data key takes the form
 
@@ -810,9 +846,6 @@ class UVPSpec(object):
 
         where spw is the spectral window integer, ant1 etc. are integers,
         and pol is either a polarization string (ex. 'XX') or integer (ex. -5).
-
-        One can also expand this key into the kwarg slots, such that
-        key=spw, key2=blpair, and key3=pol.
 
         The key can also be a dictionary in the form::
 
@@ -829,6 +862,11 @@ class UVPSpec(object):
         key : tuple
             Baseline-pair key.
 
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
         Returns
         -------
         spw : int
@@ -841,14 +879,9 @@ class UVPSpec(object):
             Polarization index.
         """
         # assert key length
-        if len(args) == 0:
-            assert len(key) == 3, "length of key must be 3."
-            if isinstance(key, (odict, dict)):
-                key = (key['spw'], key['blpair'], key['pol'])
-        elif len(args) > 0:
-            assert len(args) == 2, "length of key must be 3."
-            assert isinstance(args[0], (tuple, int, np.integer)) and isinstance(args[1], (np.str, str, int, np.integer)), "key must be ordered as (spw, blpair, pol)"
-            key = (key, args[0], args[1])
+        assert len(key) == 3, "length of key must be 3: (spw, blpair, pol)"
+        if isinstance(key, (odict, dict)):
+            key = (key['spw'], key['blpair'], key['pol'])
 
         # assign key elements
         spw = key[0]
@@ -875,8 +908,15 @@ class UVPSpec(object):
 
         # index polarization array
         pol = self.pol_to_indices(pol)
+
         # index blpairts
         blpairts = self.blpair_to_indices(blpair)
+
+        # omit flagged spectra: i.e. when integration_array == 0.0
+        if omit_flags:
+            integs = self.integration_array[spw][blpairts, pol]
+            keep = ~np.isclose(integs, 0.0)
+            blpairts = blpairts[keep]
 
         return spw, blpairts, pol
 

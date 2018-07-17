@@ -71,7 +71,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(len(k_para), 30)
         # test key expansion
         key = (0, ((1, 2), (1, 2)), 'xx')
-        d = self.uvp.get_data(*key)
+        d = self.uvp.get_data(key)
         nt.assert_equal(d.shape, (10, 30))
         # test key as dictionary
         key = {'spw':0, 'blpair':((1, 2), (1, 2)), 'pol': 'xx'}
@@ -84,6 +84,9 @@ class Test_UVPSpec(unittest.TestCase):
         keys = self.uvp.get_all_keys()
         nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), 'XX'), (0, ((1, 3), (1, 3)), 'XX'),
                                (0, ((2, 3), (2, 3)), 'XX')])
+        # test omit_flags
+        self.uvp.integration_array[0][self.uvp.blpair_to_indices(((1, 2), (1, 2)))[:2]] = 0.0
+        nt.assert_equal(self.uvp.get_integrations((0, ((1, 2), (1, 2)), 'xx'), omit_flags=True).shape, (8,))
 
     def test_stats_array(self):
         # test get_data and set_data
@@ -296,8 +299,8 @@ class Test_UVPSpec(unittest.TestCase):
         blpairs = uvp.get_blpair_groups_from_bl_groups([[1002, 2003, 1003]], only_pairs_in_bls=False)
         uvp2 = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 1)
-        nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 3.0).all())
-        nt.assert_equal(uvp2.get_data(0, 1002001002, 'xx').shape, (10, 30))
+        nt.assert_true(np.isclose(uvp2.get_nsamples((0, 1002001002, 'xx')), 3.0).all())
+        nt.assert_equal(uvp2.get_data((0, 1002001002, 'xx')).shape, (10, 30))
 
         # Test blpair averaging (with baseline-pair weights)
         # Results should be identical with different weights here, as the data
@@ -311,16 +314,16 @@ class Test_UVPSpec(unittest.TestCase):
                                    blpair_weights=blpair_wgts,
                                    inplace=False)
         #nt.assert_equal(uvp2.Nblpairs, 1)
-        nt.assert_true(np.isclose(uvp3a.get_data(0, 1002001002, 'xx'),
-                                  uvp3b.get_data(0, 1002001002, 'xx')).all())
-        #nt.assert_equal(uvp2.get_data(0, 1002001002, 'xx').shape, (10, 30))
+        nt.assert_true(np.isclose(uvp3a.get_data((0, 1002001002, 'xx')),
+                                  uvp3b.get_data((0, 1002001002, 'xx'))).all())
+        #nt.assert_equal(uvp2.get_data((0, 1002001002, 'xx')).shape, (10, 30))
 
 
         # test time averaging
         uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
         nt.assert_true(uvp2.Ntimes, 1)
-        nt.assert_true(np.isclose(uvp2.get_nsamples(0, 1002001002, 'xx'), 10.0).all())
-        nt.assert_true(uvp2.get_data(0, 1002001002, 'xx').shape, (1, 30))
+        nt.assert_true(np.isclose(uvp2.get_nsamples((0, 1002001002, 'xx')), 10.0).all())
+        nt.assert_true(uvp2.get_data((0, 1002001002, 'xx')).shape, (1, 30))
         # ensure averaging works when multiple repeated baselines are present, but only
         # if time_avg = True
         uvp.blpair_array[uvp.blpair_to_indices(2003002003)] = 1002001002
@@ -345,8 +348,8 @@ class Test_UVPSpec(unittest.TestCase):
         bls = [(37, 38), (38, 39), (52, 53)]
         uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, spw_ranges=[(0,17)], beam=beam)
         uvp1.fold_spectra()
-        cov_folded = uvp1.get_cov(0, ((37, 38), (38, 39)), 'xx')
-        data_folded = uvp1.get_data(0, ((37,38), (38, 39)), 'xx')
+        cov_folded = uvp1.get_cov((0, ((37, 38), (38, 39)), 'xx'))
+        data_folded = uvp1.get_data((0, ((37,38), (38, 39)), 'xx'))
 
 
     def test_str(self):
