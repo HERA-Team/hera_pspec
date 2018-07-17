@@ -258,8 +258,6 @@ def delay_waterfall(uvp, blpairs, spw, pol, average_blpairs=False,
     waterfall = np.swapaxes( np.array(waterfall), 0, 1)
     waterfall = waterfall.reshape(waterfall.shape[0], -1).T
     
-    print waterfall.shape
-    
     # Take logarithm of data if requested
     if log:
         vals = np.log10(waterfall)
@@ -271,7 +269,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, average_blpairs=False,
     # Plot waterfall
     matshow = ax.matshow(vals, cmap=cmap, aspect='auto',vmin=vmin, vmax=vmax, 
                          extent=[np.min(x), np.max(x), 0., vals.shape[0]],)
-    cbar = plt.colorbar(matshow)
+    cbar = ax.get_figure().colorbar(matshow)
     
     # Format colorbar labels in log mode
     if log:
