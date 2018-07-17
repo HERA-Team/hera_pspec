@@ -425,13 +425,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 for k, blp in enumerate(blpg):
 
                     # Get no. samples and construct integration weight
-                    nsmp = uvp.get_nsamples(spw, blp, p)[:, None]
-                    data = uvp.get_data(spw, blp, p)
-                    wgts = uvp.get_wgts(spw, blp, p)
-                    ints = uvp.get_integrations(spw, blp, p)[:, None]
+                    nsmp = uvp.get_nsamples((spw, blp, p))[:, None]
+                    data = uvp.get_data((spw, blp, p))
+                    wgts = uvp.get_wgts((spw, blp, p))
+                    ints = uvp.get_integrations((spw, blp, p))[:, None]
                     w = (ints * np.sqrt(nsmp))
                     if store_cov:
-                        cov = uvp.get_cov(spw,blp,p)
+                        cov = uvp.get_cov((spw, blp, p))
                     # Get error bar weights and set invalid ones to zero.
                     errws = {}
                     for stat in stat_l:
