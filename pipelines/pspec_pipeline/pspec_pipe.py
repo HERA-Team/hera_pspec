@@ -11,9 +11,7 @@ See pspec_pipe.yaml for relevant parameter selections.
 """
 import multiprocess
 import numpy as np
-import hera_cal as hc
 import hera_pspec as hp
-import hera_qm as hq
 from pyuvdata import UVData
 import pyuvdata.utils as uvutils
 import os
@@ -54,6 +52,17 @@ else:
 time = datetime.utcnow()
 hp.utils.log("Starting pspec pipeline on {}\n{}\n".format(time, '-'*60), f=lf, verbose=params['verbose'])
 hp.utils.log(json.dumps(cf, indent=1) + '\n', f=lf, verbose=params['verbose'])
+
+# define history prepend function
+def prepend_history(action, param_dict):
+    """ create a history string to prepend to data files """
+    dict_str = '\n'.join(["{} : {}".format(*_d) for _d in param_dict.items()])
+    time = datetime.utcnow()
+    hist = "\nRan pspec_pipe.py {} step at\nUTC {} with \nhera_pspec [{}], "\
+           "and pyuvdata [{}]\nwith {} algorithm "\
+           "attrs:\n{}\n{}\n".format(action, time, hp.version.git_hash[:10],
+                                     pyuvdata.version.git_hash[:10], action, '-'*50, dict_str)
+    return hist
 
 # Create multiprocesses
 if params['multiproc']:
@@ -139,12 +148,8 @@ if params['run_pspec']:
     if len(failures) > 0:
         hp.utils.log("\nSome PSPEC jobs failed after {} tries:\n{}".format(algs['pspec']['maxiter'], '\n'.join(["job {}: {}".format(i, str(jobs.keys()[i])) for i in failures])), f=lf, verbose=params['verbose'])
 
-    # print to log
-    time = datetime.utcnow()
-    hp.utils.log("\nFinished PSPEC pipeline: {}\n{}".format(time, "-"*60), f=lf, verbose=params['verbose'])
-
     # Merge power spectrum files from separate jobs
-    hp.utils.log("\nStarting power spectrum file merge: {}\n{}".format(time, '-'*60), f=lf, verbose=params['verbose'])
+    hp.utils.log("\nStarting power spectrum file merge: {}\n".format(time), f=lf, verbose=params['verbose'])
 
     # Get all groups
     psc = hp.PSpecContainer(outfname, 'r')

@@ -18,7 +18,7 @@ def package_files(package_dir, subdirectory):
             path = path.replace(package_dir + '/', '')
             paths.append(os.path.join(path, filename))
     return paths
-data_files = package_files('hera_pspec', 'data')
+data_files = package_files('hera_pspec', 'data') + package_files('hera_pspec', '../pipelines')
 
 setup_args = {
     'name':         'hera_pspec',
@@ -34,7 +34,8 @@ setup_args = {
     'include_package_data': True,
     'scripts': ['scripts/pspec_run.py', 'scripts/pspec_red.py',
                 'pipelines/idr2_preprocessing/preprocess_data.py',
-                'pipelines/pspec_pipeline/pspec_pipe.py'],
+                'pipelines/pspec_pipeline/pspec_pipe.py',
+                'scripts/bootstrap_run.py'],
     'zip_safe':     False,
 }
 
