@@ -44,15 +44,15 @@ data :
     - ['xx', 'xx']
 
   # full path to data template with {pol} and {group} fields
-  data_template : './zen.{group}.?????.{pol}.HH.uvXA'
+  data_template : 'zen.{group}.?????.{pol}.HH.uvXA'
   std_template : None
 
   # baseline type restriction in length (meters) and angle (degrees)
-  bl_len_range : [0, 16.0]
-  bl_deg_range : [0, 0]
+  bl_len_range : [14.0, 16.0]
+  bl_deg_range : [0, 10]
 
   # denote bad antennas
-  xants : []
+  xants : [0, 1, 50, 98]
 
 #---------------------------------------------------------------
 # Algorithm Parameters

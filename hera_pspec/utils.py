@@ -828,6 +828,10 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
     exit_codes = np.array(M(run_func, iterator))
     time = datetime.utcnow()
 
+    # check for len-0
+    if len(exit_codes) == 0:
+        raise ValueError("No output generated from run_func over iterator {}".format(iterator))
+
     # inspect for failures
     if np.all(exit_codes != 0):
         # everything failed, raise error
