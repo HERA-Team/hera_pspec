@@ -274,7 +274,11 @@ def delay_waterfall(uvp, blpairs, spw, pol, average_blpairs=False,
     # Format colorbar labels in log mode
     if log:
         lbls = []
-        for tick in cbar.get_ticks():
+        try:
+            ticks = cbar.get_ticks()
+        except:
+            ticks = cbar.get_yticks() # Needed for matplotlib version < 2.2
+        for tick in ticks:
             # Check to make sure we don't accidentally round the exponent
             if ("%1.1f" % tick)[-1] != "0":
                 lbls.append("")
