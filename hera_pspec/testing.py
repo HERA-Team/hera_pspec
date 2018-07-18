@@ -101,7 +101,7 @@ def build_vanilla_uvpspec(beam=None):
     spw_dly_array = np.tile(np.arange(Nspws), Ndlys)
     spw_array = np.arange(Nspws)
     freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), Nspws)
-    dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
+    dly_array = np.repeat(hp.utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
     pol_array = np.array([-5])
     Npols = len(pol_array)
     vis_units = 'unknown'
@@ -245,9 +245,9 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None,
     
     bls1, bls2 = [], []
     for blgrp in bl_grps:
-        _bls1, _bls2, _ = utils.construct_blpairs( blgrp, 
-                                                   exclude_auto_bls=True, 
-                                                   exclude_permutations=True )
+        _bls1, _bls2, _ = hp.utils.construct_blpairs(blgrp, 
+                                                     exclude_auto_bls=True, 
+                                                     exclude_permutations=True)
         bls1.extend(_bls1)
         bls2.extend(_bls2)
 
