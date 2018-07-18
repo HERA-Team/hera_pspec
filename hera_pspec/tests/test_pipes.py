@@ -14,7 +14,6 @@ import shutil
 import fnmatch
 import glob
 
-
 class Test_PreProcess(unittest.TestCase):
     """ Testing class for preprocess_data.py pipeline """
 
@@ -48,7 +47,7 @@ class Test_PreProcess(unittest.TestCase):
         cf['io']['work_dir'] = "./"
         cf['io']['out_dir'] = "./"
         cf['io']['logfile'] = "log.out"
-        cf['io']['efffile'] = 'err.out'
+        cf['io']['errfile'] = 'err.out'
         cf['io']['overwrite'] = True
         cf['data']['data_template'] = os.path.join(DATA_PATH, cf['data']['data_template'])
 
@@ -143,7 +142,7 @@ class Test_PspecPipe(unittest.TestCase):
         cf['io']['work_dir'] = "./"
         cf['io']['out_dir'] = "./"
         cf['io']['logfile'] = "log.out"
-        cf['io']['efffile'] = 'err.out'
+        cf['io']['errfile'] = 'err.out'
         cf['io']['overwrite'] = True
         cf['algorithm']['pspec']['beam'] = os.path.join(DATA_PATH, cf['algorithm']['pspec']['beam'])
 
