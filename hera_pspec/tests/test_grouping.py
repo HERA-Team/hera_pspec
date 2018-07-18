@@ -123,7 +123,7 @@ class Test_grouping(unittest.TestCase):
         self.assertRaises(AssertionError, grouping.bootstrap_average_blpairs, 
                           [np.arange(5),], blpair_groups, time_avg=False)
         self.assertRaises(KeyError, grouping.bootstrap_average_blpairs, 
-                          [self.uvp,], [[100100100100,],], time_avg=False)
+                          [self.uvp,], [[200200200200,],], time_avg=False)
         
         # Reduce UVPSpec to only 3 blpairs and set them all to the same values
         _blpairs = list(np.unique(self.uvp.blpair_array)[:3])

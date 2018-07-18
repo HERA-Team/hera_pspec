@@ -29,8 +29,8 @@ def build_vanilla_uvpspec(beam=None):
     Nspwdlys = 1 * Ndlys
 
     # [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))]
-    blpairs = [1002001002, 2003002003, 1003001003]
-    bls = [1002, 2003, 1003]
+    blpairs = [101102101102, 102103102103, 101103101103]
+    bls = [101102, 102103, 101103]
     Nbls = len(bls)
     Nblpairs = len(blpairs)
     Nblpairts = Nblpairs * Ntimes

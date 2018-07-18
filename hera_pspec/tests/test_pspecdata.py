@@ -997,7 +997,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Nspws, 3)
         nt.assert_equal(uvp.Nspwdlys, 43)
         nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
-        nt.assert_equal(uvp.get_data((0, 24025024025, 'xx')).shape, (60, 14))
+        nt.assert_equal(uvp.get_data((0, 124125124125, 'xx')).shape, (60, 14))
 
         # check select
         uvp.select(spws=[1])
@@ -1274,7 +1274,7 @@ def test_pspec_run():
     nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
     nt.assert_true(uvp.vis_units, "mK")
-    nt.assert_equal(uvp.bl_array.tolist(), [37038, 52053])
+    nt.assert_equal(uvp.bl_array.tolist(), [137138, 152153])
     nt.assert_equal(uvp.pol_array.tolist(), [-5, -5])
     nt.assert_equal(uvp.cosmo, cosmo)
     nt.assert_true(hasattr(uvp, 'cov_array'))

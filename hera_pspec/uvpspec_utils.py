@@ -26,6 +26,7 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     # get blpair baselines in integer form
     bl1 = np.floor(uvp.blpair_array / 1e6)
     blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int32).T
+
     # ensure bls is in integer form
     if isinstance(bls, tuple):
         assert isinstance(bls[0], (int, np.integer)), "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
@@ -241,6 +242,10 @@ def _blpair_to_antnums(blpair):
     ant2 = int(np.floor(blpair / 1e6 - ant1*1e3))
     ant3 = int(np.floor(blpair / 1e3 - ant1*1e6 - ant2*1e3))
     ant4 = int(np.floor(blpair - ant1*1e9 - ant2*1e6 - ant3*1e3))
+    ant1 -= 100
+    ant2 -= 100
+    ant3 -= 100
+    ant4 -= 100
 
     # form antnums tuple
     antnums = ((ant1, ant2), (ant3, ant4))
@@ -250,6 +255,9 @@ def _blpair_to_antnums(blpair):
 def _antnums_to_blpair(antnums):
     """
     Convert nested tuple of antenna numbers to baseline-pair integer.
+    A baseline-pair integer is an i12 integer that is the antenna numbers
+    + 100 directly concatenated (i.e. string contatenation).
+    Ex: ((1, 2), (3, 4)) --> 101 + 102 + 103 + 104 --> 101102103014.
 
     Parameters
     ----------
@@ -263,10 +271,10 @@ def _antnums_to_blpair(antnums):
         baseline-pair integer
     """
     # get antennas
-    ant1 = antnums[0][0]
-    ant2 = antnums[0][1]
-    ant3 = antnums[1][0]
-    ant4 = antnums[1][1]
+    ant1 = antnums[0][0] + 100
+    ant2 = antnums[0][1] + 100
+    ant3 = antnums[1][0] + 100
+    ant4 = antnums[1][1] + 100
 
     # form blpair
     blpair = int(ant1*1e9 + ant2*1e6 + ant3*1e3 + ant4)
@@ -290,6 +298,8 @@ def _bl_to_antnums(bl):
     # get antennas
     ant1 = int(np.floor(bl / 1e3))
     ant2 = int(np.floor(bl - ant1*1e3))
+    ant1 -= 100
+    ant2 -= 100
 
     # form antnums tuple
     antnums = (ant1, ant2)
@@ -299,6 +309,9 @@ def _bl_to_antnums(bl):
 def _antnums_to_bl(antnums):
     """
     Convert tuple of antenna numbers to baseline integer.
+    A baseline integer is the two antenna numbers + 100
+    directly (i.e. string) concatenated. Ex: (1, 2) -->
+    101 + 102 --> 101102.
 
     Parameters
     ----------
@@ -308,17 +321,17 @@ def _antnums_to_bl(antnums):
 
     Returns
     -------
-    blpair : <i6 integer
+    bl : <i6 integer
         baseline integer
     """
     # get antennas
-    ant1 = antnums[0]
-    ant2 = antnums[1]
+    ant1 = antnums[0] + 100
+    ant2 = antnums[1] + 100
 
-    # form blpair
-    blpair = int(ant1*1e3 + ant2)
+    # form bl
+    bl = int(ant1*1e3 + ant2)
 
-    return blpair
+    return bl
 
 def _blpair_to_bls(blpair):
     """
