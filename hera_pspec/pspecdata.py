@@ -2441,7 +2441,7 @@ class PSpecData(object):
 def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None, dset_pairs=None,
               psname_ext=None, spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
-              exclude_auto_bls=True, exclude_permutations=True,
+              exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
@@ -2520,7 +2520,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         If blpairs is None, redundant baseline groups will be formed and
         all cross-multiplies will be constructed. In doing so, if
         exclude_auto_bls is True, eliminate all instances of a bl crossed
-        with itself. Default: True
+        with itself. Default: False
 
     exclude_permutations : boolean
         If blpairs is None, redundant baseline groups will be formed and
