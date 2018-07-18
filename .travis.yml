@@ -22,12 +22,12 @@ install:
   - export PATH="$HOME/miniconda/bin:$PATH"
   - hash -r
   - conda config --set always_yes yes --set changeps1 no
-  - conda install -q conda=4.3.25
+  - conda update -q conda
   # Useful for debugging any issues with conda
   - conda info -a
 
   # create environment and install dependencies
-  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy=1.14 scipy nose pip matplotlib coverage h5py
+  - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy nose pip matplotlib coverage h5py
   - source activate test-environment
   - conda install -c conda-forge aipy
   - pip install coveralls
