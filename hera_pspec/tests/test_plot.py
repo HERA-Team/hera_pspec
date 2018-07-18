@@ -166,9 +166,9 @@ class Test_Plot(unittest.TestCase):
         
         # Try some other arguments
         ax3 = plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx', 
-                                   average_blpairs=False, delay=False, 
-                                   log=True, vmin=-1., vmax=3., 
-                                   cmap='RdBu')
+                                   average_blpairs=False, delay=True, 
+                                   log=False, vmin=-1., vmax=3., 
+                                   cmap='RdBu', fold=True)
         
 if __name__ == "__main__":
     unittest.main()
