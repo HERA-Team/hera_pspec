@@ -2441,7 +2441,7 @@ class PSpecData(object):
 def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None, dset_pairs=None,
               psname_ext=None, spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
-              exclude_auto_bls=True, exclude_permutations=True,
+              exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
@@ -2520,7 +2520,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         If blpairs is None, redundant baseline groups will be formed and
         all cross-multiplies will be constructed. In doing so, if
         exclude_auto_bls is True, eliminate all instances of a bl crossed
-        with itself. Default: True
+        with itself. Default: False
 
     exclude_permutations : boolean
         If blpairs is None, redundant baseline groups will be formed and
@@ -2703,6 +2703,19 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     # perform Jy to mK conversion if desired
     if Jy2mK:
         ds.Jy_to_mK()
+
+    # Print warning if auto_bls is set to exclude correlations of the
+    # same baseline with itself, because this may cause a bias if one
+    # is already cross-correlating different times to avoid noise bias.
+    # See issue #160 on hera_pspec repo
+    if exclude_auto_bls:
+        raise_warning("Skipping the cross-multiplications of a baseline "
+                      "with itself may cause a bias if one is already "
+                      "cross-correlating different times to avoid the "
+                      "noise bias. Please see hera_pspec github issue 160 "
+                      "to make sure you know what you are doing! "
+                      "https://github.com/HERA-Team/hera_pspec/issues/160",
+                      verbose=verbose)
 
     # check dset pair type
     err_msg = "dset_pairs must be fed as a list of len-2 integer tuples"
