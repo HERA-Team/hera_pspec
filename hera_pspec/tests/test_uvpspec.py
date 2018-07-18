@@ -38,11 +38,11 @@ class Test_UVPSpec(unittest.TestCase):
         d = self.uvp.get_data((0, ((1, 2), (1, 2)), 'xx'))
         nt.assert_equal(d.shape, (10, 30))
         nt.assert_true(d.dtype == np.complex)
-        nt.assert_almost_equal(d[0,0], (1.0020010020000001+0j))
+        nt.assert_almost_equal(d[0,0], (101.1021011020000001+0j))
         d = self.uvp.get_data((0, ((1, 2), (1, 2)), -5))
-        nt.assert_almost_equal(d[0,0], (1.0020010020000001+0j))
-        d = self.uvp.get_data((0, 1002001002, -5))
-        nt.assert_almost_equal(d[0,0], (1.0020010020000001+0j))
+        nt.assert_almost_equal(d[0,0], (101.1021011020000001+0j))
+        d = self.uvp.get_data((0, 101102101102, -5))
+        nt.assert_almost_equal(d[0,0], (101.1021011020000001+0j))
         # get_wgts
         w = self.uvp.get_wgts((0, ((1, 2), (1, 2)), 'xx'))
         nt.assert_equal(w.shape, (10, 30, 2))
@@ -137,17 +137,17 @@ class Test_UVPSpec(unittest.TestCase):
 
     def test_blpair_conversions(self):
         # test blpair -> antnums
-        an = self.uvp.blpair_to_antnums(1002001002)
+        an = self.uvp.blpair_to_antnums(101102101102)
         nt.assert_equal(an, ((1, 2), (1, 2)))
         # test antnums -> blpair
         bp = self.uvp.antnums_to_blpair(((1, 2), (1, 2)))
-        nt.assert_equal(bp, 1002001002)
+        nt.assert_equal(bp, 101102101102)
         # test bl -> antnums
-        an = self.uvp.bl_to_antnums(1002)
+        an = self.uvp.bl_to_antnums(101102)
         nt.assert_equal(an, (1, 2))
         # test antnums -> bl
         bp = self.uvp.antnums_to_bl((1, 2))
-        nt.assert_equal(bp, 1002)
+        nt.assert_equal(bp, 101102)
 
     def test_indices_funcs(self):
         # key to indices
@@ -155,7 +155,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(spw, 0)
         nt.assert_equal(pol, 0)
         nt.assert_true(np.isclose(blpairts, np.array([0,3,6,9,12,15,18,21,24,27])).min())
-        spw, blpairts, pol = self.uvp.key_to_indices( (0, 1002001002, 'xx') )
+        spw, blpairts, pol = self.uvp.key_to_indices( (0, 101102101102, 'xx') )
         nt.assert_equal(spw, 0)
         nt.assert_equal(pol, 0)
         nt.assert_true(np.isclose(blpairts, np.array([0,3,6,9,12,15,18,21,24,27])).min())
@@ -177,14 +177,14 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(len(pol), 1)
 
         # test blpair to indices
-        inds = self.uvp.blpair_to_indices(1002001002)
+        inds = self.uvp.blpair_to_indices(101102101102)
         nt.assert_true(np.isclose(inds, np.array([0,3,6,9,12,15,18,21,24,27])).min())
         inds = self.uvp.blpair_to_indices(((1,2),(1,2)))
         nt.assert_true(np.isclose(inds, np.array([0,3,6,9,12,15,18,21,24,27])).min())
 
         # test time to indices
         time = self.uvp.time_avg_array[5]
-        blpair = 1002001002
+        blpair = 101102101102
         inds = self.uvp.time_to_indices(time=time)
         nt.assert_equal(len(inds), 3)
         nt.assert_true(np.isclose(self.uvp.time_avg_array[inds], time, rtol=1e-10).all())
@@ -198,7 +198,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp.select(bls=[(1, 2)], inplace=True)
         nt.assert_equal(uvp.Nblpairs, 1)
         nt.assert_equal(uvp.data_array[0].shape, (10, 30, 1))
-        nt.assert_almost_equal(uvp.data_array[0][0,0,0], (1.0020010020000001+0j))
+        nt.assert_almost_equal(uvp.data_array[0][0,0,0], (101.1021011020000001+0j))
         # inplace vs not inplace, spw selection
         uvd = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
@@ -213,7 +213,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_almost_equal(uvp2.data_array[0][0,0,0], (-3831605.3903496987+8103523.9604128916j))
         # blpair select
         uvp = copy.deepcopy(self.uvp)
-        uvp2 = uvp.select(blpairs=[1002001002, 2003002003], inplace=False)
+        uvp2 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 2)
         # pol select
         uvp2 = uvp.select(pols=[-5], inplace=False)
@@ -275,20 +275,20 @@ class Test_UVPSpec(unittest.TestCase):
 
         # test generate noise spectra
         P_N = uvp.generate_noise_spectra(0, -5, 500, form='Pk', real=True)
-        nt.assert_equal(P_N[1002001002].shape, (10, 30))
+        nt.assert_equal(P_N[101102101102].shape, (10, 30))
 
         # test smaller system temp
         P_N2 = uvp.generate_noise_spectra(0, -5, 400, form='Pk', real=True)
-        nt.assert_true((P_N[1002001002] > P_N2[1002001002]).all())
+        nt.assert_true((P_N[101102101102] > P_N2[101102101102]).all())
 
         # test complex
         P_N2 = uvp.generate_noise_spectra(0, -5, 500, form='Pk', real=False)
-        nt.assert_true((P_N[1002001002] < P_N2[1002001002]).all())
+        nt.assert_true((P_N[101102101102] < P_N2[101102101102]).all())
 
         # test Dsq
         Dsq = uvp.generate_noise_spectra(0, -5, 500, form='DelSq', real=True)
-        nt.assert_equal(Dsq[1002001002].shape, (10, 30))
-        nt.assert_true(Dsq[1002001002][0, 1] < P_N[1002001002][0, 1])
+        nt.assert_equal(Dsq[101102101102].shape, (10, 30))
+        nt.assert_true(Dsq[101102101102][0, 1] < P_N[101102101102][0, 1])
 
         # test a blpair selection
         P_N = uvp.generate_noise_spectra(0, -5, 500, form='Pk', real=True)
@@ -296,16 +296,16 @@ class Test_UVPSpec(unittest.TestCase):
     def test_average_spectra(self):
         uvp = copy.deepcopy(self.uvp)
         # test blpair averaging
-        blpairs = uvp.get_blpair_groups_from_bl_groups([[1002, 2003, 1003]], only_pairs_in_bls=False)
+        blpairs = uvp.get_blpair_groups_from_bl_groups([[101102, 102103, 101103]], only_pairs_in_bls=False)
         uvp2 = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 1)
-        nt.assert_true(np.isclose(uvp2.get_nsamples((0, 1002001002, 'xx')), 3.0).all())
-        nt.assert_equal(uvp2.get_data((0, 1002001002, 'xx')).shape, (10, 30))
+        nt.assert_true(np.isclose(uvp2.get_nsamples((0, 101102101102, 'xx')), 3.0).all())
+        nt.assert_equal(uvp2.get_data((0, 101102101102, 'xx')).shape, (10, 30))
 
         # Test blpair averaging (with baseline-pair weights)
         # Results should be identical with different weights here, as the data
         # are all the same)
-        blpairs = [[1002001002, 1002001002]]
+        blpairs = [[101102101102, 101102101102]]
         blpair_wgts = [[2., 0.,]]
         uvp3a = uvp.average_spectra(blpair_groups=blpairs, time_avg=False,
                                    blpair_weights=None,
@@ -314,19 +314,19 @@ class Test_UVPSpec(unittest.TestCase):
                                    blpair_weights=blpair_wgts,
                                    inplace=False)
         #nt.assert_equal(uvp2.Nblpairs, 1)
-        nt.assert_true(np.isclose(uvp3a.get_data((0, 1002001002, 'xx')),
-                                  uvp3b.get_data((0, 1002001002, 'xx'))).all())
-        #nt.assert_equal(uvp2.get_data((0, 1002001002, 'xx')).shape, (10, 30))
+        nt.assert_true(np.isclose(uvp3a.get_data((0, 101102101102, 'xx')),
+                                  uvp3b.get_data((0, 101102101102, 'xx'))).all())
+        #nt.assert_equal(uvp2.get_data((0, 101102101102, 'xx')).shape, (10, 30))
 
 
         # test time averaging
         uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
         nt.assert_true(uvp2.Ntimes, 1)
-        nt.assert_true(np.isclose(uvp2.get_nsamples((0, 1002001002, 'xx')), 10.0).all())
-        nt.assert_true(uvp2.get_data((0, 1002001002, 'xx')).shape, (1, 30))
+        nt.assert_true(np.isclose(uvp2.get_nsamples((0, 101102101102, 'xx')), 10.0).all())
+        nt.assert_true(uvp2.get_data((0, 101102101102, 'xx')).shape, (1, 30))
         # ensure averaging works when multiple repeated baselines are present, but only
         # if time_avg = True
-        uvp.blpair_array[uvp.blpair_to_indices(2003002003)] = 1002001002
+        uvp.blpair_array[uvp.blpair_to_indices(102103102103)] = 101102101102
         nt.assert_raises(ValueError, uvp.average_spectra, blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=False, inplace=False)
         uvp.average_spectra(blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=True)
         nt.assert_equal(uvp.Ntimes, 1)
@@ -532,18 +532,18 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(out.Npols, 3)
 
 def test_conj_blpair_int():
-    conj_blpair = uvputils._conj_blpair_int(1002003004)
-    nt.assert_equal(conj_blpair, 3004001002)
+    conj_blpair = uvputils._conj_blpair_int(101102103104)
+    nt.assert_equal(conj_blpair, 103104101102)
 
 def test_conj_bl_int():
-    conj_bl = uvputils._conj_bl_int(1002)
-    nt.assert_equal(conj_bl, 2001)
+    conj_bl = uvputils._conj_bl_int(101102)
+    nt.assert_equal(conj_bl, 102101)
 
 def test_conj_blpair():
-    blpair = uvputils._conj_blpair(1002003004, which='first')
-    nt.assert_equal(blpair, 2001003004)
-    blpair = uvputils._conj_blpair(1002003004, which='second')
-    nt.assert_equal(blpair, 1002004003)
-    blpair = uvputils._conj_blpair(1002003004, which='both')
-    nt.assert_equal(blpair, 2001004003)
-    nt.assert_raises(ValueError, uvputils._conj_blpair, 2001003004, which='foo')
+    blpair = uvputils._conj_blpair(101102103104, which='first')
+    nt.assert_equal(blpair, 102101103104)
+    blpair = uvputils._conj_blpair(101102103104, which='second')
+    nt.assert_equal(blpair, 101102104103)
+    blpair = uvputils._conj_blpair(101102103104, which='both')
+    nt.assert_equal(blpair, 102101104103)
+    nt.assert_raises(ValueError, uvputils._conj_blpair, 102101103104, which='foo')

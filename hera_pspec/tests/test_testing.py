@@ -30,7 +30,7 @@ def test_uvpspec_from_data():
     # test basic execution
     uvp = testing.uvpspec_from_data(fname, [(37, 38), (38, 39), (52, 53), (53, 54)], beam=beam, spw_ranges=[(50, 100)])
     nt.assert_equal(uvp.Nfreqs, 50)
-    nt.assert_equal(np.unique(uvp.blpair_array).tolist(), [37038038039, 37038052053, 37038053054, 38039052053, 38039053054, 52053053054])
+    nt.assert_equal(np.unique(uvp.blpair_array).tolist(), [137138138139, 137138152153, 137138153154, 138139152153, 138139153154, 152153153154])
     uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (52, 53), (53, 54)], beam=beamfile, spw_ranges=[(50, 100)])
     uvp.history = ''
     uvp2.history = ''
@@ -40,9 +40,9 @@ def test_uvpspec_from_data():
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
     reds = redcal.get_pos_reds(dict(zip(ants, antpos)), low_hi=True)
     uvp = testing.uvpspec_from_data(fname, reds[:3], beam=beam, spw_ranges=[(50, 100)])
-    nt.assert_equal(len(set(uvp.bl_array) - set([37038, 37051, 37052, 38039, 38052, 38053, 39053, 39054,
-                                                 51052, 51067, 52053, 52067, 52068, 53054, 53068, 53069,
-                                                 54069, 67068, 68069])), 0)
+    nt.assert_equal(len(set(uvp.bl_array) - set([137138, 137151, 137152, 138139, 138152, 138153, 139153, 139154,
+                                                 151152, 151167, 152153, 152167, 152168, 153154, 153168, 153169,
+                                                 154169, 167168, 168169])), 0)
     nt.assert_equal(uvp.Nblpairs, 51)
 
     # test exceptions
