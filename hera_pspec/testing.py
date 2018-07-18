@@ -232,8 +232,8 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None,
         beam.cosmo = cosmo
     
     # Instantiate pspecdata
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], 
-                             wgts=[None, None], labels=['d1', 'd2'], beam=beam)
+    ds = hp.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], 
+                      wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
     # Get blpair groups
     assert isinstance(bl_grps, list), "bl_grps must be a list"
