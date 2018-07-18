@@ -10,6 +10,7 @@ from pyuvdata import UVData
 from hera_cal import redcal
 from scipy.signal import windows
 from scipy.interpolate import interp1d
+from astropy.time import Time
 
 # Data files to use in tests
 dfiles = [
@@ -99,11 +100,12 @@ class Test_PSpecData(unittest.TestCase):
             _d = uv.UVData()
             _d.read_miriad(os.path.join(DATA_PATH, dfile))
             self.d.append(_d)
+
         # Load standard deviations
-        self.d_std=[]
+        self.d_std = []
         for dfile in dfiles_std:
             _d = uv.UVData()
-            _d.read_miriad(os.path.join(DATA_PATH,dfile))
+            _d.read_miriad(os.path.join(DATA_PATH, dfile))
             self.d_std.append(_d)
 
         # Set trivial weights
@@ -153,6 +155,28 @@ class Test_PSpecData(unittest.TestCase):
         # Test exception when not a UVData instance
         self.assertRaises(TypeError, ds.add, [1], [None])
 
+        # Test get weights when fed a UVData for weights
+        ds = pspecdata.PSpecData(dsets=[self.uvd, self.uvd], wgts=[self.uvd, self.uvd])
+        key = (0, (24, 25), 'xx')
+        nt.assert_true(np.all(np.isclose(ds.x(key), ds.w(key))))
+
+        # Test labels when adding dsets
+        uvd = self.uvd
+        ds = pspecdata.PSpecData()
+        nt.assert_equal(len(ds.labels), 0)
+        ds.add([uvd, uvd], [None, None])
+        nt.assert_equal(len(ds.labels), 2)
+        ds.add(uvd, None, labels='foo')
+        nt.assert_equal(len(ds.dsets), len(ds.labels), 3)
+        nt.assert_equal(ds.labels, ['dset0', 'dset1', 'foo'])
+        ds.add(uvd, None)
+        nt.assert_equal(ds.labels, ['dset0', 'dset1', 'foo', 'dset3'])
+
+        # Test some exceptions
+        ds = pspecdata.PSpecData()
+        nt.assert_raises(ValueError, ds.get_G, key, key)
+        nt.assert_raises(ValueError, ds.get_H, key, key)
+
     def test_add_data(self):
         """
         Test adding non UVData object.
@@ -161,6 +185,7 @@ class Test_PSpecData(unittest.TestCase):
         #test TypeError if dsets is dict but dsets_std is not
         nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,[0])
         nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,{'e':0})
+
     def test_labels(self):
         """
         Test that dataset labels work.
@@ -214,7 +239,6 @@ class Test_PSpecData(unittest.TestCase):
         """
         Test the Q = dC/dp function.
         """
-
         vect_length = 50
         x_vect = np.random.normal(size=vect_length) \
                + 1.j * np.random.normal(size=vect_length)
@@ -247,7 +271,6 @@ class Test_PSpecData(unittest.TestCase):
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
         # Sending in sinusoids for x and y should give delta functions
-
 
         # Now do all the same tests from above but for a different number
         # of delay channels
@@ -470,69 +493,67 @@ class Test_PSpecData(unittest.TestCase):
             for norm in test_norm:
                 self.assertAlmostEqual(norm, 1.)
 
-
-    def test_cov_q(self,ndlys=13):
+    def test_cov_q(self, ndlys=13):
         """
         Test that q_hat_cov has the right shape and accepts keys in correct
         format. Also validate with arbitrary number of delays.
         """
         for d in self.d:
-            d.flag_array[:]=False #ensure that there are no flags!
-            d.select(times=np.unique(d.time_array)[:10],frequencies=d.freq_array[0,:16])
+            d.flag_array[:] = False #ensure that there are no flags!
+            d.select(times=np.unique(d.time_array)[:10], frequencies=d.freq_array[0, :16])
         for d_std in self.d_std:
-            d_std.flag_array[:]=False
-            d_std.select(times=np.unique(d_std.time_array)[:10],frequencies=d_std.freq_array[0,:16])
-        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
-        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
+            d_std.flag_array[:] = False
+            d_std.select(times=np.unique(d_std.time_array)[:10], frequencies=d_std.freq_array[0, :16])
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, dsets_std=self.d_std)
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, dsets_std=self.d_std)
         Ntime = self.ds.Ntimes
         self.ds.set_Ndlys(ndlys)
-        #Here is the analytic covariance matrix...
-        chan_x,chan_y=np.meshgrid(range(self.ds.Nfreqs),range(self.ds.Nfreqs))
-        cov_analytic=np.zeros((self.ds.spw_Ndlys,self.ds.spw_Ndlys),dtype=np.complex128)
+        # Here is the analytic covariance matrix...
+        chan_x, chan_y = np.meshgrid(range(self.ds.Nfreqs), range(self.ds.Nfreqs))
+        cov_analytic = np.zeros((self.ds.spw_Ndlys, self.ds.spw_Ndlys), dtype=np.complex128)
         for alpha in range(self.ds.spw_Ndlys):
             for beta in range(self.ds.spw_Ndlys):
-                cov_analytic[alpha,beta]=np.exp(-2j*np.pi*(alpha-beta)*(chan_x-chan_y)/self.ds.spw_Ndlys).sum()
-        key1 = (0,24,38)
-        key2 = (1,25,38)
+                cov_analytic[alpha, beta] = np.exp(-2j*np.pi*(alpha-beta)*(chan_x-chan_y)/self.ds.spw_Ndlys).sum()
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
         print(cov_analytic)
 
         for input_data_weight in ['identity','iC']:
             self.ds.set_weighting(input_data_weight)
-
             for taper in taper_selection:
                 qc = self.ds.cov_q_hat(key1,key2)
                 self.assertTrue(np.allclose(np.array(list(qc.shape)),
-                np.array([self.ds.Ntimes,self.ds.spw_Ndlys,self.ds.spw_Ndlys]),atol=1e-6))
+                np.array([self.ds.Ntimes, self.ds.spw_Ndlys, self.ds.spw_Ndlys]), atol=1e-6))
 
         """
         Now test that analytic Error calculation gives Nchan^2
         """
         self.ds.set_weighting('identity')
-        qc=self.ds.cov_q_hat(key1,key2)
+        qc = self.ds.cov_q_hat(key1, key2)
         self.assertTrue(np.allclose(qc,
-                        np.repeat(cov_analytic[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
+                        np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
         """
         Test lists of keys
         """
         self.ds.set_weighting('identity')
-        qc=self.ds.cov_q_hat([key1],[key2],time_indices=[0])
+        qc=self.ds.cov_q_hat([key1], [key2], time_indices=[0])
         self.assertTrue(np.allclose(qc,
-                        np.repeat(cov_analytic[np.newaxis,:,:],self.ds.Ntimes,axis=0),atol=1e-6))
-        self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,200)
-        self.assertRaises(ValueError,self.ds.cov_q_hat,key1,key2,"watch out!")
+                        np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
+        self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, 200)
+        self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, "watch out!")
+
     def test_cov_p_hat(self):
         """
         Test cov_p_hat, verify on identity.
         """
-        self.ds=pspecdata.PSpecData(dsets=self.d,wgts=self.w,dsets_std=self.d_std)
-        cov_p=self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),np.array([5.*np.identity(10)]))
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, dsets_std=self.d_std)
+        cov_p = self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),np.array([5.*np.identity(10)]))
         for p in range(10):
             for q in range(10):
-                if p==q:
-                    self.assertTrue(np.isclose(30.,cov_p[0,p,q],atol=1e-6))
+                if p == q:
+                    self.assertTrue(np.isclose(30., cov_p[0, p, q], atol=1e-6))
                 else:
-                    self.assertTrue(np.isclose(0.,cov_p[0,p,q],atol=1e-6))
-
+                    self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
 
     def test_q_hat(self):
         """
@@ -816,10 +837,10 @@ class Test_PSpecData(unittest.TestCase):
         # test phasing
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
-        uvd.phase_to_time(2458042)
+        uvd.phase_to_time(Time(2458042, format='jd'))
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
-        uvd2.phase_to_time(2458042.5)
+        uvd2.phase_to_time(Time(2458042.5, format='jd'))
         ds.validate_datasets()
 
     def test_rephase_to_dst(self):
@@ -962,7 +983,7 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=[(20,30), (30,40)], verbose=False)
         nt.assert_equal(uvp.Nblpairs, 16)
         nt.assert_equal(uvp.Nspws, 2)
-        uvp2 = uvp.select(spws=[0], bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
+        uvp2 = uvp.select(spws=0, bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
         nt.assert_equal(uvp2.Nspws, 1)
         nt.assert_equal(uvp2.Nblpairs, 7)
         uvp.select(spws=0, bls=(24, 25), only_pairs_in_bls=True, inplace=True)
@@ -976,7 +997,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Nspws, 3)
         nt.assert_equal(uvp.Nspwdlys, 43)
         nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
-        nt.assert_equal(uvp.get_data(0, 24025024025, 'xx').shape, (60, 14))
+        nt.assert_equal(uvp.get_data((0, 24025024025, 'xx')).shape, (60, 14))
 
         # check select
         uvp.select(spws=[1])
@@ -1028,11 +1049,12 @@ class Test_PSpecData(unittest.TestCase):
 
         # test covariance calculation runs with small number of delays
         uvd = copy.deepcopy(self.uvd)
-        uvd_std=copy.deepcopy(self.uvd_std)
+        uvd_std = copy.deepcopy(self.uvd_std)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
-        dsets_std=[uvd_std,uvd_std], beam=self.bm)
+                                 dsets_std=[uvd_std, uvd_std], beam=self.bm)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
+        nt.assert_true(hasattr(uvp, 'cov_array'))
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -1068,7 +1090,7 @@ class Test_PSpecData(unittest.TestCase):
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
         uvp = ds.pspec(bls1, bls2, (0, 1), pols=('xx','xx'), taper='none', input_data_weight='identity', norm='I', sampling=True)
-        oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        oqe = uvp.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
         # taper
@@ -1081,7 +1103,7 @@ class Test_PSpecData(unittest.TestCase):
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), taper='blackman-harris', input_data_weight='identity', norm='I')
-        oqe = uvp.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        oqe = uvp.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
 
@@ -1121,9 +1143,9 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
                         spw_ranges=[(400, 450)], verbose=False)
         # assert flag broadcast above hits weight arrays in uvp
-        nt.assert_true(np.all(np.isclose(uvp.get_wgts(0, ((24, 25), (24, 25)), 'xx')[3], 0.0)))
+        nt.assert_true(np.all(np.isclose(uvp.get_wgts((0, ((24, 25), (24, 25)), 'xx'))[3], 0.0)))
         # assert flag broadcast above hits integration arrays
-        nt.assert_true(np.isclose(uvp.get_integrations(0, ((24, 25), (24, 25)), 'xx')[3], 0.0))
+        nt.assert_true(np.isclose(uvp.get_integrations((0, ((24, 25), (24, 25)), 'xx'))[3], 0.0))
         # average spectra
         avg_uvp = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # repeat but change data in flagged portion
@@ -1155,8 +1177,8 @@ class Test_PSpecData(unittest.TestCase):
         uvp_unflagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
-        qe_unflagged = uvp_unflagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
-        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
+        qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
 
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
@@ -1173,8 +1195,8 @@ class Test_PSpecData(unittest.TestCase):
         uvp_flagged_mod = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
-        qe_flagged_mod = uvp_flagged_mod.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
-        qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
+        qe_flagged_mod = uvp_flagged_mod.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
+        qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
 
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_flagged_mod), np.real(qe_flagged), atol=0.001, rtol=0.001).all())
@@ -1229,21 +1251,25 @@ def test_pspec_run():
     fnames_std=[os.path.join(DATA_PATH,d) for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
                                                     'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
     # test basic execution
-    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True)
-    nt.assert_true(isinstance(psc, container.PSpecContainer))
-    nt.assert_equal(psc.groups(), ['dset0_dset1'])
-    nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1'])
-    nt.assert_true(os.path.exists("./out.hdf5"))
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+                              bl_len_range=(14, 15), bl_deg_range=(50, 70), psname_ext='_0')
+    nt.assert_true(isinstance(psc, container.PSpecContainer))
+    nt.assert_equal(psc.groups(), ['dset0_dset1'])
+    nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1_0'])
+    nt.assert_true(os.path.exists("./out.hdf5"))
 
-    # test Jy2mK, rephase_to_dset, blpairs and dset_labels
+    # test Jy2mK, rephase_to_dset, trim_dset_lsts, broadcast_dset_flags, blpairs and dset_labels
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
-    psc = pspecdata.pspec_run(fnames, "./out.hdf5",dsets_std=fnames_std, Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
                               rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
                               pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
                               dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
-                              cosmo=cosmo)
+                              cosmo=cosmo, trim_dset_lsts=True, broadcast_dset_flags=True, time_thresh=0.1,
+                              store_cov=True)
     nt.assert_true("foo_bar" in psc.groups())
     nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
@@ -1251,8 +1277,47 @@ def test_pspec_run():
     nt.assert_equal(uvp.bl_array.tolist(), [37038, 52053])
     nt.assert_equal(uvp.pol_array.tolist(), [-5, -5])
     nt.assert_equal(uvp.cosmo, cosmo)
+    nt.assert_true(hasattr(uvp, 'cov_array'))
+    nt.assert_equal(set(uvp.labels), set(['bar', 'foo']))
     #nt.assert_equal(uvp.labels, [])
     #nt.assert_equal(uvp.get_spw_ranges, [])
+
+    # test when no data is loaded in dset
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+                              blpairs=[((500, 501), (600, 601))])
+    nt.assert_equal(psc, None)
+    nt.assert_false(os.path.exists("./out.h5"))
+    uvds = []
+    for f in fnames:
+        uvd = UVData()
+        uvd.read_miriad(f)
+        uvds.append(uvd)
+    psc = pspecdata.pspec_run(uvds, "./out.hdf5", dsets_std=fnames_std, Jy2mK=False, verbose=False, overwrite=True,
+                              blpairs=[((500, 501), (600, 601))])
+    nt.assert_equal(psc, None)
+    nt.assert_false(os.path.exists("./out.h5"))
+
+    # test when data is loaded, but no blpairs match
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+                              blpairs=[((37, 38), (600, 601))])
+    nt.assert_true(psc is not None)
+    nt.assert_equal(len(psc.groups()), 0)
+
+    # test glob-parseable input dataset
+    dsets = [os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA"),
+             os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA")]
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
+    psc = pspecdata.pspec_run(dsets, "./out.hdf5", Jy2mK=False, verbose=True, overwrite=True,
+                              blpairs=[((24, 25), (37, 38))])
+    uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
+    nt.assert_equal(uvp.Ntimes, 120)
+    if os.path.exists("./out.hdf5"):
+        os.remove("./out.hdf5")
 
     # test exceptions
     nt.assert_raises(AssertionError, pspecdata.pspec_run, (1, 2), "./out.hdf5")
@@ -1267,8 +1332,12 @@ def test_pspec_run():
 
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()
-    a = args.parse_args([['foo'], 'bar'])
-
+    a = args.parse_args([['foo'], 'bar', '--dset_pairs', '0 0, 1 1', '--pol_pairs', 'xx xx, yy yy',
+                         '--spw_ranges', '300 400, 600 800', '--blpairs', '24 25 24 25, 37 38 37 38'])
+    nt.assert_equal(a.pol_pairs, [('xx', 'xx'), ('yy', 'yy')])
+    nt.assert_equal(a.dset_pairs, [(0, 0), (1, 1)])
+    nt.assert_equal(a.spw_ranges, [(300, 400), (600, 800)])
+    nt.assert_equal(a.blpairs, [((24, 25), (24, 25)), ((37, 38), (37, 38))])
 
 """
 # LEGACY MONTE CARLO TESTS

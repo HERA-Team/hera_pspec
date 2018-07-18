@@ -28,17 +28,26 @@ analysis :
 
   multiproc : False    # use multiprocess module
   nproc : 8               # number of processes to spawn
+  maxiter : 1
 
 #---------------------------------------------------------------
 # Data Parameters
 #---------------------------------------------------------------
 data :
-  pols :                  # list of linear polarizations of data
+  # list of linear polarizations of data to format data template with
+  pols :
     - 'xx'
     - 'yy'
-  groupname : "all"       # a single groupname
-  # full path to a data template with {pol} and {group}
-  input_data_template : '../../hera_pspec/data/zen.{group}.{pol}.LST.1.06964.uvA'
+
+  # a groupname to format data template with
+  groupname : "all"     
+
+  # a single, full path to a data template with {pol} and {group} fields
+  data_template : 'zen.{group}.{pol}.LST.1.?????.uvA'
+
+  # data baseline-type length range [meters] and angle range [degrees]
+  bl_len_range : [14, 16]  
+  bl_deg_range : [0, 1]
 
 #---------------------------------------------------------------
 # Algorithm Parameters
@@ -49,8 +58,6 @@ algorithm :
   reformat : 
     reformat_outfile : "zen.{group}.{len:03d}_{deg:03d}.{pol}.{suffix}"   # outfile template
     new_data_template : "zen.{group}.*.{pol}.{suffix}" # new data template to use        
-    bl_len_range : [0, 10000.0]  # [min, max] range of baseline lengths to extract [meters]
-    bltol : 1.0   # baseline redundancy tolerance in meters
 
   # RFI Flagging
   rfi_flag :
@@ -75,7 +82,7 @@ algorithm :
     dly_params :       # if dly_filter, these are the delay filter params
       min_dly : 1500.0
       horizon : 0.0
-      tol : 0.000000001
+      tol : 0.0001
       maxiter : 100
       window : 'blackman-harris'
       flag_nchan_low : 25
@@ -101,7 +108,7 @@ algorithm :
       standoff : 50.0
       horizon : 1.0
       min_dly : 0.0
-      tol : 0.000000001
+      tol : 0.0001
       maxiter : 100
       window : 'tukey'
       skip_wgt : 0.5

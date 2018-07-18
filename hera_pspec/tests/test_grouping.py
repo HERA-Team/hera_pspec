@@ -5,7 +5,10 @@ import os
 from hera_pspec.data import DATA_PATH
 from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing
 from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec import grouping
+from hera_pspec import grouping, container
+from pyuvdata import UVData
+from hera_cal import redcal
+
 
 class Test_grouping(unittest.TestCase):
 
@@ -213,5 +216,100 @@ class Test_grouping(unittest.TestCase):
                                times=True, pols=True, inplace=True)
         self.assertEqual(uvp1, uvp2)
         
+def test_bootstrap_resampled_error():
+    # generate a UVPSpec
+    visfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    cosmo = conversions.Cosmo_Conversions()
+    beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+    uvd = UVData()
+    uvd.read_miriad(visfile)
+    ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
+    reds = redcal.get_pos_reds(dict(zip(a, ap)), low_hi=True, bl_error_tol=1.0)[:3]
+    uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
+
+    # Lots of this function is already tested by bootstrap_run
+    # so only test the stuff not already tested
+    if os.path.exists("uvp.h5"):
+        os.remove("uvp.h5")
+    uvp.write_hdf5("uvp.h5", overwrite=True)
+    ua, ub, uw = grouping.bootstrap_resampled_error("uvp.h5", blpair_groups=None, Nsamples=10, seed=0, verbose=False)
+    # check number of boots
+    nt.assert_equal(len(ub), 10)
+    # check seed has been used properly
+    nt.assert_equal(uw[0][0][:5], [1.0, 1.0, 0.0, 2.0, 1.0])
+    nt.assert_equal(uw[0][1][:5], [2.0, 1.0, 1.0, 6.0, 1.0])
+    nt.assert_equal(uw[1][0][:5], [2.0, 2.0, 1.0, 1.0, 2.0])
+    nt.assert_equal(uw[1][1][:5], [1.0, 0.0, 1.0, 1.0, 4.0])
+
+    if os.path.exists("uvp.h5"):
+        os.remove("uvp.h5")
+
+def test_bootstrap_run():
+    # generate a UVPSpec and container
+    visfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    cosmo = conversions.Cosmo_Conversions()
+    beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+    uvd = UVData()
+    uvd.read_miriad(visfile)
+    ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
+    reds = redcal.get_pos_reds(dict(zip(a, ap)), low_hi=True, bl_error_tol=1.0)[:3]
+    uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
+    if os.path.exists("ex.h5"):
+        os.remove("ex.h5")
+    psc = container.PSpecContainer("ex.h5", mode='rw')
+    psc.set_pspec("grp1", "uvp", uvp)
+
+    # Test basic bootstrap run
+    grouping.bootstrap_run(psc, time_avg=True, Nsamples=100, seed=0,
+                           normal_std=True, robust_std=True, cintervals=[16, 84], keep_samples=True,
+                           bl_error_tol=1.0, overwrite=True, add_to_history='hello!', verbose=False)
+    spcs = psc.spectra("grp1")
+    # assert all bs samples were written
+    nt.assert_true(np.all(["uvp_bs{}".format(i) in spcs for i in range(100)]))
+    # assert average was written
+    nt.assert_true("uvp_avg" in spcs and "uvp" in spcs)
+    # assert average only has one time and 3 blpairs
+    uvp_avg = psc.get_pspec("grp1", "uvp_avg")
+    nt.assert_equal(uvp_avg.Ntimes, 1)
+    nt.assert_equal(uvp_avg.Nblpairs, 3)
+    # check avg file history
+    nt.assert_true("hello!" in uvp_avg.history)
+    # assert original uvp is unchanged
+    nt.assert_true(uvp == psc.get_pspec("grp1", 'uvp'))
+    # check stats array
+    np.testing.assert_array_equal([u'cinterval_16.00', u'cinterval_84.00', u'normal_std', u'robust_std'], uvp_avg.stats_array.keys())
+    for stat in [u'cinterval_16.00', u'cinterval_84.00', u'normal_std', u'robust_std']:
+        nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')).shape, (1, 50))
+        nt.assert_false(np.any(np.isnan(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')))))
+        nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')).dtype, np.complex128)
+
+    # test exceptions
+    del psc
+    if os.path.exists("ex.h5"):
+        os.remove("ex.h5")
+    psc = container.PSpecContainer("ex.h5", mode='rw')
+    # test empty groups
+    nt.assert_raises(AssertionError, grouping.bootstrap_run, "ex.h5")
+    # test bad filename
+    nt.assert_raises(AssertionError, grouping.bootstrap_run, 1)
+    # test fed spectra doesn't exist
+    psc.set_pspec("grp1", "uvp", uvp)
+    nt.assert_raises(AssertionError, grouping.bootstrap_run, psc, spectra=['grp1/foo'])
+    if os.path.exists("ex.h5"):
+        os.remove("ex.h5")
+
+
+def test_get_bootstrap_run_argparser():
+    args = grouping.get_bootstrap_run_argparser()
+    a = args.parse_args(['fname', '--spectra', 'grp1/uvp1', 'grp1/uvp2', 'grp2/uvp1',
+                         '--blpair_groups', '101102103104 101102102103, 102103104105',
+                         '--time_avg', 'True', '--Nsamples', '100', '--cintervals', '16', '84'])
+    nt.assert_equal(a.spectra, ['grp1/uvp1', 'grp1/uvp2', 'grp2/uvp1'])
+    nt.assert_equal(a.blpair_groups, [[101102103104, 101102102103], [102103104105]])
+    nt.assert_equal(a.cintervals, [16.0, 84.0])
+
+
 if __name__ == "__main__":
     unittest.main()

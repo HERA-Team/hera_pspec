@@ -7,6 +7,14 @@ import operator
 from hera_cal import redcal
 import itertools
 import argparse
+import glob
+import os
+import aipy
+from collections import OrderedDict as odict
+from pyuvdata import utils as uvutils
+from pyuvdata import UVData
+from datetime import datetime
+
 
 def hash(w):
     """
@@ -151,10 +159,10 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
     return bls1, bls2, blpairs
 
 
-def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=True, 
-              exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10)):
+def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=True, 
+                     exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
     """
-    Use hera_cal.redcal to get matching redundant baselines groups from uvd1 and uvd2
+    Use hera_cal.redcal to get matching, redundant baseline-pair groups from uvd1 and uvd2
     within the specified baseline tolerance, not including flagged ants.
 
     Parameters
@@ -189,9 +197,13 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         Number of baseline-pairs to put into each sub-group. No grouping if None.
         Default: None
 
-    bl_len_range : tuple of float, optional
-        Tuple containing minimum baseline length and maximum baseline length [meters]
+    bl_len_range : tuple, optional
+        len-2 tuple containing minimum baseline length and maximum baseline length [meters]
         to keep in baseline type selection
+
+    bl_deg_range : tuple, optional
+        len-2 tuple containing (minimum, maximum) baseline angle in degrees to keep in
+        baseline selection
 
     Returns
     -------
@@ -261,8 +273,9 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         xants1 = sorted(xants1)
         xants2 = sorted(xants2)
 
-    # get reds
-    reds = redcal.get_pos_reds(antpos, bl_error_tol=bl_tol, low_hi=True)
+    # construct redundant groups
+    reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
+                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
 
     # construct baseline pairs
     baselines1, baselines2, blpairs = [], [], []
@@ -274,11 +287,25 @@ def calc_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95
         # filter based on xants, existance in uvd1 and uvd2 and bl_len_range
         bls1, bls2 = [], []
         for bl1, bl2 in _blps:
+            # get baseline length and angle
             bl1i = uvd1.antnums_to_baseline(*bl1)
             bl2i = uvd1.antnums_to_baseline(*bl2)
-            bl_len = np.mean(map(lambda bl: np.linalg.norm(antpos[bl[0]]-antpos[bl[1]]), [bl1, bl2]))
+            bl1v = (antpos[bl1[0]] - antpos[bl1[1]])[:2]
+            bl2v = (antpos[bl2[0]] - antpos[bl2[1]])[:2]
+            bl1_len, bl2_len = np.linalg.norm(bl1v), np.linalg.norm(bl2v)
+            bl1_deg = np.arctan2(*bl1v[::-1]) * 180 / np.pi
+            if bl1_deg < 0: bl1_deg = (bl1_deg + 180) % 360
+            bl2_deg = np.arctan2(*bl2v[::-1]) * 180 / np.pi
+            if bl2_deg < 0: bl2_deg = (bl2_deg + 180) % 360
+            bl_len = np.mean([bl1_len, bl2_len])
+            bl_deg = np.mean([bl1_deg, bl2_deg])
+            # filter based on length cut
             if bl_len < bl_len_range[0] or bl_len > bl_len_range[1]:
                 continue
+            # filter based on angle cut
+            if bl_deg < bl_deg_range[0] or bl_deg > bl_deg_range[1]:
+                continue
+            # filter on other things
             if filter_blpairs:
                 if (bl1i not in uvd1.baseline_array or bl1[0] in xants1 or bl1[1] in xants1) \
                    or (bl2i not in uvd2.baseline_array or bl2[0] in xants2 or bl2[1] in xants2):
@@ -363,7 +390,7 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     spw_range : tuple or list of tuples
         Indices of the channels at the lower and upper bounds of the specified 
         spectral window(s). 
-        
+
         Note: If the requested spectral window is outside the available 
         frequency range, and bounds_error is False, '(None, None)' is returned. 
     """
@@ -471,7 +498,7 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
 
 def log(msg, f=None, lvl=0, tb=None, verbose=True):
     """
-    Add a message to the log (just prints to the terminal for now).
+    Add a message to the log.
     
     Parameters
     ----------
@@ -485,16 +512,16 @@ def log(msg, f=None, lvl=0, tb=None, verbose=True):
         Indent level of the message. Each level adds two extra spaces. 
         Default: 0.
 
-    tb : traceback object, optional
-        Traceback object to print with traceback.format_tb()
+    tb : traceback tuple, optional
+        Output of sys.exc_info()
 
     verbose : bool, optional
         if True, print msg. Even if False, still writes to file
         if f is provided.
     """
-    # catch for traceback provided
+    # catch for traceback if provided
     if tb is not None:
-        msg += "\n{}\n".format(traceback.format_tb(tb)[0])
+        msg += "\n{}".format('\n'.join(traceback.format_exception(*tb)))
 
     # print
     output = "%s%s" % ("  "*lvl, msg)
@@ -504,18 +531,36 @@ def log(msg, f=None, lvl=0, tb=None, verbose=True):
     # write
     if f is not None:
         f.write(output)
+        f.flush()
 
 
 def load_config(config_file):
     """
     Load configuration details from a YAML file.
+    All entries of 'None' --> None and all lists
+    of lists become lists of tuples.
     """
+    # define recursive replace function
+    def replace(d):
+        if isinstance(d, (dict, odict)):
+            for k in d.keys():
+                # 'None' and '' turn into None
+                if d[k] == 'None': d[k] = None
+                # list of lists turn into lists of tuples
+                if isinstance(d[k], list) and np.all([isinstance(i, list) for i in d[k]]):
+                    d[k] = [tuple(i) for i in d[k]]
+                elif isinstance(d[k], (dict, odict)): replace(d[k])
+
     # Open and read config file
     with open(config_file, 'r') as cfile:
         try:
             cfg = yaml.load(cfile)
         except yaml.YAMLError as exc:
             raise(exc)
+
+    # Replace entries
+    replace(cfg)
+
     return cfg
 
 
@@ -524,4 +569,396 @@ def flatten(nested_list):
     Flatten a list of nested lists
     """
     return [item for sublist in nested_list for item in sublist]
+
+
+def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=True, 
+                         exclude_permutations=True, bl_len_range=(0, 1e10), 
+                         bl_deg_range=(0, 180), xants=None, verbose=True):
+    """
+    Given a list of miriad file templates and selections for
+    polarization and group labels, construct a master list of
+    group-pol pairs, and also a list of blpairs for each
+    group-pol pair.
+
+    A group is a fieldname in the visibility files that denotes the
+    "type" of dataset. For example, the group field in the following files
+        zen.even.LST.1.01.xx.HH.uv
+        zen.odd.LST.1.01.xx.HH.uv
+    are the "even" and "odd" fields, which specifies the two time-binning groups.
+    To form cross spectra between these two files, one would feed a group_pair
+    of: group_pairs = [('even', 'odd')] and pol_pairs = [('xx', 'xx')].
+
+    Parameters
+    ----------
+    uv_templates : list
+        List of glob-parseable string templates, each of which must have
+        a {pol} and {group} field.
+
+    pol_pairs : list
+        List of len-2 polarization tuples to use in forming cross spectra.
+        Ex: [('xx', 'xx'), ('yy', 'yy'), ...]
+
+    group_pairs : list
+        List of len-2 group tuples to use in forming cross spectra.
+        See top of doc-string for an explanation of a "group" in this context.
+        Ex: [('grp1', 'grp1'), ('grp2', 'grp2'), ...]
+
+    exclude_auto_bls : bool
+        If True, exclude all baselines paired with itself.
+
+    exclude_permutations : bool
+        If True, exclude baseline2_cross_baseline1 if
+        baseline1_cross_baseline2 exists.
+
+    bl_len_range : len-2 tuple
+        A len-2 integer tuple specifying the range of baseline lengths
+        (meters in ENU frame) to consider.
+
+    bl_deg_range : len-2 tuple
+        A len-2 integer tuple specifying the range of baseline angles
+        (degrees in ENU frame) to consider.
+
+    xants : list
+        A list of integer antenna numbers to exclude.
+
+    verbose : bool
+        If True, print feedback to stdout.
+
+    Returns
+    -------
+    groupings : dict
+        A dictionary holding pol and group pair (tuple) as keys
+        and a list of baseline-pairs as values.
+
+    Notes
+    -----
+    A group-pol-pair is formed by self-matching unique files in the
+    glob-parsed master list, and then string-formatting-in appropriate 
+    pol and group selections given pol_pairs and group_pairs.
+    """
+    # type check
+    if isinstance(uv_templates, (str, np.str)):
+        uv_templates = [uv_templates]
+    assert len(pol_pairs) == len(group_pairs), "len(pol_pairs) must equal "\
+                                               "len(group_pairs)"
+
+    # get unique pols and groups
+    pols = sorted(set([item for sublist in pol_pairs for item in sublist]))
+    groups = sorted(set([item for sublist in group_pairs for item in sublist]))
+
+    # parse wildcards in uv_templates to get wildcard-unique filenames
+    unique_files = []
+    pol_grps = []
+    for template in uv_templates:
+        for pol in pols:
+            for group in groups:
+                # parse wildcards with pol / group selection
+                files = glob.glob(template.format(pol=pol, group=group))
+                # if any files were parsed, add to pol_grps
+                if len(files) > 0:
+                    pol_grps.append((pol, group))
+                # insert into unique_files with {pol} and {group} re-inserted
+                for _file in files:
+                    _unique_file = _file.replace(".{pol}.".format(pol=pol), 
+                        ".{pol}.").replace(".{group}.".format(group=group), ".{group}.")
+                    if _unique_file not in unique_files:
+                        unique_files.append(_unique_file)
+    unique_files = sorted(unique_files)
+
+    # use a single file from unique_files and a single pol-group combination to get antenna positions
+    _file = unique_files[0].format(pol=pol_grps[0][0], group=pol_grps[0][1])
+    uvd = UVData()
+    uvd.read_miriad(_file, read_data=False)
+
+    # get baseline pairs
+    (_bls1, _bls2, _, _, 
+     _) = calc_blpair_reds(uvd, uvd, filter_blpairs=False, exclude_auto_bls=exclude_auto_bls,
+                    exclude_permutations=exclude_permutations, bl_len_range=bl_len_range,
+                    bl_deg_range=bl_deg_range)
+
+    # take out xants if fed
+    if xants is not None:
+        bls1, bls2 = [], []
+        for bl1, bl2 in zip(_bls1, _bls2):
+            if bl1[0] not in xants and bl1[1] not in xants and bl2[0] not in xants and bl2[1] not in xants:
+                bls1.append(bl1)
+                bls2.append(bl2)
+    else:
+        bls1, bls2 = _bls1, _bls2
+    blps = zip(bls1, bls2)
+
+    # iterate over pol-group pairs that exist
+    groupings = odict()
+    for pp, gp in zip(pol_pairs, group_pairs):
+        if (pp[0], gp[0]) not in pol_grps or (pp[1], gp[1]) not in pol_grps:
+            if verbose:
+                print "pol_pair {} and group_pair {} not found in data files".format(pp, gp)
+            continue
+        groupings[(tuple(gp), tuple(pp))] = blps
+
+    return groupings
+
+
+def get_blvec_reds(blvecs, bl_error_tol=1.0):
+    """
+    Given a blvecs dictionary, form groups of baseline-pair objects based on
+    redundancy in ENU coordinates. Note: this only uses the East-North components
+    of the baseline vectors to calculate redundancy.
+
+    Parameters:
+    -----------
+    blvecs : dictionary (or UVPSpec object)
+        A dictionary with baseline vectors as values. Alternatively, this
+        can be a UVPSpec object with baseline-pairs and baseline vectors.
+
+    bl_error_tol : int
+        Redundancy tolerance of baseline vector in meters.
+
+    Returns:
+    --------
+    red_bl_grp : list
+        A list of baseline groups, ordered by ascending baseline length.
+
+    red_bl_len : list
+        A list of baseline lengths in meters for each bl group
+
+    red_bl_ang : list
+        A list of baseline angles in degrees for each bl group
+
+    red_bl_tag : list
+        A list of baseline string tags denoting bl length and angle
+    """
+    from hera_pspec import UVPSpec
+    # type check
+    assert isinstance(blvecs, (dict, odict, UVPSpec)), "blpairs must be fed as a dict or UVPSpec"
+    if isinstance(blvecs, UVPSpec):
+        # get baseline vectors
+        uvp = blvecs
+        bls = uvp.bl_array
+        bl_vecs = uvp.get_ENU_bl_vecs()[:, :2]
+        blvecs = dict(zip(map(uvp.bl_to_antnums, bls), bl_vecs))
+        # get baseline-pairs
+        blpairs = uvp.get_blpairs()
+        # form dictionary
+        _blvecs = odict()
+        for blp in blpairs:
+            bl1 = blp[0]
+            bl2 = blp[1]
+            _blvecs[blp] = (blvecs[bl1] + blvecs[bl2]) / 2.
+        blvecs = _blvecs
+
+    # create empty lists
+    red_bl_grp = []
+    red_bl_vec = []
+    red_bl_len = []
+    red_bl_ang = []
+    red_bl_tag = []
+
+    # iterate over each baseline in blvecs
+    for bl in blvecs.keys():
+        # get bl vector and properties
+        bl_vec = blvecs[bl][:2]
+        bl_len = np.linalg.norm(bl_vec)
+        bl_ang = np.arctan2(*bl_vec[::-1]) * 180 / np.pi
+        if bl_ang < 0: bl_ang = (bl_ang + 180) % 360
+        bl_tag = "{:03.0f}_{:03.0f}".format(bl_len, bl_ang)
+
+        # append to list if unique within tolerance
+        match = [np.all(np.isclose(blv, bl_vec, bl_error_tol)) for blv in red_bl_vec]
+        if np.any(match):
+            match_id = np.where(match)[0][0]
+            red_bl_grp[match_id].append(bl)
+
+        # else create new list
+        else:
+            red_bl_grp.append([bl])
+            red_bl_vec.append(bl_vec)
+            red_bl_len.append(bl_len)
+            red_bl_ang.append(bl_ang)
+            red_bl_tag.append(bl_tag)
+
+    # order based on tag
+    order = np.argsort(red_bl_tag)
+    red_bl_grp = [red_bl_grp[i] for i in order]
+    red_bl_len = [red_bl_len[i] for i in order]
+    red_bl_ang = [red_bl_ang[i] for i in order]
+    red_bl_tag = [red_bl_tag[i] for i in order]
+
+    return red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag
+
+
+def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verbose=True):
+    """
+    Job monitoring function, used to send elements of iterator through calls of run_func.
+    Can be parallelized if the input M function is from the multiprocess module.
+
+    Parameters
+    ----------
+    run_func : function
+        A worker function to run on each element in iterator. Should return
+        0 if job is successful, otherwise a failure is any non-zero integer.
+
+    iterator : iterable
+        An iterable whose elements define an individual job launch, and are
+        passed through to run_func for each individual job.
+
+    action_name : str
+        A descriptive name for the operation being performed by run_func.
+
+    M : map function
+        A map function used to send elements of iterator through calls to run_func.
+        Default is built-in map function.
+
+    lf : file descriptor
+        Log-file descriptor to print message to.
+
+    maxiter : int
+        Maximum number of job re-tries for failed jobs.
+
+    verbose : bool
+        If True, print feedback to stdout and logfile.
+
+    Returns
+    -------
+    failures : list
+        A list of failed job indices from iterator. Failures are any output of run_func
+        that aren't 0.
+    """
+    # run function over jobs
+    exit_codes = np.array(M(run_func, iterator))
+    time = datetime.utcnow()
+
+    # check for len-0
+    if len(exit_codes) == 0:
+        raise ValueError("No output generated from run_func over iterator {}".format(iterator))
+
+    # inspect for failures
+    if np.all(exit_codes != 0):
+        # everything failed, raise error
+        log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60, action_name, exit_codes, time), f=lf, verbose=verbose)
+        raise ValueError("All {} jobs failed".format(action_name))
+
+    # if not all failed, try re-run
+    failures = np.where(exit_codes != 0)[0]
+    counter = 1
+    while True:
+        if not np.all(exit_codes == 0):
+            if counter >= maxiter:
+                # break after certain number of tries
+                break
+            # re-run function over jobs that failed
+            exit_codes = np.array(M(run_func, failures))
+            # update counter
+            counter += 1
+            # update failures
+            failures = failures[exit_codes != 0]
+        else:
+            # all passed
+            break
+
+    # print failures if they exist
+    if len(failures) > 0:
+        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name, maxiter, failures), f=lf, verbose=verbose)
+    else:
+        log("\nAll {} jobs ran through".format(action_name), f=lf, verbose=verbose)
+
+    return failures
+
+
+def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
+             bl_deg_range=(0, 180), xants=None, add_autos=False):
+    """
+    Given a UVData object, a Miriad filepath or antenna position dictionary,
+    calculate redundant baseline groups using hera_cal.redcal and optionally filter
+    groups based on baseline cuts and xants.
+
+    Parameters
+    ----------
+    uvd : UVData object or str or dictionary
+        UVData object or Miriad filepath string or antenna position dictionary.
+        An antpos dict is formed via dict(zip(ants, ant_vecs)).
+
+    bl_error_tol : float
+        Redundancy tolerance in meters
+
+    pick_data_ants : boolean
+        If True, use only antennas in the UVData to construct reds, else use all
+        antennas present.
+
+    bl_len_range : float tuple
+        A len-2 float tuple specifying baseline length cut in meters
+
+    bl_deg_range : float tuple
+        A len-2 float tuple specifying baseline angle cut in degrees in ENU frame
+
+    xants : list
+        List of bad antenna numbers to exclude
+
+    add_autos : bool
+        If True, add into autocorrelation to redundant groups
+
+    Returns (reds, lens, angs)
+    ------- 
+    reds : list
+        List of redundant baseline (antenna-pair) groups 
+
+    lens : list
+        List of baseline lengths [meters] of each group in reds
+
+    angs : list
+        List of baseline angles [degrees ENU coords] of each group in reds
+    """
+    # handle string and UVData object
+    if isinstance(uvd, (str, np.str, UVData)):
+        # load filepath
+        if isinstance(uvd, (str, np.str)):
+            _uvd = UVData()
+            _uvd.read_miriad(uvd, read_data=False)
+            uvd = _uvd
+        # get antenna position dictionary
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
+        antpos_dict = dict(zip(ants, antpos))
+    # use antenna position dictionary
+    elif isinstance(uvd, (dict, odict)):
+        antpos_dict = uvd
+
+    # get redundant baselines
+    reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol, low_hi=True)
+    lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
+    angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
+    angs = [(a + 180) % 360 if a < 0 else a for a in angs]
+
+    # put in autocorrs
+    if add_autos:
+        ants = antpos_dict.keys()
+        reds = [zip(ants, ants)] + reds
+        lens = [0] + lens
+        angs = [0] + angs
+
+    # restrict baselines
+    _reds, _lens, _angs = [], [], []
+    for i, (l, a) in enumerate(zip(lens, angs)):
+        if l >= bl_len_range[0] and l <= bl_len_range[1]:
+            if a >= bl_deg_range[0] and a <= bl_deg_range[1]:
+                _reds.append(reds[i])
+                _lens.append(lens[i])
+                _angs.append(angs[i])
+    reds, lens, angs = _reds, _lens, _angs
+
+    # filter based on xants
+    if xants is not None:
+        _reds, _lens, _angs = [], [], []
+        for i, r in enumerate(reds):
+            _r = []
+            for bl in r:
+                if bl[0] not in xants and bl[1] not in xants:
+                    _r.append(bl)
+            if len(_r) > 0:
+                _reds.append(_r)
+                _lens.append(lens[i])
+                _angs.append(angs[i])
+
+        reds, lens, angs = _reds, _lens, _angs
+
+    return reds, lens, angs
 

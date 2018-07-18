@@ -1,9 +1,10 @@
 import unittest
 from nose.tools import assert_raises
+import nose.tools as nt
 import numpy as np
 import os, sys, copy
 from hera_pspec.data import DATA_PATH
-from hera_pspec import PSpecContainer, UVPSpec, testing
+from hera_pspec import container, PSpecContainer, UVPSpec, testing
 
 class Test_PSpecContainer(unittest.TestCase):
     
@@ -129,3 +130,51 @@ class Test_PSpecContainer(unittest.TestCase):
         # Check that save() can be called
         ps_store.save()
         
+
+def test_combine_psc_spectra():
+    fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
+    uvp1 = testing.uvpspec_from_data(fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
+    uvp2 = testing.uvpspec_from_data(fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
+
+    # test basic execution
+    if os.path.exists('ex.h5'):
+        os.remove('ex.h5')
+    psc = PSpecContainer("ex.h5", mode='rw')
+    psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
+    psc.set_pspec("grp1", "uvp_b", uvp2, overwrite=True)
+    container.combine_psc_spectra(psc, dset_split_str=None, ext_split_str='_')
+    nt.assert_equal(psc.spectra('grp1'), [u'uvp'])
+
+    # test dset name handling
+    if os.path.exists('ex.h5'):
+        os.remove('ex.h5')
+    psc = PSpecContainer("ex.h5", mode='rw')
+    psc.set_pspec("grp1", "d1_x_d2_a", uvp1, overwrite=True)
+    psc.set_pspec("grp1", "d1_x_d2_b", uvp2, overwrite=True)
+    psc.set_pspec("grp1", "d2_x_d3_a", uvp1, overwrite=True)
+    psc.set_pspec("grp1", "d2_x_d3_b", uvp2, overwrite=True)
+    container.combine_psc_spectra('ex.h5', dset_split_str='_x_', ext_split_str='_')
+    nt.assert_equal(psc.spectra('grp1'), [u'd1_x_d2', u'd2_x_d3'])
+
+    # test exceptions
+    if os.path.exists('ex.h5'):
+        os.remove('ex.h5')
+    psc = PSpecContainer("ex.h5", mode='rw')
+    # test no group exception
+    nt.assert_raises(AssertionError, container.combine_psc_spectra, psc)
+    # test failed combine_uvpspec
+    psc.set_pspec("grp1", "d1_x_d2_a", uvp1, overwrite=True)
+    psc.set_pspec("grp1", "d1_x_d2_b", uvp1, overwrite=True)
+    container.combine_psc_spectra(psc, dset_split_str='_x_', ext_split_str='_')
+    nt.assert_equal(psc.spectra('grp1'), [u'd1_x_d2_a', u'd1_x_d2_b'])
+
+    if os.path.exists("ex.h5"):
+        os.remove("ex.h5")
+
+def test_combine_psc_spectra_argparser():
+    args = container.get_combine_psc_spectra_argparser()
+    a = args.parse_args(["filename", "--dset_split_str", "_x_", "--ext_split_str", "_"])
+    nt.assert_equal(a.filename, "filename")
+    nt.assert_equal(a.dset_split_str, "_x_")
+    nt.assert_equal(a.ext_split_str, "_")
+
