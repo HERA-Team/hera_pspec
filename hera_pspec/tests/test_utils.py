@@ -221,18 +221,18 @@ class Test_Utils(unittest.TestCase):
     def test_config_pspec_blpairs(self):
         # test basic execution
         uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
-        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], verbose=False)
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], verbose=False, exclude_auto_bls=True)
         nt.assert_equal(len(groupings), 1)
         nt.assert_equal(groupings.keys()[0], (('even', 'odd'), ('xx', 'xx')))
         nt.assert_equal(len(groupings.values()[0]), 11833)
 
         # test multiple, some non-existant pairs
-        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx'), ('yy', 'yy')], [('even', 'odd'), ('even', 'odd')], verbose=False)
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx'), ('yy', 'yy')], [('even', 'odd'), ('even', 'odd')], verbose=False, exclude_auto_bls=True)
         nt.assert_equal(len(groupings), 1)
         nt.assert_equal(groupings.keys()[0], (('even', 'odd'), ('xx', 'xx')))
 
         # test xants
-        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], xants=[0, 1, 2], verbose=False)
+        groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], xants=[0, 1, 2], verbose=False, exclude_auto_bls=True)
         nt.assert_equal(len(groupings.values()[0]), 9735)
 
         # test exceptions

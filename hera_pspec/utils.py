@@ -159,7 +159,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
     return bls1, bls2, blpairs
 
 
-def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=True, 
+def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=False, 
                      exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
     """
     Use hera_cal.redcal to get matching, redundant baseline-pair groups from uvd1 and uvd2
@@ -571,7 +571,7 @@ def flatten(nested_list):
     return [item for sublist in nested_list for item in sublist]
 
 
-def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=True, 
+def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False, 
                          exclude_permutations=True, bl_len_range=(0, 1e10), 
                          bl_deg_range=(0, 180), xants=None, verbose=True):
     """
