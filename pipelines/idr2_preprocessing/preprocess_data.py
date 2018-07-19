@@ -51,7 +51,7 @@ algs = cf['algorithm']
 verbose = params['verbose']
 overwrite = params['overwrite']
 pols = params['pols']
-data_template = params['data_template']
+data_template = os.path.join(params['data_root'], params['data_template'])
 data_suffix = os.path.splitext(data_template)[1][1:]
 
 # open logfile
@@ -69,6 +69,14 @@ hp.utils.log(json.dumps(cf, indent=1) + '\n', f=lf, verbose=verbose)
 
 # change to working dir
 os.chdir(params['work_dir'])
+
+# out_dir should be cleared before each run: issue a warning if not the case
+outdir = os.path.join(params['work_dir'], params['out_dir'])
+oldfiles = glob.glob(outdir+'/*')
+if len(oldfiles) > 0:
+    hp.utils.log("\n{}\nWARNING: out_dir should be cleaned before each new run to " \
+                 "ensure proper functionality.\nIt seems like some files currently " \
+                 "exist in {}\n{}\n".format('-'*50, outdir, '-'*50), f=lf, verbose=verbose)
 
 # define history prepend function
 def prepend_history(action, param_dict):

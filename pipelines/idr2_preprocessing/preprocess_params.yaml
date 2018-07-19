@@ -8,9 +8,9 @@
 #---------------------------------------------------------------
 io :
   work_dir : './'         # directory to work in
-  out_dir : './'          # directory to dump all output in
-  logfile : 'preprocess_out.log'  # logfile   
-  errfile : 'preprocess_err.log' # error file
+  out_dir : './'          # directory to put output: root is work_dir
+  logfile : 'preprocess_out.log'  # logfile: root is work_dir
+  errfile : 'preprocess_err.log' # error file: root is work_dir
   joinlog : False       # redirect error output into logfile
   overwrite : True     # overwrite
   verbose : True        # report feedback to standard output
@@ -42,8 +42,9 @@ data :
   # a groupname to format data template with
   groupname : "all"     
 
-  # a single, full path to a data template with {pol} and {group} fields
-  data_template : 'zen.{group}.{pol}.LST.1.?????.uvA'
+  # a single path to a (glob-parseable) template with {pol} and {group} fields
+  data_root : "./"                                      # data root dir
+  data_template : 'zen.{group}.{pol}.LST.1.?????.uvA'   # data basename
 
   # data baseline-type length range [meters] and angle range [degrees]
   bl_len_range : [14, 16]  
@@ -55,9 +56,11 @@ data :
 algorithm :
 
   # Data Reformatting
-  reformat : 
-    reformat_outfile : "zen.{group}.{len:03d}_{deg:03d}.{pol}.{suffix}"   # outfile template
-    new_data_template : "zen.{group}.*.{pol}.{suffix}" # new data template to use        
+  reformat :
+    # output file template basename: root is out_dir
+    reformat_outfile : "zen.{group}.{len:03d}_{deg:03d}.{pol}.{suffix}"
+    # a new data template to adopt w/ {group}, {pol} and {suffix} fields: root is out_dir
+    new_data_template : "zen.{group}.*.{pol}.{suffix}"
 
   # RFI Flagging
   rfi_flag :

@@ -14,9 +14,9 @@
 #---------------------------------------------------------------
 io :
   work_dir : './'         # directory to work in
-  out_dir : './'          # directory to dump all output in
-  logfile : 'pspipe_out.log'  # logfile   
-  errfile : 'pspipe_err.log' # error file
+  out_dir : './'          # directory for output: root is work_dir
+  logfile : 'pspipe_out.log'  # logfile: root is work_dir
+  errfile : 'pspipe_err.log' # error file: root is work_dir
   joinlog : False       # redirect error output into logfile
   overwrite : True     # overwrite
   verbose : True        # report feedback to standard output
@@ -43,8 +43,11 @@ data :
   pol_pairs :
     - ['xx', 'xx']
 
-  # full path to data template with {pol} and {group} fields
+  # data root dir: absolute path
+  data_root : './'
+  # data template basename with {pol} and {group} fields
   data_template : 'zen.{group}.?????.{pol}.HH.uvXA'
+  # std template basename with {pol} and {group} fields
   std_template : None
 
   # baseline type restriction in length (meters) and angle (degrees)
@@ -69,7 +72,7 @@ algorithm :
     input_data_weight : "identity"
     norm : "I"
     taper : "none"
-    beam : "HERA_NF_dipole_power.beamfits"
+    beam : "HERA_NF_dipole_power.beamfits"  # work_dir is root
     cosmo : "None"
     spw_ranges :
       - [10, 20]
