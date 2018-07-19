@@ -83,7 +83,7 @@ oldfiles = glob.glob(outdir+"/*")
 if len(oldfiles) > 0:
     hp.utils.log("\n{}\nWARNING: out_dir should be cleaned before each new run to " \
                  "ensure proper functionality.\nIt seems like some files currently " \
-                 "exist in {}\n{}\n".format('-'*50, outdir, '-'*50), f=lf, verbose=verbose)
+                 "exist in {}\n{}\n".format('-'*50, outdir, '-'*50), f=lf, verbose=params['verbose'])
 
 #-------------------------------------------------------------------------------
 # Run Visibility Data Difference
