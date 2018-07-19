@@ -1,8 +1,10 @@
 import numpy as np
 import pyuvdata
 from hera_pspec import conversions
+import matplotlib
 import matplotlib.pyplot as plt
 import copy
+from collections import OrderedDict as odict
 
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
@@ -55,8 +57,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     
     Returns
     -------
-    ax : matplotlib.axes
-        Matplotlib Axes instance.
+    fig : matplotlib.pyplot.Figure
+        Matplotlib Figure instance.
     """
     # Create new Axes if none specified
     new_plot = False
@@ -143,15 +145,16 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         else:
             ax.set_ylabel("$P(k_\parallel)$ $[%s]$" % psunits, fontsize=16)
     
-    # Return Axes
-    return ax
+    # Return Figure: the axis is an attribute of figure
+    if new_plot:
+        return fig
 
 
-def delay_waterfall(uvp, blpairs, spw, pol, average_blpairs=False, 
-                    fold=False, delay=True, deltasq=False, log=True,
-                    vmin=None, vmax=None, cmap='YlGnBu', ax=None):
+def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=False, 
+                    fold=False, delay=True, deltasq=False, log=True, lst_in_hrs=True,
+                    vmin=None, vmax=None, cmap='YlGnBu', axes=None, figsize=(14, 6)):
     """
-    Plot a 1D delay spectrum (or spectra) for a group of baselines.
+    Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
     Parameters
     ----------
@@ -165,6 +168,10 @@ def delay_waterfall(uvp, blpairs, spw, pol, average_blpairs=False,
     spw, pol : int or str
         Which spectral window and polarization to plot.
     
+    component : str
+        Component of complex spectra to plot, options=['abs', 'real', 'imag'].
+        Default: 'real'.
+
     average_blpairs : bool, optional
         If True, average over the baseline pairs within each group.
     
@@ -183,6 +190,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, average_blpairs=False,
     log : bool, optional
         Whether to plot the log10 of the data. Default: True.
     
+    lst_in_hrs : bool, optional
+        If True, LST is plotted in hours, otherwise its plotted in radians.
+
     vmin, vmax : float, optional
         Clip the color scale of the delay spectrum to these min./max. values. 
         If None, use the natural range of the data. Default: None.
@@ -190,23 +200,23 @@ def delay_waterfall(uvp, blpairs, spw, pol, average_blpairs=False,
     cmap : str, optional
         Matplotlib colormap to use. Default: 'YlGnBu'.
     
-    ax : matplotlib.axes, optional
-        Use this to pass in an existing Axes object, which the power spectra 
-        will be added to. (Warning: Labels and legends will not be altered in 
-        this case, even if the existing plot has completely different axis 
+    axes : array of matplotlib.axes, optional
+        Use this to pass in an existing Axes object or array of axes, which
+        the power spectra will be added to. (Warning: Labels and legends will
+        not be altered in this case, even if the existing plot has completely different axis 
         labels etc.) If None, a new Axes object will be created. Default: None.
     
+    figsize : tuple
+        len-2 integer tuple specifying figure size if axes is None
+
     Returns
     -------
-    ax : matplotlib.axes
-        Matplotlib Axes instance.
+    fig : matplotlib.pyplot.Figure
+        Matplotlib Figure instance if input ax is None.
     """
-    # Create new Axes if none specified
-    new_plot = False
-    if ax is None:
-        new_plot = True
-        fig, ax = plt.subplots(1, 1)
-    
+    # assert component
+    assert component in ['real', 'abs', 'imag'], "Can't parse specified component {}".format(component)
+
     # Add ungrouped baseline-pairs into a group of their own (expected by the
     # averaging routines)
     blpairs_in = blpairs
@@ -242,84 +252,148 @@ def delay_waterfall(uvp, blpairs, spw, pol, average_blpairs=False,
         x = k_para
     
     # Extract power spectra into array
-    waterfall = []
+    waterfall = odict()
     for blgrp in blpairs:
         # Loop over blpairs in group and plot power spectrum for each one
         for blp in blgrp:
+            # make key
             key = (spw, blp, pol)
-            power = np.abs(uvp_plt.get_data(key))
-            waterfall.append(power.T)
-            
+            # get power data
+            power = uvp_plt.get_data(key, omit_flags=False)
+            # set flagged power data to nan
+            flags = np.isclose(uvp_plt.get_integrations(key), 0.0)
+            power[flags, :] = np.nan
+            # get component
+            if component == 'abs':
+                waterfall[key] = np.abs(power)
+            elif component == 'real':
+                waterfall[key] = np.real(power)
+            elif component == 'imag':
+                waterfall[key] = np.imag(power)
+
             # If blpairs were averaged, only the first blpair in the group 
             # exists any more (so skip the rest)
             if average_blpairs: break
     
-    # Reshape waterfall
-    waterfall = np.swapaxes( np.array(waterfall), 0, 1)
-    waterfall = waterfall.reshape(waterfall.shape[0], -1).T
-    
     # Take logarithm of data if requested
     if log:
-        vals = np.log10(waterfall)
+        for k in waterfall:
+            waterfall[k] = np.log10(np.abs(waterfall[k]))
         logunits = "\log_{10}"
     else:
-        vals = waterfall
         logunits = ""
     
-    # Plot waterfall
-    matshow = ax.matshow(vals, cmap=cmap, aspect='auto',vmin=vmin, vmax=vmax, 
-                         extent=[np.min(x), np.max(x), 0., vals.shape[0]],)
-    cbar = ax.get_figure().colorbar(matshow)
-    
-    # Format colorbar labels in log mode
-    if log:
-        lbls = []
-        try:
-            ticks = cbar.get_ticks()
-        except:
-            ticks = cbar.get_yticks() # Needed for matplotlib version < 2.2
-        for tick in ticks:
-            # Check to make sure we don't accidentally round the exponent
-            if ("%1.1f" % tick)[-1] != "0":
-                lbls.append("")
+    # Create new Axes if none specified
+    new_plot = False
+    if axes is None:
+        new_plot = True
+        # figure out how many subplots to make
+        Nkeys = len(waterfall)
+        Nside = int(np.ceil(np.sqrt(Nkeys)))
+        fig, axes = plt.subplots(Nside, Nside, figsize=figsize)
+    # Ensure axes is an ndarray
+    if isinstance(axes, matplotlib.axes._subplots.Axes):
+        axes = np.array([[axes]])
+    if isinstance(axes, list):
+        axes = np.array(axes)
+    # ensure its 2D and get side lengths
+    if axes.ndim == 1:
+        axes = axes[:, None]
+    assert axes.ndim == 2, "input axes must have ndim == 2"
+    Nvert, Nhorz = axes.shape
+
+    # get LST range: setting y-ticks is tricky due to LST wrapping...
+    y = uvp_plt.lst_avg_array[uvp_plt.key_to_indices(waterfall.keys()[0])[1]]
+    if lst_in_hrs:
+        lst_units = "Hr"
+        y = np.around(y * 24 / (2*np.pi), 2)
+    else:
+        lst_units = "rad"
+        y = np.around(y, 3)
+    Ny = len(y)
+    if Ny <= 10:
+        Ny_thin = 1
+    else:
+        Ny_thin = int(round(Ny / 10.0))
+    Nx = len(x)
+
+    # Sanitize power spectrum units 
+    psunits = uvp_plt.units
+    if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
+    if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}")
+    if "Hz" in psunits: psunits = psunits.replace("Hz", r"{\rm Hz}")
+    if "str" in psunits: psunits = psunits.replace("str", r"\,{\rm str}")
+    if "Mpc" in psunits and "\\rm" not in psunits: 
+        psunits = psunits.replace("Mpc", r"{\rm Mpc}")
+    if "pi" in psunits and "\\pi" not in psunits: 
+        psunits = psunits.replace("pi", r"\pi")
+    if "beam normalization not specified" in psunits:
+        psunits = psunits.replace("beam normalization not specified", 
+                                 r"{\rm unnormed}")
+
+    # iterate over waterfall keys
+    keys = waterfall.keys()
+    Nkeys = len(waterfall)
+    k = 0
+    for i in range(Nvert):
+        for j in range(Nhorz):
+            # set ax
+            ax = axes[i, j]
+
+            # turn off subplot if no more plots to make
+            if k >= Nkeys:
+                ax.axis('off')
+                continue
+
+            # get blpair key for this subplot
+            key = keys[k]
+
+            # plot waterfall
+            cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax, 
+                                 extent=[np.min(x), np.max(x), Ny, 0])
+
+            # ax config
+            ax.xaxis.set_ticks_position('bottom')
+            ax.tick_params(labelsize=12)
+            if ax.get_title() == '':
+                ax.set_title("bls: {} x {}".format(*uvp_plt.blpair_to_antnums(key[1])), y=1)
+
+            # set colorbar
+            cbar = ax.get_figure().colorbar(cax, ax=ax)
+            cbar.ax.tick_params(labelsize=14)
+
+            # configure left-column plots
+            if j == 0:
+                # set yticks
+                ax.set_yticks(np.arange(Ny//Ny_thin+1))
+                ax.set_yticklabels(y[::Ny_thin])
+                ax.set_ylabel(r"LST [{}]".format(lst_units), fontsize=16)
             else:
-                lbls.append("$10^{%d}$" % tick)
-        cbar.ax.set_yticklabels(["$10^{%d}$" % tick for tick in cbar.get_ticks()])
-    
-    # Add labels with units
-    if ax.get_xlabel() == "":
-        if delay:
-            ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
-        else:
-            ax.set_xlabel("$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
-    if ax.get_ylabel() == "":
-        # Sanitize power spectrum units 
-        psunits = uvp_plt.units
-        if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
-        if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}")
-        if "Hz" in psunits: psunits = psunits.replace("Hz", r"{\rm Hz}")
-        if "str" in psunits: psunits = psunits.replace("str", r"\,{\rm str}")
-        if "Mpc" in psunits and "\\rm" not in psunits: 
-            psunits = psunits.replace("Mpc", r"{\rm Mpc}")
-        if "pi" in psunits and "\\pi" not in psunits: 
-            psunits = psunits.replace("pi", r"\pi")
-        if "beam normalization not specified" in psunits:
-            psunits = psunits.replace("beam normalization not specified", 
-                                     r"{\rm unnormed}")
-        
-        # Power spectrum type
+                ax.set_yticklabels([])
+
+            # configure bottom-row plots
+            if k + Nhorz >= Nkeys:
+                if ax.get_xlabel() == "":
+                    if delay:
+                        ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
+                    else:
+                        ax.set_xlabel("$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
+            else:
+                ax.set_xticklabels([])
+
+            k += 1        
+
+    # make suptitle
+    if axes[0][0].get_figure()._suptitle is None:
         if deltasq:
-            cbar.set_label("$%s\Delta^2$ $[%s]$" % (logunits, psunits), 
-                           fontsize=16)
+            units = "$%s\Delta^2$ $[%s]$" % (logunits, psunits)
         else:
-            cbar.set_label("$%sP(k_\parallel)$ $[%s]$" % (logunits, psunits), 
-                           fontsize=16)
-        cbar.ax.tick_params(labelsize=14)
-        
-    # Switch on only bottom x labels
-    ax.tick_params(labelbottom=True, labeltop=False)
-    ax.tick_params(which='both', labelsize=16)
-    
+            units = "$%sP(k_\parallel)$ $[%s]$" % (logunits, psunits)
+
+        spwrange = np.around(np.array(uvp_plt.get_spw_ranges()[spw][:2]) / 1e6, 2)
+        axes[0][0].get_figure().suptitle("{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange), y=1.03, fontsize=14)
+
     # Return Axes
-    return ax
+    if new_plot:
+        return fig
     

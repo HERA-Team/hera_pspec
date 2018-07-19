@@ -30,7 +30,7 @@ setup_args = {
     'packages':     ['hera_pspec'],
     'package_dir':  {'hera_pspec': 'hera_pspec'},
     'package_data': {'hera_pspec': data_files},
-    'install_requires': ['numpy>=1.10', 'scipy>=0.19',],
+    'install_requires': ['numpy>=1.14', 'scipy>=1.1','matplotlib>=2.2'],
     'include_package_data': True,
     'scripts': ['scripts/pspec_run.py', 'scripts/pspec_red.py',
                 'pipelines/idr2_preprocessing/preprocess_data.py',
