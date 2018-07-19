@@ -9,7 +9,8 @@ from collections import OrderedDict as odict
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
                    average_times=False, fold=False, plot_noise=False, 
-                   delay=True, deltasq=False, legend=False, ax=None):
+                   delay=True, deltasq=False, legend=False, ax=None,
+                   component='real'):
     """
     Plot a 1D delay spectrum (or spectra) for a group of baselines.
     
@@ -54,7 +55,11 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         will be added to. (Warning: Labels and legends will not be altered in 
         this case, even if the existing plot has completely different axis 
         labels etc.) If None, a new Axes object will be created. Default: None.
-    
+
+    component : str
+        Component of complex spectra to plot, options=['abs', 'real', 'imag'].
+        Default: 'real'. 
+
     Returns
     -------
     fig : matplotlib.pyplot.Figure
@@ -108,8 +113,17 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         # Loop over blpairs in group and plot power spectrum for each one
         for blp in blgrp:
             key = (spw, blp, pol)
-            power = np.abs(np.real(uvp_plt.get_data(key))).T
-            
+            if component == 'real':
+                power = np.abs(np.real(uvp_plt.get_data(key))).T
+            elif component == 'imag':
+                power = np.abs(np.imag(uvp_plt.get_data(key))).T
+            elif component == 'abs':
+                power = np.abs(uvp_plt.get_data(key)).T
+
+            # flag spectra that have zero integration
+            flags = np.isclose(uvp_plt.get_integrations(key), 0.0)
+            power[:, flags] = np.nan
+
             ax.plot(x, power, label="%s" % str(key))
             
             # If blpairs were averaged, only the first blpair in the group 
