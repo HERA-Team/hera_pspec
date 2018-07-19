@@ -152,7 +152,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
 
 def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=False, 
                     fold=False, delay=True, deltasq=False, log=True, lst_in_hrs=True,
-                    vmin=None, vmax=None, cmap='YlGnBu', axes=None, figsize=(14, 6)):
+                    vmin=None, vmax=None, cmap='YlGnBu', axes=None, figsize=(14, 6),
+                    force_plot=False):
     """
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
@@ -208,6 +209,11 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     
     figsize : tuple
         len-2 integer tuple specifying figure size if axes is None
+
+    force_plot : bool
+        Certain qualities of an input UVPSpec will raise an exception,
+        and this parameter overrides that to continue plotting. One example is
+        having more than 20 blpairs in the object.
 
     Returns
     -------
@@ -288,6 +294,11 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             # exists any more (so skip the rest)
             if average_blpairs: break
     
+    # check for reasonable number of blpairs to plot...
+    Nkeys = len(waterfall)
+    if Nkeys > 20 and force_plot == False:
+        raise ValueError("Nblps > 20 and force_plot == False, quitting plotting routine...")
+
     # Take logarithm of data if requested
     if log:
         for k in waterfall:
@@ -346,7 +357,6 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
 
     # iterate over waterfall keys
     keys = waterfall.keys()
-    Nkeys = len(waterfall)
     k = 0
     for i in range(Nvert):
         for j in range(Nhorz):
