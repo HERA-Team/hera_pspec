@@ -989,8 +989,8 @@ class UVPSpec(object):
             Array of baseline vectors.
         """
         return uvutils.ENU_from_ECEF(
-                        (self.bl_vecs + self.telescope_location).T, \
-                        *uvutils.LatLonAlt_from_XYZ(self.telescope_location)).T
+                        (self.bl_vecs + self.telescope_location), \
+                        *uvutils.LatLonAlt_from_XYZ(self.telescope_location[None]))
 
     def read_from_group(self, grp, just_meta=False, spws=None, bls=None,
                         blpairs=None, times=None, pols=None,
