@@ -310,6 +310,7 @@ class PSpecData(object):
         """
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
+            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {} 
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -1097,7 +1098,7 @@ class PSpecData(object):
 
         return H / 2.
 
-    def get_unnormed_E(self,key1,key2):
+    def get_unnormed_E(self, key1, key2):
         """
         Calculates a series of unnormalized E matrices, such that
 
@@ -2001,7 +2002,6 @@ class PSpecData(object):
 
             # clear covariance cache
             self.clear_cache()
-            built_GH = False  # haven't built Gv and Hv matrices in this spw loop yet
 
             # setup emtpy data arrays
             spw_data = []
@@ -2076,14 +2076,34 @@ class PSpecData(object):
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
 
                     # Build Fisher matrix
-                    if input_data_weight == 'identity' and built_GH:
-                        # in this case, all Gv are the same, so skip if already built for this spw!
-                        pass
+                    if input_data_weight == 'identity':
+                        # in this case, all Gv and Hv differ only by flagging pattern
+                        # so check if we've already computed this
+                        # First: get flag weighting matrices given key1 & key2
+                        Y = np.vstack([self.Y(key1).diagonal(), self.Y(key2).diagonal()])
+
+                        # Second: check cache for Y
+                        matches = [np.isclose(Y, y).all() for y in self._identity_Y.values()]
+                        if True in matches:
+                            # This Y exists, so pick appropriate G and H and continue
+                            match = self._identity_Y.keys()[matches.index(True)]
+                            Gv = self._identity_G[match]
+                            Hv = self._identity_H[match]
+                        else:
+                            # This Y doesn't exist, so compute it
+                            if verbose: print("  Building G...")
+                            Gv = self.get_G(key1, key2)
+                            Hv = self.get_H(key1, key2, sampling=sampling)
+                            # cache it
+                            self._identity_Y[(key1, key2)] = Y
+                            self._identity_G[(key1, key2)] = Gv
+                            self._identity_H[(key1, key2)] = Hv
                     else:
+                        # for non identity weighting (i.e. iC weighting)
+                        # Gv and Hv are always different, so compute them
                         if verbose: print("  Building G...")
                         Gv = self.get_G(key1, key2)
                         Hv = self.get_H(key1, key2, sampling=sampling)
-                        built_GH = True
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
@@ -2236,7 +2256,6 @@ class PSpecData(object):
                                 filename2, label2, dset2.history, '-'*20)
         uvp.taper = taper
         uvp.norm = norm
-
 
         if self.primary_beam is not None:
             # attach cosmology
