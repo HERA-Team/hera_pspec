@@ -1950,14 +1950,15 @@ class PSpecData(object):
         # if using default setting of number of delay bins equal to number of frequency channels
         if n_dlys is None:
             n_dlys = [None for i in range(len(spw_ranges))]
+        elif isinstance(n_dlys, (int, np.integer)):
+            n_dlys = [n_dlys]
 
         # if using the whole band in the dataset, then there should just be one n_dly parameter specified
         if spw_ranges is None and n_dlys != None:
             assert len(n_dlys) == 1, "Only one spw, so cannot specify more than one n_dly value"
 
         # assert that the same number of ndlys has been specified as the number of spws
-        if (spw_ranges != None) and (n_dlys != None):
-            assert len(spw_ranges) == len(n_dlys), "Need to specify number of delay bins for each spw"
+        assert len(spw_ranges) == len(n_dlys), "Need to specify number of delay bins for each spw"
 
         # setup polarization selection
         if isinstance(pols, tuple):
@@ -2075,6 +2076,14 @@ class PSpecData(object):
                     if verbose:
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
 
+                    # Check that number of non-zero weight chans >= n_dlys
+                    key1_dof = np.sum(~np.isclose(self.Y(key1).diagonal(), 0.0))
+                    key2_dof = np.sum(~np.isclose(self.Y(key2).diagonal(), 0.0))
+                    if key1_dof < self.spw_Ndlys or key2_dof < self.spw_Ndlys:
+                        if verbose:
+                            print("WARNING: Number of unflagged chans for key1 and/or key2 < n_dlys\n" \
+                                  "which may lead to normalization instabilities.")
+
                     # Build Fisher matrix
                     if input_data_weight == 'identity':
                         # in this case, all Gv and Hv differ only by flagging pattern
@@ -2168,7 +2177,7 @@ class PSpecData(object):
                     # combined weight is geometric mean
                     pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
 
-                    # insert time and blpair info only once
+                    # insert time and blpair info only once per blpair
                     if i < 1 and j < 1:
                         # insert time info
                         inds1 = dset1.antpair2ind(*bl1)
