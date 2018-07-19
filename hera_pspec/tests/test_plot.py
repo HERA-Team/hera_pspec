@@ -125,6 +125,23 @@ class Test_Plot(unittest.TestCase):
         elements = [(matplotlib.lines.Line2D, 1),]
         self.assertTrue( axes_contains(f4.axes[0], elements) )
         plt.close(f4)
+        
+        # Plot imaginary part
+        f4 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+                                  average_blpairs=False, average_times=True, 
+                                  component='imag')
+        elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
+        self.assertTrue( axes_contains(f4.axes[0], elements) )
+        plt.close(f4)
+        
+        # Plot abs
+        f5 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+                                  average_blpairs=False, average_times=True, 
+                                  component='abs')
+        elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
+        self.assertTrue( axes_contains(f4.axes[0], elements) )
+        plt.close(f5)
+        
 
     def test_plot_cosmo(self):
         """
@@ -179,7 +196,14 @@ class Test_Plot(unittest.TestCase):
                                    log=False, vmin=-1., vmax=3., 
                                    cmap='RdBu', fold=True, component='abs')
         plt.close(f3)
-
+        
+        # Try with imaginary component
+        f4 = plot.delay_waterfall(self.uvp, [_blps,], spw=0, pol='xx', 
+                                   average_blpairs=False, delay=True, 
+                                   log=False, vmin=-1., vmax=3., 
+                                   cmap='RdBu', fold=True, component='imag')
+        plt.close(f4)
+        
         # Try some more arguments
         fig, axes = plt.subplots(1, len(blps))
         plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx',
