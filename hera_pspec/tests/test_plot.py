@@ -173,7 +173,8 @@ class Test_Plot(unittest.TestCase):
         plt.close(f2)
 
         # Try some other arguments
-        f3 = plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx', 
+        _blps = [self.uvp.blpair_to_antnums(blp) for blp in blps]
+        f3 = plot.delay_waterfall(self.uvp, [_blps,], spw=0, pol='xx', 
                                    average_blpairs=False, delay=True, 
                                    log=False, vmin=-1., vmax=3., 
                                    cmap='RdBu', fold=True, component='abs')

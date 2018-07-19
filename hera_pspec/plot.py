@@ -227,6 +227,19 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         else:
             blpairs.append(blpairs_in[i])
     
+    # iterate through and make sure they are blpair integers
+    _blpairs = []
+    for blpgrp in blpairs:
+        _blpgrp = []
+        for blp in blpgrp:
+            if isinstance(blp, tuple):
+                blp_int = uvp.antnums_to_blpair(blp)
+            else:
+                blp_int = blp
+            _blpgrp.append(blp_int)
+        _blpairs.append(_blpgrp)
+    blpairs = _blpairs
+
     # Average over blpairs or times if requested
     blpairs_in = copy.deepcopy(blpairs) # Save input blpair list
     if average_blpairs:
