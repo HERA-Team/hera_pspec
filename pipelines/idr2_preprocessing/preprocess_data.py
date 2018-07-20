@@ -63,8 +63,10 @@ if params['joinlog']:
     ef = lf
 else:
     ef = open(os.path.join(params['out_dir'], params['errfile']), "w")
+
 time = datetime.utcnow()
-hp.utils.log("Starting preprocess pipeline on {}\n{}\n".format(time, '-'*60), f=lf, verbose=verbose)
+hp.utils.log("Starting preprocess pipeline on {}\n{}\n".format(time, '-'*60), 
+             f=lf, verbose=verbose)
 hp.utils.log(json.dumps(cf, indent=1) + '\n', f=lf, verbose=verbose)
 
 # change to working dir
@@ -85,9 +87,13 @@ def prepend_history(action, param_dict):
     time = datetime.utcnow()
     hist = "\nRan preprocess_data.py {} step at\nUTC {} with \nhera_pspec [{}], "\
            "hera_cal [{}],\nhera_qm [{}] and pyuvdata [{}]\nwith {} algorithm "\
-           "attrs:\n{}\n{}\n".format(action, time, hp.version.git_hash[:10],
-                                     hc.version.git_hash[:10], hq.version.git_hash[:10], 
-                                     pyuvdata.version.git_hash[:10], action, '-'*50, dict_str)
+           "attrs:\n{}\n{}\n".format(action, time, 
+                                     hp.version.git_hash[:10],
+                                     hc.version.git_hash[:10], 
+                                     hq.version.git_hash[:10], 
+                                     pyuvdata.version.git_hash[:10], 
+                                     action, '-'*50, 
+                                     dict_str)
     return hist
 
 # assign iterator function
@@ -103,44 +109,62 @@ else:
 if params['reformat']:
     # start block
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting baseline reformatting: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nstarting baseline reformatting: {}\n".format("-"*60, time), 
+                 f=lf, verbose=verbose)
 
     # get datafiles
-    datafiles, datapols = uvt.utils.search_data(data_template.format(group=params['groupname']), pols, matched_pols=False, reverse_nesting=False, flatten=False)
+    datafiles, datapols = uvt.utils.search_data( 
+                               data_template.format(group=params['groupname']), 
+                               pols, matched_pols=False, 
+                               reverse_nesting=False, 
+                               flatten=False )
 
     # get redundant groups as a good split for parallelization
-    reds, lens, angs = hp.utils.get_reds(datafiles[0][0], bl_error_tol=1.0, add_autos=True,
-                                         bl_len_range=params['bl_len_range'], bl_deg_range=params['bl_deg_range'])
+    reds, lens, angs = hp.utils.get_reds(datafiles[0][0], bl_error_tol=1.0, 
+                                         add_autos=True,
+                                         bl_len_range=params['bl_len_range'], 
+                                         bl_deg_range=params['bl_deg_range'])
 
     # iterate over polarization group
     for i, dfs in enumerate(datafiles):
 
         # setup bl reformat function
-        def bl_reformat(j, i=i, datapols=datapols, dfs=dfs, lens=lens, angs=angs, reds=reds, data_suffix=data_suffix, p=algs['reformat'], params=params):
+        def bl_reformat(j, i=i, datapols=datapols, dfs=dfs, lens=lens, 
+                        angs=angs, reds=reds, data_suffix=data_suffix, 
+                        p=algs['reformat'], params=params):
             try:
                 if not p['bl_len_range'][0] < lens[j] < p['bl_len_range'][1]:
                     return 0
-                outname = p['reformat_outfile'].format(len=int(round(lens[j])), deg=int(round(angs[j])), pol=datapols[i][0], suffix=data_suffix)
+                outname = p['reformat_outfile'].format(len=int(round(lens[j])), 
+                                                       deg=int(round(angs[j])), 
+                                                       pol=datapols[i][0], 
+                                                       suffix=data_suffix)
                 outname = os.path.join(params['out_dir'], outname)
                 if os.path.exists(outname) and overwrite == False:
                     return 1
                 uvd = UVData()
                 uvd.read_miriad(dfs, bls=reds[j])
                 uvd.write_miriad(outname, clobber=True)
-                uvd.history = "{}{}".format(prepend_history("BL REFORMAT", p), uvd.history)
+                uvd.history = "{}{}".format(prepend_history("BL REFORMAT", p), 
+                                            uvd.history)
             except:
-                hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(j), 
+                             f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
             return 0
 
         # launch jobs
-        failures = hp.utils.job_monitor(bl_reformat, range(len(reds)), "BL REFORMAT: pol {}".format(pol), M=M, lf=lf, maxiter=params['maxiter'], verbose=verbose)
+        failures = hp.utils.job_monitor(bl_reformat, range(len(reds)), \
+                                        "BL REFORMAT: pol {}".format(pol), 
+                                        M=M, lf=lf, maxiter=params['maxiter'], 
+                                        verbose=verbose)
 
     # edit data template
     data_template = os.path.join(params['out_dir'], algs['reformat']['new_data_template'].format(pol='{pol}', suffix=data_suffix))
 
     time = datetime.utcnow()
-    hp.utils.log("\nfinished baseline reformatting: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+    hp.utils.log("\nfinished baseline reformatting: {}\n{}".format(time, "-"*60), 
+                 f=lf, verbose=verbose)
 
 #-------------------------------------------------------------------------------
 # RFI-Flag
@@ -148,10 +172,15 @@ if params['reformat']:
 if params['rfi_flag']:
     # start block
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting RFI flagging: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nstarting RFI flagging: {}\n".format("-"*60, time), 
+                 f=lf, verbose=verbose)
 
     # get datafiles
-    datafiles, datapols = uvt.utils.search_data(data_template.format(group=params['groupname']), pols, matched_pols=False, reverse_nesting=False, flatten=True)
+    datafiles, datapols = uvt.utils.search_data(
+                                data_template.format(group=params['groupname']), 
+                                pols, matched_pols=False, 
+                                reverse_nesting=False, 
+                                flatten=True )
 
     # setup RFI function
     def run_xrfi(i, datafiles=datafiles, p=cf['algorithm']['xrfi'], params=params):
@@ -168,24 +197,37 @@ if params['rfi_flag']:
                     F.flags[k] += new_f
             # write to file
             add_to_history = prepend_history("XRFI", p)
-            outname = os.path.join(params['out_dir'], os.path.basename(df) + p['file_ext'])
-            hc.io.update_vis(df, outname, filetype_in='miriad', filetype_out='miriad', data=F.data, flags=F.flags,
-                             add_to_history=add_to_history, clobber=overwrite)
+            outname = os.path.join(params['out_dir'], 
+                                   os.path.basename(df) + p['file_ext'])
+            hc.io.update_vis(df, outname, 
+                             filetype_in='miriad', 
+                             filetype_out='miriad', 
+                             data=F.data, 
+                             flags=F.flags,
+                             add_to_history=add_to_history, 
+                             clobber=overwrite)
 
         except:
-            hp.utils.log("\njob {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+            hp.utils.log("\njob {} threw exception:".format(i), 
+                         f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
         return 0
 
     # launch jobs
-    failures = hp.utils.job_monitor(run_xrfi, range(len(datafiles)), "XRFI", M=M, lf=lf, maxiter=params['maxiter'], verbose=verbose)
+    failures = hp.utils.job_monitor(run_xrfi, range(len(datafiles)), 
+                                    "XRFI", M=M, lf=lf, 
+                                    maxiter=params['maxiter'], 
+                                    verbose=verbose)
 
     # update template
-    data_template = os.path.join(params['out_dir'], os.path.basename(data_template) + algs['rfi_flag']['file_ext'])
+    data_template = os.path.join(params['out_dir'], 
+                                 os.path.basename(data_template) \
+                                 + algs['rfi_flag']['file_ext'])
     data_suffix += algs['rfi_flag']['file_ext']
 
     time = datetime.utcnow()
-    hp.utils.log("\nfinished RFI flagging: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+    hp.utils.log("\nfinished RFI flagging: {}\n{}".format(time, "-"*60), 
+                 f=lf, verbose=verbose)
 
 #-------------------------------------------------------------------------------
 # Time Average Subtraction
@@ -193,21 +235,31 @@ if params['rfi_flag']:
 if params['timeavg_sub']:
     # start block
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting full time-average spectra and subtraction: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nstarting full time-average spectra and subtraction: {}\n".format("-"*60, time), 
+                 f=lf, verbose=verbose)
 
     # get datafiles
-    datafiles, datapols = uvt.utils.search_data(data_template.format(group=params['groupname'], pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
+    datafiles, datapols = uvt.utils.search_data(
+                  data_template.format(group=params['groupname'], pol='{pol}'), 
+                  pols, matched_pols=False, 
+                  reverse_nesting=False, 
+                  flatten=False)
 
     # get redundant groups as a good split for parallelization
-    reds, lens, angs = hp.utils.get_reds(datafiles[0][0], bl_error_tol=1.0, add_autos=True,
-                                         bl_len_range=params['bl_len_range'], bl_deg_range=params['bl_deg_range'])
+    reds, lens, angs = hp.utils.get_reds(datafiles[0][0], 
+                                         bl_error_tol=1.0, 
+                                         add_autos=True,
+                                         bl_len_range=params['bl_len_range'], 
+                                         bl_deg_range=params['bl_deg_range'])
 
     # iterate over pols
     for i, dfs in enumerate(datafiles):
         pol = datapols[i][0]
 
         # write full tavg function
-        def full_tavg(j, pol=pol, lens=lens, angs=angs, reds=reds, dfs=dfs, data_suffix=data_suffix, p=algs['timeavg_sub'], params=params):
+        def full_tavg(j, pol=pol, lens=lens, angs=angs, reds=reds, dfs=dfs, 
+                      data_suffix=data_suffix, p=algs['timeavg_sub'], 
+                      params=params):
             try:
                 # load data into uvdata
                 uvd = UVData()
@@ -217,68 +269,99 @@ if params['timeavg_sub']:
                 except ValueError:
                     hp.utils.log("job {} failed b/c no data is present given bls and/or pol selection".format(j))
                     return 0
-                # instantiate FRF object
-                F = hc.frf.FRFilter()
-                # load data
-                F.load_data(uvd)
-                # perform full time-average to get spectrum
+                
+                # Perform full time-average to get spectrum
+                F = hc.frf.FRFilter() # instantiate FRF object
+                F.load_data(uvd) # load data
                 F.timeavg_data(1e10, rephase=False, verbose=verbose)
+                
                 # Delay Filter if desired
                 if p['dly_filter']:
+                    
                     # RFI Flag
                     for k in F.avg_data.keys():
                         # RFI Flag
-                        new_f = hq.xrfi.xrfi(F.avg_data[k], f=F.avg_flags[k], **p['rfi_params'])
+                        new_f = hq.xrfi.xrfi(F.avg_data[k], 
+                                             f=F.avg_flags[k], 
+                                             **p['rfi_params'])
                         F.avg_flags[k] += new_f
+                    
                     # Delay Filter
                     DF = hc.delay_filter.Delay_Filter()
                     DF.load_data(F.input_uvdata)
                     DF.data = F.avg_data
                     DF.flags = F.avg_flags
                     DF.run_filter(**p['dly_params'])
+                    
                     # Replace timeavg spectrum with CLEAN model
                     F.avg_data = DF.CLEAN_models
-                    # unflag all frequencies
+                    
+                    # Unflag all frequencies
                     for k in F.avg_flags.keys():
                         # only unflag spectra from non-xants
                         if np.min(F.avg_flags[k]) == False:
                             F.avg_flags[k][:] = False
-                # write timeavg specctrum
+                
+                # Write timeavg spectrum
                 _len = lens[j]
                 _deg = angs[j]
-                tavg_file = "zen.{group}.{pol}.{len:03d}_{deg:03d}.{tavg_tag}.{suffix}".format(group=params['groupname'], pol=pol, len=int(_len), deg=int(_deg), tavg_tag=p['tavg_tag'], suffix=data_suffix)
+                _tavg = "zen.{group}.{pol}.{len:03d}_{deg:03d}.{tavg_tag}.{suffix}"
+                tavg_file = _tavg.format( group=params['groupname'], 
+                                          pol=pol, len=int(_len), deg=int(_deg), 
+                                          tavg_tag=p['tavg_tag'], 
+                                          suffix=data_suffix )
                 tavg_file = os.path.join(params['out_dir'], tavg_file)
                 add_to_history = prepend_history("FULL TIME AVG", p)
-                F.write_data(tavg_file, write_avg=True, overwrite=overwrite, add_to_history=add_to_history)
+                F.write_data(tavg_file, write_avg=True, overwrite=overwrite, 
+                             add_to_history=add_to_history)
             except:
-                hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(j), 
+                             f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
             return 0
 
-        # launch jobs
-        failures = hp.utils.job_monitor(full_tavg, range(len(reds)), "FULL TAVG: pol {}".format(pol), M=M, lf=lf, maxiter=params['maxiter'], verbose=verbose)
+        # Launch jobs
+        failures = hp.utils.job_monitor(full_tavg, range(len(reds)), 
+                                        "FULL TAVG: pol {}".format(pol), 
+                                        M=M, lf=lf, maxiter=params['maxiter'], 
+                                        verbose=verbose)
 
-        # collate tavg spectra into a single file
-        tavgfiles = sorted(glob.glob(os.path.join(params['out_dir'], "zen.{group}.{pol}.*.{tavg_tag}.{suffix}".format(group=params['groupname'], pol=pol, tavg_tag=algs['timeavg_sub']['tavg_tag'], suffix=data_suffix))))
+        # Collate tavg spectra into a single file
+        tavgfiles = sorted(glob.glob(
+                         os.path.join(
+                              params['out_dir'], 
+                              "zen.{group}.{pol}.*.{tavg_tag}.{suffix}".format( 
+                                      group=params['groupname'], 
+                                      pol=pol, 
+                                      tavg_tag=algs['timeavg_sub']['tavg_tag'], 
+                                      suffix=data_suffix)) ))
         uvd = UVData()
         uvd.read_miriad(tavgfiles[::-1])
-        tavg_out = os.path.join(params['out_dir'], "zen.{group}.{pol}.{tavg_tag}.{suffix}".format(group=params['groupname'], pol=pol, tavg_tag=algs['timeavg_sub']['tavg_tag'], suffix=data_suffix))
+        tavg_out = os.path.join( params['out_dir'], 
+                                 "zen.{group}.{pol}.{tavg_tag}.{suffix}".format(
+                                       group=params['groupname'], 
+                                       pol=pol, 
+                                       tavg_tag=algs['timeavg_sub']['tavg_tag'], 
+                                       suffix=data_suffix))
         uvd.write_miriad(tavg_out, clobber=overwrite)
         for tf in tavgfiles:
             if os.path.exists(tf):
                 shutil.rmtree(tf)
 
-        # write tavg subtraction function
-        def tavg_sub(j, dfs=dfs, pol=pol, tavg_file=tavg_out, p=cf['algorithm']['timeavg_sub'], params=params):
+        # Write tavg subtraction function
+        def tavg_sub(j, dfs=dfs, pol=pol, tavg_file=tavg_out, 
+                     p=cf['algorithm']['timeavg_sub'], params=params):
             try:
-                # load data file
+                # Load data file
                 uvd = UVData()
                 df = dfs[j]
                 uvd.read_miriad(df)
-                # get full tavg spectra
+                
+                # Get full tavg spectra
                 tavg = UVData()
                 tavg.read_miriad(tavg_file)
-                # subtract timeavg spectrum from data
+                
+                # Subtract timeavg spectrum from data
                 for bl in np.unique(uvd.baseline_array):
                     bl_inds = np.where(uvd.baseline_array == bl)[0]
                     polnum = uvutils.polstr2num(pol)
@@ -290,83 +373,127 @@ if params['timeavg_sub']:
                         if verbose:
                             print "baseline {} not found in time-averaged spectrum".format(bl)
 
-                # put uniq_bls in if it doesn't exist
+                # Put uniq_bls in if it doesn't exist
                 if not uvd.extra_keywords.has_key('uniq_bls'):
-                    uvd.extra_keywords['uniq_bls'] = json.dumps(np.unique(uvd.baseline_array).tolist())
-                # write tavg-subtracted data
-                out_df = os.path.join(params['out_dir'], os.path.basename(df) + p['file_ext'])
-                uvd.history = "{}{}".format(prepend_history("TAVG SUB", p), uvd.history)
+                    uvd.extra_keywords['uniq_bls'] = json.dumps(
+                                        np.unique(uvd.baseline_array).tolist() )
+                
+                # Write tavg-subtracted data
+                out_df = os.path.join(params['out_dir'], 
+                                      os.path.basename(df) + p['file_ext'])
+                uvd.history = "{}{}".format(prepend_history("TAVG SUB", p), 
+                                            uvd.history)
                 uvd.write_miriad(out_df, clobber=overwrite)
             except:
-                hp.utils.log("\njob {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(i), 
+                             f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
             return 0
 
-        # launch jobs
-        failures = hp.utils.job_monitor(tavg_sub, range(len(dfs)), "TAVG SUB: pol {}".format(pol), M=M, lf=lf, maxiter=params['maxiter'], verbose=verbose)
+        # Launch jobs
+        failures = hp.utils.job_monitor( tavg_sub, 
+                                         range(len(dfs)), 
+                                         "TAVG SUB: pol {}".format(pol), 
+                                         M=M, lf=lf, maxiter=params['maxiter'], 
+                                         verbose=verbose )
 
     time = datetime.utcnow()
-    hp.utils.log("\nfinished full time-average spectra and subtraction: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+    hp.utils.log("\nfinished full time-average spectra and subtraction: {}\n{}".format(time, "-"*60), 
+                 f=lf, verbose=verbose)
 
-    data_template = os.path.join(params['out_dir'], os.path.basename(data_template) + algs['timeavg_sub']['file_ext'])
+    data_template = os.path.join( params['out_dir'], 
+                                  os.path.basename(data_template) \
+                                  + algs['timeavg_sub']['file_ext'] )
     data_suffix += algs['timeavg_sub']['file_ext']
 
 #-------------------------------------------------------------------------------
 # Time Averaging (i.e. Fringe Rate Filtering)
 #-------------------------------------------------------------------------------
 if params['time_avg']:
-    # start block
+    # Start block
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting time averaging: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nstarting time averaging: {}\n".format("-"*60, time), 
+                 f=lf, verbose=verbose)
 
-    # get datafiles
-    datafiles, datapols = uvt.utils.search_data(data_template.format(group=params['groupname'], pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=False)
+    # Get datafiles
+    datafiles, datapols = uvt.utils.search_data( 
+                                data_template.format(group=params['groupname'], 
+                                                     pol='{pol}'), 
+                                pols, matched_pols=False, 
+                                reverse_nesting=False, 
+                                flatten=False)
 
-    # get redundant groups as a good split for parallelization
-    reds, lens, angs = hp.utils.get_reds(datafiles[0][0], bl_error_tol=1.0, add_autos=True,
-                                         bl_len_range=params['bl_len_range'], bl_deg_range=params['bl_deg_range'])
+    # Get redundant groups as a good split for parallelization
+    reds, lens, angs = hp.utils.get_reds( datafiles[0][0], 
+                                          bl_error_tol=1.0, 
+                                          add_autos=True,
+                                          bl_len_range=params['bl_len_range'], 
+                                          bl_deg_range=params['bl_deg_range'] )
 
-    # iterate over pol groups
+    # Iterate over pol groups
     for i, dfs in enumerate(datafiles):
         pol = datapols[i][0]
 
-        def time_average(j, dfs=dfs, pol=pol, lens=lens, angs=angs, reds=reds, data_suffix=data_suffix, p=cf['algorithm']['tavg'], params=params):
+        def time_average(j, dfs=dfs, pol=pol, lens=lens, angs=angs, reds=reds, 
+                         data_suffix=data_suffix, p=cf['algorithm']['tavg'], 
+                         params=params):
             try:
-                # load data into uvdata
+                # Load data into uvdata
                 uvd = UVData()
-                # read data, catch ValueError
+                
+                # Read data, catch ValueError
                 try:
                     uvd.read_miriad(dfs, bls=reds[j], polarizations=[pol])
                 except ValueError:
                     hp.utils.log("job {} failed w/ ValueError, probably b/c no data is present given bls and/or pol selection".format(j))
                     return 0
-                # instantiate FRF object
-                F = hc.frf.FRFilter()
-                # load data
-                F.load_data(uvd)
-                # perform time-average
-                F.timeavg_data(p['t_window'], rephase=p['tavg_rephase'], verbose=verbose)
-                # write timeavg spectrum
+                
+                # Perform time-average
+                F = hc.frf.FRFilter() # instantiate FRF object
+                F.load_data(uvd) # load data
+                F.timeavg_data( p['t_window'], 
+                                rephase=p['tavg_rephase'], 
+                                verbose=verbose )
+                
+                # Write timeavg spectrum
                 _len = lens[j]
                 _deg = angs[j]
-                tavg_file = "zen.{group}.{pol}.{len:03d}_{deg:03d}.{suffix}".format(group=params['groupname'], pol=pol, len=int(_len), deg=int(_deg), suffix=data_suffix)
-                tavg_file = os.path.join(params['out_dir'], tavg_file + p['file_ext'])
+                tavg_file = "zen.{group}.{pol}.{len:03d}_{deg:03d}.{suffix}".format( 
+                                        group=params['groupname'], 
+                                        pol=pol, 
+                                        len=int(_len), 
+                                        deg=int(_deg), 
+                                        suffix=data_suffix)
+                tavg_file = os.path.join(params['out_dir'], 
+                                         tavg_file + p['file_ext'])
                 add_to_history = prepend_history("TIME AVERAGE", p)
-                F.write_data(tavg_file, write_avg=True, overwrite=overwrite, add_to_history=add_to_history)
+                F.write_data(tavg_file, write_avg=True, overwrite=overwrite, 
+                             add_to_history=add_to_history)
             except:
-                hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(j), 
+                             f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
             return 0
 
-        # launch jobs
-        failures = hp.utils.job_monitor(time_average, range(len(reds)), "TIME AVERAGE: pol {}".format(pol), M=M, lf=lf, maxiter=params['maxiter'], verbose=verbose)
+        # Launch jobs
+        failures = hp.utils.job_monitor( time_average, 
+                                         range(len(reds)), 
+                                         "TIME AVERAGE: pol {}".format(pol), 
+                                         M=M, lf=lf, 
+                                         maxiter=params['maxiter'], 
+                                         verbose=verbose )
 
-        # collate averaged data into time chunks
-        tavg_files = os.path.join(params['out_dir'], "zen.{group}.{pol}.*.{suffix}".format(group=params['groupname'], pol=pol, suffix=data_suffix + algs['tavg']['file_ext']))
+        # Collate averaged data into time chunks
+        tavg_files = os.path.join( params['out_dir'], 
+                                   "zen.{group}.{pol}.*.{suffix}".format(
+                                                group=params['groupname'], 
+                                                pol=pol, 
+                                                suffix=data_suffix \
+                                                    + algs['tavg']['file_ext']))
         tavg_files = sorted(glob.glob(tavg_files))
         assert len(tavg_files) > 0, "len(tavg_files) == 0"
 
-        # pick one file to get full time information from
+        # Pick one file to get full time information from
         uvd = UVData()
         uvd.read_miriad(tavg_files[-1])
         times = np.unique(uvd.time_array)
@@ -374,122 +501,184 @@ if params['time_avg']:
 
         # break into subfiles
         Nfiles = int(np.ceil(Ntimes / float(algs['tavg']['file_Ntimes'])))
-        times = [times[i*algs['tavg']['file_Ntimes']:(i+1)*algs['tavg']['file_Ntimes']] for i in range(Nfiles)]
+        times = [ times[ i*algs['tavg']['file_Ntimes'] : 
+                        (i+1)*algs['tavg']['file_Ntimes'] ] 
+                  for i in range(Nfiles) ]
 
-        def reformat_files(j, pol=pol, tavg_files=tavg_files, times=times, data_suffix=data_suffix, p=cf['algorithm']['tavg'], params=params):
+        def reformat_files(j, pol=pol, tavg_files=tavg_files, times=times, 
+                           data_suffix=data_suffix, p=cf['algorithm']['tavg'], 
+                           params=params):
             try:
                 uvd = UVData()
-                uvd.read_miriad(tavg_files[::-1], time_range=[times[j].min()-1e-8, times[j].max()+1e-8], polarizations=[pol])
-                lst = uvd.lst_array[0] - uvd.integration_time / 2.0 * 2 * np.pi / (3600. * 24)
-                outfile = os.path.join(params['out_dir'], "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(group=params['groupname'], pol=pol, LST=lst, suffix=data_suffix + p['file_ext']))
+                uvd.read_miriad(tavg_files[::-1], 
+                                time_range=[times[j].min()-1e-8, 
+                                            times[j].max()+1e-8], 
+                                polarizations=[pol])
+                lst = uvd.lst_array[0] - uvd.integration_time / 2. \
+                    * 2 * np.pi / (3600. * 24)
+                outfile = os.path.join(
+                                params['out_dir'], 
+                                "zen.{group}.{pol}.LST.{LST:.5f}.{suffix}".format(
+                                            group=params['groupname'], 
+                                            pol=pol, LST=lst, 
+                                            suffix=data_suffix + p['file_ext']))
                 uvd.write_miriad(outfile, clobber=overwrite)
             except:
-                hp.utils.log("\njob {} threw exception:".format(j), f=ef, tb=sys.exc_info(), verbose=verbose)
+                hp.utils.log("\njob {} threw exception:".format(j), 
+                             f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
 
             return 0
 
-        # launch jobs
-        failures = hp.utils.job_monitor(reformat_files, range(len(times)), "TAVG REFORMAT: pol {}".format(pol), M=M, lf=lf, maxiter=params['maxiter'], verbose=verbose)
+        # Launch jobs
+        failures = hp.utils.job_monitor(reformat_files, 
+                                        range(len(times)), 
+                                        "TAVG REFORMAT: pol {}".format(pol), 
+                                        M=M, lf=lf, maxiter=params['maxiter'], 
+                                        verbose=verbose)
 
-        # clean up time averaged files
+        # Clean up time averaged files
         for f in tavg_files:
             if os.path.exists(f):
                 shutil.rmtree(f)
 
-    data_template = os.path.join(params['out_dir'], os.path.basename(data_template) + algs['tavg']['file_ext'])
+    data_template = os.path.join(params['out_dir'], 
+                                 os.path.basename(data_template) \
+                                    + algs['tavg']['file_ext'])
     data_suffix += algs['tavg']['file_ext']
 
     time = datetime.utcnow()
-    hp.utils.log("\nfinished time averaging: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+    hp.utils.log("\nfinished time averaging: {}\n{}".format(time, "-"*60), 
+                 f=lf, verbose=verbose)
 
 #-------------------------------------------------------------------------------
 # Form Pseudo-Stokes Visibilities
 #-------------------------------------------------------------------------------
 if params['form_pstokes']:
-    # start block
+    # Start block
     time = datetime.utcnow()
     hp.utils.log("\n{}\nstarting pseudo-stokes: {}\n".format("-"*60, time), f=lf, verbose=verbose)
 
-    # get datafiles with reversed nesting
-    datafiles, datapols = uvt.utils.search_data(data_template.format(group=params['groupname'], pol='{pol}'), pols, reverse_nesting=True)
+    # Get datafiles with reversed nesting
+    datafiles, datapols = uvt.utils.search_data(
+                                data_template.format(group=params['groupname'], 
+                                                     pol='{pol}'), 
+                                pols, reverse_nesting=True)
 
-    # write pseudo-Stokes function
-    def make_pstokes(i, datafiles=datafiles, datapols=datapols, p=cf['algorithm']['pstokes'], params=params):
+    # Write pseudo-Stokes function
+    def make_pstokes(i, datafiles=datafiles, datapols=datapols, 
+                     p=cf['algorithm']['pstokes'], params=params):
         try:
-            # get all pol files for unique datafile
+            # Get all pol files for unique datafile
             dfs = datafiles[i]
             dps = datapols[i]
-            # load data
+            
+            # Load data
             dsets = []
             for df in dfs:
                 uvd = UVData()
                 uvd.read_miriad(df)
                 dsets.append(uvd)
-            # iterate over outstokes
+            
+            # Iterate over outstokes
             for pstokes in p['outstokes']:
                 try:
                     ds = hp.pstokes.filter_dset_on_stokes_pol(dsets, pstokes)
                     ps = hp.pstokes.construct_pstokes(ds[0], ds[1], pstokes=pstokes)
-                    outfile = os.path.basename(dfs[0]).replace(".{}.".format(dps[0]), ".{}.".format(pstokes))
+                    outfile = os.path.basename(dfs[0]).replace(
+                                                        ".{}.".format(dps[0]), 
+                                                        ".{}.".format(pstokes))
                     outfile = os.path.join(params['out_dir'], outfile)
-                    ps.history = "{}{}".format(prepend_history("FORM PSTOKES", p), ps.history)
+                    ps.history = "{}{}".format(prepend_history("FORM PSTOKES", p), 
+                                               ps.history)
                     ps.write_miriad(outfile, clobber=overwrite)
                 except AssertionError:
-                    hp.utils.log("failed to make pstokes {} for job {}:".format(pstokes, i), f=ef, tb=sys.exc_info(), verbose=verbose)
+                    hp.utils.log("failed to make pstokes {} for job {}:".format(pstokes, i), 
+                                f=ef, tb=sys.exc_info(), verbose=verbose)
 
         except:
-            hp.utils.log("job {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+            hp.utils.log("job {} threw exception:".format(i), 
+                         f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1
 
         return 0
 
-    # launch jobs
-    failures = hp.utils.job_monitor(make_pstokes, range(len(datafiles)), "PSTOKES", M=M, lf=lf, maxiter=params['maxiter'], verbose=verbose)
+    # Launch jobs
+    failures = hp.utils.job_monitor( make_pstokes, 
+                                     range(len(datafiles)), 
+                                     "PSTOKES", 
+                                     M=M, lf=lf, maxiter=params['maxiter'], 
+                                     verbose=verbose)
 
-    # add pstokes pols to pol list for downstream calculations
+    # Add pstokes pols to pol list for downstream calculations
     pols += algs['pstokes']['outstokes']
 
     time = datetime.utcnow()
-    hp.utils.log("\nFinished pseudo-stokes: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+    hp.utils.log("\nFinished pseudo-stokes: {}\n{}".format(time, "-"*60), 
+                 f=lf, verbose=verbose)
 
 #-------------------------------------------------------------------------------
 # Foreground Filtering (and data in-painting)
 #-------------------------------------------------------------------------------
 if params['fg_filt']:
-    # start block
+    
+    # Start block
     time = datetime.utcnow()
-    hp.utils.log("\n{}\nstarting foreground filtering: {}\n".format("-"*60, time), f=lf, verbose=verbose)
+    hp.utils.log("\n{}\nstarting foreground filtering: {}\n".format("-"*60, time), 
+                 f=lf, verbose=verbose)
 
-    # get flattened datafiles
-    datafiles, datapols = uvt.utils.search_data(data_template.format(group=params['groupname'], pol='{pol}'), pols, matched_pols=False, reverse_nesting=False, flatten=True)
+    # Get flattened datafiles
+    datafiles, datapols = uvt.utils.search_data( 
+                                 data_template.format(group=params['groupname'], 
+                                                      pol='{pol}'), 
+                                 pols, matched_pols=False, 
+                                 reverse_nesting=False, 
+                                 flatten=True)
 
-    # write fgfilt function
-    def fg_filter(i, datafiles=datafiles, p=cf['algorithm']['fg_filt'], params=params):
+    # Write fgfilt function
+    def fg_filter(i, datafiles=datafiles, p=cf['algorithm']['fg_filt'], 
+                  params=params):
         try:
-            # get datafile
+            # Get datafile and start FGFilter
             df = datafiles[i]
-            # start FGFilter
             DF = hc.delay_filter.Delay_Filter()
             DF.load_data(df, filetype='miriad')
-            # run filter
+            
+            # Run filter
             DF.run_filter(**p['filt_params'])
-            # write filtered term
-            outfile = os.path.join(params['out_dir'], os.path.basename(df) + p['filt_file_ext'])
+            
+            # Write filtered term
+            outfile = os.path.join(params['out_dir'], 
+                                   os.path.basename(df) + p['filt_file_ext'])
             add_to_history = prepend_history("FG FILTER", p)
-            DF.write_filtered_data(outfile, filetype_out='miriad', clobber=overwrite, add_to_history=add_to_history)
-            # write original data with in-paint
-            outfile = os.path.join(params['out_dir'], os.path.basename(df) + p['inpaint_file_ext'])
+            DF.write_filtered_data( outfile, 
+                                    filetype_out='miriad', 
+                                    clobber=overwrite, 
+                                    add_to_history=add_to_history )
+            
+            # Write original data with in-paint
+            outfile = os.path.join(params['out_dir'], 
+                                   os.path.basename(df) + p['inpaint_file_ext'])
             add_to_history = prepend_history("DATA INPAINT", p)
-            DF.write_filtered_data(outfile, filetype_out='miriad', clobber=overwrite, write_filled_data=True, add_to_history=add_to_history)
+            DF.write_filtered_data( outfile, 
+                                    filetype_out='miriad', 
+                                    clobber=overwrite, 
+                                    write_filled_data=True, 
+                                    add_to_history=add_to_history )
         except:
-            hp.utils.log("job {} threw exception:".format(i), f=ef, tb=sys.exc_info(), verbose=verbose)
+            hp.utils.log("job {} threw exception:".format(i), 
+                         f=ef, tb=sys.exc_info(), verbose=verbose)
             return 1            
         return 0
 
-    # launch jobs
-    failures = hp.utils.job_monitor(fg_filter, range(len(datafiles)), "FG FILTER", M=M, lf=lf, maxiter=params['maxiter'], verbose=verbose)
+    # Launch jobs
+    failures = hp.utils.job_monitor( fg_filter, 
+                                     range(len(datafiles)), 
+                                     "FG FILTER", 
+                                     M=M, lf=lf, maxiter=params['maxiter'], 
+                                     verbose=verbose )
 
     time = datetime.utcnow()
-    hp.utils.log("\nfinished foreground-filtering: {}\n{}".format(time, "-"*60), f=lf, verbose=verbose)
+    hp.utils.log("\nfinished foreground-filtering: {}\n{}".format(time, "-"*60), 
+                 f=lf, verbose=verbose)
 
