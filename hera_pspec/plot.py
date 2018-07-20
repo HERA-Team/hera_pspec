@@ -402,7 +402,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             # configure left-column plots
             if j == 0:
                 # set yticks
-                ax.set_yticks(np.arange(Ny//Ny_thin+1))
+                ax.set_yticks(np.arange(Ny)[::Ny_thin])
                 ax.set_yticklabels(y[::Ny_thin])
                 ax.set_ylabel(r"LST [{}]".format(lst_units), fontsize=16)
             else:
