@@ -827,7 +827,7 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
     
     # run function over jobs
     exit_codes = np.array(M(run_func, iterator))
-    time = datetime.utcnow()
+    tnow = datetime.utcnow()
 
     # check for len-0
     if len(exit_codes) == 0:
@@ -837,7 +837,7 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
     if np.all(exit_codes != 0):
         # everything failed, raise error
         log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60, 
-                                                action_name, exit_codes, time), 
+                                                action_name, exit_codes, tnow), 
             f=lf, verbose=verbose)
         raise ValueError("All {} jobs failed".format(action_name))
 
