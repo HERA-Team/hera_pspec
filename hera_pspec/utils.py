@@ -1,15 +1,10 @@
 import numpy as np
-import md5
-import yaml
-from conversions import Cosmo_Conversions
-import traceback
-import operator
-from hera_cal import redcal
-import itertools
-import argparse
-import glob
-import os
+import os, time, md5, yaml
+import itertools, argparse, glob
+import traceback, operator
 import aipy
+from conversions import Cosmo_Conversions
+from hera_cal import redcal
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
 from pyuvdata import UVData
@@ -787,10 +782,12 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0):
     return red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag
 
 
-def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verbose=True):
+def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, 
+                verbose=True):
     """
-    Job monitoring function, used to send elements of iterator through calls of run_func.
-    Can be parallelized if the input M function is from the multiprocess module.
+    Job monitoring function, used to send elements of iterator through calls of 
+    run_func. Can be parallelized if the input M function is from the 
+    multiprocess module.
 
     Parameters
     ----------
@@ -806,8 +803,8 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
         A descriptive name for the operation being performed by run_func.
 
     M : map function
-        A map function used to send elements of iterator through calls to run_func.
-        Default is built-in map function.
+        A map function used to send elements of iterator through calls to 
+        run_func. Default is built-in map function.
 
     lf : file descriptor
         Log-file descriptor to print message to.
@@ -821,9 +818,12 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
     Returns
     -------
     failures : list
-        A list of failed job indices from iterator. Failures are any output of run_func
-        that aren't 0.
+        A list of failed job indices from iterator. Failures are any output of 
+        run_func that aren't 0.
     """
+    # Start timing
+    t_start = time.time()
+    
     # run function over jobs
     exit_codes = np.array(M(run_func, iterator))
     time = datetime.utcnow()
@@ -835,7 +835,9 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
     # inspect for failures
     if np.all(exit_codes != 0):
         # everything failed, raise error
-        log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60, action_name, exit_codes, time), f=lf, verbose=verbose)
+        log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60, 
+                                                action_name, exit_codes, time), 
+            f=lf, verbose=verbose)
         raise ValueError("All {} jobs failed".format(action_name))
 
     # if not all failed, try re-run
@@ -858,9 +860,14 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
 
     # print failures if they exist
     if len(failures) > 0:
-        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name, maxiter, failures), f=lf, verbose=verbose)
+        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name, 
+                                                               maxiter, 
+                                                               failures), 
+            f=lf, verbose=verbose)
     else:
-        log("\nAll {} jobs ran through".format(action_name), f=lf, verbose=verbose)
+        t_run = time.time() - t_start
+        log("\nAll {} jobs ran through ({:1.1f} sec)".format(action_name, t_run), 
+            f=lf, verbose=verbose)
 
     return failures
 
@@ -869,8 +876,8 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
              bl_deg_range=(0, 180), xants=None, add_autos=False):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
-    calculate redundant baseline groups using hera_cal.redcal and optionally filter
-    groups based on baseline cuts and xants.
+    calculate redundant baseline groups using hera_cal.redcal and optionally 
+    filter groups based on baseline cuts and xants.
 
     Parameters
     ----------
