@@ -180,6 +180,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                         else:
                             c = cax.get_color()
                         cax = ax.errorbar(x, np.abs(y), fmt='none', ecolor=c, yerr=cast(errs[i]), **kwargs)
+                    else:
+                        raise KeyError("Error variable '%s' not found in stats_array of UVPSpec object." % error)
 
             # If blpairs were averaged, only the first blpair in the group 
             # exists any more (so skip the rest)
@@ -384,18 +386,20 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         Nkeys = len(waterfall)
         Nside = int(np.ceil(np.sqrt(Nkeys)))
         fig, axes = plt.subplots(Nside, Nside, figsize=figsize)
+    
     # Ensure axes is an ndarray
     if isinstance(axes, matplotlib.axes._subplots.Axes):
         axes = np.array([[axes]])
     if isinstance(axes, list):
         axes = np.array(axes)
-    # ensure its 2D and get side lengths
+    
+    # Ensure its 2D and get side lengths
     if axes.ndim == 1:
         axes = axes[:, None]
     assert axes.ndim == 2, "input axes must have ndim == 2"
     Nvert, Nhorz = axes.shape
 
-    # get LST range: setting y-ticks is tricky due to LST wrapping...
+    # Get LST range: setting y-ticks is tricky due to LST wrapping...
     y = uvp_plt.lst_avg_array[uvp_plt.key_to_indices(waterfall.keys()[0])[1]]
     if lst_in_hrs:
         lst_units = "Hr"
@@ -424,7 +428,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         psunits = psunits.replace("beam normalization not specified", 
                                  r"{\rm unnormed}")
 
-    # iterate over waterfall keys
+    # Iterate over waterfall keys
     keys = waterfall.keys()
     k = 0
     for i in range(Nvert):
@@ -483,7 +487,8 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             units = "$%sP(k_\parallel)$ $[%s]$" % (logunits, psunits)
 
         spwrange = np.around(np.array(uvp_plt.get_spw_ranges()[spw][:2]) / 1e6, 2)
-        axes[0][0].get_figure().suptitle("{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange), y=1.03, fontsize=14)
+        axes[0][0].get_figure().suptitle("{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange), 
+                                         y=1.03, fontsize=14)
 
     # Return Axes
     if new_plot:
