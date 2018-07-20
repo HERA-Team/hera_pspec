@@ -838,7 +838,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
 
 
 def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=1000, seed=None,
-                              normal_std=True, robust_std=True, cintervals=None, bl_error_tol=1.0,
+                              normal_std=True, robust_std=False, cintervals=None, bl_error_tol=1.0,
                               add_to_history='', verbose=False):
     """
     Given a UVPSpec object, generate bootstrap resamples of its average

@@ -10,7 +10,8 @@ from collections import OrderedDict as odict
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
                    average_times=False, fold=False, plot_noise=False, 
                    delay=True, deltasq=False, legend=False, ax=None,
-                   component='real'):
+                   component='real', lines=True, markers=False, error=None,
+                   **kwargs):
     """
     Plot a 1D delay spectrum (or spectra) for a group of baselines.
     
@@ -56,9 +57,24 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         this case, even if the existing plot has completely different axis 
         labels etc.) If None, a new Axes object will be created. Default: None.
 
-    component : str
+    component : str, optional
         Component of complex spectra to plot, options=['abs', 'real', 'imag'].
         Default: 'real'. 
+
+    lines : bool, optional
+        If True, plot lines between bandpowers for a given pspectrum.
+        Default: True.
+
+    markers : bool, optional
+        If True, plot circles at bandpowers. Filled for positive, empty
+        for negative. Default: False.
+
+    error : str, optional
+        If not None and if error exists in uvp stats_array, plot errors
+        on bandpowers. Default: None.
+
+    kwargs : dict, optional
+        Extra kwargs to pass to _all_ ax.plot calls.
 
     Returns
     -------
@@ -112,20 +128,59 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     for blgrp in blpairs:
         # Loop over blpairs in group and plot power spectrum for each one
         for blp in blgrp:
+            # setup key and casting function
             key = (spw, blp, pol)
             if component == 'real':
-                power = np.abs(np.real(uvp_plt.get_data(key))).T
+                cast = np.real
             elif component == 'imag':
-                power = np.abs(np.imag(uvp_plt.get_data(key))).T
+                cast = np.imag
             elif component == 'abs':
-                power = np.abs(uvp_plt.get_data(key)).T
+                cast = np.abs
 
-            # flag spectra that have zero integration
+            # get power array and repeat x array
+            power = cast(uvp_plt.get_data(key))
+
+            # flag records that have zero integration
             flags = np.isclose(uvp_plt.get_integrations(key), 0.0)
-            power[:, flags] = np.nan
+            power[flags] = np.nan
 
-            ax.plot(x, power, label="%s" % str(key))
-            
+            # get errs if requessted
+            if error is not None and hasattr(uvp_plt, 'stats_array'):
+                if error in uvp_plt.stats_array:
+                    errs = uvp_plt.get_stats(error, key)
+                    errs[flags] = np.nan
+
+            # iterate over integrations per blp
+            for i in range(power.shape[0]):
+                # get y data
+                y = power[i]
+
+                # plot elements
+                cax = None
+                if lines:
+                    cax, = ax.plot(x, np.abs(y), label="%s" % str(key), marker='None', **kwargs)
+
+                if markers:
+                    if cax is None:
+                        c = None
+                    else:
+                        c = cax.get_color()
+                    # plot positive w/ filled circles
+                    cax, = ax.plot(x[y >= 0], np.abs(y[y >= 0]), c=c, ls='None', marker='o', 
+                                  markerfacecolor=c, markeredgecolor=c, **kwargs)
+                    # plot negative w/ unfilled circles
+                    c = cax.get_color()
+                    cax, = ax.plot(x[y < 0], np.abs(y[y < 0]), c=c, ls='None', marker='o',
+                                   markerfacecolor='None', markeredgecolor=c, **kwargs)
+
+                if error is not None and hasattr(uvp_plt, 'stats_array'):
+                    if error in uvp_plt.stats_array:
+                        if cax is None:
+                            c = None
+                        else:
+                            c = cax.get_color()
+                        cax = ax.errorbar(x, np.abs(y), fmt='none', ecolor=c, yerr=cast(errs[i]), **kwargs)
+
             # If blpairs were averaged, only the first blpair in the group 
             # exists any more (so skip the rest)
             if average_blpairs: break

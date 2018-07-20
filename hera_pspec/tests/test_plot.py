@@ -4,7 +4,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import os, copy, sys
-from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils
+from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils, grouping
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 
@@ -142,6 +142,19 @@ class Test_Plot(unittest.TestCase):
         self.assertTrue( axes_contains(f4.axes[0], elements) )
         plt.close(f5)
         
+        # test errorbar plotting w/ markers
+
+        # bootstrap resample
+        (uvp_avg, _,
+         _) = grouping.bootstrap_resampled_error(self.uvp, time_avg=True,
+                                                 Nsamples=100, normal_std=True,
+                                                 robust_std=False, verbose=False)
+
+        f6 = plot.delay_spectrum(uvp_avg, uvp_avg.get_blpairs(), spw=0,
+                                pol='xx', average_blpairs=False, average_times=False,
+                                component='real', error='normal_std', lines=False,
+                                markers=True)
+        plt.close(f6)
 
     def test_plot_cosmo(self):
         """
