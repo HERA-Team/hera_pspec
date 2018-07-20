@@ -13,6 +13,7 @@ io :
   errfile : 'preprocess_err.log' # error file: root is work_dir
   joinlog : False       # redirect error output into logfile
   overwrite : True     # overwrite
+  plot : True
   verbose : True        # report feedback to standard output
 
 #---------------------------------------------------------------

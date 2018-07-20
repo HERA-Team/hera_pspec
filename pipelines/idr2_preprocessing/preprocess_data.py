@@ -37,24 +37,24 @@ from collections import OrderedDict as odict
 #-------------------------------------------------------------------------------
 # Parse YAML Configuration File
 #-------------------------------------------------------------------------------
-# get config and load dictionary
+# Get config and load dictionary
 config = sys.argv[1]
 cf = hp.utils.load_config(config)
 
-# consolidate IO, data and analysis parameter dictionaries
+# Consolidate IO, data and analysis parameter dictionaries
 params = odict(cf['io'].items() + cf['data'].items() + cf['analysis'].items())
 assert len(params) == len(cf['io']) + len(cf['data']) + len(cf['analysis']), ""\
        "Repeated parameters found within the scope of io, data and analysis dicts"
 algs = cf['algorithm']
 
-# extract certain parameters used across the script
+# Extract certain parameters used across the script
 verbose = params['verbose']
 overwrite = params['overwrite']
 pols = params['pols']
 data_template = os.path.join(params['data_root'], params['data_template'])
 data_suffix = os.path.splitext(data_template)[1][1:]
 
-# open logfile
+# Open logfile
 logfile = os.path.join(params['out_dir'], params['logfile'])
 if os.path.exists(logfile) and params['overwrite'] == False:
     raise IOError("logfile {} exists and overwrite == False, quitting pipeline...".format(logfile))
@@ -69,7 +69,7 @@ hp.utils.log("Starting preprocess pipeline on {}\n{}\n".format(time, '-'*60),
              f=lf, verbose=verbose)
 hp.utils.log(json.dumps(cf, indent=1) + '\n', f=lf, verbose=verbose)
 
-# change to working dir
+# Change to working dir
 os.chdir(params['work_dir'])
 
 # out_dir should be cleared before each run: issue a warning if not the case
@@ -80,7 +80,7 @@ if len(oldfiles) > 0:
                  "ensure proper functionality.\nIt seems like some files currently " \
                  "exist in {}\n{}\n".format('-'*50, outdir, '-'*50), f=lf, verbose=verbose)
 
-# define history prepend function
+# Define history prepend function
 def prepend_history(action, param_dict):
     """ create a history string to prepend to data files """
     dict_str = '\n'.join(["{} : {}".format(*_d) for _d in param_dict.items()])
@@ -96,7 +96,7 @@ def prepend_history(action, param_dict):
                                      dict_str)
     return hist
 
-# assign iterator function
+# Assign iterator function
 if params['multiproc']:
     pool = multiprocess.Pool(params['nproc'])
     M = pool.map
@@ -107,28 +107,29 @@ else:
 # Reformat Data by Baseline Type
 #-------------------------------------------------------------------------------
 if params['reformat']:
-    # start block
+    
+    # Start block
     time = datetime.utcnow()
     hp.utils.log("\n{}\nstarting baseline reformatting: {}\n".format("-"*60, time), 
                  f=lf, verbose=verbose)
 
-    # get datafiles
+    # Get datafiles
     datafiles, datapols = uvt.utils.search_data( 
                                data_template.format(group=params['groupname']), 
                                pols, matched_pols=False, 
                                reverse_nesting=False, 
                                flatten=False )
 
-    # get redundant groups as a good split for parallelization
+    # Get redundant groups as a good split for parallelization
     reds, lens, angs = hp.utils.get_reds(datafiles[0][0], bl_error_tol=1.0, 
                                          add_autos=True,
                                          bl_len_range=params['bl_len_range'], 
                                          bl_deg_range=params['bl_deg_range'])
 
-    # iterate over polarization group
+    # Iterate over polarization group
     for i, dfs in enumerate(datafiles):
 
-        # setup bl reformat function
+        # Setup bl reformat function
         def bl_reformat(j, i=i, datapols=datapols, dfs=dfs, lens=lens, 
                         angs=angs, reds=reds, data_suffix=data_suffix, 
                         p=algs['reformat'], params=params):
@@ -147,21 +148,30 @@ if params['reformat']:
                 uvd.write_miriad(outname, clobber=True)
                 uvd.history = "{}{}".format(prepend_history("BL REFORMAT", p), 
                                             uvd.history)
+                if params['plot']:
+                    hp.utils.plot_uvdata_waterfalls(uvd, 
+                                                    outname + ".{pol}.{bl}", 
+                                                    data='data', 
+                                                    plot_mode='log', 
+                                                    format='png')
             except:
                 hp.utils.log("\njob {} threw exception:".format(j), 
                              f=ef, tb=sys.exc_info(), verbose=verbose)
                 return 1
             return 0
 
-        # launch jobs
+        # Launch jobs
         failures = hp.utils.job_monitor(bl_reformat, range(len(reds)), \
                                         "BL REFORMAT: pol {}".format(pol), 
                                         M=M, lf=lf, maxiter=params['maxiter'], 
                                         verbose=verbose)
 
-    # edit data template
-    data_template = os.path.join(params['out_dir'], algs['reformat']['new_data_template'].format(pol='{pol}', suffix=data_suffix))
-
+    # Edit data template
+    data_template = os.path.join(
+                        params['out_dir'], 
+                        algs['reformat']['new_data_template'].format(
+                                                        pol='{pol}', 
+                                                        suffix=data_suffix))
     time = datetime.utcnow()
     hp.utils.log("\nfinished baseline reformatting: {}\n{}".format(time, "-"*60), 
                  f=lf, verbose=verbose)
@@ -170,32 +180,36 @@ if params['reformat']:
 # RFI-Flag
 #-------------------------------------------------------------------------------
 if params['rfi_flag']:
-    # start block
+    
+    # Start block
     time = datetime.utcnow()
     hp.utils.log("\n{}\nstarting RFI flagging: {}\n".format("-"*60, time), 
                  f=lf, verbose=verbose)
 
-    # get datafiles
+    # Get datafiles
     datafiles, datapols = uvt.utils.search_data(
                                 data_template.format(group=params['groupname']), 
                                 pols, matched_pols=False, 
                                 reverse_nesting=False, 
                                 flatten=True )
 
-    # setup RFI function
+    # Setup RFI function
     def run_xrfi(i, datafiles=datafiles, p=cf['algorithm']['xrfi'], params=params):
         try:
-            # setup delay filter class as container
+            # Setup delay filter class as container
             df = datafiles[i]
             F = hc.delay_filter.Delay_Filter()
-            # load data
-            F.load_data(df)
+            F.load_data(df) # load data
+            
             # RFI flag if desired
             if run_xrfi:
                 for k in F.data.keys():
-                    new_f = hq.xrfi.xrfi(F.data[k], f=F.flags[k], **p['xrfi_params'])
+                    new_f = hq.xrfi.xrfi(F.data[k], 
+                                         f=F.flags[k], 
+                                         **p['xrfi_params'])
                     F.flags[k] += new_f
-            # write to file
+            
+            # Write to file
             add_to_history = prepend_history("XRFI", p)
             outname = os.path.join(params['out_dir'], 
                                    os.path.basename(df) + p['file_ext'])
@@ -213,13 +227,13 @@ if params['rfi_flag']:
             return 1
         return 0
 
-    # launch jobs
+    # Launch jobs
     failures = hp.utils.job_monitor(run_xrfi, range(len(datafiles)), 
                                     "XRFI", M=M, lf=lf, 
                                     maxiter=params['maxiter'], 
                                     verbose=verbose)
 
-    # update template
+    # Update template
     data_template = os.path.join(params['out_dir'], 
                                  os.path.basename(data_template) \
                                  + algs['rfi_flag']['file_ext'])
@@ -233,7 +247,8 @@ if params['rfi_flag']:
 # Time Average Subtraction
 #-------------------------------------------------------------------------------
 if params['timeavg_sub']:
-    # start block
+    
+    # Start block
     time = datetime.utcnow()
     hp.utils.log("\n{}\nstarting full time-average spectra and subtraction: {}\n".format("-"*60, time), 
                  f=lf, verbose=verbose)
@@ -343,7 +358,17 @@ if params['timeavg_sub']:
                                        pol=pol, 
                                        tavg_tag=algs['timeavg_sub']['tavg_tag'], 
                                        suffix=data_suffix))
+        
+        # Write tavg data file
         uvd.write_miriad(tavg_out, clobber=overwrite)
+        
+        # Plot waterfalls if requested
+        if params['plot']:
+            hp.utils.plot_uvdata_waterfalls(uvd, 
+                                            tavg_out + ".{pol}.{bl}", 
+                                            data='data', 
+                                            plot_mode='log', 
+                                            format='png')
         for tf in tavgfiles:
             if os.path.exists(tf):
                 shutil.rmtree(tf)
@@ -384,6 +409,16 @@ if params['timeavg_sub']:
                 uvd.history = "{}{}".format(prepend_history("TAVG SUB", p), 
                                             uvd.history)
                 uvd.write_miriad(out_df, clobber=overwrite)
+                
+                
+                # Plot waterfalls if requested
+                if params['plot']:
+                    hp.utils.plot_uvdata_waterfalls(uvd, 
+                                                    out_df + ".{pol}.{bl}", 
+                                                    data='data', 
+                                                    plot_mode='log', 
+                                                    format='png')
+                
             except:
                 hp.utils.log("\njob {} threw exception:".format(i), 
                              f=ef, tb=sys.exc_info(), verbose=verbose)
@@ -523,6 +558,15 @@ if params['time_avg']:
                                             pol=pol, LST=lst, 
                                             suffix=data_suffix + p['file_ext']))
                 uvd.write_miriad(outfile, clobber=overwrite)
+                
+                # Plot waterfalls if requested
+                if params['plot']:
+                    hp.utils.plot_uvdata_waterfalls(uvd, 
+                                                    outfile + ".{pol}.{bl}", 
+                                                    data='data', 
+                                                    plot_mode='log', 
+                                                    format='png')
+                
             except:
                 hp.utils.log("\njob {} threw exception:".format(j), 
                              f=ef, tb=sys.exc_info(), verbose=verbose)
@@ -592,6 +636,15 @@ if params['form_pstokes']:
                     ps.history = "{}{}".format(prepend_history("FORM PSTOKES", p), 
                                                ps.history)
                     ps.write_miriad(outfile, clobber=overwrite)
+                    
+                    # Plot waterfalls if requested
+                    if params['plot']:
+                        hp.utils.plot_uvdata_waterfalls(ps, 
+                                                        outfile + ".{pol}.{bl}", 
+                                                        data='data', 
+                                                        plot_mode='log', 
+                                                        format='png')
+                    
                 except AssertionError:
                     hp.utils.log("failed to make pstokes {} for job {}:".format(pstokes, i), 
                                 f=ef, tb=sys.exc_info(), verbose=verbose)
