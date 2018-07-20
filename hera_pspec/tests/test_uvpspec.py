@@ -1,14 +1,11 @@
 import unittest
 import nose.tools as nt
 import numpy as np
-import os
-import sys
+import os, sys, copy, h5py
+from collections import OrderedDict as odict
 from hera_pspec.data import DATA_PATH
 from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing
 from hera_pspec import uvpspec_utils as uvputils
-import copy
-import h5py
-from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 
@@ -18,6 +15,7 @@ class Test_UVPSpec(unittest.TestCase):
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.beam = pspecbeam.PSpecBeamUV(beamfile)
         uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam)
+        uvp.check()
         self.uvp = uvp
 
     def tearDown(self):

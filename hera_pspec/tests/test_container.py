@@ -6,12 +6,17 @@ import os, sys, copy
 from hera_pspec.data import DATA_PATH
 from hera_pspec import container, PSpecContainer, UVPSpec, testing
 
-
 class Test_PSpecContainer(unittest.TestCase):
     
     def setUp(self):
         self.fname = os.path.join(DATA_PATH, '_test_container.hdf5')
         self.uvp, self.cosmo = testing.build_vanilla_uvpspec()
+        
+        # Make sure there's no lingering HDF5 from previous (failed) tests
+        try:
+            os.remove(self.fname)
+        except:
+            pass
 
     def tearDown(self):
         # Remove HDF5 file

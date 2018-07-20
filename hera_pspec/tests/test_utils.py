@@ -8,7 +8,6 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 from hera_cal import redcal
 
-
 def test_cov():
     # load another data file
     uvd = UVData()
