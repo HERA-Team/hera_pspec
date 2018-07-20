@@ -10,7 +10,8 @@ from collections import OrderedDict as odict
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
                    average_times=False, fold=False, plot_noise=False, 
                    delay=True, deltasq=False, legend=False, ax=None,
-                   component='real'):
+                   component='real', lines=True, markers=False, error=None,
+                   **kwargs):
     """
     Plot a 1D delay spectrum (or spectra) for a group of baselines.
     
@@ -56,9 +57,24 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         this case, even if the existing plot has completely different axis 
         labels etc.) If None, a new Axes object will be created. Default: None.
 
-    component : str
+    component : str, optional
         Component of complex spectra to plot, options=['abs', 'real', 'imag'].
         Default: 'real'. 
+
+    lines : bool, optional
+        If True, plot lines between bandpowers for a given pspectrum.
+        Default: True.
+
+    markers : bool, optional
+        If True, plot circles at bandpowers. Filled for positive, empty
+        for negative. Default: False.
+
+    error : str, optional
+        If not None and if error exists in uvp stats_array, plot errors
+        on bandpowers. Default: None.
+
+    kwargs : dict, optional
+        Extra kwargs to pass to _all_ ax.plot calls.
 
     Returns
     -------
@@ -112,20 +128,61 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     for blgrp in blpairs:
         # Loop over blpairs in group and plot power spectrum for each one
         for blp in blgrp:
+            # setup key and casting function
             key = (spw, blp, pol)
             if component == 'real':
-                power = np.abs(np.real(uvp_plt.get_data(key))).T
+                cast = np.real
             elif component == 'imag':
-                power = np.abs(np.imag(uvp_plt.get_data(key))).T
+                cast = np.imag
             elif component == 'abs':
-                power = np.abs(uvp_plt.get_data(key)).T
+                cast = np.abs
 
-            # flag spectra that have zero integration
+            # get power array and repeat x array
+            power = cast(uvp_plt.get_data(key))
+
+            # flag records that have zero integration
             flags = np.isclose(uvp_plt.get_integrations(key), 0.0)
-            power[:, flags] = np.nan
+            power[flags] = np.nan
 
-            ax.plot(x, power, label="%s" % str(key))
-            
+            # get errs if requessted
+            if error is not None and hasattr(uvp_plt, 'stats_array'):
+                if error in uvp_plt.stats_array:
+                    errs = uvp_plt.get_stats(error, key)
+                    errs[flags] = np.nan
+
+            # iterate over integrations per blp
+            for i in range(power.shape[0]):
+                # get y data
+                y = power[i]
+
+                # plot elements
+                cax = None
+                if lines:
+                    cax, = ax.plot(x, np.abs(y), label="%s" % str(key), marker='None', **kwargs)
+
+                if markers:
+                    if cax is None:
+                        c = None
+                    else:
+                        c = cax.get_color()
+                    # plot positive w/ filled circles
+                    cax, = ax.plot(x[y >= 0], np.abs(y[y >= 0]), c=c, ls='None', marker='o', 
+                                  markerfacecolor=c, markeredgecolor=c, **kwargs)
+                    # plot negative w/ unfilled circles
+                    c = cax.get_color()
+                    cax, = ax.plot(x[y < 0], np.abs(y[y < 0]), c=c, ls='None', marker='o',
+                                   markerfacecolor='None', markeredgecolor=c, **kwargs)
+
+                if error is not None and hasattr(uvp_plt, 'stats_array'):
+                    if error in uvp_plt.stats_array:
+                        if cax is None:
+                            c = None
+                        else:
+                            c = cax.get_color()
+                        cax = ax.errorbar(x, np.abs(y), fmt='none', ecolor=c, yerr=cast(errs[i]), **kwargs)
+                    else:
+                        raise KeyError("Error variable '%s' not found in stats_array of UVPSpec object." % error)
+
             # If blpairs were averaged, only the first blpair in the group 
             # exists any more (so skip the rest)
             if average_blpairs: break
@@ -329,18 +386,20 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         Nkeys = len(waterfall)
         Nside = int(np.ceil(np.sqrt(Nkeys)))
         fig, axes = plt.subplots(Nside, Nside, figsize=figsize)
+    
     # Ensure axes is an ndarray
     if isinstance(axes, matplotlib.axes._subplots.Axes):
         axes = np.array([[axes]])
     if isinstance(axes, list):
         axes = np.array(axes)
-    # ensure its 2D and get side lengths
+    
+    # Ensure its 2D and get side lengths
     if axes.ndim == 1:
         axes = axes[:, None]
     assert axes.ndim == 2, "input axes must have ndim == 2"
     Nvert, Nhorz = axes.shape
 
-    # get LST range: setting y-ticks is tricky due to LST wrapping...
+    # Get LST range: setting y-ticks is tricky due to LST wrapping...
     y = uvp_plt.lst_avg_array[uvp_plt.key_to_indices(waterfall.keys()[0])[1]]
     if lst_in_hrs:
         lst_units = "Hr"
@@ -369,7 +428,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         psunits = psunits.replace("beam normalization not specified", 
                                  r"{\rm unnormed}")
 
-    # iterate over waterfall keys
+    # Iterate over waterfall keys
     keys = waterfall.keys()
     k = 0
     for i in range(Nvert):
@@ -402,7 +461,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             # configure left-column plots
             if j == 0:
                 # set yticks
-                ax.set_yticks(np.arange(Ny//Ny_thin+1))
+                ax.set_yticks(np.arange(Ny)[::Ny_thin])
                 ax.set_yticklabels(y[::Ny_thin])
                 ax.set_ylabel(r"LST [{}]".format(lst_units), fontsize=16)
             else:
@@ -428,7 +487,8 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             units = "$%sP(k_\parallel)$ $[%s]$" % (logunits, psunits)
 
         spwrange = np.around(np.array(uvp_plt.get_spw_ranges()[spw][:2]) / 1e6, 2)
-        axes[0][0].get_figure().suptitle("{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange), y=1.03, fontsize=14)
+        axes[0][0].get_figure().suptitle("{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange), 
+                                         y=1.03, fontsize=14)
 
     # Return Axes
     if new_plot:
