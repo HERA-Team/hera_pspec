@@ -2,7 +2,8 @@ import numpy as np
 import os, time, md5, yaml
 import itertools, argparse, glob
 import traceback, operator
-import aipy
+import aipy, uvtools
+import pylab as plt
 from conversions import Cosmo_Conversions
 from hera_cal import redcal
 from collections import OrderedDict as odict
@@ -969,3 +970,83 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
 
     return reds, lens, angs
 
+
+def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log', 
+                           vmin=None, vmax=None, recenter=False, format='png',
+                           **kwargs):
+    """
+    Plot waterfalls for all baselines and polarizations within a UVData object, 
+    and save to individual files.
+    
+    Parameters
+    ----------
+    uvd : UVData object
+        Input data object. Waterfalls will be stored for all baselines and 
+        polarizations within the object; use uvd.select() to remove unwanted 
+        information.
+    
+    basename : str
+        Base filename for the output plots. This must have two placeholders 
+        for baseline ID ('bl') and polarization ('pol'), 
+        e.g. basename='plots/uvdata.{pol}.{bl}'.
+    
+    data : str, optional
+        Which data array to plot from the UVData object. Options are: 
+            'data', 'flags', 'nsamples'. Default: 'data'.
+    
+    plot_mode : str, optional
+        Plot mode, passed to uvtools.plot.waterfall. Default: 'log'.
+    
+    vmin, vmax : float, optional
+        Min./max. values of the plot colorscale. Default: None (uses the 
+        min./max. of the data).
+    
+    recenter : bool, optional
+        Whether to apply recentering (see uvtools.plot.waterfall). 
+        Default: False.
+    
+    format : str, optional
+        The file format of the output images. If None, the image format will be 
+        deduced from the basename string. Default: 'png'.
+    
+    **kwargs : dict
+        Keyword arguments passed to uvtools.plot.waterfall, which passes them 
+        on to matplotlib.imshow.
+    """
+    assert isinstance(uvd, UVData), "'uvd' must be a UVData object."
+    assert data in ['data', 'flags', 'nsamples'], \
+            "'%s' not a valid data array; use 'data', 'flags', or 'nsamples'" \
+            % data
+    
+    # Set plot colorscale max/min if specified
+    drng = None
+    if vmin is not None: 
+        assert vmax is not None, "Must also specify vmax if vmin is specified."
+        drng = vmax - vmin
+    
+    # Empty figure
+    fig, ax = plt.subplots(1, 1)
+    
+    # Loop over antenna pairs and pols
+    for (ant1, ant2, pol), d in uvd.antpairpol_iter():
+        
+        # Get chosen data array
+        if data == 'data':
+            pass
+        elif data == 'flags':
+            d = uvd.get_flags((ant1, ant2, pol))
+        elif data == 'nsamples':
+            d = uvd.get_nsamples((ant1, ant2, pol))
+        else:
+            raise KeyError("Invalid data array type '%s'" % data)
+        
+        # Make plot
+        img = uvtools.plot.waterfall(d, mode=plot_mode, mx=vmax, drng=drng, 
+                                     recenter=recenter, **kwargs)
+        fig.colorbar(img)
+        
+        # Save to file
+        outfile = basename.format(bl="%d.%d"%(ant1, ant2), pol=pol)
+        fig.tight_layout()
+        fig.savefig(outfile, format=format)
+        fig.clf()
