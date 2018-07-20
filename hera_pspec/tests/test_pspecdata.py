@@ -997,7 +997,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Nspws, 3)
         nt.assert_equal(uvp.Nspwdlys, 43)
         nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
-        nt.assert_equal(uvp.get_data((0, 24025024025, 'xx')).shape, (60, 14))
+        nt.assert_equal(uvp.get_data((0, 124125124125, 'xx')).shape, (60, 14))
 
         # check select
         uvp.select(spws=[1])
@@ -1039,7 +1039,6 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('xy','xy')], spw_ranges=[(10, 24)], verbose=False)
 
-
         # test with nsamp set to zero
         uvd = copy.deepcopy(self.uvd)
         uvd.nsample_array[uvd.antpair2ind(24, 25)] = 0.0
@@ -1055,6 +1054,26 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
         nt.assert_true(hasattr(uvp, 'cov_array'))
+
+        # test identity_Y caching works
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
+                                 beam=self.bm)
+        # assert caching is used when appropriate
+        uvp = ds.pspec([(24, 25), (24, 25)], [(24, 25), (24, 25)], (0, 1), ('xx', 'xx'),
+                       input_data_weight='identity', norm='I', taper='none', verbose=False,
+                       spw_ranges=[(20, 30)])
+        nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
+        nt.assert_equal(len(ds._identity_Y), 1)
+        nt.assert_equal(ds._identity_Y.keys()[0], ((0, 24, 25, 'XX'), (1, 24, 25, 'XX')))
+        # assert caching is not used when inappropriate
+        ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38), :, 25, :] = True
+        uvp = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
+                       input_data_weight='identity', norm='I', taper='none', verbose=False,
+                       spw_ranges=[(20, 30)])
+        nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
+        nt.assert_equal(len(ds._identity_Y), 2)
+        nt.assert_true(((0, 24, 25, 'XX'), (1, 24, 25, 'XX')) in ds._identity_Y.keys())
+        nt.assert_true(((0, 37, 38, 'XX'), (1, 37, 38, 'XX')) in ds._identity_Y.keys())
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -1274,7 +1293,7 @@ def test_pspec_run():
     nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
     nt.assert_true(uvp.vis_units, "mK")
-    nt.assert_equal(uvp.bl_array.tolist(), [37038, 52053])
+    nt.assert_equal(uvp.bl_array.tolist(), [137138, 152153])
     nt.assert_equal(uvp.pol_array.tolist(), [-5, -5])
     nt.assert_equal(uvp.cosmo, cosmo)
     nt.assert_true(hasattr(uvp, 'cov_array'))

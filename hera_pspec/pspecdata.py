@@ -310,6 +310,7 @@ class PSpecData(object):
         """
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
+            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {} 
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -1097,7 +1098,7 @@ class PSpecData(object):
 
         return H / 2.
 
-    def get_unnormed_E(self,key1,key2):
+    def get_unnormed_E(self, key1, key2):
         """
         Calculates a series of unnormalized E matrices, such that
 
@@ -1949,14 +1950,15 @@ class PSpecData(object):
         # if using default setting of number of delay bins equal to number of frequency channels
         if n_dlys is None:
             n_dlys = [None for i in range(len(spw_ranges))]
+        elif isinstance(n_dlys, (int, np.integer)):
+            n_dlys = [n_dlys]
 
         # if using the whole band in the dataset, then there should just be one n_dly parameter specified
         if spw_ranges is None and n_dlys != None:
             assert len(n_dlys) == 1, "Only one spw, so cannot specify more than one n_dly value"
 
         # assert that the same number of ndlys has been specified as the number of spws
-        if (spw_ranges != None) and (n_dlys != None):
-            assert len(spw_ranges) == len(n_dlys), "Need to specify number of delay bins for each spw"
+        assert len(spw_ranges) == len(n_dlys), "Need to specify number of delay bins for each spw"
 
         # setup polarization selection
         if isinstance(pols, tuple):
@@ -2001,7 +2003,6 @@ class PSpecData(object):
 
             # clear covariance cache
             self.clear_cache()
-            built_GH = False  # haven't built Gv and Hv matrices in this spw loop yet
 
             # setup emtpy data arrays
             spw_data = []
@@ -2075,15 +2076,43 @@ class PSpecData(object):
                     if verbose:
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
 
+                    # Check that number of non-zero weight chans >= n_dlys
+                    key1_dof = np.sum(~np.isclose(self.Y(key1).diagonal(), 0.0))
+                    key2_dof = np.sum(~np.isclose(self.Y(key2).diagonal(), 0.0))
+                    if key1_dof < self.spw_Ndlys or key2_dof < self.spw_Ndlys:
+                        if verbose:
+                            print("WARNING: Number of unflagged chans for key1 and/or key2 < n_dlys\n" \
+                                  "which may lead to normalization instabilities.")
+
                     # Build Fisher matrix
-                    if input_data_weight == 'identity' and built_GH:
-                        # in this case, all Gv are the same, so skip if already built for this spw!
-                        pass
+                    if input_data_weight == 'identity':
+                        # in this case, all Gv and Hv differ only by flagging pattern
+                        # so check if we've already computed this
+                        # First: get flag weighting matrices given key1 & key2
+                        Y = np.vstack([self.Y(key1).diagonal(), self.Y(key2).diagonal()])
+
+                        # Second: check cache for Y
+                        matches = [np.isclose(Y, y).all() for y in self._identity_Y.values()]
+                        if True in matches:
+                            # This Y exists, so pick appropriate G and H and continue
+                            match = self._identity_Y.keys()[matches.index(True)]
+                            Gv = self._identity_G[match]
+                            Hv = self._identity_H[match]
+                        else:
+                            # This Y doesn't exist, so compute it
+                            if verbose: print("  Building G...")
+                            Gv = self.get_G(key1, key2)
+                            Hv = self.get_H(key1, key2, sampling=sampling)
+                            # cache it
+                            self._identity_Y[(key1, key2)] = Y
+                            self._identity_G[(key1, key2)] = Gv
+                            self._identity_H[(key1, key2)] = Hv
                     else:
+                        # for non identity weighting (i.e. iC weighting)
+                        # Gv and Hv are always different, so compute them
                         if verbose: print("  Building G...")
                         Gv = self.get_G(key1, key2)
                         Hv = self.get_H(key1, key2, sampling=sampling)
-                        built_GH = True
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
@@ -2148,7 +2177,7 @@ class PSpecData(object):
                     # combined weight is geometric mean
                     pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
 
-                    # insert time and blpair info only once
+                    # insert time and blpair info only once per blpair
                     if i < 1 and j < 1:
                         # insert time info
                         inds1 = dset1.antpair2ind(*bl1)
@@ -2236,7 +2265,6 @@ class PSpecData(object):
                                 filename2, label2, dset2.history, '-'*20)
         uvp.taper = taper
         uvp.norm = norm
-
 
         if self.primary_beam is not None:
             # attach cosmology
@@ -2441,7 +2469,7 @@ class PSpecData(object):
 def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None, dset_pairs=None,
               psname_ext=None, spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
-              exclude_auto_bls=True, exclude_permutations=True,
+              exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
@@ -2520,7 +2548,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         If blpairs is None, redundant baseline groups will be formed and
         all cross-multiplies will be constructed. In doing so, if
         exclude_auto_bls is True, eliminate all instances of a bl crossed
-        with itself. Default: True
+        with itself. Default: False
 
     exclude_permutations : boolean
         If blpairs is None, redundant baseline groups will be formed and
@@ -2703,6 +2731,19 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     # perform Jy to mK conversion if desired
     if Jy2mK:
         ds.Jy_to_mK()
+
+    # Print warning if auto_bls is set to exclude correlations of the
+    # same baseline with itself, because this may cause a bias if one
+    # is already cross-correlating different times to avoid noise bias.
+    # See issue #160 on hera_pspec repo
+    if exclude_auto_bls:
+        raise_warning("Skipping the cross-multiplications of a baseline "
+                      "with itself may cause a bias if one is already "
+                      "cross-correlating different times to avoid the "
+                      "noise bias. Please see hera_pspec github issue 160 "
+                      "to make sure you know what you are doing! "
+                      "https://github.com/HERA-Team/hera_pspec/issues/160",
+                      verbose=verbose)
 
     # check dset pair type
     err_msg = "dset_pairs must be fed as a list of len-2 integer tuples"

@@ -39,6 +39,9 @@ params = odict(cf['io'].items() + cf['data'].items() + cf['analysis'].items())
 assert len(params) == len(cf['io']) + len(cf['data']) + len(cf['analysis']), ""\
        "Repeated parameters found within the scope of io, data and analysis dicts"
 algs = cf['algorithm']
+params['data_template'] = os.path.join(params['data_root'], params['data_template'])
+if params['std_template'] is not None:
+    params['std_template'] = os.path.join(params['data_root'], params['std_template'])
 
 # open logfile
 logfile = os.path.join(params['out_dir'], params['logfile'])
@@ -73,6 +76,14 @@ else:
 
 # change to working dir
 os.chdir(params['work_dir'])
+
+# out_dir should be cleared before each run: issue a warning if not the case
+outdir = os.path.join(params['work_dir'], params['out_dir'])
+oldfiles = glob.glob(outdir+"/*")
+if len(oldfiles) > 0:
+    hp.utils.log("\n{}\nWARNING: out_dir should be cleaned before each new run to " \
+                 "ensure proper functionality.\nIt seems like some files currently " \
+                 "exist in {}\n{}\n".format('-'*50, outdir, '-'*50), f=lf, verbose=params['verbose'])
 
 #-------------------------------------------------------------------------------
 # Run Visibility Data Difference
