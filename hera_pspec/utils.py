@@ -1047,6 +1047,10 @@ def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
         
         # Save to file
         outfile = basename.format(bl="%d.%d"%(ant1, ant2), pol=pol)
+        if format is not None:
+            # Make sure format extension is given
+            if outfile[-len(format)].lower() != format.lower():
+                outfile = "%s.%s" % (outfile, format)
         fig.tight_layout()
         fig.savefig(outfile, format=format)
         fig.clf()
