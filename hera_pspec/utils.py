@@ -872,6 +872,43 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
 
     return failures
 
+def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
+    """
+    Given a list of baseline vectors in ENU (TOPO) coords, get the
+    baseline length [meter] and angle [deg] given a baseline error
+    tolerance [meters]
+
+    Parameters
+    ----------
+    blvecs : list
+        A list of ndarray of 2D or 3D baseline vectors.
+
+    bl_error_tol : float, optional
+        A baseline vector error tolerance.
+
+    Returns
+    -------
+    lens : ndarray
+        Array of baseline lengths [meters]
+
+    angs : ndarray
+        Array of baseline angles [degrees]
+    """
+    # type check
+    blvecs = np.asarray(blvecs)
+    assert blvecs.shape[1] in [2, 3], "blvecs must have shape (N, 2) or (N, 3)"
+
+    # get lengths and angles
+    lens = np.array([np.linalg.norm(v) for v in blvecs])
+    angs = np.array([np.arctan2(*v[:2][::-1]) * 180 / np.pi for v in blvecs])
+    angs = np.array([(a + 180) % 360 if a < 0 else a for a in angs])
+
+    # Find baseline groups with ang ~ 180 deg that have y-vec within bl_error and set to ang = 0 deg.
+    flip = (blvecs[:, 1] > -bl_error_tol) & (blvecs[:, 1] < 0) & (blvecs[:, 0] > 0)
+    angs[flip] = 0
+
+    return lens, angs
+
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
              bl_deg_range=(0, 180), xants=None, add_autos=False):
@@ -926,22 +963,22 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
         antpos_dict = dict(zip(ants, antpos))
+
     # use antenna position dictionary
     elif isinstance(uvd, (dict, odict)):
         antpos_dict = uvd
 
     # get redundant baselines
     reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol, low_hi=True)
-    lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
-    angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
-    angs = [(a + 180) % 360 if a < 0 else a for a in angs]
+    vecs = np.array([antpos_dict[r[0][0]] - antpos_dict[r[0][1]] for r in reds])
+    lens, angs = get_bl_lens_angs(vecs, bl_error_tol=bl_error_tol)
 
     # put in autocorrs
     if add_autos:
         ants = antpos_dict.keys()
         reds = [zip(ants, ants)] + reds
-        lens = [0] + lens
-        angs = [0] + angs
+        lens = np.insert(0, lens, 0)
+        angs = np.insert(0, angs, 0)
 
     # restrict baselines
     _reds, _lens, _angs = [], [], []

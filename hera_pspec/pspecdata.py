@@ -2375,7 +2375,7 @@ class PSpecData(object):
                 # get blts indices of basline
                 indices = dset.antpair2ind(*k[:2])
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(hc.io.polstr2num[k[-1]])
+                polind = pol_list.index(uvutils.polstr2num(k[-1]))
                 # insert into dset
                 dset.data_array[indices, 0, :, polind] = data[k]
 

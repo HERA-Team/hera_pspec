@@ -11,7 +11,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                    average_times=False, fold=False, plot_noise=False, 
                    delay=True, deltasq=False, legend=False, ax=None,
                    component='real', lines=True, markers=False, error=None,
-                   **kwargs):
+                   times=None, **kwargs):
     """
     Plot a 1D delay spectrum (or spectra) for a group of baselines.
     
@@ -73,6 +73,9 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         If not None and if error exists in uvp stats_array, plot errors
         on bandpowers. Default: None.
 
+    times : array_like, optional
+        Float ndarray containing elements from time_avg_array to plot.
+
     kwargs : dict, optional
         Extra kwargs to pass to _all_ ax.plot calls.
 
@@ -97,6 +100,10 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         else:
             blpairs.append(blpairs_in[i])
     
+    # Select times if requested
+    if times is not None:
+        uvp = uvp.select(times=times, inplace=False)
+
     # Average over blpairs or times if requested
     blpairs_in = copy.deepcopy(blpairs) # Save input blpair list
     if average_blpairs:
@@ -224,7 +231,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
 def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=False, 
                     fold=False, delay=True, deltasq=False, log=True, lst_in_hrs=True,
                     vmin=None, vmax=None, cmap='YlGnBu', axes=None, figsize=(14, 6),
-                    force_plot=False):
+                    force_plot=False, times=None, title_type=0):
     """
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
@@ -286,6 +293,14 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         and this parameter overrides that to continue plotting. One example is
         having more than 20 blpairs in the object.
 
+    times : array_like, optional
+        Float ndarray containing elements from time_avg_array to plot.
+
+    title_type : int, optional
+        Type of title to put above plot(s).
+        0 : "bls: {bl1} x {bl2}"
+        1 : "bl len {len} m & ang {ang} deg" 
+
     Returns
     -------
     fig : matplotlib.pyplot.Figure
@@ -316,6 +331,10 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             _blpgrp.append(blp_int)
         _blpairs.append(_blpgrp)
     blpairs = _blpairs
+
+    # Select times if requested
+    if times is not None:
+        uvp = uvp.select(times=times, inplace=False)
 
     # Average over blpairs or times if requested
     blpairs_in = copy.deepcopy(blpairs) # Save input blpair list
@@ -414,6 +433,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         Ny_thin = int(round(Ny / 10.0))
     Nx = len(x)
 
+    # get baseline vectors
+    blvecs = dict(zip([uvp_plt.bl_to_antnums(bl) for bl in uvp_plt.bl_array], uvp_plt.get_ENU_bl_vecs()))
+
     # Sanitize power spectrum units 
     psunits = uvp_plt.units
     if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
@@ -443,6 +465,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
 
             # get blpair key for this subplot
             key = keys[k]
+            blp = uvp_plt.blpair_to_antnums(key[1])
 
             # plot waterfall
             cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax, 
@@ -452,7 +475,12 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             ax.xaxis.set_ticks_position('bottom')
             ax.tick_params(labelsize=12)
             if ax.get_title() == '':
-                ax.set_title("bls: {} x {}".format(*uvp_plt.blpair_to_antnums(key[1])), y=1)
+                if title_type == 0:
+                    ax.set_title("bls: {} x {}".format(*blp), y=1)
+                elif title_type == 1:
+                    blv = 0.5 * (blvecs[blp[0]] + blvecs[blp[1]])
+                    lens, angs = hp.utils.get_bl_lens_angs([blv], bl_error_tol=1.0)
+                    ax.set_title("bl len {len:0.2f} m & {ang:0.0f} deg".format(len=lens[0], ang=angs[0]), y=1)
 
             # set colorbar
             cbar = ax.get_figure().colorbar(cax, ax=ax)
@@ -494,3 +522,14 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     if new_plot:
         return fig
     
+
+def bandpower_bl_cov(uvp):
+    """
+
+    """
+
+
+
+
+
+
