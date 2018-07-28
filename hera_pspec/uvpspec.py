@@ -513,7 +513,7 @@ class UVPSpec(object):
         else:
             return statistic[spw][blpairts, :, pol]
 
-    def set_stats(self, stat, key, statistic, ):
+    def set_stats(self, stat, key, statistic):
         """
         Set a statistic waterfall (Ntimes, Ndlys) in the stats_array
         given the selection of spw, blpairts and pol in key.
@@ -532,12 +532,11 @@ class UVPSpec(object):
         """
         spw, blpairts, pol = self.key_to_indices(key)
         statistic = np.asarray(statistic)
+        data_shape = self.data_array[spw][blpairts, :, pol].shape
 
-        if self.data_array[spw][blpairts, :, pol].shape != statistic.shape:
-            errmsg = ("Input array (shape %r) must match the shape of data_array"
-                      "spectra (shape (%i, %i)).") % (statistic.shape,
-                                                      self.Ntimes,
-                                                      self.Ndlys)
+        if data_shape != statistic.shape:
+            errmsg = "Input array shape {:s} must match " \
+                     "data_array shape {:s}.".format(statistic.shape, data_shape)
             raise ValueError(errmsg)
 
         if not hasattr(self, "stats_array"):
@@ -921,7 +920,7 @@ class UVPSpec(object):
         return spw, blpairts, pol
 
     def select(self, spws=None, bls=None, only_pairs_in_bls=True, blpairs=None,
-               times=None, pols=None, inplace=True):
+               times=None, lsts=None, pols=None, inplace=True):
         """
         Select function for selecting out certain slices of the data.
 
@@ -951,6 +950,10 @@ class UVPSpec(object):
             Float ndarray of times from the time_avg_array to select. If None,
             all times are kept. Default: None.
 
+        lsts : array_like, optional
+            Float ndarray of lsts from the lst_avg_array to select. If None,
+            all lsts are kept. Default: None.
+
         pols : list of str or int, optional
             List of polarizations to keep. See pyuvdata.utils.polstr2num for
             acceptable options. If None, all polarizations are kept. Default:
@@ -973,7 +976,7 @@ class UVPSpec(object):
 
         uvputils._select(uvp, spws=spws, bls=bls,
                          only_pairs_in_bls=only_pairs_in_bls,
-                         blpairs=blpairs, times=times, pols=pols)
+                         blpairs=blpairs, times=times, lsts=lsts, pols=pols)
 
         if inplace == False:
             return uvp
@@ -993,7 +996,7 @@ class UVPSpec(object):
                         *uvutils.LatLonAlt_from_XYZ(self.telescope_location[None]))
 
     def read_from_group(self, grp, just_meta=False, spws=None, bls=None,
-                        blpairs=None, times=None, pols=None,
+                        blpairs=None, times=None, lsts=None, pols=None,
                         only_pairs_in_bls=False):
         """
         Clear current UVPSpec object and load in data from specified HDF5 group.
@@ -1024,6 +1027,9 @@ class UVPSpec(object):
         times : float ndarray
             Times from the time_avg_array to keep.
 
+        lsts : float ndarray
+            lsts from the lst_avg_array to keep.
+
         pols : list of str or int
             List of polarization strings or integers to keep. See
             pyuvdata.utils.polstr2num for acceptable options.
@@ -1049,11 +1055,11 @@ class UVPSpec(object):
 
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
-            uvputils._select(self, spws=spws, bls=bls,
+            uvputils._select(self, spws=spws, bls=bls, lsts=lsts,
                              only_pairs_in_bls=only_pairs_in_bls,
                              blpairs=blpairs, times=times, pols=pols)
         else:
-            uvputils._select(self, spws=spws, bls=bls,
+            uvputils._select(self, spws=spws, bls=bls, lsts=lsts,
                              only_pairs_in_bls=only_pairs_in_bls,
                              blpairs=blpairs, times=times, pols=pols,
                              h5file=grp)
@@ -1065,7 +1071,7 @@ class UVPSpec(object):
         self.check(just_meta=just_meta)
 
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
-                  blpairs=None, times=None, pols=None,
+                  blpairs=None, times=None, lsts=None, pols=None,
                   only_pairs_in_bls=False):
         """
         Clear current UVPSpec object and load in data from an HDF5 file.
@@ -1096,6 +1102,9 @@ class UVPSpec(object):
         times : float ndarray
             Times from the time_avg_array to keep.
 
+        lsts : float ndarray
+            lsts from the lst_avg_array to keep.
+
         pols : list of str or int
             List of polarization strings or integers to keep. See
             pyuvdata.utils.polstr2num for acceptable options.
@@ -1106,8 +1115,8 @@ class UVPSpec(object):
         """
         # Open file descriptor and read data
         with h5py.File(filepath, 'r') as f:
-            self.read_from_group(f, just_meta=just_meta, spws=spws, bls=bls,
-                                 only_pairs_in_bls=only_pairs_in_bls)
+            self.read_from_group(f, just_meta=just_meta, spws=spws, bls=bls, times=times,
+                                 lsts=lsts, only_pairs_in_bls=only_pairs_in_bls)
 
     def write_to_group(self, group, run_check=True):
         """
@@ -1345,6 +1354,9 @@ class UVPSpec(object):
                                     getattr(self, p)[k][j] = a.expected_type(getattr(self, p)[k][j])
                                 except:
                                     raise AssertionError(err_msg)
+        # check spw convention
+        assert set(self.spw_array) == set(np.arange(self.Nspws)), "spw_array must be np.arange(Nspws)"
+
     def _clear(self):
         """
         Clear UVPSpec of all parameters. Warning: this cannot be undone.
@@ -1727,6 +1739,7 @@ class UVPSpec(object):
                                                  noise_scalar=noise_scalar)
         return scalar
 
+
 def combine_uvpspec(uvps, verbose=True):
     """
     Combine (concatenate) multiple UVPSpec objects into a single object,
@@ -1758,7 +1771,7 @@ def combine_uvpspec(uvps, verbose=True):
     # Sort new data axes
     new_spws = sorted(new_spws)
     new_blpts = sorted(new_blpts)
-    new_pols = sorted(new_pols)
+    new_pols = [new_pols[i] for i in np.argsort(np.abs(new_pols))]
     Nspws = len(new_spws)
     Nblpairts = len(new_blpts)
     Npols = len(new_pols)
@@ -1782,10 +1795,10 @@ def combine_uvpspec(uvps, verbose=True):
         # Initialize new arrays
         u.data_array[i] = np.empty((Nblpairts, spw[3], Npols), np.complex128)
         u.integration_array[i] = np.empty((Nblpairts, Npols), np.float64)
-        u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
+        u.wgt_array[i] = np.empty((Nblpairts, spw[3], 2, Npols), np.float64)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if store_cov:
-            u.cov_array[i] = np.empty((Nblpairts, spw[2], spw[2], Npols),
+            u.cov_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols),
                                       np.complex128)
 
         # Set frequencies and delays

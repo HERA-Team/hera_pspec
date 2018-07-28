@@ -151,70 +151,6 @@ class Test_grouping(unittest.TestCase):
             ps_avg = uvp_avg.get_data((0, blpair, 'xx'))
             ps_boot = uvp4[0].get_data((0, blpair, 'xx'))
             np.testing.assert_array_almost_equal(ps_avg, ps_boot)
-    
-    
-    def test_select_common(self):
-        """
-        Test selecting power spectra that two UVPSpec objects have in common.
-        """
-        # Carve up some example UVPSpec objects
-        uvp1 = self.uvp.select(times=np.unique(self.uvp.time_avg_array)[:-1], 
-                               inplace=False)
-        uvp2 = self.uvp.select(times=np.unique(self.uvp.time_avg_array)[1:], 
-                               inplace=False)
-        uvp3 = self.uvp.select(blpairs=np.unique(self.uvp.blpair_array)[1:], 
-                               inplace=False)
-        uvp4 = self.uvp.select(blpairs=np.unique(self.uvp.blpair_array)[:2], 
-                               inplace=False)
-        uvp5 = self.uvp.select(blpairs=np.unique(self.uvp.blpair_array)[:1], 
-                               inplace=False)
-        uvp6 = self.uvp.select(times=np.unique(self.uvp.time_avg_array)[:1], 
-                               inplace=False)
-        
-        # Check that selecting on common times works
-        uvp_list = [uvp1, uvp2]
-        uvp_new = grouping.select_common(uvp_list, spws=True, blpairs=True, 
-                                         times=True, pols=True, inplace=False)
-        self.assertEqual(uvp_new[0], uvp_new[1])
-        np.testing.assert_array_equal(uvp_new[0].time_avg_array, 
-                                      uvp_new[1].time_avg_array)
-        
-        # Check that selecting on common baseline-pairs works
-        uvp_list_2 = [uvp1, uvp2, uvp3]
-        uvp_new_2 = grouping.select_common(uvp_list_2, spws=True, blpairs=True, 
-                                           times=True, pols=True, inplace=False)
-        self.assertEqual(uvp_new_2[0], uvp_new_2[1])
-        self.assertEqual(uvp_new_2[0], uvp_new_2[2])
-        np.testing.assert_array_equal(uvp_new_2[0].time_avg_array, 
-                                      uvp_new_2[1].time_avg_array)
-        
-        # Check that zero overlap in times raises a ValueError
-        self.assertRaises(ValueError, grouping.select_common, [uvp2, uvp6], 
-                                      spws=True, blpairs=True, times=True, 
-                                      pols=True, inplace=False)
-        
-        # Check that zero overlap in times does *not* raise a ValueError if 
-        # not selecting on times
-        uvp_new_3 = grouping.select_common([uvp2, uvp6], spws=True, 
-                                           blpairs=True, times=False, 
-                                           pols=True, inplace=False)
-        
-        # Check that zero overlap in baselines raises a ValueError
-        self.assertRaises(ValueError, grouping.select_common, [uvp3, uvp5], 
-                                      spws=True, blpairs=True, times=True, 
-                                      pols=True, inplace=False)
-        
-        # Check that matching times are ignored when set to False
-        uvp_new = grouping.select_common(uvp_list, spws=True, blpairs=True, 
-                                         times=False, pols=True, inplace=False)
-        self.assertNotEqual( np.sum(uvp_new[0].time_avg_array 
-                                  - uvp_new[1].time_avg_array), 0.)
-        self.assertEqual(len(uvp_new), len(uvp_list))
-        
-        # Check that in-place selection works
-        grouping.select_common(uvp_list, spws=True, blpairs=True, 
-                               times=True, pols=True, inplace=True)
-        self.assertEqual(uvp1, uvp2)
         
 def test_bootstrap_resampled_error():
     # generate a UVPSpec
@@ -279,8 +215,8 @@ def test_bootstrap_run():
     # assert original uvp is unchanged
     nt.assert_true(uvp == psc.get_pspec("grp1", 'uvp'))
     # check stats array
-    np.testing.assert_array_equal([u'cinterval_16.00', u'cinterval_84.00', u'normal_std', u'robust_std'], uvp_avg.stats_array.keys())
-    for stat in [u'cinterval_16.00', u'cinterval_84.00', u'normal_std', u'robust_std']:
+    np.testing.assert_array_equal([u'bs_cinterval_16.00', u'bs_cinterval_84.00', u'bs_robust_std', u'bs_std'], uvp_avg.stats_array.keys())
+    for stat in [u'bs_cinterval_16.00', u'bs_cinterval_84.00', u'bs_robust_std', u'bs_std']:
         nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')).shape, (1, 50))
         nt.assert_false(np.any(np.isnan(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')))))
         nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')).dtype, np.complex128)
