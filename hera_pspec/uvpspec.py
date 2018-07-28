@@ -883,12 +883,12 @@ class UVPSpec(object):
             key = (key['spw'], key['blpair'], key['pol'])
 
         # assign key elements
-        spw = key[0]
+        spw_ind = key[0]
         blpair = key[1]
         pol = key[2]
 
         # assert types
-        assert isinstance(spw, (int, np.integer)), "spw must be an integer"
+        assert isinstance(spw_ind, (int, np.integer)), "spw must be an integer"
         assert isinstance(blpair, (int, np.integer, tuple)), "blpair must be an integer or nested tuple"
         assert isinstance(pol, (np.str, str, np.integer, int)), "pol must be a string or integer"
 
@@ -901,23 +901,26 @@ class UVPSpec(object):
             pol = uvutils.polstr2num(pol)
 
         # check attributes exist in data
-        assert spw in self.spw_freq_array and spw in self.spw_dly_array, "spw {} not found in data".format(spw)
+        assert spw_ind in self.spw_freq_array and spw_ind in self.spw_dly_array, "spw {} not found in data".format(spw_ind)
         assert blpair in self.blpair_array, "blpair {} not found in data".format(blpair)
         assert pol in self.pol_array, "pol {} not found in data".format(pol)
 
         # index polarization array
-        pol = self.pol_to_indices(pol)
+        pol_ind = self.pol_to_indices(pol)
+        if isinstance(pol_ind, (list, np.ndarray)):
+            assert len(pol_ind) == 1, "only one polarization can be specified in key_to_indices"
+            pol_ind = pol_ind[0]
 
         # index blpairts
-        blpairts = self.blpair_to_indices(blpair)
+        blpairts_inds = self.blpair_to_indices(blpair)
 
         # omit flagged spectra: i.e. when integration_array == 0.0
         if omit_flags:
-            integs = self.integration_array[spw][blpairts, pol]
+            integs = self.integration_array[spw_ind][blpairts_inds, pol_ind]
             keep = ~np.isclose(integs, 0.0)
-            blpairts = blpairts[keep]
+            blpairts_inds = blpairts_inds[keep]
 
-        return spw, blpairts, pol
+        return spw_ind, blpairts_inds, pol_ind
 
     def select(self, spws=None, bls=None, only_pairs_in_bls=True, blpairs=None,
                times=None, lsts=None, pols=None, inplace=True):
