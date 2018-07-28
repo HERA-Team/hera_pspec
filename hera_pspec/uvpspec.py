@@ -923,7 +923,7 @@ class UVPSpec(object):
         return spw_ind, blpairts_inds, pol_ind
 
     def select(self, spws=None, bls=None, only_pairs_in_bls=True, blpairs=None,
-               times=None, lsts=None, pols=None, inplace=True):
+               times=None, lsts=None, pols=None, inplace=True, run_check=True):
         """
         Select function for selecting out certain slices of the data.
 
@@ -966,6 +966,9 @@ class UVPSpec(object):
             If True, edit and overwrite arrays in self, else make a copy of
             self and return. Default: True.
 
+        run_check : bool, optional
+            If True, run uvp.check() after selection
+
         Returns
         -------
         uvp : UVPSpec, optional
@@ -980,6 +983,9 @@ class UVPSpec(object):
         uvputils._select(uvp, spws=spws, bls=bls,
                          only_pairs_in_bls=only_pairs_in_bls,
                          blpairs=blpairs, times=times, lsts=lsts, pols=pols)
+
+        if run_check:
+            uvp.check()
 
         if inplace == False:
             return uvp

@@ -265,7 +265,6 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
 
 def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, times=None,
             lsts=None, pols=None, h5file=None):
-
     """
     Select function for selecting out certain slices of the data, as well as loading in data from HDF5 file.
 
@@ -348,7 +347,10 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
 
         # turn blp_select into slice if possible
         blp_select = np.where(blp_select)[0]
-        if len(set(np.diff(blp_select))) == 1:
+        if len(set(np.diff(blp_select))) == 0:
+            # its sliceable, turn into slice object
+            blp_select = slice(blp_select[0], blp_select[-1]+1)
+        elif len(set(np.diff(blp_select))) == 1:
             # its sliceable, turn into slice object
             blp_select = slice(blp_select[0], blp_select[-1]+1, np.diff(blp_select)[0])
 
@@ -388,7 +390,10 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
 
         # turn into slice object if possible
         pol_select = np.where(pol_select)[0]
-        if len(set(np.diff(pol_select))) == 1:
+        if len(set(np.diff(pol_select))) == 0:
+            # sliceable
+            pol_select = slice(pol_select[0], pol_select[-1] + 1)
+        elif len(set(np.diff(pol_select))) == 1:
             # sliceable
             pol_select = slice(pol_select[0], pol_select[-1] + 1, np.diff(pol_select)[0])
 
@@ -408,13 +413,13 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
 
     # only load / select heavy data if data_array exists _or_ if h5file is passed
     if h5file is not None or hasattr(uvp, 'data_array'):
-        
         # select data arrays
         data = odict()
         wgts = odict()
         ints = odict()
         nsmp = odict()
         cov = odict()
+        stats = odict()
 
         # determine if cov_array is stored
         if h5file is not None:
@@ -422,24 +427,51 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         else:
             store_cov = hasattr(uvp, 'cov_array')
 
+        # get stats_array keys if h5file
+        if h5file is not None:
+            statnames = np.unique([f[f.find("_")+1: f.rfind("_")] for f in h5file.keys() 
+                                    if f.startswith("stats")])
+        else:
+            if hasattr(uvp, "stats_array"):
+                statnames = uvp.stats_array.keys()
+            else:
+                statnames = []
+
         # iterate over spws
         for s in uvp.spw_array:
             # if h5file is passed, default to loading in data
             if h5file is not None:
+                # assign data arrays
                 _data = h5file['data_spw{}'.format(s)]
                 _wgts = h5file['wgt_spw{}'.format(s)]
                 _ints = h5file['integration_spw{}'.format(s)]
                 _nsmp = h5file['nsample_spw{}'.format(s)]
+                # assign cov array
                 if store_cov:
                     _covs = h5file['cov_spw{}'.format(s)]
+                # assign stats array
+                _stat = odict()
+                for statname in statnames:
+                    if statname not in stats:
+                        stats[statname] = odict()
+                    _stat[statname] = h5file["stats_{}_{}".format(statname, s)]
+
             # if no h5file, we are performing a select, so use uvp's arrays
             else:
+                # assign data arrays
                 _data = uvp.data_array[s]
                 _wgts = uvp.wgt_array[s]
                 _ints = uvp.integration_array[s]
                 _nsmp = uvp.nsample_array[s]
+                # assign cov
                 if store_cov:
                     _covs = uvp.cov_array[s]
+                # assign stats array
+                _stat = odict()
+                for statname in statnames:
+                    if statname not in stats:
+                        stats[statname] = odict()
+                    _stat[statname] = uvp.stats_array[statname][s]
 
             # slice data arrays and assign to dictionaries
             if sliceable:
@@ -450,6 +482,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
                 nsmp[s] = _nsmp[blp_select, pol_select]
                 if store_cov:
                     cov[s] = _covs[blp_select, :, :, pol_select]
+                for statname in statnames:
+                    stats[statname][s] = _stat[statname][blp_select, :, pol_select]
             else:
                 # need to slice in 2 steps
                 data[s] = _data[blp_select, :, :][:, :, pol_select]
@@ -458,24 +492,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
                 nsmp[s] = _nsmp[blp_select, :][:, pol_select]
                 if store_cov:
                     cov[s] = _covs[blp_select, :, :, :][:, :, :, pol_select]
-
-        # Prepare to read stats arrays
-        stats = odict()
-
-        # If h5file, read in stats data
-        if h5file is not None:
-            statnames = [f[f.find("_")+1: f.rfind("_")] for f in h5file.keys()
-                         if f.startswith("stats")]
-            for sts in np.unique(np.array(statnames)):
-                stats[sts] = odict()
-                for s in uvp.spw_array:
-                    stats[sts][s] = h5file["stats_{}_{}".format(sts, s)][blp_select, :, pol_select]
-        # Otherwise, select on whatever uvp already has
-        elif hasattr(uvp, "stats_array"):
-            for k in uvp.stats_array.keys():
-                stats[k] = odict()
-                for s in uvp.spw_array:
-                    stats[k][s] = uvp.stats_array[k][s][blp_select, :, pol_select]
+                for statname in statnames:
+                    stats[statname][s] = _stat[statname][blp_select, :, :][:, :, pol_select]
 
         # assign arrays to uvp
         uvp.data_array = data
