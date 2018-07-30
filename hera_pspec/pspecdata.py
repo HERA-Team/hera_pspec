@@ -2616,11 +2616,15 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     history : str
         String to add to history of each UVPSpec object.
 
-    Returns
+    Returns (psc, ds)
     -------
     psc : PSpecContainer object
         A container for the output UVPSpec objects, which themselves contain the
         power spectra and their metadata.
+
+    ds : PSpecData object
+        The PSpecData object used for OQE of power spectrum, with cached weighting
+        matrices.
     """
     # type check
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
@@ -2806,7 +2810,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
                       overwrite=overwrite)
 
-    return psc
+    return psc, ds
 
 
 def get_pspec_run_argparser():

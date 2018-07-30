@@ -1272,7 +1272,7 @@ def test_pspec_run():
     # test basic execution
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
                               bl_len_range=(14, 15), bl_deg_range=(50, 70), psname_ext='_0')
     nt.assert_true(isinstance(psc, container.PSpecContainer))
     nt.assert_equal(psc.groups(), ['dset0_dset1'])
@@ -1283,7 +1283,7 @@ def test_pspec_run():
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc = pspecdata.pspec_run(fnames, "./out.hdf5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
+    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
                               rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
                               pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
                               dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
@@ -1304,7 +1304,7 @@ def test_pspec_run():
     # test when no data is loaded in dset
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
                               blpairs=[((500, 501), (600, 601))])
     nt.assert_equal(psc, None)
     nt.assert_false(os.path.exists("./out.h5"))
@@ -1313,7 +1313,7 @@ def test_pspec_run():
         uvd = UVData()
         uvd.read_miriad(f)
         uvds.append(uvd)
-    psc = pspecdata.pspec_run(uvds, "./out.hdf5", dsets_std=fnames_std, Jy2mK=False, verbose=False, overwrite=True,
+    psc, ds = pspecdata.pspec_run(uvds, "./out.hdf5", dsets_std=fnames_std, Jy2mK=False, verbose=False, overwrite=True,
                               blpairs=[((500, 501), (600, 601))])
     nt.assert_equal(psc, None)
     nt.assert_false(os.path.exists("./out.h5"))
@@ -1321,7 +1321,7 @@ def test_pspec_run():
     # test when data is loaded, but no blpairs match
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
                               blpairs=[((37, 38), (600, 601))])
     nt.assert_true(psc is not None)
     nt.assert_equal(len(psc.groups()), 0)
@@ -1331,7 +1331,7 @@ def test_pspec_run():
              os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA")]
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc = pspecdata.pspec_run(dsets, "./out.hdf5", Jy2mK=False, verbose=True, overwrite=True,
+    psc, ds = pspecdata.pspec_run(dsets, "./out.hdf5", Jy2mK=False, verbose=True, overwrite=True,
                               blpairs=[((24, 25), (37, 38))])
     uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
     nt.assert_equal(uvp.Ntimes, 120)
