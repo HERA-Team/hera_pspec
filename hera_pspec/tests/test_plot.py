@@ -152,9 +152,17 @@ class Test_Plot(unittest.TestCase):
 
         f6 = plot.delay_spectrum(uvp_avg, uvp_avg.get_blpairs(), spw=0,
                                 pol='xx', average_blpairs=False, average_times=False,
-                                component='real', error='normal_std', lines=False,
+                                component='real', error='bs_std', lines=False,
                                 markers=True)
         plt.close(f6)
+
+        # plot errorbar instead of pspec
+        f7 = plot.delay_spectrum(uvp_avg, uvp_avg.get_blpairs(), spw=0,
+                                pol='xx', average_blpairs=False, average_times=False,
+                                component='real', lines=False,
+                                markers=True, plot_stats='bs_std')
+        plt.close(f7)
+
 
     def test_plot_cosmo(self):
         """
@@ -176,11 +184,40 @@ class Test_Plot(unittest.TestCase):
         # Plot in Delta^2 units
         f2 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=True, 
-                                  delay=False, deltasq=True, legend=True)
+                                  delay=False, deltasq=True, legend=True, label_type='blpair')
         # Should contain 1 line and 1 legend
         elements = [(matplotlib.lines.Line2D, 1), (matplotlib.legend.Legend, 1)]
         self.assertTrue( axes_contains(f2.axes[0], elements) )
         plt.close(f2)
+
+
+    def test_delay_spectrum_misc(self):
+        # various other tests for plot.delay_spectrum
+
+        # Unpack the list of baseline-pairs into a Python list
+        blpairs = np.unique(self.uvp.blpair_array)        
+        blps = [blp for blp in blpairs]
+
+        # times selection, label_type
+        f1 = plot.delay_spectrum(self.uvp, blpairs[:1], spw=0, pol='xx', 
+                                 times=self.uvp.time_avg_array[:1], lines=False,
+                                 markers=True, logscale=False, label_type='key',
+                                 force_plot=False)
+        plt.close(f1)
+
+        # test force plot exception
+        uvp = copy.deepcopy(self.uvp)
+        for i in range(3):
+            # build-up a large uvpspec object
+            _uvp = copy.deepcopy(uvp)
+            _uvp.time_avg_array += (i+1)**2
+            uvp = uvp + _uvp
+        nt.assert_raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs(), 0, 'xx')
+
+        f2 = plot.delay_spectrum(self.uvp, uvp.get_blpairs(), 0, 'xx', force_plot=True,
+                                label_type='blpairt')
+        plt.close(f2)
+
 
     def test_plot_waterfall(self):
         """

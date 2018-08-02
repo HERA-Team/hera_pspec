@@ -11,7 +11,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                    average_times=False, fold=False, plot_noise=False, 
                    delay=True, deltasq=False, legend=False, ax=None,
                    component='real', lines=True, markers=False, error=None,
-                   times=None, **kwargs):
+                   times=None, logscale=True, force_plot=False,
+                   label_type='blpairt', plot_stats=None, **kwargs):
     """
     Plot a 1D delay spectrum (or spectra) for a group of baselines.
     
@@ -76,6 +77,24 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     times : array_like, optional
         Float ndarray containing elements from time_avg_array to plot.
 
+    logscale : bool, optional
+        If True, put plot on a log-scale. Else linear scale. Default: True.
+
+    force_plot : bool, optional
+        If plotting a large number of spectra, this function will error. Set
+        this to True to override this large plot error and force plot.
+        Default: False.
+
+    label_type : int, optional
+        Line label type in legend, options=['key', 'blpair', 'blpairt'].
+            key : Label lines based on (spw, blpair, pol) key.
+            blpair : Label lines based on blpair.
+            blpairt : Label lines based on blpair-time.
+
+    plot_stats : string, optional
+        If not None, plot an entry in uvp.stats_array instead
+        of power spectrum in uvp.data_array.
+
     kwargs : dict, optional
         Extra kwargs to pass to _all_ ax.plot calls.
 
@@ -89,7 +108,11 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     if ax is None:
         new_plot = True
         fig, ax = plt.subplots(1, 1)
-    
+
+    # Select times if requested
+    if times is not None:
+        uvp = uvp.select(times=times, inplace=False)
+
     # Add ungrouped baseline-pairs into a group of their own (expected by the
     # averaging routines)
     blpairs_in = blpairs
@@ -99,10 +122,6 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
             blpairs.append([blpairs_in[i],])
         else:
             blpairs.append(blpairs_in[i])
-    
-    # Select times if requested
-    if times is not None:
-        uvp = uvp.select(times=times, inplace=False)
 
     # Average over blpairs or times if requested
     blpairs_in = copy.deepcopy(blpairs) # Save input blpair list
@@ -114,7 +133,11 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         if average_times:
             # Average over times, but not baseline-pairs
             uvp_plt.average_spectra(time_avg=True, inplace=True)
-            
+      
+    # Check plot size
+    if uvp_plt.Ntimes * len(blpairs) > 100 and force_plot == False:
+        raise ValueError("Trying to plot > 100 spectra... Set force_plot=True to continue.")
+
     # Fold the power spectra if requested
     if fold:
         uvp_plt.fold_spectra()
@@ -131,6 +154,10 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         k_para = uvp_plt.get_kparas(spw)
         x = k_para
     
+    # Check plot_stats
+    if plot_stats is not None:
+        assert plot_stats in uvp_plt.stats_array, "specified key {} not found in stats_array".format(plot_stats)
+
     # Plot power spectra
     for blgrp in blpairs:
         # Loop over blpairs in group and plot power spectrum for each one
@@ -144,12 +171,15 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
             elif component == 'abs':
                 cast = np.abs
 
-            # get power array and repeat x array
-            power = cast(uvp_plt.get_data(key))
+            # get data array and repeat x array
+            if plot_stats is None:
+                data = cast(uvp_plt.get_data(key))
+            else:
+                data = cast(uvp_plt.get_stats(plot_stats, key))
 
             # flag records that have zero integration
             flags = np.isclose(uvp_plt.get_integrations(key), 0.0)
-            power[flags] = np.nan
+            data[flags] = np.nan
 
             # get errs if requessted
             if error is not None and hasattr(uvp_plt, 'stats_array'):
@@ -157,28 +187,53 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                     errs = uvp_plt.get_stats(error, key)
                     errs[flags] = np.nan
 
+            # get times
+            blptimes = uvp_plt.time_avg_array[uvp_plt.blpair_to_indices(blp)]
+
             # iterate over integrations per blp
-            for i in range(power.shape[0]):
+            for i in range(data.shape[0]):
                 # get y data
-                y = power[i]
+                y = data[i]
+                t = blptimes[i]
+
+                # form label
+                if label_type == 'key':
+                    label = "{}".format(key)
+                elif label_type == 'blpair':
+                    label = "{}".format(blp)
+                elif label_type == 'blpairt':
+                    label = "{}, {:0.5f}".format(blp, t)
+                else:
+                    raise ValueError("Couldn't undestand label_type {}".format(label_type))
 
                 # plot elements
                 cax = None
                 if lines:
-                    cax, = ax.plot(x, np.abs(y), label="%s" % str(key), marker='None', **kwargs)
+                    if logscale:
+                        cax, = ax.plot(x, np.abs(y), marker='None', label=label, **kwargs)
+                    else:
+                        cax, = ax.plot(x, y, marker='None', label=label, **kwargs)
 
                 if markers:
                     if cax is None:
                         c = None
                     else:
                         c = cax.get_color()
-                    # plot positive w/ filled circles
-                    cax, = ax.plot(x[y >= 0], np.abs(y[y >= 0]), c=c, ls='None', marker='o', 
-                                  markerfacecolor=c, markeredgecolor=c, **kwargs)
-                    # plot negative w/ unfilled circles
-                    c = cax.get_color()
-                    cax, = ax.plot(x[y < 0], np.abs(y[y < 0]), c=c, ls='None', marker='o',
-                                   markerfacecolor='None', markeredgecolor=c, **kwargs)
+                    if lines:
+                        label = None
+
+                    # plot markers
+                    if logscale:
+                        # plot positive w/ filled circles
+                        cax, = ax.plot(x[y >= 0], np.abs(y[y >= 0]), c=c, ls='None', marker='o', 
+                                      markerfacecolor=c, markeredgecolor=c, label=label, **kwargs)
+                        # plot negative w/ unfilled circles
+                        c = cax.get_color()
+                        cax, = ax.plot(x[y < 0], np.abs(y[y < 0]), c=c, ls='None', marker='o',
+                                       markerfacecolor='None', markeredgecolor=c, **kwargs)
+                    else:
+                        cax, = ax.plot(x, y, c=c, ls='None', marker='o', 
+                                      markerfacecolor=c, markeredgecolor=c, label=label, **kwargs)
 
                 if error is not None and hasattr(uvp_plt, 'stats_array'):
                     if error in uvp_plt.stats_array:
@@ -195,7 +250,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
             if average_blpairs: break
     
     # Set log scale
-    ax.set_yscale('log')
+    if logscale:
+        ax.set_yscale('log')
     
     # Add legend
     if legend:
@@ -207,7 +263,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
             ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
         else:
             ax.set_xlabel("$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
-    if ax.get_ylabel() == "":
+    if ax.get_ylabel() == "" and plot_stats is None:
         # Sanitize power spectrum units 
         psunits = uvp_plt.units
         if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
@@ -522,14 +578,3 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     if new_plot:
         return fig
     
-
-def bandpower_bl_cov(uvp):
-    """
-
-    """
-
-
-
-
-
-
