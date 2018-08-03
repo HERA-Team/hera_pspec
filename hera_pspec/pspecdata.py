@@ -5,6 +5,7 @@ import copy, operator, itertools
 from collections import OrderedDict as odict
 import hera_cal as hc
 from hera_pspec import uvpspec, utils, version, pspecbeam, container
+from hera_pspec.flags import construct_factorizable_mask
 from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
 import datetime
@@ -1454,39 +1455,44 @@ class PSpecData(object):
             p_cov[tnum]=np.einsum('ab,cd,bd->ac',M,M,q_cov[tnum])
         return p_cov
 
-    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, unflag=False):
+    def broadcast_dset_flags(self, spw_ranges=None, first='col', greedy_threshold=0.3, n_threshold = 1, 
+                             retain_flags=True, unflag=False, greedy=True):
+
         """
-        For each dataset in self.dset, update the flag_array such that
-        the flagging patterns are time-independent for each baseline given
-        a selection for spectral windows.
-
-        For each frequency pixel in a selected spw, if the fraction of flagged
-        times exceeds time_thresh, then all times are flagged. If it does not,
-        the specific integrations which hold flags in the spw are flagged across
-        all frequencies in the spw.
-
-        Additionally, one can also unflag the flag_array entirely if desired.
-
-        Note: although technically allowed, this function may give unexpected results
-        if multiple spectral windows in spw_ranges have frequency overlap.
-
-        Note: it is generally not recommended to set time_thresh > 0.5, which
-        could lead to substantial amounts of data being flagged.
+        Using the greedy flagging function construct_factorizable_mask from 
+        flags.py, update the flags arrays of the datasets in the object 
+        with masks that are independent in time and frequency.
 
         Parameters
         ----------
-        spw_ranges : list of tuples
-            list of len-2 spectral window tuples, specifying the start (inclusive)
-            and stop (exclusive) index of the frequency array for each spw.
-            Default is to use the whole band
+        spw_ranges : list
+            list of tuples of the form (min_channel, max_channel) defining which
+            spectral window (channel range) to flag - min_channel is inclusive,
+            but max_channel is exclusive
 
-        time_thresh : float
-            Fractional threshold of flagged pixels across time needed to flag all times
-            per freq channel. It is not recommend to set this greater than 0.5
+        first : str
+            either 'col' or 'row', defines which axis is flagged first based on
+            the greedy_threshold - default is 'col'
+
+        greedy_threshold : float
+            the flag fraction beyond which a given row or column is flagged in the
+            first stage of greedy flagging
+
+        n_threshold : int
+            the number of samples needed for a pixel to remain unflagged
+
+        retain_flags : bool
+            if True, then pixels flagged in the file will always remain flagged, even
+            if they meet the n_threshold (default is True)
 
         unflag : bool
-            If True, unflag all data in the spectral window.
+            if True, the entire mask is unflagged. default is False
+
+        greedy : bool
+            if True, greedy flagging takes place, & if False, only n_threshold flagging
+            is used (resulting mask will not be factorizable). default is True
         """
+
         # validate datasets
         self.validate_datasets()
 
@@ -1494,45 +1500,14 @@ class PSpecData(object):
         self.clear_cache()
 
         # spw type check
-        if spw_ranges is None:
+        if spw_ranges == None:
             spw_ranges = [(0, self.Nfreqs)]
-        assert isinstance(spw_ranges, list), "spw_ranges must be fed as a list of tuples"
 
-        # iterate over datasets
-        for dset in self.dsets:
-            # iterate over spw ranges
-            for spw in spw_ranges:
-                self.set_spw(spw)
-                # unflag
-                if unflag:
-                    # unflag for all times
-                    dset.flag_array[:, :, self.spw_range[0]:self.spw_range[1], :] = False
-                    continue
-                # enact time threshold on flag waterfalls
-                # iterate over polarizations
-                for i in range(dset.Npols):
-                    # iterate over unique baselines
-                    ubl = np.unique(dset.baseline_array)
-                    for bl in ubl:
-                        # get baseline-times indices
-                        bl_inds = np.where(np.in1d(dset.baseline_array, bl))[0]
-                        # get flag waterfall
-                        flags = dset.flag_array[bl_inds, 0, :, i].copy()
-                        Ntimes = float(flags.shape[0])
-                        Nfreqs = float(flags.shape[1])
-                        # get time- and freq-continguous flags
-                        freq_contig_flgs = np.sum(flags, axis=1) / Nfreqs > 0.999999
-                        Ntimes_noncontig = np.sum(~freq_contig_flgs, dtype=np.float)
-                        # get freq channels where non-contiguous flags exceed threshold
-                        exceeds_thresh = np.sum(flags[~freq_contig_flgs], axis=0, dtype=np.float) / Ntimes_noncontig > time_thresh
-                        # flag channels for all times that exceed time_thresh
-                        dset.flag_array[bl_inds, :, np.where(exceeds_thresh)[0][:, None], i] = True
-                        # for pixels that have flags but didn't meet broadcasting limit
-                        # flag the integration within the spw
-                        flags[:, np.where(exceeds_thresh)[0]] = False
-                        flag_ints = np.max(flags[:, self.spw_range[0]:self.spw_range[1]], axis=1)
-                        dset.flag_array[bl_inds[flag_ints], :, self.spw_range[0]:self.spw_range[1], i] = True
-
+        # using the construct_factorizable_mask function from flags.py to conduct the flagging and update the objects
+        construct_factorizable_mask(uvdlist=self.dsets, spw_ranges=spw_ranges, first=first, greedy_threshold=greedy_threshold,
+                                    n_threshold = n_threshold, retain_flags=retain_flags, unflag=unflag, greedy=greedy,
+                                    inplace=True)
+                        
     def units(self, little_h=True):
         """
         Return the units of the power spectrum. These are inferred from the
