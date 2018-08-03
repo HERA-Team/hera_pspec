@@ -1,6 +1,7 @@
 import numpy as np
 import pyuvdata
 from hera_pspec import conversions
+import matplotlib
 import matplotlib.pyplot as plt
 import copy
 
@@ -145,4 +146,3 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     
     # Return Axes
     return ax
-    
