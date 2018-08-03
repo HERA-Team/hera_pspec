@@ -1,9 +1,10 @@
 import unittest
 import nose.tools as nt
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import os, copy, sys
-from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils
+from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils, grouping
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 
@@ -11,6 +12,36 @@ from pyuvdata import UVData
 dfiles = [
     'zen.all.xx.LST.1.06964.uvA',
 ]
+
+def axes_contains(ax, obj_list):
+    """
+    Check that a matplotlib.Axes instance contains certain elements.
+    
+    Parameters
+    ----------
+    ax : matplotlib.Axes
+        Axes instance.
+        
+    obj_list : list of tuples
+        List of tuples, one for each type of object to look for. The tuple 
+        should be of the form (matplotlib.object, int), where int is the 
+        number of instances of that object that are expected.
+    """
+    # Get plot elements
+    elems = ax.get_children()
+    
+    # Loop over list of objects that should be in the plot
+    contains_all = False
+    for obj in obj_list:
+        objtype, num_expected = obj
+        num = 0
+        for elem in elems:
+            if isinstance(elem, objtype): num += 1
+        if num != num_expected:
+            return False
+    
+    # Return True if no problems found
+    return True
 
 class Test_Plot(unittest.TestCase):
 
@@ -56,36 +87,6 @@ class Test_Plot(unittest.TestCase):
 
     def runTest(self):
         pass
-    
-    def axes_contains(self, ax, obj_list):
-        """
-        Check that a matplotlib.Axes instance contains certain elements.
-        
-        Parameters
-        ----------
-        ax : matplotlib.Axes
-            Axes instance.
-            
-        obj_list : list of tuples
-            List of tuples, one for each type of object to look for. The tuple 
-            should be of the form (matplotlib.object, int), where int is the 
-            number of instances of that object that are expected.
-        """
-        # Get plot elements
-        elems = ax.get_children()
-        
-        # Loop over list of objects that should be in the plot
-        contains_all = False
-        for obj in obj_list:
-            objtype, num_expected = obj
-            num = 0
-            for elem in elems:
-                if isinstance(elem, objtype): num += 1
-            if num != num_expected:
-                return False
-        
-        # Return True if no problems found
-        return True
             
     def test_plot_average(self):
         """
@@ -96,31 +97,65 @@ class Test_Plot(unittest.TestCase):
         blps = [blp for blp in blpairs]
         
         # Plot the spectra averaged over baseline-pairs and times
-        ax1 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+        f1 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=True)
         elements = [(matplotlib.lines.Line2D, 1),]
-        self.assertTrue( self.axes_contains(ax1, elements) )
+        self.assertTrue( axes_contains(f1.axes[0], elements) )
+        plt.close(f1)
         
         # Average over baseline-pairs but keep the time bins intact
-        ax2 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+        f2 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=False)
         elements = [(matplotlib.lines.Line2D, self.uvp.Ntimes),]
-        self.assertTrue( self.axes_contains(ax2, elements) )
-        
+        self.assertTrue( axes_contains(f2.axes[0], elements) )
+        plt.close(f2)
+
         # Average over times, but keep the baseline-pairs separate
-        ax3 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+        f3 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=False, average_times=True)
         elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
-        self.assertTrue( self.axes_contains(ax3, elements) )
-        
+        self.assertTrue( axes_contains(f3.axes[0], elements) )
+        plt.close(f3)
+
         # Plot the spectra averaged over baseline-pairs and times, but also 
         # fold the delay axis
-        ax4 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+        f4 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=True,
                                   fold=True)
         elements = [(matplotlib.lines.Line2D, 1),]
-        self.assertTrue( self.axes_contains(ax4, elements) )
+        self.assertTrue( axes_contains(f4.axes[0], elements) )
+        plt.close(f4)
         
+        # Plot imaginary part
+        f4 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+                                  average_blpairs=False, average_times=True, 
+                                  component='imag')
+        elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
+        self.assertTrue( axes_contains(f4.axes[0], elements) )
+        plt.close(f4)
+        
+        # Plot abs
+        f5 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+                                  average_blpairs=False, average_times=True, 
+                                  component='abs')
+        elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
+        self.assertTrue( axes_contains(f4.axes[0], elements) )
+        plt.close(f5)
+        
+        # test errorbar plotting w/ markers
+
+        # bootstrap resample
+        (uvp_avg, _,
+         _) = grouping.bootstrap_resampled_error(self.uvp, time_avg=True,
+                                                 Nsamples=100, normal_std=True,
+                                                 robust_std=False, verbose=False)
+
+        f6 = plot.delay_spectrum(uvp_avg, uvp_avg.get_blpairs(), spw=0,
+                                pol='xx', average_blpairs=False, average_times=False,
+                                component='real', error='normal_std', lines=False,
+                                markers=True)
+        plt.close(f6)
+
     def test_plot_cosmo(self):
         """
         Test that cosmological units can be used on plots.
@@ -131,20 +166,61 @@ class Test_Plot(unittest.TestCase):
         
         # Set cosmology and plot in non-delay (i.e. cosmological) units
         self.uvp.set_cosmology(conversions.Cosmo_Conversions())
-        ax1 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+        f1 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=True, 
                                   delay=False)
         elements = [(matplotlib.lines.Line2D, 1), (matplotlib.legend.Legend, 0)]
-        self.assertTrue( self.axes_contains(ax1, elements) )
-        
+        self.assertTrue( axes_contains(f1.axes[0], elements) )
+        plt.close(f1)
+
         # Plot in Delta^2 units
-        ax2 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
+        f2 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol='xx', 
                                   average_blpairs=True, average_times=True, 
                                   delay=False, deltasq=True, legend=True)
-        
         # Should contain 1 line and 1 legend
         elements = [(matplotlib.lines.Line2D, 1), (matplotlib.legend.Legend, 1)]
-        self.assertTrue( self.axes_contains(ax2, elements) )
+        self.assertTrue( axes_contains(f2.axes[0], elements) )
+        plt.close(f2)
+
+    def test_plot_waterfall(self):
+        """
+        Test that waterfall can be plotted.
+        """
+        # Unpack the list of baseline-pairs into a Python list
+        blpairs = np.unique(self.uvp.blpair_array)        
+        blps = [blp for blp in blpairs]
         
+        # Set cosmology and plot in non-delay (i.e. cosmological) units
+        self.uvp.set_cosmology(conversions.Cosmo_Conversions(), overwrite=True)
+        f1 = plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx', 
+                                   average_blpairs=True, delay=False)
+        plt.close(f1)
+
+        # Plot in Delta^2 units
+        f2 = plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx', 
+                                   average_blpairs=True, delay=False, 
+                                   deltasq=True)
+        plt.close(f2)
+
+        # Try some other arguments
+        _blps = [self.uvp.blpair_to_antnums(blp) for blp in blps]
+        f3 = plot.delay_waterfall(self.uvp, [_blps,], spw=0, pol='xx', 
+                                   average_blpairs=False, delay=True, 
+                                   log=False, vmin=-1., vmax=3., 
+                                   cmap='RdBu', fold=True, component='abs')
+        plt.close(f3)
+        
+        # Try with imaginary component
+        f4 = plot.delay_waterfall(self.uvp, [_blps,], spw=0, pol='xx', 
+                                   average_blpairs=False, delay=True, 
+                                   log=False, vmin=-1., vmax=3., 
+                                   cmap='RdBu', fold=True, component='imag')
+        plt.close(f4)
+        
+        # Try some more arguments
+        fig, axes = plt.subplots(1, len(blps))
+        plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx',
+                              lst_in_hrs=False, axes=axes, component='abs')
+
 if __name__ == "__main__":
     unittest.main()

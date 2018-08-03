@@ -8,9 +8,9 @@
 #---------------------------------------------------------------
 io :
   work_dir : './'         # directory to work in
-  out_dir : './'          # directory to dump all output in
-  logfile : 'preprocess_out.log'  # logfile   
-  errfile : 'preprocess_err.log' # error file
+  out_dir : './'          # directory to put output: root is work_dir
+  logfile : 'preprocess_out.log'  # logfile: root is work_dir
+  errfile : 'preprocess_err.log' # error file: root is work_dir
   joinlog : False       # redirect error output into logfile
   overwrite : True     # overwrite
   verbose : True        # report feedback to standard output
@@ -28,17 +28,27 @@ analysis :
 
   multiproc : False    # use multiprocess module
   nproc : 8               # number of processes to spawn
+  maxiter : 1
 
 #---------------------------------------------------------------
 # Data Parameters
 #---------------------------------------------------------------
 data :
-  pols :                  # list of linear polarizations of data
+  # list of linear polarizations of data to format data template with
+  pols :
     - 'xx'
     - 'yy'
-  groupname : "all"       # a single groupname
-  # full path to a data template with {pol} and {group}
-  input_data_template : '../../hera_pspec/data/zen.{group}.{pol}.LST.1.06964.uvA'
+
+  # a groupname to format data template with
+  groupname : "all"     
+
+  # a single path to a (glob-parseable) template with {pol} and {group} fields
+  data_root : "./"                                      # data root dir
+  data_template : 'zen.{group}.{pol}.LST.1.?????.uvA'   # data basename
+
+  # data baseline-type length range [meters] and angle range [degrees]
+  bl_len_range : [14, 16]  
+  bl_deg_range : [0, 1]
 
 #---------------------------------------------------------------
 # Algorithm Parameters
@@ -46,11 +56,11 @@ data :
 algorithm :
 
   # Data Reformatting
-  reformat : 
-    reformat_outfile : "zen.{group}.{len:03d}_{deg:03d}.{pol}.{suffix}"   # outfile template
-    new_data_template : "zen.{group}.*.{pol}.{suffix}" # new data template to use        
-    bl_len_range : [0, 10000.0]  # [min, max] range of baseline lengths to extract [meters]
-    bltol : 1.0   # baseline redundancy tolerance in meters
+  reformat :
+    # output file template basename: root is out_dir
+    reformat_outfile : "zen.{group}.{len:03d}_{deg:03d}.{pol}.{suffix}"
+    # a new data template to adopt w/ {group}, {pol} and {suffix} fields: root is out_dir
+    new_data_template : "zen.{group}.*.{pol}.{suffix}"
 
   # RFI Flagging
   rfi_flag :
@@ -75,7 +85,7 @@ algorithm :
     dly_params :       # if dly_filter, these are the delay filter params
       min_dly : 1500.0
       horizon : 0.0
-      tol : 0.000000001
+      tol : 0.0001
       maxiter : 100
       window : 'blackman-harris'
       flag_nchan_low : 25
@@ -101,7 +111,7 @@ algorithm :
       standoff : 50.0
       horizon : 1.0
       min_dly : 0.0
-      tol : 0.000000001
+      tol : 0.0001
       maxiter : 100
       window : 'tukey'
       skip_wgt : 0.5

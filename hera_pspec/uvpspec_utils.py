@@ -1,7 +1,7 @@
-
 import numpy as np
 import copy, operator
 from collections import OrderedDict as odict
+
 
 def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     """
@@ -26,6 +26,7 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     # get blpair baselines in integer form
     bl1 = np.floor(uvp.blpair_array / 1e6)
     blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int32).T
+
     # ensure bls is in integer form
     if isinstance(bls, tuple):
         assert isinstance(bls[0], (int, np.integer)), "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
@@ -44,7 +45,8 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     return blp_select
 
 
-def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, times=None, pols=None, h5file=None):
+def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, times=None,
+            pols=None, h5file=None):
 
     """
     Select function for selecting out certain slices of the data, as well as loading in data from HDF5 file.
@@ -73,16 +75,20 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
     h5file : h5py file descriptor, used for loading in selection of data from HDF5 file
     """
     if spws is not None:
-        # spectral window selection
-        spw_select = uvp.spw_to_indices(spws)
+        spw_freq_select = uvp.spw_to_freq_indices(spws)
+        spw_dly_select = uvp.spw_to_dly_indices(spws)
+        spw_select = uvp.spw_indices(spws)
+        uvp.spw_freq_array = uvp.spw_freq_array[spw_freq_select]
+        uvp.spw_dly_array = uvp.spw_dly_array[spw_dly_select]
         uvp.spw_array = uvp.spw_array[spw_select]
-        uvp.freq_array = uvp.freq_array[spw_select]
-        uvp.dly_array = uvp.dly_array[spw_select]
-        uvp.Nspws = len(np.unique(uvp.spw_array))
+        uvp.freq_array = uvp.freq_array[spw_freq_select]
+        uvp.dly_array = uvp.dly_array[spw_dly_select]
         uvp.Ndlys = len(np.unique(uvp.dly_array))
-        uvp.Nspwdlys = len(uvp.spw_array)
+        uvp.Nspws = len(np.unique(uvp.spw_array))
+        uvp.Nspwdlys = len(uvp.spw_dly_array)
+        uvp.Nspwfreqs = len(uvp.spw_freq_array)
         if hasattr(uvp, 'scalar_array'):
-            uvp.scalar_array = uvp.scalar_array[spws, :]
+            uvp.scalar_array = uvp.scalar_array[spw_select, :]
 
     if bls is not None:
         # get blpair baselines in integer form
@@ -124,12 +130,17 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.Ntimes = len(np.unique(uvp.time_avg_array))
         uvp.Nblpairs = len(np.unique(uvp.blpair_array))
         uvp.Nblpairts = len(uvp.blpair_array)
-        if bls is not None:
-            bl_array = np.unique(blpair_bls)
-            bl_select = reduce(operator.add, map(lambda b: uvp.bl_array==b, bl_array))
-            uvp.bl_array = uvp.bl_array[bl_select]
-            uvp.bl_vecs = uvp.bl_vecs[bl_select]
-            uvp.Nbls = len(uvp.bl_array)
+
+        # Calculate unique baselines from new blpair_array
+        new_blpairs = np.unique(uvp.blpair_array)
+        bl1 = np.floor(new_blpairs / 1e6)
+        new_bls = np.unique([bl1, new_blpairs - bl1*1e6]).astype(np.int32)
+
+        # Set baseline attributes
+        bl_select = [bl in new_bls for bl in uvp.bl_array]
+        uvp.bl_array = uvp.bl_array[bl_select]
+        uvp.bl_vecs = uvp.bl_vecs[bl_select]
+        uvp.Nbls = len(uvp.bl_array)
 
     if pols is not None:
         # assert form
@@ -157,8 +168,10 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         ints = odict()
         nsmp = odict()
         cov = odict()
-        store_cov = hasattr(uvp, 'cov_array')
-
+        if h5file is not None:
+            store_cov = 'cov_spw0' in h5file
+        else:
+            store_cov = hasattr(uvp, 'cov_array')
         for s in np.unique(uvp.spw_array):
             if h5file is not None:
                 data[s] = h5file['data_spw{}'.format(s)][blp_select, :, pol_select]
@@ -202,14 +215,13 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
+        if store_cov:
+            uvp.cov_array = cov
 
-        # Check for covariance array
-        if store_cov: uvp.cov_array = cov
-
-    except AttributeError as e:
-        # If no h5file fed and hasattr(uvp, data_array) is False then just
-        # load meta-data
+    except AttributeError:
+        # if no h5file fed and hasattr(uvp, data_array) is False then just load meta-data
         pass
+
 
 def _blpair_to_antnums(blpair):
     """
@@ -230,6 +242,10 @@ def _blpair_to_antnums(blpair):
     ant2 = int(np.floor(blpair / 1e6 - ant1*1e3))
     ant3 = int(np.floor(blpair / 1e3 - ant1*1e6 - ant2*1e3))
     ant4 = int(np.floor(blpair - ant1*1e9 - ant2*1e6 - ant3*1e3))
+    ant1 -= 100
+    ant2 -= 100
+    ant3 -= 100
+    ant4 -= 100
 
     # form antnums tuple
     antnums = ((ant1, ant2), (ant3, ant4))
@@ -239,6 +255,9 @@ def _blpair_to_antnums(blpair):
 def _antnums_to_blpair(antnums):
     """
     Convert nested tuple of antenna numbers to baseline-pair integer.
+    A baseline-pair integer is an i12 integer that is the antenna numbers
+    + 100 directly concatenated (i.e. string contatenation).
+    Ex: ((1, 2), (3, 4)) --> 101 + 102 + 103 + 104 --> 101102103014.
 
     Parameters
     ----------
@@ -252,10 +271,10 @@ def _antnums_to_blpair(antnums):
         baseline-pair integer
     """
     # get antennas
-    ant1 = antnums[0][0]
-    ant2 = antnums[0][1]
-    ant3 = antnums[1][0]
-    ant4 = antnums[1][1]
+    ant1 = antnums[0][0] + 100
+    ant2 = antnums[0][1] + 100
+    ant3 = antnums[1][0] + 100
+    ant4 = antnums[1][1] + 100
 
     # form blpair
     blpair = int(ant1*1e9 + ant2*1e6 + ant3*1e3 + ant4)
@@ -279,6 +298,8 @@ def _bl_to_antnums(bl):
     # get antennas
     ant1 = int(np.floor(bl / 1e3))
     ant2 = int(np.floor(bl - ant1*1e3))
+    ant1 -= 100
+    ant2 -= 100
 
     # form antnums tuple
     antnums = (ant1, ant2)
@@ -288,6 +309,9 @@ def _bl_to_antnums(bl):
 def _antnums_to_bl(antnums):
     """
     Convert tuple of antenna numbers to baseline integer.
+    A baseline integer is the two antenna numbers + 100
+    directly (i.e. string) concatenated. Ex: (1, 2) -->
+    101 + 102 --> 101102.
 
     Parameters
     ----------
@@ -297,17 +321,17 @@ def _antnums_to_bl(antnums):
 
     Returns
     -------
-    blpair : <i6 integer
+    bl : <i6 integer
         baseline integer
     """
     # get antennas
-    ant1 = antnums[0]
-    ant2 = antnums[1]
+    ant1 = antnums[0] + 100
+    ant2 = antnums[1] + 100
 
-    # form blpair
-    blpair = int(ant1*1e3 + ant2)
+    # form bl
+    bl = int(ant1*1e3 + ant2)
 
-    return blpair
+    return bl
 
 def _blpair_to_bls(blpair):
     """

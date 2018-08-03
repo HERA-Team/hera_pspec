@@ -12,7 +12,7 @@ For usage examples and documentation, see http://hera-pspec.readthedocs.io/en/la
 
 ### Code Dependencies
 
-* numpy >= 1.10
+* numpy >= 1.14
 * pyuvdata (`pip install pyuvdata` or use https://github.com/HERA-Team/pyuvdata.git)
 * aipy (```conda install -c conda-forge aipy```)
 * scipy >= 0.19
