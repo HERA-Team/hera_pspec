@@ -226,9 +226,9 @@ class PSpecBeamBase(object):
         
         # Check frequency bounds
         if np.min(freqs) < self.beam_freqs.min():
-            raise ValueError("Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs)))
+            print("Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs)))
         if np.max(freqs) > self.beam_freqs.max(): 
-            raise ValueError("Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs)))
+            print("Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs)))
         
         Op = interp1d(self.beam_freqs/1e6, self.power_beam_int(pol=pol), 
                       kind='quadratic', fill_value='extrapolate')(freqs/1e6)
