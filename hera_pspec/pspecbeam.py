@@ -5,6 +5,8 @@ import scipy.integrate as integrate
 from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
 import aipy
+from collections import OrderedDict as odict
+
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, 
                           num_steps=5000, taper='none', little_h=True, 
@@ -491,17 +493,16 @@ class PSpecBeamFromArray(PSpecBeamBase):
             Cosmology object. Uses the default cosmology object if not 
             specified. Default: None.
         """
-        self.allowed_pols = ['pI', 'pQ', 'pU', 'pV', 
-                             'XX', 'YY', 'XY', 'YX']
         self.OmegaP = {}; self.OmegaPP = {}
+        self.allowed_pols = [1, 2, 3, 4, -5, -6, -7, -8]
         
         # Set beam_freqs
-        self.beam_freqs = np.array(beam_freqs)
+        self.beam_freqs = np.asarray(beam_freqs)
         
         if isinstance(OmegaP, np.ndarray) and isinstance(OmegaPP, np.ndarray):
             # Only single arrays were specified; assume I
-            OmegaP = {'pI': OmegaP}
-            OmegaPP = {'pI': OmegaPP}
+            OmegaP = {1: OmegaP}
+            OmegaPP = {1: OmegaPP}
         
         elif isinstance(OmegaP, np.ndarray) or isinstance(OmegaPP, np.ndarray):
             # Mixed dict and array types are not allowed
@@ -512,18 +513,30 @@ class PSpecBeamFromArray(PSpecBeamBase):
             pass
         
         # Should now have two dicts if everything is OK
-        if not isinstance(OmegaP, dict) or not isinstance(OmegaPP, dict):
+        if not isinstance(OmegaP, (odict, dict)) or not isinstance(OmegaPP, (odict, dict)):
             raise TypeError("OmegaP and OmegaPP must both be either dicts or "
                             "arrays.")
         
         # Check for disallowed polarizations
         for key in OmegaP.keys():
+            # turn into pol integer if a pol string
+            if isinstance(key, str):
+                new_key = uvutils.polstr2num(key)
+                OmegaP[new_key] = OmegaP.pop(key)
+                key = new_key
+            # check its an allowed pol
             if key not in self.allowed_pols:
               raise KeyError("Unrecognized polarization '%s' in OmegaP." % key)
         for key in OmegaPP.keys():
+            # turn into pol integer if a pol string
+            if isinstance(key, str):
+                new_key = uvutils.polstr2num(key)
+                OmegaPP[new_key] = OmegaPP.pop(key)
+                key = new_key
+            # check its an allowed pol
             if key not in self.allowed_pols:
               raise KeyError("Unrecognized polarization '%s' in OmegaPP." % key)
-        
+
         # Check for available polarizations
         for pol in self.allowed_pols:
             if pol in OmegaP.keys() or pol in OmegaPP.keys():
@@ -565,14 +578,18 @@ class PSpecBeamFromArray(PSpecBeamBase):
             Integral over beam solid angle squared, as a function of frequency.  
             Must have the same shape as self.beam_freqs.
         """
+        # Type check
+        if isinstance(pol, str):
+            pol = uvutils.polstr2num(pol)
+
         # Check for allowed polarization
         if pol not in self.allowed_pols:
             raise KeyError("Polarization '%s' is not valid." % pol)
         
         # Make sure OmegaP and OmegaPP are arrays
         try:
-            OmegaP = np.array(OmegaP).astype(float)
-            OmegaPP = np.array(OmegaPP).astype(float)
+            OmegaP = np.array(OmegaP).astype(np.float)
+            OmegaPP = np.array(OmegaPP).astype(np.float)
         except:
             raise TypeError("OmegaP and OmegaPP must both be array_like.")
         
@@ -604,10 +621,14 @@ class PSpecBeamFromArray(PSpecBeamBase):
         primary_beam_area: float, array-like
             Scalar integral over beam solid angle.
         """
+        # type check
+        if isinstance(pol, str):
+            pol = uvutils.polstr2num(pol)
+
         if pol in self.OmegaP.keys():
             return self.OmegaP[pol]
         else:
-            available_pols = ", ".join(self.OmegaP.keys())
+            available_pols = ", ".join(map(str, self.OmegaP.keys()))
             raise KeyError("OmegaP not specified for polarization '%s'. " 
                            "Available polarizations are: %s" \
                            % (pol, available_pols))
@@ -630,10 +651,14 @@ class PSpecBeamFromArray(PSpecBeamBase):
         primary_beam_area: array_like
             Array of floats containing the primary beam-squared area.
         """
+        # type check
+        if isinstance(pol, str):
+            pol = uvutils.polstr2num(pol)
+            
         if pol in self.OmegaPP.keys():
             return self.OmegaPP[pol]
         else:
-            available_pols = ", ".join(self.OmegaPP.keys())
+            available_pols = ", ".join(map(str, self.OmegaPP.keys()))
             raise KeyError("OmegaPP not specified for polarization '%s'. " 
                            "Available polarizations are: %s" \
                            % (pol, available_pols))
@@ -645,6 +670,6 @@ class PSpecBeamFromArray(PSpecBeamBase):
         s = "PSpecBeamFromArray object\n"
         s += "\tFrequency range: Min. %4.4e Hz, Max. %4.4e Hz\n" \
               % (np.min(self.beam_freqs), np.max(self.beam_freqs))
-        s += "\tAvailable pols: %s" % (", ".join(self.OmegaP.keys()))
+        s += "\tAvailable pols: %s" % (", ".join(map(str, self.OmegaP.keys())))
         return s
         
