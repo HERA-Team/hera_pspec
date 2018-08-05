@@ -2199,7 +2199,11 @@ class PSpecData(object):
                     if i < 1 and j < 1:
                         # insert time info
                         inds1 = dset1.antpair2ind(*bl1)
-                        inds2 = dset1.antpair2ind(*bl2)
+                        if len(inds1) == 0:
+                            inds1 = dset1.antpair2ind(*bl1[::-1])
+                        inds2 = dset2.antpair2ind(*bl2)
+                        if len(inds2) == 0:
+                            inds2 = dset2.antpair2ind(*bl2[::-1])
                         time1.extend(dset1.time_array[inds1])
                         time2.extend(dset2.time_array[inds2])
                         lst1.extend(dset1.lst_array[inds1])
