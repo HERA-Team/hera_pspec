@@ -49,7 +49,7 @@ class PSpecData(object):
         """
         self.clear_cache()  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
-        self.dsets_std=[]
+        self.dsets_std = []
         self.Nfreqs = None
         self.spw_range = None
         self.spw_Nfreqs = None
@@ -2167,12 +2167,30 @@ class PSpecData(object):
                     wgts2 = self.w(key2).T
 
                     # get average of nsample across frequency axis, weighted by wgts
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) \
+                             / np.sum(wgts1, axis=1).clip(1, np.inf)
+                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) \
+                             / np.sum(wgts2, axis=1).clip(1, np.inf)
 
-                    # take inverse average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
-                    # inverse avg is done b/c nsamp_1 ~ 1/sigma_1 and nsamp_2 ~ 1/sigma_2 where sigma is a proxy for std of noise
-                    pol_ints.extend(1./np.mean([1./nsamp1, 1./nsamp2], axis=0) * dset1.integration_time)
+                    # get integ1
+                    blts1 = dset1._key2inds(bl1)
+                    if len(blts1[0]) == 0:
+                        blts1 = blts1[1]
+                    else:
+                        blts1 = blts1[0]
+                    integ1 = dset1.integration_time[blts1] * nsamp1
+                    # get integ2
+                    blts2 = dset2._key2inds(bl2)
+                    if len(blts2[0]) == 0:
+                        blts2 = blts2[1]
+                    else:
+                        blts2 = blts2[0]
+                    integ2 = dset2.integration_time[blts2] * nsamp2
+
+                    # take inverse average of integ1 and integ2 to get total integration
+                    # inverse avg is done b/c integ ~ 1/noise_var
+                    # and due to non-linear operation of V_1 * V_2
+                    pol_ints.extend(1./np.mean([1./integ1, 1./integ2], axis=0))
 
                     # combined weight is geometric mean
                     pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
