@@ -19,6 +19,7 @@ def hash(w):
     DeprecationWarning("utils.hash is deprecated.")
     return md5.md5(w.copy(order='C')).digest()
 
+
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size 
@@ -80,6 +81,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     C /= np.where(W > 0, W, 1)
     C -= np.outer(x1, x2)
     return C
+
 
 def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
     """
@@ -276,43 +278,11 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
     # construct baseline pairs
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
-        (_bls1, _bls2, 
-         _blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, group=False,
+        (bls1, bls2, 
+         blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, group=False,
                                     exclude_permutations=exclude_permutations)
-
-        # filter based on xants, existance in uvd1 and uvd2 and bl_len_range
-        bls1, bls2 = [], []
-        for bl1, bl2 in _blps:
-            # get baseline length and angle
-            bl1i = uvd1.antnums_to_baseline(*bl1)
-            bl2i = uvd1.antnums_to_baseline(*bl2)
-            bl1v = (antpos[bl1[0]] - antpos[bl1[1]])[:2]
-            bl2v = (antpos[bl2[0]] - antpos[bl2[1]])[:2]
-            bl1_len, bl2_len = np.linalg.norm(bl1v), np.linalg.norm(bl2v)
-            bl1_deg = np.arctan2(*bl1v[::-1]) * 180 / np.pi
-            if bl1_deg < 0: bl1_deg = (bl1_deg + 180) % 360
-            bl2_deg = np.arctan2(*bl2v[::-1]) * 180 / np.pi
-            if bl2_deg < 0: bl2_deg = (bl2_deg + 180) % 360
-            bl_len = np.mean([bl1_len, bl2_len])
-            bl_deg = np.mean([bl1_deg, bl2_deg])
-            # filter based on length cut
-            if bl_len < bl_len_range[0] or bl_len > bl_len_range[1]:
-                continue
-            # filter based on angle cut
-            if bl_deg < bl_deg_range[0] or bl_deg > bl_deg_range[1]:
-                continue
-            # filter on other things
-            if filter_blpairs:
-                if (bl1i not in uvd1.baseline_array or bl1[0] in xants1 or bl1[1] in xants1) \
-                   or (bl2i not in uvd2.baseline_array or bl2[0] in xants2 or bl2[1] in xants2):
-                   continue
-            bls1.append(bl1)
-            bls2.append(bl2)
-
         if len(bls1) < 1:
             continue
-
-        blps = zip(bls1, bls2)
 
         # group if desired
         if Nblps_per_group is not None:
