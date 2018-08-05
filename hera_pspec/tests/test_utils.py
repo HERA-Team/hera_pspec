@@ -184,7 +184,7 @@ class Test_Utils(unittest.TestCase):
                                    Nblps_per_group=2)  
         nt.assert_equal(len(blps), 10)
         nt.assert_true(isinstance(blps[0], list))
-        nt.assert_equal(blps[0], [((24, 37), (25, 38)), ((24, 37), (24, 37))])
+        nt.assert_equal(blps[0], [((37, 24), (38, 25)), ((37, 24), (37, 24))])
 
         # test exceptions
         uvd2 = copy.deepcopy(uvd)

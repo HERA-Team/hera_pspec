@@ -682,17 +682,22 @@ class UVPSpec(object):
     
         Parameters
         ----------
-        spw : int
-            Spectral window index or list of indices.
+        spw : int or tuple
+            Spectral window index, or spw tuple from get_spw_ranges(), or list of either.
 
         Returns
         -------
         freq_indices : array_like
-            Index array for specified spw
+            Index array for specified spw(s) in spw_freq_array.
         """
         # convert to list if int
-        if isinstance(spw, (int, np.integer)):
+        if isinstance(spw, (int, np.integer, tuple)):
             spw = [spw]
+
+        # if spws is a list of spw tuples, convert to spw indices
+        if np.all([isinstance(s, tuple) for s in spw]):
+            spw_ranges = uvp.get_spw_ranges()
+            spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data
         assert np.array(map(lambda s: s in self.spw_freq_array, spw)).all(), "spws {} not all found in data".format(spw)
@@ -712,17 +717,22 @@ class UVPSpec(object):
     
         Parameters
         ----------
-        spw : int
-            Spectral window index or list of indices.
+        spw : int or tuple
+            Spectral window index, or spw tuple from get_spw_ranges(), or list of either.
 
         Returns
         -------
         dly_indices : array_like
-            Index array for specified spw
+            Index array for specified spw(s) in spw_dly_array.
         """
         # convert to list if int
-        if isinstance(spw, (int, np.integer)):
+        if isinstance(spw, (int, np.integer, tuple)):
             spw = [spw]
+
+        # if spws is a list of spw tuples, convert to spw indices
+        if np.all([isinstance(s, tuple) for s in spw]):
+            spw_ranges = uvp.get_spw_ranges()
+            spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data
         assert np.array(map(lambda s: s in self.spw_dly_array, spw)).all(), "spws {} not all found in data".format(spw)
@@ -745,17 +755,22 @@ class UVPSpec(object):
     
         Parameters
         ----------
-        spw : int
-            Spectral window index or list of indices.
+        spw : int or tuple
+            Spectral window index, or spw tuple from get_spw_ranges(), or list of either.
 
         Returns
         -------
         spw_indices : array_like
-            Index array for specified spw
+            Index array for specified spw(s) in spw_array.
         """
         # convert to list if int
-        if isinstance(spw, (int, np.integer)):
+        if isinstance(spw, (int, np.integer, tuple)):
             spw = [spw]
+
+        # if spws is a list of spw tuples, convert to spw indices
+        if np.all([isinstance(s, tuple) for s in spw]):
+            spw_ranges = uvp.get_spw_ranges()
+            spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data
         assert np.array(map(lambda s: s in self.spw_array, spw)).all(), "spws {} not all found in data".format(spw)

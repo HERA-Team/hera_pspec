@@ -2420,7 +2420,7 @@ class PSpecData(object):
         # iterate over datasets and apply factor
         for i, dset in enumerate(self.dsets):
             # check dset vis units
-            if dset.vis_units != 'Jy':
+            if dset.vis_units.upper() != 'JY':
                 print "Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units)
                 continue
             for j, p in enumerate(dset.polarization_array):
@@ -2675,7 +2675,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         except ValueError:
             # at least one of the dset loads failed due to no data being present
             utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
-            return
+            return None, None
 
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
@@ -2697,7 +2697,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data being present
                 utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
-                return
+                return None, None
 
         assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 

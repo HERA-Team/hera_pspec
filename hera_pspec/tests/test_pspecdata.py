@@ -999,7 +999,6 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
         nt.assert_equal(uvp.get_data((0, 124125124125, 'xx')).shape, (60, 14))
 
-        # check select
         uvp.select(spws=[1])
         nt.assert_equal(uvp.Nspws, 1)
         nt.assert_equal(uvp.Ndlys, 10)
@@ -1305,7 +1304,7 @@ def test_pspec_run():
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
     psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
-                              blpairs=[((500, 501), (600, 601))])
+                            blpairs=[((500, 501), (600, 601))])
     nt.assert_equal(psc, None)
     nt.assert_false(os.path.exists("./out.h5"))
     uvds = []

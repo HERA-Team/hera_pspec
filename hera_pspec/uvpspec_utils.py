@@ -294,6 +294,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
     h5file : h5py file descriptor, used for loading in selection of data from HDF5 file
     """
     if spws is not None:
+        # make selections
         spw_freq_select = uvp.spw_to_freq_indices(spws)
         spw_dly_select = uvp.spw_to_dly_indices(spws)
         spw_select = uvp.spw_indices(spws)
@@ -308,6 +309,17 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, tim
         uvp.Nspwfreqs = len(uvp.spw_freq_array)
         if hasattr(uvp, 'scalar_array'):
             uvp.scalar_array = uvp.scalar_array[spw_select, :]
+        # down-convert spw indices such that spw_array == np.arange(Nspws)
+        for i in range(uvp.Nspws):
+            if i in uvp.spw_array:
+                continue
+            spw = np.min(uvp.spw_array[uvp.spw_array > i])
+            spw_freq_select = uvp.spw_to_freq_indices(spw)
+            spw_dly_select = uvp.spw_to_dly_indices(spw)
+            spw_select = uvp.spw_indices(spw)
+            uvp.spw_freq_array[spw_freq_select] = i
+            uvp.spw_dly_array[spw_dly_select] = i
+            uvp.spw_array[spw_select] = i
 
     if bls is not None:
         # get blpair baselines in integer form
