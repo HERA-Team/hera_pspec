@@ -98,16 +98,80 @@
   
 <!--  <div id="zoom_panel" class="img-zoom-result"></div>-->
   
+  <div class="w3-bar w3-light-grey" id="select-container">
+    
+    <div class="w3-dropdown-hover w3-right">
+      <button class="w3-button" id="pipeline-button" style="width:16em">
+        &#9673; &nbsp; <span class="info-button" id=pipeline-status>Pipeline Stage</span>
+      </button>
+      <div class="w3-dropdown-content w3-bar-block w3-card-4" id="pipeline-select">
+      </div>
+    </div>
+    
+    <div class="w3-dropdown-hover w3-right">
+      <button class="w3-button" id="lst-button" style="width:10em">
+        &#x1f550; &nbsp; <span class="info-button" id=lst-status>LST</span>
+      </button>
+      <div class="w3-dropdown-content w3-bar-block w3-card-4" id="lst-select">
+      </div>
+    </div>
+    
+    <div class="w3-dropdown-hover w3-right">
+      <button class="w3-button" id="pol-button" style="width:10em">
+        &#10011; &nbsp; <span class="info-button" id=pol-status>Pol.</span>
+      </button>
+      <div class="w3-dropdown-content w3-bar-block w3-card-4" id="pol-select">
+      </div>
+    </div>
+    
+    <div class="w3-dropdown-hover w3-right">
+      <button class="w3-button" id="redgrp-button" style="width:12em">
+        &#x2817; &nbsp; <span class="info-button" id=redgrp-status>Baseline Group</span>
+      </button>
+      <div class="w3-dropdown-content w3-bar-block w3-card-4" id="redgrp-select">
+      </div>
+    </div>
+    
+  </div>
+  
+<!--  <div class="w3-bar w3-gray" id="select-container">-->
+<!--    <div class="w3-bar-item w3-right" id="pipeline-status" style="text-align: center; width:12em">LST-binned data</div>-->
+<!--    <div class="w3-bar-item w3-right" id="lst-status" style="text-align: center; width:12em">1.01525</div>-->
+<!--    <div class="w3-bar-item w3-right" id="redgrp-status" style="text-align: center; width:12em">Group 0</div>-->
+<!--  </div>-->
+  
   <div id="flow">
     <h1 id="blname">Start here.</h2>
     
   </div>
   
-  <p><a onclick="load_baseline(11, 12)" href="javascript:void(0);">Load report</a></p>
+<!--  <p><a onclick="load_baseline(11, 12)" href="javascript:void(0);">Load report</a></p>-->
 
 <script>
 //list_baselines();
-grid_red_bls("zen.grp1.of1.xx.LST.1.71736", "uvOCRSLTF.XX");
+//grid_red_bls("zen.grp1.of1.xx.LST.1.71736", "uvOCRSLTF.XX");
+
+// Initialise Data object
+var dat = new Data();
+
+// Set-up pipeline dropdown
+populate_dropdown("pipeline", dat.prefixes, dat.prefix_names, "select_callback");
+populate_dropdown("lst", dat.lsts, dat.lsts, "select_callback");
+populate_dropdown("pol", dat.pols, dat.pols, "select_callback");
+populate_dropdown("redgrp", dat.red_bls, dat.red_bls, "select_callback");
+
+// Default display
+dropdown_grid();
+
+document.onkeydown = move_next_lst;
+
+// Disable LST and red. bl dropdowns
+//clear_dropdown("lst", false);
+//clear_dropdown("redgrp", false);
+
+
+//grid_red_bls("zen.grp1.of1.xx.LST.1.71736", "uvOCRSLTF.XX");
+
 </script>
 
 <!-- End page content -->
