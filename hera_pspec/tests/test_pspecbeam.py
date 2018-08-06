@@ -82,11 +82,7 @@ class Test_DataSet(unittest.TestCase):
         M = beam.Jy_to_mK(np.linspace(100e6, 200e6, 11))
         nt.assert_equal(len(M), 11)
         nt.assert_almost_equal(M[0], 40.643366654821904)
-        
-        # Extrapolation will fail
-        nt.assert_raises(ValueError, beam.Jy_to_mK, 99e6)
-        nt.assert_raises(ValueError, beam.Jy_to_mK, 201e6)
-        
+                
         # test exception
         nt.assert_raises(TypeError, beam.Jy_to_mK, [1])
         nt.assert_raises(TypeError, beam.Jy_to_mK, np.array([1]))

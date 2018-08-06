@@ -49,7 +49,7 @@ class PSpecData(object):
         """
         self.clear_cache()  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
-        self.dsets_std=[]
+        self.dsets_std = []
         self.Nfreqs = None
         self.spw_range = None
         self.spw_Nfreqs = None
@@ -2167,12 +2167,30 @@ class PSpecData(object):
                     wgts2 = self.w(key2).T
 
                     # get average of nsample across frequency axis, weighted by wgts
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) \
+                             / np.sum(wgts1, axis=1).clip(1, np.inf)
+                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) \
+                             / np.sum(wgts2, axis=1).clip(1, np.inf)
 
-                    # take inverse average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
-                    # inverse avg is done b/c nsamp_1 ~ 1/sigma_1 and nsamp_2 ~ 1/sigma_2 where sigma is a proxy for std of noise
-                    pol_ints.extend(1./np.mean([1./nsamp1, 1./nsamp2], axis=0) * dset1.integration_time)
+                    # get integ1
+                    blts1 = dset1._key2inds(bl1)
+                    if len(blts1[0]) == 0:
+                        blts1 = blts1[1]
+                    else:
+                        blts1 = blts1[0]
+                    integ1 = dset1.integration_time[blts1] * nsamp1
+                    # get integ2
+                    blts2 = dset2._key2inds(bl2)
+                    if len(blts2[0]) == 0:
+                        blts2 = blts2[1]
+                    else:
+                        blts2 = blts2[0]
+                    integ2 = dset2.integration_time[blts2] * nsamp2
+
+                    # take inverse average of integ1 and integ2 to get total integration
+                    # inverse avg is done b/c integ ~ 1/noise_var
+                    # and due to non-linear operation of V_1 * V_2
+                    pol_ints.extend(1./np.mean([1./integ1, 1./integ2], axis=0))
 
                     # combined weight is geometric mean
                     pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
@@ -2181,7 +2199,11 @@ class PSpecData(object):
                     if i < 1 and j < 1:
                         # insert time info
                         inds1 = dset1.antpair2ind(*bl1)
-                        inds2 = dset1.antpair2ind(*bl2)
+                        if len(inds1) == 0:
+                            inds1 = dset1.antpair2ind(*bl1[::-1])
+                        inds2 = dset2.antpair2ind(*bl2)
+                        if len(inds2) == 0:
+                            inds2 = dset2.antpair2ind(*bl2[::-1])
                         time1.extend(dset1.time_array[inds1])
                         time2.extend(dset2.time_array[inds2])
                         lst1.extend(dset1.lst_array[inds1])
@@ -2375,7 +2397,7 @@ class PSpecData(object):
                 # get blts indices of basline
                 indices = dset.antpair2ind(*k[:2])
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(hc.io.polstr2num[k[-1]])
+                polind = pol_list.index(uvutils.polstr2num(k[-1]))
                 # insert into dset
                 dset.data_array[indices, 0, :, polind] = data[k]
 
@@ -2420,7 +2442,7 @@ class PSpecData(object):
         # iterate over datasets and apply factor
         for i, dset in enumerate(self.dsets):
             # check dset vis units
-            if dset.vis_units != 'Jy':
+            if dset.vis_units.upper() != 'JY':
                 print "Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units)
                 continue
             for j, p in enumerate(dset.polarization_array):
@@ -2616,11 +2638,15 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     history : str
         String to add to history of each UVPSpec object.
 
-    Returns
+    Returns (psc, ds)
     -------
     psc : PSpecContainer object
         A container for the output UVPSpec objects, which themselves contain the
         power spectra and their metadata.
+
+    ds : PSpecData object
+        The PSpecData object used for OQE of power spectrum, with cached weighting
+        matrices.
     """
     # type check
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
@@ -2671,7 +2697,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         except ValueError:
             # at least one of the dset loads failed due to no data being present
             utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
-            return
+            return None, None
 
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
@@ -2693,7 +2719,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data being present
                 utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
-                return
+                return None, None
 
         assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
@@ -2806,7 +2832,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
                       overwrite=overwrite)
 
-    return psc
+    return psc, ds
 
 
 def get_pspec_run_argparser():

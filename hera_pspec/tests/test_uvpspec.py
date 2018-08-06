@@ -221,6 +221,18 @@ class Test_UVPSpec(unittest.TestCase):
         # time select
         uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[:1], inplace=False)
         nt.assert_equal(uvp2.Ntimes, 1)
+        # test pol and blpair select, and check dimensionality of output
+        uvp = copy.deepcopy(self.uvp)
+        uvp.set_stats('hi', uvp.get_all_keys()[0], np.ones(300).reshape(10, 30))
+        uvp2 = uvp.select(blpairs=uvp.get_blpairs(), pols=uvp.pol_array, inplace=False)
+        nt.assert_equal(uvp2.data_array[0].shape, (30, 30, 1))
+        nt.assert_equal(uvp2.stats_array['hi'][0].shape, (30, 30, 1))
+        # test when both blp and pol array are non-sliceable
+        uvp2, uvp3, uvp4 = copy.deepcopy(uvp), copy.deepcopy(uvp), copy.deepcopy(uvp)
+        uvp2.pol_array[0], uvp3.pol_array[0], uvp4.pol_array[0] = -6, -7, -8
+        uvp = uvp + uvp2 + uvp3 + uvp4
+        uvp5 = uvp.select(blpairs=[101102101102], pols=[-5, -6, -7], inplace=False)
+        nt.assert_equal(uvp5.data_array[0].shape, (10, 30, 3))
 
     def test_get_ENU_bl_vecs(self):
         bl_vecs = self.uvp.get_ENU_bl_vecs()
