@@ -1,7 +1,6 @@
 from __future__ import print_function, division
 import numpy as np
 import matplotlib
-#matplotlib.use('Agg')
 from matplotlib import gridspec
 import matplotlib.pyplot as plt
 from pyuvdata import UVData
