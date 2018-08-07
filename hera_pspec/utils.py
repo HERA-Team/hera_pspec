@@ -910,7 +910,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         List of bad antenna numbers to exclude
 
     add_autos : bool
-        If True, add into autocorrelation to redundant groups
+        If True, add into autocorrelation group to the redundant group list.
 
     low_hi : bool
         If True, if the first bl in a redundant blgroup has ant1 > ant2,
@@ -960,8 +960,8 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     if add_autos:
         ants = antpos_dict.keys()
         reds = [zip(ants, ants)] + reds
-        lens = np.insert(0, lens, 0)
-        angs = np.insert(0, angs, 0)
+        lens = np.insert(lens, 0, 0)
+        angs = np.insert(angs, 0, 0)
 
     # restrict baselines
     _reds, _lens, _angs = [], [], []

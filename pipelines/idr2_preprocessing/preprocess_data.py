@@ -303,7 +303,7 @@ if params['timeavg_sub']:
                     
                     # Delay Filter
                     DF = hc.delay_filter.Delay_Filter()
-                    DF.load_data(F.input_uvdata)
+                    DF.load_data(F.input_data)
                     DF.data = F.avg_data
                     DF.flags = F.avg_flags
                     DF.run_filter(**p['dly_params'])
@@ -549,7 +549,7 @@ if params['time_avg']:
                                 time_range=[times[j].min()-1e-8, 
                                             times[j].max()+1e-8], 
                                 polarizations=[pol])
-                lst = uvd.lst_array[0] - uvd.integration_time / 2. \
+                lst = uvd.lst_array[0] - np.median(uvd.integration_time) / 2. \
                     * 2 * np.pi / (3600. * 24)
                 outfile = os.path.join(
                                 params['out_dir'], 
@@ -705,7 +705,7 @@ if params['fg_filt']:
                                    os.path.basename(df) + p['filt_file_ext'])
             add_to_history = prepend_history("FG FILTER", p)
             DF.write_filtered_data( outfile, 
-                                    filetype_out='miriad', 
+                                    filetype='miriad', 
                                     clobber=overwrite, 
                                     add_to_history=add_to_history )
             
@@ -714,7 +714,7 @@ if params['fg_filt']:
                                    os.path.basename(df) + p['inpaint_file_ext'])
             add_to_history = prepend_history("DATA INPAINT", p)
             DF.write_filtered_data( outfile, 
-                                    filetype_out='miriad', 
+                                    filetype='miriad', 
                                     clobber=overwrite, 
                                     write_filled_data=True, 
                                     add_to_history=add_to_history )

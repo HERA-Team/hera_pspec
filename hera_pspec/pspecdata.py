@@ -2198,12 +2198,8 @@ class PSpecData(object):
                     # insert time and blpair info only once per blpair
                     if i < 1 and j < 1:
                         # insert time info
-                        inds1 = dset1.antpair2ind(*bl1)
-                        if len(inds1) == 0:
-                            inds1 = dset1.antpair2ind(*bl1[::-1])
-                        inds2 = dset2.antpair2ind(*bl2)
-                        if len(inds2) == 0:
-                            inds2 = dset2.antpair2ind(*bl2[::-1])
+                        inds1 = dset1.get_blt_inds(bl1)
+                        inds2 = dset2.get_blt_inds(bl2)
                         time1.extend(dset1.time_array[inds1])
                         time2.extend(dset2.time_array[inds2])
                         lst1.extend(dset1.lst_array[inds1])
@@ -2319,7 +2315,6 @@ class PSpecData(object):
         Will only phase if the dataset's phase type is 'drift'. This is because the rephasing
         algorithm assumes the data is drift-phased when applying phasor term.
 
-
         Note that PSpecData.Jy_to_mK() must be run after rephase_to_dset(), if one intends
         to use the former capability at any point.
 
@@ -2395,7 +2390,7 @@ class PSpecData(object):
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
                 # get blts indices of basline
-                indices = dset.antpair2ind(*k[:2])
+                indices = dset.get_blt_inds(k[:2])
                 # get index in polarization_array for this polarization
                 polind = pol_list.index(uvutils.polstr2num(k[-1]))
                 # insert into dset

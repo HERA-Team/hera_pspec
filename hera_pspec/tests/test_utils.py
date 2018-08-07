@@ -184,7 +184,7 @@ class Test_Utils(unittest.TestCase):
                                    Nblps_per_group=2)  
         nt.assert_equal(len(blps), 10)
         nt.assert_true(isinstance(blps[0], list))
-        nt.assert_equal(blps[0], [((37, 24), (38, 25)), ((37, 24), (37, 24))])
+        nt.assert_equal(blps[0], [((24, 37), (25, 38)), ((24, 37), (24, 37))])
 
         # test exceptions
         uvd2 = copy.deepcopy(uvd)
@@ -217,6 +217,12 @@ class Test_Utils(unittest.TestCase):
         r, l, a = utils.get_reds(uvd, bl_len_range=bl_len_range, bl_deg_range=bl_deg_range)
         nt.assert_true(np.all([_l > bl_len_range[0] and _l < bl_len_range[1] for _l in l]))
         nt.assert_true(np.all([_a > bl_deg_range[0] and _a < bl_deg_range[1] for _a in a]))
+
+        # autos
+        r, l, a = utils.get_reds(fname, xants=xants, add_autos=True)
+        nt.assert_almost_equal(l[0], 0)
+        nt.assert_almost_equal(a[0], 0)
+        nt.assert_true(len(r), 105)
 
     def test_config_pspec_blpairs(self):
         # test basic execution
