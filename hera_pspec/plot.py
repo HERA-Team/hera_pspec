@@ -5,6 +5,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import copy
 from collections import OrderedDict as odict
+import astropy.units as u
+import astropy.constants as c
 
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
@@ -494,3 +496,176 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     if new_plot:
         return fig
     
+def delay_wedge(uvps, blpairs, fold=False, cosmo=True, center_line=True, horizon_lines=True, cosmo_cbar=True, suptitle=''):
+    """
+    Plot a 2D delay spectrum (or spectra) for a group of baselines.
+    
+    Parameters
+    ----------
+    uvps : UVPspec
+        List of UVPSpec objects, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+        
+    blpairs : list of tuples
+        List of baseline-pair tuples.
+        
+    fold : bool, optional
+        Whether to fold the power spectrum in :math:`|k_\parallel|`. 
+        Default: False.
+        
+    cosmo : bool, optional
+        Whether to convert axes to cosmological units :math:`|k_\parallel|` and 
+        :math:`|k_\perpendicular|`.
+        Default: True.
+        
+    center_line : bool, optional
+        Whether to plot a dotted line at :math:`|k_\parallel|` =0.
+        Default: True.
+        
+    horizon_lines : bool, optional
+        Whether to plot dotted lines along the horizon.
+        Default: True.
+        
+    cosmo_cbar : bool, optional
+        Whether power has been converted to appropriate units through calibration.
+        Default: True.
+        
+    suptitle : string, optional
+        Suptitle for the plot.  If not provided, no suptitle will be plotted.
+        Default: ''.
+        
+    Returns
+    -------
+    f : matplotlib.pyplot.Figure
+        Matplotlib Figure instance.
+    """
+    
+    if (type(uvps) != list) and (type(uvps) != np.ndarray):
+        raise AttributeError("The uvps paramater should be a list of UVPSpec objects.")
+        
+    #Initialize axes objects
+    ncols = len(uvps)
+    f, axes = plt.subplots(
+        ncols=ncols,
+        nrows=1,
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+        figsize=(20, 10))
+    
+    #Plot each uvp
+    pols = []
+    plt.subplots_adjust(wspace=0, hspace=0.1)
+    for uvp, ax in zip(uvps, axes.flatten()):
+        #Find redundant-length baseline groups and their baseline lengths
+        BIN_WIDTH = 0.3 #redundancy tolerance in meters 
+        NORM_BINS = np.arange(0.0, 10000.0, BIN_WIDTH)
+        sorted_blpairs = {}
+        bllens = []
+        blpair_seps = uvp.get_blpair_seps()
+        blpair_array = uvp.blpair_array
+        for antnums in blpairs:
+            blpair = uvp.antnums_to_blpair(antnums)
+            bllen = blpair_seps[np.where(blpair_array==blpair)[0][0]]
+            bllen = np.round(np.digitize(bllen, NORM_BINS) * BIN_WIDTH, 1)
+            if bllen in bllens:
+                sorted_blpairs[bllen].append(antnums)
+            else:
+                bllens.append(bllen)
+                sorted_blpairs[bllen] = [antnums]
+        bllens = sorted(bllens)
+        
+        #Average the spectra along redundant baseline groups and time
+        uvp.average_spectra(blpair_groups=sorted_blpairs.values(), time_avg=True)
+        
+        #Grab polarization string for naming the plot later on
+        pol_int_to_str = {1: 'pI', 2: 'pQ', 3: 'pU', 4: 'pV', -5: 'XX', -6: 'YY', -7: 'XY', -8: 'YX'}
+        pol = pol_int_to_str[uvp.pol_array[0]]
+        pols.append(pol)
+        
+        #Format data array
+        data = uvp.data_array[0][:, :, 0]
+        if fold:
+            uvp.fold_spectra()
+            data = uvp.data_array[0][:, data.shape[1] // 2:, 0]
+        
+        #Format k_para axis
+        x_axis = (uvp.get_dlys(0)*1e9).tolist()
+        if cosmo:
+            x_axis = uvp.get_kparas(0).tolist()
+        if fold:
+            x_axis.insert(0, 0)
+        ax.set_xlim((x_axis[0] / 2, x_axis[-1] / 2))
+        
+        #Format k_perp axis
+        #Calculate kpr indices, and stretch wedgeslices to length of baseline norms
+        bllen_indices = [int(bllen * 10) for bllen in bllens]
+        stretched_data = np.zeros((bllen_indices[-1], data.shape[-1]), dtype=np.float64)
+        j = 0
+        for i in range(len(bllen_indices)):
+            stretched_data[j:bllen_indices[i]] = data[i]
+            j = bllen_indices[i]
+        data = stretched_data[...]
+        
+        #Find kpr mid-indicies for the tickmarks
+        bllen_midindices = []
+        for i in range(len(bllen_indices)):
+            if i == 0:
+                bllen_midindices.append(bllen_indices[i] / 2.)
+            else:
+                bllen_midindices.append((bllen_indices[i] + bllen_indices[i - 1]) / 2.)
+        
+        #Setting y axis ticks and labels
+        ax.set_yticks(bllen_midindices)
+        ax.set_yticklabels(bllens, fontsize=10)
+        
+        #Plot the data
+        im = ax.imshow(
+            np.log10(np.abs(data)),
+            aspect='auto',
+            interpolation='nearest',
+            extent=[x_axis[0], x_axis[-1], bllen_indices[-1], 0])
+        
+        #Plot the horizon lines if requested
+        if horizon_lines:
+            horizons = [(bllen*u.m/c.c).to(u.ns).value for bllen in bllens]
+            #if cosmo:
+                #XXX still need to convert horizons to appropriate kpara values
+            j = 0
+            for i, (horizon, bllen) in enumerate(zip(horizons, bllens)):
+                x1, y1 = [horizon, horizon], [j, bllen_indices[i]]
+                x2, y2 = [-horizon, -horizon], [j, bllen_indices[i]]
+                ax.plot(x1, y1, x2, y2, color='#ffffff', linestyle='--', linewidth=1)
+                j = bllen_indices[i]
+        
+        #plot center line at k_para=0 if requested
+        if center_line:
+            ax.axvline(x=0, color='#000000', ls='--', lw=1)
+
+        ax.tick_params(axis='both', direction='inout')
+        ax.set_title(pol, fontsize=15)
+    
+    #add colorbar
+    cbar_ax = f.add_axes([0.9125, 0.25, 0.025, 0.5])
+    cbar = f.colorbar(im, cax=cbar_ax)
+    
+    #add axis labels
+    if cosmo:
+        f.text(0.5, 0.05, r'$k_{\parallel}\ [h\ Mpc^{-1}]$', fontsize=15, ha='center')            
+        f.text(0.07, 0.5, r'$k_{\perp}\ [\rm h\ Mpc^{-1}]$', fontsize=15, va='center', rotation='vertical')
+    else:
+        f.text(0.5, 0.05, r'$\tau\ [ns]$', fontsize=15, ha='center')
+        f.text(0.07, 0.5, r'Baseline Group $[m]$', fontsize=15, va='center', rotation='vertical')
+        
+    #add colorbar label
+    if cosmo_cbar:
+        cbar.set_label(r"$P(k_{\parallel})\ [mK^2h^{-3}Mpc^3]$", fontsize=15, ha='center')
+    else:
+        cbar.set_label(r'$P(\tau)\ [mK^2]$', fontsize=15, ha='center')
+        
+    #Add suptitle if requested
+    if len(suptitle) > 0:
+        f.suptitle(suptitle, fontsize=15)
+    
+    #Return Figure: the axis is an attribute of figure
+    return f
