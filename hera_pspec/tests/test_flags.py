@@ -3,6 +3,7 @@ import unittest
 import nose.tools as nt
 import numpy as np
 from pyuvdata import UVData
+import matplotlib
 import os
 import sys
 from hera_pspec.data import DATA_PATH
@@ -161,7 +162,10 @@ class Test_Flags(unittest.TestCase):
         main_waterfall, freq_histogram, time_histogram, data = long_waterfall( \
             self.data_list, title='Flags Waterfall')
         # making sure the main waterfall has the right number of dividing lines
-        main_waterfall_elems = [(matplotlib.lines.Line2D, \
+        if round(data.shape[0]/60, 0) == 0: 
+            main_waterfall_elems = [(matplotlib.lines.Line2D, 1)]
+        else:
+            main_waterfall_elems = [(matplotlib.lines.Line2D, \
                                  round(data.shape[0]/60, 0))]
         nt.assert_true(self.axes_contains(main_waterfall, main_waterfall_elems))
         # making sure the time graph has the appropriate line element
@@ -170,7 +174,7 @@ class Test_Flags(unittest.TestCase):
         # making sure the freq graph has the appropriate line element
         freq_elems = [(matplotlib.lines.Line2D, 1)]
         nt.assert_true(self.axes_contains(freq_histogram, freq_elems))
-                       
+
     def test_flag_channels(self):
         """
         testing the channel-flagging function

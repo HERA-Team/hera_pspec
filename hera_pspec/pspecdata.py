@@ -2350,7 +2350,7 @@ class PSpecData(object):
                 # get blts indices of basline
                 indices = dset.antpair2ind(*k[:2])
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(hc.io.polstr2num[k[-1]])
+                polind = pol_list.index(hc.io.polstr2num(k[-1]))
                 # insert into dset
                 dset.data_array[indices, 0, :, polind] = data[k]
 
@@ -2447,7 +2447,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
               exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
-              greedy_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
+              greedy_threshold=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2566,9 +2566,9 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         non-overlapping LSTs.
 
     broadcast_dset_flags : boolean
-        If True, broadcast dset flags across time using fractional greedy_thresh.
+        If True, broadcast dset flags across time using fractional greedy_threshold.
 
-    greedy_thresh : float
+    greedy_threshold : float
         Fractional flagging threshold, above which a broadcast of flags across
         time is triggered (if broadcast_dset_flags == True). This is done
         independently for each baseline's visibility waterfall.
@@ -2701,7 +2701,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     # broadcast flags
     if broadcast_dset_flags:
-        ds.broadcast_dset_flags(greedy_thresh=greedy_thresh)
+        ds.broadcast_dset_flags(greedy_threshold=greedy_threshold)
 
     # perform Jy to mK conversion if desired
     if Jy2mK:
@@ -2817,8 +2817,8 @@ def get_pspec_run_argparser():
     a.add_argument("--cosmo", default=None, nargs='+', type=float, help="List of float values for [Om_L, Om_b, Om_c, H0, Om_M, Om_k].")
     a.add_argument("--rephase_to_dset", default=None, type=int, help="dset integer index to phase all other dsets to. Default is no rephasing.")
     a.add_argument("--trim_dset_lsts", default=False, action='store_true', help="Trim non-overlapping dset LSTs.")
-    a.add_argument("--broadcast_dset_flags", default=False, action='store_true', help="Broadcast dataset flags across time according to greedy_thresh.")
-    a.add_argument("--greedy_thresh", default=0.2, type=float, help="Fractional flagging threshold across time to trigger flag broadcast if broadcast_dset_flags is True")
+    a.add_argument("--broadcast_dset_flags", default=False, action='store_true', help="Broadcast dataset flags across time according to greedy_threshold.")
+    a.add_argument("--greedy_threshold", default=0.2, type=float, help="Fractional flagging threshold across time to trigger flag broadcast if broadcast_dset_flags is True")
     a.add_argument("--Jy2mK", default=False, action='store_true', help="Convert datasets from Jy to mK if a beam model is provided.")
     a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
     a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')

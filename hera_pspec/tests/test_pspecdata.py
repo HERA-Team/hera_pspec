@@ -1298,7 +1298,7 @@ def test_pspec_run():
                               rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
                               pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
                               dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
-                              cosmo=cosmo, trim_dset_lsts=True, broadcast_dset_flags=True, greedy_thresh=0.1,
+                              cosmo=cosmo, trim_dset_lsts=True, broadcast_dset_flags=True, greedy_threshold=0.1,
                               store_cov=True)
     nt.assert_true("foo_bar" in psc.groups())
     nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])

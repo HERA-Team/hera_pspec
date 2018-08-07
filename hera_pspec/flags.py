@@ -258,17 +258,17 @@ def long_waterfall(array_list, title, cmap='gray', starting_lst=[]):
             short_name = 'first\nintegration LST:\n'+starting_lst[i]
             plt.text(-20, 26 + i*60, short_name, rotation=-90, size='small',
                      horizontalalignment='center')
-    main_waterfall.set_xlim(0, 1024)
+    main_waterfall.set_xlim(0, data.shape[1])
     # frequency sum plot
     counts_freq = np.sum(data, axis=0)
     max_counts_freq = max(np.amax(counts_freq), data.shape[0])
     normalized_freq = 100 * counts_freq/max_counts_freq
-    freq_histogram.set_xticks(np.arange(0, 1024, 50))
+    freq_histogram.set_xticks(np.arange(0, data.shape[1], 50))
     freq_histogram.set_yticks(np.arange(0, 101, 5))
     freq_histogram.set_xlabel('Channel Number (Frequency)')
     freq_histogram.set_ylabel('Occupancy %')
     freq_histogram.grid()
-    freq_histogram.plot(np.arange(0, 1024), normalized_freq, 'r-')
+    freq_histogram.plot(np.arange(0, data.shape[1]), normalized_freq, 'r-')
     # time sum plot
     counts_times = np.sum(data, axis=1)
     max_counts_times = max(np.amax(counts_times), data.shape[1])
