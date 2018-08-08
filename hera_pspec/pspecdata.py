@@ -310,7 +310,7 @@ class PSpecData(object):
         """
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
-            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {} 
+            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -868,7 +868,7 @@ class PSpecData(object):
         N2 = np.zeros_like(N1)
         Qalphas = np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[np.newaxis, :, :, :], self.spw_Ndlys, axis=0)
         Qbetas = np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[:, np.newaxis, :, :], self.spw_Ndlys, axis=1)
- 
+
         # Q_alpha/Q_beta are N_dlys x N_dlys x N_freq x N_freq
         # taking advantage of broadcast rules!
         # matmul only applies to the last two dimensions
@@ -1121,8 +1121,8 @@ class PSpecData(object):
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
-            Tuples containing indices of dataset and baselines for the two 
-            input datavectors. If a list of tuples is provided, the baselines 
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
         Returns
@@ -1144,12 +1144,12 @@ class PSpecData(object):
             E_matrices[dly_idx] = np.dot(R1, QR2)
 
         return 0.5 * E_matrices
-    
+
     def get_unnormed_V(self, key1, key2, model='empirical'):
         """
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
-        
+
             V_ab = 2 tr(C E_a C E_b), where E_a = (1/2) R Q^a R
 
         When the data are complex, the expression becomes considerably more
@@ -1187,7 +1187,7 @@ class PSpecData(object):
 
         Note for the future: If this ends up too slow, Cholesky tricks can be
         employed to speed up the computation by a factor of a few.
-        
+
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
@@ -1197,7 +1197,7 @@ class PSpecData(object):
 
         model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
-        
+
         Returns
         -------
         V : array_like, complex
@@ -1578,8 +1578,8 @@ class PSpecData(object):
                              "calculate delays.")
         else:
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
-                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns    
-        
+                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns
+
     def scalar(self, pol, little_h=True, num_steps=2000, beam=None, taper_override='no_override'):
         """
         Computes the scalar function to convert a power spectrum estimate
@@ -1607,7 +1607,7 @@ class PSpecData(object):
                 Default: 10000
 
         beam : PSpecBeam object
-                Option to use a manually-fed PSpecBeam object instead of using 
+                Option to use a manually-fed PSpecBeam object instead of using
                 self.primary_beam.
 
         taper_override : str, optional
@@ -1645,7 +1645,7 @@ class PSpecData(object):
                                                num_steps=num_steps)
         return scalar
 
-    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False, 
+    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
         """
         Computes an adjustment factor for the pspec scalar that is needed
@@ -1667,16 +1667,16 @@ class PSpecData(object):
         key1, key2 : tuples or lists of tuples, optional
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
-            in the list will be combined with inverse noise weights. If Gv and 
+            in the list will be combined with inverse noise weights. If Gv and
             Hv are specified, these arguments will be ignored. Default: None.
 
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
-        
+
         Gv, Hv : array_like, optional
-            If specified, use these arrays instead of calling self.get_G() and 
-            self.get_H(). Using precomputed Gv and Hv will speed up this 
+            If specified, use these arrays instead of calling self.get_G() and
+            self.get_H(). Using precomputed Gv and Hv will speed up this
             function significantly. Default: None.
 
         Returns
@@ -1686,7 +1686,7 @@ class PSpecData(object):
         """
         if Gv is None: Gv = self.get_G(key1, key2)
         if Hv is None: Hv = self.get_H(key1, key2, sampling)
-        
+
         # get ratio
         summed_G = np.sum(Gv, axis=1)
         summed_H = np.sum(Hv, axis=1)
@@ -2048,7 +2048,7 @@ class PSpecData(object):
                         scalar = self.scalar(p[0], little_h=True, taper_override='none')
                     else:
                         scalar = self.scalar(p[0], little_h=True)
-                else: 
+                else:
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized",
                                   verbose=verbose)
@@ -2472,7 +2472,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
               exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
-              time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
+              time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history='',return_psdata=False):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2616,11 +2616,16 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     history : str
         String to add to history of each UVPSpec object.
 
+    return_psdata: bool
+        Set to True to return the PspecData object used to generate power spectrum.
+
     Returns
     -------
     psc : PSpecContainer object
         A container for the output UVPSpec objects, which themselves contain the
         power spectra and their metadata.
+
+    psc, psd: PSpecContainer object and PspecData Object if return_psdata is True.
     """
     # type check
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
@@ -2787,7 +2792,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     # assign group name
     if groupname is None:
         groupname = '_'.join(dset_labels)
-    
+
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
         # check bls lists aren't empty
@@ -2803,10 +2808,12 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
                       overwrite=overwrite)
-
-    return psc
+    if not return_psdata:
+        return psc
+    else:
+        return psc, ds
 
 
 def get_pspec_run_argparser():
@@ -2923,4 +2930,3 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
         uvd.read_miriad(glob.glob(dset), bls=bls, polarizations=pols)
         dsets.append(uvd)
     return dsets
-
