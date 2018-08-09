@@ -149,7 +149,7 @@ if params['reformat']:
                 uvd.history = "{}{}".format(prepend_history("BL REFORMAT", p), 
                                             uvd.history)
                 if params['plot']:
-                    hp.utils.plot_uvdata_waterfalls(uvd, 
+                    hp.plot.plot_uvdata_waterfalls(uvd, 
                                                     outname + ".{pol}.{bl}", 
                                                     data='data', 
                                                     plot_mode='log', 
@@ -364,7 +364,7 @@ if params['timeavg_sub']:
         
         # Plot waterfalls if requested
         if params['plot']:
-            hp.utils.plot_uvdata_waterfalls(uvd, 
+            hp.plot.plot_uvdata_waterfalls(uvd, 
                                             tavg_out + ".{pol}.{bl}", 
                                             data='data', 
                                             plot_mode='log', 
@@ -413,7 +413,7 @@ if params['timeavg_sub']:
                 
                 # Plot waterfalls if requested
                 if params['plot']:
-                    hp.utils.plot_uvdata_waterfalls(uvd, 
+                    hp.plot.plot_uvdata_waterfalls(uvd, 
                                                     out_df + ".{pol}.{bl}", 
                                                     data='data', 
                                                     plot_mode='log', 
@@ -561,7 +561,7 @@ if params['time_avg']:
                 
                 # Plot waterfalls if requested
                 if params['plot']:
-                    hp.utils.plot_uvdata_waterfalls(uvd, 
+                    hp.plot.plot_uvdata_waterfalls(uvd, 
                                                     outfile + ".{pol}.{bl}", 
                                                     data='data', 
                                                     plot_mode='log', 
@@ -639,7 +639,7 @@ if params['form_pstokes']:
                     
                     # Plot waterfalls if requested
                     if params['plot']:
-                        hp.utils.plot_uvdata_waterfalls(ps, 
+                        hp.plot.plot_uvdata_waterfalls(ps, 
                                                         outfile + ".{pol}.{bl}", 
                                                         data='data', 
                                                         plot_mode='log', 

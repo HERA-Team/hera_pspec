@@ -604,6 +604,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
         self.OmegaP[pol] = OmegaP
         self.OmegaPP[pol] = OmegaPP
             
+        # get available pols
+        self.available_pols = ", ".join(map(uvutils.polnum2str, self.OmegaP.keys()))
     
     def power_beam_int(self, pol='pI'):
         """
@@ -630,10 +632,9 @@ class PSpecBeamFromArray(PSpecBeamBase):
         if pol in self.OmegaP.keys():
             return self.OmegaP[pol]
         else:
-            available_pols = ", ".join(map(str, self.OmegaP.keys()))
             raise KeyError("OmegaP not specified for polarization '%s'. " 
                            "Available polarizations are: %s" \
-                           % (pol, available_pols))
+                           % (pol, self.available_pols))
     
     def power_beam_sq_int(self, pol='pI'):
         """
@@ -660,10 +661,9 @@ class PSpecBeamFromArray(PSpecBeamBase):
         if pol in self.OmegaPP.keys():
             return self.OmegaPP[pol]
         else:
-            available_pols = ", ".join(map(str, self.OmegaPP.keys()))
             raise KeyError("OmegaPP not specified for polarization '%s'. " 
                            "Available polarizations are: %s" \
-                           % (pol, available_pols))
+                           % (pol, self.available_pols))
     
     def __str__(self):
         """
@@ -672,6 +672,6 @@ class PSpecBeamFromArray(PSpecBeamBase):
         s = "PSpecBeamFromArray object\n"
         s += "\tFrequency range: Min. %4.4e Hz, Max. %4.4e Hz\n" \
               % (np.min(self.beam_freqs), np.max(self.beam_freqs))
-        s += "\tAvailable pols: %s" % (", ".join(map(str, self.OmegaP.keys())))
+        s += "\tAvailable pols: %s" % (self.available_pols)
         return s
         

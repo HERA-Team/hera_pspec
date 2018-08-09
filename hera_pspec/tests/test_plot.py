@@ -7,6 +7,7 @@ import os, copy, sys
 from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils, grouping
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
+import glob
 
 # Data files to use in tests
 dfiles = [
@@ -55,7 +56,8 @@ class Test_Plot(unittest.TestCase):
         # Load datafiles
         uvd = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, dfiles[0]))
-        
+        self.uvd = uvd
+
         # Load beam file
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
@@ -214,9 +216,13 @@ class Test_Plot(unittest.TestCase):
             uvp = uvp + _uvp
         nt.assert_raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs(), 0, 'xx')
 
-        f2 = plot.delay_spectrum(self.uvp, uvp.get_blpairs(), 0, 'xx', force_plot=True,
-                                label_type='blpairt')
+        f2 = plot.delay_spectrum(uvp, uvp.get_blpairs(), 0, 'xx', force_plot=True,
+                                label_type='blpairt', logscale=False, lines=True, markers=True)
         plt.close(f2)
+
+        # exceptions
+        nt.assert_raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs()[:3], 0, 'xx',
+                         label_type='foo')
 
 
     def test_plot_waterfall(self):
@@ -224,8 +230,8 @@ class Test_Plot(unittest.TestCase):
         Test that waterfall can be plotted.
         """
         # Unpack the list of baseline-pairs into a Python list
-        blpairs = np.unique(self.uvp.blpair_array)        
-        blps = [blp for blp in blpairs]
+        blpairs = np.unique(self.uvp.blpair_array).tolist()       
+        blps = [self.uvp.blpair_to_antnums(blp) for blp in blpairs]
         
         # Set cosmology and plot in non-delay (i.e. cosmological) units
         self.uvp.set_cosmology(conversions.Cosmo_Conversions(), overwrite=True)
@@ -240,15 +246,14 @@ class Test_Plot(unittest.TestCase):
         plt.close(f2)
 
         # Try some other arguments
-        _blps = [self.uvp.blpair_to_antnums(blp) for blp in blps]
-        f3 = plot.delay_waterfall(self.uvp, [_blps,], spw=0, pol='xx', 
+        f3 = plot.delay_waterfall(self.uvp, [blpairs,], spw=0, pol='xx', 
                                    average_blpairs=False, delay=True, 
                                    log=False, vmin=-1., vmax=3., 
                                    cmap='RdBu', fold=True, component='abs')
         plt.close(f3)
         
         # Try with imaginary component
-        f4 = plot.delay_waterfall(self.uvp, [_blps,], spw=0, pol='xx', 
+        f4 = plot.delay_waterfall(self.uvp, [blpairs,], spw=0, pol='xx', 
                                    average_blpairs=False, delay=True, 
                                    log=False, vmin=-1., vmax=3., 
                                    cmap='RdBu', fold=True, component='imag')
@@ -256,8 +261,35 @@ class Test_Plot(unittest.TestCase):
         
         # Try some more arguments
         fig, axes = plt.subplots(1, len(blps))
-        plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx',
-                              lst_in_hrs=False, axes=axes, component='abs')
+        plot.delay_waterfall(self.uvp, [blps,], spw=0, pol='xx', lst_in_hrs=False,
+                             times=np.unique(self.uvp.time_avg_array)[:10],
+                             axes=axes, component='abs', title_type='blvec')
+        plt.close()
+
+        # exceptions
+        uvp = copy.deepcopy(self.uvp)
+        for i in range(1, 4):
+            _uvp = copy.deepcopy(self.uvp)
+            _uvp.blpair_array += i * 20
+            uvp += _uvp
+        nt.assert_raises(ValueError, plot.delay_waterfall, uvp, uvp.get_blpairs(), 0, 'xx')
+        fig = plot.delay_waterfall(uvp, uvp.get_blpairs(), 0, 'xx', force_plot=True)
+        plt.close()
+
+    def test_uvdata_waterfalls(self):
+        """ Test waterfall plotter """
+        uvd = copy.deepcopy(self.uvd)
+
+        basename = "test_waterfall_plots_3423523923_{bl}_{pol}"
+
+        for d in ['data', 'flags', 'nsamples']:
+            print "running on {}".format(d)
+            plot.plot_uvdata_waterfalls(uvd, basename, vmin=0, vmax=100, data=d, plot_mode='real')
+
+            figfiles = glob.glob("test_waterfall_plots_3423523923_*_*.png")
+            nt.assert_equal(len(figfiles), 15)
+            for f in figfiles:
+                os.remove(f)
 
 if __name__ == "__main__":
     unittest.main()

@@ -2173,18 +2173,11 @@ class PSpecData(object):
                              / np.sum(wgts2, axis=1).clip(1, np.inf)
 
                     # get integ1
-                    blts1 = dset1._key2inds(bl1)
-                    if len(blts1[0]) == 0:
-                        blts1 = blts1[1]
-                    else:
-                        blts1 = blts1[0]
+                    blts1 = dset1.antpair2ind(bl1, ordered=False)
                     integ1 = dset1.integration_time[blts1] * nsamp1
+                    
                     # get integ2
-                    blts2 = dset2._key2inds(bl2)
-                    if len(blts2[0]) == 0:
-                        blts2 = blts2[1]
-                    else:
-                        blts2 = blts2[0]
+                    blts2 = dset2.antpair2ind(bl2, ordered=False)
                     integ2 = dset2.integration_time[blts2] * nsamp2
 
                     # take inverse average of integ1 and integ2 to get total integration

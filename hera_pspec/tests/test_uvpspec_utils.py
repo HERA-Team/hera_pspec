@@ -6,6 +6,7 @@ from hera_pspec import testing, pspecbeam, UVPSpec
 from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 import os
+import copy
 
 
 def test_select_common():
@@ -76,6 +77,23 @@ def test_select_common():
                            times=True, pols=True, inplace=True)
     nt.assert_equal(uvp1, uvp2)
 
+    # check uvplist > 2
+    nt.assert_raises(IndexError, uvputils.select_common, uvp_list[:1])
+
+    # check no spw overlap
+    uvp7 = copy.deepcopy(uvp1)
+    uvp7.freq_array += 10e6
+    nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], spws=True)
+
+    # check no lst overlap
+    uvp7 = copy.deepcopy(uvp1)
+    uvp7.lst_avg_array += 0.1
+    nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], lsts=True)
+
+    # check pol overlap
+    uvp7 = copy.deepcopy(uvp1)
+    uvp7.pol_array[0] = -8
+    nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], pols=True)
 
 def test_subtract_uvp():
     """ Test subtraction of two UVPSpec objects """

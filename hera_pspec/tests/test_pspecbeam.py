@@ -6,19 +6,6 @@ from hera_pspec import pspecbeam, conversions
 from hera_pspec.data import DATA_PATH
 
 
-class Example(unittest.TestCase):
-    """
-    when running tests in this file by-hand in an interactive interpreter, 
-    instantiate this example class as
-
-    self = Example()
-
-    and you can copy-paste self.assert* calls interactively.
-    """
-    def runTest(self):
-        pass
-
-
 class Test_DataSet(unittest.TestCase):
 
     def setUp(self):
@@ -82,7 +69,10 @@ class Test_DataSet(unittest.TestCase):
         M = beam.Jy_to_mK(np.linspace(100e6, 200e6, 11))
         nt.assert_equal(len(M), 11)
         nt.assert_almost_equal(M[0], 40.643366654821904)
-                
+        M = beam.Jy_to_mK(150e6)
+        nt.assert_true(isinstance(M, np.ndarray))
+        M = beam.Jy_to_mK(np.linspace(90, 210e6, 11))
+
         # test exception
         nt.assert_raises(TypeError, beam.Jy_to_mK, [1])
         nt.assert_raises(TypeError, beam.Jy_to_mK, np.array([1]))
@@ -217,7 +207,26 @@ class Test_DataSet(unittest.TestCase):
                          OmegaP={'pI': Om_P}, 
                          OmegaPP={'pI': Om_PP[:-2],},
                          beam_freqs=beam_freqs)
-        
+
+        nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray,
+                         OmegaP=Om_P, 
+                         OmegaPP={'pI': Om_PP[:-2],},
+                         beam_freqs=beam_freqs)
+ 
+        nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
+                         OmegaP={'foo': Om_P}, 
+                         OmegaPP={'pI': Om_PP,},
+                         beam_freqs=beam_freqs)
+
+        nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
+                         OmegaP={'pI': Om_P}, 
+                         OmegaPP={'foo': Om_PP,},
+                         beam_freqs=beam_freqs)
+
+        nt.assert_raises(KeyError, psbeam.add_pol, 'foo', Om_P, Om_PP)
+        nt.assert_raises(KeyError, psbeam.power_beam_int, 'foo')
+        nt.assert_raises(KeyError, psbeam.power_beam_sq_int, 'foo')
+
         # Check that invalid method args raise errors
         nt.assert_raises(KeyError, psbeam.power_beam_int, pol='blah')
         nt.assert_raises(KeyError, psbeam.power_beam_sq_int, pol='blah')

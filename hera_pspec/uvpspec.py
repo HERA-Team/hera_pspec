@@ -696,7 +696,7 @@ class UVPSpec(object):
 
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
-            spw_ranges = uvp.get_spw_ranges()
+            spw_ranges = self.get_spw_ranges()
             spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data
@@ -731,7 +731,7 @@ class UVPSpec(object):
 
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
-            spw_ranges = uvp.get_spw_ranges()
+            spw_ranges = self.get_spw_ranges()
             spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data
@@ -769,7 +769,7 @@ class UVPSpec(object):
 
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
-            spw_ranges = uvp.get_spw_ranges()
+            spw_ranges = self.get_spw_ranges()
             spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data

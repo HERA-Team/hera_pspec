@@ -161,12 +161,20 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(np.isclose(blpairts, np.array([0,3,6,9,12,15,18,21,24,27])).min())
 
         # spw to indices
-        spw = self.uvp.spw_to_dly_indices(0)
-        nt.assert_equal(len(spw), self.uvp.Ndlys)
-        spw = self.uvp.spw_to_freq_indices(0)
-        nt.assert_equal(len(spw), self.uvp.Nfreqs)
-        spw = self.uvp.spw_indices(0)
-        nt.assert_equal(len(spw), self.uvp.Nspws)
+        spw1 = self.uvp.spw_to_dly_indices(0)
+        nt.assert_equal(len(spw1), self.uvp.Ndlys)
+        spw2 = self.uvp.spw_to_freq_indices(0)
+        nt.assert_equal(len(spw2), self.uvp.Nfreqs)
+        spw3 = self.uvp.spw_indices(0)
+        nt.assert_equal(len(spw3), self.uvp.Nspws)
+
+        # use spw tuple instead of spw index
+        spw1b = self.uvp.spw_to_dly_indices(self.uvp.get_spw_ranges()[0])
+        spw2b = self.uvp.spw_to_freq_indices(self.uvp.get_spw_ranges()[0])
+        spw3b = self.uvp.spw_indices(self.uvp.get_spw_ranges()[0])
+        np.testing.assert_array_equal(spw1, spw1b)
+        np.testing.assert_array_equal(spw2, spw2b)
+        np.testing.assert_array_equal(spw3, spw3b)
 
         # pol to indices
         pol = self.uvp.pol_to_indices('xx')
@@ -199,6 +207,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp.Nblpairs, 1)
         nt.assert_equal(uvp.data_array[0].shape, (10, 30, 1))
         nt.assert_almost_equal(uvp.data_array[0][0,0,0], (101.1021011020000001+0j))
+
         # inplace vs not inplace, spw selection
         uvd = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
@@ -211,28 +220,51 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_equal(uvp2.data_array[0].shape, (10, 10, 1))
         nt.assert_almost_equal(uvp2.data_array[0][0,0,0], (-3831605.3903496987+8103523.9604128916j))
+
         # blpair select
         uvp = copy.deepcopy(self.uvp)
         uvp2 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 2)
+
         # pol select
         uvp2 = uvp.select(pols=[-5], inplace=False)
         nt.assert_equal(uvp2.pol_array[0], -5)
+
         # time select
         uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[:1], inplace=False)
         nt.assert_equal(uvp2.Ntimes, 1)
+
         # test pol and blpair select, and check dimensionality of output
         uvp = copy.deepcopy(self.uvp)
         uvp.set_stats('hi', uvp.get_all_keys()[0], np.ones(300).reshape(10, 30))
         uvp2 = uvp.select(blpairs=uvp.get_blpairs(), pols=uvp.pol_array, inplace=False)
         nt.assert_equal(uvp2.data_array[0].shape, (30, 30, 1))
         nt.assert_equal(uvp2.stats_array['hi'][0].shape, (30, 30, 1))
+
         # test when both blp and pol array are non-sliceable
         uvp2, uvp3, uvp4 = copy.deepcopy(uvp), copy.deepcopy(uvp), copy.deepcopy(uvp)
         uvp2.pol_array[0], uvp3.pol_array[0], uvp4.pol_array[0] = -6, -7, -8
         uvp = uvp + uvp2 + uvp3 + uvp4
         uvp5 = uvp.select(blpairs=[101102101102], pols=[-5, -6, -7], inplace=False)
         nt.assert_equal(uvp5.data_array[0].shape, (10, 30, 3))
+
+        # select only on lst
+        uvp = copy.deepcopy(self.uvp)
+        uvp2 = uvp.select(lsts=np.unique(uvp.lst_avg_array), inplace=False)
+        nt.assert_equal(uvp, uvp2)
+
+        # check non-sliceable select: both pol and blpairs are non-sliceable
+        uvp = copy.deepcopy(self.uvp)
+        # extend pol_array axis
+        for i in [-6, -7, -8]:
+            _uvp = copy.deepcopy(self.uvp)
+            _uvp.pol_array[0] = i
+            uvp += _uvp
+
+        # create a purposely non-sliceable select across *both* pol and blpair
+        uvp.select(pols=[-5, -7, -8], blpairs=[101102101102, 102103102103])
+        nt.assert_equal(uvp.Npols, 3)
+        nt.assert_equal(uvp.Nblpairs, 2)
 
     def test_get_ENU_bl_vecs(self):
         bl_vecs = self.uvp.get_ENU_bl_vecs()
