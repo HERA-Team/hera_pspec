@@ -494,6 +494,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
             specified. Default: None.
         """
         self.OmegaP = {}; self.OmegaPP = {}
+        # these are allowed pols in AIPS polarization integer convention
+        # see pyuvdata.utils.polstr2num() for details
         self.allowed_pols = [1, 2, 3, 4, -5, -6, -7, -8]
         
         # Set beam_freqs

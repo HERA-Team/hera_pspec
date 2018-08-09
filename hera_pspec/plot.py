@@ -81,8 +81,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         If True, put plot on a log-scale. Else linear scale. Default: True.
 
     force_plot : bool, optional
-        If plotting a large number of spectra, this function will error. Set
-        this to True to override this large plot error and force plot.
+        If plotting a large number of spectra (>100), this function will error.
+        Set this to True to override this large plot error and force plot.
         Default: False.
 
     label_type : int, optional
@@ -287,7 +287,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
 def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=False, 
                     fold=False, delay=True, deltasq=False, log=True, lst_in_hrs=True,
                     vmin=None, vmax=None, cmap='YlGnBu', axes=None, figsize=(14, 6),
-                    force_plot=False, times=None, title_type=0):
+                    force_plot=False, times=None, title_type='blpair'):
     """
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
@@ -345,17 +345,16 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         len-2 integer tuple specifying figure size if axes is None
 
     force_plot : bool
-        Certain qualities of an input UVPSpec will raise an exception,
-        and this parameter overrides that to continue plotting. One example is
-        having more than 20 blpairs in the object.
+        If plotting a large number of blpairs (>20), this routine will quit
+        unless force_plot == True.
 
     times : array_like, optional
         Float ndarray containing elements from time_avg_array to plot.
 
-    title_type : int, optional
-        Type of title to put above plot(s).
-        0 : "bls: {bl1} x {bl2}"
-        1 : "bl len {len} m & ang {ang} deg" 
+    title_type : str, optional
+        Type of title to put above plot(s). Options = ['blpair', 'blvec']
+        blpair : "bls: {bl1} x {bl2}"
+        blvec : "bl len {len} m & ang {ang} deg" 
 
     Returns
     -------
@@ -399,11 +398,11 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
                                       time_avg=False, inplace=False)
     else:
         uvp_plt = copy.deepcopy(uvp)
-            
+        
     # Fold the power spectra if requested
     if fold:
         uvp_plt.fold_spectra()
-    
+
     # Convert to Delta^2 units if requested
     if deltasq and not delay:
         uvp_plt.convert_to_deltasq()
@@ -443,7 +442,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     # check for reasonable number of blpairs to plot...
     Nkeys = len(waterfall)
     if Nkeys > 20 and force_plot == False:
-        raise ValueError("Nblps > 20 and force_plot == False, quitting plotting routine...")
+        raise ValueError("Nblps > 20 and force_plot == False, quitting...")
 
     # Take logarithm of data if requested
     if log:
@@ -531,9 +530,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             ax.xaxis.set_ticks_position('bottom')
             ax.tick_params(labelsize=12)
             if ax.get_title() == '':
-                if title_type == 0:
+                if title_type == 'blpair':
                     ax.set_title("bls: {} x {}".format(*blp), y=1)
-                elif title_type == 1:
+                elif title_type == 'blvec':
                     blv = 0.5 * (blvecs[blp[0]] + blvecs[blp[1]])
                     lens, angs = hp.utils.get_bl_lens_angs([blv], bl_error_tol=1.0)
                     ax.set_title("bl len {len:0.2f} m & {ang:0.0f} deg".format(len=lens[0], ang=angs[0]), y=1)

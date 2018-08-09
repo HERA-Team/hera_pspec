@@ -263,35 +263,49 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     return blp_select
 
 
-def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None, times=None,
-            lsts=None, pols=None, h5file=None):
+def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
+            times=None, lsts=None, pols=None, h5file=None):
     """
-    Select function for selecting out certain slices of the data, as well as loading in data from HDF5 file.
+    Select function for selecting out certain slices of the data, as well
+    as loading in data from HDF5 file.
 
     Parameters
     ----------
-    uvp : UVPSpec object with at least meta-data in required params loaded in.
+    uvp : UVPSpec object
+        A UVPSpec with at least meta-data in required params loaded in.
         If only meta-data is loaded in then h5file must be specified.
 
-    spws : list of spectral window integers to select
+    spws : list
+        A list of spectral window integers to select
 
-    bls : list of i6 baseline integers or baseline tuples, Ex. (2, 3)
-        Select all baseline-pairs whose first _or_ second baseline are in bls list.
-        This changes if only_pairs_in_bls == True.
+    bls : list
+        A list of i6 baseline integers or baseline tuples, Ex. (2, 3)
+        Select all baseline-pairs whose first _or_ second baseline are in
+        bls list. This changes if only_pairs_in_bls == True.
 
-    only_pairs_in_bls : bool, if True, keep only baseline-pairs whose first _and_ second baseline
+    only_pairs_in_bls : bool
+        If True, keep only baseline-pairs whose first _and_ second baseline
         are both found in bls list.
 
-    blpairs : list of baseline-pair tuples or integers to keep, if bls is also fed, this list is concatenated
-        onto the baseline-pair list constructed from from the bls selection
+    blpairs : list
+        A list of baseline-pair tuples or integers to keep, if bls is also
+        fed, this list is concatenated onto the baseline-pair list constructed
+        from from the bls selection
 
-    times : float ndarray of times from the time_avg_array to keep
+    times : list
+        List of times from the time_avg_array to keep. Cannot be fed if
+        lsts is fed.
 
-    lsts : float ndarray of lsts from the lst_avg_array to keep. Cannot be specified if times is specifed.
+    lsts : list
+        List of lsts from the lst_avg_array to keep. Cannot be fed if
+        times is fed.
 
-    pols : list of polarization strings or integers to keep. See pyuvdata.utils.polstr2num for acceptable options.
+    pols : list
+        A list of polarization strings or integers to keep.
+        See pyuvdata.utils.polstr2num for acceptable options.
 
-    h5file : h5py file descriptor, used for loading in selection of data from HDF5 file
+    h5file : h5py file descriptor
+        Used for loading in selection of data from HDF5 file.
     """
     if spws is not None:
         # make selections

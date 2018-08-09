@@ -2198,8 +2198,8 @@ class PSpecData(object):
                     # insert time and blpair info only once per blpair
                     if i < 1 and j < 1:
                         # insert time info
-                        inds1 = dset1.get_blt_inds(bl1)
-                        inds2 = dset2.get_blt_inds(bl2)
+                        inds1 = dset1.antpair2ind(bl1, ordered=False)
+                        inds2 = dset2.antpair2ind(bl2, ordered=False)
                         time1.extend(dset1.time_array[inds1])
                         time2.extend(dset2.time_array[inds2])
                         lst1.extend(dset1.lst_array[inds1])
@@ -2390,7 +2390,7 @@ class PSpecData(object):
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
                 # get blts indices of basline
-                indices = dset.get_blt_inds(k[:2])
+                indices = dset.antpair2ind(k[:2], ordered=False)
                 # get index in polarization_array for this polarization
                 polind = pol_list.index(uvutils.polstr2num(k[-1]))
                 # insert into dset
@@ -2411,7 +2411,7 @@ class PSpecData(object):
 
         Parameters
         ----------
-        beam :
+        beam : PSpecBeam object
         """
         # get all unique polarizations of all the datasets
         pols = set(np.ravel([dset.polarization_array for dset in self.dsets]))
@@ -2633,7 +2633,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     history : str
         String to add to history of each UVPSpec object.
 
-    Returns (psc, ds)
+    Returns
     -------
     psc : PSpecContainer object
         A container for the output UVPSpec objects, which themselves contain the

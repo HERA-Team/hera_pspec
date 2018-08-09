@@ -843,7 +843,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd2.phase_to_time(Time(2458042.5, format='jd'))
         ds.validate_datasets()
 
-    def test_rephase_to_dst(self):
+    def test_rephase_to_dset(self):
         # generate two uvd objects w/ different LST grids
         uvd1 = copy.deepcopy(self.uvd)
         uvd2 = uv.UVData()
@@ -1040,7 +1040,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # test with nsamp set to zero
         uvd = copy.deepcopy(self.uvd)
-        uvd.nsample_array[uvd.get_blt_inds((24, 25))] = 0.0
+        uvd.nsample_array[uvd.antpair2ind(24, 25, ordered=False)] = 0.0
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [('xx', 'xx')])
         nt.assert_true(np.all(np.isclose(uvp.integration_array[0], 0.0)))
@@ -1065,7 +1065,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(len(ds._identity_Y), 1)
         nt.assert_equal(ds._identity_Y.keys()[0], ((0, 24, 25, 'XX'), (1, 24, 25, 'XX')))
         # assert caching is not used when inappropriate
-        ds.dsets[0].flag_array[ds.dsets[0].get_blt_inds((37, 38)), :, 25, :] = True
+        ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), :, 25, :] = True
         uvp = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
                        input_data_weight='identity', norm='I', taper='none', verbose=False,
                        spw_ranges=[(20, 30)])
@@ -1149,13 +1149,13 @@ class Test_PSpecData(unittest.TestCase):
 
         # test single integration being flagged within spw
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
-        ds.dsets[0].flag_array[ds.dsets[0].get_blt_inds((24, 25))[3], 0, 600, 0] = True
+        ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25, ordered=False)[3], 0, 600, 0] = True
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.25, unflag=False)
         nt.assert_true(ds.dsets[0].get_flags(24, 25)[3, 400:800].all())
         nt.assert_false(ds.dsets[0].get_flags(24, 25)[3, :].all())
 
         # test pspec run sets flagged integration to have zero weight
-        uvd.flag_array[uvd.get_blt_inds((24, 25))[3], 0, 400, :] = True
+        uvd.flag_array[uvd.antpair2ind(24, 25, ordered=False)[3], 0, 400, :] = True
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
         ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=0.25)
         uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
@@ -1167,7 +1167,7 @@ class Test_PSpecData(unittest.TestCase):
         # average spectra
         avg_uvp = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # repeat but change data in flagged portion
-        ds.dsets[0].data_array[uvd.get_blt_inds((24, 25))[3], 0, 400:450, :] *= 100
+        ds.dsets[0].data_array[uvd.antpair2ind(24, 25, ordered=False)[3], 0, 400:450, :] *= 100
         uvp2 = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
                         spw_ranges=[(400, 450)], verbose=False)
         avg_uvp2 = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
@@ -1203,12 +1203,12 @@ class Test_PSpecData(unittest.TestCase):
 
         # Test that when flagged, the data within a channel really don't have any effect on the final result
         uvd2 = copy.deepcopy(uvd)
-        uvd2.flag_array[uvd.get_blt_inds((24, 25))] = True
+        uvd2.flag_array[uvd.antpair2ind(24, 25, ordered=False)] = True
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
-        uvd2.data_array[uvd.get_blt_inds((24, 25))] *= 9234.913
+        uvd2.data_array[uvd.antpair2ind(24, 25, ordered=False)] *= 9234.913
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         uvp_flagged_mod = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
