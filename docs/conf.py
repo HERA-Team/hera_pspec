@@ -27,8 +27,9 @@ import sys
 import mock
 MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'scipy.integrate', 
                 'pyuvdata', 'h5py', 'aipy', 'omnical', 'linsolve', 'hera_qm', 
-                'uvtools', 'hera_cal', 'healpy', 'scikit-learn', 'astropy', 
-                'astropy.cosmology', 'matplotlib', 'matplotlib.pyplot', 'yaml']
+                'uvtools', 'hera_cal', 'hera_cal.utils', 'healpy', 
+                'scikit-learn', 'astropy', 'astropy.cosmology', 'matplotlib', 
+                'matplotlib.pyplot', 'pylab', 'yaml']
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 
@@ -118,7 +119,7 @@ html_theme_options = {
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+#html_static_path = ['_static']
 
 
 # -- Options for HTMLHelp output ------------------------------------------
@@ -181,7 +182,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     (master_doc, 'hera_pspec', u'hera_pspec Documentation',
-     author, 'hera_pspec', 'One line description of project.',
+     author, 'hera_pspec', 'HERA delay power spectrum estimation.',
      'Miscellaneous'),
 ]
 

@@ -447,7 +447,7 @@ class UVPSpec(object):
     def get_spw_ranges(self, spws=None):
         """
         Get the frequency range and Nfreqs of each spectral window in the object.
-
+        
         Parameters
         ----------
         spws : list of spw integers, optional
@@ -455,10 +455,11 @@ class UVPSpec(object):
 
         Returns
         -------
-        spw_ranges : list of len-4 tuples (freq_start, freq_end, Nfreqs, Ndlys) in Hz.
-            Contains start, stop and Nfreqs and Ndlys [Hz] of each spectral window.
+        spw_ranges : list of len-4 tuples
+            Tuples: (freq_start, freq_end, Nfreqs, Ndlys) in Hz. Contains 
+            start, stop and Nfreqs and Ndlys [Hz] of each spectral window.
             To turn this into the frequency array of the spectral window use
-                spw_freqs = np.linspace(*spw_range[:3], endpoint=False)
+            `spw_freqs = np.linspace(*spw_range[:3], endpoint=False)`
         """
         # type check
         if isinstance(spws, (int, np.integer)):
