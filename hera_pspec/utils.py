@@ -1,15 +1,11 @@
 import numpy as np
-import md5
-import yaml
+import os, time, md5, yaml
+import itertools, argparse, glob
+import traceback, operator
+import aipy, uvtools
+import pylab as plt
 from conversions import Cosmo_Conversions
-import traceback
-import operator
 from hera_cal import redcal
-import itertools
-import argparse
-import glob
-import os
-import aipy
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
 from pyuvdata import UVData
@@ -22,6 +18,7 @@ def hash(w):
     """
     DeprecationWarning("utils.hash is deprecated.")
     return md5.md5(w.copy(order='C')).digest()
+
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
@@ -84,6 +81,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     C /= np.where(W > 0, W, 1)
     C -= np.outer(x1, x2)
     return C
+
 
 def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
     """
@@ -280,43 +278,11 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
     # construct baseline pairs
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
-        (_bls1, _bls2, 
-         _blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, group=False,
+        (bls1, bls2, 
+         blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, group=False,
                                     exclude_permutations=exclude_permutations)
-
-        # filter based on xants, existance in uvd1 and uvd2 and bl_len_range
-        bls1, bls2 = [], []
-        for bl1, bl2 in _blps:
-            # get baseline length and angle
-            bl1i = uvd1.antnums_to_baseline(*bl1)
-            bl2i = uvd1.antnums_to_baseline(*bl2)
-            bl1v = (antpos[bl1[0]] - antpos[bl1[1]])[:2]
-            bl2v = (antpos[bl2[0]] - antpos[bl2[1]])[:2]
-            bl1_len, bl2_len = np.linalg.norm(bl1v), np.linalg.norm(bl2v)
-            bl1_deg = np.arctan2(*bl1v[::-1]) * 180 / np.pi
-            if bl1_deg < 0: bl1_deg = (bl1_deg + 180) % 360
-            bl2_deg = np.arctan2(*bl2v[::-1]) * 180 / np.pi
-            if bl2_deg < 0: bl2_deg = (bl2_deg + 180) % 360
-            bl_len = np.mean([bl1_len, bl2_len])
-            bl_deg = np.mean([bl1_deg, bl2_deg])
-            # filter based on length cut
-            if bl_len < bl_len_range[0] or bl_len > bl_len_range[1]:
-                continue
-            # filter based on angle cut
-            if bl_deg < bl_deg_range[0] or bl_deg > bl_deg_range[1]:
-                continue
-            # filter on other things
-            if filter_blpairs:
-                if (bl1i not in uvd1.baseline_array or bl1[0] in xants1 or bl1[1] in xants1) \
-                   or (bl2i not in uvd2.baseline_array or bl2[0] in xants2 or bl2[1] in xants2):
-                   continue
-            bls1.append(bl1)
-            bls2.append(bl2)
-
         if len(bls1) < 1:
             continue
-
-        blps = zip(bls1, bls2)
 
         # group if desired
         if Nblps_per_group is not None:
@@ -787,10 +753,12 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0):
     return red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag
 
 
-def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verbose=True):
+def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, 
+                verbose=True):
     """
-    Job monitoring function, used to send elements of iterator through calls of run_func.
-    Can be parallelized if the input M function is from the multiprocess module.
+    Job monitoring function, used to send elements of iterator through calls of 
+    run_func. Can be parallelized if the input M function is from the 
+    multiprocess module.
 
     Parameters
     ----------
@@ -806,8 +774,8 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
         A descriptive name for the operation being performed by run_func.
 
     M : map function
-        A map function used to send elements of iterator through calls to run_func.
-        Default is built-in map function.
+        A map function used to send elements of iterator through calls to 
+        run_func. Default is built-in map function.
 
     lf : file descriptor
         Log-file descriptor to print message to.
@@ -821,12 +789,15 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
     Returns
     -------
     failures : list
-        A list of failed job indices from iterator. Failures are any output of run_func
-        that aren't 0.
+        A list of failed job indices from iterator. Failures are any output of 
+        run_func that aren't 0.
     """
+    # Start timing
+    t_start = time.time()
+    
     # run function over jobs
     exit_codes = np.array(M(run_func, iterator))
-    time = datetime.utcnow()
+    tnow = datetime.utcnow()
 
     # check for len-0
     if len(exit_codes) == 0:
@@ -835,7 +806,9 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
     # inspect for failures
     if np.all(exit_codes != 0):
         # everything failed, raise error
-        log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60, action_name, exit_codes, time), f=lf, verbose=verbose)
+        log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60, 
+                                                action_name, exit_codes, tnow), 
+            f=lf, verbose=verbose)
         raise ValueError("All {} jobs failed".format(action_name))
 
     # if not all failed, try re-run
@@ -858,19 +831,61 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, verb
 
     # print failures if they exist
     if len(failures) > 0:
-        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name, maxiter, failures), f=lf, verbose=verbose)
+        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name, 
+                                                               maxiter, 
+                                                               failures), 
+            f=lf, verbose=verbose)
     else:
-        log("\nAll {} jobs ran through".format(action_name), f=lf, verbose=verbose)
+        t_run = time.time() - t_start
+        log("\nAll {} jobs ran through ({:1.1f} sec)".format(action_name, t_run), 
+            f=lf, verbose=verbose)
 
     return failures
 
+def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
+    """
+    Given a list of baseline vectors in ENU (TOPO) coords, get the
+    baseline length [meter] and angle [deg] given a baseline error
+    tolerance [meters]
+
+    Parameters
+    ----------
+    blvecs : list
+        A list of ndarray of 2D or 3D baseline vectors.
+
+    bl_error_tol : float, optional
+        A baseline vector error tolerance.
+
+    Returns
+    -------
+    lens : ndarray
+        Array of baseline lengths [meters]
+
+    angs : ndarray
+        Array of baseline angles [degrees]
+    """
+    # type check
+    blvecs = np.asarray(blvecs)
+    assert blvecs.shape[1] in [2, 3], "blvecs must have shape (N, 2) or (N, 3)"
+
+    # get lengths and angles
+    lens = np.array([np.linalg.norm(v) for v in blvecs])
+    angs = np.array([np.arctan2(*v[:2][::-1]) * 180 / np.pi for v in blvecs])
+    angs = np.array([(a + 180) % 360 if a < 0 else a for a in angs])
+
+    # Find baseline groups with ang ~ 180 deg that have y-vec within bl_error and set to ang = 0 deg.
+    flip = (blvecs[:, 1] > -bl_error_tol) & (blvecs[:, 1] < 0) & (blvecs[:, 0] > 0)
+    angs[flip] = 0
+
+    return lens, angs
+
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False):
+             bl_deg_range=(0, 180), xants=None, add_autos=False, low_hi=True):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
-    calculate redundant baseline groups using hera_cal.redcal and optionally filter
-    groups based on baseline cuts and xants.
+    calculate redundant baseline groups using hera_cal.redcal and optionally 
+    filter groups based on baseline cuts and xants.
 
     Parameters
     ----------
@@ -895,7 +910,11 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         List of bad antenna numbers to exclude
 
     add_autos : bool
-        If True, add into autocorrelation to redundant groups
+        If True, add into autocorrelation group to the redundant group list.
+
+    low_hi : bool
+        If True, if the first bl in a redundant blgroup has ant1 > ant2,
+        then conjugate all baselines in the group.
 
     Returns (reds, lens, angs)
     ------- 
@@ -918,22 +937,31 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
         antpos_dict = dict(zip(ants, antpos))
+
     # use antenna position dictionary
     elif isinstance(uvd, (dict, odict)):
         antpos_dict = uvd
 
     # get redundant baselines
-    reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol, low_hi=True)
-    lens = [np.linalg.norm(antpos_dict[r[0][0]] - antpos_dict[r[0][1]]) for r in reds]
-    angs = [np.arctan2(*(antpos_dict[r[0][0]] - antpos_dict[r[0][1]])[:2][::-1]) * 180 / np.pi for r in reds]
-    angs = [(a + 180) % 360 if a < 0 else a for a in angs]
+    reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol, low_hi=False)
+    if low_hi:
+        _reds = []
+        for r in reds:
+            if r[0][0] > r[0][1]:
+                r = [_r[::-1] for _r in r]
+            _reds.append(r)
+        reds = _reds
+
+    # get vectors, len and ang for each baseline group
+    vecs = np.array([antpos_dict[r[0][0]] - antpos_dict[r[0][1]] for r in reds])
+    lens, angs = get_bl_lens_angs(vecs, bl_error_tol=bl_error_tol)
 
     # put in autocorrs
     if add_autos:
         ants = antpos_dict.keys()
         reds = [zip(ants, ants)] + reds
-        lens = [0] + lens
-        angs = [0] + angs
+        lens = np.insert(lens, 0, 0)
+        angs = np.insert(angs, 0, 0)
 
     # restrict baselines
     _reds, _lens, _angs = [], [], []
@@ -961,4 +989,3 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         reds, lens, angs = _reds, _lens, _angs
 
     return reds, lens, angs
-

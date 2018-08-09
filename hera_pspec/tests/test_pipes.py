@@ -14,6 +14,11 @@ import shutil
 import fnmatch
 import glob
 
+## Note! In order to debug this script, you should open 
+## an ipython session, and copy-paste `test_preprocess_run`
+## and `test_pspec_run` into the session, and check
+## the log.out and err.out files generated...
+
 class Test_PreProcess(unittest.TestCase):
     """ Testing class for preprocess_data.py pipeline """
 
@@ -49,6 +54,7 @@ class Test_PreProcess(unittest.TestCase):
         cf['io']['logfile'] = "log.out"
         cf['io']['errfile'] = 'err.out'
         cf['io']['overwrite'] = True
+        cf['io']['plot'] = False
         cf['data']['data_template'] = os.path.join(DATA_PATH, cf['data']['data_template'])
 
         # write new config

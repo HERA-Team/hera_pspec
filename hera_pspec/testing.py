@@ -4,6 +4,7 @@ import copy, operator, itertools
 from collections import OrderedDict as odict
 from hera_pspec import uvpspec, pspecdata, conversions, pspecbeam, utils
 from pyuvdata import UVData
+from hera_cal.utils import JD2LST
 
 
 def build_vanilla_uvpspec(beam=None):
@@ -40,10 +41,12 @@ def build_vanilla_uvpspec(beam=None):
     bl_vecs = np.array([[  5.33391548e+00,  -1.35907816e+01,  -7.91624188e-09],
                         [ -8.67982998e+00,   4.43554478e+00,  -1.08695203e+01],
                         [ -3.34591450e+00,  -9.15523687e+00,  -1.08695203e+01]])
-    time_array = np.repeat(np.linspace(2458042.1, 2458042.2, Ntimes), Nblpairs)
+    time_array = np.linspace(2458042.1, 2458042.2, Ntimes)
+    lst_array = JD2LST(time_array, longitude=21.4283)
+    time_array = np.repeat(time_array, Nblpairs)
     time_1_array = time_array
     time_2_array = time_array
-    lst_array = np.repeat(np.ones(Ntimes, dtype=np.float), Nblpairs)
+    lst_array = np.repeat(lst_array, Nblpairs)
     lst_1_array = lst_array
     lst_2_array = lst_array
     time_avg_array = time_array

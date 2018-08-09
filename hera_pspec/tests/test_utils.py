@@ -218,6 +218,12 @@ class Test_Utils(unittest.TestCase):
         nt.assert_true(np.all([_l > bl_len_range[0] and _l < bl_len_range[1] for _l in l]))
         nt.assert_true(np.all([_a > bl_deg_range[0] and _a < bl_deg_range[1] for _a in a]))
 
+        # autos
+        r, l, a = utils.get_reds(fname, xants=xants, add_autos=True)
+        nt.assert_almost_equal(l[0], 0)
+        nt.assert_almost_equal(a[0], 0)
+        nt.assert_true(len(r), 105)
+
     def test_config_pspec_blpairs(self):
         # test basic execution
         uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
