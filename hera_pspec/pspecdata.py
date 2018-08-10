@@ -1150,11 +1150,13 @@ class PSpecData(object):
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
         
+        .. math ::
             V_ab = 2 tr(C E_a C E_b), where E_a = (1/2) R Q^a R
 
         When the data are complex, the expression becomes considerably more
         complicated. Define
-
+        
+        .. math ::
             E^{12,a} = (1/2) R_1 Q^a R_2
             C^1 = <x1 x1^dagger> - <x1><x1^dagger>
             C^2 = <x2 x2^dagger> - <x2><x2^dagger>
@@ -1162,28 +1164,32 @@ class PSpecData(object):
             S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
 
         Then
-
+        
+        .. math ::
             V_ab = tr(E^{12,a} C^2 E^{21,b} C^1)
                     + tr(E^{12,a} P^{21} E^{12,b *} S^{21})
 
         Note that
+        
+        .. math ::
             E^{12,a}_{ij}.conj = E^{21,a}_{ji}
 
-        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by default.
-        (So while the pointy brackets <...> should in principle be ensemble averages,
-        in practice the code performs averages in time.)
+        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by 
+        default. (So while the pointy brackets <...> should in principle be 
+        ensemble averages, in practice the code performs averages in time.)
 
         Empirical covariance estimates are in principle a little risky, as they
         can potentially induce signal loss. This is probably ok if we are just
         looking intending to look at V. It is most dangerous when C_emp^-1 is
         applied to the data. The application of using this to form do a V^-1/2
-        decorrelation is probably medium risk. But this has yet to be proven, and
-        results coming from V^-1/2 should be interpreted with caution.
+        decorrelation is probably medium risk. But this has yet to be proven, 
+        and results coming from V^-1/2 should be interpreted with caution.
 
-        Note for future: Although the V matrix should be Hermitian by construction,
-        in practice there are precision issues and the Hermiticity is violated at
-        ~ 1 part in 10^15. (Which is ~the expected roundoff error). If something
-        messes up, it may be worth investigating this more.
+        Note for future: Although the V matrix should be Hermitian by 
+        construction, in practice there are precision issues and the 
+        Hermiticity is violated at ~ 1 part in 10^15. (Which is ~the expected 
+        roundoff error). If something messes up, it may be worth investigating 
+        this more.
 
         Note for the future: If this ends up too slow, Cholesky tricks can be
         employed to speed up the computation by a factor of a few.
