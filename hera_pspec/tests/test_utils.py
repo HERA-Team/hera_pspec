@@ -186,6 +186,14 @@ class Test_Utils(unittest.TestCase):
         nt.assert_true(isinstance(blps[0], list))
         nt.assert_equal(blps[0], [((24, 37), (25, 38)), ((24, 37), (24, 37))])
 
+        # test baseline select on uvd
+        uvd2 = copy.deepcopy(uvd)
+        uvd2.select(bls=[(24, 25), (37, 38), (24, 39)])
+        (bls1, bls2, blps, xants1,
+         xants2) = utils.calc_blpair_reds(uvd2, uvd2, filter_blpairs=True, exclude_auto_bls=True, exclude_permutations=True,
+                                   bl_len_range=(10.0, 20.0))  
+        nt.assert_equal(blps, [((24, 25), (37, 38))])
+
         # test exceptions
         uvd2 = copy.deepcopy(uvd)
         uvd2.antenna_positions[0] += 2

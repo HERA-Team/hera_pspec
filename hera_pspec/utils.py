@@ -174,7 +174,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
     
     filter_blpairs : bool, optional
         if True, calculate xants and filters-out baseline pairs based on xant lists
-        and baselines in the data.
+        and actual baselines in the data.
 
     xant_flag_thresh : float, optional
         Fraction of 2D visibility (per-waterfall) needed to be flagged to 
@@ -283,6 +283,21 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
                                     exclude_permutations=exclude_permutations)
         if len(bls1) < 1:
             continue
+
+        # filter based on real baselines in data
+        if filter_blpairs:
+            uvd1_bls = uvd1.get_antpairs()
+            uvd2_bls = uvd2.get_antpairs()
+            _bls1, _bls2 = [], []
+            for blp in blps:
+                bl1 = blp[0]
+                bl2 = blp[1]
+                if ((bl1 in uvd1_bls) or (bl1[::-1] in uvd1_bls)) \
+                    and ((bl2 in uvd2_bls) or (bl2[::-1] in uvd2_bls)):
+                    _bls1.append(bl1)
+                    _bls2.append(bl2)
+            bls1, bls2 = _bls1, _bls2
+            blps = zip(bls1, bls2)
 
         # group if desired
         if Nblps_per_group is not None:
