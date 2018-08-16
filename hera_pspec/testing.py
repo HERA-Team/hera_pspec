@@ -5,6 +5,7 @@ from collections import OrderedDict as odict
 from hera_pspec import uvpspec, pspecdata, conversions, pspecbeam, utils
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
+from scipy import stats
 
 
 def build_vanilla_uvpspec(beam=None):
@@ -83,7 +84,7 @@ def build_vanilla_uvpspec(beam=None):
                                    2005235.09142983,
                                   -3239928.42475397])
 
-    store_cov=True
+    store_cov = True
     cosmo = conversions.Cosmo_Conversions()
 
     data_array, wgt_array = {}, {}
@@ -220,3 +221,106 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose, 
                    store_cov=store_cov, n_dlys=n_dlys)
     return uvp
+
+
+def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False, whiten=False,
+              run_check=True):
+    """
+    Generate a simulated Gaussian noise realization.
+
+    Parameters
+    ----------
+    data : str or UVData object
+        A UVData object or path to miriad file.
+
+    Tsys : float
+        System temperature in Kelvin.
+
+    beam : str or PSpecBeam object
+        A PSpecBeam object or path to beamfits file.
+
+    Nextend : int, optional
+        Number of times to extend time axis by default length
+        before creating noise sim. Can be used to increase
+        number statistics before forming noise realization.
+
+    seed : int, optional
+        Seed to set before forming noise realization.
+
+    inplace : bool, optional
+        If True, overwrite input data and return None, else
+        make a copy and return copy.
+
+    whiten : bool, optional
+        If True, clear input data of flags if they exist and set all nsamples
+        to 1.
+
+    run_check : bool, optional
+        If True, run UVData check before return.
+
+    Returns
+    -------
+    data : UVData with noise realizations.
+    """
+    # Read data files
+    if isinstance(data, (str, np.str)):
+        _data = UVData()
+        _data.read_miriad(data)
+        data = _data
+    elif isinstance(data, UVData):
+        if not inplace:
+            data = copy.deepcopy(data)
+    assert isinstance(data, UVData)
+
+    # whiten input data
+    if whiten:
+        data.flag_array[:] = False
+        data.nsample_array[:] = 1.0
+
+    # Configure beam
+    if isinstance(beam, (str, np.str)):
+        beam = pspecbeam.PSpecBeamUV(beam)
+    assert isinstance(beam, pspecbeam.PSpecBeamBase)    
+
+    # Extend times
+    Nextend = int(Nextend)
+    if Nextend > 0:
+        assert data.phase_type == 'drift', "data must be drift phased in order to extend along time axis"
+        data = copy.deepcopy(data)
+        _data = copy.deepcopy(data)
+        dt = np.median(np.diff(np.unique(_data.time_array)))
+        dl = np.median(np.diff(np.unique(_data.lst_array)))
+        for i in range(Nextend):
+            _data.time_array += dt * _data.Ntimes * (i+1)
+            _data.lst_array += dl * _data.Ntimes * (i+1)
+            _data.lst_array %= 2*np.pi
+            data += _data
+
+    # Get Trms
+    int_time = data.integration_time
+    if not isinstance(int_time, np.ndarray):
+        int_time = np.array([int_time])
+    Trms = Tsys / np.sqrt(int_time[:, None, None, None] * data.nsample_array * data.channel_width)
+
+    # Get Vrms
+    freqs = np.unique(data.freq_array)[None, None, :, None]
+    K_to_Jy = [1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p)) for p in data.polarization_array]
+    K_to_Jy = np.array(K_to_Jy).T[None, None, :, :]
+    Vrms = K_to_Jy * Trms
+
+    # Generate noise
+    if seed is not None:
+        np.random.seed(seed)
+    data.data_array = (stats.norm.rvs(0, 1./np.sqrt(2), size=Vrms.size).reshape(Vrms.shape) \
+                       + 1j * stats.norm.rvs(0, 1./np.sqrt(2), size=Vrms.size).reshape(Vrms.shape) ) * Vrms
+    f = np.isnan(data.data_array) + np.isinf(data.data_array)
+    data.data_array[f] = np.nan
+    data.flag_array[f] = True
+    data.vis_units = 'Jy'
+
+    if run_check:
+        data.check()
+
+    if not inplace:
+        return data
+
