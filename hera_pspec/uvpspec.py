@@ -1570,13 +1570,8 @@ class UVPSpec(object):
                 if form == 'Pk':
                     pn = np.ones(len(dlys), np.float) * pn
 
-                # If pseudo stokes pol (as opposed to linear or circular pol),
-                # divide by extra factor of 2
-                if isinstance(pol, (np.str, str)):
-                    pol = uvutils.polstr2num(pol)
-
-                if pol in (1, 2, 3, 4): pn /= 2.0 # pseudo stokes pol
-                if real: pn /= np.sqrt(2) # if real divide by sqrt(2)
+                if real:
+                    pn /= np.sqrt(2) # if real divide by sqrt(2)
 
                 # append to P_blp
                 P_blp.append(pn)
