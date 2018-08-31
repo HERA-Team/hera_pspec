@@ -117,7 +117,9 @@ def build_vanilla_uvpspec(beam=None):
     return uvp, cosmo
 
 
-def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
+def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, 
+                      beam=None, taper='none', cosmo=None, n_dlys=None, 
+                      verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -127,26 +129,34 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, 
         This can be a UVData object or a string filepath to a miriad file.
 
     bl_grps : list
-        This is a list of baseline groups (e.g. redundant groups) to form blpairs from.
+        This is a list of baseline groups (e.g. redundant groups) to form 
+        blpairs from.
         Ex: [[(24, 25), (37, 38), ...], [(24, 26), (37, 39), ...], ... ]
 
-    data_std: UVData object or str or None
-        Can be UVData object or a string filepath to a miriad file.
+    data_std: UVData object or str, optional
+        Can be UVData object or a string filepath to a miriad file. 
+        Default: None.
 
-    spw_ranges : list
-        List of spectral window tuples. See PSpecData.pspec docstring for details.
+    spw_ranges : list, optional
+        List of spectral window tuples. See PSpecData.pspec docstring for 
+        details. Default: None.
 
-    beam : PSpecBeamBase subclass or str
+    beam : PSpecBeamBase subclass or str, optional
         This can be a subclass of PSpecBeamBase of a string filepath to a
-        UVBeam healpix map.
+        UVBeam healpix map. Default: None.
 
-    taper : string
-        Optional tapering applied to the data before OQE.
+    taper : str, optional
+        Optional tapering applied to the data before OQE. Default: 'none'.
 
     cosmo : Cosmo_Conversions object
+        Cosmology object.
+    
+    n_dlys : int, optional
+        Number of delay bins to use. Default: None (uses as many delay bins as 
+        frequency channels).
 
-    verbose : bool
-        if True, report feedback to standard output
+    verbose : bool, optional
+        if True, report feedback to standard output. Default: False.
 
     Returns
     -------
@@ -181,7 +191,9 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, 
         beam.cosmo = cosmo
 
     # instantiate pspecdata
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], 
+                             wgts=[None, None], labels=['d1', 'd2'], beam=beam, 
+                             n_dlys=n_dlys)
 
     # get blpair groups
     assert isinstance(bl_grps, list), "bl_grps must be a list"

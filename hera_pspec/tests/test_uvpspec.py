@@ -504,6 +504,14 @@ class Test_UVPSpec(unittest.TestCase):
         uvp3.pol_array[0] = -7
         out = uvp1 + uvp2 + uvp3
         nt.assert_equal(out.Npols, 3)
+        
+        # Test whether n_dlys != Nfreqs works
+        uvp4 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], 
+                                         beam=beam, n_dlys=uvd.Nfreqs//2)
+        uvp4b = copy.deepcopy(uvp4)
+        uvp4b.pol_array[0] = -6
+        out = uvpspec.combine_uvpspec([uvp4, uvp4b], verbose=False)
+        
 
     def test_combine_uvpspec_std(self):
         # setup uvp build
