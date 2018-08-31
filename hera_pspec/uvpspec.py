@@ -1820,7 +1820,9 @@ def combine_uvpspec(uvps, verbose=True):
         # Initialize new arrays
         u.data_array[i] = np.empty((Nblpairts, spw[3], Npols), np.complex128)
         u.integration_array[i] = np.empty((Nblpairts, Npols), np.float64)
-        u.wgt_array[i] = np.empty((Nblpairts, spw[3], 2, Npols), np.float64)
+        u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
+        # spw[2] == Nfreqs (wgt_array is not resampled if Ndlys != Nfreqs, 
+        # so needs to keep this shape)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if store_cov:
             u.cov_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols),
