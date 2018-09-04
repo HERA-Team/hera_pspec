@@ -2746,7 +2746,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     # broadcast flags
     if broadcast_dset_flags:
-        ds.broadcast_dset_flags(time_thresh=time_thresh)
+        ds.broadcast_dset_flags(time_thresh=time_thresh, spw_ranges=spw_ranges)
 
     # perform Jy to mK conversion if desired
     if Jy2mK:
