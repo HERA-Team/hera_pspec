@@ -226,7 +226,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
 def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
               whiten=False, run_check=True):
     """
-    Generate a simulated Gaussian noise realization.
+    Generate a simulated Gaussian noise realization in Jy.
 
     Parameters
     ----------
