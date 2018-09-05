@@ -1,6 +1,6 @@
 import numpy as np
 import pyuvdata
-from hera_pspec import conversions
+from hera_pspec import conversions, uvpspec, utils
 import matplotlib
 import matplotlib.pyplot as plt
 import copy
@@ -496,67 +496,123 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     if new_plot:
         return fig
     
-def delay_wedge(uvps, blpairs, fold=False, cosmo=True, center_line=True, horizon_lines=True, cosmo_cbar=True, suptitle=''):
+def delay_wedge(uvp, blpairs, spw, pol, fold=False, delay=False,
+    center_line=True, horizon_lines=True, suptitle='', subtitle=None, ax=None):
+
     """
     Plot a 2D delay spectrum (or spectra) for a group of baselines.
     
     Parameters
     ----------
-    uvps : UVPspec
-        List of UVPSpec objects, containing delay spectra for a set of baseline-pairs, 
-        times, polarizations, and spectral windows.
+    uvp : UVPspec
+        UVPSpec object or list of UVPSpec objects which will be plotted side
+        by side, containing delay spectra for a set of baseline-pairs, times,
+        polarizations, and spectral windows.
         
     blpairs : list of tuples
         List of baseline-pair tuples.
+
+    spw : int or str, or list of ints or strs
+        Which spectral window to plot for each uvp object to be plotted.  If
+        plotting multiple UVPSpec objects, this should be a list of the same
+        length as the number of objects to be plotted.
+
+    pol : str or list of strs
+        Which pol (or pols) to plot.  If plotting multiple UVPSpec objects,
+        this should be a list of of the same length as the number of
+        objects to be plotted.
         
+    get_reds_from : 
+
     fold : bool, optional
-        Whether to fold the power spectrum in :math:`|k_\parallel|`. 
+        Whether to fold the power spectrum in k_parallel. 
         Default: False.
         
-    cosmo : bool, optional
-        Whether to convert axes to cosmological units :math:`|k_\parallel|` and 
-        :math:`|k_\perpendicular|`.
-        Default: True.
+    delay : bool, optional
+        Whether to plot the axes in tau. If False, axes will be plotted in k.
+        Default: False.
         
     center_line : bool, optional
-        Whether to plot a dotted line at :math:`|k_\parallel|` =0.
+        Whether to plot a dotted line at k_parallel=0.
         Default: True.
         
     horizon_lines : bool, optional
         Whether to plot dotted lines along the horizon.
         Default: True.
         
-    cosmo_cbar : bool, optional
-        Whether power has been converted to appropriate units through calibration.
-        Default: True.
-        
     suptitle : string, optional
         Suptitle for the plot.  If not provided, no suptitle will be plotted.
         Default: ''.
+
+    subtitle : string, list, optional
+        Title for each subplot.  If plotting multiple UVPSpec objects, this
+        should be a list of strings of the same length as the number of
+        objects to be plotted.  If not provided, no subtitles will be plotted.
+        Default: None.
+
+    ax : matplotlib.axes, optional
+        Use this to pass in an existing Axes object, which the power spectra 
+        will be added to. (Warning: Labels and legends will not be altered in 
+        this case, even if the existing plot has completely different axis 
+        labels etc.) If None, a new Axes object will be created.
+        Default: None.
         
     Returns
     -------
-    f : matplotlib.pyplot.Figure
+    fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance.
     """
+
+    #Make sure uvp is a UVPSpec or list of UVPSpec
+    if isinstance(uvp, uvpspec.UVPSpec):
+        uvp = [uvp]
+    if isinstance(uvp, list):
+        for uv in uvp:
+            if not isinstance(uv, uvpspec.UVPSpec):
+                raise AttributeError('The uvp parameter should be a UVPSpec '
+                                     'object or list of UVPSpec objects.')
+    else:
+        raise AttributeError('The uvp parameter should be a UVPSpec '
+                             'object or list of UVPSpec objects.')
     
-    if (type(uvps) != list) and (type(uvps) != np.ndarray):
-        raise AttributeError("The uvps paramater should be a list of UVPSpec objects.")
-        
-    #Initialize axes objects
-    ncols = len(uvps)
-    f, axes = plt.subplots(
-        ncols=ncols,
-        nrows=1,
-        sharex=True,
-        sharey=True,
-        squeeze=False,
-        figsize=(20, 10))
+    #check to make sure spw, pol, and subtitle are appropriately formatted
+    if isinstance(spw, (int,str)):
+        spw = [spw]
+    if not isinstance(spw, list) or not len(spw)==len(uvp):
+        raise AttributeError('The same number of arguments should be provided '
+                            'for spw and uvp.')
+    if isinstance(pol, str):
+        pol = [pol]
+    if not isinstance(pol, list) or not len(pol)==len(uvp):
+        raise AttributeError('The same number of arguments should be provided '
+                            'for pol and uvp.')
+    if subtitle is not None:
+        if isinstance(subtitle, str):
+            subtitle = [subtitle]
+        if not isinstance(subtitle, list) or not len(subtitle)==len(uvp):
+            raise AttributeError('The same number of arguments should be '
+                                 'provided for subtitle and uvp.')
+    else:
+        subtitle = ['' for i in range(len(uvp))]
+            
+
+    #Create new Axes if none specified
+    new_plot = False
+    if ax is None:
+        ncols = len(uvp)
+        fig, axes = plt.subplots(
+            ncols=ncols,
+            nrows=1,
+            sharex=True,
+            sharey=True,
+            squeeze=False,
+            figsize=(20, 10))
+        new_plot = True
     
     #Plot each uvp
     pols = []
     plt.subplots_adjust(wspace=0, hspace=0.1)
-    for uvp, ax in zip(uvps, axes.flatten()):
+    for uvp, ax, spw, pol, subtitle in zip(uvp, axes.flatten(), spw, pol, subtitle):
         #Find redundant-length baseline groups and their baseline lengths
         BIN_WIDTH = 0.3 #redundancy tolerance in meters 
         NORM_BINS = np.arange(0.0, 10000.0, BIN_WIDTH)
@@ -576,22 +632,20 @@ def delay_wedge(uvps, blpairs, fold=False, cosmo=True, center_line=True, horizon
         bllens = sorted(bllens)
         
         #Average the spectra along redundant baseline groups and time
-        uvp.average_spectra(blpair_groups=sorted_blpairs.values(), time_avg=True)
-        
-        #Grab polarization string for naming the plot later on
-        pol_int_to_str = {1: 'pI', 2: 'pQ', 3: 'pU', 4: 'pV', -5: 'XX', -6: 'YY', -7: 'XY', -8: 'YX'}
-        pol = pol_int_to_str[uvp.pol_array[0]]
-        pols.append(pol)
+        uvp = uvp.average_spectra(blpair_groups=sorted_blpairs.values(), time_avg=True, inplace=False)
         
         #Format data array
-        data = uvp.data_array[0][:, :, 0]
         if fold:
             uvp.fold_spectra()
-            data = uvp.data_array[0][:, data.shape[1] // 2:, 0]
-        
+        data = []
+        for blpair in uvp.get_blpairs():
+            data.append(uvp.get_data((spw, blpair, pol))[0])
+        data = np.array(data)
+
         #Format k_para axis
-        x_axis = (uvp.get_dlys(0)*1e9).tolist()
-        if cosmo:
+        if delay:
+            x_axis = (uvp.get_dlys(0)*1e9).tolist()
+        else:
             x_axis = uvp.get_kparas(0).tolist()
         if fold:
             x_axis.insert(0, 0)
@@ -617,7 +671,13 @@ def delay_wedge(uvps, blpairs, fold=False, cosmo=True, center_line=True, horizon
         
         #Setting y axis ticks and labels
         ax.set_yticks(bllen_midindices)
-        ax.set_yticklabels(bllens, fontsize=10)
+        if delay:
+            ax.set_yticklabels(bllens, fontsize=10)
+        else:
+            avg_z = uvp.cosmo.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
+            perpfactor = uvp.cosmo.bl_to_kperp(avg_z, little_h=True)
+            bl_lens = [np.round(bllen * perpfactor, 3) for bllen in bllens]
+            ax.set_yticklabels(bl_lens, fontsize=10)
         
         #Plot the data
         im = ax.imshow(
@@ -629,8 +689,10 @@ def delay_wedge(uvps, blpairs, fold=False, cosmo=True, center_line=True, horizon
         #Plot the horizon lines if requested
         if horizon_lines:
             horizons = [(bllen*u.m/c.c).to(u.ns).value for bllen in bllens]
-            #if cosmo:
-                #XXX still need to convert horizons to appropriate kpara values
+            if not delay:
+                avg_z = uvp.cosmo.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
+                parafactor = uvp.cosmo.tau_to_kpara(avg_z, little_h=True)
+                horizons = [horizon * parafactor * 10**-9 for horizon in horizons]
             j = 0
             for i, (horizon, bllen) in enumerate(zip(horizons, bllens)):
                 x1, y1 = [horizon, horizon], [j, bllen_indices[i]]
@@ -643,29 +705,35 @@ def delay_wedge(uvps, blpairs, fold=False, cosmo=True, center_line=True, horizon
             ax.axvline(x=0, color='#000000', ls='--', lw=1)
 
         ax.tick_params(axis='both', direction='inout')
-        ax.set_title(pol, fontsize=15)
+        ax.set_title(subtitle, fontsize=15)
     
     #add colorbar
-    cbar_ax = f.add_axes([0.9125, 0.25, 0.025, 0.5])
-    cbar = f.colorbar(im, cax=cbar_ax)
+    if new_plot:
+        cbar_ax = fig.add_axes([0.9125, 0.25, 0.025, 0.5])
+        cbar = fig.colorbar(im, cax=cbar_ax)
+        
+        #add units
+        psunits = uvp.units
+        if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
+        if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}")
+        if "Mpc" in psunits and "\\rm" not in psunits: 
+            psunits = psunits.replace("Mpc", r"{\rm Mpc}")
+        if "pi" in psunits and "\\pi" not in psunits: 
+            psunits = psunits.replace("pi", r"\pi")    
+        cbar.set_label("P [$%s$]" % psunits, fontsize=15, ha='center')
     
     #add axis labels
-    if cosmo:
-        f.text(0.5, 0.05, r'$k_{\parallel}\ [h\ Mpc^{-1}]$', fontsize=15, ha='center')            
-        f.text(0.07, 0.5, r'$k_{\perp}\ [\rm h\ Mpc^{-1}]$', fontsize=15, va='center', rotation='vertical')
-    else:
-        f.text(0.5, 0.05, r'$\tau\ [ns]$', fontsize=15, ha='center')
-        f.text(0.07, 0.5, r'Baseline Group $[m]$', fontsize=15, va='center', rotation='vertical')
-        
-    #add colorbar label
-    if cosmo_cbar:
-        cbar.set_label(r"$P(k_{\parallel})\ [mK^2h^{-3}Mpc^3]$", fontsize=15, ha='center')
-    else:
-        cbar.set_label(r'$P(\tau)\ [mK^2]$', fontsize=15, ha='center')
+    if new_plot and delay:
+        fig.text(0.5, 0.05, r'$\tau\ [ns]$', fontsize=15, ha='center')
+        fig.text(0.07, 0.5, r'Baseline Group $[m]$', fontsize=15, va='center', rotation='vertical')
+    elif new_plot:
+        fig.text(0.5, 0.05, r'$k_{\parallel}\ [h\ Mpc^{-1}]$', fontsize=15, ha='center')            
+        fig.text(0.07, 0.5, r'$k_{\perp}\ [\rm h\ Mpc^{-1}]$', fontsize=15, va='center', rotation='vertical')
         
     #Add suptitle if requested
-    if len(suptitle) > 0:
-        f.suptitle(suptitle, fontsize=15)
+    if len(suptitle) > 0 and new_plot:
+        fig.suptitle(suptitle, fontsize=15)
     
     #Return Figure: the axis is an attribute of figure
-    return f
+    if new_plot:
+        return fig
