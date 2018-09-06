@@ -49,7 +49,7 @@ class PSpecData(object):
         """
         self.clear_cache()  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
-        self.dsets_std=[]
+        self.dsets_std = []
         self.Nfreqs = None
         self.spw_range = None
         self.spw_Nfreqs = None
@@ -1150,11 +1150,13 @@ class PSpecData(object):
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
         
+        .. math ::
             V_ab = 2 tr(C E_a C E_b), where E_a = (1/2) R Q^a R
 
         When the data are complex, the expression becomes considerably more
         complicated. Define
-
+        
+        .. math ::
             E^{12,a} = (1/2) R_1 Q^a R_2
             C^1 = <x1 x1^dagger> - <x1><x1^dagger>
             C^2 = <x2 x2^dagger> - <x2><x2^dagger>
@@ -1162,28 +1164,32 @@ class PSpecData(object):
             S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
 
         Then
-
+        
+        .. math ::
             V_ab = tr(E^{12,a} C^2 E^{21,b} C^1)
                     + tr(E^{12,a} P^{21} E^{12,b *} S^{21})
 
         Note that
+        
+        .. math ::
             E^{12,a}_{ij}.conj = E^{21,a}_{ji}
 
-        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by default.
-        (So while the pointy brackets <...> should in principle be ensemble averages,
-        in practice the code performs averages in time.)
+        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by 
+        default. (So while the pointy brackets <...> should in principle be 
+        ensemble averages, in practice the code performs averages in time.)
 
         Empirical covariance estimates are in principle a little risky, as they
         can potentially induce signal loss. This is probably ok if we are just
         looking intending to look at V. It is most dangerous when C_emp^-1 is
         applied to the data. The application of using this to form do a V^-1/2
-        decorrelation is probably medium risk. But this has yet to be proven, and
-        results coming from V^-1/2 should be interpreted with caution.
+        decorrelation is probably medium risk. But this has yet to be proven, 
+        and results coming from V^-1/2 should be interpreted with caution.
 
-        Note for future: Although the V matrix should be Hermitian by construction,
-        in practice there are precision issues and the Hermiticity is violated at
-        ~ 1 part in 10^15. (Which is ~the expected roundoff error). If something
-        messes up, it may be worth investigating this more.
+        Note for future: Although the V matrix should be Hermitian by 
+        construction, in practice there are precision issues and the 
+        Hermiticity is violated at ~ 1 part in 10^15. (Which is ~the expected 
+        roundoff error). If something messes up, it may be worth investigating 
+        this more.
 
         Note for the future: If this ends up too slow, Cholesky tricks can be
         employed to speed up the computation by a factor of a few.
@@ -2167,12 +2173,23 @@ class PSpecData(object):
                     wgts2 = self.w(key2).T
 
                     # get average of nsample across frequency axis, weighted by wgts
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) / np.sum(wgts2, axis=1).clip(1, np.inf)
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) \
+                             / np.sum(wgts1, axis=1).clip(1, np.inf)
+                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) \
+                             / np.sum(wgts2, axis=1).clip(1, np.inf)
 
-                    # take inverse average of nsamp1 and nsamp2 and multiply by integration time [seconds] to get total integration
-                    # inverse avg is done b/c nsamp_1 ~ 1/sigma_1 and nsamp_2 ~ 1/sigma_2 where sigma is a proxy for std of noise
-                    pol_ints.extend(1./np.mean([1./nsamp1, 1./nsamp2], axis=0) * dset1.integration_time)
+                    # get integ1
+                    blts1 = dset1.antpair2ind(bl1, ordered=False)
+                    integ1 = dset1.integration_time[blts1] * nsamp1
+                    
+                    # get integ2
+                    blts2 = dset2.antpair2ind(bl2, ordered=False)
+                    integ2 = dset2.integration_time[blts2] * nsamp2
+
+                    # take inverse average of integ1 and integ2 to get total integration
+                    # inverse avg is done b/c integ ~ 1/noise_var
+                    # and due to non-linear operation of V_1 * V_2
+                    pol_ints.extend(1./np.mean([1./integ1, 1./integ2], axis=0))
 
                     # combined weight is geometric mean
                     pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
@@ -2180,8 +2197,8 @@ class PSpecData(object):
                     # insert time and blpair info only once per blpair
                     if i < 1 and j < 1:
                         # insert time info
-                        inds1 = dset1.antpair2ind(*bl1)
-                        inds2 = dset1.antpair2ind(*bl2)
+                        inds1 = dset1.antpair2ind(bl1, ordered=False)
+                        inds2 = dset2.antpair2ind(bl2, ordered=False)
                         time1.extend(dset1.time_array[inds1])
                         time2.extend(dset2.time_array[inds2])
                         lst1.extend(dset1.lst_array[inds1])
@@ -2297,7 +2314,6 @@ class PSpecData(object):
         Will only phase if the dataset's phase type is 'drift'. This is because the rephasing
         algorithm assumes the data is drift-phased when applying phasor term.
 
-
         Note that PSpecData.Jy_to_mK() must be run after rephase_to_dset(), if one intends
         to use the former capability at any point.
 
@@ -2373,9 +2389,9 @@ class PSpecData(object):
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
                 # get blts indices of basline
-                indices = dset.antpair2ind(*k[:2])
+                indices = dset.antpair2ind(k[:2], ordered=False)
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(hc.io.polstr2num[k[-1]])
+                polind = pol_list.index(uvutils.polstr2num(k[-1]))
                 # insert into dset
                 dset.data_array[indices, 0, :, polind] = data[k]
 
@@ -2394,7 +2410,7 @@ class PSpecData(object):
 
         Parameters
         ----------
-        beam :
+        beam : PSpecBeam object
         """
         # get all unique polarizations of all the datasets
         pols = set(np.ravel([dset.polarization_array for dset in self.dsets]))
@@ -2420,7 +2436,7 @@ class PSpecData(object):
         # iterate over datasets and apply factor
         for i, dset in enumerate(self.dsets):
             # check dset vis units
-            if dset.vis_units != 'Jy':
+            if dset.vis_units.upper() != 'JY':
                 print "Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units)
                 continue
             for j, p in enumerate(dset.polarization_array):
@@ -2621,6 +2637,10 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     psc : PSpecContainer object
         A container for the output UVPSpec objects, which themselves contain the
         power spectra and their metadata.
+
+    ds : PSpecData object
+        The PSpecData object used for OQE of power spectrum, with cached weighting
+        matrices.
     """
     # type check
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
@@ -2671,7 +2691,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         except ValueError:
             # at least one of the dset loads failed due to no data being present
             utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
-            return
+            return None, None
 
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
@@ -2693,7 +2713,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data being present
                 utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
-                return
+                return None, None
 
         assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
 
@@ -2726,7 +2746,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     # broadcast flags
     if broadcast_dset_flags:
-        ds.broadcast_dset_flags(time_thresh=time_thresh)
+        ds.broadcast_dset_flags(time_thresh=time_thresh, spw_ranges=spw_ranges)
 
     # perform Jy to mK conversion if desired
     if Jy2mK:
@@ -2806,7 +2826,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
                       overwrite=overwrite)
 
-    return psc
+    return psc, ds
 
 
 def get_pspec_run_argparser():

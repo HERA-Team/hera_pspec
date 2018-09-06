@@ -97,140 +97,6 @@ def sample_baselines(bls, seed=None):
     return [random.choice(bls) for i in range(len(bls))]
 
 
-def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
-                  inplace=False):
-    """
-    Find spectral windows, baseline-pairs, times, and/or polarizations that a
-    set of UVPSpec objects have in common and return new UVPSpec objects that
-    contain only those data.
-
-    If there is no overlap, an error will be raised.
-
-    Parameters
-    ----------
-    uvp_list : list of UVPSpec
-        List of input UVPSpec objects.
-
-    spws : bool, optional
-        Whether to retain only the spectral windows that all UVPSpec objects
-        have in common. For a spectral window to be retained, the entire set of
-        delays in that window must match across all UVPSpec objects (this will
-        not allow you to just pull out common delays).
-
-        If set to False, the original spectral windows will remain in each
-        UVPSpec. Default: True.
-
-    blpairs : bool, optional
-        Whether to retain only the baseline-pairs that all UVPSpec objects have
-        in common. Default: True.
-
-    times : bool, optional
-        Whether to retain only the (average) times that all UVPSpec objects
-        have in common. This does not check to make sure that time_1 and time_2
-        (i.e. the LSTs for the left-hand and right-hand visibilities that went
-        into the power spectrum calculation) are the same. See the
-        UVPSpec.time_avg_array attribute for more details. Default: True.
-
-    pols : bool, optional
-        Whether to retain only the polarizations that all UVPSpec objects have
-        in common. Default: True.
-
-    inplace : bool, optional
-        Whether the selection should be applied to the UVPSpec objects
-        in-place, or new copies of the objects should be returned.
-
-    Returns
-    -------
-    uvp_list : list of UVPSpec, optional
-        List of UVPSpec objects with the overlap selection applied. This will
-        only be returned if inplace = False.
-    """
-    if len(uvp_list) < 2:
-        raise IndexError("uvp_list must contain two or more UVPSpec objects.")
-
-    # Get times that are common to all UVPSpec objects in the list
-    if times:
-        common_times = np.unique(uvp_list[0].time_avg_array)
-        has_times = [np.isin(common_times, uvp.time_avg_array)
-                     for uvp in uvp_list]
-        common_times = common_times[np.all(has_times, axis=0)]
-        print "common_times:", common_times
-
-    # Get baseline-pairs that are common to all
-    if blpairs:
-        common_blpairs = np.unique(uvp_list[0].blpair_array)
-        has_blpairs = [np.isin(common_blpairs, uvp.blpair_array)
-                       for uvp in uvp_list]
-        common_blpairs = common_blpairs[np.all(has_blpairs, axis=0)]
-        print "common_blpairs:", common_blpairs
-
-    # Get polarizations that are common to all
-    if pols:
-        common_pols = np.unique(uvp_list[0].pol_array)
-        has_pols = [np.isin(common_pols, uvp.pol_array) for uvp in uvp_list]
-        common_pols = common_pols[np.all(has_pols, axis=0)]
-        print "common_pols:", common_pols
-
-    # Get common spectral windows (the entire window must match)
-    # Each row of common_spws is a list of that spw's index in each UVPSpec
-    if spws:
-        common_spws = []
-        for spw in range(uvp_list[0].Nspws):
-            dlys0 = uvp_list[0].get_dlys((spw,))
-
-            # Check if this window exists in all UVPSpec objects
-            found_spws = [spw, ]
-            missing = False
-            for uvp in uvp_list:
-                # Check if any spws in this UVPSpec match the current spw
-                matches_spw = np.array([ np.array_equal(dlys0, uvp.get_dlys((i,)))
-                                         for i in range(uvp.Nspws) ])
-                if not np.any(matches_spw):
-                    missing = True
-                    break
-                else:
-                    # Store which spw of this UVPSpec it was found in
-                    found_spws.append( np.where(matches_spw)[0] )
-
-            # Only add this spw to the list if it was found in all UVPSpecs
-            if missing: continue
-            common_spws.append(found_spws)
-        common_spws = np.array(common_spws).T # Transpose
-        print "common_spws:", common_spws
-
-    # Check that this won't be an empty selection
-    if spws and len(common_spws) == 0:
-        raise ValueError("No spectral windows were found that exist in all "
-                         "spectra (the entire spectral window must match).")
-
-    if blpairs and len(common_blpairs) == 0:
-        raise ValueError("No baseline-pairs were found that exist in all spectra.")
-
-    if times and len(common_times) == 0:
-        raise ValueError("No times were found that exist in all spectra.")
-
-    if pols and len(common_pols) == 0:
-        raise ValueError("No polarizations were found that exist in all spectra.")
-
-    # Apply selections
-    out_list = []
-    for i, uvp in enumerate(uvp_list):
-        _spws, _blpairs, _times, _pols = None, None, None, None
-
-        # Set indices of blpairs, times, and pols to keep
-        if blpairs: _blpairs = common_blpairs
-        if times: _times = common_times
-        if pols: _pols = common_pols
-        if spws: _spws = common_spws[i]
-
-        _uvp = uvp.select(spws=_spws, blpairs=_blpairs, times=_times,
-                          pols=_pols, inplace=inplace)
-        if not inplace: out_list.append(_uvp)
-
-    # Return if not inplace
-    if not inplace: return out_list
-
-
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False, 
                     blpair_weights=None, error_field=None,
                     normalize_weights=True, inplace=True,
@@ -367,7 +233,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         if hasattr(uvp, "stats_array"):
             if stat not in uvp.stats_array.keys():
                 raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
-
 
     # For baseline pairs not in blpair_groups, add them as their own group
     extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
@@ -773,7 +638,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
     # Homogenise input UVPSpec objects in terms of available polarizations 
     # and spectral windows
     if len(uvp_list) > 1:
-        uvp_list = select_common(uvp_list, spws=True, pols=True, inplace=False)
+        uvp_list = uvpspec_utils.select_common(uvp_list, spws=True, pols=True, inplace=False)
 
     # Loop over UVPSpec objects, looking for available blpairs in each
     avail_blpairs = [np.unique(uvp.blpair_array) for uvp in uvp_list]
@@ -864,17 +729,17 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
         Random seed to use in bootstrap resampling.
     
     normal_std : bool
-        If True, calculate an error estimate from numpy.std and store as "normal_std"
+        If True, calculate an error estimate from numpy.std and store as "bs_std"
         in the stats_array of the output UVPSpec object.
 
     robust_std : bool
         If True, calculate an error estimate from astropy.stats.biweight_midvariance
-        and store as "robust_std" in the stats_array of the output UVPSpec object.
+        and store as "bs_robust_std" in the stats_array of the output UVPSpec object.
 
     cintervals : list
         A list of confidence interval percentages (0 < cinterval < 100) to calculate
         using numpy.percentile and store in the stats_array of the output UVPSpec
-        object as "cinterval_{:05.2f}".format(cinterval).
+        object as "bs_cinterval_{:05.2f}".format(cinterval).
 
     bl_error_tol : float
         Redundancy error tolerance of redundant groups if blpair_groups is None.
@@ -926,17 +791,17 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
     if normal_std:
         for k in keys:
             nstd = np.std(uvp_boot_data[k].real, axis=0) + 1j*np.std(uvp_boot_data[k].imag, axis=0)
-            uvp_avg.set_stats("normal_std", k, nstd)
+            uvp_avg.set_stats("bs_std", k, nstd)
 
     if robust_std:
         for k in keys:
             rstd = np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].real, axis=0)) \
                     + 1j*np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].imag, axis=0))
-            uvp_avg.set_stats("robust_std", k, rstd)
+            uvp_avg.set_stats("bs_robust_std", k, rstd)
 
     if cintervals is not None:
         for ci in cintervals:
-            ci_tag = "cinterval_{:05.2f}".format(ci)
+            ci_tag = "bs_cinterval_{:05.2f}".format(ci)
             for k in keys:
                 cint = np.percentile(uvp_boot_data[k].real, ci, axis=0) \
                         + 1j*np.percentile(uvp_boot_data[k].imag, ci, axis=0)
@@ -988,17 +853,17 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
         The random seed to initialize with before drwaing bootstrap samples.
 
     normal_std : bool
-        If True, calculate an error estimate from numpy.std and store as "normal_std"
+        If True, calculate an error estimate from numpy.std and store as "bs_std"
         in the stats_array of the output UVPSpec object.
 
     robust_std : bool
         If True, calculate an error estimate from astropy.stats.biweight_midvariance
-        and store as "robust_std" in the stats_array of the output UVPSpec object.
+        and store as "bs_robust_std" in the stats_array of the output UVPSpec object.
 
     cintervals : list
         A list of confidence interval percentages (0 < cinterval < 100) to calculate
         using numpy.percentile and store in the stats_array of the output UVPSpec
-        object as "cinterval_{:05.2f}".format(cinterval).
+        object as "bs_cinterval_{:05.2f}".format(cinterval).
 
     keep_samples : bool
         If True, store each bootstrap resample in PSpecContainer object with *_bs# suffix.
