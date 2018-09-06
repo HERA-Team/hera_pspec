@@ -495,51 +495,45 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     # Return Axes
     if new_plot:
         return fig
-    
-def delay_wedge(uvp, blpairs, spw, pol, fold=False, delay=False,
-    center_line=True, horizon_lines=True, suptitle='', subtitle=None, ax=None):
 
+
+def delay_wedge(uvp, spw, pol, blpairs=None, fold=False, delay=True,
+                center_line=True, horizon_lines=True, suptitle='',
+                subtitle=None, ax=None):
     """
     Plot a 2D delay spectrum (or spectra) for a group of baselines.
     
     Parameters
     ----------
-    uvp : UVPspec
-        UVPSpec object or list of UVPSpec objects which will be plotted side
-        by side, containing delay spectra for a set of baseline-pairs, times,
-        polarizations, and spectral windows.
-        
-    blpairs : list of tuples
-        List of baseline-pair tuples.
+    uvp : UVPSpec
+        UVPSpec object containing delay spectra to plot.
 
-    spw : int or str, or list of ints or strs
-        Which spectral window to plot for each uvp object to be plotted.  If
-        plotting multiple UVPSpec objects, this should be a list of the same
-        length as the number of objects to be plotted.
+    spw : integer
+        Which spectral window to plot.
 
-    pol : str or list of strs
-        Which pol (or pols) to plot.  If plotting multiple UVPSpec objects,
-        this should be a list of of the same length as the number of
-        objects to be plotted.
-        
-    get_reds_from : 
+    pol : int or str
+        Polarization integer or string t
+
+    blpairs : list of tuples, optional
+        List of baseline-pair tuples to use in plotting.
 
     fold : bool, optional
         Whether to fold the power spectrum in k_parallel. 
         Default: False.
-        
+
     delay : bool, optional
-        Whether to plot the axes in tau. If False, axes will be plotted in k.
-        Default: False.
-        
+        Whether to plot the axes in tau (ns). If False, axes will
+        be plotted in cosmological units.
+        Default: True.
+
     center_line : bool, optional
         Whether to plot a dotted line at k_parallel=0.
         Default: True.
-        
+
     horizon_lines : bool, optional
         Whether to plot dotted lines along the horizon.
         Default: True.
-        
+
     suptitle : string, optional
         Suptitle for the plot.  If not provided, no suptitle will be plotted.
         Default: ''.
@@ -556,14 +550,13 @@ def delay_wedge(uvp, blpairs, spw, pol, fold=False, delay=False,
         this case, even if the existing plot has completely different axis 
         labels etc.) If None, a new Axes object will be created.
         Default: None.
-        
+
     Returns
     -------
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance.
     """
-
-    #Make sure uvp is a UVPSpec or list of UVPSpec
+    # Make sure uvp is a UVPSpec or list of UVPSpec
     if isinstance(uvp, uvpspec.UVPSpec):
         uvp = [uvp]
     if isinstance(uvp, list):
@@ -574,8 +567,8 @@ def delay_wedge(uvp, blpairs, spw, pol, fold=False, delay=False,
     else:
         raise AttributeError('The uvp parameter should be a UVPSpec '
                              'object or list of UVPSpec objects.')
-    
-    #check to make sure spw, pol, and subtitle are appropriately formatted
+
+    # Check to make sure spw, pol, and subtitle are appropriately formatted
     if isinstance(spw, (int,str)):
         spw = [spw]
     if not isinstance(spw, list) or not len(spw)==len(uvp):
@@ -594,9 +587,8 @@ def delay_wedge(uvp, blpairs, spw, pol, fold=False, delay=False,
                                  'provided for subtitle and uvp.')
     else:
         subtitle = ['' for i in range(len(uvp))]
-            
 
-    #Create new Axes if none specified
+    # Create new Axes if none specified
     new_plot = False
     if ax is None:
         ncols = len(uvp)
@@ -608,12 +600,12 @@ def delay_wedge(uvp, blpairs, spw, pol, fold=False, delay=False,
             squeeze=False,
             figsize=(20, 10))
         new_plot = True
-    
-    #Plot each uvp
+
+    # Plot each uvp
     pols = []
     plt.subplots_adjust(wspace=0, hspace=0.1)
     for uvp, ax, spw, pol, subtitle in zip(uvp, axes.flatten(), spw, pol, subtitle):
-        #Find redundant-length baseline groups and their baseline lengths
+        # Find redundant-length baseline groups and their baseline lengths
         BIN_WIDTH = 0.3 #redundancy tolerance in meters 
         NORM_BINS = np.arange(0.0, 10000.0, BIN_WIDTH)
         sorted_blpairs = {}
@@ -631,7 +623,7 @@ def delay_wedge(uvp, blpairs, spw, pol, fold=False, delay=False,
                 sorted_blpairs[bllen] = [antnums]
         bllens = sorted(bllens)
         
-        #Average the spectra along redundant baseline groups and time
+        # Average the spectra along redundant baseline groups and time
         uvp = uvp.average_spectra(blpair_groups=sorted_blpairs.values(), time_avg=True, inplace=False)
         
         #Format data array
