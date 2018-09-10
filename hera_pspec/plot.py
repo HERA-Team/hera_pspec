@@ -214,9 +214,11 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                 cax = None
                 if lines:
                     if logscale:
-                        cax, = ax.plot(x, np.abs(y), marker='None', label=label, **kwargs)
+                        _y = np.abs(y)
                     else:
-                        cax, = ax.plot(x, y, marker='None', label=label, **kwargs)
+                        _y = y
+
+                    cax, = ax.plot(x, _y, marker='None', label=label, **kwargs)
 
                 if markers:
                     if cax is None:
@@ -245,7 +247,11 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                             c = None
                         else:
                             c = cax.get_color()
-                        cax = ax.errorbar(x, np.abs(y), fmt='none', ecolor=c, yerr=cast(errs[i]), **kwargs)
+                        if logscale:
+                            _y = np.abs(yp)
+                        else:
+                            _y = y
+                        cax = ax.errorbar(x, _y, fmt='none', ecolor=c, yerr=cast(errs[i]), **kwargs)
                     else:
                         raise KeyError("Error variable '%s' not found in stats_array of UVPSpec object." % error)
 
@@ -377,7 +383,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             blpairs.append([blpairs_in[i],])
         else:
             blpairs.append(blpairs_in[i])
-    
+
     # iterate through and make sure they are blpair integers
     _blpairs = []
     for blpgrp in blpairs:
@@ -582,11 +588,16 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         return fig
 
 
-def delay_wedge(uvp, spw, pol, blpairs=None, fold=False, delay=True,
-                center_line=True, horizon_lines=True, suptitle='',
-                subtitle=None, ax=None):
+def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
+                rotate=False, component='real', log10=True, loglog=False,
+                red_tol=1.0, center_line=False, horizon_lines=False,
+                title=None, ax=None, cmap='viridis', figsize=(8, 6),
+                deltasq=False, colorbar=False, cbax=None, vmin=None, vmax=None,
+                edgecolor='none', flip_xax=False, flip_yax=False, lw=2, **kwargs):
     """
-    Plot a 2D delay spectrum (or spectra) for a group of baselines.
+    Plot a 2D delay spectrum (or spectra) from a UVPSpec object. Note that
+    all integrations and redundant baselines are averaged (unless specifying times)
+    before plotting.
     
     Parameters
     ----------
@@ -597,10 +608,14 @@ def delay_wedge(uvp, spw, pol, blpairs=None, fold=False, delay=True,
         Which spectral window to plot.
 
     pol : int or str
-        Polarization integer or string t
+        Polarization integer or string
 
     blpairs : list of tuples, optional
         List of baseline-pair tuples to use in plotting.
+
+    times : list, optional
+        An ndarray or list of times from uvp.time_avg_array to
+        select on before plotting. Default: None.
 
     fold : bool, optional
         Whether to fold the power spectrum in k_parallel. 
@@ -611,207 +626,255 @@ def delay_wedge(uvp, spw, pol, blpairs=None, fold=False, delay=True,
         be plotted in cosmological units.
         Default: True.
 
+    rotate : bool, optional
+        If False, use baseline-type as x-axis and delay as y-axis,
+        else use baseline-type as y-axis and delay as x-axis.
+        Default: False
+
+    component : str, optional
+        Component of complex spectra to plot. Options=['real', 'imag', 'abs']
+        Default: 'real'.
+
+    log10 : bool, optional
+        If True, take log10 of data before plotting. Default: True
+
+    loglog : bool, optional
+        If True, turn x-axis and y-axis into log-log scale. Default: False
+
+    red_tol : float, optional
+        Redundancy tolerance when solving for redundant groups in meters.
+        Default: 1.0
+
     center_line : bool, optional
-        Whether to plot a dotted line at k_parallel=0.
-        Default: True.
+        Whether to plot a dotted line at k_perp = 0.
+        Default: False.
 
     horizon_lines : bool, optional
         Whether to plot dotted lines along the horizon.
-        Default: True.
+        Default: False.
 
-    suptitle : string, optional
-        Suptitle for the plot.  If not provided, no suptitle will be plotted.
-        Default: ''.
-
-    subtitle : string, list, optional
-        Title for each subplot.  If plotting multiple UVPSpec objects, this
-        should be a list of strings of the same length as the number of
-        objects to be plotted.  If not provided, no subtitles will be plotted.
-        Default: None.
+    title : string, optional
+        Title for subplot.  Default: None.
 
     ax : matplotlib.axes, optional
-        Use this to pass in an existing Axes object, which the power spectra 
-        will be added to. (Warning: Labels and legends will not be altered in 
-        this case, even if the existing plot has completely different axis 
-        labels etc.) If None, a new Axes object will be created.
-        Default: None.
+        If not None, use this axes as a subplot for delay wedge.
+
+    cmap : str, optional
+        Colormap of wedge plot. Default: 'viridis'
+
+    figsize : len-2 integer tuple, optional
+        If ax is None, this is the new figure size.
+
+    deltasq : bool, optional
+        Convert to Delta^2 before plotting. Default: False
+
+    colorbar : bool, optional
+        Add a colorbar to the plot. Default: False
+
+    cbax : matplotlib.axes, optional
+        Axis object for adding colorbar if True. Default: None
+
+    vmin : float, optional
+        Minimum range of colorscale. Default: None
+
+    vmax : float, optional
+        Maximum range of colorscale. Default: None
+
+    edgecolor : str, optional
+        Edgecolor of bins in pcolormesh. Default: 'none'
+
+    flip_xax : bool, optional
+        Flip xaxis if True. Default: False
+
+    flip_yax : bool, optional
+        Flip yaxis if True. Default: False
+
+    lw : int, optional
+        Line-width of horizon and center lines if plotted. Default: 2.
+
+    kwargs : dictionary
+        Additional keyword arguments to pass to pcolormesh() call.
 
     Returns
     -------
     fig : matplotlib.pyplot.Figure
-        Matplotlib Figure instance.
+        Matplotlib Figure instance if ax is None.
     """
-    # Make sure uvp is a UVPSpec or list of UVPSpec
-    if isinstance(uvp, uvpspec.UVPSpec):
-        uvp = [uvp]
-    if isinstance(uvp, list):
-        for uv in uvp:
-            if not isinstance(uv, uvpspec.UVPSpec):
-                raise AttributeError('The uvp parameter should be a UVPSpec '
-                                     'object or list of UVPSpec objects.')
-    else:
-        raise AttributeError('The uvp parameter should be a UVPSpec '
-                             'object or list of UVPSpec objects.')
+    # type checking
+    uvp = copy.deepcopy(uvp)
+    assert isinstance(uvp, uvpspec.UVPSpec), "input uvp must be a UVPSpec object"
+    assert isinstance(spw, (int, np.integer))
+    assert isinstance(pol, (int, str, np.integer, np.str))
 
-    # Check to make sure spw, pol, and subtitle are appropriately formatted
-    if isinstance(spw, (int,str)):
-        spw = [spw]
-    if not isinstance(spw, list) or not len(spw)==len(uvp):
-        raise AttributeError('The same number of arguments should be provided '
-                            'for spw and uvp.')
-    if isinstance(pol, str):
-        pol = [pol]
-    if not isinstance(pol, list) or not len(pol)==len(uvp):
-        raise AttributeError('The same number of arguments should be provided '
-                            'for pol and uvp.')
-    if subtitle is not None:
-        if isinstance(subtitle, str):
-            subtitle = [subtitle]
-        if not isinstance(subtitle, list) or not len(subtitle)==len(uvp):
-            raise AttributeError('The same number of arguments should be '
-                                 'provided for subtitle and uvp.')
-    else:
-        subtitle = ['' for i in range(len(uvp))]
-
-    # Create new Axes if none specified
+    # Create new ax if none specified
     new_plot = False
     if ax is None:
-        ncols = len(uvp)
-        fig, axes = plt.subplots(
-            ncols=ncols,
-            nrows=1,
-            sharex=True,
-            sharey=True,
-            squeeze=False,
-            figsize=(20, 10))
+        fig, ax = plt.subplots(figsize=figsize)
         new_plot = True
+    else:
+        fig = ax.get_figure()
 
-    # Plot each uvp
-    pols = []
-    plt.subplots_adjust(wspace=0, hspace=0.1)
-    for uvp, ax, spw, pol, subtitle in zip(uvp, axes.flatten(), spw, pol, subtitle):
-        # Find redundant-length baseline groups and their baseline lengths
-        BIN_WIDTH = 0.3 #redundancy tolerance in meters 
-        NORM_BINS = np.arange(0.0, 10000.0, BIN_WIDTH)
-        sorted_blpairs = {}
-        bllens = []
-        blpair_seps = uvp.get_blpair_seps()
-        blpair_array = uvp.blpair_array
-        for antnums in blpairs:
-            blpair = uvp.antnums_to_blpair(antnums)
-            bllen = blpair_seps[np.where(blpair_array==blpair)[0][0]]
-            bllen = np.round(np.digitize(bllen, NORM_BINS) * BIN_WIDTH, 1)
-            if bllen in bllens:
-                sorted_blpairs[bllen].append(antnums)
-            else:
-                bllens.append(bllen)
-                sorted_blpairs[bllen] = [antnums]
-        bllens = sorted(bllens)
-        
-        # Average the spectra along redundant baseline groups and time
-        uvp = uvp.average_spectra(blpair_groups=sorted_blpairs.values(), time_avg=True, inplace=False)
-        
-        #Format data array
-        if fold:
-            uvp.fold_spectra()
-        data = []
-        for blpair in uvp.get_blpairs():
-            data.append(uvp.get_data((spw, blpair, pol))[0])
-        data = np.array(data)
+    # Select out times if provided
+    if times is not None:
+        uvp.select(times=times, inplace=True)
 
-        #Format k_para axis
+    # Average across redundant groups and time
+    # this also ensures blpairs are ordered from short_bl --> long_bl
+    blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol)
+    uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, inplace=True)
+
+    # Convert to DeltaSq
+    if deltasq:
+        uvp.convert_to_deltasq(inplace=True)
+
+    # Fold array
+    if fold:
+        uvp.fold_spectra()
+
+    # Format ticks
+    if delay:
+        x_axis = uvp.get_dlys(spw) * 1e9
+        y_axis = uvp.get_blpair_seps()
+    else:
+        x_axis = uvp.get_kparas(spw, little_h=little_h)
+        y_axis = uvp.get_kperps(spw, little_h=little_h)
+    if rotate:
+        _x_axis = y_axis
+        y_axis = x_axis
+        x_axis = _x_axis
+
+    # Conigure Units
+    psunits = "({})^2\ {}".format(uvp.vis_units, uvp.norm_units)
+    if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}\ ")
+    if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}\ ")
+    if "Hz" in psunits: psunits = psunits.replace("Hz", r"{\rm Hz}\ ")
+    if "str" in psunits: psunits = psunits.replace("str", r"\,{\rm str}\ ")
+    if "Mpc" in psunits and "\\rm" not in psunits: 
+        psunits = psunits.replace("Mpc", r"{\rm Mpc}")
+    if "pi" in psunits and "\\pi" not in psunits: 
+        psunits = psunits.replace("pi", r"\pi")
+    if "beam normalization not specified" in psunits:
+        psunits = psunits.replace("beam normalization not specified", 
+                                 r"{\rm unnormed}")
+
+    # get data casting
+    if component == 'real':
+        cast = np.real
+    elif component == 'imag':
+        cast = np.imag
+    elif component == 'abs':
+        cast = np.abs
+    else:
+        raise ValueError("Did not understand component {}".format(component))
+
+    # get data with shape (Nblpairs, Ndlys)
+    data = cast([uvp.get_data((spw, blp, pol)).squeeze() for blp in uvp.get_blpairs()])
+
+    # take log10
+    if log10:
+        data = np.log10(np.abs(data))
+
+    # rotate
+    if rotate:
+        data = np.rot90(data[:, ::-1], k=1)
+
+    # Get bin edges
+    xdiff = np.diff(x_axis)
+    x_edges = np.array([x_axis[0]-xdiff[0]/2.0] + list(x_axis[:-1]+xdiff/2.0) + [x_axis[-1]+xdiff[-1]/2.0])
+    ydiff = np.diff(y_axis)
+    y_edges = np.array([y_axis[0]-ydiff[0]/2.0] + list(y_axis[:-1]+ydiff/2.0) + [y_axis[-1]+ydiff[-1]/2.0])
+    X, Y = np.meshgrid(x_edges, y_edges)
+
+    # plot 
+    cax = ax.pcolormesh(X, Y, data, cmap=cmap, edgecolor=edgecolor, lw=lw,
+                        vmin=vmin, vmax=vmax, **kwargs)
+
+    # loglog
+    if loglog:
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+
+    # Configure ticks
+    if rotate:
+        ax.set_xticks(np.around(x_axis, 4))
+    else:
+        ax.set_yticks(np.around(y_axis, 4))
+
+    # Add colorbar
+    if colorbar:
+        if cbax is None:
+            cbax = ax
+        cbar = fig.colorbar(cax, ax=cbax)
         if delay:
-            x_axis = (uvp.get_dlys(0)*1e9).tolist()
+            p = "P({},\ {})".format(r'\tau', r'|\vec{b}|')
         else:
-            x_axis = uvp.get_kparas(0).tolist()
-        if fold:
-            x_axis.insert(0, 0)
-        ax.set_xlim((x_axis[0] / 2, x_axis[-1] / 2))
-        
-        #Format k_perp axis
-        #Calculate kpr indices, and stretch wedgeslices to length of baseline norms
-        bllen_indices = [int(bllen * 10) for bllen in bllens]
-        stretched_data = np.zeros((bllen_indices[-1], data.shape[-1]), dtype=np.float64)
-        j = 0
-        for i in range(len(bllen_indices)):
-            stretched_data[j:bllen_indices[i]] = data[i]
-            j = bllen_indices[i]
-        data = stretched_data[...]
-        
-        #Find kpr mid-indicies for the tickmarks
-        bllen_midindices = []
-        for i in range(len(bllen_indices)):
-            if i == 0:
-                bllen_midindices.append(bllen_indices[i] / 2.)
-            else:
-                bllen_midindices.append((bllen_indices[i] + bllen_indices[i - 1]) / 2.)
-        
-        #Setting y axis ticks and labels
-        ax.set_yticks(bllen_midindices)
-        if delay:
-            ax.set_yticklabels(bllens, fontsize=10)
+            p = "P({},\ {})".format(r'k_\parallel', r'k_\perp')
+        if log10:
+            psunits = r"$\log_{{10}}\ {}\ [{}]$".format(p, psunits)
         else:
+            psunits = r"${}\ [{}]$".format(p, psunits)
+        cbar.set_label(psunits, fontsize=14)
+
+    # Configure tick labels
+    if delay:
+        xlabel = r"$\tau$ $[{\rm ns}]$"
+        ylabel = r"$|\vec{b}|$ $[{\rm m}]$"
+    else:
+        xlabel = r"$k_{\parallel}\ [h\ \rm Mpc^{-1}]$"
+        ylabel = r"$k_{\perp}\ [h\ \rm Mpc^{-1}]$"
+    if rotate:
+        _xlabel = ylabel
+        ylabel = xlabel
+        xlabel = _xlabel
+    if ax.get_xlabel() == '':
+        ax.set_xlabel(xlabel, fontsize=16)
+    if ax.get_ylabel() == '':
+        ax.set_ylabel(ylabel, fontsize=16)
+
+    # Configure center line
+    if center_line:
+        if rotate:
+            ax.axhline(y=0, color='#000000', ls='--', lw=lw)
+        else:
+            ax.axvline(x=0, color='#000000', ls='--', lw=lw)
+
+    # Plot horizons
+    if horizon_lines:
+        # get horizon in ns
+        horizons = uvp.get_blpair_seps() / conversions.units.c * 1e9
+
+        # convert to cosmological wave vector
+        if not delay:
+            # Get average redshift of spw
             avg_z = uvp.cosmo.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
-            perpfactor = uvp.cosmo.bl_to_kperp(avg_z, little_h=True)
-            bl_lens = [np.round(bllen * perpfactor, 3) for bllen in bllens]
-            ax.set_yticklabels(bl_lens, fontsize=10)
-        
-        #Plot the data
-        im = ax.imshow(
-            np.log10(np.abs(data)),
-            aspect='auto',
-            interpolation='nearest',
-            extent=[x_axis[0], x_axis[-1], bllen_indices[-1], 0])
-        
-        #Plot the horizon lines if requested
-        if horizon_lines:
-            horizons = [(bllen*u.m/c.c).to(u.ns).value for bllen in bllens]
-            if not delay:
-                avg_z = uvp.cosmo.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
-                parafactor = uvp.cosmo.tau_to_kpara(avg_z, little_h=True)
-                horizons = [horizon * parafactor * 10**-9 for horizon in horizons]
-            j = 0
-            for i, (horizon, bllen) in enumerate(zip(horizons, bllens)):
-                x1, y1 = [horizon, horizon], [j, bllen_indices[i]]
-                x2, y2 = [-horizon, -horizon], [j, bllen_indices[i]]
-                ax.plot(x1, y1, x2, y2, color='#ffffff', linestyle='--', linewidth=1)
-                j = bllen_indices[i]
-        
-        #plot center line at k_para=0 if requested
-        if center_line:
-            ax.axvline(x=0, color='#000000', ls='--', lw=1)
+            horizons *= uvp.cosmo.tau_to_kpara(avg_z, little_h=little_h)
 
-        ax.tick_params(axis='both', direction='inout')
-        ax.set_title(subtitle, fontsize=15)
-    
-    #add colorbar
-    if new_plot:
-        cbar_ax = fig.add_axes([0.9125, 0.25, 0.025, 0.5])
-        cbar = fig.colorbar(im, cax=cbar_ax)
-        
-        #add units
-        psunits = uvp.units
-        if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
-        if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}")
-        if "Mpc" in psunits and "\\rm" not in psunits: 
-            psunits = psunits.replace("Mpc", r"{\rm Mpc}")
-        if "pi" in psunits and "\\pi" not in psunits: 
-            psunits = psunits.replace("pi", r"\pi")    
-        cbar.set_label("P [$%s$]" % psunits, fontsize=15, ha='center')
-    
-    #add axis labels
-    if new_plot and delay:
-        fig.text(0.5, 0.05, r'$\tau\ [ns]$', fontsize=15, ha='center')
-        fig.text(0.07, 0.5, r'Baseline Group $[m]$', fontsize=15, va='center', rotation='vertical')
-    elif new_plot:
-        fig.text(0.5, 0.05, r'$k_{\parallel}\ [h\ Mpc^{-1}]$', fontsize=15, ha='center')            
-        fig.text(0.07, 0.5, r'$k_{\perp}\ [\rm h\ Mpc^{-1}]$', fontsize=15, va='center', rotation='vertical')
-        
-    #Add suptitle if requested
-    if len(suptitle) > 0 and new_plot:
-        fig.suptitle(suptitle, fontsize=15)
-    
-    #Return Figure: the axis is an attribute of figure
+        # iterate over bins and plot lines
+        if rotate:
+            bin_edges = x_edges
+        else:
+            bin_edges = y_edges
+        for i, hor in enumerate(horizons):
+            if rotate:
+                ax.plot(bin_edges[i:i+2], [hor, hor], color='#ffffff', ls='--', lw=lw)
+                if not uvp.folded:
+                    ax.plot(bin_edges[i:i+2], [-hor, -hor], color='#ffffff', ls='--', lw=lw)
+            else:
+                ax.plot([hor, hor], bin_edges[i:i+2], color='#ffffff', ls='--', lw=lw)
+                if not uvp.folded:
+                    ax.plot([-hor, -hor], bin_edges[i:i+2], color='#ffffff', ls='--', lw=lw)
+
+    # flip axes
+    if flip_xax:
+        plt.gca().invert_xaxis()
+    if flip_yax:
+        plt.gca().invert_yaxis()
+
+    # add title
+    if title is not None:
+        ax.set_title(title, fontsize=12)
+
+    # return figure
     if new_plot:
         return fig
 
@@ -829,7 +892,7 @@ def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
         Input data object. Waterfalls will be stored for all baselines and 
         polarizations within the object; use uvd.select() to remove unwanted 
         information.
-    
+
     basename : str
         Base filename for the output plots. This must have two placeholders 
         for baseline ID ('bl') and polarization ('pol'), 
