@@ -666,7 +666,8 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         If ax is None, this is the new figure size.
 
     deltasq : bool, optional
-        Convert to Delta^2 before plotting. Default: False
+        Convert to Delta^2 before plotting. This is ignored if delay=True.
+        Default: False
 
     colorbar : bool, optional
         Add a colorbar to the plot. Default: False
@@ -727,7 +728,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, inplace=True)
 
     # Convert to DeltaSq
-    if deltasq:
+    if deltasq and not delay:
         uvp.convert_to_deltasq(inplace=True)
 
     # Fold array
