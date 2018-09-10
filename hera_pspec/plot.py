@@ -706,6 +706,9 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     assert isinstance(spw, (int, np.integer))
     assert isinstance(pol, (int, str, np.integer, np.str))
 
+    # check pspec units for little h
+    little_h = 'h^-3' in uvp.norm_units
+
     # Create new ax if none specified
     new_plot = False
     if ax is None:
@@ -720,7 +723,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
 
     # Average across redundant groups and time
     # this also ensures blpairs are ordered from short_bl --> long_bl
-    blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol)
+    blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol, match_bl_lens=True)
     uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, inplace=True)
 
     # Convert to DeltaSq
@@ -774,6 +777,15 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     if log10:
         data = np.log10(np.abs(data))
 
+    # loglog
+    if loglog:
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.yaxis.set_major_formatter(matplotlib.ticker.LogFormatterSciNotation())
+        ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        ax.xaxis.set_major_formatter(matplotlib.ticker.LogFormatterSciNotation())
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+
     # rotate
     if rotate:
         data = np.rot90(data[:, ::-1], k=1)
@@ -786,13 +798,8 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     X, Y = np.meshgrid(x_edges, y_edges)
 
     # plot 
-    cax = ax.pcolormesh(X, Y, data, cmap=cmap, edgecolor=edgecolor, lw=lw,
+    cax = ax.pcolormesh(X, Y, data, cmap=cmap, edgecolor=edgecolor, lw=0.01,
                         vmin=vmin, vmax=vmax, **kwargs)
-
-    # loglog
-    if loglog:
-        ax.set_xscale('log')
-        ax.set_yscale('log')
 
     # Configure ticks
     if rotate:

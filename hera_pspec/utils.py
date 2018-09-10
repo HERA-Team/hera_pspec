@@ -680,7 +680,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     return groupings
 
 
-def get_blvec_reds(blvecs, bl_error_tol=1.0):
+def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
     """
     Given a blvecs dictionary, form groups of baseline-pairs based on
     redundancy in ENU coordinates. Note: this only uses the East-North components
@@ -692,8 +692,12 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0):
         A dictionary with len-2 or 3 ndarray baseline vectors as values.
         Alternatively, this can be a UVPSpec object.
 
-    bl_error_tol : int
-        Redundancy tolerance of baseline vector in meters.
+    bl_error_tol : float, optional
+        Redundancy tolerance of baseline vector in meters. Default: 1.0
+
+    match_bl_lens : bool, optional
+        Combine baseline groups of identical baseline length but
+        differing angle (using bl_error_tol). Default: False
 
     Returns:
     --------
@@ -745,7 +749,12 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0):
         bl_tag = "{:03.0f}_{:03.0f}".format(bl_len, bl_ang)
 
         # append to list if unique within tolerance
-        match = [np.all(np.isclose(blv, bl_vec, atol=bl_error_tol)) for blv in red_bl_vec]
+        if match_bl_lens:
+            # match only on bl length
+            match = [np.all(np.isclose(bll, bl_len, atol=bl_error_tol)) for bll in red_bl_len]
+        else:
+            # match on full bl vector
+            match = [np.all(np.isclose(blv, bl_vec, atol=bl_error_tol)) for blv in red_bl_vec]
         if np.any(match):
             match_id = np.where(match)[0][0]
             red_bl_grp[match_id].append(bl)

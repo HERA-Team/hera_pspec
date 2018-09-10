@@ -291,5 +291,65 @@ class Test_Plot(unittest.TestCase):
             for f in figfiles:
                 os.remove(f)
 
+    def test_delay_wedge(self):
+        """ Tests for plot.delay_wedge """
+        # construct new uvp
+        reds, lens, angs = utils.get_reds(self.ds.dsets[0], pick_data_ants=True)
+        bls1, bls2, blps, _, _ = utils.calc_blpair_reds(self.ds.dsets[0], self.ds.dsets[1],
+                                                        exclude_auto_bls=False, exclude_permutations=True)
+        uvp = self.ds.pspec(bls1, bls2, (0, 1), ('xx','xx'),  
+                            spw_ranges=[(300, 350)], 
+                            input_data_weight='identity', norm='I', 
+                            taper='blackman-harris', verbose=False)
+  
+        # test basic delay_wedge call
+        f1 = plot.delay_wedge(uvp, 0, 'xx', blpairs=None, times=None, fold=False, delay=True,
+                              rotate=False, component='real', log10=False, loglog=False, red_tol=1.0,
+                              center_line=False, horizon_lines=False, title=None, ax=None, cmap='viridis',
+                              figsize=(8, 6), deltasq=False, colorbar=False, cbax=None, vmin=None, vmax=None,
+                              edgecolor='none', flip_xax=False, flip_yax=False, lw=2)
+        plt.close()
+
+        # specify blpairs and times
+        f2 = plot.delay_wedge(uvp, 0, 'xx', blpairs=uvp.get_blpairs()[-5:], times=uvp.time_avg_array[:1],
+                              fold=False, delay=True, component='imag', 
+                              rotate=False, log10=False, loglog=False, red_tol=1.0,
+                              center_line=False, horizon_lines=False, title=None, ax=None, cmap='viridis',
+                              figsize=(8, 6), deltasq=False, colorbar=False, cbax=None, vmin=None, vmax=None,
+                              edgecolor='none', flip_xax=False, flip_yax=False, lw=2)
+        plt.close()
+
+        # fold, deltasq, cosmo and log10, loglog
+        f3 = plot.delay_wedge(uvp, 0, 'xx', blpairs=None, times=None, fold=True, delay=False, component='abs', 
+                              rotate=False, log10=True, loglog=True, red_tol=1.0,
+                              center_line=False, horizon_lines=False, title='hello', ax=None, cmap='viridis',
+                              figsize=(8, 6), deltasq=True, colorbar=False, cbax=None, vmin=None, vmax=None,
+                              edgecolor='none', flip_xax=False, flip_yax=False, lw=2)
+        plt.close()
+
+        # colorbar, vranges, flip_axes, edgecolors, lines
+        f4 = plot.delay_wedge(uvp, 0, 'xx', blpairs=None, times=None, fold=False, delay=False, component='abs', 
+                              rotate=False, log10=True, loglog=False, red_tol=1.0,
+                              center_line=True, horizon_lines=True, title='hello', ax=None, cmap='viridis',
+                              figsize=(8, 6), deltasq=False, colorbar=True, cbax=None, vmin=6, vmax=15,
+                              edgecolor='grey', flip_xax=True, flip_yax=True, lw=2)
+        plt.close()
+
+        # feed axes, red_tol
+        fig, ax = plt.subplots()
+        cbax = fig.add_axes([0.85, 0.1, 0.05, 0.9])
+        cbax.axis('off')
+        plot.delay_wedge(uvp, 0, 'xx', blpairs=None, times=None, fold=False, delay=True, component='abs', 
+                        rotate=True, log10=True, loglog=False, red_tol=10.0,
+                        center_line=False, horizon_lines=False, ax=ax, cmap='viridis',
+                        figsize=(8, 6), deltasq=False, colorbar=True, cbax=cbax, vmin=None, vmax=None,
+                        edgecolor='none', flip_xax=False, flip_yax=False, lw=2)
+        plt.close()
+
+
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
