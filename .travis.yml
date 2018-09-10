@@ -8,7 +8,7 @@ cache:
     pip: true
 
 env:
-  - PYUVDATA_VERSION="@9c94be0366eb41692f5501caac99981026a7ffe6"
+  - PYUVDATA_VERSION="@fae18f1a97e6c521b822b2ffc3c1afef4e2ac3b3"
   - PYUVDATA_VERSION=""
 
 allow_failures:
