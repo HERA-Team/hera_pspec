@@ -248,7 +248,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                         else:
                             c = cax.get_color()
                         if logscale:
-                            _y = np.abs(yp)
+                            _y = np.abs(y)
                         else:
                             _y = y
                         cax = ax.errorbar(x, _y, fmt='none', ecolor=c, yerr=cast(errs[i]), **kwargs)
@@ -812,10 +812,14 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         if cbax is None:
             cbax = ax
         cbar = fig.colorbar(cax, ax=cbax)
-        if delay:
-            p = "P({},\ {})".format(r'\tau', r'|\vec{b}|')
+        if deltasq:
+            p = "\Delta^2"
         else:
-            p = "P({},\ {})".format(r'k_\parallel', r'k_\perp')
+            p = "P"
+        if delay:
+            p = "{}({},\ {})".format(p, r'\tau', r'|\vec{b}|')
+        else:
+            p = "{}({},\ {})".format(p, r'k_\parallel', r'k_\perp')
         if log10:
             psunits = r"$\log_{{10}}\ {}\ [{}]$".format(p, psunits)
         else:
@@ -854,7 +858,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         if not delay:
             # Get average redshift of spw
             avg_z = uvp.cosmo.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
-            horizons *= uvp.cosmo.tau_to_kpara(avg_z, little_h=little_h)
+            horizons *= uvp.cosmo.tau_to_kpara(avg_z, little_h=little_h) / 1e9
 
         # iterate over bins and plot lines
         if rotate:

@@ -346,10 +346,10 @@ class Test_Plot(unittest.TestCase):
                         edgecolor='none', flip_xax=False, flip_yax=False, lw=2)
         plt.close()
 
-
-
-
-
+        # test exceptions
+        nt.assert_raises(ValueError, plot.delay_wedge, uvp, 0, 'xx', component='foo')
+        plt.close()
+        
 
 if __name__ == "__main__":
     unittest.main()

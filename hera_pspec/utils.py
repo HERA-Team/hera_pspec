@@ -751,10 +751,10 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
         # append to list if unique within tolerance
         if match_bl_lens:
             # match only on bl length
-            match = [np.all(np.isclose(bll, bl_len, atol=bl_error_tol)) for bll in red_bl_len]
+            match = [np.all(np.isclose(bll, bl_len, rtol=0.0, atol=bl_error_tol)) for bll in red_bl_len]
         else:
             # match on full bl vector
-            match = [np.all(np.isclose(blv, bl_vec, atol=bl_error_tol)) for blv in red_bl_vec]
+            match = [np.all(np.isclose(blv, bl_vec, rtol=0.0, atol=bl_error_tol)) for blv in red_bl_vec]
         if np.any(match):
             match_id = np.where(match)[0][0]
             red_bl_grp[match_id].append(bl)
