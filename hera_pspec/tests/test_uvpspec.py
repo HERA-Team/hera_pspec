@@ -82,8 +82,8 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(blps, [((1, 2), (1, 2)), ((1, 3), (1, 3)), ((2, 3), (2, 3))])
         # test get all keys
         keys = self.uvp.get_all_keys()
-        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), 'XX'), (0, ((1, 3), (1, 3)), 'XX'),
-                               (0, ((2, 3), (2, 3)), 'XX')])
+        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), 'xx'), (0, ((1, 3), (1, 3)), 'xx'),
+                               (0, ((2, 3), (2, 3)), 'xx')])
         # test omit_flags
         self.uvp.integration_array[0][self.uvp.blpair_to_indices(((1, 2), (1, 2)))[:2]] = 0.0
         nt.assert_equal(self.uvp.get_integrations((0, ((1, 2), (1, 2)), 'xx'), omit_flags=True).shape, (8,))
@@ -448,7 +448,7 @@ class Test_UVPSpec(unittest.TestCase):
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Npols, 2)
         nt.assert_true(len(set(out.pol_array) ^ set([-5, -6])) == 0)
-        key = (0, ((37, 38), (38, 39)), 'XX')
+        key = (0, ((37, 38), (38, 39)), 'xx')
         nt.assert_true(np.all(np.isclose(out.get_nsamples(key), np.ones(10, dtype=np.float64))))
         nt.assert_true(np.all(np.isclose(out.get_integrations(key), 190 * np.ones(10, dtype=np.float64), atol=5, rtol=2)))
 
