@@ -9,7 +9,8 @@ from hera_cal.utils import JD2LST
 
 def build_vanilla_uvpspec(beam=None):
     """
-    Build an example vanilla UVPSpec object from scratch, with all necessary metadata.
+    Build an example vanilla UVPSpec object from scratch, with all necessary 
+    metadata.
 
     Parameters
     ----------
@@ -54,7 +55,8 @@ def build_vanilla_uvpspec(beam=None):
     spw_freq_array = np.tile(np.arange(Nspws), Nfreqs)
     spw_dly_array = np.tile(np.arange(Nspws), Ndlys)
     spw_array = np.arange(Nspws)
-    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), Nspws)
+    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), 
+                           Nspws)
     dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
     pol_array = np.array([-5])
     Npols = len(pol_array)
@@ -84,26 +86,31 @@ def build_vanilla_uvpspec(beam=None):
     store_cov=True
     cosmo = conversions.Cosmo_Conversions()
 
-    data_array, wgt_array, integration_array, nsample_array, cov_array = {}, {}, {}, {}, {}
+    data_array, wgt_array = {}, {}
+    integration_array, nsample_array, cov_array = {}, {}, {}
     for s in spw_array:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
-        wgt_array[s] = np.ones((Nblpairts, Ndlys, 2, Npols), dtype=np.float)
+        wgt_array[s] = np.ones((Nblpairts, Nfreqs, 2, Npols), dtype=np.float)
+        # NB: The wgt_array has dimensions Nfreqs rather than Ndlys; it has the 
+        # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
-         for m in range(Nblpairts)] for n in range(Npols)]),0,-1)
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
 
-
-    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws', 'Nblpairs', 'Nblpairts',
-              'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array',
-              'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array',
+    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws', 
+              'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys', 'Nbls', 
+              'blpair_array', 'time_1_array', 'time_2_array', 
+              'lst_1_array', 'lst_2_array', 'spw_array',
               'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
-              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm',
-              'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array',
-              'cosmo', 'scalar_array', 'labels', 'norm_units', 'labels', 'label_1_array',
-              'label_2_array','store_cov','cov_array', 'spw_dly_array', 'spw_freq_array']
+              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 
+              'norm', 'git_hash', 'nsample_array', 'time_avg_array', 
+              'lst_avg_array', 'cosmo', 'scalar_array', 'labels', 'norm_units', 
+              'labels', 'label_1_array', 'label_2_array', 'store_cov', 
+              'cov_array', 'spw_dly_array', 'spw_freq_array']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
@@ -192,21 +199,24 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
 
     # instantiate pspecdata
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], 
-                             wgts=[None, None], labels=['d1', 'd2'], beam=beam, 
-                             n_dlys=n_dlys)
+                             wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
     # get blpair groups
     assert isinstance(bl_grps, list), "bl_grps must be a list"
     if not isinstance(bl_grps[0], list): bl_grps = [bl_grps]
-    assert np.all([isinstance(blgrp, list) for blgrp in bl_grps]), "bl_grps must be fed as a list of lists"
-    assert np.all([isinstance(blgrp[0], tuple) for blgrp in bl_grps]), "bl_grps must be fed as a list of lists of tuples"
+    assert np.all([isinstance(blgrp, list) for blgrp in bl_grps]), \
+        "bl_grps must be fed as a list of lists"
+    assert np.all([isinstance(blgrp[0], tuple) for blgrp in bl_grps]), \
+        "bl_grps must be fed as a list of lists of tuples"
     bls1, bls2 = [], []
     for blgrp in bl_grps:
-        _bls1, _bls2, _ = utils.construct_blpairs(blgrp, exclude_auto_bls=True, exclude_permutations=True)
+        _bls1, _bls2, _ = utils.construct_blpairs(blgrp, exclude_auto_bls=True, 
+                                                  exclude_permutations=True)
         bls1.extend(_bls1)
         bls2.extend(_bls2)
 
     # run pspec
-    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges,
-                   taper=taper, verbose=verbose,store_cov=store_cov)
+    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', 
+                   spw_ranges=spw_ranges, taper=taper, verbose=verbose, 
+                   store_cov=store_cov, n_dlys=n_dlys)
     return uvp
