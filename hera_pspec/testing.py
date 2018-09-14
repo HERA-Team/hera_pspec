@@ -226,7 +226,13 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
 def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
               whiten=False, run_check=True):
     """
-    Generate a simulated Gaussian noise realization in Jy.
+    Generate a simulated Gaussian noise realization in Jy. Tsys is
+    converted to a Trms via
+
+        Trms = Tsys / sqrt(channel_width * integration_time)
+
+    where Trms is divided by an additional sqrt(2) if the polarization
+    in data is a pseudo-Stokes polarization.
 
     Parameters
     ----------
@@ -302,10 +308,11 @@ def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
         int_time = np.array([int_time])
     Trms = Tsys / np.sqrt(int_time[:, None, None, None] * data.nsample_array * data.channel_width)
 
-    # Get Vrms
+    # Get Vrms: if a pol is pStokes pol, divide by extra sqrt(2)
     freqs = np.unique(data.freq_array)[None, None, :, None]
     K_to_Jy = [1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p)) for p in data.polarization_array]
     K_to_Jy = np.array(K_to_Jy).T[None, None, :, :]
+    K_to_Jy /= np.array([np.sqrt(2) if p in [1, 2, 3, 4] else 1.0 for p in data.polarization_array])
     Vrms = K_to_Jy * Trms
 
     # Generate noise

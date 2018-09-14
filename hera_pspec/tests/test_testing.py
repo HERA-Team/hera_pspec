@@ -2,7 +2,7 @@ import nose.tools as nt
 from hera_pspec.data import DATA_PATH
 from hera_pspec import testing, uvpspec, conversions, pspecbeam, utils
 import os
-from pyuvdata import UVData
+from pyuvdata import UVData, UVBeam
 import numpy as np
 from hera_cal import redcal
 import copy
@@ -59,21 +59,31 @@ def test_noise_sim():
     uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     uvd.read_miriad(uvfile)
+    beam = UVBeam()
     bfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(bfile)
+    beam.read_beamfits(bfile)
+    beam2 = UVBeam()
+    beam2.read_beamfits(os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits"))
+    beam += beam2
+    beam = pspecbeam.PSpecBeamUV(beam)
 
     # test noise amplitude
-    uvn = testing.noise_sim(uvd, 300.0, beam, seed=0, whiten=True, inplace=False)
-    nt.assert_equal(uvn.Ntimes, uvd.Ntimes)
-    nt.assert_equal(uvn.Nfreqs, uvd.Nfreqs)
-    nt.assert_equal(uvn.Nbls, uvd.Nbls)
-    nt.assert_equal(uvn.Npols, uvd.Npols)
-    nt.assert_almost_equal(np.std(uvn.data_array.real), 6.054660787502636)
-    nt.assert_almost_equal(np.std(uvn.data_array.imag), 6.066085566037699)
+    uvd2 = copy.deepcopy(uvd)
+    uvd2.polarization_array[0] = 1
+    uvd2 += uvd
+    uvn = testing.noise_sim(uvd2, 300.0, beam, seed=0, whiten=True, inplace=False)
+    nt.assert_equal(uvn.Ntimes, uvd2.Ntimes)
+    nt.assert_equal(uvn.Nfreqs, uvd2.Nfreqs)
+    nt.assert_equal(uvn.Nbls, uvd2.Nbls)
+    nt.assert_equal(uvn.Npols, uvd2.Npols)
+    nt.assert_almost_equal(np.std(uvn.data_array[:, :, :, 1].real), 6.057816667533955)
+    nt.assert_almost_equal(np.std(uvn.data_array[:, :, :, 1].imag), 6.0793964903750775)
+    nt.assert_almost_equal(np.std(uvn.data_array[:, :, :, 0].real) / np.std(uvn.data_array[:, :, :, 1].real),
+                           1/np.sqrt(2), places=2)
 
     # test seed and inplace
     np.random.seed(0)
-    uvn2 = copy.deepcopy(uvd)
+    uvn2 = copy.deepcopy(uvd2)
     testing.noise_sim(uvn2, 300.0, beam, seed=None, whiten=True, inplace=True)
     nt.assert_equal(uvn, uvn2)
 
