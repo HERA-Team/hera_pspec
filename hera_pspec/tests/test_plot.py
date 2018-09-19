@@ -216,13 +216,19 @@ class Test_Plot(unittest.TestCase):
             uvp = uvp + _uvp
         nt.assert_raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs(), 0, 'xx')
 
-        f2 = plot.delay_spectrum(uvp, uvp.get_blpairs(), 0, 'xx', force_plot=True,
-                                label_type='blpairt', logscale=False, lines=True, markers=True)
+        f2 = plot.delay_spectrum(uvp, uvp.get_blpairs(), 0, 'xx', 
+                                 force_plot=True, label_type='blpairt', 
+                                 logscale=False, lines=True, markers=True)
         plt.close(f2)
-
+        
+        f3 = plot.delay_spectrum(uvp, uvp.get_blpairs(), 0, 'xx', 
+                                 force_plot=True, label_type='blvec', 
+                                 logscale=False, lines=True, markers=True)
+        plt.close(f3)
+        
         # exceptions
-        nt.assert_raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs()[:3], 0, 'xx',
-                         label_type='foo')
+        nt.assert_raises(ValueError, plot.delay_spectrum, uvp, 
+                         uvp.get_blpairs()[:3], 0, 'xx', label_type='foo')
 
 
     def test_plot_waterfall(self):

@@ -92,8 +92,11 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     label_type : int, optional
         Line label type in legend, options=['key', 'blpair', 'blpairt'].
             key : Label lines based on (spw, blpair, pol) key.
-            blpair : Label lines based on blpair.
+            blpair : Label lines based on blpair (as a pair of antenna pairs).
             blpairt : Label lines based on blpair-time.
+            blvec : Label lines in the format "{len} m & {ang} deg". 
+                    If the two baselines have different vectors, their average 
+                    will be used.
 
     plot_stats : string, optional
         If not None, plot an entry in uvp.stats_array instead
@@ -160,7 +163,8 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     
     # Check plot_stats
     if plot_stats is not None:
-        assert plot_stats in uvp_plt.stats_array, "specified key {} not found in stats_array".format(plot_stats)
+        assert plot_stats in uvp_plt.stats_array, \
+            "specified key {} not found in stats_array".format(plot_stats)
 
     # Plot power spectra
     for blgrp in blpairs:
@@ -181,77 +185,88 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
             else:
                 data = cast(uvp_plt.get_stats(plot_stats, key))
 
-            # flag records that have zero integration
+            # Flag records that have zero integration
             flags = np.isclose(uvp_plt.get_integrations(key), 0.0)
             data[flags] = np.nan
 
-            # get errs if requessted
+            # Get errs if requested
             if error is not None and hasattr(uvp_plt, 'stats_array'):
                 if error in uvp_plt.stats_array:
                     errs = uvp_plt.get_stats(error, key)
                     errs[flags] = np.nan
 
-            # get times
+            # Get times
             blptimes = uvp_plt.time_avg_array[uvp_plt.blpair_to_indices(blp)]
-
-            # iterate over integrations per blp
+            
+            # Get baseline vectors (if needed)
+            if label_type == 'blvec':
+                blvecs = dict(zip( [uvp_plt.bl_to_antnums(bl) 
+                                        for bl in uvp_plt.bl_array], 
+                                    uvp_plt.get_ENU_bl_vecs() ))
+            
+            # Iterate over integrations per blp
             for i in range(data.shape[0]):
-                # get y data
+                # Get y data
                 y = data[i]
                 t = blptimes[i]
-
-                # form label
+                
+                # Get blpair as pair of tuples rather than integer
+                _blp = blp
+                if isinstance(blp, int): _blp = uvp_plt.blpair_to_antnums(blp)
+                
+                # Form label
                 if label_type == 'key':
                     label = "{}".format(key)
                 elif label_type == 'blpair':
-                    label = "{}".format(blp)
+                    label = "{}".format(_blp)
                 elif label_type == 'blpairt':
-                    label = "{}, {:0.5f}".format(blp, t)
+                    label = "{}, {:0.5f}".format(_blp, t)
+                elif label_type == 'blvec':
+                    # Calculate average vector for blpair
+                    blv = 0.5 * (blvecs[_blp[0]] + blvecs[_blp[1]])
+                    lens, angs = utils.get_bl_lens_angs([blv], bl_error_tol=1.0)
+                    label = "{len:0.2f} m & {ang:0.0f} deg".format(len=lens[0], 
+                                                                   ang=angs[0])
                 else:
                     raise ValueError("Couldn't undestand label_type {}".format(label_type))
 
-                # plot elements
+                # Plot elements
                 cax = None
                 if lines:
-                    if logscale:
-                        _y = np.abs(y)
-                    else:
-                        _y = y
-
+                    _y = np.abs(y) if logscale else y
                     cax, = ax.plot(x, _y, marker='None', label=label, **kwargs)
 
                 if markers:
-                    if cax is None:
-                        c = None
-                    else:
-                        c = cax.get_color()
-                    if lines:
-                        label = None
+                    c = None if cax is None else cax.get_color()
+                    if lines: label = None
 
-                    # plot markers
+                    # Plot markers
                     if logscale:
-                        # plot positive w/ filled circles
-                        cax, = ax.plot(x[y >= 0], np.abs(y[y >= 0]), c=c, ls='None', marker='o', 
-                                      markerfacecolor=c, markeredgecolor=c, label=label, **kwargs)
-                        # plot negative w/ unfilled circles
+                        # Plot positive w/ filled circles
+                        cax, = ax.plot(x[y >= 0], np.abs(y[y >= 0]), c=c, 
+                                       ls='None', marker='o', 
+                                       markerfacecolor=c, markeredgecolor=c, 
+                                       label=label, **kwargs)
+                        
+                        # Plot negative w/ unfilled circles
                         c = cax.get_color()
-                        cax, = ax.plot(x[y < 0], np.abs(y[y < 0]), c=c, ls='None', marker='o',
-                                       markerfacecolor='None', markeredgecolor=c, **kwargs)
+                        cax, = ax.plot(x[y < 0], np.abs(y[y < 0]), c=c, 
+                                       ls='None', marker='o',
+                                       markerfacecolor='None', 
+                                       markeredgecolor=c, **kwargs)
                     else:
+                        # Plot directly
                         cax, = ax.plot(x, y, c=c, ls='None', marker='o', 
-                                      markerfacecolor=c, markeredgecolor=c, label=label, **kwargs)
-
+                                      markerfacecolor=c, markeredgecolor=c, 
+                                      label=label, **kwargs)
+                
+                # Plot errorbar if requested
                 if error is not None and hasattr(uvp_plt, 'stats_array'):
                     if error in uvp_plt.stats_array:
-                        if cax is None:
-                            c = None
-                        else:
-                            c = cax.get_color()
-                        if logscale:
-                            _y = np.abs(y)
-                        else:
-                            _y = y
-                        cax = ax.errorbar(x, _y, fmt='none', ecolor=c, yerr=cast(errs[i]), **kwargs)
+                        c = None if cax is None else cax.get_color()
+                        _y = np.abs(y) if logscale else y
+                        cax = ax.errorbar(x, _y, fmt='none', ecolor=c, 
+                                          yerr=cast(errs[i]), **kwargs)
                     else:
                         raise KeyError("Error variable '%s' not found in stats_array of UVPSpec object." % error)
 
@@ -260,12 +275,10 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
             if average_blpairs: break
     
     # Set log scale
-    if logscale:
-        ax.set_yscale('log')
+    if logscale: ax.set_yscale('log')
     
     # Add legend
-    if legend:
-        ax.legend(loc='upper left')
+    if legend: ax.legend(loc='upper left')
     
     # Add labels with units
     if ax.get_xlabel() == "":
@@ -290,14 +303,15 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
             ax.set_ylabel("$P(k_\parallel)$ $[%s]$" % psunits, fontsize=16)
     
     # Return Figure: the axis is an attribute of figure
-    if new_plot:
-        return fig
+    if new_plot: return fig
 
 
-def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=False, 
-                    fold=False, delay=True, deltasq=False, log=True, lst_in_hrs=True,
-                    vmin=None, vmax=None, cmap='YlGnBu', axes=None, figsize=(14, 6),
-                    force_plot=False, times=None, title_type='blpair'):
+def delay_waterfall(uvp, blpairs, spw, pol, component='real', 
+                    average_blpairs=False, fold=False, delay=True, 
+                    deltasq=False, log=True, lst_in_hrs=True,
+                    vmin=None, vmax=None, cmap='YlGnBu', axes=None, 
+                    figsize=(14, 6), force_plot=False, times=None, 
+                    title_type='blpair'):
     """
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
@@ -348,8 +362,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     axes : array of matplotlib.axes, optional
         Use this to pass in an existing Axes object or array of axes, which
         the power spectra will be added to. (Warning: Labels and legends will
-        not be altered in this case, even if the existing plot has completely different axis 
-        labels etc.) If None, a new Axes object will be created. Default: None.
+        not be altered in this case, even if the existing plot has completely 
+        different axis labels etc.) If None, a new Axes object will be created. 
+        Default: None.
     
     figsize : tuple
         len-2 integer tuple specifying figure size if axes is None
@@ -372,7 +387,8 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         Matplotlib Figure instance if input ax is None.
     """
     # assert component
-    assert component in ['real', 'abs', 'imag'], "Can't parse specified component {}".format(component)
+    assert component in ['real', 'abs', 'imag'], \
+        "Can't parse specified component {}".format(component)
 
     # Add ungrouped baseline-pairs into a group of their own (expected by the
     # averaging routines)
@@ -384,7 +400,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         else:
             blpairs.append(blpairs_in[i])
 
-    # iterate through and make sure they are blpair integers
+    # Iterate through and make sure they are blpair integers
     _blpairs = []
     for blpgrp in blpairs:
         _blpgrp = []
@@ -449,7 +465,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             # exists any more (so skip the rest)
             if average_blpairs: break
     
-    # check for reasonable number of blpairs to plot...
+    # Check for reasonable number of blpairs to plot...
     Nkeys = len(waterfall)
     if Nkeys > 20 and force_plot == False:
         raise ValueError("Nblps > 20 and force_plot == False, quitting...")
@@ -498,8 +514,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
         Ny_thin = int(round(Ny / 10.0))
     Nx = len(x)
 
-    # get baseline vectors
-    blvecs = dict(zip([uvp_plt.bl_to_antnums(bl) for bl in uvp_plt.bl_array], uvp_plt.get_ENU_bl_vecs()))
+    # Get baseline vectors
+    blvecs = dict(zip( [uvp_plt.bl_to_antnums(bl) for bl in uvp_plt.bl_array], 
+                       uvp_plt.get_ENU_bl_vecs() ))
 
     # Sanitize power spectrum units 
     psunits = uvp_plt.units
@@ -533,8 +550,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             blp = uvp_plt.blpair_to_antnums(key[1])
 
             # plot waterfall
-            cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax, 
-                                 extent=[np.min(x), np.max(x), Ny, 0])
+            cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', 
+                             vmin=vmin, vmax=vmax, 
+                             extent=[np.min(x), np.max(x), Ny, 0])
 
             # ax config
             ax.xaxis.set_ticks_position('bottom')
