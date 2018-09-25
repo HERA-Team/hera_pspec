@@ -1316,7 +1316,7 @@ def test_pspec_run():
     # assert dset labeling propagated
     nt.assert_equal(set(uvp.labels), set(['bar', 'foo']))
     # assert spw_ranges and n_dlys specification worked
-    np.testing.assert_array_equal(uvp.get_spw_ranges(), [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)])
+    np.testing.assert_array_equal(uvp.get_spw_ranges(), [(163476562.5, 165917968.75, 25, 25), (170312500.0, 172265625.0, 20, 20)])
 
     # get shifted UVDatas and test rephasing, flag broadcasting
     uvd = UVData()
@@ -1331,7 +1331,7 @@ def test_pspec_run():
     psc, ds = pspecdata.pspec_run([copy.deepcopy(uvd1), copy.deepcopy(uvd2)], "./out2.h5",
                                    blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
                                    verbose=False, overwrite=True, spw_ranges=[(50, 100)], rephase_to_dset=0,
-                                   broadcast_dset_flags=True, time_thresh=0.3)
+                                   broadcast_dset_flags=True, greedy_threshold=0.3)
     # assert first integration flagged across entire spw
     nt.assert_true(ds.dsets[0].get_flags(37, 38)[0, 50:100].all())
     # assert first integration flagged *ONLY* across spw
