@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>HERA</title>
+  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script type="text/javascript" src="data.js"></script>
+  <script type="text/javascript" src="hera_webui.js"></script>
+  <link rel="stylesheet" href="w3.css">
+  <link rel="stylesheet" href="w3-colours.css">
+  <link rel="stylesheet" href="hera_webui.css">
+  
+</head>
+
+<body class="w3-light-grey w3-content" style="max-width:1600px">
+
+<!-- Sidebar/menu -->
+<nav class="w3-sidebar w3-collapse w3-white w3-animate-left" style="z-index:3;width:300px;" id="mySidebar"><br>
+  
+  <div class="w3-container">
+    <a href="#" onclick="w3_close()" class="w3-hide-large w3-right w3-jumbo w3-padding w3-hover-grey" title="close menu">
+      <i class="fa fa-remove">CLOSE</i>
+    </a>
+    <img src="hera_logo.png" style="width:30%;">
+    <br>
+    <h4><b>PIPELINE</b></h4>
+  </div>
+  
+  <!-- PIPELINE -->
+  <div class="w3-bar-block">
+    <a href="#" onclick="w3_close()" class="w3-bar-item w3-button w3-padding">
+      <i class="w3-margin-right"></i>
+      LST-binned data
+    </a>
+    <a href="#" onclick="w3_close()" class="w3-bar-item w3-button w3-padding">
+      <i class="w3-margin-right"></i>
+      RFI flagging
+    </a>
+    <a href="#" onclick="w3_close()" class="w3-bar-item w3-button w3-padding">
+      <i class="w3-margin-right"></i>
+      Time averaging
+    </a>
+    <a href="#" onclick="w3_close()" class="w3-bar-item w3-button w3-padding">
+      <i class="w3-margin-right"></i>
+      Pseudo-Stokes
+    </a>
+    <a href="#" onclick="w3_close()" class="w3-bar-item w3-button w3-padding">
+      <i class="w3-margin-right"></i>
+      Delay filtering
+    </a>
+    
+  </div>
+  
+  <!-- Grouping -->
+  <div class="w3-container">
+    <h4><b>GRID VIEW</b></h4>
+  </div>
+  
+  <div class="w3-bar-block">
+    <a onclick="list_baselines()" href="#" class="w3-bar-item w3-button w3-padding">
+      <i class="w3-margin-right"></i>
+      By baseline
+    </a>
+    
+    <a href="#" onclick="w3_close()" class="w3-bar-item w3-button w3-padding">
+      <i class="w3-margin-right"></i>
+      xxx
+    </a>
+    
+    <a href="#" onclick="w3_close()" class="w3-bar-item w3-button w3-padding">
+      <i class="w3-margin-right"></i>
+      xxx
+    </a>
+    
+  </div>
+  
+  <!-- Zoom window -->
+  <div class="w3-container">
+      <div id="zoom-window" class="img-zoom-result"></div>
+  </div>
+  
+<!--  <footer class="w3-container">-->
+<!--    <br>-->
+<!--    <p class="w3-text-grey">Hosted by:</p>-->
+<!--    <img src="/static/images/qmul.png" style="width:65%;">-->
+<!--  </footer>-->
+  
+</nav>
+
+<!-- Overlay effect when opening sidebar on small screens -->
+<div class="w3-overlay w3-hide-large w3-animate-opacity" onclick="w3_close()" style="cursor:pointer" title="close side menu" id="myOverlay"></div>
+
+
+
+<!-- !PAGE CONTENT! -->
+<div class="w3-main" style="margin-left:320px">
+  
+<!--  <div id="zoom_panel" class="img-zoom-result"></div>-->
+  
+  <div class="w3-bar w3-light-grey" id="select-container">
+    
+    <div class="w3-dropdown-hover w3-right">
+      <button class="w3-button" id="pipeline-button" style="width:16em">
+        &#9673; &nbsp; <span class="info-button" id=pipeline-status>Pipeline Stage</span>
+      </button>
+      <div class="w3-dropdown-content w3-bar-block w3-card-4" id="pipeline-select">
+      </div>
+    </div>
+    
+    <div class="w3-dropdown-hover w3-right">
+      <button class="w3-button" id="lst-button" style="width:10em">
+        &#x1f550; &nbsp; <span class="info-button" id=lst-status>LST</span>
+      </button>
+      <div class="w3-dropdown-content w3-bar-block w3-card-4" id="lst-select">
+      </div>
+    </div>
+    
+    <div class="w3-dropdown-hover w3-right">
+      <button class="w3-button" id="pol-button" style="width:10em">
+        &#10011; &nbsp; <span class="info-button" id=pol-status>Pol.</span>
+      </button>
+      <div class="w3-dropdown-content w3-bar-block w3-card-4" id="pol-select">
+      </div>
+    </div>
+    
+    <div class="w3-dropdown-hover w3-right">
+      <button class="w3-button" id="redgrp-button" style="width:12em">
+        &#x2817; &nbsp; <span class="info-button" id=redgrp-status>Baseline Group</span>
+      </button>
+      <div class="w3-dropdown-content w3-bar-block w3-card-4" id="redgrp-select">
+      </div>
+    </div>
+    
+  </div>
+  
+<!--  <div class="w3-bar w3-gray" id="select-container">-->
+<!--    <div class="w3-bar-item w3-right" id="pipeline-status" style="text-align: center; width:12em">LST-binned data</div>-->
+<!--    <div class="w3-bar-item w3-right" id="lst-status" style="text-align: center; width:12em">1.01525</div>-->
+<!--    <div class="w3-bar-item w3-right" id="redgrp-status" style="text-align: center; width:12em">Group 0</div>-->
+<!--  </div>-->
+  
+  <div id="flow">
+    <h1 id="blname">Start here.</h2>
+    
+  </div>
+  
+<!--  <p><a onclick="load_baseline(11, 12)" href="javascript:void(0);">Load report</a></p>-->
+
+<script>
+//list_baselines();
+//grid_red_bls("zen.grp1.of1.xx.LST.1.71736", "uvOCRSLTF.XX");
+
+// Initialise Data object
+var dat = new Data();
+
+// Set-up pipeline dropdown
+populate_dropdown("pipeline", dat.prefixes, dat.prefix_names, "select_callback");
+populate_dropdown("lst", dat.lsts, dat.lsts, "select_callback");
+populate_dropdown("pol", dat.pols, dat.pols, "select_callback");
+populate_dropdown("redgrp", dat.red_bls, dat.red_bls, "select_callback");
+
+// Default display
+dropdown_grid();
+
+document.onkeydown = move_next_lst;
+
+// Disable LST and red. bl dropdowns
+//clear_dropdown("lst", false);
+//clear_dropdown("redgrp", false);
+
+
+//grid_red_bls("zen.grp1.of1.xx.LST.1.71736", "uvOCRSLTF.XX");
+
+</script>
+
+<!-- End page content -->
+</div>
+
+</body>
+</html>

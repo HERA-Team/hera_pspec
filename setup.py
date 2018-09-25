@@ -33,8 +33,6 @@ setup_args = {
     'install_requires': ['numpy>=1.14', 'scipy','matplotlib>=2.2'],
     'include_package_data': True,
     'scripts': ['scripts/pspec_run.py', 'scripts/pspec_red.py',
-                'pipelines/idr2_preprocessing/preprocess_data.py',
-                'pipelines/pspec_pipeline/pspec_pipe.py',
                 'scripts/bootstrap_run.py'],
     'zip_safe':     False,
 }

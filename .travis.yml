@@ -7,6 +7,13 @@ python:
 cache:
     pip: true
 
+env:
+  - PYUVDATA_VERSION="@fae18f1a97e6c521b822b2ffc3c1afef4e2ac3b3"
+  - PYUVDATA_VERSION=""
+
+allow_failures:
+  - env: PYUVDATA_VERSION=""
+
 install:
   # ensure that we have the full tag information available for version.py
   - git fetch --tags
@@ -29,17 +36,16 @@ install:
   # create environment and install dependencies
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy nose pip matplotlib coverage
   - source activate test-environment
-  - conda install -c conda-forge aipy
+  - conda install -c conda-forge healpy aipy
   - pip install coveralls
-  - pip install git+https://github.com/HERA-Team/pyuvdata.git
+  - pip install h5py
+  - pip install git+https://github.com/HERA-Team/pyuvdata.git$PYUVDATA_VERSION
   - pip install git+https://github.com/HERA-Team/omnical.git
   - pip install git+https://github.com/HERA-Team/linsolve.git
   - pip install git+https://github.com/HERA-Team/hera_qm.git
   - pip install git+https://github.com/HERA-Team/uvtools.git
   - pip install git+https://github.com/HERA-Team/hera_cal.git
-  - pip install healpy
   - pip install scikit-learn
-  - pip install h5py
   - pip install pyyaml
   - pip install multiprocess
   - python setup.py install

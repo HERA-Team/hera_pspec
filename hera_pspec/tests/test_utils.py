@@ -186,6 +186,14 @@ class Test_Utils(unittest.TestCase):
         nt.assert_true(isinstance(blps[0], list))
         nt.assert_equal(blps[0], [((24, 37), (25, 38)), ((24, 37), (24, 37))])
 
+        # test baseline select on uvd
+        uvd2 = copy.deepcopy(uvd)
+        uvd2.select(bls=[(24, 25), (37, 38), (24, 39)])
+        (bls1, bls2, blps, xants1,
+         xants2) = utils.calc_blpair_reds(uvd2, uvd2, filter_blpairs=True, exclude_auto_bls=True, exclude_permutations=True,
+                                   bl_len_range=(10.0, 20.0))  
+        nt.assert_equal(blps, [((24, 25), (37, 38))])
+
         # test exceptions
         uvd2 = copy.deepcopy(uvd)
         uvd2.antenna_positions[0] += 2
@@ -217,6 +225,12 @@ class Test_Utils(unittest.TestCase):
         r, l, a = utils.get_reds(uvd, bl_len_range=bl_len_range, bl_deg_range=bl_deg_range)
         nt.assert_true(np.all([_l > bl_len_range[0] and _l < bl_len_range[1] for _l in l]))
         nt.assert_true(np.all([_a > bl_deg_range[0] and _a < bl_deg_range[1] for _a in a]))
+
+        # autos
+        r, l, a = utils.get_reds(fname, xants=xants, add_autos=True)
+        nt.assert_almost_equal(l[0], 0)
+        nt.assert_almost_equal(a[0], 0)
+        nt.assert_true(len(r), 105)
 
     def test_config_pspec_blpairs(self):
         # test basic execution
@@ -299,6 +313,12 @@ def test_get_blvec_reds():
     (red_bl_grp, red_bl_len, red_bl_ang,
      red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=0.0)
     nt.assert_equal(len(red_bl_grp), uvp.Nblpairs)
+
+    # test combine angles
+    uvp = testing.uvpspec_from_data(fname, reds[:3], spw_ranges=[(10, 40)])
+    (red_bl_grp, red_bl_len, red_bl_ang,
+     red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=1.0, match_bl_lens=True)
+    nt.assert_equal(len(red_bl_grp), 1)
 
 
 def test_job_monitor():

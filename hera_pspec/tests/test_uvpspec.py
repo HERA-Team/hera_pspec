@@ -45,7 +45,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_almost_equal(d[0,0], (101.1021011020000001+0j))
         # get_wgts
         w = self.uvp.get_wgts((0, ((1, 2), (1, 2)), 'xx'))
-        nt.assert_equal(w.shape, (10, 30, 2))
+        nt.assert_equal(w.shape, (10, 50, 2)) # should have Nfreq dim, not Ndlys
         nt.assert_true(w.dtype == np.float)
         nt.assert_equal(w[0,0,0], 1.0)
         # get_integrations
@@ -82,8 +82,8 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(blps, [((1, 2), (1, 2)), ((1, 3), (1, 3)), ((2, 3), (2, 3))])
         # test get all keys
         keys = self.uvp.get_all_keys()
-        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), 'XX'), (0, ((1, 3), (1, 3)), 'XX'),
-                               (0, ((2, 3), (2, 3)), 'XX')])
+        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), 'xx'), (0, ((1, 3), (1, 3)), 'xx'),
+                               (0, ((2, 3), (2, 3)), 'xx')])
         # test omit_flags
         self.uvp.integration_array[0][self.uvp.blpair_to_indices(((1, 2), (1, 2)))[:2]] = 0.0
         nt.assert_equal(self.uvp.get_integrations((0, ((1, 2), (1, 2)), 'xx'), omit_flags=True).shape, (8,))
@@ -161,12 +161,20 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(np.isclose(blpairts, np.array([0,3,6,9,12,15,18,21,24,27])).min())
 
         # spw to indices
-        spw = self.uvp.spw_to_dly_indices(0)
-        nt.assert_equal(len(spw), self.uvp.Ndlys)
-        spw = self.uvp.spw_to_freq_indices(0)
-        nt.assert_equal(len(spw), self.uvp.Nfreqs)
-        spw = self.uvp.spw_indices(0)
-        nt.assert_equal(len(spw), self.uvp.Nspws)
+        spw1 = self.uvp.spw_to_dly_indices(0)
+        nt.assert_equal(len(spw1), self.uvp.Ndlys)
+        spw2 = self.uvp.spw_to_freq_indices(0)
+        nt.assert_equal(len(spw2), self.uvp.Nfreqs)
+        spw3 = self.uvp.spw_indices(0)
+        nt.assert_equal(len(spw3), self.uvp.Nspws)
+
+        # use spw tuple instead of spw index
+        spw1b = self.uvp.spw_to_dly_indices(self.uvp.get_spw_ranges()[0])
+        spw2b = self.uvp.spw_to_freq_indices(self.uvp.get_spw_ranges()[0])
+        spw3b = self.uvp.spw_indices(self.uvp.get_spw_ranges()[0])
+        np.testing.assert_array_equal(spw1, spw1b)
+        np.testing.assert_array_equal(spw2, spw2b)
+        np.testing.assert_array_equal(spw3, spw3b)
 
         # pol to indices
         pol = self.uvp.pol_to_indices('xx')
@@ -199,6 +207,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp.Nblpairs, 1)
         nt.assert_equal(uvp.data_array[0].shape, (10, 30, 1))
         nt.assert_almost_equal(uvp.data_array[0][0,0,0], (101.1021011020000001+0j))
+
         # inplace vs not inplace, spw selection
         uvd = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
@@ -211,16 +220,51 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_equal(uvp2.data_array[0].shape, (10, 10, 1))
         nt.assert_almost_equal(uvp2.data_array[0][0,0,0], (-3831605.3903496987+8103523.9604128916j))
+
         # blpair select
         uvp = copy.deepcopy(self.uvp)
         uvp2 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 2)
+
         # pol select
         uvp2 = uvp.select(pols=[-5], inplace=False)
         nt.assert_equal(uvp2.pol_array[0], -5)
+
         # time select
         uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[:1], inplace=False)
         nt.assert_equal(uvp2.Ntimes, 1)
+
+        # test pol and blpair select, and check dimensionality of output
+        uvp = copy.deepcopy(self.uvp)
+        uvp.set_stats('hi', uvp.get_all_keys()[0], np.ones(300).reshape(10, 30))
+        uvp2 = uvp.select(blpairs=uvp.get_blpairs(), pols=uvp.pol_array, inplace=False)
+        nt.assert_equal(uvp2.data_array[0].shape, (30, 30, 1))
+        nt.assert_equal(uvp2.stats_array['hi'][0].shape, (30, 30, 1))
+
+        # test when both blp and pol array are non-sliceable
+        uvp2, uvp3, uvp4 = copy.deepcopy(uvp), copy.deepcopy(uvp), copy.deepcopy(uvp)
+        uvp2.pol_array[0], uvp3.pol_array[0], uvp4.pol_array[0] = -6, -7, -8
+        uvp = uvp + uvp2 + uvp3 + uvp4
+        uvp5 = uvp.select(blpairs=[101102101102], pols=[-5, -6, -7], inplace=False)
+        nt.assert_equal(uvp5.data_array[0].shape, (10, 30, 3))
+
+        # select only on lst
+        uvp = copy.deepcopy(self.uvp)
+        uvp2 = uvp.select(lsts=np.unique(uvp.lst_avg_array), inplace=False)
+        nt.assert_equal(uvp, uvp2)
+
+        # check non-sliceable select: both pol and blpairs are non-sliceable
+        uvp = copy.deepcopy(self.uvp)
+        # extend pol_array axis
+        for i in [-6, -7, -8]:
+            _uvp = copy.deepcopy(self.uvp)
+            _uvp.pol_array[0] = i
+            uvp += _uvp
+
+        # create a purposely non-sliceable select across *both* pol and blpair
+        uvp.select(pols=[-5, -7, -8], blpairs=[101102101102, 102103102103])
+        nt.assert_equal(uvp.Npols, 3)
+        nt.assert_equal(uvp.Nblpairs, 2)
 
     def test_get_ENU_bl_vecs(self):
         bl_vecs = self.uvp.get_ENU_bl_vecs()
@@ -404,7 +448,7 @@ class Test_UVPSpec(unittest.TestCase):
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Npols, 2)
         nt.assert_true(len(set(out.pol_array) ^ set([-5, -6])) == 0)
-        key = (0, ((37, 38), (38, 39)), 'XX')
+        key = (0, ((37, 38), (38, 39)), 'xx')
         nt.assert_true(np.all(np.isclose(out.get_nsamples(key), np.ones(10, dtype=np.float64))))
         nt.assert_true(np.all(np.isclose(out.get_integrations(key), 190 * np.ones(10, dtype=np.float64), atol=5, rtol=2)))
 
@@ -460,16 +504,29 @@ class Test_UVPSpec(unittest.TestCase):
         uvp3.pol_array[0] = -7
         out = uvp1 + uvp2 + uvp3
         nt.assert_equal(out.Npols, 3)
+        
+        # Test whether n_dlys != Nfreqs works
+        uvp4 = testing.uvpspec_from_data(uvd, bls, beam=beam, 
+                                         spw_ranges=[(20, 30), (60, 90)], 
+                                         n_dlys=[5, 15])
+        uvp4b = copy.deepcopy(uvp4)
+        uvp4b.pol_array[0] = -6
+        out = uvpspec.combine_uvpspec([uvp4, uvp4b], verbose=False)
+        
 
     def test_combine_uvpspec_std(self):
         # setup uvp build
         uvd = UVData()
         uvd_std = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
-        uvd_std.read_miriad(os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'))
-        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+        uvd_std.read_miriad(
+                      os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'))
+        beam = pspecbeam.PSpecBeamUV(
+                      os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, spw_ranges=[(20, 24), (64, 68)], beam=beam)
+        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, 
+                                         spw_ranges=[(20, 24), (64, 68)], 
+                                         beam=beam)
         # test failure due to overlapping data
         uvp2 = copy.deepcopy(uvp1)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
@@ -483,9 +540,14 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test partial data overlap failure
-        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], data_std=uvd_std, spw_ranges=[(20, 24), (64, 68)], beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], 
+                                         data_std=uvd_std, 
+                                         spw_ranges=[(20, 24), (64, 68)], 
+                                         beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 24), (64, 68)], data_std=uvd_std, beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, bls, 
+                                         spw_ranges=[(20, 24), (64, 68)], 
+                                         data_std=uvd_std, beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2 = copy.deepcopy(uvp1)
         uvp2.pol_array[0] = -6
@@ -493,14 +555,17 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test concat across spw
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 91)], data_std=uvd_std, beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 91)], 
+                                         data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nspws, 3)
         nt.assert_equal(out.Nfreqs, 14)
         nt.assert_equal(out.Nspwdlys, 14)
 
         # test concat across blpairts
-        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 24), (64, 68)], data_std=uvd_std, beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], 
+                                         spw_ranges=[(20, 24), (64, 68)], 
+                                         data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nblpairs, 4)
         nt.assert_equal(out.Nbls, 5)
@@ -514,7 +579,8 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test feed as strings
-        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)], data_std=uvd_std, beam=beam)
+        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)], 
+                                         data_std=uvd_std, beam=beam)
         uvp2 = copy.deepcopy(uvp1)
         uvp2.pol_array[0] = -6
         uvp1.write_hdf5('uvp1.hdf5', overwrite=True)
@@ -522,9 +588,8 @@ class Test_UVPSpec(unittest.TestCase):
         out = uvpspec.combine_uvpspec(['uvp1.hdf5', 'uvp2.hdf5'], verbose=False)
         nt.assert_true(out.Npols, 2)
         for ff in ['uvp1.hdf5', 'uvp2.hdf5']:
-            if os.path.exists(ff):
-                os.remove(ff)
-
+            if os.path.exists(ff): os.remove(ff)
+        
         # test UVPSpec __add__
         uvp3 = copy.deepcopy(uvp1)
         uvp3.pol_array[0] = -7
@@ -547,3 +612,4 @@ def test_conj_blpair():
     blpair = uvputils._conj_blpair(101102103104, which='both')
     nt.assert_equal(blpair, 102101104103)
     nt.assert_raises(ValueError, uvputils._conj_blpair, 102101103104, which='foo')
+    
