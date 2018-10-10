@@ -161,7 +161,7 @@ def test_bootstrap_resampled_error():
     uvd = UVData()
     uvd.read_miriad(visfile)
     ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
-    reds = redcal.get_pos_reds(dict(zip(a, ap)), low_hi=True, bl_error_tol=1.0)[:3]
+    reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
 
     # Lots of this function is already tested by bootstrap_run
@@ -190,7 +190,7 @@ def test_bootstrap_run():
     uvd = UVData()
     uvd.read_miriad(visfile)
     ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
-    reds = redcal.get_pos_reds(dict(zip(a, ap)), low_hi=True, bl_error_tol=1.0)[:3]
+    reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
     if os.path.exists("ex.h5"):
         os.remove("ex.h5")
