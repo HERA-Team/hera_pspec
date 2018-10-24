@@ -958,7 +958,7 @@ class Test_PSpecData(unittest.TestCase):
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
-        red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos, low_hi=True))[2]
+        red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos))[2]
         bls1, bls2, blps = utils.construct_blpairs(red_bls, exclude_permutations=True)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)

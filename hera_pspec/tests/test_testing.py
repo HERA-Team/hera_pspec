@@ -38,7 +38,7 @@ def test_uvpspec_from_data():
 
     # test multiple bl groups
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-    reds = redcal.get_pos_reds(dict(zip(ants, antpos)), low_hi=True)
+    reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
     uvp = testing.uvpspec_from_data(fname, reds[:3], beam=beam, spw_ranges=[(50, 100)])
     nt.assert_equal(len(set(uvp.bl_array) - set([137138, 137151, 137152, 138139, 138152, 138153, 139153, 139154,
                                                  151152, 151167, 152153, 152167, 152168, 153154, 153168, 153169,

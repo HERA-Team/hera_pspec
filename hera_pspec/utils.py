@@ -905,7 +905,7 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
 
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False, low_hi=True):
+             bl_deg_range=(0, 180), xants=None, add_autos=False):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
     calculate redundant baseline groups using hera_cal.redcal and optionally 
@@ -936,10 +936,6 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     add_autos : bool
         If True, add into autocorrelation group to the redundant group list.
 
-    low_hi : bool
-        If True, if the first bl in a redundant blgroup has ant1 > ant2,
-        then conjugate all baselines in the group.
-
     Returns (reds, lens, angs)
     ------- 
     reds : list
@@ -967,14 +963,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         antpos_dict = uvd
 
     # get redundant baselines
-    reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol, low_hi=False)
-    if low_hi:
-        _reds = []
-        for r in reds:
-            if r[0][0] > r[0][1]:
-                r = [_r[::-1] for _r in r]
-            _reds.append(r)
-        reds = _reds
+    reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
 
     # get vectors, len and ang for each baseline group
     vecs = np.array([antpos_dict[r[0][0]] - antpos_dict[r[0][1]] for r in reds])
