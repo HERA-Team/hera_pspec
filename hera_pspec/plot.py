@@ -593,7 +593,9 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
                 red_tol=1.0, center_line=False, horizon_lines=False,
                 title=None, ax=None, cmap='viridis', figsize=(8, 6),
                 deltasq=False, colorbar=False, cbax=None, vmin=None, vmax=None,
-                edgecolor='none', flip_xax=False, flip_yax=False, lw=2, **kwargs):
+                edgecolor='none', flip_xax=False, flip_yax=False, lw=2, set_bl_tick_major=False,
+                set_bl_tick_minor=False, xtick_size=10, xtick_rot=0, ytick_size=10, ytick_rot=0,
+                **kwargs):
     """
     Plot a 2D delay spectrum (or spectra) from a UVPSpec object. Note that
     all integrations and redundant baselines are averaged (unless specifying times)
@@ -692,6 +694,13 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
 
     lw : int, optional
         Line-width of horizon and center lines if plotted. Default: 2.
+
+    set_bl_tick_major : bool, optional
+        If True, use the baseline lengths as major ticks, rather than default uniform
+        grid.
+
+    set_bl_tick_minor : bool, optional
+        If True, use the baseline lengths as minor ticks, which have no labels.
 
     kwargs : dictionary
         Additional keyword arguments to pass to pcolormesh() call.
@@ -803,10 +812,16 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
                         vmin=vmin, vmax=vmax, **kwargs)
 
     # Configure ticks
-    if rotate:
-        ax.set_xticks(np.around(x_axis, 4))
-    else:
-        ax.set_yticks(np.around(y_axis, 4))
+    if set_bl_tick_major:
+        if rotate:
+            ax.set_xticks(map(lambda x: np.around(x, _get_sigfig(x)+2), x_axis))
+        else:
+            ax.set_yticks(map(lambda x: np.around(x, _get_sigfig(x)+2), y_axis))
+    if set_bl_tick_minor:
+        if rotate:
+            ax.set_xticks(map(lambda x: np.around(x, _get_sigfig(x)+2), x_axis), minor=True)
+        else:
+            ax.set_yticks(map(lambda x: np.around(x, _get_sigfig(x)+2), y_axis), minor=True)
 
     # Add colorbar
     if colorbar:
@@ -878,13 +893,21 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
 
     # flip axes
     if flip_xax:
-        plt.gca().invert_xaxis()
+        fig.sca(ax)
+        fig.gca().invert_xaxis()
     if flip_yax:
-        plt.gca().invert_yaxis()
+        fig.sca(ax)
+        fig.gca().invert_yaxis()
 
     # add title
     if title is not None:
         ax.set_title(title, fontsize=12)
+
+    # Configure tick sizes and rotation
+    [tl.set_size(xtick_size) for tl in ax.get_xticklabels()]
+    [tl.set_rotation(xtick_rot) for tl in ax.get_xticklabels()]
+    [tl.set_size(ytick_size) for tl in ax.get_yticklabels()]
+    [tl.set_rotation(ytick_rot) for tl in ax.get_yticklabels()]
 
     # return figure
     if new_plot:
@@ -974,3 +997,15 @@ def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
         fig.tight_layout()
         fig.savefig(outfile, format=format)
         fig.clf()
+
+def _get_sigfig(x):
+    return -int(np.floor(np.log10(np.abs(x))))
+
+def _round_sigfig(x, up=True):
+    sigfigs = get_sigfig(x)
+    if up:
+        return np.ceil(10**sigfigs * x) / 10**sigfigs
+    else:
+        return np.floor(10**sigfigs * x) / 10**sigfigs
+
+

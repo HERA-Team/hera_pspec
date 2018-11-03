@@ -183,7 +183,7 @@ def test_bootstrap_resampled_error():
         os.remove("uvp.h5")
 
 
-def validate_bootstrap_errorbar():
+def test_validate_bootstrap_errorbar():
     """ This is used to test the bootstrapping code
     against the gaussian noise visibility simulator.
     The basic premise is that, if working properly,
@@ -197,13 +197,13 @@ def validate_bootstrap_errorbar():
     Tsys = 300.0  # Kelvin
 
     # generate complex gaussian noise
-    seed = 0
+    seed = 4
     uvd1 = testing.noise_sim(uvfile, Tsys, beam, seed=seed, whiten=True, inplace=False, Nextend=4)
-    seed = 1
+    seed = 5
     uvd2 = testing.noise_sim(uvfile, Tsys, beam, seed=seed, whiten=True, inplace=False, Nextend=4)
 
     # get redundant baseline group
-    reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True, bl_len_range=(10, 20),
+    reds, lens, angs = utils.get_reds(uvd1, pick_data_ants=True, bl_len_range=(10, 20),
                                       bl_deg_range=(0, 1))
     bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=False, exclude_permutations=False)
 
@@ -219,11 +219,11 @@ def validate_bootstrap_errorbar():
                                                                       robust_std=True, cintervals=[16, 84],
                                                                       verbose=False)
 
-    # assert bs_std z-score has std of ~1.0 along time ax to within 1%
-    bs_std_zscr = uvp_avg.data_array[0].real / uvp_avg.stats_array['bs_std'][0].real
-    nt.assert_true(np.abs(1.0 - np.mean(np.std(bs_std_zscr, axis=0))) < 0.01)
-    bs_std_zscr = uvp_avg.data_array[0].imag / uvp_avg.stats_array['bs_std'][0].imag
-    nt.assert_true(np.abs(1.0 - np.mean(np.std(bs_std_zscr, axis=0))) < 0.01)
+    # assert z-score has std of ~1.0 along time ax to within 1%
+    bs_std_zscr_real = np.std(uvp_avg.data_array[0].real) / np.mean(uvp_avg.stats_array['bs_std'][0].real)
+    nt.assert_true(np.abs(1.0 - bs_std_zscr_real) < 0.01)
+    bs_std_zscr_imag = np.std(uvp_avg.data_array[0].imag) / np.mean(uvp_avg.stats_array['bs_std'][0].imag)
+    nt.assert_true(np.abs(1.0 - bs_std_zscr_imag) < 0.01)
 
 
 def test_bootstrap_run():
