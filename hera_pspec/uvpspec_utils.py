@@ -1,6 +1,7 @@
 import numpy as np
 import copy, operator
 from collections import OrderedDict as odict
+from pyuvdata.utils import polstr2num
 
 
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
@@ -409,7 +410,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
         # if fed as strings convert to integers
         if isinstance(pols[0], (np.str, str)):
-            pols = map(lambda p: uvutils.polstr2num(p), pols)
+            pols = map(lambda p: polstr2num(p), pols)
 
         # create selection
         pol_select = np.array(reduce(operator.add, map(lambda p: uvp.pol_array == p, pols)))
