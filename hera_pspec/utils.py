@@ -11,6 +11,38 @@ from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
 
+<<<<<<< HEAD
+=======
+def hash(w):
+    """
+    Return an MD5 hash of a set of weights.
+    """
+    DeprecationWarning("utils.hash is deprecated.")
+    return md5.md5(w.copy(order='C')).digest()
+
+def wtl(nchan, df, bl_length):
+    """
+    Computes way-to-lazy (wtl) weights for a baseline
+    Parameters
+    ----------
+    nchan: integer
+        Number of channels on baseline
+    df: float
+        channel width (Hz)
+    bl_length: float
+        length of a baseline (nanoseconds)
+    Returns
+    ----------
+    cov: (nchan, nchan) lazy-covariance matrix assuming that the delay-space covariance is diagonal and zero outside
+         of the horizon
+    """
+    igrid,jgrid = np.meshgrid(range(-nchan/2,nchan/2),range(-nchan/2,nchan/2))
+    x = 2.*(igrid-jgrid)*df*bl_length
+    output = np.sinc(x)
+
+
+
+>>>>>>> added "WTL" weighting
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
@@ -78,6 +110,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
 def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, 
                       group=False, Nblps_per_group=1):
     """
+<<<<<<< HEAD
     Construct a list of baseline-pairs from a baseline-group. This function 
     can be used to easily convert a single list of baselines into the input 
     needed by PSpecData.pspec(bls1, bls2, ...).
@@ -106,6 +139,22 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
         also be excluded.
         
         Default: False.
+=======
+    Construct a list of baseline-pairs from a baseline-group. This function can be used to easily convert a
+    single list of baselines into the input needed by PSpecData.pspec(bls1, bls2, ...).
+
+    Parameters
+    ----------
+    bls : list of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]
+
+    exclude_auto_bls: boolean, if True, exclude all baselines crossed with itself from the final blpairs list
+
+    exclude_permutations : boolean, if True, exclude permutations and only form combinations of the bls list.
+        For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, but makes this example clearer)
+        and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
+        If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
+        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.
+>>>>>>> added "WTL" weighting
 
     group : bool, optional
         If True, group each consecutive Nblps_per_group blpairs into sub-lists. 
@@ -169,10 +218,15 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
     return bls1, bls2, blpairs
 
 
+<<<<<<< HEAD
 def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, 
                      xant_flag_thresh=0.95, exclude_auto_bls=False,
                      exclude_permutations=True, Nblps_per_group=None, 
                      bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
+=======
+def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=False,
+                     exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
+>>>>>>> added "WTL" weighting
     """
     Use hera_cal.redcal to get matching, redundant baseline-pair groups from 
     uvd1 and uvd2 within the specified baseline tolerance, not including 
@@ -199,8 +253,12 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         If True, exclude all bls crossed with itself from the blpairs list
 
     exclude_permutations : boolean, optional
+<<<<<<< HEAD
         If True, exclude permutations and only form combinations of the bls list.
         
+=======
+        if True, exclude permutations and only form combinations of the bls list.
+>>>>>>> added "WTL" weighting
         For example, if bls = [1, 2, 3] (note this isn't the proper form of bls,
         but makes this example clearer) and exclude_permutations = False,
         then blpairs = [11, 12, 13, 21, 22, 23, 31, 32, 33]. If however
@@ -290,9 +348,14 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
         (bls1, bls2,
+<<<<<<< HEAD
          blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, 
                                    group=False, 
                                    exclude_permutations=exclude_permutations)
+=======
+         blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, group=False,
+                                    exclude_permutations=exclude_permutations)
+>>>>>>> added "WTL" weighting
         if len(bls1) < 1:
             continue
 
