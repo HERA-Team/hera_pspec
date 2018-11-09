@@ -59,48 +59,34 @@ def test_noise_sim():
     uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     uvd.read_miriad(uvfile)
-    beam = UVBeam()
-    bfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam.read_beamfits(bfile)
-    beam2 = UVBeam()
-    beam2.read_beamfits(os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits"))
-    beam += beam2
-    beam = pspecbeam.PSpecBeamUV(beam)
 
     # test noise amplitude
     uvd2 = copy.deepcopy(uvd)
     uvd2.polarization_array[0] = 1
     uvd2 += uvd
-    uvn = testing.noise_sim(uvd2, 300.0, beam, seed=0, whiten=True, inplace=False)
+    uvn = testing.noise_sim(uvd2, 300.0, seed=0, whiten=True, inplace=False)
     nt.assert_equal(uvn.Ntimes, uvd2.Ntimes)
     nt.assert_equal(uvn.Nfreqs, uvd2.Nfreqs)
     nt.assert_equal(uvn.Nbls, uvd2.Nbls)
     nt.assert_equal(uvn.Npols, uvd2.Npols)
-    nt.assert_almost_equal(np.std(uvn.data_array[:, :, :, 1].real), 6.057816667533955)
-    nt.assert_almost_equal(np.std(uvn.data_array[:, :, :, 1].imag), 6.0793964903750775)
+    nt.assert_almost_equal(np.std(uvn.data_array[:, :, :, 1].real), 0.20655731998619664)
+    nt.assert_almost_equal(np.std(uvn.data_array[:, :, :, 1].imag), 0.20728471891024444)
     nt.assert_almost_equal(np.std(uvn.data_array[:, :, :, 0].real) / np.std(uvn.data_array[:, :, :, 1].real),
                            1/np.sqrt(2), places=2)
 
     # test seed and inplace
     np.random.seed(0)
     uvn2 = copy.deepcopy(uvd2)
-    testing.noise_sim(uvn2, 300.0, beam, seed=None, whiten=True, inplace=True)
+    testing.noise_sim(uvn2, 300.0, seed=None, whiten=True, inplace=True)
     nt.assert_equal(uvn, uvn2)
 
     # test Tsys scaling
-    uvn3 = testing.noise_sim(uvd, 2*300.0, beam, seed=0, whiten=True, inplace=False)
-    nt.assert_almost_equal(np.std(uvn3.data_array.real), 2*6.054660787502636)
-    nt.assert_almost_equal(np.std(uvn3.data_array.imag), 2*6.066085566037699)
-
-    # test pyuvdata backwards compatible integration_time attr
-    uvd2 = copy.deepcopy(uvd)
-    uvd2.integration_time = uvd2.integration_time[0]
-    uvn4 = testing.noise_sim(uvfile, 2*300.0, bfile, seed=0, 
-                             whiten=True, inplace=False, run_check=False)
-    nt.assert_equal(uvn3, uvn4)
+    uvn3 = testing.noise_sim(uvd2, 2*300.0, seed=0, whiten=True, inplace=False)
+    nt.assert_almost_equal(np.std(uvn3.data_array[:, :, :, 1].real), 2*0.20655731998619664)
+    nt.assert_almost_equal(np.std(uvn3.data_array[:, :, :, 1].imag), 2*0.20728471891024444)
 
     # test Nextend
-    uvn = testing.noise_sim(uvd, 300.0, beam, seed=0, whiten=True, inplace=False, Nextend=4)
+    uvn = testing.noise_sim(uvd, 300.0, seed=0, whiten=True, inplace=False, Nextend=4)
     nt.assert_equal(uvn.Ntimes, uvd.Ntimes*5)
     nt.assert_equal(uvn.Nfreqs, uvd.Nfreqs)
     nt.assert_equal(uvn.Nbls, uvd.Nbls)
