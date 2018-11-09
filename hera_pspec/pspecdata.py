@@ -58,7 +58,7 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
-
+        self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
         self.data_weighting = 'identity'
