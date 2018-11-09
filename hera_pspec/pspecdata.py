@@ -14,6 +14,8 @@ import ast
 import glob
 import warnings
 
+SPEED_OF_LIGHT = 299792458.
+
 
 class PSpecData(object):
 
@@ -336,6 +338,7 @@ class PSpecData(object):
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
             self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
+            self._RegFactor = {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -343,6 +346,8 @@ class PSpecData(object):
                 try: del(self._I[k])
                 except(KeyError): pass
                 try: del(self._iC[k])
+                except(KeyError): pass
+                try: del(self._RegFactor[k])
                 except(KeyError): pass
                 try: del(self._Y[k])
                 except(KeyError): pass
@@ -518,7 +523,7 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. options=['empirical','wtl']
+            Type of covariance model to calculate, if not cached. options=['empirical','wtl','le']
 
         Returns
         -------
@@ -543,7 +548,7 @@ class PSpecData(object):
             if model == 'empirical':
                 self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
             elif model == 'wtl':
-                ind1, ind2 = self._dsets[dset]._key2inds(bl)
+                ind1, ind2, _ = self.dsets[dset]._key2inds(bl)
                 inds = np.hstack([ind1,ind2]).T.astype(int)
                 bl_len = np.linalg.norm(self._dsets[dset].uvw_array[inds,:],axis=1).max()
                 self.set_C({Ckey: utils.wtl(self.spw_Nfreqs, self.channel_width)})
@@ -662,6 +667,29 @@ class PSpecData(object):
             self.set_iC({Ckey:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
         return self._iC[Ckey]
 
+    def RegFactor(self,key):
+        """
+        Determine ratio between thermal noise covariance and trace empirically
+        """
+        assert isinstance(key, tuple)
+        # parse key
+        dset, bl = self.parse_blkey(key)
+        key = (dset,) + (bl,)
+        Ckey = key + (self.cov_regularization,)
+        # Calculate inverse covariance if not in cache
+        if not self._RegFactor.has_key(Ckey):
+            if isinstance(self.cov_regularization,float):
+                self.set_RegFactor({Ckey:self.cov_regularization})
+            if self.cov_regularization == 'empirical':
+                data = self.x(key)
+                wght = np.diagonal(self.Y(key))
+                data = data[wght>0.,:]
+                rf =np.mean(np.mean(np.abs(np.diff(data,axis=0))**2.,axis=1))
+                ctrace = np.trace(self.C_model(key,model='empirical'))
+                self.set_RegFactor({Ckey:rf/ctrace})
+        return self._RegFactor[Ckey]
+
+
     def Y(self, key):
         """
         Return the weighting (diagonal) matrix, Y. This matrix
@@ -716,6 +744,18 @@ class PSpecData(object):
             self.iC().
         """
         for k in d: self._iC[k] = d[k]
+
+    def set_RegFactor(self,d):
+        """
+        Set the cached regularization factor for covariance matrix of a given dataset
+        and baseline to a specified value.
+
+        Parameters
+        ----------
+        d: dict
+            Dictionary containing regularization to insert into regularazation cache
+        """
+        for k in d: self._RegFactor[k] = d[k]
 
     def set_R(self, d):
         """
@@ -792,6 +832,17 @@ class PSpecData(object):
             Type of data weightings. Options=['identity', 'iC']
         """
         self.data_weighting = data_weighting
+
+    def set_cov_regularization(self, cov_regularization):
+        """
+        Set regularization factor for covariance weights.
+
+        Parameters
+        ----------
+        cov_regularization : float
+            regularization factor for inverted covariance matrices.
+        """
+        self.cov_regularization = cov_regularization
 
     def set_taper(self, taper):
         """
@@ -2091,6 +2142,7 @@ class PSpecData(object):
         # set taper and data weighting
         self.set_taper(taper)
         self.set_weighting(input_data_weight)
+        self.set_cov_regularization(cov_regularization)
 
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
