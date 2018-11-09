@@ -190,40 +190,38 @@ def test_validate_bootstrap_errorbar():
     gaussian noise pspectra divided by their bootstrapped
     errorbars should have a standard deviation that
     converges to 1. """
-    # get simulated noise in Jy
-    bfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
-    beam = pspecbeam.PSpecBeamUV(bfile)
+    # get simulated noise in K-str
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     Tsys = 300.0  # Kelvin
 
     # generate complex gaussian noise
     seed = 4
-    uvd1 = testing.noise_sim(uvfile, Tsys, beam, seed=seed, whiten=True, inplace=False, Nextend=4)
+    uvd1 = testing.noise_sim(uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0)
     seed = 5
-    uvd2 = testing.noise_sim(uvfile, Tsys, beam, seed=seed, whiten=True, inplace=False, Nextend=4)
+    uvd2 = testing.noise_sim(uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0)
 
-    # get redundant baseline group
-    reds, lens, angs = utils.get_reds(uvd1, pick_data_ants=True, bl_len_range=(10, 20),
-                                      bl_deg_range=(0, 1))
-    bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=False, exclude_permutations=False)
+    # form (auto) baseline-pairs from only 14.6m bls
+    reds, lens, angs = utils.get_reds(uvd1, pick_data_ants=True, bl_len_range=(10, 50),
+                                      bl_deg_range=(0, 180))
+    bls1, bls2 = utils.flatten(reds), utils.flatten(reds)
 
     # setup PSpecData and form power psectra
-    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None], beam=beam)
-    ds.Jy_to_mK()
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
     uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
-                   taper='none', sampling=False, little_h=True, spw_ranges=[(0, 50)], verbose=False)
+                   taper='none', sampling=False, little_h=False, spw_ranges=[(0, 50)], verbose=False)
 
     # bootstrap resample
-    uvp_avg, uvp_boots, uvp_wgts = grouping.bootstrap_resampled_error(uvp, time_avg=False, Nsamples=200,
+    seed = 0
+    Nsamples = 200
+    uvp_avg, uvp_boots, uvp_wgts = grouping.bootstrap_resampled_error(uvp, time_avg=False, Nsamples=Nsamples,
                                                                       seed=seed, normal_std=True,
-                                                                      robust_std=True, cintervals=[16, 84],
-                                                                      verbose=False)
+                                                                      blpair_groups=[uvp.get_blpairs()])
 
-    # assert z-score has std of ~1.0 along time ax to within 1%
+    # assert z-score has std of ~1.0 along time ax to within 1/sqrt(Nsamples)
     bs_std_zscr_real = np.std(uvp_avg.data_array[0].real) / np.mean(uvp_avg.stats_array['bs_std'][0].real)
-    nt.assert_true(np.abs(1.0 - bs_std_zscr_real) < 0.01)
+    nt.assert_true(np.abs(1.0 - bs_std_zscr_real) < 1/np.sqrt(Nsamples))
     bs_std_zscr_imag = np.std(uvp_avg.data_array[0].imag) / np.mean(uvp_avg.stats_array['bs_std'][0].imag)
-    nt.assert_true(np.abs(1.0 - bs_std_zscr_imag) < 0.01)
+    nt.assert_true(np.abs(1.0 - bs_std_zscr_imag) < 1/np.sqrt(Nsamples))
 
 
 def test_bootstrap_run():
