@@ -80,6 +80,11 @@ def test_noise_sim():
     testing.noise_sim(uvn2, 300.0, seed=None, whiten=True, inplace=True)
     nt.assert_equal(uvn, uvn2)
 
+    # Test with a beam!
+    beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+    uvn = testing.noise_sim(copy.deepcopy(uvd), 300.0, beamfile, seed=0, whiten=True, inplace=False)
+    nt.assert_equal(uvn.vis_units, 'Jy')
+
     # test Tsys scaling
     uvn3 = testing.noise_sim(uvd2, 2*300.0, seed=0, whiten=True, inplace=False)
     nt.assert_almost_equal(np.std(uvn3.data_array[:, :, :, 1].real), 2*0.20655731998619664)
