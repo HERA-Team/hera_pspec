@@ -331,8 +331,8 @@ class Test_Plot(unittest.TestCase):
         f4 = plot.delay_wedge(uvp, 0, 'xx', blpairs=None, times=None, fold=False, delay=False, component='abs', 
                               rotate=False, log10=True, loglog=False, red_tol=1.0,
                               center_line=True, horizon_lines=True, title='hello', ax=None, cmap='viridis',
-                              figsize=(8, 6), deltasq=False, colorbar=True, cbax=None, vmin=6, vmax=15,
-                              edgecolor='grey', flip_xax=True, flip_yax=True, lw=2)
+                              figsize=(8, 6), deltasq=True, colorbar=True, cbax=None, vmin=6, vmax=15,
+                              edgecolor='grey', flip_xax=True, flip_yax=True, lw=2, set_bl_tick_minor=True)
         plt.close()
 
         # feed axes, red_tol
@@ -343,7 +343,7 @@ class Test_Plot(unittest.TestCase):
                         rotate=True, log10=True, loglog=False, red_tol=10.0,
                         center_line=False, horizon_lines=False, ax=ax, cmap='viridis',
                         figsize=(8, 6), deltasq=False, colorbar=True, cbax=cbax, vmin=None, vmax=None,
-                        edgecolor='none', flip_xax=False, flip_yax=False, lw=2)
+                        edgecolor='none', flip_xax=False, flip_yax=False, lw=2, set_bl_tick_major=True)
         plt.close()
 
         # test exceptions
