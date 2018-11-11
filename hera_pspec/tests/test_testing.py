@@ -59,40 +59,6 @@ def test_noise_sim():
     uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     uvd.read_miriad(uvfile)
-<<<<<<< HEAD
-    bfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(bfile)
-
-    # test noise amplitude
-    uvn = testing.noise_sim(uvd, 300.0, beam, seed=0, whiten=True, inplace=False)
-    nt.assert_equal(uvn.Ntimes, uvd.Ntimes)
-    nt.assert_equal(uvn.Nfreqs, uvd.Nfreqs)
-    nt.assert_equal(uvn.Nbls, uvd.Nbls)
-    nt.assert_equal(uvn.Npols, uvd.Npols)
-    nt.assert_almost_equal(np.std(uvn.data_array.real), 6.054660787502636)
-    nt.assert_almost_equal(np.std(uvn.data_array.imag), 6.066085566037699)
-
-    # test seed and inplace
-    np.random.seed(0)
-    uvn2 = copy.deepcopy(uvd)
-    testing.noise_sim(uvn2, 300.0, beam, seed=None, whiten=True, inplace=True)
-    nt.assert_equal(uvn, uvn2)
-
-    # test Tsys scaling
-    uvn3 = testing.noise_sim(uvd, 2*300.0, beam, seed=0, whiten=True, inplace=False)
-    nt.assert_almost_equal(np.std(uvn3.data_array.real), 2*6.054660787502636)
-    nt.assert_almost_equal(np.std(uvn3.data_array.imag), 2*6.066085566037699)
-
-    # test pyuvdata backwards compatible integration_time attr
-    uvd2 = copy.deepcopy(uvd)
-    uvd2.integration_time = uvd2.integration_time[0]
-    uvn4 = testing.noise_sim(uvfile, 2*300.0, bfile, seed=0, 
-                             whiten=True, inplace=False, run_check=False)
-    nt.assert_equal(uvn3, uvn4)
-
-    # test Nextend
-    uvn = testing.noise_sim(uvd, 300.0, beam, seed=0, whiten=True, inplace=False, Nextend=4)
-=======
 
     # test noise amplitude
     uvd2 = copy.deepcopy(uvd)
@@ -126,7 +92,6 @@ def test_noise_sim():
 
     # test Nextend
     uvn = testing.noise_sim(uvd, 300.0, seed=0, whiten=True, inplace=False, Nextend=4)
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
     nt.assert_equal(uvn.Ntimes, uvd.Ntimes*5)
     nt.assert_equal(uvn.Nfreqs, uvd.Nfreqs)
     nt.assert_equal(uvn.Nbls, uvd.Nbls)

@@ -182,58 +182,19 @@ def test_bootstrap_resampled_error():
     if os.path.exists("uvp.h5"):
         os.remove("uvp.h5")
 
-
-<<<<<<< HEAD
-def validate_bootstrap_errorbar():
-=======
 def test_validate_bootstrap_errorbar():
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
     """ This is used to test the bootstrapping code
     against the gaussian noise visibility simulator.
     The basic premise is that, if working properly,
     gaussian noise pspectra divided by their bootstrapped
     errorbars should have a standard deviation that
     converges to 1. """
-<<<<<<< HEAD
-    # get simulated noise in Jy
-    bfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
-    beam = pspecbeam.PSpecBeamUV(bfile)
-=======
+
     # get simulated noise in K-str
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     Tsys = 300.0  # Kelvin
 
     # generate complex gaussian noise
-<<<<<<< HEAD
-    seed = 0
-    uvd1 = testing.noise_sim(uvfile, Tsys, beam, seed=seed, whiten=True, inplace=False, Nextend=4)
-    seed = 1
-    uvd2 = testing.noise_sim(uvfile, Tsys, beam, seed=seed, whiten=True, inplace=False, Nextend=4)
-
-    # get redundant baseline group
-    reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True, bl_len_range=(10, 20),
-                                      bl_deg_range=(0, 1))
-    bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=False, exclude_permutations=False)
-
-    # setup PSpecData and form power psectra
-    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None], beam=beam)
-    ds.Jy_to_mK()
-    uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
-                   taper='none', sampling=False, little_h=True, spw_ranges=[(0, 50)], verbose=False)
-
-    # bootstrap resample
-    uvp_avg, uvp_boots, uvp_wgts = grouping.bootstrap_resampled_error(uvp, time_avg=False, Nsamples=200,
-                                                                      seed=seed, normal_std=True,
-                                                                      robust_std=True, cintervals=[16, 84],
-                                                                      verbose=False)
-
-    # assert bs_std z-score has std of ~1.0 along time ax to within 1%
-    bs_std_zscr = uvp_avg.data_array[0].real / uvp_avg.stats_array['bs_std'][0].real
-    nt.assert_true(np.abs(1.0 - np.mean(np.std(bs_std_zscr, axis=0))) < 0.01)
-    bs_std_zscr = uvp_avg.data_array[0].imag / uvp_avg.stats_array['bs_std'][0].imag
-    nt.assert_true(np.abs(1.0 - np.mean(np.std(bs_std_zscr, axis=0))) < 0.01)
-=======
     seed = 4
     uvd1 = testing.noise_sim(uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0)
     seed = 5
@@ -261,7 +222,6 @@ def test_validate_bootstrap_errorbar():
     nt.assert_true(np.abs(1.0 - bs_std_zscr_real) < 1/np.sqrt(Nsamples))
     bs_std_zscr_imag = np.std(uvp_avg.data_array[0].imag) / np.mean(uvp_avg.stats_array['bs_std'][0].imag)
     nt.assert_true(np.abs(1.0 - bs_std_zscr_imag) < 1/np.sqrt(Nsamples))
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
 
 def test_bootstrap_run():

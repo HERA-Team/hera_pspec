@@ -149,15 +149,9 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         List of spectral window tuples. See PSpecData.pspec docstring for 
         details. Default: None.
 
-<<<<<<< HEAD
-    beam : PSpecBeamBase subclass or str
-        This can be a subclass of PSpecBeamBase or a string filepath to a
-        UVBeam healpix map.
-=======
     beam : PSpecBeamBase subclass or str, optional
         This can be a subclass of PSpecBeamBase of a string filepath to a
         UVBeam healpix map. Default: None.
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     taper : str, optional
         Optional tapering applied to the data before OQE. Default: 'none'.
@@ -228,13 +222,6 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
                    store_cov=store_cov, n_dlys=n_dlys)
     return uvp
 
-
-<<<<<<< HEAD
-def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
-              whiten=False, run_check=True):
-    """
-    Generate a simulated Gaussian noise realization in Jy.
-=======
 def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
               whiten=False, run_check=True):
     """
@@ -247,7 +234,6 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
     where Trms is divided by an additional sqrt(2) if the polarization
     in data is a pseudo-Stokes polarization. If a primary beam model is
     provided, the output is converted to Jansky.
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     Parameters
     ----------
@@ -257,11 +243,7 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
     Tsys : float
         System temperature in Kelvin.
 
-<<<<<<< HEAD
-    beam : str or PSpecBeam object
-=======
     beam : str or PSpecBeam object, optional
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
         A PSpecBeam object or path to beamfits file.
 
     Nextend : int, optional
@@ -277,13 +259,8 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
         make a copy and return copy.
 
     whiten : bool, optional
-<<<<<<< HEAD
-        If True, clear input data of flags if they exist and set all nsamples
-        to 1.
-=======
         If True, clear input data of flags if they exist and
         set all nsamples to 1.
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     run_check : bool, optional
         If True, run UVData check before return.
@@ -308,16 +285,10 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
         data.nsample_array[:] = 1.0
 
     # Configure beam
-<<<<<<< HEAD
-    if isinstance(beam, (str, np.str)):
-        beam = pspecbeam.PSpecBeamUV(beam)
-    assert isinstance(beam, pspecbeam.PSpecBeamBase)    
-=======
     if beam is not None:
         if isinstance(beam, (str, np.str)):
             beam = pspecbeam.PSpecBeamUV(beam)
         assert isinstance(beam, pspecbeam.PSpecBeamBase)    
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     # Extend times
     Nextend = int(Nextend)
@@ -339,13 +310,6 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
         int_time = np.array([int_time])
     Trms = Tsys / np.sqrt(int_time[:, None, None, None] * data.nsample_array * data.channel_width)
 
-<<<<<<< HEAD
-    # Get Vrms
-    freqs = np.unique(data.freq_array)[None, None, :, None]
-    K_to_Jy = [1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p)) for p in data.polarization_array]
-    K_to_Jy = np.array(K_to_Jy).T[None, None, :, :]
-    Vrms = K_to_Jy * Trms
-=======
     # if a pol is pStokes pol, divide by extra sqrt(2)
     polcorr = np.array([np.sqrt(2) if p in [1, 2, 3, 4] else 1.0 for p in data.polarization_array])
     Trms /= polcorr
@@ -359,25 +323,15 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
         rms = K_to_Jy * Trms
     else:
         rms = Trms
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     # Generate noise
     if seed is not None:
         np.random.seed(seed)
-<<<<<<< HEAD
-    data.data_array = (stats.norm.rvs(0, 1./np.sqrt(2), size=Vrms.size).reshape(Vrms.shape) \
-                       + 1j * stats.norm.rvs(0, 1./np.sqrt(2), size=Vrms.size).reshape(Vrms.shape) ) * Vrms
-    f = np.isnan(data.data_array) + np.isinf(data.data_array)
-    data.data_array[f] = np.nan
-    data.flag_array[f] = True
-    data.vis_units = 'Jy'
-=======
     data.data_array = (stats.norm.rvs(0, 1./np.sqrt(2), size=rms.size).reshape(rms.shape) \
                        + 1j * stats.norm.rvs(0, 1./np.sqrt(2), size=rms.size).reshape(rms.shape) ) * rms
     f = np.isnan(data.data_array) + np.isinf(data.data_array)
     data.data_array[f] = np.nan
     data.flag_array[f] = True
->>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     if run_check:
         data.check()
