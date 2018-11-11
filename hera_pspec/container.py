@@ -406,10 +406,10 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
                 for uvp in to_merge:
                     if uvp != spc:
                         del psc.data[grp][uvp]
-            except:
+            except Exception as exc:
                 # merge failed, so continue
                 if verbose:
-                    print "uvp merge failed for spectra {}/{}".format(grp, spc)
+                    print "uvp merge failed for spectra {}/{}, exception: {}".format(grp, spc, exc)
 
 
 def get_combine_psc_spectra_argparser():

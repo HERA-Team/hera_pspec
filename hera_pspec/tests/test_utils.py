@@ -293,7 +293,7 @@ def test_get_blvec_reds():
     uvd = UVData()
     uvd.read_miriad(fname)
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-    reds = redcal.get_pos_reds(dict(zip(ants, antpos)), low_hi=True)
+    reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
     uvp = testing.uvpspec_from_data(fname, reds[:2], spw_ranges=[(10, 40)])
 
     # test execution w/ dictionary
@@ -313,6 +313,12 @@ def test_get_blvec_reds():
     (red_bl_grp, red_bl_len, red_bl_ang,
      red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=0.0)
     nt.assert_equal(len(red_bl_grp), uvp.Nblpairs)
+
+    # test combine angles
+    uvp = testing.uvpspec_from_data(fname, reds[:3], spw_ranges=[(10, 40)])
+    (red_bl_grp, red_bl_len, red_bl_ang,
+     red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=1.0, match_bl_lens=True)
+    nt.assert_equal(len(red_bl_grp), 1)
 
 
 def test_job_monitor():

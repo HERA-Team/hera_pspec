@@ -2730,6 +2730,7 @@ class PSpecData(object):
 
 
 def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None, dset_pairs=None,
+<<<<<<< HEAD
 			  psname_ext=None, spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
 			  input_data_weight='identity', norm='I', taper='none',
 			  exclude_auto_bls=False, exclude_permutations=True,
@@ -3074,6 +3075,352 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 					  overwrite=overwrite)
 
 	return psc, ds
+=======
+              psname_ext=None, spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
+              input_data_weight='identity', norm='I', taper='none',
+              exclude_auto_bls=False, exclude_permutations=True,
+              Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
+              beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
+              time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
+    """
+    Create a PSpecData object, run OQE delay spectrum estimation and write
+    results to a PSpecContainer object.
+
+    Parameters
+    ----------
+    dsets : list
+        Contains UVData objects or string filepaths to miriad files
+
+    filename : str
+        Output filepath for HDF5 PSpecContainer object
+
+    groupname : str
+        Groupname of the subdirectory in the HDF5 container to store the
+        UVPSpec objects in. Default is a concatenation the dset_labels.
+
+    dsets_std : list
+        Contains UVData objects or string filepaths to miriad files.
+        Default is none.
+
+    dset_labels : list
+        List of strings to label the input datasets. These labels form
+        the psname of each UVPSpec object. Default is "dset0_x_dset1"
+        where 0 and 1 are replaced with the dset index in dsets.
+        Note: it is not advised to put underscores in the dset label names,
+        as some downstream functions assume this to be the case.
+
+    dset_pairs : list of len-2 integer tuples
+        List of tuples specifying the dset pairs to use in OQE estimation.
+        Default is to form all N_choose_2 pairs from input dsets.
+
+    psname_ext : string
+        A string extension for the psname in the PSpecContainer object.
+        Example: 'group/psname{}'.format(psname_ext)
+
+    spw_ranges : list of len-2 integer tuples
+        List of tuples specifying the spectral window range. See
+        PSpecData.pspec() for details. Default is the entire band.
+
+    n_dlys : list
+        List of integers denoting number of delays to use per spectral window.
+        Same length as spw_ranges.
+
+    pol_pairs : list of len-2 tuples
+        List of string or integer tuples specifying the polarization
+        pairs to use in OQE with each dataset pair in dset_pairs.
+        Default is to get all unique pols in the datasets and to form
+        all auto-pol pairs. See PSpecData.pspec() for details.
+
+    blpairs : list of tuples
+        List of tuples specifying the desired baseline pairs to use in OQE.
+        Ex. [((1, 2), (3, 4)), ((1, 2), (5, 6)), ...]
+        The first bl in a tuple is drawn from zeroth index of a tuple in
+        dset_pairs, while the second bl is drawn from the first index.
+        See pspecdata.construct_blpairs for details. If None, the default
+        behavior is to use the antenna positions in each UVData object to
+        construct lists of redundant baseline groups to to take all
+        cross-multiplies in each redundant baseline group.
+
+    input_data_weight : string
+        Data weighting to use in OQE. See PSpecData.pspec for details.
+        Default: 'identity'
+
+    norm : string
+        Normalization scheme to use in OQE. See PSpecData.pspec for details.
+        Default: 'I'
+
+    taper : string
+        Tapering to apply to data in OQE. See PSpecData.pspec for details.
+        Default: 'none'
+
+    exclude_auto_bls : boolean
+        If blpairs is None, redundant baseline groups will be formed and
+        all cross-multiplies will be constructed. In doing so, if
+        exclude_auto_bls is True, eliminate all instances of a bl crossed
+        with itself. Default: False
+
+    exclude_permutations : boolean
+        If blpairs is None, redundant baseline groups will be formed and
+        all cross-multiplies will be constructed. In doing so, if
+        exclude_permutations is True, eliminates instances of
+        (bl_B, bl_A) if (bl_A, bl_B) also exists. Default: True
+
+    Nblps_per_group : integer
+        If blpairs is None, group blpairs into sub-groups of baseline-pairs
+        of this size. See utils.calc_blpair_reds() for details. Default: None
+
+    bl_len_range : len-2 float tuple
+        A tuple containing the minimum and maximum baseline length to use
+        in utils.calc_blpair_reds call. Only used if blpairs is None.
+
+    bl_deg_range : len-2 float tuple
+        A tuple containing the min and max baseline angle (ENU frame in degrees)
+        to use in utils.calc_blpair_reds. Total range is between 0 and 180 degrees.
+
+    bl_error_tol : float
+        Baseline vector error tolerance when constructing redundant groups.
+
+    beam : PSpecBeam object, UVBeam object or string
+        Beam model to use in OQE. Can be a PSpecBeam object or a filepath
+        to a beamfits healpix map (see UVBeam)
+
+    cosmo : conversions.Cosmo_Conversions object
+        A Cosmo_Conversions object to use as the cosmology when normalizing
+        the power spectra. Default is a Planck cosmology.
+        See conversions.Cosmo_Conversions for details.
+
+    rephase_to_dset : integer
+        Integer index of the anchor dataset when rephasing all other datasets.
+        This adds a phasor correction to all others dataset to phase the
+        visibility data to the LST-grid of this dataset. Default behavior
+        is no rephasing.
+
+    trim_dset_lsts : boolean
+        If True, look for constant offset in LST between all dsets, and trim
+        non-overlapping LSTs.
+
+    broadcast_dset_flags : boolean
+        If True, broadcast dset flags across time using fractional time_thresh.
+
+    time_thresh : float
+        Fractional flagging threshold, above which a broadcast of flags across
+        time is triggered (if broadcast_dset_flags == True). This is done
+        independently for each baseline's visibility waterfall.
+
+    Jy2mK : boolean
+        If True, use the beam model provided to convert the units of each
+        dataset from Jy to milli-Kelvin. If the visibility data are not in Jy,
+        this correction is not applied.
+
+    store_cov : boolean, optional
+        If True, solve for covariance between bandpowers and store in
+        output UVPSpec object.
+
+    overwrite : boolean
+        If True, overwrite outputs if they exist on disk.
+
+    verbose : boolean
+        If True, report feedback to standard output.
+
+    history : str
+        String to add to history of each UVPSpec object.
+
+    Returns
+    -------
+    psc : PSpecContainer object
+        A container for the output UVPSpec objects, which themselves contain the
+        power spectra and their metadata.
+
+    ds : PSpecData object
+        The PSpecData object used for OQE of power spectrum, with cached weighting
+        matrices.
+    """
+    # type check
+    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
+    assert isinstance(dsets, (list, tuple, np.ndarray)), err_msg
+
+    # parse psname
+    if psname_ext is not None:
+        assert isinstance(psname_ext, (str, np.str))
+    else:
+        psname_ext = ''
+
+    # polarizations check
+    if pol_pairs is not None:
+        pols = sorted(set(np.ravel(pol_pairs)))
+    else:
+        pols = None
+
+    # baselines check
+    if blpairs is not None:
+        err_msg = "blpairs must be fed as a list of baseline-pair tuples, Ex: [((1, 2), (3, 4)), ...]"
+        assert isinstance(blpairs, list), err_msg
+        assert np.all([isinstance(blp, tuple) for blp in blpairs]), err_msg
+        bls1 = [blp[0] for blp in blpairs]
+        bls2 = [blp[1] for blp in blpairs]
+        bls = sorted(set(bls1 + bls2))
+    else:
+        # get redundant baseline groups
+        bls = None
+
+    # Construct dataset pairs to operate on
+    Ndsets = len(dsets)
+    if dset_pairs is None:
+        dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+
+    if dset_labels is None:
+        dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
+    else:
+        assert not np.any(['_' in dl for dl in dset_labels]), "cannot accept underscores in input dset_labels: {}".format(dset_labels)
+
+    # load data if fed as filepaths
+    if isinstance(dsets[0], (str, np.str)):
+        try:
+            # load data into UVData objects if fed as list of strings
+            t0 = time.time()
+            dsets = _load_dsets(dsets, bls=bls, pols=pols, verbose=verbose)
+            utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
+                      lvl=1, verbose=verbose)
+        except ValueError:
+            # at least one of the dset loads failed due to no data being present
+            utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
+            return None, None
+
+    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
+    assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
+
+    # check dsets_std input
+    if dsets_std is not None:
+        err_msg = "input dsets_std must be a list of UVData objects or filepaths to miriad files"
+        assert isinstance(dsets_std,(list, tuple, np.ndarray)), err_msg
+        assert len(dsets_std) == Ndsets, "len(dsets_std) must equal len(dsets)"
+
+        # if path strings provided, read in UVData objects.
+        if isinstance(dsets_std[0], (str, np.str)):
+            try:
+                # load data into UVData objects if fed as list of strings
+                t0 = time.time()
+                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, verbose=verbose)
+                utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
+                          lvl=1, verbose=verbose)
+            except ValueError:
+                # at least one of the dsets_std loads failed due to no data being present
+                utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
+                return None, None
+
+        assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
+
+    # configure polarization
+    if pol_pairs is None:
+        unique_pols = reduce(operator.and_, [set(d.polarization_array) for d in dsets])
+        pol_pairs = [(up, up) for up in unique_pols]
+    assert len(pol_pairs) > 0, "no pol_pairs specified"
+
+    # load beam
+    if isinstance(beam, (str, np.str)):
+        beam = pspecbeam.PSpecBeamUV(beam, cosmo=cosmo)
+
+    # beam and cosmology check
+    if beam is not None:
+        assert isinstance(beam, pspecbeam.PSpecBeamBase)
+        if cosmo is not None:
+            beam.cosmo = cosmo
+
+    # package into PSpecData
+    ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels, dsets_std=dsets_std, beam=beam)
+
+    # Rephase if desired
+    if rephase_to_dset is not None:
+        ds.rephase_to_dset(rephase_to_dset)
+
+    # trim dset LSTs
+    if trim_dset_lsts:
+        ds.trim_dset_lsts()
+
+    # broadcast flags
+    if broadcast_dset_flags:
+        ds.broadcast_dset_flags(time_thresh=time_thresh, spw_ranges=spw_ranges)
+
+    # perform Jy to mK conversion if desired
+    if Jy2mK:
+        ds.Jy_to_mK()
+
+    # Print warning if auto_bls is set to exclude correlations of the
+    # same baseline with itself, because this may cause a bias if one
+    # is already cross-correlating different times to avoid noise bias.
+    # See issue #160 on hera_pspec repo
+    if exclude_auto_bls:
+        raise_warning("Skipping the cross-multiplications of a baseline "
+                      "with itself may cause a bias if one is already "
+                      "cross-correlating different times to avoid the "
+                      "noise bias. Please see hera_pspec github issue 160 "
+                      "to make sure you know what you are doing! "
+                      "https://github.com/HERA-Team/hera_pspec/issues/160",
+                      verbose=verbose)
+
+    # check dset pair type
+    err_msg = "dset_pairs must be fed as a list of len-2 integer tuples"
+    assert isinstance(dset_pairs, list), err_msg
+    assert np.all([isinstance(d, tuple) for d in dset_pairs]), err_msg
+
+    # Get baseline-pairs to use for each dataset pair
+    bls1_list, bls2_list = [], []
+    for i, dsetp in enumerate(dset_pairs):
+        # get bls if blpairs not fed
+        if blpairs is None:
+            (bls1, bls2, blps, xants1,
+             xants2) = utils.calc_blpair_reds(dsets[dsetp[0]], dsets[dsetp[1]],
+                                              filter_blpairs=True,
+                                              exclude_auto_bls=exclude_auto_bls,
+                                              exclude_permutations=exclude_permutations,
+                                              Nblps_per_group=Nblps_per_group,
+                                              bl_len_range=bl_len_range,
+                                              bl_deg_range=bl_deg_range)
+            bls1_list.append(bls1)
+            bls2_list.append(bls2)
+
+        # ensure fed blpairs exist in each of the datasets
+        else:
+            dset1_bls = dsets[dsetp[0]].get_antpairs()
+            dset2_bls = dsets[dsetp[1]].get_antpairs()
+            _bls1 = []
+            _bls2 = []
+            for _bl1, _bl2 in zip(bls1, bls2):
+                if (_bl1 in dset1_bls or _bl1[::-1] in dset1_bls) \
+                    and (_bl2 in dset2_bls or _bls2[::-1] in dset2_bls):
+                    _bls1.append(_bl1)
+                    _bls2.append(_bl2)
+
+            bls1_list.append(_bls1)
+            bls2_list.append(_bls2)
+
+    # Open PSpecContainer to store all output in
+    psc = container.PSpecContainer(filename, mode='rw')
+
+    # assign group name
+    if groupname is None:
+        groupname = '_'.join(dset_labels)
+    
+    # Loop over dataset combinations
+    for i, dset_idxs in enumerate(dset_pairs):
+        # check bls lists aren't empty
+        if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
+            continue
+
+        # Run OQE
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
+                       spw_ranges=spw_ranges, n_dlys=n_dlys, store_cov=store_cov,
+                       input_data_weight=input_data_weight, norm=norm, taper=taper,
+                       history=history, verbose=verbose)
+
+        # Store output
+        psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
+                                    dset_labels[dset_idxs[1]], psname_ext)
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
+                      overwrite=overwrite)
+
+    return psc, ds
+>>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
 
 def get_pspec_run_argparser():

@@ -857,7 +857,7 @@ class Test_PSpecData(unittest.TestCase):
         # rephase and get pspec
         ds.rephase_to_dset(0)
         uvp2 = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
-        blp = (0, ((37,39),(37,39)), 'XX')
+        blp = (0, ((37,39),(37,39)), 'xx')
         nt.assert_true(np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min())
 
     def test_Jy_to_mK(self):
@@ -958,7 +958,7 @@ class Test_PSpecData(unittest.TestCase):
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
-        red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos, low_hi=True))[2]
+        red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos))[2]
         bls1, bls2, blps = utils.construct_blpairs(red_bls, exclude_permutations=True)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
@@ -1063,7 +1063,7 @@ class Test_PSpecData(unittest.TestCase):
                        spw_ranges=[(20, 30)])
         nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
         nt.assert_equal(len(ds._identity_Y), 1)
-        nt.assert_equal(ds._identity_Y.keys()[0], ((0, 24, 25, 'XX'), (1, 24, 25, 'XX')))
+        nt.assert_equal(ds._identity_Y.keys()[0], ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')))
         # assert caching is not used when inappropriate
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), :, 25, :] = True
         uvp = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
@@ -1071,8 +1071,8 @@ class Test_PSpecData(unittest.TestCase):
                        spw_ranges=[(20, 30)])
         nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
         nt.assert_equal(len(ds._identity_Y), 2)
-        nt.assert_true(((0, 24, 25, 'XX'), (1, 24, 25, 'XX')) in ds._identity_Y.keys())
-        nt.assert_true(((0, 37, 38, 'XX'), (1, 37, 38, 'XX')) in ds._identity_Y.keys())
+        nt.assert_true(((0, 24, 25, 'xx'), (1, 24, 25, 'xx')) in ds._identity_Y.keys())
+        nt.assert_true(((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys())
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -1278,27 +1278,75 @@ def test_pspec_run():
     nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1_0'])
     nt.assert_true(os.path.exists("./out.hdf5"))
 
-    # test Jy2mK, rephase_to_dset, trim_dset_lsts, broadcast_dset_flags, blpairs and dset_labels
+    # test Jy2mK, blpairs, cosmo, cov_array, spw_ranges, dset labeling
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile, verbose=False, overwrite=True,
-                              rephase_to_dset=0, blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
+    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile,
+                              blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))], verbose=False, overwrite=True,
                               pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
-                              dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)],
-                              cosmo=cosmo, trim_dset_lsts=True, broadcast_dset_flags=True, time_thresh=0.1,
-                              store_cov=True)
+                              dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)], n_dlys=[20, 20],
+                              cosmo=cosmo, trim_dset_lsts=False, broadcast_dset_flags=False, store_cov=True)
+    # assert groupname is dset1_dset2
     nt.assert_true("foo_bar" in psc.groups())
+    # assert uvp names are labeled by dset_pairs
     nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
+    # get UVPSpec for further inspection
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
+    # assert Jy2mK worked
     nt.assert_true(uvp.vis_units, "mK")
+    # assert only blpairs that were fed are present
     nt.assert_equal(uvp.bl_array.tolist(), [137138, 152153])
     nt.assert_equal(uvp.pol_array.tolist(), [-5, -5])
+    # assert weird cosmology was passed
     nt.assert_equal(uvp.cosmo, cosmo)
+    # assert cov_array was calculated b/c std files were passed and store_cov
     nt.assert_true(hasattr(uvp, 'cov_array'))
+    # assert dset labeling propagated
     nt.assert_equal(set(uvp.labels), set(['bar', 'foo']))
-    #nt.assert_equal(uvp.labels, [])
-    #nt.assert_equal(uvp.get_spw_ranges, [])
+    # assert spw_ranges and n_dlys specification worked
+    np.testing.assert_array_equal(uvp.get_spw_ranges(), [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)])
+
+    # get shifted UVDatas and test rephasing, flag broadcasting
+    uvd = UVData()
+    uvd.read_miriad(fnames[0])
+    uvd.flag_array[:] = False
+    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False)[0], 0, 75, 0] = True
+    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False)[:3], 0, 90, 0] = True
+    uvd1 = uvd.select(times=np.unique(uvd.time_array)[::2], inplace=False)
+    uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
+    if os.path.exists("./out2.h5"):
+        os.remove("./out2.h5")
+    psc, ds = pspecdata.pspec_run([copy.deepcopy(uvd1), copy.deepcopy(uvd2)], "./out2.h5",
+                                   blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
+                                   verbose=False, overwrite=True, spw_ranges=[(50, 100)], rephase_to_dset=0,
+                                   broadcast_dset_flags=True, time_thresh=0.3)
+    # assert first integration flagged across entire spw
+    nt.assert_true(ds.dsets[0].get_flags(37, 38)[0, 50:100].all())
+    # assert first integration flagged *ONLY* across spw
+    nt.assert_false(ds.dsets[0].get_flags(37, 38)[0, :50].any() + ds.dsets[0].get_flags(37, 38)[0, 100:].any())
+    # assert channel 90 flagged for all ints
+    nt.assert_true(ds.dsets[0].get_flags(37, 38)[:, 90].all())
+    # assert phase errors decreased after phasing
+    phserr_before = np.mean(np.abs(np.angle(uvd1.data_array / uvd2.data_array)))
+    phserr_after = np.mean(np.abs(np.angle(ds.dsets[0].data_array / ds.dsets[1].data_array)))
+    nt.assert_true(phserr_after < phserr_before)
+
+    # test lst trimming
+    if os.path.exists("./out2.h5"):
+        os.remove("./out2.h5")
+    uvd1 = copy.deepcopy(uvd)
+    uvd2 = uvd.select(times=np.unique(uvd.time_array)[2:], inplace=False)
+    psc, ds = pspecdata.pspec_run([copy.deepcopy(uvd1), copy.deepcopy(uvd2)], "./out2.h5",
+                                   blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
+                                   verbose=False, overwrite=True, spw_ranges=[(50, 100)],
+                                   trim_dset_lsts=True)
+    # assert first uvd1 lst_array got trimmed by 2 integrations
+    nt.assert_equal(ds.dsets[0].Ntimes, 8)
+    nt.assert_true(np.isclose(np.unique(ds.dsets[0].lst_array), np.unique(uvd2.lst_array)).all())
+
+    if os.path.exists("./out2.h5"):
+        os.remove("./out2.h5")
 
     # test when no data is loaded in dset
     if os.path.exists("./out.hdf5"):

@@ -680,20 +680,24 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     return groupings
 
 
-def get_blvec_reds(blvecs, bl_error_tol=1.0):
+def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
     """
-    Given a blvecs dictionary, form groups of baseline-pair objects based on
+    Given a blvecs dictionary, form groups of baseline-pairs based on
     redundancy in ENU coordinates. Note: this only uses the East-North components
     of the baseline vectors to calculate redundancy.
 
     Parameters:
     -----------
     blvecs : dictionary (or UVPSpec object)
-        A dictionary with baseline vectors as values. Alternatively, this
-        can be a UVPSpec object with baseline-pairs and baseline vectors.
+        A dictionary with len-2 or 3 ndarray baseline vectors as values.
+        Alternatively, this can be a UVPSpec object.
 
-    bl_error_tol : int
-        Redundancy tolerance of baseline vector in meters.
+    bl_error_tol : float, optional
+        Redundancy tolerance of baseline vector in meters. Default: 1.0
+
+    match_bl_lens : bool, optional
+        Combine baseline groups of identical baseline length but
+        differing angle (using bl_error_tol). Default: False
 
     Returns:
     --------
@@ -745,7 +749,12 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0):
         bl_tag = "{:03.0f}_{:03.0f}".format(bl_len, bl_ang)
 
         # append to list if unique within tolerance
-        match = [np.all(np.isclose(blv, bl_vec, bl_error_tol)) for blv in red_bl_vec]
+        if match_bl_lens:
+            # match only on bl length
+            match = [np.all(np.isclose(bll, bl_len, rtol=0.0, atol=bl_error_tol)) for bll in red_bl_len]
+        else:
+            # match on full bl vector
+            match = [np.all(np.isclose(blv, bl_vec, rtol=0.0, atol=bl_error_tol)) for blv in red_bl_vec]
         if np.any(match):
             match_id = np.where(match)[0][0]
             red_bl_grp[match_id].append(bl)
@@ -896,7 +905,7 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
 
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False, low_hi=True):
+             bl_deg_range=(0, 180), xants=None, add_autos=False):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
     calculate redundant baseline groups using hera_cal.redcal and optionally 
@@ -927,10 +936,6 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     add_autos : bool
         If True, add into autocorrelation group to the redundant group list.
 
-    low_hi : bool
-        If True, if the first bl in a redundant blgroup has ant1 > ant2,
-        then conjugate all baselines in the group.
-
     Returns (reds, lens, angs)
     ------- 
     reds : list
@@ -958,14 +963,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         antpos_dict = uvd
 
     # get redundant baselines
-    reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol, low_hi=False)
-    if low_hi:
-        _reds = []
-        for r in reds:
-            if r[0][0] > r[0][1]:
-                r = [_r[::-1] for _r in r]
-            _reds.append(r)
-        reds = _reds
+    reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
 
     # get vectors, len and ang for each baseline group
     vecs = np.array([antpos_dict[r[0][0]] - antpos_dict[r[0][1]] for r in reds])

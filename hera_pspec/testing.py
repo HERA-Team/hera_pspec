@@ -10,7 +10,8 @@ from scipy import stats
 
 def build_vanilla_uvpspec(beam=None):
     """
-    Build an example vanilla UVPSpec object from scratch, with all necessary metadata.
+    Build an example vanilla UVPSpec object from scratch, with all necessary 
+    metadata.
 
     Parameters
     ----------
@@ -55,7 +56,8 @@ def build_vanilla_uvpspec(beam=None):
     spw_freq_array = np.tile(np.arange(Nspws), Nfreqs)
     spw_dly_array = np.tile(np.arange(Nspws), Ndlys)
     spw_array = np.arange(Nspws)
-    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), Nspws)
+    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), 
+                           Nspws)
     dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
     pol_array = np.array([-5])
     Npols = len(pol_array)
@@ -85,26 +87,31 @@ def build_vanilla_uvpspec(beam=None):
     store_cov = True
     cosmo = conversions.Cosmo_Conversions()
 
-    data_array, wgt_array, integration_array, nsample_array, cov_array = {}, {}, {}, {}, {}
+    data_array, wgt_array = {}, {}
+    integration_array, nsample_array, cov_array = {}, {}, {}
     for s in spw_array:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
-        wgt_array[s] = np.ones((Nblpairts, Ndlys, 2, Npols), dtype=np.float)
+        wgt_array[s] = np.ones((Nblpairts, Nfreqs, 2, Npols), dtype=np.float)
+        # NB: The wgt_array has dimensions Nfreqs rather than Ndlys; it has the 
+        # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
-         for m in range(Nblpairts)] for n in range(Npols)]),0,-1)
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
 
-
-    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws', 'Nblpairs', 'Nblpairts',
-              'Npols', 'Ndlys', 'Nbls', 'blpair_array', 'time_1_array',
-              'time_2_array', 'lst_1_array', 'lst_2_array', 'spw_array',
+    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws', 
+              'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys', 'Nbls', 
+              'blpair_array', 'time_1_array', 'time_2_array', 
+              'lst_1_array', 'lst_2_array', 'spw_array',
               'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
-              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 'norm',
-              'git_hash', 'nsample_array', 'time_avg_array', 'lst_avg_array',
-              'cosmo', 'scalar_array', 'labels', 'norm_units', 'labels', 'label_1_array',
-              'label_2_array','store_cov','cov_array', 'spw_dly_array', 'spw_freq_array']
+              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 
+              'norm', 'git_hash', 'nsample_array', 'time_avg_array', 
+              'lst_avg_array', 'cosmo', 'scalar_array', 'labels', 'norm_units', 
+              'labels', 'label_1_array', 'label_2_array', 'store_cov', 
+              'cov_array', 'spw_dly_array', 'spw_freq_array']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
@@ -118,7 +125,9 @@ def build_vanilla_uvpspec(beam=None):
     return uvp, cosmo
 
 
-def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, taper='none', cosmo=None, verbose=False):
+def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, 
+                      beam=None, taper='none', cosmo=None, n_dlys=None, 
+                      verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -128,26 +137,40 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, 
         This can be a UVData object or a string filepath to a miriad file.
 
     bl_grps : list
-        This is a list of baseline groups (e.g. redundant groups) to form blpairs from.
+        This is a list of baseline groups (e.g. redundant groups) to form 
+        blpairs from.
         Ex: [[(24, 25), (37, 38), ...], [(24, 26), (37, 39), ...], ... ]
 
-    data_std: UVData object or str or None
-        Can be UVData object or a string filepath to a miriad file.
+    data_std: UVData object or str, optional
+        Can be UVData object or a string filepath to a miriad file. 
+        Default: None.
 
-    spw_ranges : list
-        List of spectral window tuples. See PSpecData.pspec docstring for details.
+    spw_ranges : list, optional
+        List of spectral window tuples. See PSpecData.pspec docstring for 
+        details. Default: None.
 
+<<<<<<< HEAD
     beam : PSpecBeamBase subclass or str
         This can be a subclass of PSpecBeamBase or a string filepath to a
         UVBeam healpix map.
+=======
+    beam : PSpecBeamBase subclass or str, optional
+        This can be a subclass of PSpecBeamBase of a string filepath to a
+        UVBeam healpix map. Default: None.
+>>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
-    taper : string
-        Optional tapering applied to the data before OQE.
+    taper : str, optional
+        Optional tapering applied to the data before OQE. Default: 'none'.
 
     cosmo : Cosmo_Conversions object
+        Cosmology object.
+    
+    n_dlys : int, optional
+        Number of delay bins to use. Default: None (uses as many delay bins as 
+        frequency channels).
 
-    verbose : bool
-        if True, report feedback to standard output
+    verbose : bool, optional
+        if True, report feedback to standard output. Default: False.
 
     Returns
     -------
@@ -182,29 +205,49 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, beam=None, 
         beam.cosmo = cosmo
 
     # instantiate pspecdata
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], wgts=[None, None], labels=['d1', 'd2'], beam=beam)
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], 
+                             wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
     # get blpair groups
     assert isinstance(bl_grps, list), "bl_grps must be a list"
     if not isinstance(bl_grps[0], list): bl_grps = [bl_grps]
-    assert np.all([isinstance(blgrp, list) for blgrp in bl_grps]), "bl_grps must be fed as a list of lists"
-    assert np.all([isinstance(blgrp[0], tuple) for blgrp in bl_grps]), "bl_grps must be fed as a list of lists of tuples"
+    assert np.all([isinstance(blgrp, list) for blgrp in bl_grps]), \
+        "bl_grps must be fed as a list of lists"
+    assert np.all([isinstance(blgrp[0], tuple) for blgrp in bl_grps]), \
+        "bl_grps must be fed as a list of lists of tuples"
     bls1, bls2 = [], []
     for blgrp in bl_grps:
-        _bls1, _bls2, _ = utils.construct_blpairs(blgrp, exclude_auto_bls=True, exclude_permutations=True)
+        _bls1, _bls2, _ = utils.construct_blpairs(blgrp, exclude_auto_bls=True, 
+                                                  exclude_permutations=True)
         bls1.extend(_bls1)
         bls2.extend(_bls2)
 
     # run pspec
-    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', spw_ranges=spw_ranges,
-                   taper=taper, verbose=verbose,store_cov=store_cov)
+    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', 
+                   spw_ranges=spw_ranges, taper=taper, verbose=verbose, 
+                   store_cov=store_cov, n_dlys=n_dlys)
     return uvp
 
 
+<<<<<<< HEAD
 def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
               whiten=False, run_check=True):
     """
     Generate a simulated Gaussian noise realization in Jy.
+=======
+def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
+              whiten=False, run_check=True):
+    """
+    Generate a simulated Gaussian noise (visibility) realization given
+    a system temperature Tsys. If a primary beam model is not provided,
+    this is in units of Kelvin-steradians
+
+        Trms = Tsys / sqrt(channel_width * integration_time)
+
+    where Trms is divided by an additional sqrt(2) if the polarization
+    in data is a pseudo-Stokes polarization. If a primary beam model is
+    provided, the output is converted to Jansky.
+>>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     Parameters
     ----------
@@ -214,7 +257,11 @@ def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
     Tsys : float
         System temperature in Kelvin.
 
+<<<<<<< HEAD
     beam : str or PSpecBeam object
+=======
+    beam : str or PSpecBeam object, optional
+>>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
         A PSpecBeam object or path to beamfits file.
 
     Nextend : int, optional
@@ -230,8 +277,13 @@ def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
         make a copy and return copy.
 
     whiten : bool, optional
+<<<<<<< HEAD
         If True, clear input data of flags if they exist and set all nsamples
         to 1.
+=======
+        If True, clear input data of flags if they exist and
+        set all nsamples to 1.
+>>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     run_check : bool, optional
         If True, run UVData check before return.
@@ -256,9 +308,16 @@ def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
         data.nsample_array[:] = 1.0
 
     # Configure beam
+<<<<<<< HEAD
     if isinstance(beam, (str, np.str)):
         beam = pspecbeam.PSpecBeamUV(beam)
     assert isinstance(beam, pspecbeam.PSpecBeamBase)    
+=======
+    if beam is not None:
+        if isinstance(beam, (str, np.str)):
+            beam = pspecbeam.PSpecBeamUV(beam)
+        assert isinstance(beam, pspecbeam.PSpecBeamBase)    
+>>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     # Extend times
     Nextend = int(Nextend)
@@ -280,21 +339,45 @@ def noise_sim(data, Tsys, beam, Nextend=0, seed=None, inplace=False,
         int_time = np.array([int_time])
     Trms = Tsys / np.sqrt(int_time[:, None, None, None] * data.nsample_array * data.channel_width)
 
+<<<<<<< HEAD
     # Get Vrms
     freqs = np.unique(data.freq_array)[None, None, :, None]
     K_to_Jy = [1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p)) for p in data.polarization_array]
     K_to_Jy = np.array(K_to_Jy).T[None, None, :, :]
     Vrms = K_to_Jy * Trms
+=======
+    # if a pol is pStokes pol, divide by extra sqrt(2)
+    polcorr = np.array([np.sqrt(2) if p in [1, 2, 3, 4] else 1.0 for p in data.polarization_array])
+    Trms /= polcorr
+
+    # Get Vrms in Jy using beam
+    if beam is not None:
+        freqs = np.unique(data.freq_array)[None, None, :, None]
+        K_to_Jy = [1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p)) for p in data.polarization_array]
+        K_to_Jy = np.array(K_to_Jy).T[None, None, :, :]
+        K_to_Jy /= np.array([np.sqrt(2) if p in [1, 2, 3, 4] else 1.0 for p in data.polarization_array])
+        rms = K_to_Jy * Trms
+    else:
+        rms = Trms
+>>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     # Generate noise
     if seed is not None:
         np.random.seed(seed)
+<<<<<<< HEAD
     data.data_array = (stats.norm.rvs(0, 1./np.sqrt(2), size=Vrms.size).reshape(Vrms.shape) \
                        + 1j * stats.norm.rvs(0, 1./np.sqrt(2), size=Vrms.size).reshape(Vrms.shape) ) * Vrms
     f = np.isnan(data.data_array) + np.isinf(data.data_array)
     data.data_array[f] = np.nan
     data.flag_array[f] = True
     data.vis_units = 'Jy'
+=======
+    data.data_array = (stats.norm.rvs(0, 1./np.sqrt(2), size=rms.size).reshape(rms.shape) \
+                       + 1j * stats.norm.rvs(0, 1./np.sqrt(2), size=rms.size).reshape(rms.shape) ) * rms
+    f = np.isnan(data.data_array) + np.isinf(data.data_array)
+    data.data_array[f] = np.nan
+    data.flag_array[f] = True
+>>>>>>> c50139100555fba73fc7973fdf665a1ba578bd41
 
     if run_check:
         data.check()
