@@ -308,13 +308,19 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
     h5file : h5py file descriptor
         Used for loading in selection of data from HDF5 file.
     """
+    spw_mapping = None
     if spws is not None:
-        # make selections
+        # Get info for each spw that will be retained
         spw_freq_select = uvp.spw_to_freq_indices(spws)
         spw_dly_select = uvp.spw_to_dly_indices(spws)
         spw_select = uvp.spw_indices(spws)
         uvp.spw_freq_array = uvp.spw_freq_array[spw_freq_select]
         uvp.spw_dly_array = uvp.spw_dly_array[spw_dly_select]
+        
+        # Ordered list of old spw indices for the new spws
+        spw_mapping = uvp.spw_array[spw_select]
+        
+        # Update spw-related arrays (NB data arrays haven't been reordered yet!)
         uvp.spw_array = uvp.spw_array[spw_select]
         uvp.freq_array = uvp.freq_array[spw_freq_select]
         uvp.dly_array = uvp.dly_array[spw_dly_select]
@@ -324,7 +330,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.Nspwfreqs = len(uvp.spw_freq_array)
         if hasattr(uvp, 'scalar_array'):
             uvp.scalar_array = uvp.scalar_array[spw_select, :]
-        # down-convert spw indices such that spw_array == np.arange(Nspws)
+        
+        # Down-convert spw indices such that spw_array == np.arange(Nspws)
         for i in range(uvp.Nspws):
             if i in uvp.spw_array:
                 continue
@@ -465,40 +472,41 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 statnames = []
 
         # iterate over spws
-        for s in uvp.spw_array:
+        if spw_mapping is None: spw_mapping = uvp.spw_array
+        for s, s_old in zip(uvp.spw_array, spw_mapping):
             # if h5file is passed, default to loading in data
             if h5file is not None:
                 # assign data arrays
-                _data = h5file['data_spw{}'.format(s)]
-                _wgts = h5file['wgt_spw{}'.format(s)]
-                _ints = h5file['integration_spw{}'.format(s)]
-                _nsmp = h5file['nsample_spw{}'.format(s)]
+                _data = h5file['data_spw{}'.format(s_old)]
+                _wgts = h5file['wgt_spw{}'.format(s_old)]
+                _ints = h5file['integration_spw{}'.format(s_old)]
+                _nsmp = h5file['nsample_spw{}'.format(s_old)]
                 # assign cov array
                 if store_cov:
-                    _covs = h5file['cov_spw{}'.format(s)]
+                    _covs = h5file['cov_spw{}'.format(s_old)]
                 # assign stats array
                 _stat = odict()
                 for statname in statnames:
                     if statname not in stats:
                         stats[statname] = odict()
-                    _stat[statname] = h5file["stats_{}_{}".format(statname, s)]
+                    _stat[statname] = h5file["stats_{}_{}".format(statname, s_old)]
 
             # if no h5file, we are performing a select, so use uvp's arrays
             else:
                 # assign data arrays
-                _data = uvp.data_array[s]
-                _wgts = uvp.wgt_array[s]
-                _ints = uvp.integration_array[s]
-                _nsmp = uvp.nsample_array[s]
+                _data = uvp.data_array[s_old]
+                _wgts = uvp.wgt_array[s_old]
+                _ints = uvp.integration_array[s_old]
+                _nsmp = uvp.nsample_array[s_old]
                 # assign cov
                 if store_cov:
-                    _covs = uvp.cov_array[s]
+                    _covs = uvp.cov_array[s_old]
                 # assign stats array
                 _stat = odict()
                 for statname in statnames:
                     if statname not in stats:
                         stats[statname] = odict()
-                    _stat[statname] = uvp.stats_array[statname][s]
+                    _stat[statname] = uvp.stats_array[statname][s_old]
 
             # slice data arrays and assign to dictionaries
             if sliceable:
