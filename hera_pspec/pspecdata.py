@@ -480,7 +480,7 @@ class PSpecData(object):
         self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
 
-    def C_model(self, key, model='time_average'):
+    def C_model(self, key, model='time_average', subtracted=True):
         """
         Return a covariance model having specified a key and model type.
 
@@ -493,6 +493,9 @@ class PSpecData(object):
 
         model : string, optional
             Type of covariance model to calculate, if not cached. options=['time_average']
+
+        subtracted : bool, default:True
+            Whether or not to subtract the mean value when calculating the variance
 
         Returns
         -------
@@ -525,20 +528,21 @@ class PSpecData(object):
                 for time in range(data.shape[0]):
                     data_square[time, :, :] = np.einsum('i,j', data[time, :], data[time, :].conj())
                 covariance = np.average(data_square, axis=0)
-                #(Nspw_freqs, Nspw_freqs)
-                data_average = np.average(data, axis=0)
-                #(Nspw_freqs)
-                data_average_square =  np.einsum('i,j', data_average, data_average.conj())
-                #(Nspw_freqs, Nspw_freqs)
-                covariance -= data_average_square
-                #(Nspw_freqs, Nspw_freqs)
+                if subtracted == True:
+                    #(Nspw_freqs, Nspw_freqs)
+                    data_average = np.average(data, axis=0)
+                    #(Nspw_freqs)
+                    data_average_square =  np.einsum('i,j', data_average, data_average.conj())
+                    #(Nspw_freqs, Nspw_freqs)
+                    covariance -= data_average_square
+                    #(Nspw_freqs, Nspw_freqs)
                 self.set_C({Ckey: covariance})
             if model == 'empirical':
                 self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
                 #(Nspw_freqs, Nspw_freqs)
         return self._C[Ckey]
 
-    def cross_covar_model(self, key1, key2, model='time_average', conj_1=False, conj_2=True):
+    def cross_covar_model(self, key1, key2, model='time_average', conj_1=False, conj_2=True, subtracted=True):
         """
         Return a covariance model having specified a key and model type.
 
@@ -557,6 +561,9 @@ class PSpecData(object):
 
         conj_2 : boolean, optional
             Whether to conjugate second copy of data in covar or not. Default: True
+
+        subtracted : bool, default:True
+            Whether or not to subtract the mean value when calculating the variance
 
         Returns
         -------
@@ -598,14 +605,15 @@ class PSpecData(object):
                 x1x2[time, :, :] = np.einsum('i,j', x1[time, :], x2[time, :])
             covar = np.average(x1x2, axis=0)
             #(Nspw_freqs, Nspw_freqs)
-            x1_average = np.average(x1, axis=0)
-            #(Nspw_freqs)
-            x2_average = np.average(x2, axis=0)
-            #(Nspw_freqs)
-            x1_average_x2_average =  np.einsum('i,j', x1_average, x2_average)
-            #(Nspw_freqs, Nspw_freqs)
-            covar -= x1_average_x2_average
-            #(Nspw_freqs, Nspw_freqs)
+            if subtracted == True:
+                x1_average = np.average(x1, axis=0)
+                #(Nspw_freqs)
+                x2_average = np.average(x2, axis=0)
+                #(Nspw_freqs)
+                x1_average_x2_average =  np.einsum('i,j', x1_average, x2_average)
+                #(Nspw_freqs, Nspw_freqs)
+                covar -= x1_average_x2_average
+                #(Nspw_freqs, Nspw_freqs)
         return covar
 
     def I(self, key):
@@ -1349,50 +1357,124 @@ class PSpecData(object):
             Bandpower variance , with dimensions (Ndlys, ).
         """
         # Collect all the relevant pieces
+        var_q_real_list = odict()
+        var_q_imag_list = odict() 
+        var_p_real_list = odict()
+        var_p_imag_list = odict()
+        
+        type_list = ['original', 'diagonal', 'mean', 'max', 'min']
+        #"original": the original input covariance matrix;
+        #"diagonal": only the diagonal part of the original input covariance matrix are left;
+        #"mean": set the matrix to be identity and multiply it by the mean of the diagonal elements
+        #"min": set the matrix to be identity and multiply it by the minimum of the diagonal elements
+        #"max": set the matrix to be identity and multiply it by the maximum of the diagonal elements
+
         E_matrices = self.get_unnormed_E(key1, key2)
-        C11 = self.C_model(key1, model=model)
-        C22 = self.C_model(key2, model=model)
-        C21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True)
-        C12 = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True)
-        P11 = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False)
-        S11 = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True)
-        P22 = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False)
-        S22 = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True)
-        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
-        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
+        C11_ = self.C_model(key1, model=model)
+        C22_ = self.C_model(key2, model=model)
+        C21_ = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True)
+        C12_ = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True)
+        P11_ = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False)
+        S11_ = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True)
+        P22_ = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False)
+        S22_ = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True)
+        P21_ = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
+        S21_ = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
+        
+        for i in type_list:
+            if i == 'original':
+                C11 = C11_
+                C22 = C22_
+                C21 = C21_
+                C12 = C12_
+                P11 = P11_
+                S11 = S11_
+                P22 = P22_
+                S22 = S22_
+                P21 = P21_
+                S21 = S21_
+            if i == 'diagonal':
+                C11 = np.diag(np.diag(C11_))
+                C22 = np.diag(np.diag(C22_))
+                C21 = np.diag(np.diag(C21_))
+                C12 = np.diag(np.diag(C12_))
+                P11 = np.diag(np.diag(P11_))
+                S11 = np.diag(np.diag(S11_))
+                P22 = np.diag(np.diag(P22_))
+                S22 = np.diag(np.diag(S22_))
+                P21 = np.diag(np.diag(P21_))
+                S21 = np.diag(np.diag(S21_))
+            if i == 'mean':
+                C11 = np.diag([np.mean(np.diag(C11_))]*len(np.diag(C11_)))
+                C22 = np.diag([np.mean(np.diag(C22_))]*len(np.diag(C22_)))
+                C21 = np.diag([np.mean(np.diag(C21_))]*len(np.diag(C21_)))
+                C12 = np.diag([np.mean(np.diag(C12_))]*len(np.diag(C12_)))
+                P11 = np.diag([np.mean(np.diag(P11_))]*len(np.diag(P11_)))
+                S11 = np.diag([np.mean(np.diag(S11_))]*len(np.diag(S11_)))
+                P22 = np.diag([np.mean(np.diag(P22_))]*len(np.diag(P22_)))
+                S22 = np.diag([np.mean(np.diag(S22_))]*len(np.diag(S22_)))
+                P21 = np.diag([np.mean(np.diag(P21_))]*len(np.diag(P21_)))
+                S21 = np.diag([np.mean(np.diag(S21_))]*len(np.diag(S21_)))
+            if i == 'max':
+                C11 = np.diag([np.max(np.diag(C11_))]*len(np.diag(C11_)))
+                C22 = np.diag([np.max(np.diag(C22_))]*len(np.diag(C22_)))
+                C21 = np.diag([np.max(np.diag(C21_))]*len(np.diag(C21_)))
+                C12 = np.diag([np.max(np.diag(C12_))]*len(np.diag(C12_)))
+                P11 = np.diag([np.max(np.diag(P11_))]*len(np.diag(P11_)))
+                S11 = np.diag([np.max(np.diag(S11_))]*len(np.diag(S11_)))
+                P22 = np.diag([np.max(np.diag(P22_))]*len(np.diag(P22_)))
+                S22 = np.diag([np.max(np.diag(S22_))]*len(np.diag(S22_)))
+                P21 = np.diag([np.max(np.diag(P21_))]*len(np.diag(P21_)))
+                S21 = np.diag([np.max(np.diag(S21_))]*len(np.diag(S21_)))
+            if i == 'min':
+                C11 = np.diag([np.min(np.diag(C11_))]*len(np.diag(C11_)))
+                C22 = np.diag([np.min(np.diag(C22_))]*len(np.diag(C22_)))
+                C21 = np.diag([np.min(np.diag(C21_))]*len(np.diag(C21_)))
+                C12 = np.diag([np.min(np.diag(C12_))]*len(np.diag(C12_)))
+                P11 = np.diag([np.min(np.diag(P11_))]*len(np.diag(P11_)))
+                S11 = np.diag([np.min(np.diag(S11_))]*len(np.diag(S11_)))
+                P22 = np.diag([np.min(np.diag(P22_))]*len(np.diag(P22_)))
+                S22 = np.diag([np.min(np.diag(S22_))]*len(np.diag(S22_)))
+                P21 = np.diag([np.min(np.diag(P21_))]*len(np.diag(P21_)))
+                S21 = np.diag([np.min(np.diag(S21_))]*len(np.diag(S21_)))
 
-        E12C21 = np.dot(E_matrices, C21) 
-        E12P22 = np.dot(E_matrices, P22) 
-        E21starS11 = np.dot(np.transpose(E_matrices, (0,2,1)), S11)
-        E21C11 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C11)
-        E12C22 = np.dot(E_matrices, C22)
-        E12starS21 = np.dot(E_matrices.conj(), S21)
-        E12P21 = np.dot(E_matrices, P21)
-        E21C12 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C12)
-        E21P11 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), P11)
-        E12starS22 = np.dot(E_matrices.conj(), S22) 
+            E12C21 = np.dot(E_matrices, C21) 
+            E12P22 = np.dot(E_matrices, P22) 
+            E21starS11 = np.dot(np.transpose(E_matrices, (0,2,1)), S11)
+            E21C11 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C11)
+            E12C22 = np.dot(E_matrices, C22)
+            E12starS21 = np.dot(E_matrices.conj(), S21)
+            E12P21 = np.dot(E_matrices, P21)
+            E21C12 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C12)
+            E21P11 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), P11)
+            E12starS22 = np.dot(E_matrices.conj(), S22) 
 
-        q_q = np.einsum('aij,bji', E12P22, E21starS11) + np.einsum('aij,bji', E12C21, E12C21)
-        q_qdagger = np.einsum('aij,bji', E12C22, E21C11) + np.einsum('aij,bji', E12P21, E12starS21)
-        qdagger_qdagger = np.einsum('aij,bji', E21C12, E21C12) + np.einsum('aij,bji', E21P11, E12starS22)
+            q_q = np.einsum('aij,bji', E12P22, E21starS11) + np.einsum('aij,bji', E12C21, E12C21)
+            q_qdagger = np.einsum('aij,bji', E12C22, E21C11) + np.einsum('aij,bji', E12P21, E12starS21)
+            qdagger_qdagger = np.einsum('aij,bji', E21C12, E21C12) + np.einsum('aij,bji', E21P11, E12starS22)
 
-        var_q_real = (q_q + qdagger_qdagger + 2.*q_qdagger) / 4.
-        var_q_imag = (q_q + qdagger_qdagger - 2.*q_qdagger) / 4.
-        var_q_real = var_q_real.diagonal()
-        var_q_imag = var_q_imag.diagonal()
+            var_q_real = (q_q + qdagger_qdagger + 2.*q_qdagger) / 4.
+            var_q_imag = (q_q + qdagger_qdagger - 2.*q_qdagger) / 4.
+            var_q_real = var_q_real.diagonal()
+            var_q_imag = var_q_imag.diagonal()
 
-        var_p_real = ( np.einsum('ab,cd,bd->ac', M, M, q_q) +
-            2. * np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) + 
-            np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+            var_p_real = ( np.einsum('ab,cd,bd->ac', M, M, q_q) +
+                2. * np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) + 
+                np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
 
-        var_p_imag = ( np.einsum('ab,cd,bd->ac', M, M, q_q) -
-            2. * np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) +
-            np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4.
+            var_p_imag = ( np.einsum('ab,cd,bd->ac', M, M, q_q) -
+                2. * np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) +
+                np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4.
 
-        var_p_real = var_p_real.diagonal()
-        var_p_imag = var_p_imag.diagonal()
+            var_p_real = var_p_real.diagonal()
+            var_p_imag = var_p_imag.diagonal()
 
-        return var_q_real, var_q_imag, var_p_real, var_p_imag
+            var_p_real_list[i] = var_p_real
+            var_p_imag_list[i] = var_p_imag
+            var_q_real_list[i] = var_q_real
+            var_q_imag_list[i] = var_q_imag
+
+        return var_q_real_list, var_q_imag_list, var_p_real_list, var_p_imag_list
 
     def get_MW(self, G, H, mode='I', band_covar=None):
         """
@@ -2353,19 +2435,21 @@ class PSpecData(object):
                         pol_cov_q.extend(cov_qv)
 
                     # Generate the variance for real and imaginary part for bandpowers
-                    var_q_real, var_q_imag, var_real, var_imag = self.analytic_variance(key1, key2, Mv, model='time_average')
+                    var_q_real, var_q_imag, var_real_, var_imag_ = self.analytic_variance(key1, key2, Mv, model='time_average')
+                    var_real = odict()
+                    var_imag = odict()
+                    if self.primary_beam != None:
+                            for type_key in var_real_.keys():
+                                var_real[type_key] = var_real_[type_key]*\
+                                (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
+                            for type_key in var_imag_.keys():
+                                var_imag[type_key] = var_imag_[type_key]*\
+                                (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
+
                     var_q_real = np.array([var_q_real for tind in range(self.Ntimes)])
                     var_q_imag = np.array([var_q_imag for tind in range(self.Ntimes)])
                     var_real = np.array([var_real for tind in range(self.Ntimes)])
                     var_imag = np.array([var_imag for tind in range(self.Ntimes)])
-
-                    if self.primary_beam != None:
-                            var_real *= \
-                            (scalar * self.scalar_delay_adjustment(key1, key2,
-                                                                   sampling=sampling))**2.
-                            var_imag *= \
-                            (scalar * self.scalar_delay_adjustment(key1, key2,
-                                                                   sampling=sampling))**2.
 
                     pol_var_q_real.extend(var_q_real)
                     pol_var_q_imag.extend(var_q_imag)
@@ -2532,13 +2616,13 @@ class PSpecData(object):
         # fill data arrays
         uvp.data_array = data_array
         uvp.data_array_q = data_array_q
+        uvp.var_array_q_real = var_array_q_real
+        uvp.var_array_q_imag = var_array_q_imag
+        uvp.var_array_real = var_array_real
+        uvp.var_array_imag = var_array_imag
         if store_cov:
             uvp.cov_array = cov_array
-            uvp.cov_array_q = cov_array_q
-            uvp.var_array_q_real = var_array_q_real
-            uvp.var_array_q_imag = var_array_q_imag
-            uvp.var_array_real = var_array_real
-            uvp.var_array_imag = var_array_imag
+            uvp.cov_array_q = cov_array_q    
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))

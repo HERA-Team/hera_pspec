@@ -38,10 +38,16 @@ class UVPSpec(object):
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
         self._cov_array = PSpecParam("cov_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         self._cov_array_q = PSpecParam("cov_array_q", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        '''
         self._var_array_q_real = PSpecParam("var_array_q_real", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         self._var_array_q_imag = PSpecParam("var_array_q_imag", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         self._var_array_real = PSpecParam("var_array_real", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         self._var_array_imag = PSpecParam("var_array_imag", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
+        '''
+        self._var_array_q_real = PSpecParam("var_array_q_real", description=desc, expected_type=np.object, form="(Nblpairts, Npols)")
+        self._var_array_q_imag = PSpecParam("var_array_q_imag", description=desc, expected_type=np.object, form="(Nblpairts, Npols)")
+        self._var_array_real = PSpecParam("var_array_real", description=desc, expected_type=np.object, form="(Nblpairts, Npols)")
+        self._var_array_imag = PSpecParam("var_array_imag", description=desc, expected_type=np.object, form="(Nblpairts, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
@@ -257,6 +263,7 @@ class UVPSpec(object):
         spw, blpairts, pol = self.key_to_indices(key, omit_flags=omit_flags)
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
+        '''
         if type == "real":
             if hasattr(self,'var_array_q_real'):
                 if self.folded:
@@ -274,6 +281,34 @@ class UVPSpec(object):
                     return self.var_array_q_imag[spw][blpairts, Ndlys//2+1:, pol]
                 else:
                     return self.var_array_q_imag[spw][blpairts, :, pol]
+            else:
+                raise AttributeError("No variance array has been calculated.")
+        else:
+            raise ValueError("No types besides real and imag.")
+        '''
+        if type == "real":
+            if hasattr(self,'var_array_q_real'):
+                if self.folded:
+                    Ndlys = self.data_array[spw].shape[1]
+                    result = odict()
+                    for i in self.var_array_q_real[spw][blpairts, pol].keys():
+                        result[i] = self.var_array_q_real[spw][blpairts, pol][i][Ndlys//2+1:]
+                    return result
+                else:
+                    return self.var_array_q_real[spw][blpairts, pol]
+            else:
+                raise AttributeError("No variance array has been calculated.")
+
+        elif type == "imag":
+            if hasattr(self,'var_array_q_imag'):
+                if self.folded:
+                    Ndlys = self.data_array[spw].shape[1]
+                    result = odict()
+                    for i in self.var_array_q_imag[spw][blpairts, pol].keys():
+                        result[i] = self.var_array_q_imag[spw][blpairts, pol][i][Ndlys//2+1:]
+                    return result
+                else:
+                    return self.var_array_q_imag[spw][blpairts, pol]
             else:
                 raise AttributeError("No variance array has been calculated.")
         else:
@@ -312,6 +347,7 @@ class UVPSpec(object):
         spw, blpairts, pol = self.key_to_indices(key, omit_flags=omit_flags)
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
+        '''
         if type == "real":
             if hasattr(self,'var_array_real'):
                 if self.folded:
@@ -331,7 +367,35 @@ class UVPSpec(object):
                     return self.var_array_imag[spw][blpairts, :, pol]
             else:
                 raise AttributeError("No variance array has been calculated.")
+        
+        else:
+            raise ValueError("No types besides real and imag.")
+        '''
+        if type == "real":
+            if hasattr(self,'var_array_real'):
+                if self.folded:
+                    Ndlys = self.data_array[spw].shape[1]
+                    result = odict()
+                    for i in self.var_array_real[spw][blpairts, pol].keys():
+                        result[i] = self.var_array_real[spw][blpairts, pol][i][Ndlys//2+1:]
+                    return result
+                else:
+                    return self.var_array_real[spw][blpairts, pol]
+            else:
+                raise AttributeError("No variance array has been calculated.")
 
+        elif type == "imag":
+            if hasattr(self,'var_array_imag'):
+                if self.folded:
+                    Ndlys = self.data_array[spw].shape[1]
+                    result = odict()
+                    for i in self.var_array_imag[spw][blpairts, pol].keys():
+                        result[i] = self.var_array_imag[spw][blpairts, pol][i][Ndlys//2+1:]
+                    return result
+                else:
+                    return self.var_array_imag[spw][blpairts, pol]
+            else:
+                raise AttributeError("No variance array has been calculated.")
         else:
             raise ValueError("No types besides real and imag.")
 

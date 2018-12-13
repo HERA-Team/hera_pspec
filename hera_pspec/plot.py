@@ -1,6 +1,6 @@
 import numpy as np
 import pyuvdata
-from hera_pspec import conversions, uvpspec, utils
+from hera_pspec import conversions, uvpspec, utils, grouping
 import matplotlib
 import matplotlib.pyplot as plt
 import copy
@@ -8,8 +8,9 @@ from collections import OrderedDict as odict
 import astropy.units as u
 import astropy.constants as c
 from pyuvdata import UVData
+from scipy import stats
 import uvtools
-
+import astropy.stats as astats
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
                    average_times=False, fold=False, plot_noise=False, 
@@ -1009,3 +1010,1115 @@ def _round_sigfig(x, up=True):
         return np.floor(10**sigfigs * x) / 10**sigfigs
 
 
+def plot_uvdata_vis_hist(uvd, axis, index, fit_curve='Gaussian', plot_mode='normal', show_robust=False,
+                           **kwargs):
+    """
+    Plot histograms for the visibilities. 
+    
+    Parameters
+    ----------
+    uvd : UVData object
+        Input data object. Waterfalls will be stored for all baselines and 
+        polarizations within the object; use uvd.select() to remove unwanted 
+        information.
+
+    axis : str
+        Along which axis to plot the distribution.
+        Choices: ['frequencies', 'baseline-times'].
+    
+    plot_mode : str
+        Plot mode.
+        Choices: ['normal', 'density'].
+        Default: 'normal'.
+    
+    index : int 
+        The index in the uvd.data_array to draw. 
+    
+    show_robust : bool
+        Whether or not to show the robust mean and std for the histogram.
+        Default: False
+
+    fit_curve : str
+        The types of fuctions to fit the distribution, only called when plot_mode == 'density'.
+        Chocies: ['Gaussian', 'Exponential']
+        Default: 'Gaussian'.
+    
+    **kwargs : 
+    """
+    assert isinstance(uvd, UVData), "'uvd' must be a UVData object."
+    assert axis in ['frequencies', 'baseline-times'], \
+            "'%s' not a valid axis; use 'frequencies' or 'baseline-times'" \
+            % axis
+    assert plot_mode in ['normal', 'density'], \
+            "'%s' not a valid axis; use 'normal' or 'density' " \
+            % plot_mode
+    assert isinstance(index, int), "'index' must be a integer."        
+    if axis == 'frequencies':
+        assert index >=0 and index < uvd.Nblts, "The index is not valid."
+    if axis == 'baseline-times':
+        assert index >=0 and index < uvd.Nfreqs, "The index is not valid."
+        
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    if axis == 'frequencies':
+        fig.suptitle('Distribution of the visibility at time {}, baseline {} across frequency axis'.format(uvd.time_array[index], uvd.baseline_array[index]), fontsize=14)
+        d = uvd.data_array[index][0, :, 0]
+    if axis == 'baseline-times':
+        fig.suptitle('Distribution of the visibility at frequency {} across baseline-time axis'.format(uvd.freq_array[0,index]), fontsize=14)
+        d = uvd.data_array[:, 0, index, 0]
+
+    ax = axes[0]
+    data = d.real
+    if plot_mode == 'normal':
+        if show_robust == True:
+            n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
+                range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
+                ,label='real\n(mean:{:.2f}, \nmean(r):{:.2f}, \nstd:{:.2f},\nstd(r):{:.2f})'.format(np.mean(data), astats.biweight_location(data),np.std(data), np.sqrt(astats.biweight_midvariance(data)))
+                ,color = 'blue' )
+        else:
+            n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
+                range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
+                ,label='real\n(mean:{:.2f}, \nstd:{:.2f})'.format(np.mean(data),np.std(data))
+                ,color = 'blue' )
+        bincenters = 0.5*(bins[1:]+bins[:-1])
+        menStd     = np.sqrt(n)
+        ax.bar(bincenters, n, width=0., ecolor='red', yerr=menStd)
+    
+    if plot_mode == 'density':
+        if show_robust == True:
+            n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
+                range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
+                ,label='real\n(mean:{:.2f}, \nmean(r):{:.2f}, \nstd:{:.2f},\nstd(r):{:.2f})'.format(np.mean(data), astats.biweight_location(data),np.std(data), np.sqrt(astats.biweight_midvariance(data)))
+                ,color = 'blue', density=True)
+        else:
+            n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
+                range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
+                ,label='real\n(mean:{:.2f}, \nstd:{:.2f})'.format(np.mean(data),np.std(data))
+                ,color = 'blue', density=True)
+        
+        assert fit_curve in ['Gaussian', 'Exponential'],\
+        "'%s' not a valid axis; use 'Gaussian' or 'Exponential'" % fit_curve
+        if fit_curve == 'Gaussian':
+            y = stats.norm.pdf(bins, np.mean(data), np.std(data))
+            ax.plot(bins, y, lw=2, ls='--', label='Gaussian', color='blue')
+        if fit_curve == 'Exponential':
+            y = stats.laplace.pdf(bins, np.mean(data), np.std(data)/np.sqrt(2.))
+            ax.plot(bins, y, lw=2, ls='--', label='Exponential', color='blue')
+    
+    ax.legend(fontsize=12, loc='lower center',framealpha=0)
+    ax.set_yscale('log')
+    ax.grid()
+    
+    ax = axes[1]
+    data = d.imag
+    if plot_mode == 'normal':
+        if show_robust == True:
+            n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
+                range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
+                ,label='real\n(mean:{:.2f}, \nmean(r):{:.2f}, \nstd:{:.2f},\nstd(r):{:.2f})'.format(np.mean(data), astats.biweight_location(data),np.std(data), np.sqrt(astats.biweight_midvariance(data)))
+                ,color = 'blue' )
+        else:
+            n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
+                range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
+                ,label='real\n(mean:{:.2f}, \nstd:{:.2f})'.format(np.mean(data),np.std(data))
+                ,color = 'blue' )
+        bincenters = 0.5*(bins[1:]+bins[:-1])
+        menStd     = np.sqrt(n)
+        ax.bar(bincenters, n, width=0., ecolor='red', yerr=menStd)
+    
+    if plot_mode == 'density':
+        if show_robust == True:
+            n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
+                range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
+                ,label='real\n(mean:{:.2f}, \nmean(r):{:.2f}, \nstd:{:.2f},\nstd(r):{:.2f})'.format(np.mean(data), astats.biweight_location(data),np.std(data), np.sqrt(astats.biweight_midvariance(data)))
+                ,color = 'blue', density=True)
+        else:
+            n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
+                range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
+                ,label='real\n(mean:{:.2f}, \nstd:{:.2f})'.format(np.mean(data),np.std(data))
+                ,color = 'blue', density=True)
+        
+        assert fit_curve in ['Gaussian', 'Exponential'],\
+        "'%s' not a valid axis; use 'Gaussian' or 'Exponential'" % fit_curve
+        if fit_curve == 'Gaussian':
+            y = stats.norm.pdf(bins, np.mean(data), np.std(data))
+            ax.plot(bins, y, lw=2, ls='--', label='Gaussian', color='blue')
+        if fit_curve == 'Exponential':
+            y = stats.laplace.pdf(bins, np.mean(data), np.std(data)/np.sqrt(2.))
+            ax.plot(bins, y, lw=2, ls='--', label='Exponential', color='blue')
+    
+    ax.legend(fontsize=12, loc='lower center',framealpha=0)
+    ax.set_yscale('log')
+    ax.grid()
+
+
+def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=[], **kwargs):
+    """
+    Plot the error bars.
+    
+    Parameters
+    ----------
+    uvp : UVPspec
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+    
+    uvp_td : UVPspec from the data difference
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+
+    key : tuple
+        Baseline-pair key, in the format (spw, ((ant1, ant2),(ant3, ant4)), pol)
+    
+    time_index : integer
+
+    Tsys : float
+        The input system temperature to call in the uvp.generate_noise_spectra().
+
+    extra_error_types: str
+        Extra types for error bars other than the default three.
+        Choices:['min','max','diagonal','mean']
+        Default:[] 
+
+    kwargs : dict, optional
+        Extra kwargs to pass to _all_ ax.plot calls.
+    """
+    assert isinstance(time_index, int), "time_index must be a integer."
+    assert time_index >= 0 and time_index < uvp.Ntimes, "time_index is not valid."
+    
+    analytic_real_ori = np.sqrt(np.abs(uvp.get_var(key,type='real')[time_index]['original']))
+    analytic_imag_ori = np.sqrt(np.abs(uvp.get_var(key,type='imag')[time_index]['original']))
+    
+    if 'diagonal' in extra_error_types:
+        analytic_real_diag = np.sqrt(np.abs(uvp.get_var(key,type='real')[time_index]['diagonal']))
+        analytic_imag_diag = np.sqrt(np.abs(uvp.get_var(key,type='imag')[time_index]['diagonal']))
+    if 'max' in extra_error_types:
+        analytic_real_max = np.sqrt(np.abs(uvp.get_var(key,type='real')[time_index]['max']))
+        analytic_imag_max = np.sqrt(np.abs(uvp.get_var(key,type='imag')[time_index]['max']))
+    if 'mean' in extra_error_types:
+        analytic_real_mean = np.sqrt(np.abs(uvp.get_var(key,type='real')[time_index]['mean']))
+        analytic_imag_mean = np.sqrt(np.abs(uvp.get_var(key,type='imag')[time_index]['mean']))
+    if 'min' in extra_error_types:
+        analytic_real_min = np.sqrt(np.abs(uvp.get_var(key,type='real')[time_index]['min']))
+        analytic_imag_min = np.sqrt(np.abs(uvp.get_var(key,type='imag')[time_index]['min']))
+    
+    pnn_real = np.abs(uvp_td.get_data(key)[time_index].real)/2. 
+    pnn_imag = np.abs(uvp_td.get_data(key)[time_index].imag)/2. 
+   
+    psn_real = np.sqrt(np.abs(uvp.get_data(key)[time_index].real * uvp_td.get_data(key)[time_index].real)) 
+    psn_imag = np.sqrt(np.abs(uvp.get_data(key)[time_index].real * uvp_td.get_data(key)[time_index].imag)) 
+    
+    noise = uvp.generate_noise_spectra(0, 'xx', Tsys)[uvp.antnums_to_blpair(key[1])]
+
+    fig = plt.figure(figsize=(10, 8))
+    fig.suptitle("Error bars at time {} on baseline-pair {}".format((np.unique(uvp.time_1_array)[time_index],np.unique(uvp.time_2_array)[time_index]), key[1]), y=0.55, fontsize=12)
+    
+    dlys = uvp.get_dlys(0) * 1e9
+
+    ax0 = fig.add_axes([0.1, 0.0, 0.4, 0.1])
+    ax0.plot(dlys, psn_real / analytic_real_ori , c='blue')
+    ax0.plot(dlys, pnn_real / analytic_real_ori, c='orange')
+    if 'diagonal' in extra_error_types:
+        ax0.plot(dlys, analytic_real_diag / analytic_real_ori, c='m')
+    if 'max' in extra_error_types:
+        ax0.plot(dlys, analytic_real_max / analytic_real_ori, ls='--', c='m')
+    if 'mean' in extra_error_types:
+        ax0.plot(dlys, analytic_real_mean / analytic_real_ori, ls=':', c='m')
+    if 'min' in extra_error_types:
+        ax0.plot(dlys, analytic_real_min / analytic_real_ori, ls='-.', c='m')
+    ax0.plot(dlys, noise[time_index]/analytic_real_ori, c='k', lw=0.5)
+    ax0.axhline(y=1, c='g')
+    ax0.semilogy()
+    
+    ax1 = fig.add_axes([0.1, 0.1, 0.4, 0.4])
+    ax1.plot(dlys, psn_real, label=r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', c='blue')
+    ax1.plot(dlys, pnn_real , label=r'$P_{nn}}$', c='orange')
+    ax1.plot(dlys, analytic_real_ori, label='analytic-original', c='g')
+    if 'diagonal' in extra_error_types:
+        ax1.plot(dlys, analytic_real_diag, label='analytic-diag', c='m')
+    if 'max' in extra_error_types:
+        ax1.plot(dlys, analytic_real_max, ls='--', label='analytic-max', c='m')
+    if 'mean' in extra_error_types:
+        ax1.plot(dlys, analytic_real_mean, ls=':', label='analytic-mean', c='m')
+    if 'min' in extra_error_types:
+        ax1.plot(dlys, analytic_real_min, ls='-.', label='analytic-min', c='m')
+    ax1.plot(dlys, noise[time_index], c='k', lw=0.5, label='thermal noise')
+    ax1.legend(loc='best', framealpha=0)
+    ax1.set_xticklabels('')
+    ax1.semilogy()
+
+    ax2 = fig.add_axes([0.5, 0.0, 0.4, 0.1])
+    ax2.plot(dlys, psn_imag / analytic_imag_ori , c='blue')
+    ax2.plot(dlys, pnn_imag / analytic_imag_ori,  c='orange')
+    if 'diagonal' in extra_error_types:
+        ax2.plot(dlys, analytic_imag_diag / analytic_imag_ori, c='m')
+    if 'max' in extra_error_types:
+        ax2.plot(dlys, analytic_imag_max / analytic_imag_ori, ls='--', c='m')
+    if 'mean' in extra_error_types:
+        ax2.plot(dlys, analytic_imag_mean / analytic_imag_ori, ls=':', c='m')
+    if 'min' in extra_error_types:
+        ax2.plot(dlys, analytic_imag_min / analytic_imag_ori, ls='-.', c='m')
+    ax2.plot(dlys, noise[time_index]/analytic_imag_ori, c='k', lw=0.5)
+    ax2.axhline(y=1, c='g')
+    ax2.semilogy()
+    ax2.yaxis.tick_right()
+
+    ax3 = fig.add_axes([0.5, 0.1, 0.4, 0.4])
+    ax3.plot(dlys, psn_imag, label=r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', c='blue')
+    ax3.plot(dlys, pnn_imag , label=r'$P_{nn}}$', c='orange')
+    ax3.plot(dlys, analytic_imag_ori, label='analytic-original', c='g')
+    if 'diagonal' in extra_error_types:
+        ax3.plot(dlys, analytic_imag_diag, label='analytic-diag', c='m')
+    if 'max' in extra_error_types:
+        ax3.plot(dlys, analytic_imag_max, ls='--', label='analytic-max', c='m')
+    if 'mean' in extra_error_types: 
+        ax3.plot(dlys, analytic_imag_mean, ls=':', label='analytic-mean', c='m')
+    if 'min' in extra_error_types:
+        ax3.plot(dlys, analytic_imag_min, ls='-.', label='analytic-min', c='m')
+    ax3.plot(dlys, noise[time_index], c='k', lw=0.5, label='thermal noise')
+    ax3.legend(loc='best', framealpha=0)
+    ax3.semilogy()
+    ax3.yaxis.tick_right()
+    ax3.set_xticklabels('')
+
+
+def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_types=[], fit_curve='Gaussian', plot_mode='normal', show_robust=True, **kwargs):
+    """
+    Plot the distribution of z-scores on a baseline-pair across time axis and delay axis.
+    
+    Parameters
+    ----------
+    uvp : UVPspec
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+    
+    uvp_td : UVPspec from the data difference
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+
+    key : tuple
+        Baseline-pair key, in the format (spw, ((ant1, ant2),(ant3, ant4)), pol)
+    
+    wedge : float
+        The position of the wedge in the delay space. 
+
+    inside_wedge : bool
+        The choice to plot the histograms of z-scores inside or outside the wedge.  
+
+    extra_error_types: str
+        Extra types for error bars other than the default three.
+        Choices:['min','max','diagonal','mean']
+        Default:[] 
+
+    plot_mode : str
+        Plot mode.
+        Choices: ['normal', 'density'].
+        Default: 'normal'.
+    
+    show_robust : bool
+        Whether or not to show the robust mean and std for the histogram.
+        Default: False
+
+    fit_curve : str
+        The types of fuctions to fit the distribution, only called when plot_mode == 'density'.
+        Chocies: ['Gaussian', 'Exponential']
+        Default: 'Gaussian'.
+
+    kwargs : dict, optional
+        Extra kwargs to pass to _all_ ax.plot calls.
+    """
+    dlys = uvp.get_dlys(0)*1e9
+    assert wedge <= np.max(dlys) and wedge >= np.min(dlys), "The 'wedge' is not valid." 
+    if inside_wedge==True:
+        c_td = 'blue'
+        pre_td = r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'
+        ptd_real = np.sqrt(np.abs(uvp.get_data(key)[:uvp_td.Ntimes].real * uvp_td.get_data(key)[:uvp_td.Ntimes].real)).T[abs(dlys)<wedge].reshape(-1)
+        ptd_imag = np.sqrt(np.abs(uvp.get_data(key)[:uvp_td.Ntimes].real * uvp_td.get_data(key)[:uvp_td.Ntimes].imag)).T[abs(dlys)<wedge].reshape(-1)
+        analytic_real_ori = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['original'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+        analytic_imag_ori = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['original'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+        if 'diagonal' in extra_error_types:
+            analytic_real_diag = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['diagonal'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+            analytic_imag_diag = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['diagonal'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+        if 'max' in extra_error_types:
+            analytic_real_max = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['max'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+            analytic_imag_max = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['max'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+        if 'mean' in extra_error_types:
+            analytic_real_mean = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['mean'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+            analytic_imag_mean = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['mean'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+        if 'min' in extra_error_types:
+            analytic_real_min = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['min'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+            analytic_imag_min = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['min'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+        p_real = uvp.get_data(key)[:uvp_td.Ntimes].real.T[abs(dlys)<wedge].reshape(-1)
+        p_real -= np.mean(p_real)
+        p_imag = uvp.get_data(key)[:uvp_td.Ntimes].imag.T[abs(dlys)<wedge].reshape(-1)
+        p_imag -= np.mean(p_imag)
+    else:
+        c_td = 'orange'
+        pre_td = r'$P_{nn}$'
+        ptd_real = (np.abs(uvp_td.get_data(key)[:uvp_td.Ntimes].real)/2.).T[abs(dlys)>wedge].reshape(-1)
+        ptd_imag = (np.abs(uvp_td.get_data(key)[:uvp_td.Ntimes].imag)/2.).T[abs(dlys)>wedge].reshape(-1)
+        analytic_real_ori = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['original'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+        analytic_imag_ori = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['original'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+        if 'diagonal' in extra_error_types:
+            analytic_real_diag = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['diagonal'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+            analytic_imag_diag = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['diagonal'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+        if 'max' in extra_error_types:
+            analytic_real_max = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['max'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+            analytic_imag_max = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['max'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+        if 'mean' in extra_error_types:
+            analytic_real_mean = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['mean'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+            analytic_imag_mean = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['mean'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+        if 'min' in extra_error_types:
+            analytic_real_min = np.sqrt(np.abs([uvp.get_var(key,type='real')[i]['min'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+            analytic_imag_min = np.sqrt(np.abs([uvp.get_var(key,type='imag')[i]['min'] for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+        p_real = uvp.get_data(key)[:uvp_td.Ntimes].real.T[abs(dlys)>wedge].reshape(-1)
+        p_real -= np.mean(p_real)
+        p_imag = uvp.get_data(key)[:uvp_td.Ntimes].imag.T[abs(dlys)>wedge].reshape(-1)
+        p_imag -= np.mean(p_imag)
+    
+    #fig, axes = plt.subplots(5,2,figsize=(10, 20))
+    error_type_list_real = odict()
+    error_type_list_imag = odict()
+    error_type_list_real[pre_td] = ptd_real
+    error_type_list_imag[pre_td] = ptd_imag
+    error_type_list_real['original'] = analytic_real_ori
+    error_type_list_imag['original'] = analytic_imag_ori      
+    if 'diagonal' in extra_error_types:
+        error_type_list_real['diagonal'] = analytic_real_diag 
+        error_type_list_imag['diagonal'] = analytic_imag_diag   
+    if 'max' in extra_error_types:
+        error_type_list_real['max'] = analytic_real_max
+        error_type_list_imag['max'] = analytic_imag_max  
+    if 'mean' in extra_error_types:
+        error_type_list_real['mean'] = analytic_real_mean
+        error_type_list_imag['mean'] = analytic_imag_mean  
+    if 'min' in extra_error_types:
+        error_type_list_real['min'] = analytic_real_min
+        error_type_list_imag['min'] = analytic_imag_min  
+    
+    error_types = [pre_td, 'original'] + extra_error_types 
+    colors = [c_td,'green'] + ['m']*len(extra_error_types)      
+    nrow = len(error_types)
+    height = 4*nrow
+
+    fig, axes = plt.subplots(nrow,2,figsize=(10, height))
+
+    if inside_wedge==True:
+        fig.suptitle("Distribution of z-scores (inside the wedge) on blp {} across time axis and across delay axis".format(key[1]),fontsize=12)
+    else:
+        fig.suptitle("Distribution of z-scores (outside the wedge) on blp {} across time axis and across delay axis".format(key[1]),fontsize=12)
+    
+    for j in range(nrow):
+        ax = axes[j,0]
+        d = p_real/error_type_list_real[error_types[j]]
+        mean = np.mean(d)
+        std = np.std(d)
+        if plot_mode == 'normal':
+            density = False
+        if plot_mode == 'density':
+            density = True
+        if show_robust == True:
+            mean_r = astats.biweight_location(d)
+            std_r = np.sqrt(astats.biweight_midvariance(d))
+            mean_plot = mean_r
+            std_plot = std_r
+            n, bins, patches = ax.hist(d, bins=11, range=((mean_r-2.*std_r),(mean_r+2.*std_r)), 
+                histtype='step', lw=3, density=density,
+                label=error_types[j]+'-real\nmean:{:.2f}\nmean(r):{:.2f}\nstd:{:.2f}\nstd(r):{:.2f}'.format(mean,mean_r,std,std_r), color=colors[j])
+        else:
+            mean_plot = mean
+            std_plot = std
+            n, bins, patches = ax.hist(d, bins=11, range=((mean-2.*std),(mean+2.*std)), 
+                histtype='step', lw=3, density=density,
+                label=error_types[j]+'-real\nmean:{:.2f}\nstd:{:.2f}'.format(mean,std), color=colors[j])
+        
+        if plot_mode == 'normal':    
+            bincenters = 0.5*(bins[1:]+bins[:-1])
+            menStd     = np.sqrt(n)
+            ax.bar(bincenters, n, width=0., ecolor='c', yerr=menStd)
+        
+        if plot_mode == 'density':  
+            assert fit_curve in ['Gaussian', 'Exponential'],\
+            "'%s' not a valid axis; use 'Gaussian' or 'Exponential'" % fit_curve
+            if fit_curve == 'Gaussian':
+                y = stats.norm.pdf(bins, mean_plot, std_plot)
+                ax.plot(bins, y, lw=2, ls='--', label='Gaussian', color=colors[j])
+            if fit_curve == 'Exponential':
+                y = stats.laplace.pdf(bins, mean_plot, std_plot/np.sqrt(2.))
+                ax.plot(bins, y, lw=2, ls='--', label='Exponential', color=colors[j])
+        
+        ax.legend(loc='upper left', framealpha=0, fontsize=12)
+
+        ax = axes[j,1]
+        d = p_imag / error_type_list_imag[error_types[j]]
+        mean = np.mean(d)
+        std = np.std(d)
+        if plot_mode == 'normal':
+            density = False
+        if plot_mode == 'density':
+            density = True
+        if show_robust == True:
+            mean_r = astats.biweight_location(d)
+            std_r = np.sqrt(astats.biweight_midvariance(d))
+            mean_plot = mean_r
+            std_plot = std_r
+            n, bins, patches = ax.hist(d, bins=11, range=((mean_r-2.*std_r),(mean_r+2.*std_r)), 
+                histtype='step', lw=3, density=density,
+                label=error_types[j]+'-imag\nmean:{:.2f}\nmean(r):{:.2f}\nstd:{:.2f}\nstd(r):{:.2f}'.format(mean,mean_r,std,std_r), color=colors[j])
+        else:
+            mean_plot = mean
+            std_plot = std
+            n, bins, patches = ax.hist(d, bins=11, range=((mean-2.*std),(mean+2.*std)), 
+                histtype='step', lw=3, density=density,
+                label=error_types[j]+'-imag\nmean:{:.2f}\nstd:{:.2f}'.format(mean,std), color=colors[j])
+        
+        if plot_mode == 'normal':    
+            bincenters = 0.5*(bins[1:]+bins[:-1])
+            menStd     = np.sqrt(n)
+            ax.bar(bincenters, n, width=0., ecolor='c', yerr=menStd)
+        
+        if plot_mode == 'density':  
+            assert fit_curve in ['Gaussian', 'Exponential'],\
+            "'%s' not a valid axis; use 'Gaussian' or 'Exponential'" % fit_curve
+            if fit_curve == 'Gaussian':
+                y = stats.norm.pdf(bins, mean_plot, std_plot)
+                ax.plot(bins, y, lw=2, ls='--', label='Gaussian', color=colors[j])
+            if fit_curve == 'Exponential':
+                y = stats.laplace.pdf(bins, mean_plot, std_plot/np.sqrt(2.))
+                ax.plot(bins, y, lw=2, ls='--', label='Exponential', color=colors[j])
+        
+        ax.legend(loc='upper left', framealpha=0, fontsize=12)
+
+def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_error_types=[], fit_curve='Gaussian', plot_mode='normal', show_robust=True, **kwargs):
+    """
+    Plot the distribution of the z-scores in the same delay bin across blpt axis.
+    
+    Parameters
+    ----------
+    uvp : UVPspec
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+    
+    uvp_td : UVPspec from the data difference
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+
+    dly : float
+        The delay time.
+    
+    wedge : float
+        The position of the wedge in the delay space. 
+
+    spw : int
+        The index for the spectral window.
+
+    pol : str
+        The polarization type.
+
+    blpairs : list
+        The list of the baseline-pairs.
+
+    extra_error_types: str
+        Extra types for error bars other than the default three.
+        Choices:['min','max','diagonal','mean']
+        Default:[] 
+
+    plot_mode : str
+        Plot mode.
+        Choices: ['normal', 'density'].
+        Default: 'normal'.
+    
+    show_robust : bool
+        Whether or not to show the robust mean and std for the histogram.
+        Default: False
+
+    fit_curve : str
+        The types of fuctions to fit the distribution, only called when plot_mode == 'density'.
+        Chocies: ['Gaussian', 'Exponential']
+        Default: 'Gaussian'.
+
+    kwargs : dict, optional
+        Extra kwargs to pass to _all_ ax.plot calls.
+    """
+    dlys = uvp.get_dlys(0)*1e9
+    assert wedge <= np.max(dlys) and wedge >= np.min(dlys), "The 'wedge' is not valid."
+    assert dly <= np.max(dlys) and dly >= np.min(dlys), "The 'dly' is not valid."
+    dly_ind = np.argmin(abs(dlys-dly))
+    assert isinstance(blpairs, list), "blpairs must a list."
+    assert isinstance(blpairs[0], tuple), "blpairs must a list of baseline-pairs."
+    key_list = []
+    for blpair in blpairs:
+        key = (spw, blpair, pol)
+        key_list.append(key)
+
+    if abs(dly)<=abs(wedge):
+        c_td = 'blue'
+        pre_td = r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'
+        ptd_real = np.sqrt(np.abs(np.array([uvp.get_data(key)[:uvp_td.Ntimes,dly_ind].real * uvp_td.get_data(key)[:,dly_ind].real for key in key_list]).reshape(-1)))
+        ptd_imag = np.sqrt(np.abs(np.array([uvp.get_data(key)[:uvp_td.Ntimes,dly_ind].real * uvp_td.get_data(key)[:,dly_ind].imag for key in key_list]).reshape(-1)))
+    else:
+        c_td = 'orange'
+        pre_td = r'$P_{nn}$'
+        ptd_real = np.abs(np.array([uvp_td.get_data(key)[:,dly_ind].real/2. for key in key_list]).reshape(-1))
+        ptd_imag = np.abs(np.array([uvp_td.get_data(key)[:,dly_ind].imag/2. for key in key_list]).reshape(-1))
+            
+    analytic_real_ori = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['original'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+    analytic_imag_ori = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['original'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+    if 'diagonal' in extra_error_types:
+        analytic_real_diag = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['diagonal'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+        analytic_imag_diag = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['diagonal'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+    if 'max' in extra_error_types:
+        analytic_real_max = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['max'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+        analytic_imag_max = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['max'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+    if 'mean' in extra_error_types:
+        analytic_real_mean = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['mean'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+        analytic_imag_mean = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['mean'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+    if 'min' in extra_error_types:
+        analytic_real_min = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['min'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+        analytic_imag_min = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['min'] for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+    
+    p_real = np.array([uvp.get_data(key)[:uvp_td.Ntimes,dly_ind].real for key in key_list]).reshape(-1)
+    p_real -= np.mean(p_real)
+    p_imag = np.array([uvp.get_data(key)[:uvp_td.Ntimes,dly_ind].imag for key in key_list]).reshape(-1)
+    p_imag -= np.mean(p_imag)
+       
+    error_type_list_real = odict()
+    error_type_list_imag = odict()
+    error_type_list_real[pre_td] = ptd_real
+    error_type_list_imag[pre_td] = ptd_imag
+    error_type_list_real['original'] = analytic_real_ori
+    error_type_list_imag['original'] = analytic_imag_ori      
+    if 'diagonal' in extra_error_types:
+        error_type_list_real['diagonal'] = analytic_real_diag 
+        error_type_list_imag['diagonal'] = analytic_imag_diag   
+    if 'max' in extra_error_types:
+        error_type_list_real['max'] = analytic_real_max
+        error_type_list_imag['max'] = analytic_imag_max  
+    if 'mean' in extra_error_types:
+        error_type_list_real['mean'] = analytic_real_mean
+        error_type_list_imag['mean'] = analytic_imag_mean  
+    if 'min' in extra_error_types:
+        error_type_list_real['min'] = analytic_real_min
+        error_type_list_imag['min'] = analytic_imag_min  
+    
+    error_types = [pre_td, 'original'] + extra_error_types 
+    colors = [c_td,'green'] + ['m']*len(extra_error_types)      
+    nrow = len(error_types)
+    height = 4*nrow
+
+    fig, axes = plt.subplots(nrow,2,figsize=(10, height))
+    fig.suptitle("Distribution of z-scores at tau {} ns across blpt axis".format(dlys[dly_ind]),fontsize=12)
+     
+    for j in range(nrow):
+        ax = axes[j,0]
+        d = p_real / error_type_list_real[error_types[j]]
+        mean = np.mean(d)
+        std = np.std(d)
+        if plot_mode == 'normal':
+            density = False
+        if plot_mode == 'density':
+            density = True
+        if show_robust == True:
+            mean_r = astats.biweight_location(d)
+            std_r = np.sqrt(astats.biweight_midvariance(d))
+            mean_plot = mean_r
+            std_plot = std_r
+            n, bins, patches = ax.hist(d, bins=11, range=((mean_r-2.*std_r),(mean_r+2.*std_r)), 
+                histtype='step', lw=3, density=density,
+                label=error_types[j]+'-real\nmean:{:.2f}\nmean(r):{:.2f}\nstd:{:.2f}\nstd(r):{:.2f}'.format(mean,mean_r,std,std_r), color=colors[j])
+        else:
+            mean_plot = mean
+            std_plot = std
+            n, bins, patches = ax.hist(d, bins=11, range=((mean-2.*std),(mean+2.*std)), 
+                histtype='step', lw=3, density=density,
+                label=error_types[j]+'-real\nmean:{:.2f}\nstd:{:.2f}'.format(mean,std), color=colors[j])
+        
+        if plot_mode == 'normal':    
+            bincenters = 0.5*(bins[1:]+bins[:-1])
+            menStd     = np.sqrt(n)
+            ax.bar(bincenters, n, width=0., ecolor='c', yerr=menStd)
+        
+        if plot_mode == 'density':  
+            assert fit_curve in ['Gaussian', 'Exponential'],\
+            "'%s' not a valid axis; use 'Gaussian' or 'Exponential'" % fit_curve
+            if fit_curve == 'Gaussian':
+                y = stats.norm.pdf(bins, mean_plot, std_plot)
+                ax.plot(bins, y, lw=2, ls='--', label='Gaussian', color=colors[j])
+            if fit_curve == 'Exponential':
+                y = stats.laplace.pdf(bins, mean_plot, std_plot/np.sqrt(2.))
+                ax.plot(bins, y, lw=2, ls='--', label='Exponential', color=colors[j])
+        
+        ax.legend(loc='upper left', framealpha=0, fontsize=12)
+
+        ax = axes[j,1]
+        d = p_imag / error_type_list_imag[error_types[j]]
+        mean = np.mean(d)
+        std = np.std(d)
+        if plot_mode == 'normal':
+            density = False
+        if plot_mode == 'density':
+            density = True
+        if show_robust == True:
+            mean_r = astats.biweight_location(d)
+            std_r = np.sqrt(astats.biweight_midvariance(d))
+            mean_plot = mean_r
+            std_plot = std_r
+            n, bins, patches = ax.hist(d, bins=11, range=((mean_r-2.*std_r),(mean_r+2.*std_r)), 
+                histtype='step', lw=3, density=density,
+                label=error_types[j]+'-imag\nmean:{:.2f}\nmean(r):{:.2f}\nstd:{:.2f}\nstd(r):{:.2f}'.format(mean,mean_r,std,std_r), color=colors[j])
+        else:
+            mean_plot = mean
+            std_plot = std
+            n, bins, patches = ax.hist(d, bins=11, range=((mean-2.*std),(mean+2.*std)), 
+                histtype='step', lw=3, density=density,
+                label=error_types[j]+'-imag\nmean:{:.2f}\nstd:{:.2f}'.format(mean,std), color=colors[j])
+        
+        if plot_mode == 'normal':    
+            bincenters = 0.5*(bins[1:]+bins[:-1])
+            menStd     = np.sqrt(n)
+            ax.bar(bincenters, n, width=0., ecolor='c', yerr=menStd)
+        
+        if plot_mode == 'density':  
+            assert fit_curve in ['Gaussian', 'Exponential'],\
+            "'%s' not a valid axis; use 'Gaussian' or 'Exponential'" % fit_curve
+            if fit_curve == 'Gaussian':
+                y = stats.norm.pdf(bins, mean_plot, std_plot)
+                ax.plot(bins, y, lw=2, ls='--', label='Gaussian', color=colors[j])
+            if fit_curve == 'Exponential':
+                y = stats.laplace.pdf(bins, mean_plot, std_plot/np.sqrt(2.))
+                ax.plot(bins, y, lw=2, ls='--', label='Exponential', color=colors[j])
+        
+        ax.legend(loc='upper left', framealpha=0, fontsize=12)
+
+def plot_error_blpt_avg(uvp, uvp_td, spw, pol, blpairs, Tsys, extra_error_types=[], **kwargs):
+    """
+    Plot the average error bars over blpts.
+    
+    Parameters
+    ----------
+    uvp : UVPspec
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+    
+    uvp_td : UVPspec from the data difference
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+
+    spw : int
+        The index for the spectral window.
+
+    pol : str
+        The polarization type.
+
+    blpairs : list
+        The list of baseline-pairs.
+    
+    Tsys : float
+        The system temperature. 
+
+    extra_error_types: str
+        Extra types for error bars other than the default three.
+        Choices:['min','max','diagonal','mean']
+        Default:[] 
+
+    kwargs : dict, optional
+        Extra kwargs to pass to _all_ ax.plot calls.
+    """
+    if 'max' in extra_error_types:
+        analytic_real_max_avg_blpt = []
+        analytic_imag_max_avg_blpt = []
+    if 'mean' in extra_error_types:
+        analytic_real_mean_avg_blpt = []
+        analytic_imag_mean_avg_blpt = []
+    if 'min' in extra_error_types:
+        analytic_real_min_avg_blpt = []
+        analytic_imag_min_avg_blpt = []
+    if 'diagonal' in extra_error_types:
+        analytic_real_diag_avg_blpt = []
+        analytic_imag_diag_avg_blpt = []
+    analytic_real_ori_avg_blpt = []
+    analytic_imag_ori_avg_blpt = []
+    psn_real_avg_blpt = []
+    psn_imag_avg_blpt = []
+    pnn_real_avg_blpt = []
+    pnn_imag_avg_blpt = []
+    noise_avg_blpt = []
+
+    noise = uvp_td.generate_noise_spectra(spw, pol, Tsys, blpairs=blpairs)
+
+    key_list = []
+    for blpair in blpairs:
+        key = (spw, blpair, pol)
+        key_list.append(key)
+    
+    for i in range(uvp.Ndlys):
+        p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].real for key in key_list]).reshape(-1)
+        n = np.array([np.array([uvp.get_var(key,type='real')[time]['original'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+        P, N = grouping.average_spectra_with_error(p,n)
+        analytic_real_ori_avg_blpt.append(N)
+        if 'diagonal' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='real')[time]['diagonal'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_real_diag_avg_blpt.append(N)
+        if 'max' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='real')[time]['max'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_real_max_avg_blpt.append(N)
+        if 'mean' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='real')[time]['mean'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_real_mean_avg_blpt.append(N)
+        if 'min' in extra_error_types:  
+            n = np.array([np.array([uvp.get_var(key,type='real')[time]['min'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_real_min_avg_blpt.append(N)  
+        n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].real for key in key_list]).reshape(-1)
+        P, N = grouping.average_spectra_with_error(p,n)
+        psn_real_avg_blpt.append(N)
+        n = np.array([uvp_td.get_data(key)[:,i].real/2. for key in key_list]).reshape(-1)**2
+        P, N = grouping.average_spectra_with_error(p,n)
+        pnn_real_avg_blpt.append(N)
+        n = np.array([noise[uvp.antnums_to_blpair(blp)][:, i] for blp in blpairs]).reshape(-1)**2
+        P, N = grouping.average_spectra_with_error(p,n)
+        noise_avg_blpt.append(N)
+
+        p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].imag for key in key_list]).reshape(-1)        
+        n = np.array([np.array([uvp.get_var(key,type='imag')[time]['original'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+        P, N = grouping.average_spectra_with_error(p,n)
+        analytic_imag_ori_avg_blpt.append(N)
+        if 'diagonal' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='imag')[time]['diagonal'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_imag_diag_avg_blpt.append(N)
+        if 'max' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='imag')[time]['max'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_imag_max_avg_blpt.append(N)
+        if 'mean' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='imag')[time]['mean'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_imag_mean_avg_blpt.append(N)
+        if 'min' in extra_error_types:  
+            n = np.array([np.array([uvp.get_var(key,type='imag')[time]['min'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_imag_min_avg_blpt.append(N)  
+        n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].imag for key in key_list]).reshape(-1)
+        P, N = grouping.average_spectra_with_error(p,n)
+        psn_imag_avg_blpt.append(N)
+        n = np.array([uvp_td.get_data(key)[:,i].imag/2. for key in key_list]).reshape(-1)**2
+        P, N = grouping.average_spectra_with_error(p,n)
+        pnn_imag_avg_blpt.append(N)
+
+    if 'mean' in extra_error_types:
+        analytic_real_mean_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_mean_avg_blpt).reshape(-1)))
+        analytic_imag_mean_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_mean_avg_blpt).reshape(-1)))
+    if 'diagonal' in extra_error_types:
+        analytic_real_diag_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_diag_avg_blpt).reshape(-1)))
+        analytic_imag_diag_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_diag_avg_blpt).reshape(-1)))
+    if 'min' in extra_error_types:
+        analytic_real_min_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_min_avg_blpt).reshape(-1)))
+        analytic_imag_min_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_min_avg_blpt).reshape(-1)))
+    if 'max' in extra_error_types:
+        analytic_real_max_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_max_avg_blpt).reshape(-1)))
+        analytic_imag_max_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_max_avg_blpt).reshape(-1)))
+    
+    analytic_real_ori_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_ori_avg_blpt).reshape(-1)))
+    analytic_imag_ori_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_ori_avg_blpt).reshape(-1)))
+    psn_real_avg_blpt = np.sqrt(np.abs(np.array(psn_real_avg_blpt).reshape(-1)))
+    psn_imag_avg_blpt = np.sqrt(np.abs(np.array(psn_imag_avg_blpt).reshape(-1)))
+    pnn_real_avg_blpt = np.sqrt(np.abs(np.array(pnn_real_avg_blpt).reshape(-1)))
+    pnn_imag_avg_blpt = np.sqrt(np.abs(np.array(pnn_imag_avg_blpt).reshape(-1)))
+    noise_avg_blpt = np.sqrt(np.abs(np.array(noise_avg_blpt).reshape(-1)))
+
+    boots = []
+    spectra = np.array([uvp.get_data(key)[:uvp_td.Ntimes, :] for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+    for i in range(1000):
+        select = np.random.choice(np.arange(len(spectra)), len(spectra), replace=True)
+        boots.append(np.mean(spectra[select], axis=0))
+    boot_blpt = np.std(np.real(boots), axis=0) + 1j*np.std(np.imag(boots), axis=0)
+
+    fig = plt.figure(figsize=(10, 8))
+    fig.suptitle("Blpt-averaged error bars ", y=0.55, fontsize=12)
+    dlys = uvp.get_dlys(0) * 1e9
+
+    ax0 = fig.add_axes([0.1, 0.0, 0.4, 0.1])
+    ax0.plot(dlys, psn_real_avg_blpt / analytic_real_ori_avg_blpt , c='blue')
+    ax0.plot(dlys, pnn_real_avg_blpt / analytic_real_ori_avg_blpt, c='orange')
+    ax0.plot(dlys, boot_blpt.real/ analytic_real_ori_avg_blpt, c='red')
+    if 'diagonal' in extra_error_types:
+        ax0.plot(dlys, analytic_real_diag_avg_blpt / analytic_real_ori_avg_blpt, c='m')
+    if 'max' in extra_error_types:
+        ax0.plot(dlys, analytic_real_max_avg_blpt / analytic_real_ori_avg_blpt, ls='--', c='m')
+    if 'mean' in extra_error_types:
+        ax0.plot(dlys, analytic_real_mean_avg_blpt/ analytic_real_ori_avg_blpt, ls=':', c='m')
+    if 'min' in extra_error_types:
+        ax0.plot(dlys, analytic_real_min_avg_blpt/ analytic_real_ori_avg_blpt, ls='-.', c='m')
+    ax0.plot(dlys, noise_avg_blpt/analytic_real_ori_avg_blpt, c='k')
+    ax0.axhline(y=1, c='g')
+    ax0.semilogy()
+
+    ax1 = fig.add_axes([0.1, 0.1, 0.4, 0.4])
+    ax1.plot(dlys, psn_real_avg_blpt, 
+             label=r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', c='blue')
+    ax1.plot(dlys, pnn_real_avg_blpt ,label=r'$P_{nn}}$', c='orange')
+    ax1.plot(dlys, analytic_real_ori_avg_blpt, label='analytic-original', c='g')
+    if 'diagonal' in extra_error_types:
+        ax1.plot(dlys, analytic_real_diag_avg_blpt, label='analytic-diagonal', c='m')
+    if 'max' in extra_error_types:    
+        ax1.plot(dlys, analytic_real_max_avg_blpt, ls='--', label='analytic-max', c='m')
+    if 'mean' in extra_error_types:
+        ax1.plot(dlys, analytic_real_mean_avg_blpt, ls=':', label='analytic-mean', c='m')
+    if 'min' in extra_error_types:
+        ax1.plot(dlys, analytic_real_min_avg_blpt, ls='-.', label='analytic-min', c='m')
+    ax1.plot(dlys, boot_blpt.real, label='bootstrap', c='red')
+    ax1.plot(dlys, noise_avg_blpt, label='thermal noise', c='k')
+    ax1.legend(loc='upper left', framealpha=0)
+    ax1.set_xticklabels('')
+    ax1.semilogy()
+
+    ax2 = fig.add_axes([0.5, 0.0, 0.4, 0.1])
+    ax2.plot(dlys, psn_imag_avg_blpt / analytic_imag_ori_avg_blpt , c='blue')
+    ax2.plot(dlys, pnn_imag_avg_blpt / analytic_imag_ori_avg_blpt, c='orange')
+    if 'diagonal' in extra_error_types:
+        ax2.plot(dlys, analytic_imag_diag_avg_blpt / analytic_imag_ori_avg_blpt, c='m')
+    if 'max' in extra_error_types:
+        ax2.plot(dlys, analytic_imag_max_avg_blpt / analytic_imag_ori_avg_blpt, ls='--', c='m')
+    if 'mean' in extra_error_types:
+        ax2.plot(dlys, analytic_imag_mean_avg_blpt/ analytic_imag_ori_avg_blpt, ls=':', c='m')
+    if 'min' in extra_error_types:
+        ax2.plot(dlys, analytic_imag_min_avg_blpt/ analytic_imag_ori_avg_blpt, ls='-.', c='m')
+    ax2.plot(dlys, noise_avg_blpt/analytic_imag_ori_avg_blpt, c='k')
+    ax2.plot(dlys, boot_blpt.imag/ analytic_imag_ori_avg_blpt, c='red')
+    ax2.axhline(y=1, c='g')
+    ax2.semilogy()
+    ax2.yaxis.tick_right()
+
+    ax3 = fig.add_axes([0.5, 0.1, 0.4, 0.4])
+    ax3.plot(dlys, psn_imag_avg_blpt, label=r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', c='blue')
+    ax3.plot(dlys, pnn_imag_avg_blpt , label=r'$P_{nn}}$', c='orange')
+    ax3.plot(dlys, analytic_real_ori_avg_blpt, label='analytic-original', c='g')
+    if 'diagonal' in extra_error_types:
+        ax3.plot(dlys, analytic_imag_diag_avg_blpt, label='analytic-diagonal', c='m')
+    if 'max' in extra_error_types:    
+        ax3.plot(dlys, analytic_imag_max_avg_blpt, ls='--', label='analytic-max', c='m')
+    if 'mean' in extra_error_types:
+        ax3.plot(dlys, analytic_imag_mean_avg_blpt, ls=':', label='analytic-mean', c='m')
+    if 'min' in extra_error_types:
+        ax3.plot(dlys, analytic_imag_min_avg_blpt, ls='-.', label='analytic-min', c='m')
+    ax3.plot(dlys, boot_blpt.imag, label='bootstrap', c='red')
+    ax3.plot(dlys, noise_avg_blpt, label='thermal noise', c='k')
+    ax3.legend(loc='upper left', framealpha=0)
+    ax3.semilogy()
+    ax3.yaxis.tick_right()
+    ax3.set_xticklabels('')
+
+def plot_error_blpt(uvp, uvp_td, spw, pol, blpairs, Tsys, extra_error_types=[], **kwargs):
+    """
+    Plot the error bars over different baseline-pairs and times.
+    
+    Parameters
+    ----------
+    uvp : UVPspec
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+    
+    uvp_td : UVPspec from the data difference
+        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        times, polarizations, and spectral windows.
+
+    spw : int
+        The index for the spectral window.
+
+    pol : str
+        The polarization type.
+
+    blpairs : list
+        The list of baseline-pairs.
+    
+    Tsys : float
+        The system temperature. 
+
+    extra_error_types: str
+        Extra types for error bars other than the default three.
+        Choices:['min','max','diagonal','mean']
+        Default:[] 
+
+    kwargs : dict, optional
+        Extra kwargs to pass to _all_ ax.plot calls.
+    """
+    if 'max' in extra_error_types:
+        analytic_real_max_avg_blpt = []
+        analytic_imag_max_avg_blpt = []
+    if 'mean' in extra_error_types:
+        analytic_real_mean_avg_blpt = []
+        analytic_imag_mean_avg_blpt = []
+    if 'min' in extra_error_types:
+        analytic_real_min_avg_blpt = []
+        analytic_imag_min_avg_blpt = []
+    if 'diagonal' in extra_error_types:
+        analytic_real_diag_avg_blpt = []
+        analytic_imag_diag_avg_blpt = []
+    analytic_real_ori_avg_blpt = []
+    analytic_imag_ori_avg_blpt = []
+    psn_real_avg_blpt = []
+    psn_imag_avg_blpt = []
+    pnn_real_avg_blpt = []
+    pnn_imag_avg_blpt = []
+    noise_avg_blpt = []
+
+    noise = uvp_td.generate_noise_spectra(spw, pol, Tsys, blpairs=blpairs)
+
+    key_list = []
+    for blpair in blpairs:
+        key = (spw, blpair, pol)
+        key_list.append(key)
+    
+    for i in range(uvp.Ndlys):
+        p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].real for key in key_list]).reshape(-1)
+        n = np.array([np.array([uvp.get_var(key,type='real')[time]['original'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+        P, N = grouping.average_spectra_with_error(p,n)
+        analytic_real_ori_avg_blpt.append(N)
+        if 'diagonal' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='real')[time]['diagonal'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_real_diag_avg_blpt.append(N)
+        if 'max' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='real')[time]['max'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_real_max_avg_blpt.append(N)
+        if 'mean' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='real')[time]['mean'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_real_mean_avg_blpt.append(N)
+        if 'min' in extra_error_types:  
+            n = np.array([np.array([uvp.get_var(key,type='real')[time]['min'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_real_min_avg_blpt.append(N)  
+        n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].real for key in key_list]).reshape(-1)
+        P, N = grouping.average_spectra_with_error(p,n)
+        psn_real_avg_blpt.append(N)
+        n = np.array([uvp_td.get_data(key)[:,i].real/2. for key in key_list]).reshape(-1)**2
+        P, N = grouping.average_spectra_with_error(p,n)
+        pnn_real_avg_blpt.append(N)
+        n = np.array([noise[uvp.antnums_to_blpair(blp)][:, i] for blp in blpairs]).reshape(-1)**2
+        P, N = grouping.average_spectra_with_error(p,n)
+        noise_avg_blpt.append(N)
+
+        p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].imag for key in key_list]).reshape(-1)        
+        n = np.array([np.array([uvp.get_var(key,type='imag')[time]['original'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+        P, N = grouping.average_spectra_with_error(p,n)
+        analytic_imag_ori_avg_blpt.append(N)
+        if 'diagonal' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='imag')[time]['diagonal'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_imag_diag_avg_blpt.append(N)
+        if 'max' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='imag')[time]['max'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_imag_max_avg_blpt.append(N)
+        if 'mean' in extra_error_types:
+            n = np.array([np.array([uvp.get_var(key,type='imag')[time]['mean'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_imag_mean_avg_blpt.append(N)
+        if 'min' in extra_error_types:  
+            n = np.array([np.array([uvp.get_var(key,type='imag')[time]['min'] for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            analytic_imag_min_avg_blpt.append(N)  
+        n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].imag for key in key_list]).reshape(-1)
+        P, N = grouping.average_spectra_with_error(p,n)
+        psn_imag_avg_blpt.append(N)
+        n = np.array([uvp_td.get_data(key)[:,i].imag/2. for key in key_list]).reshape(-1)**2
+        P, N = grouping.average_spectra_with_error(p,n)
+        pnn_imag_avg_blpt.append(N)
+
+    if 'mean' in extra_error_types:
+        analytic_real_mean_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_mean_avg_blpt).reshape(-1)))
+        analytic_imag_mean_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_mean_avg_blpt).reshape(-1)))
+    if 'diagonal' in extra_error_types:
+        analytic_real_diag_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_diag_avg_blpt).reshape(-1)))
+        analytic_imag_diag_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_diag_avg_blpt).reshape(-1)))
+    if 'min' in extra_error_types:
+        analytic_real_min_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_min_avg_blpt).reshape(-1)))
+        analytic_imag_min_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_min_avg_blpt).reshape(-1)))
+    if 'max' in extra_error_types:
+        analytic_real_max_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_max_avg_blpt).reshape(-1)))
+        analytic_imag_max_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_max_avg_blpt).reshape(-1)))
+    
+    analytic_real_ori_avg_blpt = np.sqrt(np.abs(np.array(analytic_real_ori_avg_blpt).reshape(-1)))
+    analytic_imag_ori_avg_blpt = np.sqrt(np.abs(np.array(analytic_imag_ori_avg_blpt).reshape(-1)))
+    psn_real_avg_blpt = np.sqrt(np.abs(np.array(psn_real_avg_blpt).reshape(-1)))
+    psn_imag_avg_blpt = np.sqrt(np.abs(np.array(psn_imag_avg_blpt).reshape(-1)))
+    pnn_real_avg_blpt = np.sqrt(np.abs(np.array(pnn_real_avg_blpt).reshape(-1)))
+    pnn_imag_avg_blpt = np.sqrt(np.abs(np.array(pnn_imag_avg_blpt).reshape(-1)))
+    noise_avg_blpt = np.sqrt(np.abs(np.array(noise_avg_blpt).reshape(-1)))
+
+    error_types = [r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', r'$P_{nn}}$', 'thermal noise','original'] + extra_error_types 
+    colors = ['blue','orange', 'k', 'green'] + ['m']*len(extra_error_types) 
+    error_avg_list_real = odict()
+    error_avg_list_imag = odict()
+    error_blpt_list_real = odict()
+    error_blpt_list_imag = odict()
+    error_avg_list_real[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = psn_real_avg_blpt
+    error_avg_list_imag[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = psn_imag_avg_blpt
+    error_blpt_list_real[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = np.sqrt(np.abs(np.array([uvp.get_data(key)[:uvp_td.Ntimes,].real * uvp_td.get_data(key).real for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)))
+    error_blpt_list_imag[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = np.sqrt(np.abs(np.array([uvp.get_data(key)[:uvp_td.Ntimes,].real * uvp_td.get_data(key).imag for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)))
+    
+    error_avg_list_real[r'$P_{nn}}$'] = pnn_real_avg_blpt
+    error_avg_list_imag[r'$P_{nn}}$'] = pnn_imag_avg_blpt
+    error_blpt_list_real[r'$P_{nn}}$'] = np.abs(np.array([uvp_td.get_data(key).real/2. for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys))   
+    error_blpt_list_imag[r'$P_{nn}}$'] = np.abs(np.array([uvp_td.get_data(key).imag/2. for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys))
+    
+    error_avg_list_real['thermal noise'] = noise_avg_blpt
+    error_avg_list_imag['thermal noise'] = noise_avg_blpt
+    error_blpt_list_real['thermal noise'] = np.array([noise[uvp.antnums_to_blpair(blp)] for blp in blpairs]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+    error_blpt_list_imag['thermal noise'] = np.array([noise[uvp.antnums_to_blpair(blp)] for blp in blpairs]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+    error_avg_list_real['original'] = analytic_real_ori_avg_blpt
+    error_avg_list_imag['original'] = analytic_imag_ori_avg_blpt 
+    error_blpt_list_real['original'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['original'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+    error_blpt_list_imag['original'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['original'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+                 
+    if 'diagonal' in extra_error_types:
+        error_avg_list_real['diagonal'] = analytic_real_diag_avg_blpt    
+        error_avg_list_imag['diagonal'] = analytic_imag_diag_avg_blpt
+        error_blpt_list_real['diagonal'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['diagonal'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+        error_blpt_list_imag['diagonal'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['diagonal'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+    if 'min' in extra_error_types:
+        error_avg_list_real['min'] = analytic_real_min_avg_blpt    
+        error_avg_list_imag['min'] = analytic_imag_min_avg_blpt
+        error_blpt_list_real['min'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['min'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+        error_blpt_list_imag['min'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['min'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+    if 'max' in extra_error_types:
+        error_avg_list_real['max'] = analytic_real_max_avg_blpt    
+        error_avg_list_imag['max'] = analytic_imag_max_avg_blpt
+        error_blpt_list_real['max'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['max'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+        error_blpt_list_imag['max'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['max'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+    if 'mean' in extra_error_types:
+        error_avg_list_real['mean'] = analytic_real_mean_avg_blpt    
+        error_avg_list_imag['mean'] = analytic_imag_mean_avg_blpt 
+        error_blpt_list_real['mean'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='real')[time]['mean'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+        error_blpt_list_imag['mean'] = np.sqrt(np.abs(np.array([np.array([uvp.get_var(key,type='imag')[time]['mean'] for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+ 
+    nrow = len(error_types)
+    height = 4*nrow
+    fig, axes = plt.subplots(nrow,2,figsize=(12, height))
+    fig.suptitle("Error bars on different blpts", fontsize=12)
+    dlys = uvp.get_dlys(0) * 1e9
+    for j in range(nrow):
+        ax = axes[j,0]
+        for i in range(len(error_blpt_list_real[error_types[j]])):
+            ax.plot(dlys, error_blpt_list_real[error_types[j]][i], ls='--')
+        ax.plot(dlys, error_avg_list_real[error_types[j]], c=colors[j], label= error_types[j] +'-average')
+        ax.legend(loc='upper left')
+        ax.set_yscale('log')
+
+        ax = axes[j,1]
+        for i in range(len(error_blpt_list_imag[error_types[j]])):
+            ax.plot(dlys, error_blpt_list_imag[error_types[j]][i], ls='--')
+        ax.plot(dlys, error_avg_list_imag[error_types[j]], c=colors[j], label= error_types[j] +'-average')
+        ax.legend(loc='upper left')
+        ax.set_yscale('log')
+
+
+
+
+
+   
+   

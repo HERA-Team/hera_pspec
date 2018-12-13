@@ -962,3 +962,32 @@ def get_bootstrap_run_argparser():
     a.add_argument("--verbose", default=False, action='store_true', help="report feedback to stdout.")
     
     return a
+
+def average_spectra_with_error(p, v):
+    '''
+    p : The input power spectra array.
+
+    v : The variance array which has the same size with p.
+     
+    The average spectra are constructed in this way:
+    (p1,p2, ) = Ap_bar+(n1,n2, ), 
+    where A is a indentity array.
+    If we denote p=(p1,p2,) and n=(n1,n2,).
+    we can define N=<n n^t>, then we obtain p_bar=[A^tN^{-1}A]^{-1} A^t N^{-1}p, 
+    and Sigma=[A^tN^{-1}A]^{-1}.
+    In the calculation, we use the assumption that N is diagonal.
+
+    Return:
+    p_bar : p_bar.
+
+    Sigma : Sigma.
+    '''
+    if len(p) != len(v):
+        raise TypeError("p should be the same array with v.")
+    p = np.array(p)
+    n = np.array(v)
+    N_inv = np.diag(v**(-1.))
+    A = np.ones(len(p)).reshape(-1,1)
+    Sigma = np.linalg.inv(np.matmul(A.T, np.matmul(N_inv, A)))
+    p_bar = np.matmul(Sigma, np.matmul(A.T, np.matmul(N_inv, p)))
+    return p_bar, Sigma  
