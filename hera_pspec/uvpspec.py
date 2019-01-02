@@ -447,7 +447,7 @@ class UVPSpec(object):
     def get_spw_ranges(self, spws=None):
         """
         Get the frequency range and Nfreqs of each spectral window in the object.
-        
+
         Parameters
         ----------
         spws : list of spw integers, optional
@@ -456,7 +456,7 @@ class UVPSpec(object):
         Returns
         -------
         spw_ranges : list of len-4 tuples
-            Tuples: (freq_start, freq_end, Nfreqs, Ndlys) in Hz. Contains 
+            Tuples: (freq_start, freq_end, Nfreqs, Ndlys) in Hz. Contains
             start, stop and Nfreqs and Ndlys [Hz] of each spectral window.
             To turn this into the frequency array of the spectral window use
             `spw_freqs = np.linspace(*spw_range[:3], endpoint=False)`
@@ -680,7 +680,7 @@ class UVPSpec(object):
         """
         Convert a spectral window integer into a list of indices to index
         into the spw_freq_array or freq_array.
-    
+
         Parameters
         ----------
         spw : int or tuple
@@ -715,7 +715,7 @@ class UVPSpec(object):
         """
         Convert a spectral window integer into a list of indices to index
         into the spw_dly_array or dly_array.
-    
+
         Parameters
         ----------
         spw : int or tuple
@@ -753,7 +753,7 @@ class UVPSpec(object):
         """
         Convert a spectral window integer into a list of indices to index
         into the spw_array.
-    
+
         Parameters
         ----------
         spw : int or tuple
@@ -1066,7 +1066,7 @@ class UVPSpec(object):
         # Make sure the group is a UVPSpec object
         assert 'pspec_type' in grp.attrs, "This object is not a UVPSpec object"
         assert grp.attrs['pspec_type'] == 'UVPSpec', "This object is not a UVPSpec object"
-        
+
         # Clear all data in the current object
         self._clear()
 
@@ -1203,7 +1203,7 @@ class UVPSpec(object):
                 for i in np.unique(self.spw_array):
                     group.create_dataset("stats_{}_{}".format(s, i),
                                          data=data[i], dtype=data[i].dtype)
-    
+
         # denote as a uvpspec object
         group.attrs['pspec_type'] = self.__class__.__name__
 
@@ -1226,7 +1226,7 @@ class UVPSpec(object):
         if os.path.exists(filepath) and overwrite is False:
             raise IOError("{} exists, not overwriting...".format(filepath))
         elif os.path.exists(filepath) and overwrite is True:
-            print "{} exists, overwriting...".format(filepath)
+            print("{} exists, overwriting...".format(filepath))
             os.remove(filepath)
 
         # Write file
@@ -1280,15 +1280,15 @@ class UVPSpec(object):
               or not hasattr(self, 'OmegaPP') \
               or not hasattr(self, 'beam_freqs')) \
               and new_beam is None:
-                print "In order to set the cosmology, self.OmegaP, " \
+                print("In order to set the cosmology, self.OmegaP, " \
                       "self.OmegaPP and self.beam_freqs must exist, or you " \
                       "need to pass a PSpecBeamUV object or a path to a beam " \
-                      "file as new_beam."
+                      "file as new_beam.")
                 return
 
         # overwrite beam quantities
         if new_beam is not None:
-            if verbose: print "Updating beam data with {}".format(new_beam)
+            if verbose: print("Updating beam data with {}".format(new_beam))
             if isinstance(new_beam, (str, np.str)):
                 # PSpecBeamUV will adopt a default cosmology upon instantiation,
                 # but this doesn't matterfor what we need from it
@@ -1434,8 +1434,8 @@ class UVPSpec(object):
                                getattr(other, p)[i]).all()
         except AssertionError:
             if verbose:
-                print "UVPSpec parameter '{}' not equivalent between {} and {}" \
-                      "".format(p, self.__repr__(), other.__repr__())
+                print("UVPSpec parameter '{}' not equivalent between {} and {}" \
+                      "".format(p, self.__repr__(), other.__repr__()))
             return False
 
         return True
@@ -1809,14 +1809,14 @@ def combine_uvpspec(uvps, verbose=True):
     u.scalar_array = np.empty((Nspws, Npols), np.float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     u.spw_dly_array, u.spw_freq_array = [], []
-    
+
     # Loop over spectral windows
     for i, spw in enumerate(new_spws):
         # Initialize new arrays
         u.data_array[i] = np.empty((Nblpairts, spw[3], Npols), np.complex128)
         u.integration_array[i] = np.empty((Nblpairts, Npols), np.float64)
         u.wgt_array[i] = np.empty((Nblpairts, spw[2], 2, Npols), np.float64)
-        # spw[2] == Nfreqs (wgt_array is not resampled if Ndlys != Nfreqs, 
+        # spw[2] == Nfreqs (wgt_array is not resampled if Ndlys != Nfreqs,
         # so needs to keep this shape)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if store_cov:
@@ -1828,7 +1828,7 @@ def combine_uvpspec(uvps, verbose=True):
         spw_Ndlys = spw[3]
         spw_freqs = np.linspace(*spw[:3], endpoint=False)
         spw_dlys = np.fft.fftshift(
-                        np.fft.fftfreq(spw_Ndlys, 
+                        np.fft.fftfreq(spw_Ndlys,
                                        np.median(np.diff(spw_freqs)) ) )
         u.spw_freq_array.extend(np.ones(spw_Nfreqs, np.int32) * i)
         u.spw_dly_array.extend(np.ones(spw_Ndlys, np.int32) * i)
@@ -1900,7 +1900,7 @@ def combine_uvpspec(uvps, verbose=True):
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
-                    
+
                     # Labels
                     lbl1 = uvps[l].label_1_array[m, n, q]
                     lbl2 = uvps[l].label_2_array[m, n, q]
@@ -1950,7 +1950,7 @@ def combine_uvpspec(uvps, verbose=True):
                     lbl2 = uvps[l].label_2_array[m, n, q]
                     u.label_1_array[i, j, k] = u_lbls[uvps[l].labels[lbl1]]
                     u.label_2_array[i, j, k] = u_lbls[uvps[l].labels[lbl2]]
-            
+
                     # scalar array, only do once per spw and pol
                     if j == 0:
                         u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
@@ -1971,7 +1971,7 @@ def combine_uvpspec(uvps, verbose=True):
             l = [p in _pols for _pols in uvp_pols].index(True)
             q = uvp_pols[l].index(p)
 
-            # Get mapping of blpair-time indices between old UVPSpec objects 
+            # Get mapping of blpair-time indices between old UVPSpec objects
             # and the new one
             blpts_idxs = uvputils._fast_lookup_blpairts(uvp_blpts[l], new_blpts)
             if k == 0: blpts_idxs0 = blpts_idxs.copy()
@@ -1990,7 +1990,7 @@ def combine_uvpspec(uvps, verbose=True):
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
-                    
+
                     # Labels
                     lbl1 = uvps[l].label_1_array[m, n, q]
                     lbl2 = uvps[l].label_2_array[m, n, q]
@@ -2028,7 +2028,7 @@ def combine_uvpspec(uvps, verbose=True):
 
     # Run check to make sure the new UVPSpec object is valid
     u.check()
-    
+
     return u
 
 
@@ -2043,7 +2043,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     multiple non-overlapping data axes between all uvpspec pairs in uvps,
     an error is raised.
 
-    All uvpspec objects must have certain attributes that agree exactly. These 
+    All uvpspec objects must have certain attributes that agree exactly. These
     include:
         'channel_width', 'telescope_location', 'weighting', 'OmegaP',
         'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 'taper', 'vis_units',
@@ -2064,7 +2064,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     Returns
     -------
     uvps : list
-        List of input UVPSpec objects 
+        List of input UVPSpec objects
 
     concat_ax : str
         Data axis ['spw', 'blpairts', 'pols'] across data can be concatenated
@@ -2097,8 +2097,8 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         uvps = _uvps
 
     # ensure static metadata agree between all objects
-    static_meta = ['channel_width', 'telescope_location', 'weighting', 
-                   'OmegaP', 'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 
+    static_meta = ['channel_width', 'telescope_location', 'weighting',
+                   'OmegaP', 'beam_freqs', 'OmegaPP', 'beamfile', 'norm',
                    'taper', 'vis_units', 'norm_units', 'folded', 'cosmo']
     for m in static_meta:
         for u in uvps[1:]:
@@ -2110,7 +2110,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
                     "Cannot concatenate UVPSpec objs: not all agree on '{}' attribute".format(m)
 
     # get static metadata values
-    static_meta = odict([(k, getattr(uvps[0], k, None)) for k in static_meta 
+    static_meta = odict([(k, getattr(uvps[0], k, None)) for k in static_meta
                                     if getattr(uvps[0], k, None) is not None])
 
     # create unique data axis lists
@@ -2174,7 +2174,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
             concat_ax = ['spw', 'blpairts', 'pol'][matches.index(False)]
             data_concat_axes[(i, j)] = concat_ax
             if verbose:
-                print "uvp {} and {} are concatable across {} axis".format(i, j, concat_ax)
+                print("uvp {} and {} are concatable across {} axis".format(i, j, concat_ax))
 
     # assert all uvp pairs have the same (single) non-overlap (concat) axis
     err_msg = "Non-overlapping data in uvps span multiple data axes:\n{}" \
@@ -2188,4 +2188,3 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
                "scalar_array must be the same for all uvps given concatenation along blpairts."
 
     return uvps, concat_ax, unique_spws, unique_blpts, unique_pols, static_meta
-
