@@ -10,6 +10,7 @@ from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
+import hera_pspec as hp
 
 
 def hash(w):
@@ -1002,3 +1003,72 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         reds, lens, angs = _reds, _lens, _angs
 
     return reds, lens, angs
+
+def pspecdata_time_difference(ds, time_diff):
+    """
+    Given a PSpecData object and a time difference,  
+
+    Parameters
+    ----------
+    ds : PSpecData object
+
+    time_diff : float
+        The time difference in seconds. 
+
+    Returns
+    -------
+    ds_td : PSpecData object
+    """
+    uvd1 = ds.dsets[0]
+    uvd2 = ds.dsets[1]
+    min_time_diff = np.mean(np.unique(uvd1.time_array)[1:]-np.unique(uvd1.time_array)[0:-1])
+    index_diff = int(time_diff / min_time_diff) + 1
+    if index_diff > len(np.unique(uvd1.time_array))-2:
+        index_diff = len(np.unique(uvd1.time_array))-2
+
+    uvd10 = uvd1.select(times=np.unique(uvd1.time_array)[0:-1:index_diff], inplace=False)
+    uvd11 = uvd1.select(times=np.unique(uvd1.time_array)[1::index_diff], inplace=False)
+    data10 = uvd10.data_array
+    data11 = uvd11.data_array
+    data10 -= data11
+    uvd10.data_array = data10
+
+    uvd20 = uvd2.select(times=np.unique(uvd2.time_array)[0:-1:index_diff], inplace=False)
+    uvd21 = uvd2.select(times=np.unique(uvd2.time_array)[1::index_diff], inplace=False)
+    data20 = uvd20.data_array
+    data21 = uvd21.data_array
+    data20 -= data21
+    uvd20.data_array = data20
+
+    ds_td = hp.PSpecData(dsets=[uvd10, uvd20], wgts=ds.wgts, beam=ds.primary_beam)
+    return ds_td
+
+def uvd_time_difference(uvd, time_diff):
+    """
+    Given a UVData object and a time difference,  
+
+    Parameters
+    ----------
+    uvd : UVData object
+
+    time_diff : float
+        The time difference in seconds. 
+
+    Returns
+    -------
+    ds_td : PSpecData object
+    """
+    
+    min_time_diff = np.mean(np.unique(uvd.time_array)[1:]-np.unique(uvd.time_array)[0:-1])
+    index_diff = int(time_diff / min_time_diff) + 1
+    if index_diff > len(np.unique(uvd.time_array))-2:
+        index_diff = len(np.unique(uvd.time_array))-2
+
+    uvd0 = uvd.select(times=np.unique(uvd.time_array)[0:-1:index_diff], inplace=False)
+    uvd1 = uvd.select(times=np.unique(uvd.time_array)[1::index_diff], inplace=False)
+    data0 = uvd0.data_array
+    data1 = uvd1.data_array
+    data0 -= data1
+    uvd0.data_array = data0
+
+    return uvd0

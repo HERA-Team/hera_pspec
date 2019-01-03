@@ -7,7 +7,7 @@ import copy
 import argparse
 from astropy import stats as astats
 import os
-
+import scipy
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
                     seed=None):
@@ -991,3 +991,52 @@ def average_spectra_with_error(p, v):
     Sigma = np.linalg.inv(np.matmul(A.T, np.matmul(N_inv, A)))
     p_bar = np.matmul(Sigma, np.matmul(A.T, np.matmul(N_inv, p)))
     return p_bar, Sigma  
+
+def normality_test(x, test_type, alpha=0.05):
+    '''
+    A synthesis of different normality test methods.
+    
+    Parameters
+    ----------
+    x : array
+        The data array to be tested
+        
+    test_type : str
+        The type of normality tests.
+        Choices:['Shapiro-Wilk','Kolmogorov-Smirnov','Anderson-Darling','DAgostino-Pearson']
+    
+    alpha : float
+        The critical value to reject or accept the null hypothesis. 
+    
+    Returns
+    -------
+    '''
+    if test_type == 'Shapiro-Wilk':
+        stat, p = scipy.stats.shapiro(x)
+        print 'Statistics={:.3f}, p={:.3f}'.format(stat, p)
+        if p > alpha:
+            print 'Sample looks Gaussian (fail to reject H0)'
+        else:
+            print 'Sample does not look Gaussian (reject H0)'
+    if test_type == 'Kolmogorov-Smirnov':
+        stat, p = scipy.stats.kstest(x, cdf='norm')
+        print 'Statistics={:.3f}, p={:.3f}'.format(stat, p)
+        if p > alpha:
+            print 'Sample looks Gaussian (fail to reject H0)'
+        else:
+            print 'Sample does not look Gaussian (reject H0)'
+    if test_type == 'DAgostino-Pearson':
+        stat, p = scipy.stats.normaltest(x)
+        print 'Statistics={:.3f}, p={:.3f}'.format(stat, p)
+        if p > alpha:
+            print 'Sample looks Gaussian (fail to reject H0)'
+        else:
+            print 'Sample does not look Gaussian (reject H0)'
+    if test_type == 'Anderson-Darling':
+        result = scipy.stats.anderson(x)    
+        for i in range(len(result.critical_values)):
+            sl, cv = result.significance_level[i], result.critical_values[i]
+            if result.statistic < result.critical_values[i]:
+                print '{:.3f}: {:.3f}, data looks normal (fail to reject H0)'.format(sl, cv)
+            else:
+                print '{:.3f}: {:.3f}, data does not look normal (reject H0)'.format(sl, cv)
