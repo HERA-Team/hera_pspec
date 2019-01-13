@@ -87,31 +87,65 @@ def build_vanilla_uvpspec(beam=None):
     store_cov = True
     cosmo = conversions.Cosmo_Conversions()
 
-    data_array, wgt_array = {}, {}
-    integration_array, nsample_array, cov_array = {}, {}, {}
+    data_array, data_array_q, wgt_array = {}, {}, {}
+    #integration_array, nsample_array, cov_array = {}, {}, {}
+    integration_array, nsample_array = {}, {}
+    cov_array_real, cov_array_imag, cov_array_q_real, cov_array_q_imag = {},{},{},{}
+    var_array_real, var_array_imag, var_array_q_real, var_array_q_imag = {},{},{},{}
+    
     for s in spw_array:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
+                      * blpair_array[:, None, None] / 1e9
+        data_array_q[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
         wgt_array[s] = np.ones((Nblpairts, Nfreqs, 2, Npols), dtype=np.float)
         # NB: The wgt_array has dimensions Nfreqs rather than Ndlys; it has the 
         # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
-        cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+        #cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+        #                                     for m in range(Nblpairts)] 
+        #                                     for n in range(Npols)]), 0, -1)
+        cov_array_real[s] =np.moveaxis(np.array([[odict([('original', np.identity(Ndlys, dtype=np.complex64))])\
                                              for m in range(Nblpairts)] 
                                              for n in range(Npols)]), 0, -1)
+        cov_array_imag[s] =np.moveaxis(np.array([[odict([('original', np.identity(Ndlys, dtype=np.complex64))])\
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
+        cov_array_q_real[s] =np.moveaxis(np.array([[odict([('original', np.identity(Ndlys, dtype=np.complex64))])\
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
+        cov_array_q_imag[s] =np.moveaxis(np.array([[odict([('original', np.identity(Ndlys, dtype=np.complex64))])\
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
+        var_array_real[s] =np.moveaxis(np.array([[odict([('original', np.ones(Ndlys, dtype=np.complex64))])\
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
+        var_array_imag[s] =np.moveaxis(np.array([[odict([('original', np.ones(Ndlys, dtype=np.complex64))])\
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
+        var_array_q_real[s] =np.moveaxis(np.array([[odict([('original', np.ones(Ndlys, dtype=np.complex64))])\
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
+        var_array_q_imag[s] =np.moveaxis(np.array([[odict([('original', np.ones(Ndlys, dtype=np.complex64))])\
+                                             for m in range(Nblpairts)] 
+                                             for n in range(Npols)]), 0, -1)
+
+       
 
     params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws', 
               'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys', 'Nbls', 
               'blpair_array', 'time_1_array', 'time_2_array', 
               'lst_1_array', 'lst_2_array', 'spw_array',
-              'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
+              'dly_array', 'freq_array', 'pol_array', 'data_array', 'data_array_q', 'wgt_array',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
               'vis_units', 'channel_width', 'weighting', 'history', 'taper', 
               'norm', 'git_hash', 'nsample_array', 'time_avg_array', 
               'lst_avg_array', 'cosmo', 'scalar_array', 'labels', 'norm_units', 
               'labels', 'label_1_array', 'label_2_array', 'store_cov', 
-              'cov_array', 'spw_dly_array', 'spw_freq_array']
+              'cov_array_real', 'cov_array_imag', 'cov_array_q_real', 
+              'cov_array_q_imag', 'var_array_q_real', 'var_array_q_imag', 'var_array_real', 
+              'var_array_imag','spw_dly_array', 'spw_freq_array']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']

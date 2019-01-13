@@ -1604,6 +1604,9 @@ class UVPSpec(object):
             group.create_dataset("data_spw{}".format(i),
                                  data=self.data_array[i],
                                  dtype=np.complex128)
+            group.create_dataset("data_q_spw{}".format(i),
+                                 data=self.data_array_q[i],
+                                 dtype=np.complex128)
             group.create_dataset("wgt_spw{}".format(i),
                                  data=self.wgt_array[i],
                                  dtype=np.float64)
@@ -1619,15 +1622,9 @@ class UVPSpec(object):
                                      data=self.cov_array[i],
                                      dtype=np.complex128)
             '''
-            if hasattr(self, "cov_array_real"):
-                group.create_dataset("cov_spw{}".format(i),
-                                     data=self.cov_array_real[i],
-                                     dtype=np.object)
-
-            if hasattr(self, "var_array_real"):
-                group.create_dataset("var_spw{}".format(i),
-                                     data=self.var_array_real[i],
-                                     dtype=np.object)
+            ##cov_array is replaced by a series of attributes, e.g. cov_array_real, in the new version,
+            ##and data in these new attributes are stored as odict(), which is unable to convert into
+            ##hdf5, so we just ignore all the covariance. 
 
         # Store any statistics arrays
         if hasattr(self, "stats_array"):
@@ -1863,8 +1860,14 @@ class UVPSpec(object):
                         assert np.isclose(getattr(self, p), getattr(other, p)).all()
                 elif p in self._dicts:
                     for i in getattr(self, p):
-                        assert np.isclose(getattr(self, p)[i], \
-                               getattr(other, p)[i]).all()
+                        if p not in ["cov_array_real", "cov_array_imag", "cov_array_q_real",\
+                        "cov_array_q_imag", "var_array_q_real", "var_array_q_imag",\
+                        "var_array_real","var_array_imag"]:
+                            assert np.isclose(getattr(self, p)[i],\
+                                getattr(other, p)[i]).all()
+                        #The information on the covariance is stored in dict(), so that np.isclose()
+                        #is not valid. 
+                            
         except AssertionError:
             if verbose:
                 print "UVPSpec parameter '{}' not equivalent between {} and {}" \

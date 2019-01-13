@@ -782,7 +782,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         raise ValueError("Did not understand component {}".format(component))
 
     # get data with shape (Nblpairs, Ndlys)
-    data = cast([get_data((spw, blp, pol)).squeeze() for blp in uvp.get_blpairs()])
+    data = cast([uvp.get_data((spw, blp, pol)).squeeze() for blp in uvp.get_blpairs()])
 
     # take log10
     if log10:

@@ -1461,8 +1461,8 @@ class PSpecData(object):
 
             cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
             cov_q_imag = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
-            var_q_real = cov_q_real.diagonal()
-            var_q_imag = cov_q_imag.diagonal()
+            var_q_real = np.diagonal(cov_q_real)
+            var_q_imag = np.diagonal(cov_q_imag)
 
             cov_p_real = ( np.einsum('ab,cd,bd->ac', M, M, q_q) +
                 np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) +
@@ -1472,8 +1472,8 @@ class PSpecData(object):
                 np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) -
                 np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
                 np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-            var_p_real = cov_p_real.diagonal()
-            var_p_imag = cov_p_imag.diagonal()
+            var_p_real = np.diagonal(cov_p_real)
+            var_p_imag = np.diagonal(cov_p_imag)
 
             #assert np.all(var_p_real.real>0) and np.all(var_p_imag.real>0) and np.all(var_q_real.real>0) and np.all(var_q_imag.real>0),\
             #"The variance must be positive."
@@ -2253,10 +2253,10 @@ class PSpecData(object):
         cov_array_imag = odict()
         cov_array_q_real = odict()
         cov_array_q_imag = odict()
-        var_array_q_real = odict()
-        var_array_q_imag = odict()
         var_array_real = odict()
         var_array_imag = odict()
+        var_array_q_real = odict()
+        var_array_q_imag = odict()
         time1 = []
         time2 = []
         lst1 = []
@@ -2293,10 +2293,10 @@ class PSpecData(object):
             spw_cov_imag = []
             spw_cov_q_real = []
             spw_cov_q_imag = []
-            spw_var_q_real = []
-            spw_var_q_imag = []
             spw_var_real = []
             spw_var_imag = []
+            spw_var_q_real = []
+            spw_var_q_imag = []
 
             d = self.delays() * 1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
@@ -2328,10 +2328,10 @@ class PSpecData(object):
                 pol_cov_imag = []
                 pol_cov_q_real = []
                 pol_cov_q_imag = []
-                pol_var_q_real = []
-                pol_var_q_imag = []
                 pol_var_real = []
                 pol_var_imag = []
+                pol_var_q_real = []
+                pol_var_q_imag = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
@@ -2435,11 +2435,15 @@ class PSpecData(object):
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
 
-                        cov_q_real, cov_q_imag, cov_real_, cov_imag_, var_q_real, var_q_imag, var_real_, var_imag_ = self.get_analytic_covariance(key1, key2, Mv, model='time_average')
+                        cov_q_real_, cov_q_imag_, cov_real_, cov_imag_, var_q_real_, var_q_imag_, var_real_, var_imag_ = self.get_analytic_covariance(key1, key2, Mv, model='time_average')
                         cov_real = odict()
                         cov_imag = odict()
                         var_real = odict()
                         var_imag = odict()
+                        cov_q_real = odict()
+                        cov_q_imag = odict()
+                        var_q_real = odict()
+                        var_q_imag = odict()
 
                         if self.primary_beam != None:
                                 for type_key in cov_real_.keys():
@@ -2454,7 +2458,16 @@ class PSpecData(object):
                                 for type_key in var_imag_.keys():
                                     var_imag[type_key] = var_imag_[type_key]*\
                                     (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
-
+                        
+                        for type_key in cov_q_real_.keys():
+                            cov_q_real[type_key] = cov_q_real_[type_key]*1.
+                        for type_key in cov_q_imag_.keys():
+                            cov_q_imag[type_key] = cov_q_imag_[type_key]*1.
+                        for type_key in var_q_real_.keys():
+                            var_q_real[type_key] = var_q_real_[type_key]*1.
+                        for type_key in var_q_imag_.keys():
+                            var_q_imag[type_key] = var_q_imag_[type_key]*1.
+                           
                         cov_q_real = np.array([cov_q_real for tind in range(self.Ntimes)])
                         cov_q_imag = np.array([cov_q_imag for tind in range(self.Ntimes)])
                         cov_real = np.array([cov_real for tind in range(self.Ntimes)])
@@ -2471,7 +2484,7 @@ class PSpecData(object):
                         pol_var_q_real.extend(var_q_real)
                         pol_var_q_imag.extend(var_q_imag)
                         pol_var_real.extend(var_real)
-                        pol_var_imag.extend(var_imag)   
+                        pol_var_imag.extend(var_imag)  
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2550,10 +2563,10 @@ class PSpecData(object):
             spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
             spw_cov_q_real = np.moveaxis(np.array(spw_cov_q_real), 0, -1)
             spw_cov_q_imag = np.moveaxis(np.array(spw_cov_q_imag), 0, -1)
-            spw_var_q_real = np.moveaxis(np.array(spw_var_q_real), 0, -1)
-            spw_var_q_imag = np.moveaxis(np.array(spw_var_q_imag), 0, -1)
             spw_var_real = np.moveaxis(np.array(spw_var_real), 0, -1)
             spw_var_imag = np.moveaxis(np.array(spw_var_imag), 0, -1)
+            spw_var_q_real = np.moveaxis(np.array(spw_var_q_real), 0, -1)
+            spw_var_q_imag = np.moveaxis(np.array(spw_var_q_imag), 0, -1)
 
             data_array[i] = spw_data
             data_array_q[i] = spw_data_q

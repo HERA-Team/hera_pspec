@@ -227,7 +227,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
     antpos2, ants2 = uvd2.get_ENU_antpos(pick_data_ants=False)
     antpos2 = dict(zip(ants2, antpos2))
     antpos = dict(antpos1.items() + antpos2.items())
-
+    
     # assert antenna positions match
     for a in set(antpos1).union(set(antpos2)):
         if a in antpos1 and a in antpos2:
@@ -271,11 +271,11 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
 
         xants1 = sorted(xants1)
         xants2 = sorted(xants2)
-
+    
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
                                 bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
-
+    
     # construct baseline pairs
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
@@ -957,15 +957,16 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
             uvd = _uvd
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
+
         antpos_dict = dict(zip(ants, antpos))
 
     # use antenna position dictionary
     elif isinstance(uvd, (dict, odict)):
         antpos_dict = uvd
-
+    
     # get redundant baselines
     reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
-
+    
     # get vectors, len and ang for each baseline group
     vecs = np.array([antpos_dict[r[0][0]] - antpos_dict[r[0][1]] for r in reds])
     lens, angs = get_bl_lens_angs(vecs, bl_error_tol=bl_error_tol)
