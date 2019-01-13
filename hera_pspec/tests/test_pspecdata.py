@@ -1426,7 +1426,7 @@ def test_real_covariance():
     spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
     antpos = dict(zip(ants, antpos))
-    red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0, low_hi=True)
+    red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
     bls1, bls2, blpairs = utils.construct_blpairs(red_bls[2], exclude_auto_bls=True, exclude_permutations=True)
 
     uvp = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
