@@ -8,6 +8,7 @@ from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils, grouping
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 import glob
+from hera_cal import redcal
 
 # Data files to use in tests
 dfiles = [
@@ -349,7 +350,79 @@ class Test_Plot(unittest.TestCase):
         # test exceptions
         nt.assert_raises(ValueError, plot.delay_wedge, uvp, 0, 'xx', component='foo')
         plt.close()
+
+    def test_plot_uvdata_hist(self):
+
+        dfile = os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA')
+        uvd = UVData()
+        uvd.read(dfile)
+
+        cosmo = conversions.Cosmo_Conversions()
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+
+        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
+        uvd.data_array *= Jy_to_mK[None, None, :, None]
+
+        plot.plot_uvdata_vis_hist(uvd, 'frequencies', 0, plot_mode='normal', show_robust=True)
+        plot.plot_uvdata_vis_hist(uvd, 'frequencies', 0, fit_curve='Exponential', plot_mode='density', show_robust=True)
+        plot.plot_uvdata_vis_hist(uvd, 'baseline-times', 0, plot_mode='normal', show_robust=True)
+        plot.plot_uvdata_vis_hist(uvd, 'baseline-times', 0, fit_curve='Gaussian', plot_mode='density', show_robust=True)
         
+        plt.close()
+
+    def test_plot_covariance(self):
+
+        dfile = os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA')
+        uvd = UVData()
+        uvd.read(dfile)
+
+        cosmo = conversions.Cosmo_Conversions()
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+
+        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
+        uvd.data_array *= Jy_to_mK[None, None, :, None]
+
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes/2):1], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes/2):(uvd.Ntimes/2 + uvd.Ntimes/2):1], inplace=False)
+
+        uvd_td = utils.uvd_time_difference(uvd, 0.0002)
+
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+        ds.rephase_to_dset(0)
+
+        ds_td = utils.pspecdata_time_difference(ds, 0.0002)
+
+        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos = dict(zip(ants, antpos))
+        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
+        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
+
+        uvp = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
+         norm='I', taper='blackman-harris', store_cov = True, verbose=False)
+
+        uvp_td = ds_td.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
+         norm='I', taper='blackman-harris', store_cov = True, verbose=False)
+
+        key = (0,blpairs[0],"xx")
+
+        plot.plot_error(uvp, uvp_td, key, 0, 300, normalized=True, extra_error_types=['min','max','diagonal','mean'])
+        plot.plot_error(uvp, uvp_td, key, 0, 300, normalized=False, extra_error_types=['min','max','diagonal','mean'])
+        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, normalized=False, inside_wedge=True, extra_error_types=['min','max','diagonal','mean'], fit_curve='Exponential', plot_mode='density', show_robust=True)
+        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, normalized=True, inside_wedge=False, extra_error_types=['min','max','diagonal','mean'], plot_mode='normal', show_robust=True)
+        plot.plot_zscore_blpt_hist(uvp, uvp_td, 100, 1000, 0, "xx", blpairs, normalized=False, 
+                              extra_error_types=['min','max','diagonal','mean'],
+                              plot_mode='density', show_robust=True,)
+        plot.plot_error_blpt_avg(uvp, uvp_td, 0, "xx", blpairs, 300, normalized=True, 
+                    extra_error_types=['min','max','diagonal','mean'])
+        plot.plot_error_blpt(uvp, uvp_td, 0, "xx", blpairs, 300, 
+                        normalized=True, extra_error_types=['min','max','diagonal','mean'])
+        
+        plot.imshow_cov(uvp, key, 0, error_type='original', normalized=True)
+        plot.imshow_cov(uvp, key, 0, error_type='diagonal', normalized=False)
+        plt.close()
 
 if __name__ == "__main__":
     unittest.main()

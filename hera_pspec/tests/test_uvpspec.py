@@ -4,12 +4,13 @@ import numpy as np
 import os
 import sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils
 from hera_pspec import uvpspec_utils as uvputils
 import copy
 import h5py
 from collections import OrderedDict as odict
 from pyuvdata import UVData
+from hera_cal import redcal
 
 
 class Test_UVPSpec(unittest.TestCase):
@@ -87,6 +88,57 @@ class Test_UVPSpec(unittest.TestCase):
         # test omit_flags
         self.uvp.integration_array[0][self.uvp.blpair_to_indices(((1, 2), (1, 2)))[:2]] = 0.0
         nt.assert_equal(self.uvp.get_integrations((0, ((1, 2), (1, 2)), 'xx'), omit_flags=True).shape, (8,))
+
+    def test_get_covariance(self):
+        dfile = os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA')
+        uvd = UVData()
+        uvd.read(dfile)
+
+        cosmo = conversions.Cosmo_Conversions()
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+
+        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
+        uvd.data_array *= Jy_to_mK[None, None, :, None]
+
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes/2):1], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes/2):(uvd.Ntimes/2 + uvd.Ntimes/2):1], inplace=False)
+
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+        ds.rephase_to_dset(0)
+
+        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos = dict(zip(ants, antpos))
+        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
+        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
+
+        uvp = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
+         norm='I', taper='blackman-harris', store_cov = True, verbose=False)
+
+        key = (0,blpairs[0],"xx")
+
+        data_q = uvp.get_data_q(key)
+        nt.assert_equal(data_q.shape, (5, 50))
+
+        cov_real = uvp.get_cov(key, type='real')
+        nt.assert_equal(cov_real[0]['original'].shape, (50, 50))
+        cov_imag = uvp.get_cov(key, type='imag')
+        nt.assert_equal(cov_imag[0]['original'].shape, (50, 50))
+        cov_q_real = uvp.get_cov_q(key, type='real')
+        nt.assert_equal(cov_q_real[0]['original'].shape, (50, 50))
+        cov_q_imag = uvp.get_cov_q(key, type='imag')
+        nt.assert_equal(cov_q_imag[0]['original'].shape, (50, 50))
+
+        var_real = uvp.get_var(key, type='real')
+        nt.assert_equal(var_real[0]['original'].shape, (50,))
+        var_imag = uvp.get_var(key, type='imag')
+        nt.assert_equal(var_imag[0]['original'].shape, (50,))
+        var_q_real = uvp.get_var_q(key, type='real')
+        nt.assert_equal(var_q_real[0]['original'].shape, (50,))
+        var_q_imag = uvp.get_var_q(key, type='imag')
+        nt.assert_equal(var_q_imag[0]['original'].shape, (50,))
+
 
     def test_stats_array(self):
         # test get_data and set_data
