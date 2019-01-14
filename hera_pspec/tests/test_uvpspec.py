@@ -139,6 +139,26 @@ class Test_UVPSpec(unittest.TestCase):
         var_q_imag = uvp.get_var_q(key, type='imag')
         nt.assert_equal(var_q_imag[0]['original'].shape, (50,))
 
+        uvp.fold_spectra()
+
+        cov_real = uvp.get_cov(key, type='real')
+        nt.assert_equal(cov_real[0]['original'].shape, (24, 24))
+        cov_imag = uvp.get_cov(key, type='imag')
+        nt.assert_equal(cov_imag[0]['original'].shape, (24, 24))
+        cov_q_real = uvp.get_cov_q(key, type='real')
+        nt.assert_equal(cov_q_real[0]['original'].shape, (24, 24))
+        cov_q_imag = uvp.get_cov_q(key, type='imag')
+        nt.assert_equal(cov_q_imag[0]['original'].shape, (24, 24))
+
+        var_real = uvp.get_var(key, type='real')
+        nt.assert_equal(var_real[0]['original'].shape, (24,))
+        var_imag = uvp.get_var(key, type='imag')
+        nt.assert_equal(var_imag[0]['original'].shape, (24,))
+        var_q_real = uvp.get_var_q(key, type='real')
+        nt.assert_equal(var_q_real[0]['original'].shape, (24,))
+        var_q_imag = uvp.get_var_q(key, type='imag')
+        nt.assert_equal(var_q_imag[0]['original'].shape, (24,))
+
 
     def test_stats_array(self):
         # test get_data and set_data
