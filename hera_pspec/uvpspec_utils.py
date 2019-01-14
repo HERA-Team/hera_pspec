@@ -152,7 +152,7 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
         has_times = [np.isin(common_times, uvp.time_avg_array)
                      for uvp in uvp_list]
         common_times = common_times[np.all(has_times, axis=0)]
-        if verbose: print "common_times:", common_times
+        if verbose: print("common_times:", common_times)
 
     # Get lsts that are common to all UVPSpec objects in the list
     if lsts:
@@ -160,7 +160,7 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
         has_lsts = [np.isin(common_lsts, uvp.lst_avg_array)
                      for uvp in uvp_list]
         common_lsts = common_lsts[np.all(has_lsts, axis=0)]
-        if verbose: print "common_lsts:", common_lsts
+        if verbose: print("common_lsts:", common_lsts)
 
     # Get baseline-pairs that are common to all
     if blpairs:
@@ -168,14 +168,14 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
         has_blpairs = [np.isin(common_blpairs, uvp.blpair_array)
                        for uvp in uvp_list]
         common_blpairs = common_blpairs[np.all(has_blpairs, axis=0)]
-        if verbose: print "common_blpairs:", common_blpairs
+        if verbose: print("common_blpairs:", common_blpairs)
 
     # Get polarizations that are common to all
     if pols:
         common_pols = np.unique(uvp_list[0].pol_array)
         has_pols = [np.isin(common_pols, uvp.pol_array) for uvp in uvp_list]
         common_pols = common_pols[np.all(has_pols, axis=0)]
-        if verbose: print "common_pols:", common_pols
+        if verbose: print("common_pols:", common_pols)
 
     # Get common spectral windows (the entire window must match)
     # Each row of common_spws is a list of that spw's index in each UVPSpec
@@ -183,7 +183,7 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, pols=True,
         common_spws = uvp_list[0].get_spw_ranges()
         has_spws = [map(lambda x: x in uvp.get_spw_ranges(), common_spws) for uvp in uvp_list]
         common_spws = [common_spws[i] for i, f in enumerate(np.all(has_spws, axis=0)) if f]
-        if verbose: print "common_spws:", common_spws
+        if verbose: print("common_spws:", common_spws)
 
     # Check that this won't be an empty selection
     if spws and len(common_spws) == 0:
@@ -316,10 +316,10 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         spw_select = uvp.spw_indices(spws)
         uvp.spw_freq_array = uvp.spw_freq_array[spw_freq_select]
         uvp.spw_dly_array = uvp.spw_dly_array[spw_dly_select]
-        
+
         # Ordered list of old spw indices for the new spws
         spw_mapping = uvp.spw_array[spw_select]
-        
+
         # Update spw-related arrays (NB data arrays haven't been reordered yet!)
         uvp.spw_array = uvp.spw_array[spw_select]
         uvp.freq_array = uvp.freq_array[spw_freq_select]
@@ -330,7 +330,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.Nspwfreqs = len(uvp.spw_freq_array)
         if hasattr(uvp, 'scalar_array'):
             uvp.scalar_array = uvp.scalar_array[spw_select, :]
-        
+
         # Down-convert spw indices such that spw_array == np.arange(Nspws)
         for i in range(uvp.Nspws):
             if i in uvp.spw_array:
@@ -463,7 +463,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
         # get stats_array keys if h5file
         if h5file is not None:
-            statnames = np.unique([f[f.find("_")+1: f.rfind("_")] for f in h5file.keys() 
+            statnames = np.unique([f[f.find("_")+1: f.rfind("_")] for f in h5file.keys()
                                     if f.startswith("stats")])
         else:
             if hasattr(uvp, "stats_array"):

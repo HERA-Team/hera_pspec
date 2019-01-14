@@ -27,7 +27,7 @@ class Test_Cosmo(unittest.TestCase):
         # test parameters get fed to class
         C = conversions.Cosmo_Conversions(H0=25.5)
         self.assertAlmostEqual(C.H0, 25.5)
-        print C
+        print(C)
 
         #test equality
         self.assertEqual(C, C)

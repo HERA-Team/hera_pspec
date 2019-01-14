@@ -22,11 +22,11 @@ def hash(w):
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
-    Computes an empirical covariance matrix from data vectors. If d1 is of size 
-    (M,N), then the output is M x M. In other words, the second axis is the 
+    Computes an empirical covariance matrix from data vectors. If d1 is of size
+    (M,N), then the output is M x M. In other words, the second axis is the
     axis that is averaged over in forming the covariance (e.g. a time axis).
 
-    If d2 is provided and d1 != d2, then this computes the cross-variance, 
+    If d2 is provided and d1 != d2, then this computes the cross-variance,
     i.e. <d1 d2^dagger> - <d1> <d2>^dagger
 
     The fact that the second copy is complex conjugated is the default behaviour,
@@ -58,7 +58,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     if d2 is None: d2,w2 = d1,w1
     if not np.isreal(w1).all(): raise TypeError("Weight matrices must be real")
     if not np.isreal(w2).all(): raise TypeError("Weight matrices must be real")
-    if np.less(w1, 0.).any() or np.less(w2, 0.).any(): 
+    if np.less(w1, 0.).any() or np.less(w2, 0.).any():
         raise ValueError("Weight matrices must be positive")
     d1sum,d1wgt = (w1*d1).sum(axis=1), w1.sum(axis=1)
     d2sum,d2wgt = (w2*d2).sum(axis=1), w2.sum(axis=1)
@@ -75,7 +75,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     if conj_2:
         z2 = z2.conj()
         x2 = x2.conj()
-    
+
     C = np.dot(z1, z2.T)
     W = np.dot(w1, w2.T)
     C /= np.where(W > 0, W, 1)
@@ -85,7 +85,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
 
 def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
     """
-    Construct a list of baseline-pairs from a baseline-group. This function can be used to easily convert a 
+    Construct a list of baseline-pairs from a baseline-group. This function can be used to easily convert a
     single list of baselines into the input needed by PSpecData.pspec(bls1, bls2, ...).
 
     Parameters
@@ -98,7 +98,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
         For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, but makes this example clearer)
         and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
         If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
-        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.   
+        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.
 
     group : boolean, optional
         if True, group each consecutive Nblps_per_group blpairs into sub-lists
@@ -157,7 +157,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
     return bls1, bls2, blpairs
 
 
-def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=False, 
+def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=False,
                      exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
     """
     Use hera_cal.redcal to get matching, redundant baseline-pair groups from uvd1 and uvd2
@@ -171,13 +171,13 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
 
     bl_tol : float, optional
         Baseline-vector redundancy tolerance in meters
-    
+
     filter_blpairs : bool, optional
         if True, calculate xants and filters-out baseline pairs based on xant lists
         and actual baselines in the data.
 
     xant_flag_thresh : float, optional
-        Fraction of 2D visibility (per-waterfall) needed to be flagged to 
+        Fraction of 2D visibility (per-waterfall) needed to be flagged to
         consider the entire visibility flagged.
 
     exclude_auto_bls: boolean, optional
@@ -185,12 +185,12 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
 
     exclude_permutations : boolean, optional
         if True, exclude permutations and only form combinations of the bls list.
-        For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, 
-        but makes this example clearer) and exclude_permutations = False, 
-        then blpairs = [11, 12, 13, 21, 22, 23, 31, 32, 33]. If however 
-        exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33]. 
-        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 are excluded.   
-        
+        For example, if bls = [1, 2, 3] (note this isn't the proper form of bls,
+        but makes this example clearer) and exclude_permutations = False,
+        then blpairs = [11, 12, 13, 21, 22, 23, 31, 32, 33]. If however
+        exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
+        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 are excluded.
+
     Nblps_per_group : integer
         Number of baseline-pairs to put into each sub-group. No grouping if None.
         Default: None
@@ -278,7 +278,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
     # construct baseline pairs
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
-        (bls1, bls2, 
+        (bls1, bls2,
          blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, group=False,
                                     exclude_permutations=exclude_permutations)
         if len(bls1) < 1:
@@ -315,9 +315,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
 
 def get_delays(freqs, n_dlys=None):
     """
-    Return an array of delays, tau, corresponding to the bins of the delay 
+    Return an array of delays, tau, corresponding to the bins of the delay
     power spectrum given by frequency array.
-    
+
     Parameters
     ----------
     freqs : ndarray of frequencies in Hz
@@ -345,35 +345,35 @@ def get_delays(freqs, n_dlys=None):
 
 def spw_range_from_freqs(data, freq_range, bounds_error=True):
     """
-    Return a tuple defining the spectral window that corresponds to the 
+    Return a tuple defining the spectral window that corresponds to the
     frequency range specified in freq_range.
-    
-    (Spectral windows are specified as tuples containing the first and last 
+
+    (Spectral windows are specified as tuples containing the first and last
     index of a frequency range in data.freq_array.)
-    
+
     Parameters
     ----------
     data : UVData or UVPSpec object
         Object containing data with a frequency dimension.
-        
+
     freq_range : tuple or list of tuples
-        Tuples containing the lower and upper frequency bounds for each 
-        spectral window. The range is inclusive of the lower frequency bound, 
-        i.e. it includes all channels in freq_range[0] <= freq < freq_range[1]. 
+        Tuples containing the lower and upper frequency bounds for each
+        spectral window. The range is inclusive of the lower frequency bound,
+        i.e. it includes all channels in freq_range[0] <= freq < freq_range[1].
         Frequencies are in Hz.
-    
+
     bounds_error : bool, optional
-        Whether to raise an error if a specified lower/upper frequency is 
+        Whether to raise an error if a specified lower/upper frequency is
         outside the frequency range available in 'data'. Default: True.
 
     Returns
     -------
     spw_range : tuple or list of tuples
-        Indices of the channels at the lower and upper bounds of the specified 
-        spectral window(s). 
+        Indices of the channels at the lower and upper bounds of the specified
+        spectral window(s).
 
-        Note: If the requested spectral window is outside the available 
-        frequency range, and bounds_error is False, '(None, None)' is returned. 
+        Note: If the requested spectral window is outside the available
+        frequency range, and bounds_error is False, '(None, None)' is returned.
     """
     # Get frequency array from input object
     try:
@@ -385,25 +385,25 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
                              % str(freqs.shape))
     except:
         raise AttributeError("Object 'data' does not have a freq_array attribute.")
-    
+
     # Check for a single tuple input
     is_tuple = False
     if isinstance(freq_range, tuple):
         is_tuple = True
         freq_range = [freq_range,]
-    
+
     # Make sure freq_range is now a list (of tuples)
     if not isinstance(freq_range, list):
         raise TypeError("freq_range must be a tuple or list of tuples.")
-    
+
     # Loop over tuples and find spectral window indices
     spw_range = []
     for frange in freq_range:
         fmin, fmax = frange
-        if fmin > fmax: 
+        if fmin > fmax:
             raise ValueError("Upper bound of spectral window is less than "
                              "the lower bound.")
-        
+
         # Check that this doesn't go beyond the available range of freqs
         if fmin < np.min(freqs) and bounds_error:
             raise ValueError("Lower bound of spectral window is below the "
@@ -418,7 +418,7 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
         idxs = np.where(np.logical_and(freqs >= fmin, freqs < fmax))[0]
         spw = (idxs[0], idxs[-1]) if idxs.size > 0 else (None, None)
         spw_range.append(spw)
-    
+
     # Unpack from list if only a single tuple was specified originally
     if is_tuple: return spw_range[0]
     return spw_range
@@ -426,61 +426,61 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
 
 def spw_range_from_redshifts(data, z_range, bounds_error=True):
     """
-    Return a tuple defining the spectral window that corresponds to the 
+    Return a tuple defining the spectral window that corresponds to the
     redshift range specified in z_range.
-    
-    (Spectral windows are specified as tuples containing the first and last 
+
+    (Spectral windows are specified as tuples containing the first and last
     index of a frequency range in data.freq_array.)
-    
+
     Parameters
     ----------
     data : UVData or UVPSpec object
         Object containing data with a frequency dimension.
-        
+
     z_range : tuple or list of tuples
-        Tuples containing the lower and upper fredshift bounds for each 
-        spectral window. The range is inclusive of the upper redshift bound, 
+        Tuples containing the lower and upper fredshift bounds for each
+        spectral window. The range is inclusive of the upper redshift bound,
         i.e. it includes all channels in z_range[0] > z >= z_range[1].
-    
+
     bounds_error : bool, optional
-        Whether to raise an error if a specified lower/upper redshift is 
+        Whether to raise an error if a specified lower/upper redshift is
         outside the frequency range available in 'data'. Default: True.
 
     Returns
     -------
     spw_range : tuple or list of tuples
-        Indices of the channels at the lower and upper bounds of the specified 
+        Indices of the channels at the lower and upper bounds of the specified
         spectral window(s).
-        
-        Note: If the requested spectral window is outside the available 
-        frequency range, and bounds_error is False, '(None, None)' is returned. 
+
+        Note: If the requested spectral window is outside the available
+        frequency range, and bounds_error is False, '(None, None)' is returned.
     """
     # Check for a single tuple input
     is_tuple = False
     if isinstance(z_range, tuple):
         is_tuple = True
         z_range = [z_range,]
-    
+
     # Convert redshifts to frequencies (in Hz)
     freq_range = []
     for zrange in z_range:
         zmin, zmax = zrange
-        freq_range.append( (Cosmo_Conversions.z2f(zmax), 
+        freq_range.append( (Cosmo_Conversions.z2f(zmax),
                             Cosmo_Conversions.z2f(zmin)) )
-    
+
     # Use freq. function to get spectral window
-    spw_range = spw_range_from_freqs(data=data, freq_range=freq_range, 
+    spw_range = spw_range_from_freqs(data=data, freq_range=freq_range,
                                      bounds_error=bounds_error)
-    
+
     # Unpack from list if only a single tuple was specified originally
     if is_tuple: return spw_range[0]
     return spw_range
-    
+
 
 def log(msg, f=None, lvl=0, tb=None, verbose=True):
     """
     Add a message to the log.
-    
+
     Parameters
     ----------
     msg : str
@@ -490,7 +490,7 @@ def log(msg, f=None, lvl=0, tb=None, verbose=True):
         file descriptor to write message to.
 
     lvl : int, optional
-        Indent level of the message. Each level adds two extra spaces. 
+        Indent level of the message. Each level adds two extra spaces.
         Default: 0.
 
     tb : traceback tuple, optional
@@ -552,8 +552,8 @@ def flatten(nested_list):
     return [item for sublist in nested_list for item in sublist]
 
 
-def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False, 
-                         exclude_permutations=True, bl_len_range=(0, 1e10), 
+def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
+                         exclude_permutations=True, bl_len_range=(0, 1e10),
                          bl_deg_range=(0, 180), xants=None, verbose=True):
     """
     Given a list of miriad file templates and selections for
@@ -614,7 +614,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     Notes
     -----
     A group-pol-pair is formed by self-matching unique files in the
-    glob-parsed master list, and then string-formatting-in appropriate 
+    glob-parsed master list, and then string-formatting-in appropriate
     pol and group selections given pol_pairs and group_pairs.
     """
     # type check
@@ -640,7 +640,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                     pol_grps.append((pol, group))
                 # insert into unique_files with {pol} and {group} re-inserted
                 for _file in files:
-                    _unique_file = _file.replace(".{pol}.".format(pol=pol), 
+                    _unique_file = _file.replace(".{pol}.".format(pol=pol),
                         ".{pol}.").replace(".{group}.".format(group=group), ".{group}.")
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
@@ -652,7 +652,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     uvd.read_miriad(_file, read_data=False)
 
     # get baseline pairs
-    (_bls1, _bls2, _, _, 
+    (_bls1, _bls2, _, _,
      _) = calc_blpair_reds(uvd, uvd, filter_blpairs=False, exclude_auto_bls=exclude_auto_bls,
                     exclude_permutations=exclude_permutations, bl_len_range=bl_len_range,
                     bl_deg_range=bl_deg_range)
@@ -673,7 +673,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     for pp, gp in zip(pol_pairs, group_pairs):
         if (pp[0], gp[0]) not in pol_grps or (pp[1], gp[1]) not in pol_grps:
             if verbose:
-                print "pol_pair {} and group_pair {} not found in data files".format(pp, gp)
+                print("pol_pair {} and group_pair {} not found in data files".format(pp, gp))
             continue
         groupings[(tuple(gp), tuple(pp))] = blps
 
@@ -777,11 +777,11 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
     return red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag
 
 
-def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1, 
+def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
                 verbose=True):
     """
-    Job monitoring function, used to send elements of iterator through calls of 
-    run_func. Can be parallelized if the input M function is from the 
+    Job monitoring function, used to send elements of iterator through calls of
+    run_func. Can be parallelized if the input M function is from the
     multiprocess module.
 
     Parameters
@@ -798,7 +798,7 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
         A descriptive name for the operation being performed by run_func.
 
     M : map function
-        A map function used to send elements of iterator through calls to 
+        A map function used to send elements of iterator through calls to
         run_func. Default is built-in map function.
 
     lf : file descriptor
@@ -813,12 +813,12 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
     Returns
     -------
     failures : list
-        A list of failed job indices from iterator. Failures are any output of 
+        A list of failed job indices from iterator. Failures are any output of
         run_func that aren't 0.
     """
     # Start timing
     t_start = time.time()
-    
+
     # run function over jobs
     exit_codes = np.array(M(run_func, iterator))
     tnow = datetime.utcnow()
@@ -830,8 +830,8 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
     # inspect for failures
     if np.all(exit_codes != 0):
         # everything failed, raise error
-        log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60, 
-                                                action_name, exit_codes, tnow), 
+        log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60,
+                                                action_name, exit_codes, tnow),
             f=lf, verbose=verbose)
         raise ValueError("All {} jobs failed".format(action_name))
 
@@ -855,13 +855,13 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
 
     # print failures if they exist
     if len(failures) > 0:
-        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name, 
-                                                               maxiter, 
-                                                               failures), 
+        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name,
+                                                               maxiter,
+                                                               failures),
             f=lf, verbose=verbose)
     else:
         t_run = time.time() - t_start
-        log("\nAll {} jobs ran through ({:1.1f} sec)".format(action_name, t_run), 
+        log("\nAll {} jobs ran through ({:1.1f} sec)".format(action_name, t_run),
             f=lf, verbose=verbose)
 
     return failures
@@ -908,7 +908,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
              bl_deg_range=(0, 180), xants=None, add_autos=False):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
-    calculate redundant baseline groups using hera_cal.redcal and optionally 
+    calculate redundant baseline groups using hera_cal.redcal and optionally
     filter groups based on baseline cuts and xants.
 
     Parameters
@@ -937,9 +937,9 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         If True, add into autocorrelation group to the redundant group list.
 
     Returns (reds, lens, angs)
-    ------- 
+    -------
     reds : list
-        List of redundant baseline (antenna-pair) groups 
+        List of redundant baseline (antenna-pair) groups
 
     lens : list
         List of baseline lengths [meters] of each group in reds
