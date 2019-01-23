@@ -256,3 +256,12 @@ class Test_DataSet(unittest.TestCase):
         nt.assert_equal(OPP.shape, (26, 2))
 
 
+    def test_beam_normalized_response(self):
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+        beam     = pspecbeam.PSpecBeamUV(beamfile)
+        freq     = np.linspace(130.0*1e6, 140.0*1e6, 10)
+        nside    = beam.primary_beam.nside #uvbeam object
+        beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol='xx', freq=freq)
+        nt.assert_equal(len(beam_res[1]), len(freq)) 
+        nt.assert_equal(beam_res[0].ndim, 2) 
+        nt.assert_equal(np.shape(beam_res[0]), (len(freq), (12*nside**2)))
