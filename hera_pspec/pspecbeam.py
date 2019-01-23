@@ -402,12 +402,41 @@ class PSpecBeamUV(PSpecBeamBase):
         if uvb.beam_type == 'efield':
             self.primary_beam.efield_to_power(inplace=True)
             self.primary_beam.peak_normalize()
+    
+    def beam_normalized_response(self, pol='pI', freq=None):
+        
+        if self.primary_beam.beam_type != 'power':
+            raise ValueError('beam_type must be power')
+        if self.primary_beam.Naxes_vec > 1:
+            raise ValueError('Expect scalar for power beam, found vector')
+        if self.primary_beam._data_normalization.value != 'peak':
+            raise ValueError('beam must be peak normalized')
+        if self.primary_beam.pixel_coordinate_system != 'healpix':
+            raise ValueError('Currently only healpix format supported')
+
+        nside        = self.primary_beam.nside
+        beam_res     = self.primary_beam._interp_freq(freq) # interpolate beam in frequency, based on the data frequencies 
+
+        if isinstance(pol, (str, np.str)):
+            pol = uvutils.polstr2num(pol)
+        
+        pol_array     = self.primary_beam.polarization_array
+        
+        if pol in pol_array:
+            stokes_p_ind = np.where(np.isin(pol_array, pol))[0][0]
+            beam_res     = beam_res[0, 0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
+        else:
+            raise ValueError('Do not have the right polarization information')
+
+        omega = np.sum(beam_res, axis=-1) * np.pi / (3. * nside**2) #compute beam solid angle as a function of frequency 
+        
+        return beam_res, omega, nside
 
     def power_beam_int(self, pol='pI'):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency. Uses function
-        in pyuvdata.
+       in pyuvdata.
 
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
@@ -674,4 +703,3 @@ class PSpecBeamFromArray(PSpecBeamBase):
               % (np.min(self.beam_freqs), np.max(self.beam_freqs))
         s += "\tAvailable pols: %s" % (self.available_pols)
         return s
-        
