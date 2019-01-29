@@ -1,4 +1,4 @@
- import unittest
+import unittest
 import nose.tools as nt
 import os, sys
 import pyuvdata as uv
