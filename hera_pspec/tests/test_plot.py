@@ -80,7 +80,7 @@ class Test_Plot(unittest.TestCase):
                         bls, exclude_permutations=False, exclude_auto_bls=True)
         
         # Calculate the power spectrum
-        self.uvp = self.ds.pspec(self.bls1, self.bls2, (0, 1), ('xx','xx'),  
+        self.uvp, uvp_q = self.ds.pspec(self.bls1, self.bls2, (0, 1), ('xx','xx'),  
                                  spw_ranges=[(300, 400), (600,721)], 
                                  input_data_weight='identity', norm='I', 
                                  taper='blackman-harris', verbose=False)
@@ -298,7 +298,7 @@ class Test_Plot(unittest.TestCase):
         reds, lens, angs = utils.get_reds(self.ds.dsets[0], pick_data_ants=True)
         bls1, bls2, blps, _, _ = utils.calc_blpair_reds(self.ds.dsets[0], self.ds.dsets[1],
                                                         exclude_auto_bls=False, exclude_permutations=True)
-        uvp = self.ds.pspec(bls1, bls2, (0, 1), ('xx','xx'),  
+        uvp, uvp_q = self.ds.pspec(bls1, bls2, (0, 1), ('xx','xx'),  
                             spw_ranges=[(300, 350)], 
                             input_data_weight='identity', norm='I', 
                             taper='blackman-harris', verbose=False)
@@ -387,12 +387,14 @@ class Test_Plot(unittest.TestCase):
         uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes/2):1], inplace=False)
         uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes/2):(uvd.Ntimes/2 + uvd.Ntimes/2):1], inplace=False)
 
-        uvd_td = utils.uvd_time_difference(uvd, 0.0002)
+        uvd1_td = utils.uvd_time_difference(uvd1, 0.0002)
+        uvd2_td = utils.uvd_time_difference(uvd2, 0.0002)
 
         ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
         ds.rephase_to_dset(0)
 
-        ds_td = utils.pspecdata_time_difference(ds, 0.0002)
+        ds_td = pspecdata.PSpecData(dsets=[uvd1_td, uvd2_td], wgts=[None, None], beam=uvb)
+        ds_td.rephase_to_dset(0)
 
         spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
@@ -400,28 +402,30 @@ class Test_Plot(unittest.TestCase):
         red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
         bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 
-        uvp = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = True, verbose=False)
+        uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
+         norm='I', taper='blackman-harris', store_cov = True, cov_types = ['original', 'min','max','diagonal','mean'],
+         verbose=False)
 
-        uvp_td = ds_td.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = True, verbose=False)
+        uvp_td, uvp_td_q = ds_td.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
+         norm='I', taper='blackman-harris', store_cov = True, cov_types = ['original', 'min','max','diagonal','mean'],
+         verbose=False)
 
         key = (0,blpairs[0],"xx")
 
-        plot.plot_error(uvp, uvp_td, key, 0, 300, normalized=True, extra_error_types=['min','max','diagonal','mean'])
-        plot.plot_error(uvp, uvp_td, key, 0, 300, normalized=False, extra_error_types=['min','max','diagonal','mean'])
-        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, normalized=False, inside_wedge=True, extra_error_types=['min','max','diagonal','mean'], fit_curve='Exponential', plot_mode='density', show_robust=True)
-        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, normalized=True, inside_wedge=False, extra_error_types=['min','max','diagonal','mean'], plot_mode='normal', show_robust=True)
-        plot.plot_zscore_blpt_hist(uvp, uvp_td, 100, 1000, 0, "xx", blpairs, normalized=False, 
+        plot.plot_error(uvp, uvp_td, key, 0, 300, extra_error_types=['min','max','diagonal','mean'])
+        plot.plot_error(uvp, uvp_td, key, 0, 300, extra_error_types=['min','max','diagonal','mean'])
+        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, inside_wedge=True, extra_error_types=['min','max','diagonal','mean'], fit_curve='Exponential', plot_mode='density', show_robust=True)
+        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, inside_wedge=False, extra_error_types=['min','max','diagonal','mean'], plot_mode='normal', show_robust=True)
+        plot.plot_zscore_blpt_hist(uvp, uvp_td, 100, 1000, 0, "xx", blpairs, 
                               extra_error_types=['min','max','diagonal','mean'],
                               plot_mode='density', show_robust=True,)
-        plot.plot_error_blpt_avg(uvp, uvp_td, 0, "xx", blpairs, 300, normalized=True, 
+        plot.plot_error_blpt_avg(uvp, uvp_td, 0, "xx", blpairs, 300, 
                     extra_error_types=['min','max','diagonal','mean'])
         plot.plot_error_blpt(uvp, uvp_td, 0, "xx", blpairs, 300, 
-                        normalized=True, extra_error_types=['min','max','diagonal','mean'])
+                        extra_error_types=['min','max','diagonal','mean'])
         
-        plot.imshow_cov(uvp, key, 0, error_type='original', normalized=True)
-        plot.imshow_cov(uvp, key, 0, error_type='diagonal', normalized=False)
+        plot.imshow_cov(uvp, key, 0, error_type='original')
+        plot.imshow_cov(uvp, key, 0, error_type='diagonal')
         plt.close()
 
 if __name__ == "__main__":

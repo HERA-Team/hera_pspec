@@ -113,51 +113,22 @@ class Test_UVPSpec(unittest.TestCase):
         red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
         bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 
-        uvp = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
+        uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
          norm='I', taper='blackman-harris', store_cov = True, verbose=False)
 
         key = (0,blpairs[0],"xx")
 
-        data_q = uvp.get_data_q(key)
-        nt.assert_equal(data_q.shape, (5, 50))
-
-        cov_real = uvp.get_cov(key, type='real')
-        nt.assert_equal(cov_real[0]['original'].shape, (50, 50))
-        cov_imag = uvp.get_cov(key, type='imag')
-        nt.assert_equal(cov_imag[0]['original'].shape, (50, 50))
-        cov_q_real = uvp.get_cov_q(key, type='real')
-        nt.assert_equal(cov_q_real[0]['original'].shape, (50, 50))
-        cov_q_imag = uvp.get_cov_q(key, type='imag')
-        nt.assert_equal(cov_q_imag[0]['original'].shape, (50, 50))
-
-        var_real = uvp.get_var(key, type='real')
-        nt.assert_equal(var_real[0]['original'].shape, (50,))
-        var_imag = uvp.get_var(key, type='imag')
-        nt.assert_equal(var_imag[0]['original'].shape, (50,))
-        var_q_real = uvp.get_var_q(key, type='real')
-        nt.assert_equal(var_q_real[0]['original'].shape, (50,))
-        var_q_imag = uvp.get_var_q(key, type='imag')
-        nt.assert_equal(var_q_imag[0]['original'].shape, (50,))
+        cov_real = uvp.get_cov(key, component='real', cov_type='original')
+        nt.assert_equal(cov_real[0].shape, (50, 50))
+        cov_imag = uvp.get_cov(key, component='imag', cov_type='original')
+        nt.assert_equal(cov_imag[0].shape, (50, 50))
 
         uvp.fold_spectra()
 
-        cov_real = uvp.get_cov(key, type='real')
-        nt.assert_equal(cov_real[0]['original'].shape, (24, 24))
-        cov_imag = uvp.get_cov(key, type='imag')
-        nt.assert_equal(cov_imag[0]['original'].shape, (24, 24))
-        cov_q_real = uvp.get_cov_q(key, type='real')
-        nt.assert_equal(cov_q_real[0]['original'].shape, (24, 24))
-        cov_q_imag = uvp.get_cov_q(key, type='imag')
-        nt.assert_equal(cov_q_imag[0]['original'].shape, (24, 24))
-
-        var_real = uvp.get_var(key, type='real')
-        nt.assert_equal(var_real[0]['original'].shape, (24,))
-        var_imag = uvp.get_var(key, type='imag')
-        nt.assert_equal(var_imag[0]['original'].shape, (24,))
-        var_q_real = uvp.get_var_q(key, type='real')
-        nt.assert_equal(var_q_real[0]['original'].shape, (24,))
-        var_q_imag = uvp.get_var_q(key, type='imag')
-        nt.assert_equal(var_q_imag[0]['original'].shape, (24,))
+        cov_real = uvp.get_cov(key, component='real', cov_type='original')
+        nt.assert_equal(cov_real[0].shape, (24, 24))
+        cov_imag = uvp.get_cov(key, component='imag', cov_type='original')
+        nt.assert_equal(cov_imag[0].shape, (24, 24))
 
 
     def test_stats_array(self):

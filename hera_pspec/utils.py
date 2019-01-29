@@ -11,6 +11,7 @@ from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
 import hera_pspec as hp
+import copy
 
 
 def hash(w):
@@ -227,7 +228,6 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
     antpos2, ants2 = uvd2.get_ENU_antpos(pick_data_ants=False)
     antpos2 = dict(zip(ants2, antpos2))
     antpos = dict(antpos1.items() + antpos2.items())
-    
     # assert antenna positions match
     for a in set(antpos1).union(set(antpos2)):
         if a in antpos1 and a in antpos2:
@@ -270,12 +270,10 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
                         xants2.remove(antnums[1])
 
         xants1 = sorted(xants1)
-        xants2 = sorted(xants2)
-    
+        xants2 = sorted(xants2) 
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
-                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
-    
+                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)    
     # construct baseline pairs
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
@@ -957,7 +955,6 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
             uvd = _uvd
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
-
         antpos_dict = dict(zip(ants, antpos))
 
     # use antenna position dictionary
@@ -1007,7 +1004,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
 
 def pspecdata_time_difference(ds, time_diff):
     """
-    Given a PSpecData object and a time difference,  
+    Given a PSpecData object and a time difference, give the time difference PSpecData object.  
 
     Parameters
     ----------
@@ -1022,31 +1019,15 @@ def pspecdata_time_difference(ds, time_diff):
     """
     uvd1 = ds.dsets[0]
     uvd2 = ds.dsets[1]
-    min_time_diff = np.mean(np.unique(uvd1.time_array)[1:]-np.unique(uvd1.time_array)[0:-1])
-    index_diff = int(time_diff / min_time_diff) + 1
-    if index_diff > len(np.unique(uvd1.time_array))-2:
-        index_diff = len(np.unique(uvd1.time_array))-2
-
-    uvd10 = uvd1.select(times=np.unique(uvd1.time_array)[0:-1:index_diff], inplace=False)
-    uvd11 = uvd1.select(times=np.unique(uvd1.time_array)[1::index_diff], inplace=False)
-    data10 = uvd10.data_array
-    data11 = uvd11.data_array
-    data10 -= data11
-    uvd10.data_array = data10
-
-    uvd20 = uvd2.select(times=np.unique(uvd2.time_array)[0:-1:index_diff], inplace=False)
-    uvd21 = uvd2.select(times=np.unique(uvd2.time_array)[1::index_diff], inplace=False)
-    data20 = uvd20.data_array
-    data21 = uvd21.data_array
-    data20 -= data21
-    uvd20.data_array = data20
+    uvd10 = uvd_time_difference(uvd1, time_diff)
+    uvd20 = uvd_time_difference(uvd2, time_diff)
 
     ds_td = hp.PSpecData(dsets=[uvd10, uvd20], wgts=ds.wgts, beam=ds.primary_beam)
     return ds_td
 
 def uvd_time_difference(uvd, time_diff):
     """
-    Given a UVData object and a time difference,  
+    Given a UVData object and a time difference, give the time difference UVData object.  
 
     Parameters
     ----------
@@ -1057,14 +1038,13 @@ def uvd_time_difference(uvd, time_diff):
 
     Returns
     -------
-    ds_td : PSpecData object
+    uvd_td : UVData object
     """
-    
     min_time_diff = np.mean(np.unique(uvd.time_array)[1:]-np.unique(uvd.time_array)[0:-1])
     index_diff = int(time_diff / min_time_diff) + 1
     if index_diff > len(np.unique(uvd.time_array))-2:
         index_diff = len(np.unique(uvd.time_array))-2
-
+    
     uvd0 = uvd.select(times=np.unique(uvd.time_array)[0:-1:index_diff], inplace=False)
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[1::index_diff], inplace=False)
     data0 = uvd0.data_array

@@ -1279,7 +1279,7 @@ class PSpecData(object):
 
         return auto_term + cross_term
 
-    def get_analytic_covariance(self, key1, key2, M, model='time_average'):
+    def get_analytic_covariance(self, key1, key2, M, model='time_average', cov_types=['original']):
         """
         Calculates the auto-covariance matrix for both the real and imaginary
         parts of bandpowers (i.e., the q vectors and the p vectors). 
@@ -1350,31 +1350,24 @@ class PSpecData(object):
 
         model : str, default: 'time_average'
             How the covariances of the input data should be estimated.
+
+        cov_types : list of strs
+            The models on input covariance matrices. 
+            Options: 'original', 'diagonal', 'mean', 'max', 'min'
+            Default: ['original']
         
         Returns
         -------
         V : array_like, complex
-            Bandpower variance which must be positive, with dimension (Ndlys,).
             Bandpower covariance, with dimension (Ndlys,Ndlys).
         """
         # Collect all the relevant pieces
-        var_q_real_list = odict()
-        var_q_imag_list = odict() 
-        var_p_real_list = odict()
-        var_p_imag_list = odict()
-
         cov_q_real_list = odict()
         cov_q_imag_list = odict() 
         cov_p_real_list = odict()
         cov_p_imag_list = odict()
         
-        type_list = ['original', 'diagonal', 'mean', 'max', 'min']
-        #"original": the original input covariance matrix;
-        #"diagonal": only the diagonal part of the original input covariance matrix are left;
-        #"mean": set the matrix to be identity and multiply it by the mean of the diagonal elements
-        #"min": set the matrix to be identity and multiply it by the minimum of the diagonal elements
-        #"max": set the matrix to be identity and multiply it by the maximum of the diagonal elements
-
+        # Get E matrices and input covariance matrices
         E_matrices = self.get_unnormed_E(key1, key2)
         C11_ = self.C_model(key1, model=model)
         C22_ = self.C_model(key2, model=model)
@@ -1387,7 +1380,12 @@ class PSpecData(object):
         P21_ = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
         S21_ = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
         
-        for i in type_list:
+        #"original": the original input covariance matrix;
+        #"diagonal": only the diagonal part of the original input covariance matrix are left;
+        #"mean": set the matrix to be identity and multiply it by the mean of the diagonal elements
+        #"min": set the matrix to be identity and multiply it by the minimum of the diagonal elements
+        #"max": set the matrix to be identity and multiply it by the maximum of the diagonal elements
+        for i in cov_types:
             if i == 'original':
                 C11 = C11_
                 C22 = C22_
@@ -1455,15 +1453,14 @@ class PSpecData(object):
             E21P11 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), P11)
             E12starS22 = np.dot(E_matrices.conj(), S22) 
 
+            # Get q_q, q_qdagger, qdagger_qdagger
             q_q = np.einsum('aij,bji', E12P22, E21starS11) + np.einsum('aij,bji', E12C21, E12C21)
             q_qdagger = np.einsum('aij,bji', E12C22, E21C11) + np.einsum('aij,bji', E12P21, E12starS21)
             qdagger_qdagger = np.einsum('aij,bji', E21C12, E21C12) + np.einsum('aij,bji', E21P11, E12starS22)
 
+            # Get bandpower covariance 
             cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
             cov_q_imag = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
-            var_q_real = np.diagonal(cov_q_real)
-            var_q_imag = np.diagonal(cov_q_imag)
-
             cov_p_real = ( np.einsum('ab,cd,bd->ac', M, M, q_q) +
                 np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) +
                 np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
@@ -1472,22 +1469,13 @@ class PSpecData(object):
                 np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) -
                 np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
                 np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-            var_p_real = np.diagonal(cov_p_real)
-            var_p_imag = np.diagonal(cov_p_imag)
-
-            #assert np.all(var_p_real.real>0) and np.all(var_p_imag.real>0) and np.all(var_q_real.real>0) and np.all(var_q_imag.real>0),\
-            #"The variance must be positive."
 
             cov_p_real_list[i] = cov_p_real
             cov_p_imag_list[i] = cov_p_imag
             cov_q_real_list[i] = cov_q_real
             cov_q_imag_list[i] = cov_q_imag
-            var_p_real_list[i] = var_p_real
-            var_p_imag_list[i] = var_p_imag
-            var_q_real_list[i] = var_q_real
-            var_q_imag_list[i] = var_q_imag
 
-        return cov_q_real_list, cov_q_imag_list, cov_p_real_list, cov_p_imag_list, var_q_real_list, var_q_imag_list, var_p_real_list, var_p_imag_list
+        return cov_q_real_list, cov_q_imag_list, cov_p_real_list, cov_p_imag_list
 
     def get_MW(self, G, H, mode='I', band_covar=None):
         """
@@ -2036,7 +2024,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, input_data_weight='identity',
               norm='I', taper='none', sampling=False, little_h=True, spw_ranges=None,
-              verbose=True, history='', store_cov=False):
+              verbose=True, history='', store_cov=False, save_q=False, cov_types=['original']):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2115,6 +2103,15 @@ class PSpecData(object):
             given an input visibility noise model, and store the output
             in the UVPSpec object.
 
+        save_q : boolean, optional
+            If True, store the results (delay spectra and covariance matrices) for 
+            the unnormalized bandpowers in the UVPSpec object.
+
+        cov_types : list of strs, optional
+            A list of the models on the input covariance matrix (the covariance matrix
+            for data stored in UVData objects). 
+            Default: ['original'] 
+
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -2124,7 +2121,10 @@ class PSpecData(object):
         Returns
         -------
         uvp : UVPSpec object
-            Instance of UVPSpec that holds the output power spectrum data.
+            Instance of UVPSpec that holds the normalized output power spectrum data.
+
+        uvp_q : UVPspec object
+            Instance of the UVPspec that holds the output unnormalized power spectrum data.
 
         Examples
         --------
@@ -2249,14 +2249,10 @@ class PSpecData(object):
         data_array_q = odict()
         wgt_array = odict()
         integration_array = odict()
-        cov_array_real = odict()
-        cov_array_imag = odict()
-        cov_array_q_real = odict()
-        cov_array_q_imag = odict()
-        var_array_real = odict()
-        var_array_imag = odict()
-        var_array_q_real = odict()
-        var_array_q_imag = odict()
+        cov_array_real = odict([[cov_type, odict()] for cov_type in cov_types])
+        cov_array_imag = odict([[cov_type, odict()] for cov_type in cov_types])
+        cov_array_q_real = odict([[cov_type, odict()] for cov_type in cov_types])
+        cov_array_q_imag = odict([[cov_type, odict()] for cov_type in cov_types])
         time1 = []
         time2 = []
         lst1 = []
@@ -2289,14 +2285,10 @@ class PSpecData(object):
             spw_ints = []
             spw_scalar = []
             spw_pol = []
-            spw_cov_real = []
-            spw_cov_imag = []
-            spw_cov_q_real = []
-            spw_cov_q_imag = []
-            spw_var_real = []
-            spw_var_imag = []
-            spw_var_q_real = []
-            spw_var_q_imag = []
+            spw_cov_real = odict([[cov_type, []] for cov_type in cov_types])
+            spw_cov_imag = odict([[cov_type, []] for cov_type in cov_types])
+            spw_cov_q_real = odict([[cov_type, []] for cov_type in cov_types])
+            spw_cov_q_imag = odict([[cov_type, []] for cov_type in cov_types])
 
             d = self.delays() * 1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
@@ -2324,14 +2316,10 @@ class PSpecData(object):
                 pol_data_q = []
                 pol_wgts = []
                 pol_ints = []
-                pol_cov_real = []
-                pol_cov_imag = []
-                pol_cov_q_real = []
-                pol_cov_q_imag = []
-                pol_var_real = []
-                pol_var_imag = []
-                pol_var_q_real = []
-                pol_var_q_imag = []
+                pol_cov_real = odict([[cov_type, []] for cov_type in cov_types])
+                pol_cov_imag = odict([[cov_type, []] for cov_type in cov_types])
+                pol_cov_q_real = odict([[cov_type, []] for cov_type in cov_types])
+                pol_cov_q_imag = odict([[cov_type, []] for cov_type in cov_types])
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
@@ -2435,56 +2423,28 @@ class PSpecData(object):
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
 
-                        cov_q_real_, cov_q_imag_, cov_real_, cov_imag_, var_q_real_, var_q_imag_, var_real_, var_imag_ = self.get_analytic_covariance(key1, key2, Mv, model='time_average')
-                        cov_real = odict()
-                        cov_imag = odict()
-                        var_real = odict()
-                        var_imag = odict()
-                        cov_q_real = odict()
-                        cov_q_imag = odict()
-                        var_q_real = odict()
-                        var_q_imag = odict()
+                        cov_q_real, cov_q_imag, cov_real, cov_imag = self.get_analytic_covariance(key1, key2, Mv, 
+                            model='time_average', cov_types=cov_types)
 
-                        if self.primary_beam != None:
-                                for type_key in cov_real_.keys():
-                                    cov_real[type_key] = cov_real_[type_key]*\
-                                    (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
-                                for type_key in cov_imag_.keys():
-                                    cov_imag[type_key] = cov_imag_[type_key]*\
-                                    (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
-                                for type_key in var_real_.keys():
-                                    var_real[type_key] = var_real_[type_key]*\
-                                    (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
-                                for type_key in var_imag_.keys():
-                                    var_imag[type_key] = var_imag_[type_key]*\
-                                    (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
+                        for cov_type in cov_types:
+                            if self.primary_beam != None:
+                                cov_real[cov_type] = cov_real[cov_type]*\
+                                (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
+                                cov_imag[cov_type] = cov_imag[cov_type]*\
+                                (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
                         
-                        for type_key in cov_q_real_.keys():
-                            cov_q_real[type_key] = cov_q_real_[type_key]*1.
-                        for type_key in cov_q_imag_.keys():
-                            cov_q_imag[type_key] = cov_q_imag_[type_key]*1.
-                        for type_key in var_q_real_.keys():
-                            var_q_real[type_key] = var_q_real_[type_key]*1.
-                        for type_key in var_q_imag_.keys():
-                            var_q_imag[type_key] = var_q_imag_[type_key]*1.
-                           
-                        cov_q_real = np.array([cov_q_real for tind in range(self.Ntimes)])
-                        cov_q_imag = np.array([cov_q_imag for tind in range(self.Ntimes)])
-                        cov_real = np.array([cov_real for tind in range(self.Ntimes)])
-                        cov_imag = np.array([cov_imag for tind in range(self.Ntimes)])
-                        var_q_real = np.array([var_q_real for tind in range(self.Ntimes)])
-                        var_q_imag = np.array([var_q_imag for tind in range(self.Ntimes)])
-                        var_real = np.array([var_real for tind in range(self.Ntimes)])
-                        var_imag = np.array([var_imag for tind in range(self.Ntimes)])
+                            cov_real[cov_type] = np.array([cov_real[cov_type] for tind in range(self.Ntimes)])
+                            cov_imag[cov_type] = np.array([cov_imag[cov_type] for tind in range(self.Ntimes)])
 
-                        pol_cov_real.extend(cov_real)
-                        pol_cov_imag.extend(cov_imag)
-                        pol_cov_q_real.extend(cov_q_real)
-                        pol_cov_q_imag.extend(cov_q_imag)
-                        pol_var_q_real.extend(var_q_real)
-                        pol_var_q_imag.extend(var_q_imag)
-                        pol_var_real.extend(var_real)
-                        pol_var_imag.extend(var_imag)  
+                            pol_cov_real[cov_type].extend(cov_real[cov_type]) 
+                            pol_cov_imag[cov_type].extend(cov_imag[cov_type])
+
+                        if save_q:      
+                            for cov_type in cov_types:
+                                cov_q_real[cov_type] = np.array([cov_q_real[cov_type] for tind in range(self.Ntimes)])
+                                cov_q_imag[cov_type] = np.array([cov_q_imag[cov_type] for tind in range(self.Ntimes)])
+                                pol_cov_q_real[cov_type].extend(cov_q_real[cov_type])
+                                pol_cov_q_imag[cov_type].extend(cov_q_imag[cov_type]) 
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2499,7 +2459,8 @@ class PSpecData(object):
 
                     # insert pspectra
                     pol_data.extend(pv.T)
-                    pol_data_q.extend(qv.T)
+                    if save_q:
+                        pol_data_q.extend(qv.T)
 
                     # get weights
                     wgts1 = self.w(key1).T
@@ -2545,39 +2506,29 @@ class PSpecData(object):
                 spw_data_q.append(pol_data_q)
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
-                spw_cov_real.append(pol_cov_real)
-                spw_cov_imag.append(pol_cov_imag)
-                spw_cov_q_real.append(pol_cov_q_real)
-                spw_cov_q_imag.append(pol_cov_q_imag)
-                spw_var_q_real.append(pol_var_q_real)
-                spw_var_q_imag.append(pol_var_q_imag)
-                spw_var_real.append(pol_var_real)
-                spw_var_imag.append(pol_var_imag)
-
+                [spw_cov_real[cov_type].append(pol_cov_real[cov_type]) for cov_type in cov_types]
+                [spw_cov_imag[cov_type].append(pol_cov_imag[cov_type]) for cov_type in cov_types]
+                [spw_cov_q_real[cov_type].append(pol_cov_q_real[cov_type]) for cov_type in cov_types]
+                [spw_cov_q_imag[cov_type].append(pol_cov_q_imag[cov_type]) for cov_type in cov_types]
+ 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_data_q = np.moveaxis(np.array(spw_data_q), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
-            spw_cov_real = np.moveaxis(np.array(spw_cov_real), 0, -1)
-            spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
-            spw_cov_q_real = np.moveaxis(np.array(spw_cov_q_real), 0, -1)
-            spw_cov_q_imag = np.moveaxis(np.array(spw_cov_q_imag), 0, -1)
-            spw_var_real = np.moveaxis(np.array(spw_var_real), 0, -1)
-            spw_var_imag = np.moveaxis(np.array(spw_var_imag), 0, -1)
-            spw_var_q_real = np.moveaxis(np.array(spw_var_q_real), 0, -1)
-            spw_var_q_imag = np.moveaxis(np.array(spw_var_q_imag), 0, -1)
+            for cov_type in cov_types:
+                spw_cov_real[cov_type] = np.moveaxis(np.array(spw_cov_real[cov_type]), 0, -1)
+                spw_cov_imag[cov_type] = np.moveaxis(np.array(spw_cov_imag[cov_type]), 0, -1)
+                spw_cov_q_real[cov_type] = np.moveaxis(np.array(spw_cov_q_real[cov_type]), 0, -1)
+                spw_cov_q_imag[cov_type] = np.moveaxis(np.array(spw_cov_q_imag[cov_type]), 0, -1)
 
             data_array[i] = spw_data
             data_array_q[i] = spw_data_q
-            cov_array_real[i] = spw_cov_real
-            cov_array_imag[i] = spw_cov_imag
-            cov_array_q_real[i] = spw_cov_q_real
-            cov_array_q_imag[i] = spw_cov_q_imag
-            var_array_q_real[i] = spw_var_q_real
-            var_array_q_imag[i] = spw_var_q_imag
-            var_array_real[i] = spw_var_real
-            var_array_imag[i] = spw_var_imag
+            for cov_type in cov_types:
+                cov_array_real[cov_type][i] = spw_cov_real[cov_type]
+                cov_array_imag[cov_type][i] = spw_cov_imag[cov_type]
+                cov_array_q_real[cov_type][i] = spw_cov_q_real[cov_type]
+                cov_array_q_imag[cov_type][i] = spw_cov_q_imag[cov_type]
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
@@ -2652,25 +2603,26 @@ class PSpecData(object):
 
         # fill data arrays
         uvp.data_array = data_array
-        uvp.data_array_q = data_array_q
         if store_cov:
             uvp.cov_array_real = cov_array_real
             uvp.cov_array_imag = cov_array_imag
-            uvp.cov_array_q_real = cov_array_q_real
-            uvp.cov_array_q_imag = cov_array_q_imag
-            uvp.var_array_q_real = var_array_q_real
-            uvp.var_array_q_imag = var_array_q_imag
-            uvp.var_array_real = var_array_real
-            uvp.var_array_imag = var_array_imag    
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))
-
+        if save_q:
+            uvp_q = copy.deepcopy(uvp)
+            uvp_q.data_array = data_array_q
+            uvp_q.norm = 'Unnormalized'
+            if store_cov:
+                uvp_q.cov_array_real = cov_array_q_real
+                uvp_q.cov_array_imag = cov_array_q_imag
+            uvp_q.check()
+        else:
+            uvp_q = None
         # run check
         uvp.check()
-
-        return uvp
-
+        return uvp, uvp_q
+        
     def rephase_to_dset(self, dset_index=0, inplace=True):
         """
         Rephase visibility data in self.dsets to the LST grid of dset[dset_index]
@@ -2854,7 +2806,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
               exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
-              time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
+              time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, save_q=False,
+              cov_types=['original'], history=''):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2988,7 +2941,14 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     store_cov : boolean, optional
         If True, solve for covariance between bandpowers and store in
         output UVPSpec object.
+    
+    save_q : boolean, optional
+        If True, store the data of unnormalized power spectra in output UVPSpec object.
 
+    cov_types : list of strs, optional
+        Models for input covariance matrices.
+        Default: ['original']
+    
     overwrite : boolean
         If True, overwrite outputs if they exist on disk.
 
@@ -3181,15 +3141,21 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
             continue
 
         # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
+        uvp, uvp_q = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, store_cov=store_cov,
                        input_data_weight=input_data_weight, norm=norm, taper=taper,
-                       history=history, verbose=verbose)
+                       save_q=save_q, cov_types=cov_types, history=history,
+                       verbose=verbose)
 
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
+                      overwrite=overwrite)
+        if save_q:
+            psname = '{}_x_unnormalized_{}{}'.format(dset_labels[dset_idxs[0]],
+                                    dset_labels[dset_idxs[1]], psname_ext)
+            psc.set_pspec(group=groupname, psname=psname, pspec=uvp_q, 
                       overwrite=overwrite)
 
     return psc, ds
@@ -3238,6 +3204,8 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files.")
+    a.add_argument("--save_q", default=False, action='store_true', help="Store unnormalized bandpowers given dsets_std files.")
+    a.add_argument("--cov_types", default=['original'], type=list, help='List of models on input covariance matrices.')
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")

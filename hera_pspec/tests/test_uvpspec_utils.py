@@ -110,7 +110,6 @@ def test_subtract_uvp():
     uvs = uvputils.subtract_uvp(uvp, uvp, run_check=True)
     nt.assert_true(isinstance(uvs, UVPSpec))
     nt.assert_true(hasattr(uvs, "stats_array"))
-    #nt.assert_true(hasattr(uvs, "cov_array"))
     nt.assert_true(hasattr(uvs, "cov_array_real"))
 
     # we subtracted uvp from itself, so data_array should be zero
