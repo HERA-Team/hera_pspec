@@ -1,10 +1,10 @@
 import numpy as np
-import os, time, md5, yaml
+import os, time, yaml
 import itertools, argparse, glob
 import traceback, operator
 import aipy, uvtools
 import pylab as plt
-from conversions import Cosmo_Conversions
+from hera_pspec.conversions import Cosmo_Conversions
 from hera_cal import redcal
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
@@ -17,6 +17,7 @@ def hash(w):
     Return an MD5 hash of a set of weights.
     """
     DeprecationWarning("utils.hash is deprecated.")
+    import md5
     return md5.md5(w.copy(order='C')).digest()
 
 

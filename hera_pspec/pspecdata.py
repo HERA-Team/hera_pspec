@@ -1586,7 +1586,8 @@ class PSpecData(object):
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
                                     n_dlys=self.spw_Ndlys) * 1e9 # convert to ns
 
-    def scalar(self, pol, little_h=True, num_steps=2000, beam=None, taper_override='no_override'):
+    def scalar(self, polpair, little_h=True, num_steps=2000, beam=None, 
+               taper_override='no_override'):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set
@@ -1599,9 +1600,9 @@ class PSpecData(object):
 
         Parameters
         ----------
-        pol: str
-                Which polarization to compute the scalar for.
-                e.g. 'I', 'Q', 'U', 'V', 'XX', 'YY'...
+        polpair: tuple or int
+                Which pair of polarizations to compute the beam scalar for.
+                e.g. ('pI', 'pI') or ('XX', 'YY').
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
@@ -1627,6 +1628,16 @@ class PSpecData(object):
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
                 in h^-3 Mpc^3 or Mpc^3.
         """
+        # make sure polarizations are the same
+        if isinstance(polpair, int):
+            polpair = uvutils.polpair_int2tuple(polpair)
+        if polpair[0] != polpair[1]:
+            raise NotImplementedError(
+                    "Polarizations don't match. Beam scalar can only be "
+                    "calculated for auto-polarization pairs at the moment.")
+        else:
+            pol = polpair[0]
+        
         # set spw_range and get freqs
         freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]
         start = freqs[0]
@@ -1751,8 +1762,8 @@ class PSpecData(object):
         assert isinstance(pol_pair[0], (int, np.integer)), err_msg
         assert isinstance(pol_pair[1], (int, np.integer)), err_msg
 
-        if pol_pair[0] != pol_pair[1]:
-            raise NotImplementedError("Only auto/equal polarizations are implement at the moment.")
+        #if pol_pair[0] != pol_pair[1]:
+        #    raise NotImplementedError("Only auto/equal polarizations are implement at the moment.")
 
         dset_ind1 = self.dset_idx(dsets[0])
         dset_ind2 = self.dset_idx(dsets[1])
@@ -1770,9 +1781,10 @@ class PSpecData(object):
 
         return valid
 
-    def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, input_data_weight='identity',
-              norm='I', taper='none', sampling=False, little_h=True, spw_ranges=None,
-              verbose=True, history='', store_cov=False):
+    def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, 
+              input_data_weight='identity', norm='I', taper='none', 
+              sampling=False, little_h=True, spw_ranges=None,
+              store_cov=False, verbose=True, history=''):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -1805,9 +1817,11 @@ class PSpecData(object):
             where the first index is for the Left-Hand dataset and second index
             is used for the Right-Hand dataset (see above).
 
-        pols : length-2 tuple of strings or integers or list of length-2 tuples of strings or integers
+        pols : length-2 tuple of strings or integers or list of length-2 
+            tuples of strings or integers
             Contains polarization pairs to use in forming power spectra
-            e.g. ('XX','XX') or [('XX','XX'),('XY','YX')] or list of polarization pairs.
+            e.g. ('XX','XX') or [('XX','XX'),('pI','pI')] or list of 
+            polarization pairs.
             Only auto/equal polarization pairs are implemented at the moment.
             It uses the polarizations of the UVData onjects (specified in dsets)
             by default only if the UVData object consists of equal polarizations.
@@ -1850,7 +1864,7 @@ class PSpecData(object):
             If True, calculate an analytic covariance between bandpowers
             given an input visibility noise model, and store the output
             in the UVPSpec object.
-
+        
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -1917,22 +1931,30 @@ class PSpecData(object):
                                   verbose=verbose)
 
         # get datasets
-        assert isinstance(dsets, (list, tuple)), "dsets must be fed as length-2 tuple of integers"
+        assert isinstance(dsets, (list, tuple)), \
+            "dsets must be fed as length-2 tuple of integers"
         assert len(dsets) == 2, "len(dsets) must be 2"
-        assert isinstance(dsets[0], (int, np.int)) and isinstance(dsets[1], (int, np.int)), "dsets must contain integer indices"
+        assert isinstance(dsets[0], (int, np.int)) \
+            and isinstance(dsets[1], (int, np.int)), \
+                "dsets must contain integer indices"
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
 
         # assert form of bls1 and bls2
-        assert isinstance(bls1, list), "bls1 and bls2 must be fed as a list of antpair tuples"
-        assert isinstance(bls2, list), "bls1 and bls2 must be fed as a list of antpair tuples"
-        assert len(bls1) == len(bls2) and len(bls1) > 0, "length of bls1 must equal length of bls2 and be > 0"
+        assert isinstance(bls1, list), \
+            "bls1 and bls2 must be fed as a list of antpair tuples"
+        assert isinstance(bls2, list), \
+            "bls1 and bls2 must be fed as a list of antpair tuples"
+        assert len(bls1) == len(bls2) and len(bls1) > 0, \
+            "length of bls1 must equal length of bls2 and be > 0"
 
         for i in range(len(bls1)):
             if isinstance(bls1[i], tuple):
-                assert isinstance(bls2[i], tuple), "bls1[{}] type must match bls2[{}] type".format(i, i)
+                assert isinstance(bls2[i], tuple), \
+                    "bls1[{}] type must match bls2[{}] type".format(i, i)
             else:
-                assert len(bls1[i]) == len(bls2[i]), "len(bls1[{}]) must match len(bls2[{}])".format(i, i)
+                assert len(bls1[i]) == len(bls2[i]), \
+                    "len(bls1[{}]) must match len(bls2[{}])".format(i, i)
 
         # construct list of baseline pairs
         bl_pairs = []
@@ -1951,24 +1973,29 @@ class PSpecData(object):
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
         else:
-            assert np.isclose(map(lambda t: len(t), spw_ranges), 2).all(), "spw_ranges must be fed as a list of length-2 tuples"
+            assert np.isclose(map(lambda t: len(t), spw_ranges), 2).all(), \
+                "spw_ranges must be fed as a list of length-2 tuples"
 
-        # if using default setting of number of delay bins equal to number of frequency channels
+        # if using default setting of number of delay bins equal to number 
+        # of frequency channels
         if n_dlys is None:
             n_dlys = [None for i in range(len(spw_ranges))]
         elif isinstance(n_dlys, (int, np.integer)):
             n_dlys = [n_dlys]
 
-        # if using the whole band in the dataset, then there should just be one n_dly parameter specified
+        # if using the whole band in the dataset, then there should just be 
+        # one n_dly parameter specified
         if spw_ranges is None and n_dlys != None:
-            assert len(n_dlys) == 1, "Only one spw, so cannot specify more than one n_dly value"
+            assert len(n_dlys) == 1, \
+                "Only one spw, so cannot specify more than one n_dly value"
 
-        # assert that the same number of ndlys has been specified as the number of spws
-        assert len(spw_ranges) == len(n_dlys), "Need to specify number of delay bins for each spw"
+        # assert that the same number of ndlys has been specified as the 
+        # number of spws
+        assert len(spw_ranges) == len(n_dlys), \
+            "Need to specify number of delay bins for each spw"
 
         # setup polarization selection
-        if isinstance(pols, tuple):
-            pols = [pols]
+        if isinstance(pols, tuple): pols = [pols]
 
         # convert all polarizations to integers if fed as strings
         _pols = []
@@ -2010,12 +2037,12 @@ class PSpecData(object):
             # clear covariance cache
             self.clear_cache()
 
-            # setup emtpy data arrays
+            # setup empty data arrays
             spw_data = []
             spw_wgts = []
             spw_ints = []
             spw_scalar = []
-            spw_pol = []
+            spw_polpair = []
             spw_cov = []
 
             d = self.delays() * 1e-9
@@ -2033,13 +2060,11 @@ class PSpecData(object):
                 # validating polarization pair on UVData objects
                 valid = self.validate_pol(dsets, tuple(p))
                 if not valid:
-                   # storing only one polarization as only equal polarization are allowed at the
-                   # moment and UVPSpec object also understands one polarization
+                   # Polarization pair is invalid; skip
                    print ("Polarization pair: {} failed the validation test, continuing...".format(p_str))
                    continue
-
-                # UVPSpec only takes a single pol currently
-                spw_pol.append(p[0])
+                
+                spw_polpair.append(p)
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
@@ -2047,13 +2072,22 @@ class PSpecData(object):
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
-                    # using zero'th indexed poalrization as cross polarized beam are not yet implemented
+                    
+                    # Raise error if cross-pol is requested
+                    if (p[0] != p[1]):
+                        raise NotImplementedError("Cross-polarized beams are "
+                                                  "not yet implemented")
+                    
+                    # using zero'th indexed polarization, as cross-polarized 
+                    # beams are not yet implemented
                     if norm == 'H^-1':
-                        # If using decorrelation, the H^-1 normalization already deals with the taper,
-                        # so we need to override the taper when computing the scalar
-                        scalar = self.scalar(p[0], little_h=True, taper_override='none')
+                        # If using decorrelation, the H^-1 normalization 
+                        # already deals with the taper, so we need to override 
+                        # the taper when computing the scalar
+                        scalar = self.scalar(p, little_h=True, 
+                                             taper_override='none')
                     else:
-                        scalar = self.scalar(p[0], little_h=True)
+                        scalar = self.scalar(p, little_h=True)
                 else:
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized",
@@ -2087,18 +2121,21 @@ class PSpecData(object):
                     key2_dof = np.sum(~np.isclose(self.Y(key2).diagonal(), 0.0))
                     if key1_dof < self.spw_Ndlys or key2_dof < self.spw_Ndlys:
                         if verbose:
-                            print("WARNING: Number of unflagged chans for key1 and/or key2 < n_dlys\n" \
-                                  "which may lead to normalization instabilities.")
+                            print("WARNING: Number of unflagged chans for key1 "
+                                  "and/or key2 < n_dlys\n which may lead to "
+                                  "normalization instabilities.")
 
                     # Build Fisher matrix
                     if input_data_weight == 'identity':
                         # in this case, all Gv and Hv differ only by flagging pattern
                         # so check if we've already computed this
                         # First: get flag weighting matrices given key1 & key2
-                        Y = np.vstack([self.Y(key1).diagonal(), self.Y(key2).diagonal()])
+                        Y = np.vstack([self.Y(key1).diagonal(), 
+                                       self.Y(key2).diagonal()])
 
                         # Second: check cache for Y
-                        matches = [np.isclose(Y, y).all() for y in self._identity_Y.values()]
+                        matches = [np.isclose(Y, y).all() 
+                                   for y in self._identity_Y.values()]
                         if True in matches:
                             # This Y exists, so pick appropriate G and H and continue
                             match = self._identity_Y.keys()[matches.index(True)]
@@ -2138,8 +2175,8 @@ class PSpecData(object):
                         if verbose: print("  Computing and multiplying scalar...")
                         pv *= scalar
 
-                    # Wide bin adjustment of scalar, which is only needed for the diagonal norm
-                    # matrix mode (i.e., norm = 'I')
+                    # Wide bin adjustment of scalar, which is only needed for 
+                    # the diagonal norm matrix mode (i.e., norm = 'I')
                     if norm == 'I':
                         pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
 
@@ -2149,9 +2186,9 @@ class PSpecData(object):
                         cov_qv = self.cov_q_hat(key1, key2)
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
-                            cov_pv *= \
-                            (scalar * self.scalar_delay_adjustment(key1, key2,
-                                                                   sampling=sampling))**2.
+                            cov_pv *= (scalar * \
+                                       self.scalar_delay_adjustment(key1, key2,
+                                                         sampling=sampling))**2.
                         pol_cov.extend(cov_pv)
 
                     # Get baseline keys
@@ -2172,7 +2209,7 @@ class PSpecData(object):
                     wgts1 = self.w(key1).T
                     wgts2 = self.w(key2).T
 
-                    # get average of nsample across frequency axis, weighted by wgts
+                    # get avg of nsample across frequency axis, weighted by wgts
                     nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) \
                              / np.sum(wgts1, axis=1).clip(1, np.inf)
                     nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) \
@@ -2186,13 +2223,14 @@ class PSpecData(object):
                     blts2 = dset2.antpair2ind(bl2, ordered=False)
                     integ2 = dset2.integration_time[blts2] * nsamp2
 
-                    # take inverse average of integ1 and integ2 to get total integration
+                    # take inverse avg of integ1 and integ2 to get total integ
                     # inverse avg is done b/c integ ~ 1/noise_var
                     # and due to non-linear operation of V_1 * V_2
                     pol_ints.extend(1./np.mean([1./integ1, 1./integ2], axis=0))
 
                     # combined weight is geometric mean
-                    pol_wgts.extend(np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2))
+                    pol_wgts.extend(np.concatenate([wgts1[:, :, None], 
+                                                    wgts2[:, :, None]], axis=2))
 
                     # insert time and blpair info only once per blpair
                     if i < 1 and j < 1:
@@ -2205,7 +2243,8 @@ class PSpecData(object):
                         lst2.extend(dset2.lst_array[inds2])
 
                         # insert blpair info
-                        blp_arr.extend(np.ones_like(inds1, np.int) * uvputils._antnums_to_blpair(blp))
+                        blp_arr.extend(np.ones_like(inds1, np.int) \
+                                       * uvputils._antnums_to_blpair(blp))
 
                 # insert into data and wgts integrations dictionaries
                 spw_data.append(pol_data)
@@ -2224,9 +2263,10 @@ class PSpecData(object):
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
 
-            # raise error if none of pols are consistent witht the UVData objects
-            if len(spw_pol)==0:
-                raise ValueError("None of the specified polarization pair match that of the UVData objects")
+            # raise error if none of pols are consistent with the UVData objects
+            if len(spw_polpair) == 0:
+                raise ValueError("None of the specified polarization pairs "
+                                 "match that of the UVData objects")
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
@@ -2237,7 +2277,9 @@ class PSpecData(object):
         uvp.time_avg_array = np.mean([uvp.time_1_array, uvp.time_2_array], axis=0)
         uvp.lst_1_array = np.array(lst1)
         uvp.lst_2_array = np.array(lst2)
-        uvp.lst_avg_array = np.mean([np.unwrap(uvp.lst_1_array), np.unwrap(uvp.lst_2_array)], axis=0) % (2*np.pi)
+        uvp.lst_avg_array = np.mean([np.unwrap(uvp.lst_1_array), 
+                                     np.unwrap(uvp.lst_2_array)], axis=0) \
+                                     % (2*np.pi)
         uvp.blpair_array = np.array(blp_arr)
         uvp.Nblpairs = len(np.unique(blp_arr))
         uvp.Ntimes = len(np.unique(time1))
@@ -2257,10 +2299,10 @@ class PSpecData(object):
         uvp.Nspwdlys = len(uvp.spw_dly_array)
         uvp.Nspwfreqs = len(uvp.spw_freq_array)
         uvp.Nfreqs = len(np.unique(freqs))
-        uvp.pol_array = np.array(spw_pol, np.int)
-        uvp.Npols = len(spw_pol)
+        uvp.polpair_array = np.array(spw_polpair, np.int)
+        uvp.Npols = len(spw_polpair)
         uvp.scalar_array = np.array(sclr_arr)
-        uvp.channel_width = dset1.channel_width  # all dsets are validated to agree
+        uvp.channel_width = dset1.channel_width  # all dsets validated to agree
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
@@ -2288,7 +2330,8 @@ class PSpecData(object):
             uvp.cosmo = self.primary_beam.cosmo
             # attach beam info
             uvp.beam_freqs = self.primary_beam.beam_freqs
-            uvp.OmegaP, uvp.OmegaPP = self.primary_beam.get_Omegas(uvp.pol_array)
+            uvp.OmegaP, uvp.OmegaPP = \
+                                self.primary_beam.get_Omegas(uvp.polpair_array)
             if hasattr(self.primary_beam, 'filename'):
                 uvp.beamfile = self.primary_beam.filename
 
@@ -2305,17 +2348,21 @@ class PSpecData(object):
 
         return uvp
 
+
     def rephase_to_dset(self, dset_index=0, inplace=True):
         """
-        Rephase visibility data in self.dsets to the LST grid of dset[dset_index]
-        using hera_cal.utils.lst_rephase. Each integration in all other dsets is
-        phased to the center of the corresponding LST bin (by index) in dset[dset_index].
+        Rephase visibility data in self.dsets to the LST grid of 
+        dset[dset_index] using hera_cal.utils.lst_rephase.
+        
+        Each integration in all other dsets is phased to the center of the 
+        corresponding LST bin (by index) in dset[dset_index].
 
-        Will only phase if the dataset's phase type is 'drift'. This is because the rephasing
-        algorithm assumes the data is drift-phased when applying phasor term.
+        Will only phase if the dataset's phase type is 'drift'. This is because 
+        the rephasing algorithm assumes the data is drift-phased when applying 
+        the phasor term.
 
-        Note that PSpecData.Jy_to_mK() must be run after rephase_to_dset(), if one intends
-        to use the former capability at any point.
+        Note that PSpecData.Jy_to_mK() must be run *after* rephase_to_dset(), 
+        if one intends to use the former capability at any point.
 
         Parameters
         ----------
@@ -2390,8 +2437,10 @@ class PSpecData(object):
             for j, k in enumerate(data.keys()):
                 # get blts indices of basline
                 indices = dset.antpair2ind(k[:2], ordered=False)
+                
                 # get index in polarization_array for this polarization
                 polind = pol_list.index(uvutils.polstr2num(k[-1]))
+                
                 # insert into dset
                 dset.data_array[indices, 0, :, polind] = data[k]
 
@@ -2404,13 +2453,14 @@ class PSpecData(object):
 
     def Jy_to_mK(self, beam=None):
         """
-        Convert internal datasets from a Jy-scale to mK scale using a primary beam
-        model if available. Note that if you intend to rephase_to_dset(), Jy to mK conversion
-        must be done after that step.
+        Convert internal datasets from a Jy-scale to mK scale using a primary 
+        beam model if available. Note that if you intend to rephase_to_dset(), 
+        Jy to mK conversion must be done *after* that step.
 
         Parameters
         ----------
         beam : PSpecBeam object
+            Beam object.
         """
         # get all unique polarizations of all the datasets
         pols = set(np.ravel([dset.polarization_array for dset in self.dsets]))
@@ -2420,13 +2470,16 @@ class PSpecData(object):
             beam = self.primary_beam
         else:
             if self.primary_beam is not None:
-                print("Warning: feeding a beam model when self.primary_beam already exists...")
+                print("Warning: feeding a beam model when self.primary_beam "
+                      "already exists...")
 
         # Check beam is not None
-        assert beam is not None, "Cannot convert Jy --> mK b/c beam object is not defined..."
+        assert beam is not None, \
+            "Cannot convert Jy --> mK b/c beam object is not defined..."
 
         # assert type of beam
-        assert isinstance(beam, pspecbeam.PSpecBeamBase), "beam model must be a subclass of pspecbeam.PSpecBeamBase"
+        assert isinstance(beam, pspecbeam.PSpecBeamBase), \
+            "beam model must be a subclass of pspecbeam.PSpecBeamBase"
 
         # iterate over all pols and get conversion factors
         factors = {}
@@ -2445,9 +2498,10 @@ class PSpecData(object):
 
     def trim_dset_lsts(self, lst_tol=6):
         """
-        Assuming all datasets in self.dsets are locked to the same LST grid (but
-        each may have a constant offset), trim LSTs from each dset that aren't found
-        in all other dsets (within some decimal tolerance specified by lst_tol).
+        Assuming all datasets in self.dsets are locked to the same LST grid 
+        (but each may have a constant offset), trim LSTs from each dset that 
+        aren't found in all other dsets (within some decimal tolerance 
+        specified by lst_tol).
 
         Warning: this edits the data in dsets in-place, and is not reversible.
 
@@ -2461,34 +2515,41 @@ class PSpecData(object):
         for dset in self.dsets:
             _dlst = np.median(np.diff(np.unique(dset.lst_array)))
             if not np.isclose(dlst, _dlst, atol=10**(-lst_tol) / dset.Ntimes):
-                print("not all datasets in self.dsets are on the same LST grid, cannot LST trim.")
+                print("not all datasets in self.dsets are on the same LST "
+                      "grid, cannot LST trim.")
                 return
 
-        # get lst array of each dataset and turn into string and add to common_lsts
+        # get lst array of each dataset, turn into string and add to common_lsts
         lst_arrs = []
         common_lsts = set()
         for i, dset in enumerate(self.dsets):
-            lsts = ["{lst:0.{tol}f}".format(lst=l, tol=lst_tol) for l in dset.lst_array]
+            lsts = ["{lst:0.{tol}f}".format(lst=l, tol=lst_tol) 
+                    for l in dset.lst_array]
             lst_arrs.append(lsts)
             if i == 0:
                 common_lsts = common_lsts.union(set(lsts))
             else:
                 common_lsts = common_lsts.intersection(set(lsts))
 
-        # iterate through dsets and trim off integrations whose lst isn't in common_lsts
+        # iterate through dsets and trim off integrations whose lst isn't 
+        # in common_lsts
         for i, dset in enumerate(self.dsets):
             trim_inds = np.array([l not in common_lsts for l in lst_arrs[i]])
             if np.any(trim_inds):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
 
 
-def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None, dset_pairs=None,
-              psname_ext=None, spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
+def pspec_run(dsets, filename, dsets_std=None, groupname=None, 
+              dset_labels=None, dset_pairs=None, psname_ext=None, 
+              spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=False, exclude_permutations=True,
-              Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
-              beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
-              time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, history=''):
+              Nblps_per_group=None, bl_len_range=(0, 1e10), 
+              bl_deg_range=(0, 180), bl_error_tol=1.0,
+              beam=None, cosmo=None, rephase_to_dset=None, 
+              trim_dset_lsts=False, broadcast_dset_flags=True,
+              time_thresh=0.2, Jy2mK=False, overwrite=True, 
+              verbose=True, store_cov=False, history=''):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2582,7 +2643,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     bl_deg_range : len-2 float tuple
         A tuple containing the min and max baseline angle (ENU frame in degrees)
-        to use in utils.calc_blpair_reds. Total range is between 0 and 180 degrees.
+        to use in utils.calc_blpair_reds. Total range is between 0 and 180 
+        degrees.
 
     bl_error_tol : float
         Baseline vector error tolerance when constructing redundant groups.
@@ -2635,12 +2697,12 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     Returns
     -------
     psc : PSpecContainer object
-        A container for the output UVPSpec objects, which themselves contain the
-        power spectra and their metadata.
+        A container for the output UVPSpec objects, which themselves contain 
+        the power spectra and their metadata.
 
     ds : PSpecData object
-        The PSpecData object used for OQE of power spectrum, with cached weighting
-        matrices.
+        The PSpecData object used for OQE of power spectrum, with cached 
+        weighting matrices.
     """
     # type check
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
@@ -2678,7 +2740,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     if dset_labels is None:
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
     else:
-        assert not np.any(['_' in dl for dl in dset_labels]), "cannot accept underscores in input dset_labels: {}".format(dset_labels)
+        assert not np.any(['_' in dl for dl in dset_labels]), \
+          "cannot accept underscores in input dset_labels: {}".format(dset_labels)
 
     # load data if fed as filepaths
     if isinstance(dsets[0], (str, np.str)):
@@ -2698,7 +2761,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
     # check dsets_std input
     if dsets_std is not None:
-        err_msg = "input dsets_std must be a list of UVData objects or filepaths to miriad files"
+        err_msg = "input dsets_std must be a list of UVData objects or " \
+                  "filepaths to miriad files"
         assert isinstance(dsets_std,(list, tuple, np.ndarray)), err_msg
         assert len(dsets_std) == Ndsets, "len(dsets_std) must equal len(dsets)"
 
@@ -2707,11 +2771,13 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
             try:
                 # load data into UVData objects if fed as list of strings
                 t0 = time.time()
-                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, verbose=verbose)
+                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, 
+                                        verbose=verbose)
                 utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
                           lvl=1, verbose=verbose)
             except ValueError:
-                # at least one of the dsets_std loads failed due to no data being present
+                # at least one of the dsets_std loads failed due to no data 
+                # being present
                 utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
                 return None, None
 
@@ -2734,7 +2800,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
             beam.cosmo = cosmo
 
     # package into PSpecData
-    ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels, dsets_std=dsets_std, beam=beam)
+    ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels, 
+                   dsets_std=dsets_std, beam=beam)
 
     # Rephase if desired
     if rephase_to_dset is not None:
@@ -2776,13 +2843,14 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         # get bls if blpairs not fed
         if blpairs is None:
             (bls1, bls2, blps, xants1,
-             xants2) = utils.calc_blpair_reds(dsets[dsetp[0]], dsets[dsetp[1]],
-                                              filter_blpairs=True,
-                                              exclude_auto_bls=exclude_auto_bls,
-                                              exclude_permutations=exclude_permutations,
-                                              Nblps_per_group=Nblps_per_group,
-                                              bl_len_range=bl_len_range,
-                                              bl_deg_range=bl_deg_range)
+             xants2) = utils.calc_blpair_reds(
+                                      dsets[dsetp[0]], dsets[dsetp[1]],
+                                      filter_blpairs=True,
+                                      exclude_auto_bls=exclude_auto_bls, 
+                                      exclude_permutations=exclude_permutations,
+                                      Nblps_per_group=Nblps_per_group,
+                                      bl_len_range=bl_len_range,
+                                      bl_deg_range=bl_deg_range )
             bls1_list.append(bls1)
             bls2_list.append(bls2)
 
@@ -2816,9 +2884,9 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
 
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
-                       spw_ranges=spw_ranges, n_dlys=n_dlys, store_cov=store_cov,
-                       input_data_weight=input_data_weight, norm=norm, taper=taper,
-                       history=history, verbose=verbose)
+                       spw_ranges=spw_ranges, n_dlys=n_dlys, 
+                       store_cov=store_cov, input_data_weight=input_data_weight, 
+                       norm=norm, taper=taper, history=history, verbose=verbose)
 
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
@@ -2885,16 +2953,20 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
 
     Parameters
     ----------
-    blpairs : list of baseline-pair tuples, Ex. [((1,2),(1,2)), ((2,3),(2,3))]
+    blpairs : list of baseline-pair tuples
+        Ex. [((1,2),(1,2)), ((2,3),(2,3))]
         See docstring of PSpecData.pspec() for details on format.
 
-    uvd1 : UVData instance containing visibility data that first bl in blpair will draw from
+    uvd1, uvd2 : UVData
+        UVData instances containing visibility data that first/second bl in 
+        blpair will draw from
+    
+    baseline_tol : float, optional
+        Distance tolerance for notion of baseline "redundancy" in meters. 
+        Default: 1.0.
 
-    uvd2 : UVData instance containing visibility data that second bl in blpair will draw from
-
-    baseline_tol : float, distance tolerance for notion of baseline "redundancy" in meters
-
-    verbose : bool, if True report feedback to stdout
+    verbose : bool, optional
+        If True report feedback to stdout. Default: True.
     """
     # ensure uvd1 and uvd2 are UVData objects
     if isinstance(uvd1, UVData) == False:
@@ -2911,11 +2983,13 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     # ensure shared antenna keys match within tolerance
     shared = sorted(set(ap1.keys()) & set(ap2.keys()))
     for k in shared:
-        assert np.linalg.norm(ap1[k] - ap2[k]) <= baseline_tol, "uvd1 and uvd2 don't agree on antenna positions within tolerance of {} m".format(baseline_tol)
+        assert np.linalg.norm(ap1[k] - ap2[k]) <= baseline_tol, \
+            "uvd1 and uvd2 don't agree on antenna positions within tolerance of {} m".format(baseline_tol)
     ap = ap1
     ap.update(ap2)
 
-    # iterate through baselines and check baselines crossed with each other are within tolerance
+    # iterate through baselines and check baselines crossed with each other 
+    # are within tolerance
     for i, blg in enumerate(blpairs):
         if isinstance(blg, tuple):
             blg = [blg]
@@ -2927,17 +3001,23 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
 
 
 def raise_warning(warning, verbose=True):
-    '''warning function'''
+    """
+    Warning function.
+    """
     if verbose:
         print(warning)
 
 
 def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
-    """ helper function for loading Miriad datasets in pspec_run """
+    """
+    Helper function for loading Miriad datasets in pspec_run.
+    """
     dsets = []
     Ndsets = len(fnames)
     for i, dset in enumerate(fnames):
-        utils.log("Reading {} / {} datasets...".format(i+1, Ndsets), f=logf, lvl=1, verbose=verbose)
+        utils.log("Reading {} / {} datasets...".format(i+1, Ndsets), 
+                  f=logf, lvl=1, verbose=verbose)
+        
         # read data
         uvd = UVData()
         uvd.read_miriad(glob.glob(dset), bls=bls, polarizations=pols)
