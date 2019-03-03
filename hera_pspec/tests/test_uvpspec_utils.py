@@ -96,6 +96,41 @@ def test_select_common():
     nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], 
                                  polpairs=True)
 
+def test_polpair_int2tuple():
+    """
+    Test conversion of polpair ints to tuples.
+    """
+    # List of polpairs to test
+    polpairs = [('xx','xx'), ('xx','yy'), ('xy', 'yx'), 
+                ('pI','pI'), ('pI','pQ'), ('pQ','pQ'), ('pU','pU'),
+                ('pV','pV') ]
+    
+    # Check that lists and single items work
+    pol_ints = uvputils.polpair_tuple2int(polpairs)
+    uvputils.polpair_tuple2int(polpairs[0])
+    uvputils.polpair_int2tuple(505)
+    uvputils.polpair_int2tuple([505,404])
+    uvputils.polpair_int2tuple(np.array([505,404]))
+    
+    # Test converting to int and then back again
+    pol_pairs_returned = uvputils.polpair_int2tuple(pol_ints, pol_strings=True)
+    
+    print("pp:", polpairs)
+    print("pp_ret:", pol_pairs_returned)
+    print("pp_ints:", pol_ints)
+    
+    
+    for i in range(len(polpairs)):
+        nt.assert_equal(polpairs[i], pol_pairs_returned[i])
+    
+    # Check that errors are raised appropriately
+    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, ('xx','xx'))
+    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, 'xx')
+    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, 'pI')
+    nt.assert_raises(ValueError, uvputils.polpair_int2tuple, 999)
+    nt.assert_raises(ValueError, uvputils.polpair_int2tuple, [999,])
+    
+    
 def test_subtract_uvp():
     """ Test subtraction of two UVPSpec objects """
     # setup uvp

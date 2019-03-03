@@ -1,7 +1,7 @@
 import numpy as np
 import copy, operator
 from collections import OrderedDict as odict
-from pyuvdata.utils import polstr2num
+from pyuvdata.utils import polstr2num, polnum2str
 
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     """
@@ -233,15 +233,19 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, polpairs=True,
     if not inplace: return out_list
 
 
-def polpair_int2tuple(polpair):
+def polpair_int2tuple(polpair, pol_strings=False):
     """
     Convert a pol-pair integer into a tuple pair of polarization 
     integers. See polpair_tuple2int for more details.
     
     Parameters
     ----------
-    polpair : int
+    polpair : int or list of int
         Integer representation of polarization pair.
+    
+    pol_strings : bool, optional
+        If True, return polarization pair tuples with polarization strings. 
+        Otherwise, use polarization integers. Default: True.
     
     Returns
     -------
@@ -249,7 +253,13 @@ def polpair_int2tuple(polpair):
         A length-2 tuple containing a pair of polarization 
         integers, e.g. (-5, -5).
     """
-    assert isinstance(polpair, (int, np.integer)), "polpair must be integer: %s" % type(polpair)
+    # Recursive evaluation
+    if isinstance(polpair, (list, np.ndarray)):
+        return [polpair_int2tuple(p, pol_strings=pol_strings) for p in polpair]
+    
+    # Check for integer type
+    assert isinstance(polpair, (int, np.integer)), \
+        "polpair must be integer: %s" % type(polpair)
     
     # Split into pol1 and pol2 integers
     pol1 = int(str(polpair)[:-2]) - 10
@@ -260,7 +270,11 @@ def polpair_int2tuple(polpair):
         raise ValueError("polpair integer evaluates to an invalid "
                          "polarization pair: (%d, %d)" 
                          % (pol1, pol2))
-    return (pol1, pol2)
+    # Convert to strings if requested
+    if pol_strings:
+        return (polnum2str(pol1), polnum2str(pol2))
+    else:
+        return (pol1, pol2)
     
 
 def polpair_tuple2int(polpair):
@@ -284,6 +298,11 @@ def polpair_tuple2int(polpair):
     polpair : int
         Integer representation of polarization pair.
     """
+    # Recursive evaluation
+    if isinstance(polpair, (list, np.ndarray)):
+        return [polpair_tuple2int(p) for p in polpair]
+    
+    # Check types
     assert type(polpair) in (tuple,), "pol must be a tuple"
     assert len(polpair) == 2, "polpair tuple must have 2 elements"
     
