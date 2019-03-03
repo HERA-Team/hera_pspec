@@ -129,7 +129,7 @@ def main():
         print('git branch = {0}'.format(git_branch))
         print('git description = {0}'.format(git_description))
     except:
-        print("Failed to print version info.")
+        pass
 
 if __name__ == '__main__':
     main()
