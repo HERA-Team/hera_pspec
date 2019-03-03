@@ -123,11 +123,13 @@ git_branch = version_info['git_branch']
 
 
 def main():
-    print('Version = {0}'.format(version))
-    print('git origin = {0}'.format(git_origin))
-    print('git branch = {0}'.format(git_branch))
-    print('git description = {0}'.format(git_description))
-
+    try:
+        print('Version = {0}'.format(version))
+        print('git origin = {0}'.format(git_origin))
+        print('git branch = {0}'.format(git_branch))
+        print('git description = {0}'.format(git_description))
+    except:
+        print("Failed to print version info.")
 
 if __name__ == '__main__':
     main()
