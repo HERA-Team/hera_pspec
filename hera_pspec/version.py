@@ -1,3 +1,4 @@
+#from __future__ import print_function
 import os
 import subprocess
 import json
@@ -63,10 +64,10 @@ if git_hash is not '':
 
 
 def main():
-    print("Version =", version)
-    print("git origin =", git_origin)
-    print("git branch =", git_branch)
-    print("git description =", git_description)
+    print("Version = {0}".format(version))
+    print("git origin = {0}".format(git_origin.decode('utf-8')))
+    print("git branch = {0}".format(git_branch.decode('utf-8')))
+    print("git description = {0}".format(git_description.decode('utf-8')))
 
 if __name__ == '__main__':
     main()
