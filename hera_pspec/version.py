@@ -64,10 +64,13 @@ if git_hash is not '':
 
 
 def main():
-    print("Version = {0}".format(version))
-    print("git origin = {0}".format(git_origin.decode('utf-8')))
-    print("git branch = {0}".format(git_branch.decode('utf-8')))
-    print("git description = {0}".format(git_description.decode('utf-8')))
-
+    try:
+        print("Version = {0}".format(version))
+        print("git origin = {0}".format(git_origin.decode('utf-8')))
+        print("git branch = {0}".format(git_branch.decode('utf-8')))
+        print("git description = {0}".format(git_description.decode('utf-8')))
+    except TypeError:
+        print(type(version), type(git_origin))
+        raise
 if __name__ == '__main__':
     main()
