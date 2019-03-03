@@ -254,5 +254,8 @@ class Test_DataSet(unittest.TestCase):
         OP, OPP = beam.get_Omegas([(-5,-5), (-6,-6)])
         nt.assert_equal(OP.shape, (26, 2))
         nt.assert_equal(OPP.shape, (26, 2))
+        
+        nt.assert_raises(TypeError, beam.get_Omegas, 'xx')
+        nt.assert_raises(NotImplementedError, beam.get_Omegas, [('pI','pQ'),])
 
 

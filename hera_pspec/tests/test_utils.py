@@ -198,7 +198,10 @@ class Test_Utils(unittest.TestCase):
         uvd2 = copy.deepcopy(uvd)
         uvd2.antenna_positions[0] += 2
         nt.assert_raises(AssertionError, utils.calc_blpair_reds, uvd, uvd2)
-
+    
+    def test_get_delays(self):
+        utils.get_delays(np.linspace(100., 200., 50)*1e6)
+    
     def test_get_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()

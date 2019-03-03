@@ -310,6 +310,9 @@ class Test_PSpecData(unittest.TestCase):
             Q_matrix = self.ds.get_Q_alt(alpha, allow_fft=False)
             Q_diff_norm = np.linalg.norm(Q_matrix - Q_matrix_fft)
             self.assertLessEqual(Q_diff_norm, multiplicative_tolerance)
+        
+        # Check for error handling
+        nt.assert_raises(ValueError, self.ds.set_Ndlys, vect_length+100)
 
     def test_get_unnormed_E(self):
         """
@@ -801,7 +804,12 @@ class Test_PSpecData(unittest.TestCase):
         gauss = pspecbeam.PSpecBeamGauss(0.8,
                                   np.linspace(115e6, 130e6, 50, endpoint=False))
         ds2 = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=gauss)
-
+        
+        # Check normal execution
+        scalar = self.ds.scalar(('xx','xx'))
+        scalar = self.ds.scalar(('xx','xx'), taper_override='none')
+        nt.assert_raises(NotImplementedError, self.ds.scalar, ('xx','yy'))
+        
         # Precomputed results in the following test were done "by hand"
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         # FIXME: Uncomment when pyuvdata support for this is ready
@@ -814,26 +822,34 @@ class Test_PSpecData(unittest.TestCase):
     def test_validate_datasets(self):
         # test freq exception
         uvd = copy.deepcopy(self.d[0])
-        uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10], inplace=False)
+        uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10], 
+                          inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
+        
         # test time exception
         uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
+        
         # test std exception
         ds.dsets_std=ds.dsets_std[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
+        
         # test wgt exception
         ds.wgts = ds.wgts[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
+        
         # test warnings
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
-        uvd.select(frequencies=np.unique(uvd.freq_array)[:10], times=np.unique(uvd.time_array)[:10])
-        uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], times=np.unique(uvd2.time_array)[10:20])
+        uvd.select(frequencies=np.unique(uvd.freq_array)[:10], 
+                   times=np.unique(uvd.time_array)[:10])
+        uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], 
+                    times=np.unique(uvd2.time_array)[10:20])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         ds.validate_datasets()
+        
         # test phasing
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
@@ -842,6 +858,9 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(ValueError, ds.validate_datasets)
         uvd2.phase_to_time(Time(2458042.5, format='jd'))
         ds.validate_datasets()
+        
+        # test polarization
+        ds.validate_pol((0,1), ('xx', 'xx'))
 
     def test_rephase_to_dset(self):
         # generate two uvd objects w/ different LST grids
@@ -915,6 +934,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(IndexError, ds.units)
         ds.add(self.uvd, None)
         # test basic execution
+        vis_u, norm_u = ds.units(little_h=False)
         vis_u, norm_u = ds.units()
         nt.assert_equal(vis_u, "UNCALIB")
         nt.assert_equal(norm_u, "Hz str [beam normalization not specified]")

@@ -12,15 +12,6 @@ from pyuvdata import UVData
 from datetime import datetime
 
 
-def hash(w):
-    """
-    Return an MD5 hash of a set of weights.
-    """
-    DeprecationWarning("utils.hash is deprecated.")
-    import md5
-    return md5.md5(w.copy(order='C')).digest()
-
-
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size

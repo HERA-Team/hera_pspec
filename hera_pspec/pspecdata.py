@@ -1086,12 +1086,7 @@ class PSpecData(object):
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None.")
         
-        try:
-            H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        except:
-            print("exception:", self.spw_Ndlys, self.spw_Ndlys)
-            raise
-            
+        H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
 

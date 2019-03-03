@@ -114,12 +114,6 @@ def test_polpair_int2tuple():
     
     # Test converting to int and then back again
     pol_pairs_returned = uvputils.polpair_int2tuple(pol_ints, pol_strings=True)
-    
-    print("pp:", polpairs)
-    print("pp_ret:", pol_pairs_returned)
-    print("pp_ints:", pol_ints)
-    
-    
     for i in range(len(polpairs)):
         nt.assert_equal(polpairs[i], pol_pairs_returned[i])
     
@@ -132,7 +126,9 @@ def test_polpair_int2tuple():
     
     
 def test_subtract_uvp():
-    """ Test subtraction of two UVPSpec objects """
+    """
+    Test subtraction of two UVPSpec objects
+    """
     # setup uvp
     beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
     beam = pspecbeam.PSpecBeamUV(beamfile)
