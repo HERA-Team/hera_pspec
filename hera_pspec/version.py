@@ -2,6 +2,12 @@ import os
 import subprocess
 import json
 
+# Python 2/3 portable Unicode handling
+try:
+    unicode
+except NameError:
+    unicode = str
+
 hera_pspec_dir = os.path.dirname(os.path.realpath(__file__))
 version_file = os.path.join(hera_pspec_dir, 'VERSION')
 version = open(version_file).read().strip()
@@ -63,10 +69,10 @@ if git_hash is not '':
 
 
 def main():
-    print('Version = {0}'.format(version))
-    print('git origin = {0}'.format(git_origin))
-    print('git branch = {0}'.format(git_branch))
-    print('git description = {0}'.format(git_description))
+    print('Version = {0}'.format(unicode(version)))
+    print('git origin = {0}'.format(unicode(git_origin)))
+    print('git branch = {0}'.format(unicode(git_branch)))
+    print('git description = {0}'.format(unicode(git_description)))
 
 if __name__ == '__main__':
     main()
