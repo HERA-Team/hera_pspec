@@ -63,10 +63,10 @@ if git_hash is not '':
 
 
 def main():
-    print("Version = %s" % version)
-    print("git origin = %s" % git_origin)
-    print("git branch = %s" % git_branch)
-    print("git description = %s" % git_description)
+    print("Version =", version)
+    print("git origin =", git_origin)
+    print("git branch =", git_branch)
+    print("git description =", git_description)
 
 if __name__ == '__main__':
     main()
