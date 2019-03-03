@@ -43,6 +43,10 @@ class Test_Sensitivity(unittest.TestCase):
         self.beam.cosmo = C
         sense.set_beam(self.beam)
         nt.assert_equal(sense.cosmo.get_params(), sense.beam.cosmo.get_params())
+        
+        bm = copy.deepcopy(self.beam)
+        delattr(bm, 'cosmo')
+        sense.set_beam(bm)
 
     def test_scalar(self):
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
