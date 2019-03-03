@@ -248,10 +248,10 @@ class Test_DataSet(unittest.TestCase):
     def test_get_Omegas(self):
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         beam = pspecbeam.PSpecBeamUV(beamfile)
-        OP, OPP = beam.get_Omegas('xx')
+        OP, OPP = beam.get_Omegas(('xx','xx'))
         nt.assert_equal(OP.shape, (26, 1))
         nt.assert_equal(OPP.shape, (26, 1))
-        OP, OPP = beam.get_Omegas([-5, -6])
+        OP, OPP = beam.get_Omegas([(-5,-5), (-6,-6)])
         nt.assert_equal(OP.shape, (26, 2))
         nt.assert_equal(OPP.shape, (26, 2))
 

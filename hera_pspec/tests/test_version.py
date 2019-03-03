@@ -2,7 +2,7 @@
 import nose.tools as nt
 import sys
 import os
-from StringIO import StringIO
+from io import StringIO
 import subprocess
 import hera_pspec
 

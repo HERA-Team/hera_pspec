@@ -294,10 +294,12 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         return fig
 
 
-def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=False, 
-                    fold=False, delay=True, deltasq=False, log=True, lst_in_hrs=True,
-                    vmin=None, vmax=None, cmap='YlGnBu', axes=None, figsize=(14, 6),
-                    force_plot=False, times=None, title_type='blpair'):
+def delay_waterfall(uvp, blpairs, spw, pol, component='real', 
+                    average_blpairs=False, fold=False, delay=True, 
+                    deltasq=False, log=True, lst_in_hrs=True,
+                    vmin=None, vmax=None, cmap='YlGnBu', axes=None, 
+                    figsize=(14, 6), force_plot=False, times=None, 
+                    title_type='blpair'):
     """
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
@@ -484,7 +486,8 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
     Nvert, Nhorz = axes.shape
 
     # Get LST range: setting y-ticks is tricky due to LST wrapping...
-    y = uvp_plt.lst_avg_array[uvp_plt.key_to_indices(waterfall.keys()[0])[1]]
+    y = uvp_plt.lst_avg_array[
+            uvp_plt.key_to_indices(list(waterfall.keys())[0])[1] ]
     if lst_in_hrs:
         lst_units = "Hr"
         y = np.around(y * 24 / (2*np.pi), 2)
@@ -516,7 +519,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
                                  r"{\rm unnormed}")
 
     # Iterate over waterfall keys
-    keys = waterfall.keys()
+    keys = list(waterfall.keys())
     k = 0
     for i in range(Nvert):
         for j in range(Nhorz):
@@ -533,8 +536,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real', average_blpairs=Fa
             blp = uvp_plt.blpair_to_antnums(key[1])
 
             # plot waterfall
-            cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax, 
-                                 extent=[np.min(x), np.max(x), Ny, 0])
+            cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', 
+                             vmin=vmin, vmax=vmax, 
+                             extent=[np.min(x), np.max(x), Ny, 0])
 
             # ax config
             ax.xaxis.set_ticks_position('bottom')
@@ -593,13 +597,14 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
                 red_tol=1.0, center_line=False, horizon_lines=False,
                 title=None, ax=None, cmap='viridis', figsize=(8, 6),
                 deltasq=False, colorbar=False, cbax=None, vmin=None, vmax=None,
-                edgecolor='none', flip_xax=False, flip_yax=False, lw=2, set_bl_tick_major=False,
-                set_bl_tick_minor=False, xtick_size=10, xtick_rot=0, ytick_size=10, ytick_rot=0,
+                edgecolor='none', flip_xax=False, flip_yax=False, lw=2, 
+                set_bl_tick_major=False, set_bl_tick_minor=False, 
+                xtick_size=10, xtick_rot=0, ytick_size=10, ytick_rot=0,
                 **kwargs):
     """
     Plot a 2D delay spectrum (or spectra) from a UVPSpec object. Note that
-    all integrations and redundant baselines are averaged (unless specifying times)
-    before plotting.
+    all integrations and redundant baselines are averaged (unless specifying 
+    times) before plotting.
     
     Parameters
     ----------
@@ -609,8 +614,8 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     spw : integer
         Which spectral window to plot.
 
-    pol : int or str
-        Polarization integer or string
+    pol : int or tuple
+        Polarization-pair integer or tuple, e.g. ('pI', 'pI')
 
     blpairs : list of tuples, optional
         List of baseline-pair tuples to use in plotting.
@@ -696,8 +701,8 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         Line-width of horizon and center lines if plotted. Default: 2.
 
     set_bl_tick_major : bool, optional
-        If True, use the baseline lengths as major ticks, rather than default uniform
-        grid.
+        If True, use the baseline lengths as major ticks, rather than default 
+        uniform grid.
 
     set_bl_tick_minor : bool, optional
         If True, use the baseline lengths as minor ticks, which have no labels.
@@ -714,7 +719,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     uvp = copy.deepcopy(uvp)
     assert isinstance(uvp, uvpspec.UVPSpec), "input uvp must be a UVPSpec object"
     assert isinstance(spw, (int, np.integer))
-    assert isinstance(pol, (int, str, np.integer, np.str))
+    assert isinstance(pol, (int, np.integer, tuple))
 
     # check pspec units for little h
     little_h = 'h^-3' in uvp.norm_units
@@ -733,7 +738,8 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
 
     # Average across redundant groups and time
     # this also ensures blpairs are ordered from short_bl --> long_bl
-    blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol, match_bl_lens=True)
+    blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol, 
+                                                      match_bl_lens=True)
     uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, inplace=True)
 
     # Convert to DeltaSq
@@ -814,14 +820,16 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     # Configure ticks
     if set_bl_tick_major:
         if rotate:
-            ax.set_xticks(map(lambda x: np.around(x, _get_sigfig(x)+2), x_axis))
+            ax.set_xticks([np.around(x, _get_sigfig(x)+2) for x in x_axis])
         else:
-            ax.set_yticks(map(lambda x: np.around(x, _get_sigfig(x)+2), y_axis))
+            ax.set_yticks([np.around(x, _get_sigfig(x)+2) for x in y_axis])
     if set_bl_tick_minor:
         if rotate:
-            ax.set_xticks(map(lambda x: np.around(x, _get_sigfig(x)+2), x_axis), minor=True)
+            ax.set_xticks([np.around(x, _get_sigfig(x)+2) for x in x_axis], 
+                          minor=True)
         else:
-            ax.set_yticks(map(lambda x: np.around(x, _get_sigfig(x)+2), y_axis), minor=True)
+            ax.set_yticks([np.around(x, _get_sigfig(x)+2) for x in y_axis], 
+                          minor=True)
 
     # Add colorbar
     if colorbar:

@@ -88,8 +88,8 @@ class UVPSpec(object):
         self._cosmo = PSpecParam("cosmo", description="Instance of conversion.Cosmo_Conversions class.", expected_type=conversions.Cosmo_Conversions)
 
         # Collect all parameters: required and non-required
-        self._all_params = sorted(map(lambda p: p[1:],
-                                    fnmatch.filter(self.__dict__.keys(), '_*')))
+        self._all_params = sorted( [ p[1:] for p in
+                                    fnmatch.filter(self.__dict__.keys(), '_*')])
 
         # Specify required params: these are required for read / write and
         # self.check()
@@ -354,7 +354,8 @@ class UVPSpec(object):
         # get list of bl separations
         bl_vecs = self.get_ENU_bl_vecs()
         bls = self.bl_array.tolist()
-        blseps = np.array(map(lambda bl: np.linalg.norm(bl_vecs[bls.index(bl)]), self.bl_array))
+        blseps = np.array([np.linalg.norm(bl_vecs[bls.index(bl)]) 
+                           for bl in self.bl_array])
 
         # construct empty blp_avg_sep array
         blp_avg_sep = np.empty(self.Nblpairts, np.float)
@@ -458,8 +459,9 @@ class UVPSpec(object):
 
         # loop over spw and pols and add to keys
         for spw in range(self.Nspws):
-            for p in self.pol_array:
-                pstr = uvutils.polnum2str(p)
+            for p in self.polpair_array:
+                pol1, pol2 = uvputils.polpair_int2tuple(p)
+                pstr = (uvutils.polnum2str(pol1), uvutils.polnum2str(pol2))
                 all_keys.extend([(spw, blp, pstr) for blp in blps])
 
         return all_keys
@@ -556,10 +558,11 @@ class UVPSpec(object):
         spw, blpairts, polpair = self.key_to_indices(key)
         statistic = np.asarray(statistic)
         data_shape = self.data_array[spw][blpairts, :, polpair].shape
-
+        
         if data_shape != statistic.shape:
-            errmsg = "Input array shape {:s} must match " \
-                     "data_array shape {:s}.".format(statistic.shape, data_shape)
+            print(data_shape, statistic.shape)
+            errmsg = "Input array shape {} must match " \
+                     "data_array shape {}.".format(statistic.shape, data_shape)
             raise ValueError(errmsg)
 
         if not hasattr(self, "stats_array"):
@@ -705,11 +708,13 @@ class UVPSpec(object):
             blpair = [blpair]
         elif isinstance(blpair, list):
             if isinstance(blpair[0], tuple):
-                blpair = map(lambda blp: self.antnums_to_blpair(blp), blpair)
+                blpair = [self.antnums_to_blpair(blp) for blp in blpair]
         # assert exists in data
-        assert np.array(map(lambda b: b in self.blpair_array, blpair)).all(), "blpairs {} not all found in data".format(blpair)
-        return np.arange(self.Nblpairts)[reduce(operator.add, map(lambda b: self.blpair_array == b, blpair))]
-    
+        assert np.array([b in self.blpair_array for b in blpair]).all(), \
+            "blpairs {} not all found in data".format(blpair)
+        return np.arange(self.Nblpairts)[
+                np.logical_or.reduce([self.blpair_array == b for b in blpair])]
+        
     
     def spw_to_freq_indices(self, spw):
         """
@@ -737,12 +742,12 @@ class UVPSpec(object):
             spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data
-        assert np.array(map(lambda s: s in self.spw_freq_array, spw)).all(), "spws {} not all found in data".format(spw)
+        assert np.array([s in self.spw_freq_array for s in spw]).all(), \
+            "spws {} not all found in data".format(spw)
 
         # get select boolean array
-        select = reduce( operator.add, 
-                         map(lambda s: self.spw_freq_array == s, spw))
-
+        select = np.logical_or.reduce([self.spw_freq_array == s for s in spw])
+        
         # get indices
         freq_indices = np.arange(self.Nspwfreqs)[select]
         return freq_indices
@@ -774,11 +779,12 @@ class UVPSpec(object):
             spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data
-        assert np.array(map(lambda s: s in self.spw_dly_array, spw)).all(), "spws {} not all found in data".format(spw)
+        assert np.array([s in self.spw_dly_array for s in spw]).all(), \
+            "spws {} not all found in data".format(spw)
 
         # get select boolean array
-        select = reduce(operator.add, map(lambda s: self.spw_dly_array == s, spw))
-
+        select = np.logical_or.reduce([self.spw_dly_array == s for s in spw])
+        
         if self.folded:
             select[self.dly_array < 1e-10] = False
 
@@ -813,11 +819,13 @@ class UVPSpec(object):
             spw = [spw_ranges.index(s) for s in spw]
 
         # assert exists in data
-        assert np.array(map(lambda s: s in self.spw_array, spw)).all(), "spws {} not all found in data".format(spw)
+        assert np.array([s in self.spw_array for s in spw]).all(), \
+            "spws {} not all found in data".format(spw)
 
         # get select boolean array
-        select = reduce(operator.add, map(lambda s: self.spw_array == s, spw))
-
+        #select = reduce(operator.add, [self.spw_array == s for s in spw])
+        select = np.logical_or.reduce([self.spw_array == s for s in spw])
+        
         # get array
         spw_indices = np.arange(self.Nspws)[select]
 
@@ -826,11 +834,11 @@ class UVPSpec(object):
     
     def polpair_to_indices(self, polpair):
         """
-        Map a polarization integer or str to its index in polpair_array.
+        Map a polarization-pair integer or tuple to its index in polpair_array.
 
         Parameters
         ----------
-        polpair : int or tuple
+        polpair : (list of) int or tuple
             Polarization-pair integer or tuple of polarization strings/ints.
 
         Returns
@@ -838,21 +846,22 @@ class UVPSpec(object):
         indices : int
             Index of polpair in polpair_array.
         """
-        # Convert to polpair integer if tuple was passed
-        if isinstance(polpair, tuple):
-            polpair = polpair_tuple2int(polpair)
+        # Convert to list if not already a list
+        if isinstance(polpair, (tuple, int, np.integer)):
+            polpair = [polpair,]
+        elif not isinstance(polpair, list):
+            raise TypeError("polpair must be list of tuple or int")
         
-        # Check polpair is valid type
-        assert isinstance(polpair, int) or isinstance(polpair, np.int), \
-            "polpair is an invalid type. Must be integer or tuple."
+        # Convert list items to standard format (polpair integers)
+        polpair = [uvputils.polpair_tuple2int(p) if isinstance(p, tuple) else p 
+                   for p in polpair]
 
-        # ensure all pols exist in data
-        assert np.array(map(lambda p: p in self.polpair_array, polpair)).all(), \
-            "pols {} not all found in data".format(pol)
-
-        indices = np.arange(self.Npols)[
-                    reduce(operator.add, 
-                           map(lambda p: self.polpair_array == p, polpair) )]
+        # Ensure all pols exist in data
+        assert np.array([p in self.polpair_array for p in polpair]).all(), \
+            "pols {} not all found in data".format(polpair)
+        
+        idxs = np.logical_or.reduce([self.polpair_array == pp for pp in polpair])
+        indices = np.arange(self.polpair_array.size)[idxs]
         return indices
     
     
@@ -908,7 +917,7 @@ class UVPSpec(object):
           key = {
             'spw' : spw_integer,
             'blpair' : ((ant1, ant2), (ant3, ant4))
-            'pol' : (pol12, pol34)
+            'polpair' : (pol12, pol34)
             }
 
         and it will parse the dictionary for you.
@@ -935,9 +944,9 @@ class UVPSpec(object):
             Polarization pair index.
         """
         # assert key length
-        assert len(key) == 3, "length of key must be 3: (spw, blpair, pol)"
+        assert len(key) == 3, "length of key must be 3: (spw, blpair, polpair)"
         if isinstance(key, (odict, dict)):
-            key = (key['spw'], key['blpair'], key['pol'])
+            key = (key['spw'], key['blpair'], key['polpair'])
 
         # assign key elements
         spw_ind = key[0]
@@ -949,7 +958,7 @@ class UVPSpec(object):
         assert isinstance(blpair, (int, np.integer, tuple)), \
             "blpair must be an integer or nested tuple"
         assert isinstance(polpair, (tuple, np.integer, int)), \
-            "pol must be a tuple or integer"
+            "polpair must be a tuple or integer: %s / %s" % (polpair, key)
 
         # convert blpair to int if not int
         if type(blpair) == tuple:
@@ -957,18 +966,18 @@ class UVPSpec(object):
 
         # convert pol to int if not int
         if type(polpair) == tuple:
-            polpair = polpair_tuple2int(polpair)
+            polpair = uvputils.polpair_tuple2int(polpair)
 
         # check attributes exist in data
         assert spw_ind in self.spw_freq_array and spw_ind in self.spw_dly_array, \
             "spw {} not found in data".format(spw_ind)
         assert blpair in self.blpair_array, \
-            "blpair {} not found in data".format(blpair)
+            "blpair {} not found in data, blpairs are: {}".format(blpair, self.blpair_array)
         assert polpair in self.polpair_array, \
             "polpair {} not found in data".format(polpair)
 
         # index polarization array
-        polpair_ind = self.polpair_to_indices(polpair) # FIXME FIXME
+        polpair_ind = self.polpair_to_indices(polpair)
         if isinstance(polpair_ind, (list, np.ndarray)):
             assert len(polpair_ind) == 1, \
                 "only one polpair can be specified in key_to_indices"
@@ -1221,7 +1230,19 @@ class UVPSpec(object):
                 if k == 'cosmo':
                     group.attrs['cosmo'] = str(getattr(self, k).get_params())
                     continue
-                group.attrs[k] = getattr(self, k)
+                this_attr = getattr(self, k)
+                
+                # Do Unicode/string conversions, as HDF5 struggles with them
+                if k == 'labels':
+                    this_attr = [np.string_(lbl) for lbl in this_attr] 
+                
+                # Store attribute in group
+                try:
+                    group.attrs[k] = this_attr
+                except(TypeError):
+                    print("TypeError:", k, this_attr)
+                    continue
+                
         for k in self._meta_dsets:
             if hasattr(self, k):
                 group.create_dataset(k, data=getattr(self, k))
@@ -1401,7 +1422,7 @@ class UVPSpec(object):
                     # ndarrays
                     if p in self._ndarrays:
                         assert isinstance(getattr(self, p), np.ndarray), \
-                            "attribute {} needs to be an ndarray".format(p)
+                            "attribute {} needs to be an ndarray, {}".format(p, getattr(self, p).tostring())
                         if issubclass(getattr(self, p).dtype.type, 
                                       a.expected_type):
                             pass
@@ -1586,7 +1607,7 @@ class UVPSpec(object):
         """
         # Assert polarization-pair type
         if isinstance(polpair, tuple):
-            polpair = uvutils.polpair_tuple2int(polpair)
+            polpair = uvputils.polpair_tuple2int(polpair)
 
         # Get polarization index
         polpair_ind = self.polpair_to_indices(polpair)
@@ -1605,7 +1626,7 @@ class UVPSpec(object):
         if blpairs is None:
             blpairs = np.unique(self.blpair_array)
         elif isinstance(blpairs[0], tuple):
-            blpairs = map(lambda blp: self.antnums_to_blpair(blp), blpairs)
+            blpairs = [self.antnums_to_blpair(blp) for blp in blpairs]
 
         # Get delays
         dlys = self.get_dlys(spw)
@@ -1859,7 +1880,7 @@ def combine_uvpspec(uvps, verbose=True):
     # Sort new data axes
     new_spws = sorted(new_spws)
     new_blpts = sorted(new_blpts)
-    new_pols = [new_pols[i] for i in np.argsort(np.abs(new_pols))]
+    new_polpairs = [new_polpairs[i] for i in np.argsort(np.abs(new_polpairs))]
     Nspws = len(new_spws)
     Nblpairts = len(new_blpts)
     Npols = len(new_polpairs)
@@ -1935,7 +1956,8 @@ def combine_uvpspec(uvps, verbose=True):
 
     # get each uvp's data axes
     uvp_spws = [_uvp.get_spw_ranges() for _uvp in uvps]
-    uvp_blpts = [zip(_uvp.blpair_array, _uvp.time_avg_array) for _uvp in uvps]
+    uvp_blpts = [list(zip(_uvp.blpair_array, _uvp.time_avg_array)) 
+                 for _uvp in uvps]
     uvp_polpairs = [_uvp.polpair_array.tolist() for _uvp in uvps]
 
     # Construct dict of label indices, to be used for re-ordering later
@@ -1954,7 +1976,7 @@ def combine_uvpspec(uvps, verbose=True):
             if i == 0: blpts_idxs0 = blpts_idxs.copy()
 
             # Loop over polarizations
-            for k, p in enumerate(new_pols):
+            for k, p in enumerate(new_polpairs):
                 q = uvp_polpairs[l].index(p)
                 u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
 
@@ -2032,7 +2054,7 @@ def combine_uvpspec(uvps, verbose=True):
             u.lst_avg_array[j] = uvps[l].lst_avg_array[n]
             u.blpair_array[j] = uvps[l].blpair_array[n]
 
-    elif concat_ax == 'polpair':
+    elif concat_ax == 'polpairs':
 
         # Concatenate polarizations
         for k, p in enumerate(new_polpairs):
@@ -2074,11 +2096,15 @@ def combine_uvpspec(uvps, verbose=True):
             u.lst_2_array[j] = uvps[0].lst_2_array[n]
             u.lst_avg_array[j] = uvps[0].lst_avg_array[n]
             u.blpair_array[j] = uvps[0].blpair_array[n]
-
+    
+    else:
+        # Make sure we have properly identified the concat_ax
+        raise ValueError("concat_ax {} not recognized.".format(concat_ax))
+    
     # Set baselines
     u.Nblpairs = len(np.unique(u.blpair_array))
     uvp_bls = [uvp.bl_array for uvp in uvps]
-    new_bls = sorted(reduce(operator.or_, [set(bls) for bls in uvp_bls]))
+    new_bls = np.unique(np.hstack(uvp_bls))
     u.bl_array = np.array(new_bls)
     u.Nbls = len(u.bl_array)
     u.bl_vecs = []
@@ -2088,7 +2114,7 @@ def combine_uvpspec(uvps, verbose=True):
         u.bl_vecs.append(uvps[l].bl_vecs[h])
     u.bl_vecs = np.array(u.bl_vecs)
     u.Ntimes = len(np.unique(u.time_avg_array))
-    u.history = reduce(operator.add, [uvp.history for uvp in uvps])
+    u.history = "".join([uvp.history for uvp in uvps])
     u.labels = np.array(u.labels, np.str)
 
     for k in static_meta.keys():
@@ -2206,7 +2232,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     for i, uvp1 in enumerate(uvps):
         # get uvp1 sets and append to unique lists
         uvp1_spws = uvp1.get_spw_ranges()
-        uvp1_blpts = zip(uvp1.blpair_array, uvp1.time_avg_array)
+        uvp1_blpts = list(zip(uvp1.blpair_array, uvp1.time_avg_array))
         uvp1_polpairs = uvp1.polpair_array
 
         # iterate over uvps
@@ -2214,7 +2240,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
             if j <= i: continue
             # get uvp2 sets
             uvp2_spws = uvp2.get_spw_ranges()
-            uvp2_blpts = zip(uvp2.blpair_array, uvp2.time_avg_array)
+            uvp2_blpts = list(zip(uvp2.blpair_array, uvp2.time_avg_array))
             uvp2_polpairs = uvp2.polpair_array
 
             # determine if uvp1 and uvp2 are an identical match
@@ -2246,13 +2272,17 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 
     # assert all uvp pairs have the same (single) non-overlap (concat) axis
     err_msg = "Non-overlapping data in uvps span multiple data axes:\n{}" \
-              "".format("\n".join(map(lambda i: "{} & {}: {}".format(i[0][0], i[0][1], i[1]), data_concat_axes.items())))
+              "".format("\n".join( ["{} & {}: {}".format(i[0][0],i[0][1],i[1]) 
+                                    for i in data_concat_axes.items()] ))
     assert len(set(data_concat_axes.values())) == 1, err_msg
 
     # perform additional checks given concat ax
     if concat_ax == 'blpairts':
         # check scalar_array
-        assert np.all([np.isclose(uvps[0].scalar_array, u.scalar_array) for u in uvps[1:]]), "" \
-               "scalar_array must be the same for all uvps given concatenation along blpairts."
+        assert np.all([np.isclose(uvps[0].scalar_array, u.scalar_array)     
+                       for u in uvps[1:]]), \
+               "scalar_array must be the same for all uvps given " \
+               "concatenation along blpairts."
 
-    return uvps, concat_ax, unique_spws, unique_blpts, unique_polpairs, static_meta
+    return uvps, concat_ax, unique_spws, unique_blpts, \
+           unique_polpairs, static_meta

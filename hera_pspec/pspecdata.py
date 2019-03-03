@@ -119,7 +119,7 @@ class PSpecData(object):
                 dsets_std = _dsets_std
 
             # Unpack dsets and wgts dicts
-            labels = dsets.keys()
+            labels = list(dsets.keys())
             _dsets = [dsets[key] for key in labels]
             _wgts = [wgts[key] for key in labels]
             dsets = _dsets
@@ -238,31 +238,44 @@ class PSpecData(object):
             raise ValueError("all dsets must have the same Ntimes")
 
         # raise warnings if times don't match
-        lst_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].lst_array) - np.unique(dset.lst_array), self.dsets[1:]))
+        lst_diffs = np.array( [ np.unique(self.dsets[0].lst_array) 
+                              - np.unique(dset.lst_array) 
+                               for dset in self.dsets[1:]] )
         if np.max(np.abs(lst_diffs)) > 0.001:
-            raise_warning("Warning: taking power spectra between LST bins misaligned by more than 15 seconds",
-                            verbose=verbose)
+            raise_warning("Warning: taking power spectra between LST bins "
+                          "misaligned by more than 15 seconds",
+                          verbose=verbose)
 
         # raise warning if frequencies don't match
-        freq_diffs = np.array(map(lambda dset: np.unique(self.dsets[0].freq_array) - np.unique(dset.freq_array), self.dsets[1:]))
+        freq_diffs = np.array( [ np.unique(self.dsets[0].freq_array) 
+                               - np.unique(dset.freq_array) 
+                                for dset in self.dsets[1:]] )
         if np.max(np.abs(freq_diffs)) > 0.001e6:
-            raise_warning("Warning: taking power spectra between frequency bins misaligned by more than 0.001 MHz",
+            raise_warning("Warning: taking power spectra between frequency "
+                          "bins misaligned by more than 0.001 MHz",
                           verbose=verbose)
 
         # Check phase type
         phase_types = []
         for d in self.dsets: phase_types.append(d.phase_type)
         if np.unique(phase_types).size > 1:
-            raise ValueError("all datasets must have the same phase type (i.e. 'drift', 'phased', ...)\ncurrent phase types are {}".format(phase_types))
+            raise ValueError("all datasets must have the same phase type "
+                             "(i.e. 'drift', 'phased', ...)\ncurrent phase "
+                             "types are {}".format(phase_types))
 
         # Check phase centers if phase type is phased
         if 'phased' in set(phase_types):
-            phase_ra = map(lambda d: d.phase_center_ra_degrees, self.dsets)
-            phase_dec = map(lambda d: d.phase_center_dec_degrees, self.dsets)
-            max_diff_ra = np.max(map(lambda d: np.diff(d), itertools.combinations(phase_ra, 2)))
-            max_diff_dec = np.max(map(lambda d: np.diff(d), itertools.combinations(phase_dec, 2)))
+            phase_ra = [d.phase_center_ra_degrees for d in self.dsets]
+            phase_dec = [d.phase_center_dec_degrees for d in self.dsets]
+            max_diff_ra = np.max( [np.diff(d) 
+                                   for d in itertools.combinations(phase_ra, 2)])
+            max_diff_dec = np.max([np.diff(d) 
+                                  for d in itertools.combinations(phase_dec, 2)])
             max_diff = np.sqrt(max_diff_ra**2 + max_diff_dec**2)
-            if max_diff > 0.15: raise_warning("Warning: maximum phase-center difference between datasets is > 10 arcmin", verbose=verbose)
+            if max_diff > 0.15:
+                raise_warning("Warning: maximum phase-center difference "
+                              "between datasets is > 10 arcmin", 
+                              verbose=verbose)
 
     def check_key_in_dset(self, key, dset_ind):
         """
@@ -377,13 +390,13 @@ class PSpecData(object):
 
         # get baseline
         bl = key[0]
-        if isinstance(bl, (int, np.int, np.int32)):
+        if isinstance(bl, (int, np.integer)):
             assert len(key) > 1, "baseline must be fed as a tuple"
             bl = tuple(key[:2])
             key = key[2:]
         else:
             key = key[1:]
-        assert isinstance(bl, tuple), "baseline must be fed as a tuple"
+        assert isinstance(bl, tuple), "baseline must be fed as a tuple, %s" % bl
 
         # put pol into bl key if it exists
         if len(key) > 0:
@@ -512,14 +525,15 @@ class PSpecData(object):
         Ckey = key + (model,)
 
         # check cache
-        if not self._C.has_key(Ckey):
+        if Ckey not in self._C:
             # calculate covariance model
             if model == 'empirical':
                 self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
 
         return self._C[Ckey]
 
-    def cross_covar_model(self, key1, key2, model='empirical', conj_1=False, conj_2=True):
+    def cross_covar_model(self, key1, key2, model='empirical', 
+                          conj_1=False, conj_2=True):
         """
         Return a covariance model having specified a key and model type.
 
@@ -531,13 +545,16 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. options=['empirical']
+            Type of covariance model to calculate, if not cached. 
+            options=['empirical']
 
         conj_1 : boolean, optional
-            Whether to conjugate first copy of data in covar or not. Default: False
+            Whether to conjugate first copy of data in covar or not. 
+            Default: False
 
         conj_2 : boolean, optional
-            Whether to conjugate second copy of data in covar or not. Default: True
+            Whether to conjugate second copy of data in covar or not. 
+            Default: True
 
         Returns
         -------
@@ -583,7 +600,7 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
 
-        if not self._I.has_key(key):
+        if key not in self._I:
             self._I[key] = np.identity(self.spw_Nfreqs)
         return self._I[key]
 
@@ -599,7 +616,8 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string
-            Type of covariance model to calculate, if not cached. options=['empirical']
+            Type of covariance model to calculate, if not cached. 
+            options=['empirical']
 
         Returns
         -------
@@ -614,7 +632,7 @@ class PSpecData(object):
         Ckey = key + (model,)
 
         # Calculate inverse covariance if not in cache
-        if not self._iC.has_key(Ckey):
+        if Ckey not in self._iC:
             C = self.C_model(key, model=model)
             U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
 
@@ -659,9 +677,10 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
 
-        if not self._Y.has_key(key):
+        if key not in self._Y:
             self._Y[key] = np.diag(np.max(self.w(key), axis=1))
-            if not np.all(np.isclose(self._Y[key], 0.0) + np.isclose(self._Y[key], 1.0)):
+            if not np.all(np.isclose(self._Y[key], 0.0) \
+                        + np.isclose(self._Y[key], 1.0)):
                 raise NotImplementedError("Non-binary weights not currently implmented")
         return self._Y[key]
 
@@ -720,17 +739,19 @@ class PSpecData(object):
         key = (dset,) + (bl,)
         Rkey = key + (self.data_weighting,) + (self.taper,)
 
-        if not self._R.has_key(Rkey):
+        if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
                 sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
                 sqrtT = np.sqrt(aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)).reshape(1, -1)
 
-            # get flag weight vector: straight multiplication of vectors mimics matrix multiplication
+            # get flag weight vector: straight multiplication of vectors 
+            # mimics matrix multiplication
             sqrtY = np.sqrt(self.Y(key).diagonal().reshape(1, -1))
 
-            # replace possible nans with zero (when something dips negative in sqrt for some reason)
+            # replace possible nans with zero (when something dips negative 
+            # in sqrt for some reason)
             sqrtT[np.isnan(sqrtT)] = 0.0
             sqrtY[np.isnan(sqrtY)] = 0.0
 
@@ -946,7 +967,7 @@ class PSpecData(object):
 
         else:
             q = []
-            for i in xrange(self.spw_Ndlys):
+            for i in range(self.spw_Ndlys):
                 Q = self.get_Q_alt(i)
                 QRx2 = np.dot(Q, Rx2)
                 qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
@@ -987,13 +1008,13 @@ class PSpecData(object):
         R2 = self.R(key2)
 
         iR1Q, iR2Q = {}, {}
-        for ch in xrange(self.spw_Ndlys):
+        for ch in range(self.spw_Ndlys):
             Q = self.get_Q_alt(ch)
             iR1Q[ch] = np.dot(R1, Q) # R_1 Q
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
 
-        for i in xrange(self.spw_Ndlys):
-            for j in xrange(self.spw_Ndlys):
+        for i in range(self.spw_Ndlys):
+            for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
                 G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
 
@@ -1063,9 +1084,14 @@ class PSpecData(object):
         """
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
-                             "by now! Cannot be equal to None")
-
-        H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+                             "by now! Cannot be equal to None.")
+        
+        try:
+            H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+        except:
+            print("exception:", self.spw_Ndlys, self.spw_Ndlys)
+            raise
+            
         R1 = self.R(key1)
         R2 = self.R(key2)
 
@@ -1077,7 +1103,7 @@ class PSpecData(object):
             sinc_matrix = np.sinc(sinc_matrix / np.float(self.spw_Ndlys))
 
         iR1Q_alt, iR2Q = {}, {}
-        for ch in xrange(self.spw_Ndlys):
+        for ch in range(self.spw_Ndlys):
             Q_alt = self.get_Q_alt(ch)
             iR1Q_alt[ch] = np.dot(R1, Q_alt) # R_1 Q_alt
             Q = Q_alt
@@ -1087,8 +1113,8 @@ class PSpecData(object):
 
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
 
-        for i in xrange(self.spw_Ndlys): # this loop goes as nchan^4
-            for j in xrange(self.spw_Ndlys):
+        for i in range(self.spw_Ndlys): # this loop goes as nchan^4
+            for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
                 H[i,j] += np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
 
@@ -1964,7 +1990,8 @@ class PSpecData(object):
             elif isinstance(bls1[i], list) and len(bls1[i]) == 1:
                 bl_pairs.append( (bls1[i][0], bls2[i][0]) )
             else:
-                bl_pairs.append(map(lambda j: (bls1[i][j] , bls2[i][j]), range(len(bls1[i]))))
+                bl_pairs.append(
+                    [ (bls1[i][j], bls2[i][j]) for j in range(len(bls1[i])) ] )
 
         # validate bl-pair redundancy
         validate_blpairs(bl_pairs, dset1, dset2, baseline_tol=1.0)
@@ -1973,7 +2000,7 @@ class PSpecData(object):
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
         else:
-            assert np.isclose(map(lambda t: len(t), spw_ranges), 2).all(), \
+            assert np.isclose([len(t) for t in spw_ranges], 2).all(), \
                 "spw_ranges must be fed as a list of length-2 tuples"
 
         # if using default setting of number of delay bins equal to number 
@@ -2054,17 +2081,18 @@ class PSpecData(object):
 
             # Loop over polarizations
             for j, p in enumerate(pols):
-                p_str = tuple(map(lambda _p: uvutils.polnum2str(_p), p))
+                p_str = tuple([uvutils.polnum2str(_p) for _p in p])
                 if verbose: print( "\nUsing polarization pair: {}".format(p_str))
 
                 # validating polarization pair on UVData objects
                 valid = self.validate_pol(dsets, tuple(p))
                 if not valid:
                    # Polarization pair is invalid; skip
-                   print ("Polarization pair: {} failed the validation test, continuing...".format(p_str))
+                   print("Polarization pair: {} failed the validation test, "
+                         "continuing...".format(p_str))
                    continue
                 
-                spw_polpair.append(p)
+                spw_polpair.append( uvputils.polpair_tuple2int(p) )
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
@@ -2138,7 +2166,7 @@ class PSpecData(object):
                                    for y in self._identity_Y.values()]
                         if True in matches:
                             # This Y exists, so pick appropriate G and H and continue
-                            match = self._identity_Y.keys()[matches.index(True)]
+                            match = list(self._identity_Y.keys())[matches.index(True)]
                             Gv = self._identity_G[match]
                             Hv = self._identity_H[match]
                         else:
@@ -2285,9 +2313,9 @@ class PSpecData(object):
         uvp.Ntimes = len(np.unique(time1))
         uvp.Nblpairts = len(time1)
         bls_arr = sorted(set(bls_arr))
-        uvp.bl_array = np.array(map(lambda bl: uvp.antnums_to_bl(bl), bls_arr))
+        uvp.bl_array = np.array([uvp.antnums_to_bl(bl) for bl in bls_arr])
         antpos = dict(zip(dset1.antenna_numbers, dset1.antenna_positions))
-        uvp.bl_vecs = np.array(map(lambda bl: antpos[bl[0]] - antpos[bl[1]], bls_arr))
+        uvp.bl_vecs = np.array([antpos[bl[0]] - antpos[bl[1]] for bl in bls_arr])
         uvp.Nbls = len(uvp.bl_array)
         uvp.spw_dly_array = np.array(dly_spws)
         uvp.spw_freq_array = np.array(freq_spws)
@@ -2341,7 +2369,9 @@ class PSpecData(object):
             uvp.cov_array = cov_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
-        uvp.nsample_array = dict(map(lambda k: (k, np.ones_like(uvp.integration_array[k], np.float)), uvp.integration_array.keys()))
+        uvp.nsample_array = dict(
+                        [ (k, np.ones_like(uvp.integration_array[k], np.float)) 
+                         for k in uvp.integration_array.keys() ] )
 
         # run check
         uvp.check()
@@ -2422,7 +2452,7 @@ class PSpecData(object):
              pols) = hc.io.load_vis(dset, return_meta=True)
 
             # make bls dictionary
-            bls = dict(map(lambda k: (k, antpos[k[0]] - antpos[k[1]]), data.keys()))
+            bls = dict([(k, antpos[k[0]] - antpos[k[1]]) for k in data.keys()])
 
             # Get dlst array
             dlst = lst_grid - lsts
@@ -2785,7 +2815,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
 
     # configure polarization
     if pol_pairs is None:
-        unique_pols = reduce(operator.and_, [set(d.polarization_array) for d in dsets])
+        unique_pols = np.unique(np.hstack([d.polarization_array for d in dsets]))
         pol_pairs = [(up, up) for up in unique_pols]
     assert len(pol_pairs) > 0, "no pol_pairs specified"
 
@@ -2891,6 +2921,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
+        
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
                       overwrite=overwrite)
 
@@ -2901,16 +2932,16 @@ def get_pspec_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
     def list_of_int_tuples(v):
-        v = map(lambda x: tuple(map(int, x.split())), v.split(","))
+        v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_str_tuples(v):
-        v = map(lambda x: tuple(map(str, x.split())), v.split(","))
+        v = [tuple([str(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_tuple_tuples(v):
-        v = map(lambda x: tuple(map(int, x.split())), v.split(","))
-        v = map(lambda x: (x[:2], x[2:]), v)
+        v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
+        v = [(x[:2], x[2:]) for x in v]
         return v
 
     a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")

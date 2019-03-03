@@ -76,7 +76,8 @@ def build_vanilla_uvpspec(beam=None):
     label_1_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 0
     label_2_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 1
     if beam is not None:
-        OmegaP, OmegaPP = beam.get_Omegas(beam.primary_beam.polarization_array[0])
+        pol = beam.primary_beam.polarization_array[0]
+        OmegaP, OmegaPP = beam.get_Omegas((pol,pol))
         beam_freqs = beam.beam_freqs
 
     # HERA coordinates in Karoo Desert, SA
@@ -221,6 +222,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', 
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose, 
                    store_cov=store_cov, n_dlys=n_dlys)
+    
     return uvp
 
 

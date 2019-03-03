@@ -3,7 +3,6 @@ import copy, operator
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num
 
-
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     """
     Subtract uvp2.data_array from uvp1.data_array. Subtract matching
@@ -192,7 +191,7 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, polpairs=True,
     # Each row of common_spws is a list of that spw's index in each UVPSpec
     if spws:
         common_spws = uvp_list[0].get_spw_ranges()
-        has_spws = [map(lambda x: x in uvp.get_spw_ranges(), common_spws) 
+        has_spws = [[x in uvp.get_spw_ranges() for x in common_spws] 
                     for uvp in uvp_list]
         common_spws = [common_spws[i] for i, f in enumerate(np.all(has_spws, axis=0)) if f]
         if verbose: print("common_spws:", common_spws)
@@ -250,7 +249,7 @@ def polpair_int2tuple(polpair):
         A length-2 tuple containing a pair of polarization 
         integers, e.g. (-5, -5).
     """
-    assert type(polpair) in (int, np.int), "polpair must be integer"
+    assert isinstance(polpair, (int, np.integer)), "polpair must be integer: %s" % type(polpair)
     
     # Split into pol1 and pol2 integers
     pol1 = int(str(polpair)[:-2]) - 10
@@ -290,8 +289,8 @@ def polpair_tuple2int(polpair):
     
     # Convert strings to ints if necessary
     pol1, pol2 = polpair
-    if type(pol1) in (str, np.str): pol1 = uvutils.polstr2num(pol1)
-    if type(pol2) in (str, np.str): pol2 = uvutils.polstr2num(pol2)
+    if type(pol1) in (str, np.str): pol1 = polstr2num(pol1)
+    if type(pol2) in (str, np.str): pol2 = polstr2num(pol2)
     
     # Convert to polpair integer
     ppint = (10 + pol1)*100 + (10 + pol2)
@@ -333,15 +332,17 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
         bls = [uvp.antnums_to_bl(bls)]
     elif isinstance(bls, list):
         if isinstance(bls[0], tuple):
-            bls = map(lambda b: uvp.antnums_to_bl(b), bls)
+            bls = [uvp.antnums_to_bl(b) for b in bls]
     elif isinstance(bls, (int, np.integer)):
         bls = [bls]
     
     # get indices
     if only_pairs_in_bls:
-        blp_select = np.array(map(lambda blp: np.bool((blp[0] in bls) * (blp[1] in bls)), blpair_bls))
+        blp_select = np.array( [np.bool((blp[0] in bls) * (blp[1] in bls)) 
+                                for blp in blpair_bls] )
     else:
-        blp_select = np.array(map(lambda blp: np.bool((blp[0] in bls) + (blp[1] in bls)), blpair_bls))
+        blp_select = np.array( [np.bool((blp[0] in bls) + (blp[1] in bls))
+                                for blp in blpair_bls] )
 
     return blp_select
 
@@ -440,21 +441,26 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         
         # if fed as list of tuples, convert to integers
         if isinstance(blpairs[0], tuple):
-            blpairs = map(lambda blp: uvp.antnums_to_blpair(blp), blpairs)
-        blpair_select = np.array(reduce(operator.add, map(lambda blp: uvp.blpair_array == blp, blpairs)))
+            blpairs = [uvp.antnums_to_blpair(blp) for blp in blpairs]
+        blpair_select = np.logical_or.reduce(
+                                   [uvp.blpair_array == blp for blp in blpairs])
         blp_select += blpair_select
 
     if times is not None:
         if bls is None and blpairs is None:
             blp_select = np.ones(uvp.Nblpairts, np.bool)
-        time_select = np.array(reduce(operator.add, map(lambda t: np.isclose(uvp.time_avg_array, t, rtol=1e-16), times)))
+        time_select = np.logical_or.reduce( 
+                               [np.isclose(uvp.time_avg_array, t, rtol=1e-16) 
+                                for t in times])
         blp_select *= time_select
 
     if lsts is not None:
         assert times is None, "Cannot select on lsts and times simultaneously."
         if bls is None and blpairs is None:
             blp_select = np.ones(uvp.Nblpairts, np.bool)
-        lst_select = np.array(reduce(operator.add, map(lambda t: np.isclose(uvp.lst_avg_array, t, rtol=1e-16), lsts)))
+        lst_select = np.logical_or.reduce(
+                            [ np.isclose(uvp.lst_avg_array, t, rtol=1e-16) 
+                              for t in lsts] )
         blp_select *= lst_select
 
     if bls is None and blpairs is None and times is None and lsts is None:
@@ -506,7 +512,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                     else p for p in polpairs]
         
         # create selection
-        polpair_select = np.array(reduce(operator.add, map(lambda p: uvp.polpair_array == p, polpairs)))
+        polpair_select = np.logical_or.reduce( [uvp.polpair_array == p 
+                                                for p in polpairs] )
 
         # turn into slice object if possible
         polpair_select = np.where(polpair_select)[0]
@@ -903,6 +910,7 @@ def _fast_lookup_blpairts(src_blpts, query_blpts, time_prec=8):
     # array lookup functions to be used
     src_blpts = np.asarray(src_blpts)
     query_blpts = np.asarray(query_blpts)
+    
     src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
     query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
     # Applies rounding to time values to ensure reliable float comparisons

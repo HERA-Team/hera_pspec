@@ -149,8 +149,8 @@ class Test_grouping(unittest.TestCase):
                                                      [uvp3,], 
                                                      blpair_groups=[_blpairs,], 
                                                      time_avg=True)
-            ps_avg = uvp_avg.get_data((0, blpair, 'xx'))
-            ps_boot = uvp4[0].get_data((0, blpair, 'xx'))
+            ps_avg = uvp_avg.get_data((0, blpair, ('xx','xx')))
+            ps_boot = uvp4[0].get_data((0, blpair, ('xx','xx')))
             np.testing.assert_array_almost_equal(ps_avg, ps_boot)
 
 def test_bootstrap_resampled_error():
@@ -258,11 +258,11 @@ def test_bootstrap_run():
     # assert original uvp is unchanged
     nt.assert_true(uvp == psc.get_pspec("grp1", 'uvp'))
     # check stats array
-    np.testing.assert_array_equal([u'bs_cinterval_16.00', u'bs_cinterval_84.00', u'bs_robust_std', u'bs_std'], uvp_avg.stats_array.keys())
+    np.testing.assert_array_equal([u'bs_cinterval_16.00', u'bs_cinterval_84.00', u'bs_robust_std', u'bs_std'], list(uvp_avg.stats_array.keys()))
     for stat in [u'bs_cinterval_16.00', u'bs_cinterval_84.00', u'bs_robust_std', u'bs_std']:
-        nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')).shape, (1, 50))
-        nt.assert_false(np.any(np.isnan(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')))))
-        nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), 'XX')).dtype, np.complex128)
+        nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ('xx','xx'))).shape, (1, 50))
+        nt.assert_false(np.any(np.isnan(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ('xx','xx'))))))
+        nt.assert_equal(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ('xx','xx'))).dtype, np.complex128)
 
     # test exceptions
     del psc

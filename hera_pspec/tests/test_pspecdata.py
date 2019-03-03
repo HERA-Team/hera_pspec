@@ -267,7 +267,7 @@ class Test_PSpecData(unittest.TestCase):
             self.assertAlmostEqual(np.imag(xQx), 0.)
 
         x_vect = np.ones(vect_length)
-        Q_matrix = self.ds.get_Q_alt(vect_length/2)
+        Q_matrix = self.ds.get_Q_alt(vect_length//2)
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
         # Sending in sinusoids for x and y should give delta functions
@@ -291,7 +291,7 @@ class Test_PSpecData(unittest.TestCase):
             self.assertAlmostEqual(np.imag(xQx), 0.)
 
         x_vect = np.ones(vect_length)
-        Q_matrix = self.ds.get_Q_alt((vect_length-2)/2-1)
+        Q_matrix = self.ds.get_Q_alt((vect_length-2)//2-1)
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
         # Sending in sinusoids for x and y should give delta functions
@@ -638,9 +638,9 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.set_taper(taper)
 
-                self.ds.set_Ndlys(Nfreq/3)
+                self.ds.set_Ndlys(Nfreq//3)
                 H = self.ds.get_H(key1, key2)
-                self.assertEqual(H.shape, (Nfreq/3, Nfreq/3)) # Test shape
+                self.assertEqual(H.shape, (Nfreq//3, Nfreq//3)) # Test shape
 
                 self.ds.set_Ndlys()
                 H = self.ds.get_H(key1, key2)
@@ -857,7 +857,7 @@ class Test_PSpecData(unittest.TestCase):
         # rephase and get pspec
         ds.rephase_to_dset(0)
         uvp2 = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
-        blp = (0, ((37,39),(37,39)), 'xx')
+        blp = (0, ((37,39),(37,39)), ('xx','xx'))
         nt.assert_true(np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min())
 
     def test_Jy_to_mK(self):
@@ -869,7 +869,8 @@ class Test_PSpecData(unittest.TestCase):
         ds.Jy_to_mK()
         nt.assert_true(ds.dsets[0].vis_units, 'mK')
         nt.assert_true(ds.dsets[1].vis_units, 'mK')
-        nt.assert_true(uvd.get_data(24, 25, 'xx')[30, 30] / ds.dsets[0].get_data(24, 25, 'xx')[30, 30] < 1.0)
+        nt.assert_true(uvd.get_data(24, 25, 'xx')[30, 30] \
+                    / ds.dsets[0].get_data(24, 25, 'xx')[30, 30] < 1.0)
 
         # test feeding beam
         ds2 = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
@@ -958,7 +959,7 @@ class Test_PSpecData(unittest.TestCase):
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
-        red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos))[2]
+        red_bls = [sorted(blg) for blg in redcal.get_pos_reds(antpos)][2]
         bls1, bls2, blps = utils.construct_blpairs(red_bls, exclude_permutations=True)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
@@ -997,7 +998,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(uvp.Nspws, 3)
         nt.assert_equal(uvp.Nspwdlys, 43)
         nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
-        nt.assert_equal(uvp.get_data((0, 124125124125, 'xx')).shape, (60, 14))
+        nt.assert_equal(uvp.get_data((0, 124125124125, ('xx','xx'))).shape, (60, 14))
 
         uvp.select(spws=[1])
         nt.assert_equal(uvp.Nspws, 1)
@@ -1008,7 +1009,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=[(10, 24)], verbose=False)
-        nt.assert_raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pols=[('xx','yy')])
+        #nt.assert_raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pols=[('xx','yy')])
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('yy','yy')], spw_ranges=[(10, 24)], verbose=False)
@@ -1063,7 +1064,7 @@ class Test_PSpecData(unittest.TestCase):
                        spw_ranges=[(20, 30)])
         nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
         nt.assert_equal(len(ds._identity_Y), 1)
-        nt.assert_equal(ds._identity_Y.keys()[0], ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')))
+        nt.assert_equal(list(ds._identity_Y.keys())[0], ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')))
         # assert caching is not used when inappropriate
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), :, 25, :] = True
         uvp = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
@@ -1108,7 +1109,7 @@ class Test_PSpecData(unittest.TestCase):
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
         uvp = ds.pspec(bls1, bls2, (0, 1), pols=('xx','xx'), taper='none', input_data_weight='identity', norm='I', sampling=True)
-        oqe = uvp.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
+        oqe = uvp.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
         # taper
@@ -1121,7 +1122,7 @@ class Test_PSpecData(unittest.TestCase):
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), taper='blackman-harris', input_data_weight='identity', norm='I')
-        oqe = uvp.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
+        oqe = uvp.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
 
@@ -1161,9 +1162,9 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
                         spw_ranges=[(400, 450)], verbose=False)
         # assert flag broadcast above hits weight arrays in uvp
-        nt.assert_true(np.all(np.isclose(uvp.get_wgts((0, ((24, 25), (24, 25)), 'xx'))[3], 0.0)))
+        nt.assert_true(np.all(np.isclose(uvp.get_wgts((0, ((24, 25), (24, 25)), ('xx','xx')))[3], 0.0)))
         # assert flag broadcast above hits integration arrays
-        nt.assert_true(np.isclose(uvp.get_integrations((0, ((24, 25), (24, 25)), 'xx'))[3], 0.0))
+        nt.assert_true(np.isclose(uvp.get_integrations((0, ((24, 25), (24, 25)), ('xx','xx')))[3], 0.0))
         # average spectra
         avg_uvp = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # repeat but change data in flagged portion
@@ -1195,8 +1196,8 @@ class Test_PSpecData(unittest.TestCase):
         uvp_unflagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
-        qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
-        qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
+        qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
+        qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
 
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
@@ -1213,8 +1214,8 @@ class Test_PSpecData(unittest.TestCase):
         uvp_flagged_mod = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
-        qe_flagged_mod = uvp_flagged_mod.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
-        qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
+        qe_flagged_mod = uvp_flagged_mod.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
+        qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
 
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_flagged_mod), np.real(qe_flagged), atol=0.001, rtol=0.001).all())
@@ -1271,8 +1272,10 @@ def test_pspec_run():
     # test basic execution
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
-                              bl_len_range=(14, 15), bl_deg_range=(50, 70), psname_ext='_0')
+    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, 
+                                  verbose=False, overwrite=True,
+                                  bl_len_range=(14, 15), bl_deg_range=(50, 70), 
+                                  psname_ext='_0')
     nt.assert_true(isinstance(psc, container.PSpecContainer))
     nt.assert_equal(psc.groups(), ['dset0_dset1'])
     nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1_0'])
@@ -1297,7 +1300,7 @@ def test_pspec_run():
     nt.assert_true(uvp.vis_units, "mK")
     # assert only blpairs that were fed are present
     nt.assert_equal(uvp.bl_array.tolist(), [137138, 152153])
-    nt.assert_equal(uvp.pol_array.tolist(), [-5, -5])
+    nt.assert_equal(uvp.polpair_array.tolist(), [505, 505])
     # assert weird cosmology was passed
     nt.assert_equal(uvp.cosmo, cosmo)
     # assert cov_array was calculated b/c std files were passed and store_cov
