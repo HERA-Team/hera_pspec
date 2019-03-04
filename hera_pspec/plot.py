@@ -1115,9 +1115,13 @@ def plot_uvdata_vis_hist(uvd, axis, index, fit_curve='Gaussian', plot_mode='norm
         ax.set_yscale('log')
         ax.grid()
 
-def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=[], **kwargs):
+def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=['time_average'], **kwargs):
     """
-    Plot different kinds of error bars in one figure.
+    Plot different kinds of error bars in one figure. These include 'nn' and 'sn' like
+    errors, which are constructed from time-differenced power spectra, uvp_td. Errors
+    which rely on pushing an input covariance matrix through the quadratic estimator are assigned 
+    in 'extra_error_types', and the first one ranked in 'extra_error_types' will be chosen 
+    as the reference, which means we will plot the ratios of other errors with the referred one.    
     
     Parameters
     ----------
@@ -1137,28 +1141,28 @@ def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=[], **kwarg
     Tsys : float
         The input system temperature to call in the uvp.generate_noise_spectra().
 
-    extra_error_types: str
+    extra_error_types: list of strs
         Extra types for error bars.
-        Choices:['min','max','diagonal','mean']
-        Default:[] 
+        Choices:'time_average', 'time_average_min','time_average_max',
+        'time_average_diagonal','time_average_mean'
+        Default:['time_average'] 
 
     kwargs : dict, optional
         Extra kwargs to pass to _all_ ax.plot calls.
     """
     assert isinstance(time_index, int), "time_index must be a integer."
     assert time_index >= 0 and time_index < uvp.Ntimes, "time_index is not valid."
+    assert len(extra_error_types) >=1, 'extra error types must be more than one.'
 
-    #The analytic variance
-    cov_types = ['original'] + extra_error_types
+    #Get the analytic variance and the color
     analytic_real, analytic_imag, color_list = odict(), odict(), odict() 
-    analytic_real['original'] = np.sqrt(np.abs(np.diag(uvp.get_cov(key,component='real', cov_type='original')[time_index])))
-    analytic_imag['original'] = np.sqrt(np.abs(np.diag(uvp.get_cov(key,component='imag', cov_type='original')[time_index])))
-    color_list['original'] = 'green'
-    #Extra types of analytic error bars. 
+    analytic_real[extra_error_types[0]] = np.sqrt(np.abs(np.diag(uvp.get_cov(key,component='real', cov_model=extra_error_types[0])[time_index])))
+    analytic_imag[extra_error_types[0]] = np.sqrt(np.abs(np.diag(uvp.get_cov(key,component='imag', cov_model=extra_error_types[0])[time_index])))
+    color_list[extra_error_types[0]] = 'green'
     error_flag = 1
-    for error_type in extra_error_types:
-        analytic_real[error_type] = np.sqrt(np.abs(np.diag(uvp.get_cov(key,component='real', cov_type=error_type)[time_index])))
-        analytic_imag[error_type] = np.sqrt(np.abs(np.diag(uvp.get_cov(key,component='imag', cov_type=error_type)[time_index])))
+    for error_type in extra_error_types[1:]:
+        analytic_real[error_type] = np.sqrt(np.abs(np.diag(uvp.get_cov(key,component='real', cov_model=error_type)[time_index])))
+        analytic_imag[error_type] = np.sqrt(np.abs(np.diag(uvp.get_cov(key,component='imag', cov_model=error_type)[time_index])))
         #Use rgb colors.
         color_list[error_type] = (0.5, abs(np.sin(error_flag)), 0.5)
         error_flag += 1
@@ -1181,12 +1185,12 @@ def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=[], **kwarg
     dlys = uvp.get_dlys(0) * 1e9
     # The ratio of error bars to the original one
     ax0 = fig.add_axes([0.1, 0.0, 0.4, 0.1])
-    ax0.plot(dlys, psn_real / analytic_real['original'] , c='blue')
-    ax0.plot(dlys, pnn_real / analytic_real['original'], c='orange')
-    for error_type in extra_error_types: 
-        ax0.plot(dlys, analytic_real[error_type] / analytic_real['original'], c=color_list[error_type])
+    ax0.plot(dlys, psn_real / analytic_real[extra_error_types[0]] , c='blue')
+    ax0.plot(dlys, pnn_real / analytic_real[extra_error_types[0]], c='orange')
+    for error_type in extra_error_types[1:]: 
+        ax0.plot(dlys, analytic_real[error_type] / analytic_real[extra_error_types[0]], c=color_list[error_type])
     if not uvp.norm == 'Unnormalized':  
-        ax0.plot(dlys, noise[time_index]/analytic_real['original'], c='k')
+        ax0.plot(dlys, noise[time_index]/analytic_real[extra_error_types[0]], c='k')
     ax0.axhline(y=1, c='g')
     ax0.set_xlabel(r"$\tau$ $[{\rm ns}]$",fontsize=12)
     ax0.semilogy()
@@ -1194,8 +1198,8 @@ def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=[], **kwarg
     ax1 = fig.add_axes([0.1, 0.1, 0.4, 0.4])
     ax1.plot(dlys, psn_real, label=r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', c='blue')
     ax1.plot(dlys, pnn_real , label=r'$P_{nn}}$', c='orange')
-    for cov_type in cov_types:
-        ax1.plot(dlys, analytic_real[cov_type], label='analytic-'+cov_type, c=color_list[cov_type])
+    for error_type in extra_error_types: 
+        ax1.plot(dlys, analytic_real[error_type], label='analytic_'+error_type, c=color_list[error_type])
     if not uvp.norm == 'Unnormalized':
         ax1.plot(dlys, noise[time_index], c='k', label='thermal noise')
     ax1.legend(loc='best', framealpha=0)
@@ -1203,12 +1207,12 @@ def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=[], **kwarg
     ax1.semilogy()
     # The ratio of error bars to the original one
     ax2 = fig.add_axes([0.5, 0.0, 0.4, 0.1])
-    ax2.plot(dlys, psn_imag / analytic_imag['original'] , c='blue')
-    ax2.plot(dlys, pnn_imag / analytic_imag['original'],  c='orange')
-    for error_type in extra_error_types:
-        ax2.plot(dlys, analytic_imag[error_type] / analytic_imag['original'], c=color_list[error_type])
+    ax2.plot(dlys, psn_imag / analytic_imag[extra_error_types[0]] , c='blue')
+    ax2.plot(dlys, pnn_imag / analytic_imag[extra_error_types[0]],  c='orange')
+    for error_type in extra_error_types[1:]:
+        ax2.plot(dlys, analytic_imag[error_type] / analytic_imag[extra_error_types[0]], c=color_list[error_type])
     if not uvp.norm == 'Unnormalized': 
-        ax2.plot(dlys, noise[time_index]/analytic_imag['original'], c='k')
+        ax2.plot(dlys, noise[time_index]/analytic_imag[extra_error_types[0]], c='k')
     ax2.axhline(y=1, c='g')
     ax2.set_xlabel(r"$\tau$ $[{\rm ns}]$",fontsize=12)
     ax2.semilogy()
@@ -1217,8 +1221,8 @@ def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=[], **kwarg
     ax3 = fig.add_axes([0.5, 0.1, 0.4, 0.4])
     ax3.plot(dlys, psn_imag, label=r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', c='blue')
     ax3.plot(dlys, pnn_imag , label=r'$P_{nn}}$', c='orange')
-    for cov_type in cov_types:
-        ax3.plot(dlys, analytic_imag[cov_type], label='analytic-'+cov_type, c=color_list[cov_type])
+    for error_type in extra_error_types: 
+        ax3.plot(dlys, analytic_imag[error_type], label='analytic_'+error_type, c=color_list[error_type])
     if not uvp.norm == 'Unnormalized':
         ax3.plot(dlys, noise[time_index], c='k', label='thermal noise')
     ax3.legend(loc='best', framealpha=0)
@@ -1226,7 +1230,7 @@ def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=[], **kwarg
     ax3.yaxis.tick_right()
     ax3.set_xticklabels('')
 
-def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_types=[], fit_curve='Gaussian', plot_mode='normal', show_robust=True, **kwargs):
+def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_types=['time_average'], fit_curve='Gaussian', plot_mode='normal', show_robust=True, **kwargs):
     """
     Plot the distribution of z-scores on a baseline-pair across time axis and delay axis.
     
@@ -1249,10 +1253,11 @@ def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_typ
     inside_wedge : bool
         The choice to plot the histograms of z-scores inside or outside the wedge.  
 
-    extra_error_types: str
+    extra_error_types: list of strs
         Extra types for error bars.
-        Choices:['min','max','diagonal','mean']
-        Default:[] 
+        Choices:'time_average', 'time_average_min','time_average_max',
+        'time_average_diagonal','time_average_mean'
+        Default:['time_average'] 
 
     plot_mode : str
         Plot mode. If choose 'normal', just plot histograms of numbers. 
@@ -1274,6 +1279,8 @@ def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_typ
     """
     dlys = uvp.get_dlys(0)*1e9
     assert wedge <= np.max(dlys) and wedge >= np.min(dlys), "The 'wedge' is not valid." 
+    assert len(extra_error_types) >=1, 'extra error types must be more than one.'
+
     # Dictionary of error bars.
     error_type_list_real = odict()
     error_type_list_imag = odict()
@@ -1289,14 +1296,10 @@ def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_typ
         error_type_list_imag[pre_td] = np.sqrt(np.abs(uvp.get_data(key)[:uvp_td.Ntimes].real * uvp_td.get_data(key)[:uvp_td.Ntimes].imag)).T[abs(dlys)<wedge].reshape(-1)
         label_list[pre_td] = pre_td
 
-        error_type_list_real['original'] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='real', cov_type='original')[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
-        error_type_list_imag['original'] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='imag', cov_type='original')[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
-        label_list['original'] = 'analytic-original'
-        
         for error_type in extra_error_types:
-            error_type_list_real[error_type] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='real', cov_type=error_type)[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
-            error_type_list_imag[error_type] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='imag', cov_type=error_type)[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
-            label_list[error_type] = 'analytic-'+error_type
+            error_type_list_real[error_type] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='real', cov_model=error_type)[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+            error_type_list_imag[error_type] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='imag', cov_model=error_type)[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)<wedge].reshape(-1)
+            label_list[error_type] = 'analytic_'+error_type
         
         p_real = uvp.get_data(key)[:uvp_td.Ntimes].real.T[abs(dlys)<wedge].reshape(-1)
         p_real -= np.mean(p_real)
@@ -1311,14 +1314,10 @@ def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_typ
         error_type_list_imag[pre_td] = (np.abs(uvp_td.get_data(key)[:uvp_td.Ntimes].imag)/2.).T[abs(dlys)>wedge].reshape(-1)
         label_list[pre_td] = pre_td
 
-        error_type_list_real['original'] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='real', cov_type='original')[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
-        error_type_list_imag['original'] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='imag', cov_type='original')[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
-        label_list['original'] = 'analytic-original'
-
         for error_type in extra_error_types:
-            error_type_list_real[error_type] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='real', cov_type=error_type)[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
-            error_type_list_imag[error_type] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='imag', cov_type=error_type)[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
-            label_list[error_type] = 'analytic-'+error_type
+            error_type_list_real[error_type] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='real', cov_model=error_type)[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+            error_type_list_imag[error_type] = np.sqrt(np.abs([np.diag(uvp.get_cov(key,component='imag', cov_model=error_type)[i]) for i in range(uvp_td.Ntimes)])).T[abs(dlys)>wedge].reshape(-1)
+            label_list[error_type] = 'analytic_'+error_type
 
         p_real = uvp.get_data(key)[:uvp_td.Ntimes].real.T[abs(dlys)>wedge].reshape(-1)
         p_real -= np.mean(p_real)
@@ -1326,8 +1325,8 @@ def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_typ
         p_imag = uvp.get_data(key)[:uvp_td.Ntimes].imag.T[abs(dlys)>wedge].reshape(-1)
         p_imag -= np.mean(p_imag)
     # Types of error bars and the colors
-    error_types = [pre_td, 'original'] + extra_error_types 
-    colors = [c_td,'green'] + [(0.5, abs(np.sin(error_flag)), 0.5) for error_flag in range(1, len(extra_error_types)+1)]      
+    error_types = [pre_td,] + extra_error_types 
+    colors = [c_td,'green'] + [(0.5, abs(np.sin(error_flag)), 0.5) for error_flag in range(1, len(extra_error_types))]      
     
     nrow = len(error_types)
     height = 4*nrow
@@ -1343,7 +1342,7 @@ def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_typ
         d_list = []
         d_list.append(p_real / error_type_list_real[error_types[j]])
         d_list.append(p_imag / error_type_list_imag[error_types[j]])
-        pre_list = ['-real', '-imag']
+        pre_list = ['_real', '_imag']
         for index in range(0,2):  
             ax = axes[j,index]
             d = d_list[index]
@@ -1386,7 +1385,7 @@ def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_typ
             
             ax.legend(loc='upper left', framealpha=0, fontsize=12)
 
-def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_error_types=[], fit_curve='Gaussian', plot_mode='normal', show_robust=True, **kwargs):
+def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_error_types=['time_average'], fit_curve='Gaussian', plot_mode='normal', show_robust=True, **kwargs):
     """
     Plot the distribution of the z-scores in the same delay bin across blpt axis.
     
@@ -1415,10 +1414,11 @@ def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_erro
     blpairs : list
         The list of the baseline-pairs.
 
-    extra_error_types: str
+    extra_error_types: list of strs
         Extra types for error bars.
-        Choices:['min','max','diagonal','mean']
-        Default:[] 
+        Choices:'time_average', 'time_average_min','time_average_max',
+        'time_average_diagonal','time_average_mean'
+        Default:['time_average'] 
 
     plot_mode : str
         Plot mode. If choose 'normal', just plot histograms of numbers. 
@@ -1444,6 +1444,8 @@ def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_erro
     dly_ind = np.argmin(abs(dlys-dly))
     assert isinstance(blpairs, list), "blpairs must a list."
     assert isinstance(blpairs[0], tuple), "blpairs must a list of baseline-pairs."
+    assert len(extra_error_types) >=1, 'extra error types must be more than one.'
+
 
     key_list = []
     for blpair in blpairs:
@@ -1466,23 +1468,20 @@ def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_erro
         label_list[pre_td] = pre_td
         error_type_list_real[pre_td] = np.abs(np.array([uvp_td.get_data(key)[:,dly_ind].real/2. for key in key_list]).reshape(-1))
         error_type_list_imag[pre_td] = np.abs(np.array([uvp_td.get_data(key)[:,dly_ind].imag/2. for key in key_list]).reshape(-1))
-    # The original type of analytic variance      
-    error_type_list_real['original'] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_type='original')[time]) for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
-    error_type_list_imag['original'] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_type='original')[time]) for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
-    label_list['original'] = 'analytic-original'
-    # Other types of analytic variance 
+
+    # Get the analytic variance 
     for error_type in extra_error_types:
-        error_type_list_real[error_type] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_type=error_type)[time]) for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
-        error_type_list_imag[error_type] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_type=error_type)[time]) for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
-        label_list[error_type] = 'analytic-'+error_type
+        error_type_list_real[error_type] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_model=error_type)[time]) for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+        error_type_list_imag[error_type] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_model=error_type)[time]) for time in range(uvp_td.Ntimes)])[:,dly_ind] for key in key_list]).reshape(-1)))
+        label_list[error_type] = 'analytic_'+error_type
 
     p_real = np.array([uvp.get_data(key)[:uvp_td.Ntimes,dly_ind].real for key in key_list]).reshape(-1)
     p_real -= np.mean(p_real)
     p_imag = np.array([uvp.get_data(key)[:uvp_td.Ntimes,dly_ind].imag for key in key_list]).reshape(-1)
     p_imag -= np.mean(p_imag)
     # Error types and colors   
-    error_types = [pre_td, 'original'] + extra_error_types 
-    colors = [c_td,'green'] + [(0.5, abs(np.sin(error_flag)), 0.5) for error_flag in range(1, len(extra_error_types)+1)]      
+    error_types = [pre_td,] + extra_error_types 
+    colors = [c_td,'green'] + [(0.5, abs(np.sin(error_flag)), 0.5) for error_flag in range(1, len(extra_error_types))]      
     nrow = len(error_types)
     height = 4*nrow
 
@@ -1493,7 +1492,7 @@ def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_erro
         d_list = []
         d_list.append(p_real / error_type_list_real[error_types[j]])
         d_list.append(p_imag / error_type_list_imag[error_types[j]])
-        pre_list = ['-real', '-imag']
+        pre_list = ['_real', '_imag']
         for index in range(0,2):  
             ax = axes[j,index]
             d = d_list[index]
@@ -1536,12 +1535,25 @@ def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_erro
             
             ax.legend(loc='upper left', framealpha=0, fontsize=12)
 
-def plot_error_blpt_avg(uvp, uvp_td, spw, pol, blpairs, Tsys, extra_error_types=[], **kwargs):
+def plot_error_blpt_avg(mode, uvp, uvp_td, spw, pol, blpairs, Tsys, average_method ='optimal', blpt_weights=None, 
+    extra_error_types=['time_average'], **kwargs):
     """
-    Plot the average error bar in the same delay bin over baseline-pairs and times.
+    For different kinds of error bars, just plot their average across baseline-pair-times axis,
+    or plot the average ones and the original ones at all available baseline-pairs&times together,
+    depending on the input in parameter 'mode'.
+    These error bars include 'nn' and 'sn' like errors, which are constructed from time-differenced power spectra, uvp_td.
+    We aslo plot the bootstrap error bar based on resampling the average inside the spectra group. 
+    Errors which rely on pushing an input covariance matrix through the quadratic estimator are assigned 
+    in 'extra_error_types', and the first one ranked in 'extra_error_types' will be chosen 
+    as the reference, which means we will plot the ratios of other errors with the referred one.  
     
     Parameters
     ----------
+    mode : str
+        Options : 'blpt', 'blpt_avg'.
+        If mode == 'blpt', plot the average errors and the original errors at all available baseline-pairs&times together. 
+        If mode == 'blpt_avg', just plot the average error bars.
+
     uvp : UVPspec
         UVPSpec object, containing delay spectra for a set of baseline-pairs, 
         times, polarizations, and spectral windows.
@@ -1562,27 +1574,41 @@ def plot_error_blpt_avg(uvp, uvp_td, spw, pol, blpairs, Tsys, extra_error_types=
     Tsys : float
         The system temperature. 
 
-    extra_error_types: str
+    average_method : str
+        Specify the method to carry on averaging.
+        Options : 'simple', 'optimal'.
+        For 'optimal' method, please refer to M. Tegmark, ApJ, 480, L87 (1997), arXiv:astro-ph/9611130
+        and grouping.average_spectra_with_error.
+        For 'simple' method, please refer to grouping.average_spectra. 
+
+    blpt_weights : list of weights (float or int), optional
+        Relative weight of each baseline-pair-time when performing the average. This
+        is useful for simple average with weights and bootstrapping. This should have the same size with
+        the number of blpair-pair-time indices.  
+        Default: None.
+        
+    extra_error_types: list of strs
         Extra types for error bars.
-        Choices:['min','max','diagonal','mean']
-        Default:[] 
+        Choices:'time_average', 'time_average_min','time_average_max',
+        'time_average_diagonal','time_average_mean'
+        Default:['time_average'] 
 
     kwargs : dict, optional
         Extra kwargs to pass to _all_ ax.plot calls.
     """
-    # List of types of analytic error bars
-    cov_types = ['original'] + extra_error_types
-    #Analytic error bars.
-    analytic_real_avg_blpt = odict([[cov_type, []] for cov_type in cov_types])
-    analytic_imag_avg_blpt = odict([[cov_type, []] for cov_type in cov_types])
-    color_list = odict()
-    color_list['original'] = 'green'
-    # Add rgb colors
-    error_flag = 1
-    for error_type in extra_error_types:
-        color_list[error_type] = (0.5, abs(np.sin(error_flag)), 0.5)
-        error_flag += 1
+    assert mode == 'blpt' or mode == 'blpt_avg', 'Unvalid choice for modes.'
+    assert len(extra_error_types) >=1, 'extra error types must be more than one.'
+
+    # Dicts of average analytic error bars.
+    analytic_real_avg_blpt = odict([[error_type, []] for error_type in extra_error_types])
+    analytic_imag_avg_blpt = odict([[error_type, []] for error_type in extra_error_types])
     
+    # Dicts of colors
+    color_list = odict()
+    
+    # Dicts of labels
+    label_list = odict()
+
     #The power spectra of time difference data, thought to be error bars in noise dominant regions, 
     psn_real_avg_blpt = []
     psn_imag_avg_blpt = []
@@ -1598,299 +1624,215 @@ def plot_error_blpt_avg(uvp, uvp_td, spw, pol, blpairs, Tsys, extra_error_types=
     if not uvp.norm == 'Unnormalized':    
         noise = uvp_td.generate_noise_spectra(spw, pol, Tsys, blpairs=blpairs)
 
+    # Get all keys
     key_list = []
     for blpair in blpairs:
         key = (spw, blpair, pol)
         key_list.append(key)
-    # Get the average error bars across blpt axis
-    for i in range(uvp.Ndlys):
-        p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].real for key in key_list]).reshape(-1)
-        for cov_type in cov_types:
-            n = np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_type=cov_type)[time]) for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
-            P, N = grouping.average_spectra_with_error(p,n)
-            analytic_real_avg_blpt[cov_type].append(N)
-       
-        n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].real for key in key_list]).reshape(-1)
-        P, N = grouping.average_spectra_with_error(p,n)
-        psn_real_avg_blpt.append(N)
-        
-        n = np.array([uvp_td.get_data(key)[:,i].real/2. for key in key_list]).reshape(-1)**2
-        P, N = grouping.average_spectra_with_error(p,n)
-        pnn_real_avg_blpt.append(N)
-        
-        if not uvp.norm == 'Unnormalized':
-            n = np.array([noise[uvp.antnums_to_blpair(blp)][:, i] for blp in blpairs]).reshape(-1)**2
-            P, N = grouping.average_spectra_with_error(p,n)
-            noise_avg_blpt.append(N)
 
-        p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].imag for key in key_list]).reshape(-1)        
-        for cov_type in cov_types:
-            n = np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_type=cov_type)[time]) for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
-            P, N = grouping.average_spectra_with_error(p,n)
-            analytic_imag_avg_blpt[cov_type].append(N)
-        
-        n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].imag for key in key_list]).reshape(-1)
-        P, N = grouping.average_spectra_with_error(p,n)
-        psn_imag_avg_blpt.append(N)
-        
-        n = np.array([uvp_td.get_data(key)[:,i].imag/2. for key in key_list]).reshape(-1)**2
-        P, N = grouping.average_spectra_with_error(p,n)
-        pnn_imag_avg_blpt.append(N)
+    # Get weights
+    if blpt_weights is None:
+        # Assign unity weights to baseline-pair groups that were specified
+        blpt_weights = np.array([[1. for item in range(uvp_td.Ntimes)] for key in key_list]).reshape(-1)
+    else:
+        # Check that blpt_weights has the shape as (Nblpairs, Ntimes)
+        blpt_weights = abs(np.array(blpt_weights).reshape(-1))
+        assert len(blpt_weights) == len(key_list)*uvp_td.Ntimes
     
+    # Multiply blpt_weights with the integration time     
+    nsmp = np.array([[uvp.get_nsamples(key)[time] for time in range(uvp_td.Ntimes)] for key in key_list]).reshape(-1)
+    ints = np.array([[uvp.get_integrations(key)[time] for time in range(uvp_td.Ntimes)] for key in key_list]).reshape(-1)
+    w = (ints * np.sqrt(nsmp))
+    w = w*blpt_weights
+    
+    Nspwdlys = len(uvp.get_dlys(spw)) 
+    # Get the average error bars across blpt axis
+    for i in range(Nspwdlys):
+        # Choose the average method to be 'simple'
+        if average_method == 'simple':
+            for error_type in extra_error_types:
+                n = np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_model=error_type)[time]) for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+                analytic_real_avg_blpt[error_type].append(np.sum(n*w, axis=0)/np.sum(w, axis=0).clip(1e-10, np.inf))
+                n = np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_model=error_type)[time]) for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+                analytic_imag_avg_blpt[error_type].append(np.sum(n*w, axis=0)/np.sum(w, axis=0).clip(1e-10, np.inf))
+            
+            n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].real for key in key_list]).reshape(-1)
+            psn_real_avg_blpt.append(np.sum(n*w, axis=0)/np.sum(w, axis=0).clip(1e-10, np.inf))
+            n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].imag for key in key_list]).reshape(-1)
+            psn_imag_avg_blpt.append(np.sum(n*w, axis=0)/np.sum(w, axis=0).clip(1e-10, np.inf))
+            
+            n = np.array([uvp_td.get_data(key)[:,i].real/2. for key in key_list]).reshape(-1)**2
+            pnn_real_avg_blpt.append(np.sum(n*w, axis=0)/np.sum(w, axis=0).clip(1e-10, np.inf))
+            n = np.array([uvp_td.get_data(key)[:,i].imag/2. for key in key_list]).reshape(-1)**2
+            pnn_imag_avg_blpt.append(np.sum(n*w, axis=0)/np.sum(w, axis=0).clip(1e-10, np.inf))
+            
+            if not uvp.norm == 'Unnormalized':
+                n = np.array([noise[uvp.antnums_to_blpair(blp)][:, i] for blp in blpairs]).reshape(-1)**2
+                noise_avg_blpt.append(np.sum(n*w, axis=0)/np.sum(w, axis=0).clip(1e-10, np.inf))
+
+        # Choose the average method to be 'optimal'
+        if average_method == 'optimal':
+            p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].real for key in key_list]).reshape(-1)
+            for error_type in extra_error_types:
+                n = np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_model=error_type)[time]) for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+                P, N = grouping.average_spectra_with_error(p,n)
+                analytic_real_avg_blpt[error_type].append(N)
+                n = np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_model=error_type)[time]) for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
+                P, N = grouping.average_spectra_with_error(p,n)
+                analytic_imag_avg_blpt[error_type].append(N)
+           
+            n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].real for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            psn_real_avg_blpt.append(N)
+            n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].imag for key in key_list]).reshape(-1)
+            P, N = grouping.average_spectra_with_error(p,n)
+            psn_imag_avg_blpt.append(N)
+
+            n = np.array([uvp_td.get_data(key)[:,i].real/2. for key in key_list]).reshape(-1)**2
+            P, N = grouping.average_spectra_with_error(p,n)
+            pnn_real_avg_blpt.append(N)
+            n = np.array([uvp_td.get_data(key)[:,i].imag/2. for key in key_list]).reshape(-1)**2
+            P, N = grouping.average_spectra_with_error(p,n)
+            pnn_imag_avg_blpt.append(N)
+            
+            if not uvp.norm == 'Unnormalized':
+                n = np.array([noise[uvp.antnums_to_blpair(blp)][:, i] for blp in blpairs]).reshape(-1)**2
+                P, N = grouping.average_spectra_with_error(p,n)
+                noise_avg_blpt.append(N)
+
     # Get the square roots of the above results
-    for cov_type in cov_types:    
-        analytic_real_avg_blpt[cov_type] = np.sqrt(np.abs(np.array(analytic_real_avg_blpt[cov_type]).reshape(-1)))
-        analytic_imag_avg_blpt[cov_type] = np.sqrt(np.abs(np.array(analytic_imag_avg_blpt[cov_type]).reshape(-1)))
+    for error_type in extra_error_types:    
+        analytic_real_avg_blpt[error_type] = np.sqrt(np.abs(np.array(analytic_real_avg_blpt[error_type]).reshape(-1)))
+        analytic_imag_avg_blpt[error_type] = np.sqrt(np.abs(np.array(analytic_imag_avg_blpt[error_type]).reshape(-1)))
     psn_real_avg_blpt = np.sqrt(np.abs(np.array(psn_real_avg_blpt).reshape(-1)))
     psn_imag_avg_blpt = np.sqrt(np.abs(np.array(psn_imag_avg_blpt).reshape(-1)))
     pnn_real_avg_blpt = np.sqrt(np.abs(np.array(pnn_real_avg_blpt).reshape(-1)))
     pnn_imag_avg_blpt = np.sqrt(np.abs(np.array(pnn_imag_avg_blpt).reshape(-1)))
-    
     if not uvp.norm == 'Unnormalized': 
         noise_avg_blpt = np.sqrt(np.abs(np.array(noise_avg_blpt).reshape(-1)))
 
     # Generate Bootstrap errors
     boots = []
-    spectra = np.array([uvp.get_data(key)[:uvp_td.Ntimes, :] for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
+    spectra = np.array([uvp.get_data(key)[:uvp_td.Ntimes, :] for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys)
     for i in range(100):
         select = np.random.choice(np.arange(len(spectra)), len(spectra), replace=True)
-        boots.append(np.mean(spectra[select], axis=0))
+        boots.append(np.sum(spectra[select]*w[:, None][select], axis=0)/np.sum(w[select], axis=0).clip(1e-10, np.inf))
     boot_blpt = np.std(np.real(boots), axis=0) + 1j*np.std(np.imag(boots), axis=0)
-
-    # Make plots
-    fig = plt.figure(figsize=(10, 8))
-    fig.suptitle("Blpt-averaged error bars ", y=0.55, fontsize=12)
-    dlys = uvp.get_dlys(0) * 1e9
-    # Plot the ratio of error bars to the analytic-original one
-    ax0 = fig.add_axes([0.1, 0.0, 0.4, 0.1])
-    ax0.plot(dlys, psn_real_avg_blpt / analytic_real_avg_blpt['original'] , c='blue')
-    ax0.plot(dlys, pnn_real_avg_blpt / analytic_real_avg_blpt['original'], c='orange')
-    ax0.plot(dlys, boot_blpt.real/ analytic_real_avg_blpt['original'], c='red')
-    for error_type in extra_error_types:
-        ax0.plot(dlys, analytic_real_avg_blpt[error_type] / analytic_real_avg_blpt['original'], c=color_list[error_type])
-    if not uvp.norm == 'Unnormalized': 
-        ax0.plot(dlys, noise_avg_blpt/analytic_real_avg_blpt['original'], c='k')
-    ax0.axhline(y=1, c='g')
-    ax0.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=12)
-    ax0.semilogy()
-    # Plot different kinds of error bars
-    ax1 = fig.add_axes([0.1, 0.1, 0.4, 0.4])
-    ax1.plot(dlys, psn_real_avg_blpt, 
-             label=r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', c='blue')
-    ax1.plot(dlys, pnn_real_avg_blpt ,label=r'$P_{nn}}$', c='orange')
-    for cov_type in cov_types:
-        ax1.plot(dlys, analytic_real_avg_blpt[cov_type], label='analytic-'+cov_type, c=color_list[cov_type])
-    ax1.plot(dlys, boot_blpt.real, label='bootstrap', c='red')
-    if not uvp.norm == 'Unnormalized': 
-        ax1.plot(dlys, noise_avg_blpt, label='thermal noise', c='k')
-    ax1.legend(loc='upper left', framealpha=0)
-    ax1.set_xticklabels('')
-    ax1.semilogy()
-    # Plot the ratio of error bars to the analytic-original one
-    ax2 = fig.add_axes([0.5, 0.0, 0.4, 0.1])
-    ax2.plot(dlys, psn_imag_avg_blpt / analytic_imag_avg_blpt['original'] , c='blue')
-    ax2.plot(dlys, pnn_imag_avg_blpt / analytic_imag_avg_blpt['original'], c='orange')
-    for error_type in extra_error_types:
-        ax2.plot(dlys, analytic_imag_avg_blpt[error_type] / analytic_imag_avg_blpt['original'], c=color_list[error_type])
-    if not uvp.norm == 'Unnormalized': 
-        ax2.plot(dlys, noise_avg_blpt/analytic_imag_avg_blpt['original'], c='k')
-    ax2.plot(dlys, boot_blpt.imag/ analytic_imag_avg_blpt['original'], c='red')
-    ax2.axhline(y=1, c='g')
-    ax2.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=12)
-    ax2.semilogy()
-    ax2.yaxis.tick_right()
-    # Plot different kinds of error bars
-    ax3 = fig.add_axes([0.5, 0.1, 0.4, 0.4])
-    ax3.plot(dlys, psn_imag_avg_blpt, label=r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', c='blue')
-    ax3.plot(dlys, pnn_imag_avg_blpt , label=r'$P_{nn}}$', c='orange')
-    for cov_type in cov_types:
-        ax3.plot(dlys, analytic_imag_avg_blpt[cov_type], label='analytic-'+cov_type, c=color_list[cov_type])
-    ax3.plot(dlys, boot_blpt.imag, label='bootstrap', c='red')
-    if not uvp.norm == 'Unnormalized': 
-        ax3.plot(dlys, noise_avg_blpt, label='thermal noise', c='k')
-    ax3.legend(loc='upper left', framealpha=0)
-    ax3.semilogy()
-    ax3.yaxis.tick_right()
-    ax3.set_xticklabels('')
-
-def plot_error_blpt(uvp, uvp_td, spw, pol, blpairs, Tsys, extra_error_types=[], **kwargs):
-    """
-    Plot the error bars in the same delay bin over baseline-pair&times and their average together.
     
-    Parameters
-    ----------
-    uvp : UVPspec
-        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
-        times, polarizations, and spectral windows.
-    
-    uvp_td : UVPspec from the data difference
-        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
-        times, polarizations, and spectral windows.
-
-    spw : int
-        The index for the spectral window.
-
-    pol : str
-        The polarization type.
-
-    blpairs : list
-        The list of baseline-pairs.
-    
-    Tsys : float
-        The system temperature. 
-
-    extra_error_types: str
-        Extra types for error bars.
-        Choices:['min','max','diagonal','mean']
-        Default:[] 
-
-    kwargs : dict, optional
-        Extra kwargs to pass to _all_ ax.plot calls.
-    """
-    # List of types of analytic error bars
-    cov_types = ['original'] + extra_error_types
-    #Analytic error bars.
-    analytic_real_avg_blpt = odict([[cov_type, []] for cov_type in cov_types])
-    analytic_imag_avg_blpt = odict([[cov_type, []] for cov_type in cov_types])
-    # Add the colors
-    color_list = odict()
-    color_list['original'] = 'green'
-    error_flag = 1
-    for error_type in extra_error_types:
-        color_list[error_type] = (0.5, abs(np.sin(error_flag)), 0.5)
-        error_flag += 1
-    # Add the labels
-    label_list = odict()
-    # Average error bars for 'psn', 'pnn' and 'noise'.
-    psn_real_avg_blpt = []
-    psn_imag_avg_blpt = []
-    pnn_real_avg_blpt = []
-    pnn_imag_avg_blpt = []
-    noise_avg_blpt = []
-
-    if not uvp.norm == 'Unnormalized':    
-        noise = uvp_td.generate_noise_spectra(spw, pol, Tsys, blpairs=blpairs)
-
-    key_list = []
-    for blpair in blpairs:
-        key = (spw, blpair, pol)
-        key_list.append(key)
-    # Get the average error bars across blpt axis
-    for i in range(uvp.Ndlys):
-        p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].real for key in key_list]).reshape(-1)
-        for cov_type in cov_types:
-            n = np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_type=cov_type)[time]) for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
-            P, N = grouping.average_spectra_with_error(p,n)
-            analytic_real_avg_blpt[cov_type].append(N)
-       
-        n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].real for key in key_list]).reshape(-1)
-        P, N = grouping.average_spectra_with_error(p,n)
-        psn_real_avg_blpt.append(N)
-        
-        n = np.array([uvp_td.get_data(key)[:,i].real/2. for key in key_list]).reshape(-1)**2
-        P, N = grouping.average_spectra_with_error(p,n)
-        pnn_real_avg_blpt.append(N)
-        
-        if not uvp.norm == 'Unnormalized':
-            n = np.array([noise[uvp.antnums_to_blpair(blp)][:, i] for blp in blpairs]).reshape(-1)**2
-            P, N = grouping.average_spectra_with_error(p,n)
-            noise_avg_blpt.append(N)
-
-        p = np.array([uvp.get_data(key)[:uvp_td.Ntimes, i].imag for key in key_list]).reshape(-1)        
-        for cov_type in cov_types:
-            n = np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_type=cov_type)[time]) for time in range(uvp_td.Ntimes)])[:,i] for key in key_list]).reshape(-1)
-            P, N = grouping.average_spectra_with_error(p,n)
-            analytic_imag_avg_blpt[cov_type].append(N)
-        
-        n = np.array([uvp.get_data(key)[:uvp_td.Ntimes,i].real * uvp_td.get_data(key)[:,i].imag for key in key_list]).reshape(-1)
-        P, N = grouping.average_spectra_with_error(p,n)
-        psn_imag_avg_blpt.append(N)
-        
-        n = np.array([uvp_td.get_data(key)[:,i].imag/2. for key in key_list]).reshape(-1)**2
-        P, N = grouping.average_spectra_with_error(p,n)
-        pnn_imag_avg_blpt.append(N)
-    
-    # Get the square roots of the above results
-    for cov_type in cov_types:    
-        analytic_real_avg_blpt[cov_type] = np.sqrt(np.abs(np.array(analytic_real_avg_blpt[cov_type]).reshape(-1)))
-        analytic_imag_avg_blpt[cov_type] = np.sqrt(np.abs(np.array(analytic_imag_avg_blpt[cov_type]).reshape(-1)))
-   
-    psn_real_avg_blpt = np.sqrt(np.abs(np.array(psn_real_avg_blpt).reshape(-1)))
-    psn_imag_avg_blpt = np.sqrt(np.abs(np.array(psn_imag_avg_blpt).reshape(-1)))
-    pnn_real_avg_blpt = np.sqrt(np.abs(np.array(pnn_real_avg_blpt).reshape(-1)))
-    pnn_imag_avg_blpt = np.sqrt(np.abs(np.array(pnn_imag_avg_blpt).reshape(-1)))
-    
-    if not uvp.norm == 'Unnormalized': 
-        noise_avg_blpt = np.sqrt(np.abs(np.array(noise_avg_blpt).reshape(-1)))
-        color_list['thermal noise'] = 'k'
-        label_list['thermal noise'] = 'thermal noise'
     # Only plot 'thermal noise' when uvp.norm is not 'Unnormalized'
     if not uvp.norm == 'Unnormalized':         
-        error_types = [r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', r'$P_{nn}}$', 'thermal noise','original'] + extra_error_types 
+        error_types = [r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', r'$P_{nn}}$', 'thermal noise'] + extra_error_types 
     else:
-        error_types = [r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', r'$P_{nn}}$', 'original'] + extra_error_types 
+        error_types = [r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$', r'$P_{nn}}$'] + extra_error_types     
 
-    # Add colors
-    color_list[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = 'blue'
-    color_list[r'$P_{nn}}$'] = 'orange' 
-    # Add labels
-    label_list[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'
-    label_list[r'$P_{nn}}$'] = r'$P_{nn}}$'
-
-    # Dicts for avg error bars and error bars at different blpts
+    # Dicts for avg error bars and error bars at all blpts
     error_avg_list_real = odict()
     error_avg_list_imag = odict()
     error_blpt_list_real = odict()
     error_blpt_list_imag = odict()
     
-    # Pack all the data into the four dicts
+    # Pack all the data into dicts
     error_avg_list_real[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = psn_real_avg_blpt
     error_avg_list_imag[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = psn_imag_avg_blpt
-    error_blpt_list_real[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = np.sqrt(np.abs(np.array([uvp.get_data(key)[:uvp_td.Ntimes,].real * uvp_td.get_data(key).real for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)))
-    error_blpt_list_imag[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = np.sqrt(np.abs(np.array([uvp.get_data(key)[:uvp_td.Ntimes,].real * uvp_td.get_data(key).imag for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)))
-    
+    if mode == 'blpt':
+        error_blpt_list_real[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = np.sqrt(np.abs(np.array([uvp.get_data(key)[:uvp_td.Ntimes,].real * uvp_td.get_data(key).real for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys)))
+        error_blpt_list_imag[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = np.sqrt(np.abs(np.array([uvp.get_data(key)[:uvp_td.Ntimes,].real * uvp_td.get_data(key).imag for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys)))
+    color_list[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = 'blue'
+    label_list[r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'] = r'$\sqrt{2 {Re}(P_{dd})P_{nn}}$'
+
     error_avg_list_real[r'$P_{nn}}$'] = pnn_real_avg_blpt
     error_avg_list_imag[r'$P_{nn}}$'] = pnn_imag_avg_blpt
-    error_blpt_list_real[r'$P_{nn}}$'] = np.abs(np.array([uvp_td.get_data(key).real/2. for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys))   
-    error_blpt_list_imag[r'$P_{nn}}$'] = np.abs(np.array([uvp_td.get_data(key).imag/2. for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys))
-    
+    if mode == 'blpt':
+        error_blpt_list_real[r'$P_{nn}}$'] = np.abs(np.array([uvp_td.get_data(key).real/2. for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys))   
+        error_blpt_list_imag[r'$P_{nn}}$'] = np.abs(np.array([uvp_td.get_data(key).imag/2. for key in key_list]).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys))
+    color_list[r'$P_{nn}}$'] = 'orange' 
+    label_list[r'$P_{nn}}$'] = r'$P_{nn}}$'
+
     if not uvp.norm == 'Unnormalized':
         error_avg_list_real['thermal noise'] = noise_avg_blpt
         error_avg_list_imag['thermal noise'] = noise_avg_blpt
-        error_blpt_list_real['thermal noise'] = np.array([noise[uvp.antnums_to_blpair(blp)] for blp in blpairs]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
-        error_blpt_list_imag['thermal noise'] = np.array([noise[uvp.antnums_to_blpair(blp)] for blp in blpairs]).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
-    
-    for cov_type in cov_types:
-        label_list[cov_type] = 'analytic-' + cov_type
-        error_avg_list_real[cov_type] = analytic_real_avg_blpt[cov_type]
-        error_avg_list_imag[cov_type] = analytic_imag_avg_blpt[cov_type] 
-        error_blpt_list_real[cov_type] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_type=cov_type)[time]) for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
-        error_blpt_list_imag[cov_type] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_type=cov_type)[time]) for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, uvp_td.Ndlys)
-                 
-    nrow = len(error_types)
-    height = 4*nrow
-    # Make plots
-    fig, axes = plt.subplots(nrow,2,figsize=(12, height))
-    fig.suptitle("Error bars on different blpts", fontsize=12)
-    dlys = uvp.get_dlys(0) * 1e9
-    # In each row draw one type of error bars,
-    # and left column is for real components and right column is for imaginary components
-    for j in range(nrow):
-        ax = axes[j,0]
-        for i in range(len(error_blpt_list_real[error_types[j]])):
-            ax.plot(dlys, error_blpt_list_real[error_types[j]][i], ls='--')
-        ax.plot(dlys, error_avg_list_real[error_types[j]], c=color_list[error_types[j]], label= label_list[error_types[j]] +'-average')
-        ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=12)
-        ax.legend(loc='upper left')
-        ax.set_yscale('log')
+        if mode == 'blpt':
+            error_blpt_list_real['thermal noise'] = np.array([noise[uvp.antnums_to_blpair(blp)] for blp in blpairs]).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys)
+            error_blpt_list_imag['thermal noise'] = np.array([noise[uvp.antnums_to_blpair(blp)] for blp in blpairs]).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys)
+        color_list['thermal noise'] = 'k'
+        label_list['thermal noise'] = 'thermal noise'
 
-        ax = axes[j,1]
-        for i in range(len(error_blpt_list_imag[error_types[j]])):
-            ax.plot(dlys, error_blpt_list_imag[error_types[j]][i], ls='--')
-        ax.plot(dlys, error_avg_list_imag[error_types[j]], c=color_list[error_types[j]], label= label_list[error_types[j]] +'-average')
-        ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=12)
-        ax.legend(loc='upper left')
-        ax.set_yscale('log')
+    for error_type in extra_error_types:
+        label_list[error_type] = 'analytic_' + error_type
+        error_avg_list_real[error_type] = analytic_real_avg_blpt[error_type]
+        error_avg_list_imag[error_type] = analytic_imag_avg_blpt[error_type] 
+        if mode == 'blpt':
+            error_blpt_list_real[error_type] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='real', cov_model=error_type)[time]) for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys)
+            error_blpt_list_imag[error_type] = np.sqrt(np.abs(np.array([np.array([np.diag(uvp.get_cov(key,component='imag', cov_model=error_type)[time]) for time in range(uvp_td.Ntimes)]) for key in key_list]))).reshape(len(key_list)*uvp_td.Ntimes, Nspwdlys)
+    color_list[extra_error_types[0]] = 'green'
+    error_flag = 1
+    for error_type in extra_error_types[1:]:
+        color_list[error_type] = (0.5, abs(np.sin(error_flag)), 0.5)
+        error_flag += 1
+        
+    # Make plots
+    if mode == 'blpt_avg':
+        fig = plt.figure(figsize=(10, 8))
+        fig.suptitle("Blpt-averaged error bars ", y=0.55, fontsize=12)
+        dlys = uvp.get_dlys(0) * 1e9
+        # Plot the ratio of error bars to the analytic-original one
+        ax0 = fig.add_axes([0.1, 0.0, 0.4, 0.1])
+        for error_type in error_types: 
+            ax0.plot(dlys, error_avg_list_real[error_type] / error_avg_list_real[extra_error_types[0]] , c=color_list[error_type])
+        ax0.plot(dlys, boot_blpt.real/ error_avg_list_real[extra_error_types[0]], c='red')
+        ax0.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=12)
+        ax0.semilogy()
+        # Plot different kinds of error bars
+        ax1 = fig.add_axes([0.1, 0.1, 0.4, 0.4])
+        for error_type in error_types:
+            ax1.plot(dlys, error_avg_list_real[error_type], label=label_list[error_type], c=color_list[error_type])
+        ax1.plot(dlys, boot_blpt.real, label='bootstrap', c='red')
+        ax1.legend(loc='upper left', framealpha=0)
+        ax1.set_xticklabels('')
+        ax1.semilogy()
+        # Plot the ratio of error bars to the analytic-original one
+        ax2 = fig.add_axes([0.5, 0.0, 0.4, 0.1])
+        for error_type in error_types: 
+            ax2.plot(dlys, error_avg_list_imag[error_type] / error_avg_list_imag[extra_error_types[0]] , c=color_list[error_type])
+        ax2.plot(dlys, boot_blpt.imag/ error_avg_list_imag[extra_error_types[0]], c='red')
+        ax2.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=12)
+        ax2.semilogy()
+        ax2.yaxis.tick_right()
+        # Plot different kinds of error bars
+        ax3 = fig.add_axes([0.5, 0.1, 0.4, 0.4])
+        for error_type in error_types:
+            ax3.plot(dlys, error_avg_list_imag[error_type], label=label_list[error_type], c=color_list[error_type])
+        ax3.plot(dlys, boot_blpt.imag, label='bootstrap', c='red')
+        ax3.legend(loc='upper left', framealpha=0)
+        ax3.semilogy()
+        ax3.yaxis.tick_right()
+        ax3.set_xticklabels('')
+
+    if mode == 'blpt':
+        nrow = len(error_types)
+        height = 4*nrow
+        # Make plots
+        fig, axes = plt.subplots(nrow,2,figsize=(12, height))
+        fig.suptitle("Error bars on different blpts", fontsize=12)
+        dlys = uvp.get_dlys(0) * 1e9
+        # In each row draw one type of error bars,
+        # and left column is for real components and right column is for imaginary components
+        for (j,error_type) in zip(range(nrow), error_types):
+            ax = axes[j,0]
+            for i in range(len(error_blpt_list_real[error_type])):
+                ax.plot(dlys, error_blpt_list_real[error_type][i], ls='--')
+            ax.plot(dlys, error_avg_list_real[error_type], c=color_list[error_type], label= label_list[error_type] +'(average)')
+            ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=12)
+            ax.legend(loc='upper left')
+            ax.set_yscale('log')
+
+            ax = axes[j,1]
+            for i in range(len(error_blpt_list_imag[error_type])):
+                ax.plot(dlys, error_blpt_list_imag[error_type][i], ls='--')
+            ax.plot(dlys, error_avg_list_imag[error_type], c=color_list[error_type], label= label_list[error_type] +'(average)')
+            ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=12)
+            ax.legend(loc='upper left')
+            ax.set_yscale('log')
 
 def imshow_cov(uvp, key, time_index, error_type, **kwargs):
     """
@@ -1907,9 +1849,10 @@ def imshow_cov(uvp, key, time_index, error_type, **kwargs):
     
     time_index : integer
 
-    error_type : str
-        Extra types for error bars.
-        Choices:['orginal', min','max','diagonal','mean']
+    error_type: str
+    Extra types for error bars.
+    Choices:'time_average', 'time_average_min','time_average_max',
+    'time_average_diagonal','time_average_mean'
     
     kwargs : dict, optional
         Extra kwargs to pass to _all_ ax.plot calls.
@@ -1919,8 +1862,8 @@ def imshow_cov(uvp, key, time_index, error_type, **kwargs):
     assert isinstance(time_index, int), "time_index must be a integer."
     assert time_index >= 0 and time_index < uvp.Ntimes, "time_index is not valid."
     # Get covariance matrix
-    cov_real = np.abs(uvp.get_cov(key, component='real', cov_type=error_type)[time_index])
-    cov_imag = np.abs(uvp.get_cov(key, component='imag', cov_type=error_type)[time_index])
+    cov_real = np.abs(uvp.get_cov(key, component='real', cov_model=error_type)[time_index])
+    cov_imag = np.abs(uvp.get_cov(key, component='imag', cov_model=error_type)[time_index])
     dlys = np.array(uvp.get_dlys(0)*1e9, dtype=np.int)
     # Make plots
     fig = plt.figure(figsize=(6,10))

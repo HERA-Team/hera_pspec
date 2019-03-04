@@ -54,6 +54,7 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
+        self._C = {}
 
         # set data weighting to identity by default
         # and taper to none by default
@@ -473,16 +474,21 @@ class PSpecData(object):
         ----------
         cov : dict
             Dictionary containing new covariance values for given datasets and
-            baselines. Keys of the dictionary are tuples, with the first item
-            being the ID (index) of the dataset, and subsequent items being the
-            baseline indices.
+            baselines. Keys of the dictionary are tuples. 
+            The format of a key is like: (dset_ind1, bl1, dset_ind2, bl2, model, conj_1, conj_2, subtracted), where 'model' should be a str, 'conj_1', 'conj_2'
+            and 'subtracted' should be boolean values.
+            The shape of cov(key) should be like (Ntimes, Nfreqs, Nfreqs).    
         """
         self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
 
-    def C_model(self, key, model='time_average', subtracted=True):
+    def C_model(self, key, model='time_average', subtracted=True, known_cov=None):
         """
         Return a covariance model having specified a key and model type.
+
+        Note: Time-dependent flags that differ from frequency channel-to-channel
+        can create spurious spectral structure. Consider factorizing the flags with 
+        self.broadcast_dset_flags() before using model='time_average'.
 
         Parameters
         ----------
@@ -492,11 +498,16 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. options=['time_average']
+            Type of covariance model to calculate, if not cached. 
+            Options=['time_average', 'empirical', 'time_average_diag', 'time_average_mean',
+            'time_average_min', 'time_average_max', ...]
 
-        subtracted : bool, default:True
-            Whether or not to subtract the mean value when calculating the variance
+        subtracted : boolean, default: True
+            Whether or not to subtract the mean value when calculating the covariance.
 
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are not calculated internally from data.
+        
         Returns
         -------
         C : array-like
@@ -505,46 +516,88 @@ class PSpecData(object):
         # type check
         assert isinstance(key, tuple), "key must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
-        assert model in ['time_average','empirical'], "didn't recognize model {}".format(model)
+        
+        if known_cov == None:
+            assert model in ['time_average', 'empirical', 'time_average_diag', 'time_average_mean', 
+            'time_average_min', 'time_average_max'], "didn't recognize model {}".format(model) 
 
         # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
 
         # add model to key
-        Ckey = key + (model,)
+        Ckey = key + key + (model,) + (False,) + (True,) + (subtracted,)
 
         # check cache
-        if not self._C.has_key(Ckey):
-            # calculate covariance model
-            if model == 'time_average':
-                spw = slice(self.spw_range[0], self.spw_range[1])
-                data = self.dsets[dset].get_data(bl).T[spw]
-                #(Nspw_freqs, Ntimes)
-                data = data.T
-                #(Ntimes, Nspw_freqs)
-                data_square = np.zeros((data.shape[0], data.shape[1], data.shape[1]), dtype=np.complex128)
-                #(Ntimes, Nspw_freqs, Nspw_freqs)
-                for time in range(data.shape[0]):
-                    data_square[time, :, :] = np.einsum('i,j', data[time, :], data[time, :].conj())
-                covariance = np.average(data_square, axis=0)
-                if subtracted == True:
-                    #(Nspw_freqs, Nspw_freqs)
-                    data_average = np.average(data, axis=0)
-                    #(Nspw_freqs)
-                    data_average_square =  np.einsum('i,j', data_average, data_average.conj())
-                    #(Nspw_freqs, Nspw_freqs)
-                    covariance -= data_average_square
-                    #(Nspw_freqs, Nspw_freqs)
-                self.set_C({Ckey: covariance})
-            if model == 'empirical':
-                self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
-                #(Nspw_freqs, Nspw_freqs)
-        return self._C[Ckey]
+        if model in ['time_average', 'empirical', 'time_average_diag', 'time_average_mean', 
+        'time_average_min', 'time_average_max']:
+        # calculate covariance from models
+            if 'time_average' in model:
+                data = self.x(key)
+                weights = self.w(key)
+                # (spw_Nfreqs, Ntimes)
 
-    def cross_covar_model(self, key1, key2, model='time_average', conj_1=False, conj_2=True, subtracted=True):
+                time_indices = data.shape[1]
+                # Get Ntimes
+
+                data = data.T
+                weights = weights.T
+                # (Ntimes, spw_Nfreqs)
+
+                data_square = np.einsum('ab,ac->abc', data, data.conj())
+                weights_square = np.einsum('ab,ac->abc', weights, weights)
+                # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+                
+                covariance = np.sum(data_square * weights_square, axis=0) / np.sum(weights_square, axis=0).clip(1e-10, np.inf)
+                # (spw_Nfreqs, spw_Nfreqs)
+                
+                if subtracted == True:
+                    data_average = np.sum(data * weights, axis=0) / np.sum(weights, axis=0).clip(1e-10, np.inf)
+                    # (spw_Nfreqs)
+                    data_average_square =  np.einsum('i,j', data_average, data_average.conj())
+                    # (spw_Nfreqs, spw_Nfreqs)
+                    covariance -= data_average_square
+                    # (spw_Nfreqs, spw_Nfreqs)
+                
+                if 'diag' in model:
+                    covariance = np.diag(np.diag(covariance))
+                if 'mean' in model:
+                    covariance = np.diag([np.mean(np.diag(covariance))]*len(np.diag(covariance)))
+                if 'max' in model:
+                    covariance = np.diag([np.max(np.diag(covariance))]*len(np.diag(covariance)))
+                if 'min' in model:
+                    covariance = np.diag([np.min(np.diag(covariance))]*len(np.diag(covariance)))
+                
+                covariance = np.repeat(covariance[np.newaxis,:,:], time_indices, axis=0)
+                #(Ntimes, spw_Nfreqs, spw_Nfreqs)
+                self.set_C({Ckey: covariance})
+                
+            if model == 'empirical':
+                data = self.x(key)
+                weights = self.w(key)
+                # (spw_Nfreqs, Ntimes)
+                
+                time_indices = data.shape[1]
+                # Get Ntimes
+                covariance = np.repeat(utils.cov(data, weights, subtracted=subtracted)[np.newaxis,:,:], time_indices, axis=0)
+                # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+                self.set_C({Ckey: covariance})
+            
+            return self._C[Ckey]
+
+        else:
+            assert Ckey in known_cov.keys(), "didn't recognize Ckey."
+            spw = slice(self.spw_range[0], self.spw_range[1])
+            return known_cov[Ckey][:, spw, spw]
+            # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+
+    def cross_covar_model(self, key1, key2, model='time_average', conj_1=False, conj_2=True, subtracted=True, known_cov=None):
         """
         Return a covariance model having specified a key and model type.
+
+        Note: Time-dependent flags that differ from frequency channel-to-channel
+        can create spurious spectral structure. Consider factorizing the flags with 
+        self.broadcast_dset_flags() before using model='time_average'.
 
         Parameters
         ----------
@@ -554,7 +607,9 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. options=['time_average']
+            Type of covariance model to calculate, if not cached. 
+            Options=['time_average', 'empirical', 'time_average_diag', 'time_average_mean',
+            'time_average_min', 'time_average_max', ...]
 
         conj_1 : boolean, optional
             Whether to conjugate first copy of data in covar or not. Default: False
@@ -562,19 +617,24 @@ class PSpecData(object):
         conj_2 : boolean, optional
             Whether to conjugate second copy of data in covar or not. Default: True
 
-        subtracted : bool, default:True
-            Whether or not to subtract the mean value when calculating the variance
+        subtracted : boolean, default: True
+            Whether or not to subtract the mean value when calculating the covariance.
+
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are not calculated internally from data.
 
         Returns
         -------
-        cross_covar : array-like, spw_Nfreqs x spw_Nfreqs
+        cross_covar : array-like, Ntimes x spw_Nfreqs x spw_Nfreqs
             Cross covariance model for the specified key.
         """
         # type check
         assert isinstance(key1, tuple), "key1 must be fed as a tuple"
         assert isinstance(key2, tuple), "key2 must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
-        assert model in ['time_average','empirical'], "didn't recognize model {}".format(model)
+        if known_cov == None:
+            assert model in ['time_average', 'empirical', 'time_average_diag', 'time_average_mean', 
+            'time_average_min', 'time_average_max'], "didn't recognize model {}".format(model)
 
         # parse key
         dset, bl = self.parse_blkey(key1)
@@ -582,39 +642,149 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key2)
         key2 = (dset,) + (bl,)
 
-        if model == 'empirical':
-            covar = utils.cov(self.x(key1), self.w(key1),
-                              self.x(key2), self.w(key2),
-                              conj_1=conj_1, conj_2=conj_2)
-        if model == 'time_average':
-            x1 = self.x(key1)
-            #(Nspw_freqs, Ntimes)
-            x2 = self.x(key2)
-            #(Nspw_freqs, Ntimes)
-            x1 = x1.T
-            #(Ntimes, Nspw_freqs)
-            x2 = x2.T
-            #(Ntimes, Nspw_freqs)
-            if conj_1:
-                x1 = x1.conj()
-            if conj_2:
-                x2 = x2.conj()
-            x1x2 = np.zeros((x1.shape[0], x1.shape[1], x1.shape[1]), dtype=np.complex128)
-            #(Ntimes, Nspw_freqs, Nspw_freqs)
-            for time in range(x1.shape[0]):
-                x1x2[time, :, :] = np.einsum('i,j', x1[time, :], x2[time, :])
-            covar = np.average(x1x2, axis=0)
-            #(Nspw_freqs, Nspw_freqs)
-            if subtracted == True:
-                x1_average = np.average(x1, axis=0)
-                #(Nspw_freqs)
-                x2_average = np.average(x2, axis=0)
-                #(Nspw_freqs)
-                x1_average_x2_average =  np.einsum('i,j', x1_average, x2_average)
-                #(Nspw_freqs, Nspw_freqs)
-                covar -= x1_average_x2_average
-                #(Nspw_freqs, Nspw_freqs)
-        return covar
+        # add model to key
+        Ckey = key1 + key2 + (model,) + (conj_1,) + (conj_2,) + (subtracted,)
+
+        # check cache
+        if model in ['time_average', 'empirical', 'time_average_diag', 'time_average_mean', 
+        'time_average_min', 'time_average_max']:
+        # calculate covariance from models
+            if model == 'empirical':
+                x1 = self.x(key1)
+                w1 = self.w(key1)
+                x2 = self.x(key2)
+                w2 = self.w(key2)
+                # (spw_Nfreqs, Ntimes)
+
+                time_indices = x1.shape[1]
+                # Get Ntimes
+
+                covar = utils.cov(x1, w1, x2, w2,
+                                  conj_1=conj_1, conj_2=conj_2, subtracted=subtracted)
+                covar = np.repeat(covar[np.newaxis,:,:], time_indices, axis=0)
+                # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+                self.set_C({Ckey: covar})
+                
+            if 'time_average' in model:
+                x1 = self.x(key1)
+                w1 = self.w(key1)
+                x2 = self.x(key2)
+                w2 = self.w(key2)
+                # (spw_Nfreqs, Ntimes)
+
+                time_indices = x1.shape[1]
+                # Get Ntimes
+                
+                x1 = x1.T
+                w1 = w1.T
+                x2 = x2.T
+                w2 = w2.T
+                # (Ntimes, spw_Nfreqs)
+                
+                if conj_1:
+                    x1 = x1.conj()
+                if conj_2:
+                    x2 = x2.conj()
+               
+                x1x2 = np.einsum('ai,aj->aij', x1, x2)
+                w1w2 = np.einsum('ai,aj->aij', w1, w2)
+                # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+                
+                covar = np.sum(x1x2 * w1w2, axis=0) / np.sum(w1w2, axis=0).clip(1e-10, np.inf)
+                # (spw_Nfreqs, spw_Nfreqs)
+                
+                if subtracted == True:
+                    x1_average = np.sum(x1 * w1, axis=0) / np.sum(w1, axis=0).clip(1e-10, np.inf)
+                    # (spw_Nfreqs)
+                    x2_average = np.sum(x2 * w2, axis=0) / np.sum(w2, axis=0).clip(1e-10, np.inf)
+                    # (spw_Nfreqs)
+                    x1_average_x2_average =  np.einsum('i,j', x1_average, x2_average)
+                    # (spw_Nfreqs, spw_Nfreqs)
+                    covar -= x1_average_x2_average
+                    # (spw_Nfreqs, spw_Nfreqs)
+
+                if 'diag' in model:
+                    covar = np.diag(np.diag(covar))
+                if 'mean' in model:
+                    covar = np.diag([np.mean(np.diag(covar))]*len(np.diag(covar)))
+                if 'max' in model:
+                    covar = np.diag([np.max(np.diag(covar))]*len(np.diag(covar)))
+                if 'min' in model:
+                    covar = np.diag([np.min(np.diag(covar))]*len(np.diag(covar)))
+                
+                covar = np.repeat(covar[np.newaxis,:,:], time_indices, axis=0)
+                # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+                self.set_C({Ckey: covar})
+            
+            return self._C[Ckey]
+        
+        else:
+            assert Ckey in known_cov.keys(), "didn't recognize Ckey."
+            spw = slice(self.spw_range[0], self.spw_range[1])
+            return known_cov[Ckey][:, spw, spw]
+            # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+        
+    def get_Ckeys(self, bls1, bls2, dsets, pols, cov_model):
+        """
+        Generate Ckeys in known_cov or ds._C.
+
+        Parameters
+        ----------
+        bls1, bls2 : list of baselines
+            All the baselines are in one group.
+
+        dsets : length-2 tuple
+            Contains indices of self.dsets to use in forming power spectra,
+            where the first index is for the Left-Hand dataset and second index
+            is used for the Right-Hand dataset (see above).
+        
+        pols : length-2 tuple of strings.
+            Contains polarization pairs to use in forming power spectra
+            e.g. ('XX','XX').
+
+        Returns
+        -------
+        Ckeys: list
+            List containing the Ckeys.
+        """
+        Ckeys = []
+        blpairs = zip(bls1, bls2)
+       
+        for blpair in blpairs:
+            key1 = (dset[0],blpair[0],pols[0])
+            dset, bl = ds.parse_blkey(key1)
+            key1 = (dset,) + (bl,)
+
+            key2 = (dset[1],blpair[1],pols[1])
+            dset, bl = ds.parse_blkey(key2)
+            key2 = (dset,) + (bl,)
+            
+            # Get auto-covariance
+            Ckey = key1 + key1 + (model,) + (False, True, True)
+            Ckeys.append(Ckey)
+            Ckey = key1 + key1 + (model,) + (False, False, True)
+            Ckeys.append(Ckey)
+            Ckey = key1 + key1 + (model,) + (True, True, True)
+            Ckeys.append(Ckey)
+
+            Ckey = key2 + key2 + (model,) + (False, True, True)
+            Ckeys.append(Ckey)
+            Ckey = key2 + key2 + (model,) + (False, False, True)
+            Ckeys.append(Ckey)
+            Ckey = key2 + key2 + (model,) + (True, True, True)
+            Ckeys.append(Ckey)
+            
+            # Get cross-covariance
+            Ckey = key1 + key2 + (model,) + (False, True, True)
+            Ckeys.append(Ckey)
+            Ckey = key2 + key1 + (model,) + (False, True, True)
+            Ckeys.append(Ckey)
+            Ckey = key2 + key1 + (model,) + (False, False, True)
+            Ckeys.append(Ckey)
+            Ckey = key2 + key1 + (model,) + (True, True, True)
+            Ckeys.append(Ckey)
+        
+        return Ckeys
 
     def I(self, key):
         """
@@ -669,7 +839,7 @@ class PSpecData(object):
 
         # Calculate inverse covariance if not in cache
         if not self._iC.has_key(Ckey):
-            C = self.C_model(key, model=model)
+            C = self.C_model(key, model=model)[0]
             U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
 
             # FIXME: Not sure what these are supposed to do
@@ -1265,10 +1435,10 @@ class PSpecData(object):
         """
         # Collect all the relevant pieces
         E_matrices = self.get_unnormed_E(key1, key2)
-        C1 = self.C_model(key1, model=model)
-        C2 = self.C_model(key2, model=model)
-        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
-        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
+        C1 = self.C_model(key1, model=model)[0]
+        C2 = self.C_model(key2, model=model)[0]
+        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)[0]
+        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)[0]
 
         E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
         E12C2 = np.dot(E_matrices, C2)
@@ -1279,7 +1449,7 @@ class PSpecData(object):
 
         return auto_term + cross_term
 
-    def get_analytic_covariance(self, key1, key2, M, model='time_average', cov_types=['original']):
+    def get_analytic_covariance(self, key1, key2, M, models=['time_average'], known_cov=None):
         """
         Calculates the auto-covariance matrix for both the real and imaginary
         parts of bandpowers (i.e., the q vectors and the p vectors). 
@@ -1341,6 +1511,10 @@ class PSpecData(object):
         default. (So while the pointy brackets <...> should in principle be 
         ensemble averages, in practice the code performs averages in time.)
 
+        Note: Time-dependent flags that differ from frequency channel-to-channel
+        can create spurious spectral structure. Consider factorizing the flags with 
+        self.broadcast_dset_flags() before using model='time_average'
+
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
@@ -1348,132 +1522,80 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
-        model : str, default: 'time_average'
-            How the covariances of the input data should be estimated.
+        M : array_like
+            Normalization matrix, M.
 
-        cov_types : list of strs
-            The models on input covariance matrices. 
-            Options: 'original', 'diagonal', 'mean', 'max', 'min'
-            Default: ['original']
-        
+        models : list of strs
+            How the covariances of the input data should be estimated.
+            Options: 'time_average', 'time_average_diag', 'time_average_mean', 'time_average_max', 
+            'time_average_min'
+            Default: ['time_average']
+
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are not calculated internally from data.
+
         Returns
         -------
         V : array_like, complex
-            Bandpower covariance, with dimension (Ndlys,Ndlys).
+            Bandpower covariance, with dimension (Ntimes, spw_Ndlys, spw_Ndlys).
         """
         # Collect all the relevant pieces
-        cov_q_real_list = odict()
-        cov_q_imag_list = odict() 
-        cov_p_real_list = odict()
-        cov_p_imag_list = odict()
-        
-        # Get E matrices and input covariance matrices
-        E_matrices = self.get_unnormed_E(key1, key2)
-        C11_ = self.C_model(key1, model=model)
-        C22_ = self.C_model(key2, model=model)
-        C21_ = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True)
-        C12_ = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True)
-        P11_ = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False)
-        S11_ = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True)
-        P22_ = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False)
-        S22_ = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True)
-        P21_ = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
-        S21_ = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
-        
-        #"original": the original input covariance matrix;
-        #"diagonal": only the diagonal part of the original input covariance matrix are left;
-        #"mean": set the matrix to be identity and multiply it by the mean of the diagonal elements
-        #"min": set the matrix to be identity and multiply it by the minimum of the diagonal elements
-        #"max": set the matrix to be identity and multiply it by the maximum of the diagonal elements
-        for i in cov_types:
-            if i == 'original':
-                C11 = C11_
-                C22 = C22_
-                C21 = C21_
-                C12 = C12_
-                P11 = P11_
-                S11 = S11_
-                P22 = P22_
-                S22 = S22_
-                P21 = P21_
-                S21 = S21_
-            if i == 'diagonal':
-                C11 = np.diag(np.diag(C11_))
-                C22 = np.diag(np.diag(C22_))
-                C21 = np.diag(np.diag(C21_))
-                C12 = np.diag(np.diag(C12_))
-                P11 = np.diag(np.diag(P11_))
-                S11 = np.diag(np.diag(S11_))
-                P22 = np.diag(np.diag(P22_))
-                S22 = np.diag(np.diag(S22_))
-                P21 = np.diag(np.diag(P21_))
-                S21 = np.diag(np.diag(S21_))
-            if i == 'mean':
-                C11 = np.diag([np.mean(np.diag(C11_))]*len(np.diag(C11_)))
-                C22 = np.diag([np.mean(np.diag(C22_))]*len(np.diag(C22_)))
-                C21 = np.diag([np.mean(np.diag(C21_))]*len(np.diag(C21_)))
-                C12 = np.diag([np.mean(np.diag(C12_))]*len(np.diag(C12_)))
-                P11 = np.diag([np.mean(np.diag(P11_))]*len(np.diag(P11_)))
-                S11 = np.diag([np.mean(np.diag(S11_))]*len(np.diag(S11_)))
-                P22 = np.diag([np.mean(np.diag(P22_))]*len(np.diag(P22_)))
-                S22 = np.diag([np.mean(np.diag(S22_))]*len(np.diag(S22_)))
-                P21 = np.diag([np.mean(np.diag(P21_))]*len(np.diag(P21_)))
-                S21 = np.diag([np.mean(np.diag(S21_))]*len(np.diag(S21_)))
-            if i == 'max':
-                C11 = np.diag([np.max(np.diag(C11_))]*len(np.diag(C11_)))
-                C22 = np.diag([np.max(np.diag(C22_))]*len(np.diag(C22_)))
-                C21 = np.diag([np.max(np.diag(C21_))]*len(np.diag(C21_)))
-                C12 = np.diag([np.max(np.diag(C12_))]*len(np.diag(C12_)))
-                P11 = np.diag([np.max(np.diag(P11_))]*len(np.diag(P11_)))
-                S11 = np.diag([np.max(np.diag(S11_))]*len(np.diag(S11_)))
-                P22 = np.diag([np.max(np.diag(P22_))]*len(np.diag(P22_)))
-                S22 = np.diag([np.max(np.diag(S22_))]*len(np.diag(S22_)))
-                P21 = np.diag([np.max(np.diag(P21_))]*len(np.diag(P21_)))
-                S21 = np.diag([np.max(np.diag(S21_))]*len(np.diag(S21_)))
-            if i == 'min':
-                C11 = np.diag([np.min(np.diag(C11_))]*len(np.diag(C11_)))
-                C22 = np.diag([np.min(np.diag(C22_))]*len(np.diag(C22_)))
-                C21 = np.diag([np.min(np.diag(C21_))]*len(np.diag(C21_)))
-                C12 = np.diag([np.min(np.diag(C12_))]*len(np.diag(C12_)))
-                P11 = np.diag([np.min(np.diag(P11_))]*len(np.diag(P11_)))
-                S11 = np.diag([np.min(np.diag(S11_))]*len(np.diag(S11_)))
-                P22 = np.diag([np.min(np.diag(P22_))]*len(np.diag(P22_)))
-                S22 = np.diag([np.min(np.diag(S22_))]*len(np.diag(S22_)))
-                P21 = np.diag([np.min(np.diag(P21_))]*len(np.diag(P21_)))
-                S21 = np.diag([np.min(np.diag(S21_))]*len(np.diag(S21_)))
-
-            E12C21 = np.dot(E_matrices, C21) 
-            E12P22 = np.dot(E_matrices, P22) 
-            E21starS11 = np.dot(np.transpose(E_matrices, (0,2,1)), S11)
-            E21C11 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C11)
-            E12C22 = np.dot(E_matrices, C22)
-            E12starS21 = np.dot(E_matrices.conj(), S21)
-            E12P21 = np.dot(E_matrices, P21)
-            E21C12 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C12)
-            E21P11 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), P11)
-            E12starS22 = np.dot(E_matrices.conj(), S22) 
+        cov_q_real_list = odict([[model, []] for model in models])
+        cov_q_imag_list = odict([[model, []] for model in models])
+        cov_p_real_list = odict([[model, []] for model in models])
+        cov_p_imag_list = odict([[model, []] for model in models])
+         
+        for model in models:
+            # Get E matrices and input covariance matrices
+            E_matrices = self.get_unnormed_E(key1, key2)
+            # (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
+            C11 = self.C_model(key1, model=model, known_cov=known_cov)[:,np.newaxis,:,:]
+            C22 = self.C_model(key2, model=model, known_cov=known_cov)[:,np.newaxis,:,:]
+            C21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov)[:,np.newaxis,:,:]
+            C12 = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True, known_cov=known_cov)[:,np.newaxis,:,:]
+            P11 = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov)[:,np.newaxis,:,:]
+            S11 = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov)[:,np.newaxis,:,:]
+            P22 = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False, known_cov=known_cov)[:,np.newaxis,:,:]
+            S22 = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov)[:,np.newaxis,:,:]
+            P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov)[:,np.newaxis,:,:]
+            S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov)[:,np.newaxis,:,:]
+            # (Ntimes, 1, spw_Nfreqs, spw_Nfreqs)
+               
+            E12C21 = np.matmul(E_matrices, C21) 
+            E12P22 = np.matmul(E_matrices, P22) 
+            E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
+            E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
+            E12C22 = np.matmul(E_matrices, C22)
+            E12starS21 = np.matmul(E_matrices.conj(), S21)
+            E12P21 = np.matmul(E_matrices, P21)
+            E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
+            E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
+            E12starS22 = np.matmul(E_matrices.conj(), S22) 
+            # (Ntimes, spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
             # Get q_q, q_qdagger, qdagger_qdagger
-            q_q = np.einsum('aij,bji', E12P22, E21starS11) + np.einsum('aij,bji', E12C21, E12C21)
-            q_qdagger = np.einsum('aij,bji', E12C22, E21C11) + np.einsum('aij,bji', E12P21, E12starS21)
-            qdagger_qdagger = np.einsum('aij,bji', E21C12, E21C12) + np.einsum('aij,bji', E21P11, E12starS22)
+            q_q = np.einsum('abij, acji->abc', E12P22, E21starS11) + np.einsum('abij, acji->abc', E12C21, E12C21)
+            q_qdagger = np.einsum('abij, acji->abc', E12C22, E21C11) + np.einsum('abij, acji->abc', E12P21, E12starS21)
+            qdagger_qdagger = np.einsum('abij, acji->abc', E21C12, E21C12) + np.einsum('abij, acji->abc', E21P11, E12starS22)
+            # (Ntimes, spw_Ndlys, spw_Ndlys)
 
             # Get bandpower covariance 
             cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
             cov_q_imag = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
-            cov_p_real = ( np.einsum('ab,cd,bd->ac', M, M, q_q) +
-                np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) +
-                np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
-                np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-            cov_p_imag = -( np.einsum('ab,cd,bd->ac', M, M, q_q) -
-                np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) -
-                np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
-                np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+            cov_p_real = ( np.einsum('ab,cd,ibd->iac', M, M, q_q) +
+                np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) +
+                np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
+                np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+            cov_p_imag = -( np.einsum('ab,cd,ibd->iac', M, M, q_q) -
+                np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) -
+                np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
+                np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+            # (Ntimes, spw_Ndlys, spw_Ndlys)
 
-            cov_p_real_list[i] = cov_p_real
-            cov_p_imag_list[i] = cov_p_imag
-            cov_q_real_list[i] = cov_q_real
-            cov_q_imag_list[i] = cov_q_imag
+            cov_p_real_list[model] = cov_p_real
+            cov_p_imag_list[model] = cov_p_imag
+            cov_q_real_list[model] = cov_q_real
+            cov_q_imag_list[model] = cov_q_imag
 
         return cov_q_real_list, cov_q_imag_list, cov_p_real_list, cov_p_imag_list
 
@@ -2024,7 +2146,8 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, input_data_weight='identity',
               norm='I', taper='none', sampling=False, little_h=True, spw_ranges=None,
-              verbose=True, history='', store_cov=False, save_q=False, cov_types=['original']):
+              verbose=True, history='', store_cov=False, save_q=False, cov_models=['time_average']
+              ,known_cov=None):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2104,13 +2227,23 @@ class PSpecData(object):
             in the UVPSpec object.
 
         save_q : boolean, optional
-            If True, store the results (delay spectra and covariance matrices) for 
-            the unnormalized bandpowers in the UVPSpec object.
+            If True, store and return the results (delay spectra and covariance matrices) for 
+            the unnormalized bandpowers in a separate UVPSpec object.
 
-        cov_types : list of strs, optional
-            A list of the models on the input covariance matrix (the covariance matrix
+        cov_models : list of strs, optional
+            A list of the models on how to calculate the input covariance matrix (the covariance matrix
             for data stored in UVData objects). 
-            Default: ['original'] 
+            Default: ['time_average']. Options: ['time_average', 'time_average_diag', ...]
+
+        known_cov : dicts of input covariance matrices
+            known_cov has the type {Ckey:covariance}, which is the same with ds._C. The matrices
+            stored in known_cov must be constructed externally, different from those in ds._C which
+            are constructed internally.
+            A typical Ckey is like key1 + key2 + (model,) + (conj_1,) + (conj_2,) + (subtracted,),
+            where 'key1' and 'key2' specifies the dset and baseline index,
+            'model' is the type of covariance, 
+            'conj_1', 'conj_2' and 'subtracted' are all boolean values.
+            covariance has the shape (Ntimes, Nfreqs, Nfreqs).
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
@@ -2124,7 +2257,8 @@ class PSpecData(object):
             Instance of UVPSpec that holds the normalized output power spectrum data.
 
         uvp_q : UVPspec object
-            Instance of the UVPspec that holds the output unnormalized power spectrum data.
+            If save_q == True, instance of UVPSpec that holds the unnormalized power spectrum data.
+            Otherwise returned as None.
 
         Examples
         --------
@@ -2244,15 +2378,32 @@ class PSpecData(object):
             _pols.append(p)
         pols = _pols
 
+        # Check keys in known_cov are complete
+        for cov_model in cov_models:
+            if cov_model not in ['time_average', 'empirical', 'time_average_diag', 'time_average_mean', 'time_average_min', 'time_average_max']:
+                assert known_cov is not None, "didn't recognize {}".format(cov_model)
+                bl1 = []
+                bl2 = []
+                for blp in bl_pairs:
+                    bl1.append(blp[0])
+                    bl1.append(blp[1])
+
+                for pol in pols:
+                    p_str = tuple(map(lambda _p: uvutils.polnum2str(_p), pol))
+                   
+                    Ckeys = self.get_Ckeys(bl1, bl2, dsets, p_str, cov_model)
+                    for Ckey in Ckeys:
+                        assert Ckey in known_cov.keys(), "didn't recognize {}".format(Ckey)
+
         # initialize empty lists
         data_array = odict()
         data_array_q = odict()
         wgt_array = odict()
         integration_array = odict()
-        cov_array_real = odict([[cov_type, odict()] for cov_type in cov_types])
-        cov_array_imag = odict([[cov_type, odict()] for cov_type in cov_types])
-        cov_array_q_real = odict([[cov_type, odict()] for cov_type in cov_types])
-        cov_array_q_imag = odict([[cov_type, odict()] for cov_type in cov_types])
+        cov_array_real = odict([[cov_model, odict()] for cov_model in cov_models])
+        cov_array_imag = odict([[cov_model, odict()] for cov_model in cov_models])
+        cov_array_q_real = odict([[cov_model, odict()] for cov_model in cov_models])
+        cov_array_q_imag = odict([[cov_model, odict()] for cov_model in cov_models])
         time1 = []
         time2 = []
         lst1 = []
@@ -2285,10 +2436,10 @@ class PSpecData(object):
             spw_ints = []
             spw_scalar = []
             spw_pol = []
-            spw_cov_real = odict([[cov_type, []] for cov_type in cov_types])
-            spw_cov_imag = odict([[cov_type, []] for cov_type in cov_types])
-            spw_cov_q_real = odict([[cov_type, []] for cov_type in cov_types])
-            spw_cov_q_imag = odict([[cov_type, []] for cov_type in cov_types])
+            spw_cov_real = odict([[cov_model, []] for cov_model in cov_models])
+            spw_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
+            spw_cov_q_real = odict([[cov_model, []] for cov_model in cov_models])
+            spw_cov_q_imag = odict([[cov_model, []] for cov_model in cov_models])
 
             d = self.delays() * 1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
@@ -2316,10 +2467,10 @@ class PSpecData(object):
                 pol_data_q = []
                 pol_wgts = []
                 pol_ints = []
-                pol_cov_real = odict([[cov_type, []] for cov_type in cov_types])
-                pol_cov_imag = odict([[cov_type, []] for cov_type in cov_types])
-                pol_cov_q_real = odict([[cov_type, []] for cov_type in cov_types])
-                pol_cov_q_imag = odict([[cov_type, []] for cov_type in cov_types])
+                pol_cov_real = odict([[cov_model, []] for cov_model in cov_models])
+                pol_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
+                pol_cov_q_real = odict([[cov_model, []] for cov_model in cov_models])
+                pol_cov_q_imag = odict([[cov_model, []] for cov_model in cov_models])
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
@@ -2424,27 +2575,21 @@ class PSpecData(object):
                         if verbose: print(" Building q_hat covariance...")
 
                         cov_q_real, cov_q_imag, cov_real, cov_imag = self.get_analytic_covariance(key1, key2, Mv, 
-                            model='time_average', cov_types=cov_types)
+                            models=cov_models, known_cov=known_cov)
 
-                        for cov_type in cov_types:
+                        for cov_model in cov_models:
                             if self.primary_beam != None:
-                                cov_real[cov_type] = cov_real[cov_type]*\
+                                cov_real[cov_model] = cov_real[cov_model]*\
                                 (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
-                                cov_imag[cov_type] = cov_imag[cov_type]*\
+                                cov_imag[cov_model] = cov_imag[cov_model]*\
                                 (scalar * self.scalar_delay_adjustment(key1, key2, sampling=sampling))**2.
-                        
-                            cov_real[cov_type] = np.array([cov_real[cov_type] for tind in range(self.Ntimes)])
-                            cov_imag[cov_type] = np.array([cov_imag[cov_type] for tind in range(self.Ntimes)])
-
-                            pol_cov_real[cov_type].extend(cov_real[cov_type]) 
-                            pol_cov_imag[cov_type].extend(cov_imag[cov_type])
+                            pol_cov_real[cov_model].extend(cov_real[cov_model]) 
+                            pol_cov_imag[cov_model].extend(cov_imag[cov_model])
 
                         if save_q:      
-                            for cov_type in cov_types:
-                                cov_q_real[cov_type] = np.array([cov_q_real[cov_type] for tind in range(self.Ntimes)])
-                                cov_q_imag[cov_type] = np.array([cov_q_imag[cov_type] for tind in range(self.Ntimes)])
-                                pol_cov_q_real[cov_type].extend(cov_q_real[cov_type])
-                                pol_cov_q_imag[cov_type].extend(cov_q_imag[cov_type]) 
+                            for cov_model in cov_models:
+                                pol_cov_q_real[cov_model].extend(cov_q_real[cov_model])
+                                pol_cov_q_imag[cov_model].extend(cov_q_imag[cov_model]) 
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2506,29 +2651,29 @@ class PSpecData(object):
                 spw_data_q.append(pol_data_q)
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
-                [spw_cov_real[cov_type].append(pol_cov_real[cov_type]) for cov_type in cov_types]
-                [spw_cov_imag[cov_type].append(pol_cov_imag[cov_type]) for cov_type in cov_types]
-                [spw_cov_q_real[cov_type].append(pol_cov_q_real[cov_type]) for cov_type in cov_types]
-                [spw_cov_q_imag[cov_type].append(pol_cov_q_imag[cov_type]) for cov_type in cov_types]
+                [spw_cov_real[cov_model].append(pol_cov_real[cov_model]) for cov_model in cov_models]
+                [spw_cov_imag[cov_model].append(pol_cov_imag[cov_model]) for cov_model in cov_models]
+                [spw_cov_q_real[cov_model].append(pol_cov_q_real[cov_model]) for cov_model in cov_models]
+                [spw_cov_q_imag[cov_model].append(pol_cov_q_imag[cov_model]) for cov_model in cov_models]
  
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_data_q = np.moveaxis(np.array(spw_data_q), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
-            for cov_type in cov_types:
-                spw_cov_real[cov_type] = np.moveaxis(np.array(spw_cov_real[cov_type]), 0, -1)
-                spw_cov_imag[cov_type] = np.moveaxis(np.array(spw_cov_imag[cov_type]), 0, -1)
-                spw_cov_q_real[cov_type] = np.moveaxis(np.array(spw_cov_q_real[cov_type]), 0, -1)
-                spw_cov_q_imag[cov_type] = np.moveaxis(np.array(spw_cov_q_imag[cov_type]), 0, -1)
+            for cov_model in cov_models:
+                spw_cov_real[cov_model] = np.moveaxis(np.array(spw_cov_real[cov_model]), 0, -1)
+                spw_cov_imag[cov_model] = np.moveaxis(np.array(spw_cov_imag[cov_model]), 0, -1)
+                spw_cov_q_real[cov_model] = np.moveaxis(np.array(spw_cov_q_real[cov_model]), 0, -1)
+                spw_cov_q_imag[cov_model] = np.moveaxis(np.array(spw_cov_q_imag[cov_model]), 0, -1)
 
             data_array[i] = spw_data
             data_array_q[i] = spw_data_q
-            for cov_type in cov_types:
-                cov_array_real[cov_type][i] = spw_cov_real[cov_type]
-                cov_array_imag[cov_type][i] = spw_cov_imag[cov_type]
-                cov_array_q_real[cov_type][i] = spw_cov_q_real[cov_type]
-                cov_array_q_imag[cov_type][i] = spw_cov_q_imag[cov_type]
+            for cov_model in cov_models:
+                cov_array_real[cov_model][i] = spw_cov_real[cov_model]
+                cov_array_imag[cov_model][i] = spw_cov_imag[cov_model]
+                cov_array_q_real[cov_model][i] = spw_cov_q_real[cov_model]
+                cov_array_q_imag[cov_model][i] = spw_cov_q_imag[cov_model]
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
@@ -2807,7 +2952,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
               Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, rephase_to_dset=None, trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, verbose=True, store_cov=False, save_q=False,
-              cov_types=['original'], history=''):
+              cov_models=['time_average'], known_cov=None, history=''):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2943,11 +3088,22 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         output UVPSpec object.
     
     save_q : boolean, optional
-        If True, store the data of unnormalized power spectra in output UVPSpec object.
+        If True, store and return the results (delay spectra and covariance matrices) 
+        for the unnormalized bandpowers in a separate UVPSpec object.
 
-    cov_types : list of strs, optional
+    cov_models : list of strs, optional
         Models for input covariance matrices.
-        Default: ['original']
+        Default: ['time_average']. Options: ['time_average', 'time_average_diag', ...]
+
+    known_cov : dicts of input covariance matrices
+            known_cov has the type {Ckey:covariance}, which is the same with ds._C. The matrices
+            stored in known_cov must be constructed externally, different from those in ds._C which
+            are constructed internally.
+            A typical Ckey is like key1 + key2 + (model,) + (conj_1,) + (conj_2,) + (subtracted,),
+            where 'key1' and 'key2' specifies the dset and baseline index,
+            'model' is the type of covariance, 
+            'conj_1', 'conj_2' and 'subtracted' are all boolean values.
+            covariance has the shape (Ntimes, Nfreqs, Nfreqs).
     
     overwrite : boolean
         If True, overwrite outputs if they exist on disk.
@@ -3144,7 +3300,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         uvp, uvp_q = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, store_cov=store_cov,
                        input_data_weight=input_data_weight, norm=norm, taper=taper,
-                       save_q=save_q, cov_types=cov_types, history=history,
+                       save_q=save_q, cov_models=cov_models, history=history,
                        verbose=verbose)
 
         # Store output
@@ -3205,7 +3361,7 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files.")
     a.add_argument("--save_q", default=False, action='store_true', help="Store unnormalized bandpowers given dsets_std files.")
-    a.add_argument("--cov_types", default=['original'], type=list, help='List of models on input covariance matrices.')
+    a.add_argument("--cov_models", default=['time_average'], type=list, help='List of models on input covariance matrices.')
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")

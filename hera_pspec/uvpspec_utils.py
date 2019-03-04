@@ -80,14 +80,14 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
 
                 # add cov in quadrature: real and imag separately                
                 if hasattr(uvp1, "cov_array_real") and hasattr(uvp2, "cov_array_real"):
-                    for cov_type in uvp1.cov_array_real.keys():
-                        if cov_type in uvp2.cov_array_real.keys():
-                            cov1r = uvp1.get_cov(key1, component='real', cov_type=cov_type)
-                            cov2r = uvp2.get_cov(key2, component='real', cov_type=cov_type)
-                            uvp1.cov_array_real[cov_type][i][blp1_inds, :, :, j] = np.sqrt(cov1r.real**2 + cov2r.real**2) + 1j*np.sqrt(cov1r.imag**2 + cov2r.imag**2)
-                            cov1i = uvp1.get_cov(key1, component='imag', cov_type=cov_type)
-                            cov2i = uvp2.get_cov(key2, component='imag', cov_type=cov_type)
-                            uvp1.cov_array_imag[cov_type][i][blp1_inds, :, :, j] = np.sqrt(cov1i.real**2 + cov2i.real**2) + 1j*np.sqrt(cov1i.imag**2 + cov2i.imag**2)
+                    for cov_model in uvp1.cov_array_real.keys():
+                        if cov_model in uvp2.cov_array_real.keys():
+                            cov1r = uvp1.get_cov(key1, component='real', cov_model=cov_model)
+                            cov2r = uvp2.get_cov(key2, component='real', cov_model=cov_model)
+                            uvp1.cov_array_real[cov_model][i][blp1_inds, :, :, j] = np.sqrt(cov1r.real**2 + cov2r.real**2) + 1j*np.sqrt(cov1r.imag**2 + cov2r.imag**2)
+                            cov1i = uvp1.get_cov(key1, component='imag', cov_model=cov_model)
+                            cov2i = uvp2.get_cov(key2, component='imag', cov_model=cov_model)
+                            uvp1.cov_array_imag[cov_model][i][blp1_inds, :, :, j] = np.sqrt(cov1i.real**2 + cov2i.real**2) + 1j*np.sqrt(cov1i.imag**2 + cov2i.imag**2)
 
     # run check
     if run_check:

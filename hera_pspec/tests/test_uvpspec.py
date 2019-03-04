@@ -118,16 +118,16 @@ class Test_UVPSpec(unittest.TestCase):
 
         key = (0,blpairs[0],"xx")
 
-        cov_real = uvp.get_cov(key, component='real', cov_type='original')
+        cov_real = uvp.get_cov(key, component='real', cov_model='time_average')
         nt.assert_equal(cov_real[0].shape, (50, 50))
-        cov_imag = uvp.get_cov(key, component='imag', cov_type='original')
+        cov_imag = uvp.get_cov(key, component='imag', cov_model='time_average')
         nt.assert_equal(cov_imag[0].shape, (50, 50))
 
         uvp.fold_spectra()
 
-        cov_real = uvp.get_cov(key, component='real', cov_type='original')
+        cov_real = uvp.get_cov(key, component='real', cov_model='time_average')
         nt.assert_equal(cov_real[0].shape, (24, 24))
-        cov_imag = uvp.get_cov(key, component='imag', cov_type='original')
+        cov_imag = uvp.get_cov(key, component='imag', cov_model='time_average')
         nt.assert_equal(cov_imag[0].shape, (24, 24))
 
 

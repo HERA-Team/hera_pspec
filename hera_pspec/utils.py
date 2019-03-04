@@ -22,7 +22,7 @@ def hash(w):
     return md5.md5(w.copy(order='C')).digest()
 
 
-def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
+def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True, subtracted=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size 
     (M,N), then the output is M x M. In other words, the second axis is the 
@@ -51,6 +51,8 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
         Whether to conjugate d1 or not. Default: False
     conj_2 : boolean, optional
         Whether to conjugate d2 or not. Default: True
+    subtracted : boolean, default: True
+            Whether or not to subtract the mean value when calculating the covariance.
 
     Returns
     -------
@@ -81,7 +83,8 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     C = np.dot(z1, z2.T)
     W = np.dot(w1, w2.T)
     C /= np.where(W > 0, W, 1)
-    C -= np.outer(x1, x2)
+    if subtracted==True:
+        C -= np.outer(x1, x2)
     return C
 
 

@@ -89,8 +89,8 @@ def build_vanilla_uvpspec(beam=None):
 
     data_array, wgt_array = {}, {}
     integration_array, nsample_array = {}, {}
-    cov_types = ['original', 'diagonal']
-    cov_array_real, cov_array_imag = odict([[cov_type, odict()] for cov_type in cov_types]), odict([[cov_type, odict()] for cov_type in cov_types])
+    cov_models = ['time_average', 'time_average_diag']
+    cov_array_real, cov_array_imag = odict([[cov_model, odict()] for cov_model in cov_models]), odict([[cov_model, odict()] for cov_model in cov_models])
     
     for s in spw_array:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
@@ -101,10 +101,10 @@ def build_vanilla_uvpspec(beam=None):
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
 
-        for cov_type in cov_types:
-        	cov_array_real[cov_type][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+        for cov_model in cov_models:
+        	cov_array_real[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
         		for m in range(Nblpairts)] for n in range(Npols)]), 0, -1)
-        	cov_array_imag[cov_type][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+        	cov_array_imag[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
         		for m in range(Nblpairts)] for n in range(Npols)]), 0, -1)
 
     params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws', 

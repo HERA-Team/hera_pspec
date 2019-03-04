@@ -382,18 +382,18 @@ class Test_PSpecData(unittest.TestCase):
 
         # Check matrix sizes
         for matrix in [conj1_conj1, conj1_real1, real1_conj1, real1_real1]:
-            self.assertEqual(matrix.shape, (ds.spw_Nfreqs, ds.spw_Nfreqs))
-
-        for i in range(ds.spw_Nfreqs):
+            self.assertEqual(matrix.shape, (ds.Ntimes, ds.spw_Nfreqs, ds.spw_Nfreqs))
+        for i in range(1):
             for j in range(ds.spw_Nfreqs):
-                # Check that the matrices that ought to be Hermitian are indeed Hermitian
-                self.assertAlmostEqual(conj1_real1.conj().T[i,j], conj1_real1[i,j])
-                self.assertAlmostEqual(real1_conj1.conj().T[i,j], real1_conj1[i,j])
-                # Check that real_real and conj_conj are complex conjugates of each other
-                # Also check that they are symmetric
-                self.assertAlmostEqual(real1_real1.conj()[i,j], conj1_conj1[i,j])
-                self.assertAlmostEqual(real1_real1[j,i], real1_real1[i,j])
-                self.assertAlmostEqual(conj1_conj1[j,i], conj1_conj1[i,j])
+                for k in range(ds.spw_Nfreqs):
+                    # Check that the matrices that ought to be Hermitian are indeed Hermitian
+                    self.assertAlmostEqual(conj1_real1.conj()[i,k,j], conj1_real1[i,j,k])
+                    self.assertAlmostEqual(real1_conj1.conj()[i,k,j], real1_conj1[i,j,k])
+                    # Check that real_real and conj_conj are complex conjugates of each other
+                    # Also check that they are symmetric
+                    self.assertAlmostEqual(real1_real1.conj()[i,j,k], conj1_conj1[i,j,k])
+                    self.assertAlmostEqual(real1_real1[i,k,j], real1_real1[i,j,k])
+                    self.assertAlmostEqual(conj1_conj1[i,k,j], conj1_conj1[i,j,k])
 
 
         real1_real2 = ds.cross_covar_model(key1, key2, conj_1=False, conj_2=False)
@@ -406,12 +406,13 @@ class Test_PSpecData(unittest.TestCase):
         real2_conj1 = ds.cross_covar_model(key2, key1, conj_1=False, conj_2=True)
 
         # And some similar tests for cross covariances
-        for i in range(ds.spw_Nfreqs):
+        for i in range(1):
             for j in range(ds.spw_Nfreqs):
-                self.assertAlmostEqual(real1_real2.T[i,j], real2_real1[i,j])
-                self.assertAlmostEqual(conj1_conj2.T[i,j], conj2_conj1[i,j])
-                self.assertAlmostEqual(conj1_real2.conj()[j,i], conj2_real1[i,j])
-                self.assertAlmostEqual(real1_conj2.conj()[j,i], real2_conj1[i,j])
+                for k in range(ds.spw_Nfreqs):
+                    self.assertAlmostEqual(real1_real2[i,k,j], real2_real1[i,j,k])
+                    self.assertAlmostEqual(conj1_conj2[i,k,j], conj2_conj1[i,j,k])
+                    self.assertAlmostEqual(conj1_real2.conj()[i,k,j], conj2_real1[i,j,k])
+                    self.assertAlmostEqual(real1_conj2.conj()[i,k,j], real2_conj1[i,j,k])
 
     def test_get_unnormed_V(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
@@ -1412,9 +1413,9 @@ def test_real_covariance():
     uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
     
     Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
-    data_array = np.random.normal(0,100,uvd.data_array.size).reshape(uvd.data_array.shape) +\
-    1.j*np.random.normal(0,100,uvd.data_array.size).reshape(uvd.data_array.shape)
-    uvd.data_array = data_array
+    #data_array = np.random.normal(0,100,uvd.data_array.size).reshape(uvd.data_array.shape) +\
+    #1.j*np.random.normal(0,100,uvd.data_array.size).reshape(uvd.data_array.shape)
+    #uvd.data_array = data_array
 
     # slide the time axis of uvd by one integration
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes/2):1], inplace=False)
@@ -1426,18 +1427,17 @@ def test_real_covariance():
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
     antpos = dict(zip(ants, antpos))
     red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
-    bls1, bls2, blpairs = utils.construct_blpairs(red_bls[2], exclude_auto_bls=True, exclude_permutations=True)
+    bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 
     uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
          norm='I', taper='blackman-harris', store_cov = True, verbose=False)
 
     for spw in range(uvp.Nspws):
-        for blpt in range(uvp.Nblpairts):
-            for pol in range(uvp.Npols):
-                    nt.assert_true((abs(uvp.cov_array_real['original'][spw].real) / abs\
-                            (uvp.cov_array_real['original'][spw].imag) > 1e8).all())
-                    nt.assert_true((abs(uvp.cov_array_imag['original'][spw].real) / abs\
-                            (uvp.cov_array_imag['original'][spw].imag) > 1e8).all())
+        nt.assert_true((abs(uvp.cov_array_real['time_average'][spw].real) / abs\
+            (uvp.cov_array_real['time_average'][spw].imag) > 1e8).all())
+        nt.assert_true((abs(uvp.cov_array_imag['time_average'][spw].real) / abs\
+            (uvp.cov_array_imag['time_average'][spw].imag) > 1e8).all())
+                      
 """
 # LEGACY MONTE CARLO TESTS
     def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):
