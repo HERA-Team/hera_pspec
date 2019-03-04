@@ -323,8 +323,6 @@ class Test_PSpecData(unittest.TestCase):
         Q_matrix is simply an identity matrix with same dimensions as that of vector length.
         It will be very helpful if we can have more elegant solution for this.
         
-        Further, since the current version does not have the right normalization in place, I have commented out the
-        "def test_normalization" method. This is temporary and would be enabled in the next version.
         """
         vect_length = 50
         x_vect = np.random.normal(size=vect_length) \
@@ -1160,56 +1158,56 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(((0, 24, 25, 'xx'), (1, 24, 25, 'xx')) in ds._identity_Y.keys())
         nt.assert_true(((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys())
 
-   # def test_normalization(self):
-   #     # Test Normalization of pspec() compared to PAPER legacy techniques
-   #     d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2],
-   #                          frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
-   #     d2 = self.uvd.select(times=np.unique(self.uvd.time_array)[1::2],
-   #                          frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
-   #     freqs = np.unique(d1.freq_array)
+    def test_normalization(self):
+        # Test Normalization of pspec() compared to PAPER legacy techniques
+        d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2],
+                             frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
+        d2 = self.uvd.select(times=np.unique(self.uvd.time_array)[1::2],
+                             frequencies=np.unique(self.uvd.freq_array)[40:51], inplace=False)
+        freqs = np.unique(d1.freq_array)
 
-   #     # Setup baselines
-   #     bls1 = [(24, 25)]
-   #     bls2 = [(37, 38)]
+        # Setup baselines
+        bls1 = [(24, 25)]
+        bls2 = [(37, 38)]
 
-   #     # Get beam
-   #     beam = copy.deepcopy(self.bm)
-   #     cosmo = conversions.Cosmo_Conversions()
+        # Get beam
+        beam = copy.deepcopy(self.bm)
+        cosmo = conversions.Cosmo_Conversions()
 
-   #     # Set to mK scale
-   #     d1.data_array *= beam.Jy_to_mK(freqs, pol='XX')[None, None, :, None]
-   #     d2.data_array *= beam.Jy_to_mK(freqs, pol='XX')[None, None, :, None]
+        # Set to mK scale
+        d1.data_array *= beam.Jy_to_mK(freqs, pol='XX')[None, None, :, None]
+        d2.data_array *= beam.Jy_to_mK(freqs, pol='XX')[None, None, :, None]
 
-   #     # Compare using no taper
-   #     OmegaP = beam.power_beam_int(pol='XX')
-   #     OmegaPP = beam.power_beam_sq_int(pol='XX')
-   #     OmegaP = interp1d(beam.beam_freqs/1e6, OmegaP)(freqs/1e6)
-   #     OmegaPP = interp1d(beam.beam_freqs/1e6, OmegaPP)(freqs/1e6)
-   #     NEB = 1.0
-   #     Bp = np.median(np.diff(freqs)) * len(freqs)
-   #     scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
-   #     data1 = d1.get_data(bls1[0])
-   #     data2 = d2.get_data(bls2[0])
-   #     legacy = np.fft.fftshift(np.conj(np.fft.fft(data1, axis=1)) * np.fft.fft(data2, axis=1) * scalar / len(freqs)**2, axes=1)[0]
-   #     # hera_pspec OQE
-   #     ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-   #     uvp = ds.pspec(bls1, bls2, (0, 1), pols=('xx','xx'), taper='none', input_data_weight='identity', norm='I', sampling=True)
-   #     oqe = uvp.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
-   #     # assert answers are same to within 3%
-   #     nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
-   #     # taper
-   #     window = windows.blackmanharris(len(freqs))
-   #     NEB = Bp / trapz(window**2, x=freqs)
-   #     scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
-   #     data1 = d1.get_data(bls1[0])
-   #     data2 = d2.get_data(bls2[0])
-   #     legacy = np.fft.fftshift(np.conj(np.fft.fft(data1*window[None, :], axis=1)) * np.fft.fft(data2*window[None, :], axis=1) * scalar / len(freqs)**2, axes=1)[0]
-   #     # hera_pspec OQE
-   #     ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-   #     uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), taper='blackman-harris', input_data_weight='identity', norm='I')
-   #     oqe = uvp.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
-   #     # assert answers are same to within 3%
-   #     nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
+        # Compare using no taper
+        OmegaP = beam.power_beam_int(pol='XX')
+        OmegaPP = beam.power_beam_sq_int(pol='XX')
+        OmegaP = interp1d(beam.beam_freqs/1e6, OmegaP)(freqs/1e6)
+        OmegaPP = interp1d(beam.beam_freqs/1e6, OmegaPP)(freqs/1e6)
+        NEB = 1.0
+        Bp = np.median(np.diff(freqs)) * len(freqs)
+        scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
+        data1 = d1.get_data(bls1[0])
+        data2 = d2.get_data(bls2[0])
+        legacy = np.fft.fftshift(np.conj(np.fft.fft(data1, axis=1)) * np.fft.fft(data2, axis=1) * scalar / len(freqs)**2, axes=1)[0]
+        # hera_pspec OQE
+        ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
+        uvp = ds.pspec(bls1, bls2, (0, 1), pols=('xx','xx'), taper='none', input_data_weight='identity', norm='I', sampling=True)
+        oqe = uvp.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
+        # assert answers are same to within 3%
+        nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
+        # taper
+        window = windows.blackmanharris(len(freqs))
+        NEB = Bp / trapz(window**2, x=freqs)
+        scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
+        data1 = d1.get_data(bls1[0])
+        data2 = d2.get_data(bls2[0])
+        legacy = np.fft.fftshift(np.conj(np.fft.fft(data1*window[None, :], axis=1)) * np.fft.fft(data2*window[None, :], axis=1) * scalar / len(freqs)**2, axes=1)[0]
+        # hera_pspec OQE
+        ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), taper='blackman-harris', input_data_weight='identity', norm='I')
+        oqe = uvp.get_data((0, ((24, 25), (37, 38)), 'xx'))[0]
+        # assert answers are same to within 3%
+        nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
 
     def test_broadcast_dset_flags(self):
         # setup
