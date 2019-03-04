@@ -10,7 +10,7 @@ from collections import OrderedDict as odict
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, 
                           num_steps=5000, taper='none', little_h=True, 
-                          noise_scalar=False):
+                          noise_scalar=False, exact_norm=False):
     """
     This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
@@ -73,6 +73,10 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     redshifts = cosmo.f2z(integration_freqs).flatten()
     X2Y = np.array(map(lambda z: cosmo.X2Y(z, little_h=little_h), redshifts))
 
+    if exact_norm: #Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
+        scalar = integrate.trapz(X2Y, x=integration_freqs)/(np.abs(integration_freqs[-1]-integration_freqs[0]))
+        return scalar
+
     # Use linear interpolation to interpolate the frequency-dependent 
     # quantities derived from the beam model to the same frequency grid as the 
     # power spectrum estimation
@@ -99,7 +103,6 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     scalar = 1. / integrate.trapz(d_inv_scalar, x=integration_freqs)
     return scalar
 
-
 class PSpecBeamBase(object):
 
     def __init__(self, cosmo=None):
@@ -121,7 +124,7 @@ class PSpecBeamBase(object):
 
     def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, 
                              num_steps=5000, pol='pI', taper='none', 
-                             little_h=True, noise_scalar=False):
+                             little_h=True, noise_scalar=False, exact_norm=False):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -187,7 +190,7 @@ class PSpecBeamBase(object):
                                        omega_ratio, pspec_freqs,
                                        num_steps=num_steps, taper=taper, 
                                        little_h=little_h,
-                                       noise_scalar=noise_scalar)
+                                       noise_scalar=noise_scalar, exact_norm=exact_norm)
         return scalar
 
     def Jy_to_mK(self, freqs, pol='pI'):
@@ -414,17 +417,17 @@ class PSpecBeamUV(PSpecBeamBase):
         if self.primary_beam.pixel_coordinate_system != 'healpix':
             raise ValueError('Currently only healpix format supported')
 
-        nside        = self.primary_beam.nside
-        beam_res     = self.primary_beam._interp_freq(freq) # interpolate beam in frequency, based on the data frequencies 
+        nside = self.primary_beam.nside
+        beam_res = self.primary_beam._interp_freq(freq) # interpolate beam in frequency, based on the data frequencies 
 
         if isinstance(pol, (str, np.str)):
             pol = uvutils.polstr2num(pol)
         
-        pol_array     = self.primary_beam.polarization_array
+        pol_array = self.primary_beam.polarization_array
         
         if pol in pol_array:
             stokes_p_ind = np.where(np.isin(pol_array, pol))[0][0]
-            beam_res     = beam_res[0, 0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
+            beam_res = beam_res[0, 0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
         else:
             raise ValueError('Do not have the right polarization information')
 
