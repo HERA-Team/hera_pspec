@@ -53,7 +53,7 @@ class UVPSpec(object):
         self._spw_freq_array = PSpecParam("spw_freq_array", description="Spw integer array for the freq_array.", form="(Nspwfreqs,)", expected_type=np.uint16)
         self._freq_array = PSpecParam("freq_array", description="Frequency array of the original data in Hz.", form="(Nfreqs,)", expected_type=np.float64)
         self._dly_array = PSpecParam("dly_array", description="Delay array in seconds.", form="(Nspwdlys,)", expected_type=np.float64)
-        desc = "Polarization pair integer, made up of two "
+        desc = "Polarization pair integer, made up of two polarization integers concatenated in a standardized way."
         self._polpair_array = PSpecParam("polpair_array", description=desc, form="(Npols,)", expected_type=np.int32)
         self._lst_1_array = PSpecParam("lst_1_array", description="LST array of the first bl in the bl-pair [radians].", form="(Nblpairts,)", expected_type=np.float64)
         self._lst_2_array = PSpecParam("lst_2_array", description="LST array of the second bl in the bl-pair [radians].", form="(Nblpairts,)", expected_type=np.float64)
