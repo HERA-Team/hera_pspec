@@ -12,6 +12,8 @@ import time
 import argparse
 import ast
 import glob
+import sys
+from numpy import linalg
 
 
 class PSpecData(object):
@@ -900,6 +902,8 @@ class PSpecData(object):
 
     def q_hat(self, key1, key2, allow_fft=False, exact_norm = False):
         """
+
+        If exact_norm is False:
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
 
@@ -918,6 +922,9 @@ class PSpecData(object):
         This function uses the state of self.data_weighting and self.taper
         in constructing q_hat. See PSpecData.pspec for details.
 
+        If exact_norm is True:
+        It uses get_Q function to return normalized power spectrum (Eq. 14 in HERA memo #44)
+
         Parameters
         ----------
         key1, key2: tuples or lists of tuples
@@ -933,24 +940,35 @@ class PSpecData(object):
             a delta-fn bin in delay space. It also only works if the number
             of delay bins is equal to the number of frequencies. Default: False.
 
+        exact_norm: bool, optional
+            If beam and spectral window factors are taken in the computation of power spectrum (dC/dp = Q, and not Q_alt)
+            In this case, it returns normalized power spectrum, except for X2Y term.
+
         Returns
         -------
         q_hat : array_like
-            Unnormalized bandpowers
+            Unnormalized/normalized bandpowers
         """
         Rx1, Rx2 = 0.0, 0.0
+        R1, R2 = 0.0, 0.0
 
         # Calculate R x_1
         if isinstance(key1, list):
-            for _key in key1: Rx1 += np.dot(self.R(_key), self.x(_key))
+            for _key in key1: 
+                Rx1 += np.dot(self.R(_key), self.x(_key))
+                R1 += self.R(_key) 
         else:
             Rx1 = np.dot(self.R(key1), self.x(key1))
+            R1  = self.R(key1)
 
         # Calculate R x_2
         if isinstance(key2, list):
-            for _key in key2: Rx2 += np.dot(self.R(_key), self.x(_key))
+            for _key in key2: 
+                Rx2 += np.dot(self.R(_key), self.x(_key))
+                R2 += self.R(_key) 
         else:
             Rx2 = np.dot(self.R(key2), self.x(key2))
+            R2  = self.R(key2)
 
         '''
         The set of operations for exact_norm == True are drawn from Equations 11(a) and 11(b) from HERA memo #44.
@@ -958,19 +976,30 @@ class PSpecData(object):
         '''
         
         if exact_norm and allow_fft: #exact_norm approach is meant to enable non-uniform binnning as well, where FFT is not 
-            #applicable. As of now, we are sticking to uniform binning.
+            #applicable. As of now, we are using uniform binning.
             raise NotImplementedError("Exact normalization does not support FFT approach at present")
 
         elif exact_norm and not(allow_fft):
             q          = []
-            del_tau    = np.median(np.diff(self.delays()))  #Get del_eta in Eq.11(a)
+            del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (seconds)
+            Q_matrix_all_delays = np.zeros((self.spw_Ndlys,self.spw_Nfreqs,self.spw_Nfreqs), dtype='complex128')
             for i in xrange(self.spw_Ndlys):
-                Q    = del_tau * self.get_Q(i) #ideally, del_tau should be part of get_Q. 
-                #However, as of now, it remains same for all delay bins. So we put it here to avoid its repeated computation.
+                Q    = del_tau * self.get_Q(i) #ideally, del_tau should be part of get_Q. We use it here to avoid its repeated computation
+                Q_matrix_all_delays[i] = Q
                 QRx2 = np.dot(Q, Rx2)
-                qi   = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
+                qi   = 0.5 * np.einsum('i...,i...->...', Rx1.conj(), QRx2) #square and sum over columns
                 q.append(qi)
-            return 0.5 * np.array(q) #Return unnormalized band powers
+
+            q = np.asarray(q) #(Ndlys X Ntime)
+            q_norm  = np.zeros_like(q, dtype='complex128')
+            wt_norm = np.zeros(len(q), dtype='complex128') 
+
+            for i in xrange(self.spw_Ndlys):#One normalization for each delay bin
+                for j in xrange(self.spw_Ndlys):
+                    wt_norm[i] += np.trace(np.linalg.multi_dot([R1, Q_matrix_all_delays[i], \
+                                                                R2, Q_matrix_all_delays[j]]))
+                q_norm[i] = (q[i])/(0.5*wt_norm[i])
+            return q_norm #Return normalized band powers
 
         # use FFT if possible and allowed
         elif allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
@@ -979,7 +1008,7 @@ class PSpecData(object):
             return 0.5 * np.fft.fftshift(_Rx1, axes=0).conj() * np.fft.fftshift(_Rx2, axes=0)
 
         else:
-            q          = []
+            q        = []
             for i in xrange(self.spw_Ndlys):
                 Q    = self.get_Q_alt(i)
                 QRx2 = np.dot(Q, Rx2)
@@ -1452,7 +1481,7 @@ class PSpecData(object):
     def get_Q(self, mode):
         '''
         Computed Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha). 
-        This includes contributions from primary beam, beam area and spectral tapering functions.
+        This includes contributions from primary beam.
         
         Parameters
         ----------
@@ -1471,24 +1500,23 @@ class PSpecData(object):
             raise IndexError("Cannot compute Q matrix for a mode outside"
                              "of allowed range of delay modes.")
 
-        tau                     = self.delays()[mode]/1.0e9 # delay in seconds
-        nu                      = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
-        pol                     = self.spw_pol_i #Get polarization
-        taper                   = aipy.dsp.gen_window(self.spw_Nfreqs, self.taper) #Get spectral taper function
+        tau = self.delays()[mode] * 1.0e-9 # delay in seconds
+        nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
+        pol = self.spw_pol_i #Get polarization
 
         try:
             beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(pol, nu) 
             #Get beam response in (frequency, pixel), beam area(freq) and Nside, used in computing dtheta.
-            prod                    = 1.0/(beam_omega) if taper == 'none' else (taper/beam_omega)
-            beam_prod               = prod[:, np.newaxis] * beam_res 
-            integral_beam           = (np.pi/(3.0*(N)**2))* \
-                                      np.dot(beam_prod, beam_prod.T) #beam_prod has spectral window and omega already subsumed
-        except(AttributeError): #if beam object is not provided, assume an identity matrix (isotropic beam)
-            integral_beam           = np.ones((len(nu), len(nu))) 
+            prod          = (1.0/beam_omega) 
+            beam_prod     = beam_res * prod[:, np.newaxis] 
+            integral_beam = (np.pi/(3.0*(N)**2))* \
+                                      np.dot(beam_prod, beam_prod.T) #beam_prod has omega subsumed, but taper is still part of R matrix
+        except(AttributeError):
+            integral_beam = np.ones((len(nu), len(nu)))
 
-        eta_int                 = np.exp(-2j * np.pi * tau * nu) #exponential part of the expression
-        Q_alt                   = np.einsum('i,j', eta_int.conj(), eta_int) # dot it with its conjugate
-        Q                       = Q_alt * integral_beam 
+        eta_int = np.exp(-2j * np.pi * tau * nu) #exponential part of the expression
+        Q_alt   = np.einsum('i,j', eta_int.conj(), eta_int) # dot it with its conjugate
+        Q       = Q_alt * integral_beam 
         return Q
 
     def p_hat(self, M, q):
@@ -1662,7 +1690,7 @@ class PSpecData(object):
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
                                  n_dlys=self.spw_Ndlys) * 1e9 # convert to ns    
         
-    def scalar(self, pol, little_h=True, num_steps=2000, beam=None, taper_override='no_override'):
+    def scalar(self, pol, little_h=True, num_steps=2000, beam=None, taper_override='no_override', exact_norm=False):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set
@@ -1719,12 +1747,12 @@ class PSpecData(object):
             scalar = self.primary_beam.compute_pspec_scalar(
                                         start, end, len(freqs), pol=pol,
                                         taper=self.taper, little_h=little_h,
-                                        num_steps=num_steps)
+                                        num_steps=num_steps, exact_norm=exact_norm)
         else:
             scalar = beam.compute_pspec_scalar(start, end, len(freqs),
                                                pol=pol, taper=self.taper,
                                                little_h=little_h,
-                                               num_steps=num_steps)
+                                               num_steps=num_steps, exact_norm=exact_norm)
         return scalar
 
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False, 
@@ -1848,7 +1876,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, input_data_weight='identity',
               norm='I', taper='none', sampling=False, little_h=True, spw_ranges=None,
-              verbose=True, history='', store_cov=False):
+              verbose=True, history='', store_cov=False, exact_norm=False):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2094,7 +2122,7 @@ class PSpecData(object):
             spw_pol = []
             spw_cov = []
 
-            d = self.delays() * 1e-9
+            d = self.delays()*1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
             dlys.extend(d)
             dly_spws.extend(np.ones_like(d, np.int16) * i)
@@ -2129,9 +2157,9 @@ class PSpecData(object):
                     if norm == 'H^-1':
                         # If using decorrelation, the H^-1 normalization already deals with the taper,
                         # so we need to override the taper when computing the scalar
-                        scalar = self.scalar(p[0], little_h=True, taper_override='none')
+                        scalar = self.scalar(p[0], little_h=True, taper_override='none', exact_norm=exact_norm)
                     else:
-                        scalar = self.scalar(p[0], little_h=True)
+                        scalar = self.scalar(p[0], little_h=True, exact_norm=exact_norm)
                 else: 
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized",
@@ -2139,7 +2167,7 @@ class PSpecData(object):
                     scalar = 1.0
                 spw_scalar.append(scalar)
 
-                # Loop over baseline pairs
+               # Loop over baseline pairs
                 for k, blp in enumerate(bl_pairs):
                     # assign keys
                     if isinstance(blp, list):
@@ -2200,29 +2228,31 @@ class PSpecData(object):
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, exact_norm=True) # Currently, q_hat would use the new function 'get_Q' and not 
-                    #Q_alt by default. This will also require a new normalization to qv, which is a work in progress. 
-
-                    # Normalize power spectrum estimate
-                    if verbose: print("  Normalizing power spectrum...")
-                    if norm == 'V^-1/2':
-                        V_mat = self.get_unnormed_V(key1, key2)
-                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
-                    else:
-                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
-                    pv = self.p_hat(Mv, qv)
-
-                    # Multiply by scalar
+                    qv = self.q_hat(key1, key2, exact_norm=exact_norm) 
+                        
+                    #Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
-                        pv *= scalar
+                        qv *= scalar #This is a common step for both the methods
 
-                    # Wide bin adjustment of scalar, which is only needed for the diagonal norm
-                    # matrix mode (i.e., norm = 'I')
-                    if norm == 'I':
-                        pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
+                    if exact_norm: #The output would be a normalized spectrum, so we would skip external normalization
+                        pv = qv
+                    else: # Use the existing routine for normalization
+                        # Normalize power spectrum estimate
+                        if verbose: print("  Normalizing power spectrum...")
+                        if norm == 'V^-1/2':
+                            V_mat = self.get_unnormed_V(key1, key2)
+                            Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
+                        else:
+                            Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
+                        pv = self.p_hat(Mv, qv)
 
-                    # Generate the covariance matrix if error bars provided
+                        #Wide bin adjustment of scalar, which is only needed for the diagonal norm
+                        #matrix mode (i.e., norm = 'I')
+                        if norm == 'I':
+                           pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
+
+                    #Generate the covariance matrix if error bars provided
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
                         cov_qv = self.cov_q_hat(key1, key2)
@@ -2381,7 +2411,6 @@ class PSpecData(object):
 
         # run check
         uvp.check()
-
         return uvp
 
     def rephase_to_dset(self, dset_index=0, inplace=True):
