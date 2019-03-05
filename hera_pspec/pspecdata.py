@@ -1651,7 +1651,7 @@ class PSpecData(object):
         """
         # make sure polarizations are the same
         if isinstance(polpair, int):
-            polpair = uvutils.polpair_int2tuple(polpair)
+            polpair = uvputils.polpair_int2tuple(polpair)
         if polpair[0] != polpair[1]:
             raise NotImplementedError(
                     "Polarizations don't match. Beam scalar can only be "

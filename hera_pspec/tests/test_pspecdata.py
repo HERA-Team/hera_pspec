@@ -233,6 +233,7 @@ class Test_PSpecData(unittest.TestCase):
         print(ds) # print empty psd
         ds.add(self.uvd, None)
         print(ds) # print populated psd
+        
 
     def test_get_Q_alt(self):
 
@@ -485,7 +486,11 @@ class Test_PSpecData(unittest.TestCase):
                 # Test that the norm matrix is diagonal
                 M, W = self.ds.get_MW(random_G, random_H, mode=mode)
                 self.assertEqual(diagonal_or_not(M), True)
-
+            elif mode == 'L^-1':
+                # Test that Cholesky mode is disabled 
+                nt.assert_raises(NotImplementedError, 
+                                 self.ds.get_MW, random_G, random_H, mode=mode)
+                
             # Test sizes for everyone
             self.assertEqual(M.shape, (n,n))
             self.assertEqual(W.shape, (n,n))
@@ -807,7 +812,9 @@ class Test_PSpecData(unittest.TestCase):
         
         # Check normal execution
         scalar = self.ds.scalar(('xx','xx'))
+        scalar = self.ds.scalar(1515) # polpair-integer = ('xx', 'xx')
         scalar = self.ds.scalar(('xx','xx'), taper_override='none')
+        scalar = self.ds.scalar(('xx','xx'), beam=gauss)
         nt.assert_raises(NotImplementedError, self.ds.scalar, ('xx','yy'))
         
         # Precomputed results in the following test were done "by hand"
@@ -861,6 +868,12 @@ class Test_PSpecData(unittest.TestCase):
         
         # test polarization
         ds.validate_pol((0,1), ('xx', 'xx'))
+        
+        # test channel widths
+        uvd2.channel_width *= 2.
+        ds2 = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
+        nt.assert_raises(ValueError, ds2.validate_datasets)
+        
 
     def test_rephase_to_dset(self):
         # generate two uvd objects w/ different LST grids
@@ -961,6 +974,9 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_false(ds.check_key_in_dset((24, 26, 'yy'), 0))
         # check exception
         nt.assert_raises(KeyError, ds.check_key_in_dset, (1,2,3,4,5), 0)
+        
+        # test dset_idx
+        nt.assert_raises(TypeError, ds.dset_idx, (1,2))
 
     def test_pspec(self):
         # generate ds
