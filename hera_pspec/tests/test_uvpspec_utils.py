@@ -96,6 +96,21 @@ def test_select_common():
     nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], 
                                  polpairs=True)
 
+def test_get_blpairs_from_bls():
+    """
+    Test conversion of 
+    """
+    # setup uvp
+    beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+    beam = pspecbeam.PSpecBeamUV(beamfile)
+    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
+    
+    # Check that bls can be specified in several different ways
+    blps = uvputils._get_blpairs_from_bls(uvp, bls=101102)
+    blps = uvputils._get_blpairs_from_bls(uvp, bls=(101,102))
+    blps = uvputils._get_blpairs_from_bls(uvp, bls=[101102, 101103])
+    
+
 def test_polpair_int2tuple():
     """
     Test conversion of polpair ints to tuples.
