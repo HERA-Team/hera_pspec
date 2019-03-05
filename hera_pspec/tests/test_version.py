@@ -2,7 +2,12 @@
 import nose.tools as nt
 import sys
 import os
-from io import StringIO
+try:
+    # Python 2
+    from cStringIO import StringIO
+except:
+    # Python 3
+    from io import StringIO
 import subprocess
 import hera_pspec
 
