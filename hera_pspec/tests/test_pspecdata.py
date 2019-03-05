@@ -1320,7 +1320,7 @@ def test_pspec_run():
     nt.assert_true(uvp.vis_units, "mK")
     # assert only blpairs that were fed are present
     nt.assert_equal(uvp.bl_array.tolist(), [137138, 152153])
-    nt.assert_equal(uvp.polpair_array.tolist(), [505, 505])
+    nt.assert_equal(uvp.polpair_array.tolist(), [1515, 1515])
     # assert weird cosmology was passed
     nt.assert_equal(uvp.cosmo, cosmo)
     # assert cov_array was calculated b/c std files were passed and store_cov

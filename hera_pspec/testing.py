@@ -59,7 +59,7 @@ def build_vanilla_uvpspec(beam=None):
     freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), 
                            Nspws)
     dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
-    polpair_array = np.array([505,])
+    polpair_array = np.array([1515,]) # corresponds to ('xx','xx')
     Npols = len(polpair_array)
     vis_units = 'unknown'
     norm_units = 'Hz str'

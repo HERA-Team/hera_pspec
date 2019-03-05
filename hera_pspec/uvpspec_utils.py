@@ -262,8 +262,8 @@ def polpair_int2tuple(polpair, pol_strings=False):
         "polpair must be integer: %s" % type(polpair)
     
     # Split into pol1 and pol2 integers
-    pol1 = int(str(polpair)[:-2]) - 10
-    pol2 = int(str(polpair)[-2:]) - 10
+    pol1 = int(str(polpair)[:-2]) - 20
+    pol2 = int(str(polpair)[-2:]) - 20
     
     # Check that pol1 and pol2 are in the allowed range (-8, 4)
     if (pol1 < -8 or pol1 > 4) or (pol2 < -8 or pol2 > 4):
@@ -282,10 +282,10 @@ def polpair_tuple2int(polpair):
     Convert a tuple pair of polarization strings/integers into 
     an pol-pair integer.
     
-    The polpair integer is formed by adding 10 to each standardized 
+    The polpair integer is formed by adding 20 to each standardized 
     polarization integer (see polstr2num and AIPS memo 117) and 
     then concatenating them. For example, polarization pair 
-    ('pI', 'pQ') == (1, 2) == 1112. 
+    ('pI', 'pQ') == (1, 2) == 2122. 
     
     Parameters
     ----------
@@ -312,7 +312,7 @@ def polpair_tuple2int(polpair):
     if type(pol2) in (str, np.str): pol2 = polstr2num(pol2)
     
     # Convert to polpair integer
-    ppint = (10 + pol1)*100 + (10 + pol2)
+    ppint = (20 + pol1)*100 + (20 + pol2)
     return ppint
 
 

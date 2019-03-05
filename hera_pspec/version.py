@@ -113,6 +113,14 @@ def history_string(notes=''):
         history += notes
     return history + '\n------------\n'
 
+def print_version_info():
+    """
+    Print git/version info.
+    """
+    print('Version = {0}'.format(version))
+    print('git origin = {0}'.format(git_origin))
+    print('git branch = {0}'.format(git_branch))
+    print('git description = {0}'.format(git_description))
 
 version_info = construct_version_info()
 version = version_info['version']
@@ -123,13 +131,7 @@ git_branch = version_info['git_branch']
 
 
 def main():
-    try:
-        print('Version = {0}'.format(version))
-        print('git origin = {0}'.format(git_origin))
-        print('git branch = {0}'.format(git_branch))
-        print('git description = {0}'.format(git_description))
-    except:
-        pass
+    print_version_info()
 
 if __name__ == '__main__':
     main()

@@ -149,7 +149,11 @@ class Test_grouping(unittest.TestCase):
                                                      [uvp3,], 
                                                      blpair_groups=[_blpairs,], 
                                                      time_avg=True)
-            ps_avg = uvp_avg.get_data((0, blpair, ('xx','xx')))
+            try:
+                ps_avg = uvp_avg.get_data((0, blpair, ('xx','xx')))
+            except:
+                print(uvp_avg.polpair_array)
+                raise
             ps_boot = uvp4[0].get_data((0, blpair, ('xx','xx')))
             np.testing.assert_array_almost_equal(ps_avg, ps_boot)
 

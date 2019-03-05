@@ -92,7 +92,7 @@ def test_select_common():
 
     # check pol overlap
     uvp7 = copy.deepcopy(uvp1)
-    uvp7.polpair_array[0] = 202 # = (-8,-8)
+    uvp7.polpair_array[0] = 1212 # = (-8,-8)
     nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], 
                                  polpairs=True)
 
@@ -108,9 +108,9 @@ def test_polpair_int2tuple():
     # Check that lists and single items work
     pol_ints = uvputils.polpair_tuple2int(polpairs)
     uvputils.polpair_tuple2int(polpairs[0])
-    uvputils.polpair_int2tuple(505)
-    uvputils.polpair_int2tuple([505,404])
-    uvputils.polpair_int2tuple(np.array([505,404]))
+    uvputils.polpair_int2tuple(1515)
+    uvputils.polpair_int2tuple([1515,1414])
+    uvputils.polpair_int2tuple(np.array([1515,1414]))
     
     # Test converting to int and then back again
     pol_pairs_returned = uvputils.polpair_int2tuple(pol_ints, pol_strings=True)
