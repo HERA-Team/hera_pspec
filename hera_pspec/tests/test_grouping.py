@@ -3,11 +3,12 @@ import nose.tools as nt
 import numpy as np
 import os
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils
 from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec import grouping, container
 from pyuvdata import UVData
 from hera_cal import redcal
+import copy
 
 
 class Test_grouping(unittest.TestCase):
@@ -99,7 +100,7 @@ class Test_grouping(unittest.TestCase):
         # Check that returned length is the same for groups too
         samp = grouping.sample_baselines(g1)
         self.assertEqual(len(g1), len(samp))
-    
+
     def test_bootstrap_average_blpairs(self):
         """
         Test bootstrap averaging over power spectra.
@@ -151,7 +152,7 @@ class Test_grouping(unittest.TestCase):
             ps_avg = uvp_avg.get_data((0, blpair, 'xx'))
             ps_boot = uvp4[0].get_data((0, blpair, 'xx'))
             np.testing.assert_array_almost_equal(ps_avg, ps_boot)
-        
+
 def test_bootstrap_resampled_error():
     # generate a UVPSpec
     visfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
@@ -161,7 +162,7 @@ def test_bootstrap_resampled_error():
     uvd = UVData()
     uvd.read_miriad(visfile)
     ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
-    reds = redcal.get_pos_reds(dict(zip(a, ap)), low_hi=True, bl_error_tol=1.0)[:3]
+    reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
 
     # Lots of this function is already tested by bootstrap_run
@@ -181,6 +182,48 @@ def test_bootstrap_resampled_error():
     if os.path.exists("uvp.h5"):
         os.remove("uvp.h5")
 
+
+def test_validate_bootstrap_errorbar():
+    """ This is used to test the bootstrapping code
+    against the gaussian noise visibility simulator.
+    The basic premise is that, if working properly,
+    gaussian noise pspectra divided by their bootstrapped
+    errorbars should have a standard deviation that
+    converges to 1. """
+    # get simulated noise in K-str
+    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    Tsys = 300.0  # Kelvin
+
+    # generate complex gaussian noise
+    seed = 4
+    uvd1 = testing.noise_sim(uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0)
+    seed = 5
+    uvd2 = testing.noise_sim(uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0)
+
+    # form (auto) baseline-pairs from only 14.6m bls
+    reds, lens, angs = utils.get_reds(uvd1, pick_data_ants=True, bl_len_range=(10, 50),
+                                      bl_deg_range=(0, 180))
+    bls1, bls2 = utils.flatten(reds), utils.flatten(reds)
+
+    # setup PSpecData and form power psectra
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
+    uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
+                   taper='none', sampling=False, little_h=False, spw_ranges=[(0, 50)], verbose=False)
+
+    # bootstrap resample
+    seed = 0
+    Nsamples = 200
+    uvp_avg, uvp_boots, uvp_wgts = grouping.bootstrap_resampled_error(uvp, time_avg=False, Nsamples=Nsamples,
+                                                                      seed=seed, normal_std=True,
+                                                                      blpair_groups=[uvp.get_blpairs()])
+
+    # assert z-score has std of ~1.0 along time ax to within 1/sqrt(Nsamples)
+    bs_std_zscr_real = np.std(uvp_avg.data_array[0].real) / np.mean(uvp_avg.stats_array['bs_std'][0].real)
+    nt.assert_true(np.abs(1.0 - bs_std_zscr_real) < 1/np.sqrt(Nsamples))
+    bs_std_zscr_imag = np.std(uvp_avg.data_array[0].imag) / np.mean(uvp_avg.stats_array['bs_std'][0].imag)
+    nt.assert_true(np.abs(1.0 - bs_std_zscr_imag) < 1/np.sqrt(Nsamples))
+
+
 def test_bootstrap_run():
     # generate a UVPSpec and container
     visfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
@@ -190,7 +233,7 @@ def test_bootstrap_run():
     uvd = UVData()
     uvd.read_miriad(visfile)
     ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
-    reds = redcal.get_pos_reds(dict(zip(a, ap)), low_hi=True, bl_error_tol=1.0)[:3]
+    reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
     if os.path.exists("ex.h5"):
         os.remove("ex.h5")

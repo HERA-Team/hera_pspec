@@ -293,7 +293,7 @@ def test_get_blvec_reds():
     uvd = UVData()
     uvd.read_miriad(fname)
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-    reds = redcal.get_pos_reds(dict(zip(ants, antpos)), low_hi=True)
+    reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
     uvp = testing.uvpspec_from_data(fname, reds[:2], spw_ranges=[(10, 40)])
 
     # test execution w/ dictionary

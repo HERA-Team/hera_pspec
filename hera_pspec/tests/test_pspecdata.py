@@ -439,7 +439,7 @@ class Test_PSpecData(unittest.TestCase):
         random_V = generate_pos_def_all_pos(n)
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
-        
+
         for mode in ['H^-1', 'V^-1/2', 'I', 'L^-1']:
             if mode == 'H^-1':
                 # Test that if we have full-rank matrices, the resulting window functions
@@ -483,7 +483,7 @@ class Test_PSpecData(unittest.TestCase):
                 # Test that the norm matrix is diagonal
                 M, W = self.ds.get_MW(random_G, random_H, mode=mode)
                 self.assertEqual(diagonal_or_not(M), True)
-            
+
             # Test sizes for everyone
             self.assertEqual(M.shape, (n,n))
             self.assertEqual(W.shape, (n,n))
@@ -959,7 +959,7 @@ class Test_PSpecData(unittest.TestCase):
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
-        red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos, low_hi=True))[2]
+        red_bls = map(lambda blg: sorted(blg), redcal.get_pos_reds(antpos))[2]
         bls1, bls2, blps = utils.construct_blpairs(red_bls, exclude_permutations=True)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
@@ -1252,7 +1252,7 @@ class Test_PSpecData(unittest.TestCase):
         # # assert answers are same to within 3%
         # nt.assert_true(np.isclose(np.real(qe_flagged_asymm)/np.real(qe_flagged), 1, atol=0.03, rtol=0.03).all())
 
-        print uvd.data_array.shape
+        print(uvd.data_array.shape)
 
     def test_validate_blpairs(self):
         # test exceptions

@@ -311,7 +311,7 @@ class PSpecData(object):
         """
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
-            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {} 
+            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -869,7 +869,7 @@ class PSpecData(object):
         N2 = np.zeros_like(N1)
         Qalphas = np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[np.newaxis, :, :, :], self.spw_Ndlys, axis=0)
         Qbetas = np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[:, np.newaxis, :, :], self.spw_Ndlys, axis=1)
- 
+
         # Q_alpha/Q_beta are N_dlys x N_dlys x N_freq x N_freq
         # taking advantage of broadcast rules!
         # matmul only applies to the last two dimensions
@@ -1122,8 +1122,8 @@ class PSpecData(object):
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
-            Tuples containing indices of dataset and baselines for the two 
-            input datavectors. If a list of tuples is provided, the baselines 
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
         Returns
@@ -1145,18 +1145,18 @@ class PSpecData(object):
             E_matrices[dly_idx] = np.dot(R1, QR2)
 
         return 0.5 * E_matrices
-    
+
     def get_unnormed_V(self, key1, key2, model='empirical'):
         """
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
-        
+
         .. math ::
             V_ab = 2 tr(C E_a C E_b), where E_a = (1/2) R Q^a R
 
         When the data are complex, the expression becomes considerably more
         complicated. Define
-        
+
         .. math ::
             E^{12,a} = (1/2) R_1 Q^a R_2
             C^1 = <x1 x1^dagger> - <x1><x1^dagger>
@@ -1165,36 +1165,36 @@ class PSpecData(object):
             S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
 
         Then
-        
+
         .. math ::
             V_ab = tr(E^{12,a} C^2 E^{21,b} C^1)
                     + tr(E^{12,a} P^{21} E^{12,b *} S^{21})
 
         Note that
-        
+
         .. math ::
             E^{12,a}_{ij}.conj = E^{21,a}_{ji}
 
-        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by 
-        default. (So while the pointy brackets <...> should in principle be 
+        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by
+        default. (So while the pointy brackets <...> should in principle be
         ensemble averages, in practice the code performs averages in time.)
 
         Empirical covariance estimates are in principle a little risky, as they
         can potentially induce signal loss. This is probably ok if we are just
         looking intending to look at V. It is most dangerous when C_emp^-1 is
         applied to the data. The application of using this to form do a V^-1/2
-        decorrelation is probably medium risk. But this has yet to be proven, 
+        decorrelation is probably medium risk. But this has yet to be proven,
         and results coming from V^-1/2 should be interpreted with caution.
 
-        Note for future: Although the V matrix should be Hermitian by 
-        construction, in practice there are precision issues and the 
-        Hermiticity is violated at ~ 1 part in 10^15. (Which is ~the expected 
-        roundoff error). If something messes up, it may be worth investigating 
+        Note for future: Although the V matrix should be Hermitian by
+        construction, in practice there are precision issues and the
+        Hermiticity is violated at ~ 1 part in 10^15. (Which is ~the expected
+        roundoff error). If something messes up, it may be worth investigating
         this more.
 
         Note for the future: If this ends up too slow, Cholesky tricks can be
         employed to speed up the computation by a factor of a few.
-        
+
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
@@ -1204,7 +1204,7 @@ class PSpecData(object):
 
         model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
-        
+
         Returns
         -------
         V : array_like, complex
@@ -1559,8 +1559,8 @@ class PSpecData(object):
                              "calculate delays.")
         else:
             return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
-                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns    
-        
+                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns
+
     def scalar(self, pol, little_h=True, num_steps=2000, beam=None, taper_override='no_override'):
         """
         Computes the scalar function to convert a power spectrum estimate
@@ -1588,7 +1588,7 @@ class PSpecData(object):
                 Default: 10000
 
         beam : PSpecBeam object
-                Option to use a manually-fed PSpecBeam object instead of using 
+                Option to use a manually-fed PSpecBeam object instead of using
                 self.primary_beam.
 
         taper_override : str, optional
@@ -1626,7 +1626,7 @@ class PSpecData(object):
                                                num_steps=num_steps)
         return scalar
 
-    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False, 
+    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
         """
         Computes an adjustment factor for the pspec scalar that is needed
@@ -1648,16 +1648,16 @@ class PSpecData(object):
         key1, key2 : tuples or lists of tuples, optional
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
-            in the list will be combined with inverse noise weights. If Gv and 
+            in the list will be combined with inverse noise weights. If Gv and
             Hv are specified, these arguments will be ignored. Default: None.
 
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
-        
+
         Gv, Hv : array_like, optional
-            If specified, use these arrays instead of calling self.get_G() and 
-            self.get_H(). Using precomputed Gv and Hv will speed up this 
+            If specified, use these arrays instead of calling self.get_G() and
+            self.get_H(). Using precomputed Gv and Hv will speed up this
             function significantly. Default: None.
 
         Returns
@@ -1667,7 +1667,7 @@ class PSpecData(object):
         """
         if Gv is None: Gv = self.get_G(key1, key2)
         if Hv is None: Hv = self.get_H(key1, key2, sampling)
-        
+
         # get ratio
         summed_G = np.sum(Gv, axis=1)
         summed_H = np.sum(Hv, axis=1)
@@ -1736,11 +1736,11 @@ class PSpecData(object):
 
         valid = True
         if pol_pair[0] not in dset1.polarization_array:
-            print "dset {} does not contain data for polarization {}".format(dset_ind1, pol_pair[0])
+            print("dset {} does not contain data for polarization {}".format(dset_ind1, pol_pair[0]))
             valid = False
 
         if pol_pair[1] not in dset2.polarization_array:
-            print "dset {} does not contain data for polarization {}".format(dset_ind2, pol_pair[1])
+            print("dset {} does not contain data for polarization {}".format(dset_ind2, pol_pair[1]))
             valid = False
 
         return valid
@@ -2029,7 +2029,7 @@ class PSpecData(object):
                         scalar = self.scalar(p[0], little_h=True, taper_override='none')
                     else:
                         scalar = self.scalar(p[0], little_h=True)
-                else: 
+                else:
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized",
                                   verbose=verbose)
@@ -2156,7 +2156,7 @@ class PSpecData(object):
                     # get integ1
                     blts1 = dset1.antpair2ind(bl1, ordered=False)
                     integ1 = dset1.integration_time[blts1] * nsamp1
-                    
+
                     # get integ2
                     blts2 = dset2.antpair2ind(bl2, ordered=False)
                     integ2 = dset2.integration_time[blts2] * nsamp2
@@ -2342,7 +2342,7 @@ class PSpecData(object):
 
             # skip if dataset is not drift phased
             if dset.phase_type != 'drift':
-                print "skipping dataset {} b/c it isn't drift phased".format(i)
+                print("skipping dataset {} b/c it isn't drift phased".format(i))
 
             # convert UVData to DataContainers. Note this doesn't make
             # a copy of the data
@@ -2395,7 +2395,7 @@ class PSpecData(object):
             beam = self.primary_beam
         else:
             if self.primary_beam is not None:
-                print "Warning: feeding a beam model when self.primary_beam already exists..."
+                print("Warning: feeding a beam model when self.primary_beam already exists...")
 
         # Check beam is not None
         assert beam is not None, "Cannot convert Jy --> mK b/c beam object is not defined..."
@@ -2412,7 +2412,7 @@ class PSpecData(object):
         for i, dset in enumerate(self.dsets):
             # check dset vis units
             if dset.vis_units.upper() != 'JY':
-                print "Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units)
+                print("Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units))
                 continue
             for j, p in enumerate(dset.polarization_array):
                 dset.data_array[:, :, :, j] *= factors[p][None, None, :]
@@ -2436,7 +2436,7 @@ class PSpecData(object):
         for dset in self.dsets:
             _dlst = np.median(np.diff(np.unique(dset.lst_array)))
             if not np.isclose(dlst, _dlst, atol=10**(-lst_tol) / dset.Ntimes):
-                print "not all datasets in self.dsets are on the same LST grid, cannot LST trim."
+                print("not all datasets in self.dsets are on the same LST grid, cannot LST trim.")
                 return
 
         # get lst array of each dataset and turn into string and add to common_lsts
@@ -2782,7 +2782,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
     # assign group name
     if groupname is None:
         groupname = '_'.join(dset_labels)
-    
+
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
         # check bls lists aren't empty
@@ -2798,7 +2798,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None, dset_labels=None,
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, 
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
                       overwrite=overwrite)
 
     return psc, ds
@@ -2918,4 +2918,3 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
         uvd.read_miriad(glob.glob(dset), bls=bls, polarizations=pols)
         dsets.append(uvd)
     return dsets
-
