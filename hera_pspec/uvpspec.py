@@ -838,8 +838,12 @@ class UVPSpec(object):
 
         Parameters
         ----------
-        polpair : (list of) int or tuple
-            Polarization-pair integer or tuple of polarization strings/ints.
+        polpair : (list of) int or tuple or str
+            Polarization-pair integer or tuple of polarization strings/ints. 
+            
+            Alternatively, if a single string is given, will assume that the 
+            specified polarization is to be cross-correlated withitself, 
+            e.g. 'XX' implies ('XX', 'XX').
 
         Returns
         -------
@@ -847,10 +851,14 @@ class UVPSpec(object):
             Index of polpair in polpair_array.
         """
         # Convert to list if not already a list
-        if isinstance(polpair, (tuple, int, np.integer)):
+        if isinstance(polpair, (tuple, int, np.integer, str)):
             polpair = [polpair,]
-        elif not isinstance(polpair, list):
-            raise TypeError("polpair must be list of tuple or int")
+        elif not isinstance(polpair, (list, np.ndarray)):
+            raise TypeError("polpair must be list of tuple or int or str")
+        
+        # Convert strings to ints
+        polpair = [uvputils.polpair_tuple2int((p,p)) if isinstance(p, str) else p 
+                   for p in polpair]
         
         # Convert list items to standard format (polpair integers)
         polpair = [uvputils.polpair_tuple2int(p) if isinstance(p, tuple) else p 
@@ -925,7 +933,7 @@ class UVPSpec(object):
         Parameters
         ----------
         key : tuple
-            Baseline-pair, spw, and pol-pair key.
+            Baseline-pair, spw, and pol-pair key. 
 
         omit_flags : bool, optional
             If True, remove time integrations (or spectra) that
@@ -959,13 +967,17 @@ class UVPSpec(object):
             "blpair must be an integer or nested tuple"
         assert isinstance(polpair, (tuple, np.integer, int)), \
             "polpair must be a tuple or integer: %s / %s" % (polpair, key)
-
+        
+        # convert polpair string to tuple
+        if isinstance(polpair, str):
+            polpair = (polpair, polpair)
+        
         # convert blpair to int if not int
-        if type(blpair) == tuple:
+        if isinstance(blpair, tuple):
             blpair = self.antnums_to_blpair(blpair)
 
         # convert pol to int if not int
-        if type(polpair) == tuple:
+        if isinstance(polpair, tuple):
             polpair = uvputils.polpair_tuple2int(polpair)
 
         # check attributes exist in data
@@ -1031,9 +1043,12 @@ class UVPSpec(object):
             Float ndarray of lsts from the lst_avg_array to select. If None,
             all lsts are kept. Default: None.
 
-        polpairs : list of tuple or int, optional
+        polpairs : list of tuple or int or str, optional
             List of polarization-pairs to keep. If None, all polarizations 
             are kept. Default: None.
+            
+            (Strings are expanded into polarization pairs, and are not treated 
+            as individual polarizations, e.g. 'XX' becomes ('XX,'XX').)
 
         inplace : bool, optional
             If True, edit and overwrite arrays in self, else make a copy of
@@ -1112,8 +1127,10 @@ class UVPSpec(object):
         lsts : float ndarray
             lsts from the lst_avg_array to keep.
 
-        polpairs : list of tuple or int
-            List of polarization-pair integers or tuples to keep.
+        polpairs : list of tuple or int or str
+            List of polarization-pair integers, tuples, or strings to keep. 
+            Strings are expanded into polarization pairs, and are not treated 
+            as individual polarizations, e.g. 'XX' becomes ('XX,'XX').
 
         only_pairs_in_bls : bool, optional
             If True, keep only baseline-pairs whose first _and_ second baseline
@@ -1188,8 +1205,11 @@ class UVPSpec(object):
         lsts : float ndarray
             lsts from the lst_avg_array to keep.
 
-        polpairs : list of polpair ints or tuples
-            List of polarization-pair integers or tuples to keep.
+        polpairs : list of polpair ints or tuples or str
+            List of polarization-pair integers or tuples to keep. 
+            
+            Strings are expanded into polarization pairs, and are not treated 
+            as individual polarizations, e.g. 'XX' becomes ('XX,'XX').
 
         only_pairs_in_bls : bool, optional
             If True, keep only baseline-pairs whose first _and_ second baseline
@@ -1570,9 +1590,10 @@ class UVPSpec(object):
         spw : int
             Spectral window index to generate noise curve for.
 
-        polpair : tuple or int
+        polpair : tuple or int or str
             Polarization-pair selection in form of tuple (e.g. ('I', 'Q')) or
-            polpair int.
+            polpair int. Strings are expanded into polarization pairs, e.g. 
+            'XX' becomes ('XX,'XX').
 
         Tsys : float
             System temperature in Kelvin.
@@ -1605,6 +1626,10 @@ class UVPSpec(object):
             of noise power spectra as values, with ndarrays having shape
             (Ntimes, Ndlys).
         """
+        # Check for str polpair and convert to integer
+        if isinstance(polpair, str):
+            polpair = uvputils.polpair_tuple2int((polpair, polpair))
+        
         # Assert polarization-pair type
         if isinstance(polpair, tuple):
             polpair = uvputils.polpair_tuple2int(polpair)
@@ -1808,7 +1833,7 @@ class UVPSpec(object):
         spw : integer
             Spectral window selection.
 
-        polpair : tuple or int
+        polpair : tuple or int or str
             Which polarization pair to calculate the scalar for.
 
         num_steps : int, optional

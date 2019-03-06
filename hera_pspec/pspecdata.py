@@ -1621,9 +1621,11 @@ class PSpecData(object):
 
         Parameters
         ----------
-        polpair: tuple or int
-                Which pair of polarizations to compute the beam scalar for.
-                e.g. ('pI', 'pI') or ('XX', 'YY').
+        polpair: tuple, int, or str
+                Which pair of polarizations to compute the beam scalar for,
+                e.g. ('pI', 'pI') or ('XX', 'YY'). If string, will assume that 
+                the specified polarization is to be cross-correlated with 
+                itself, e.g. 'XX' implies ('XX', 'XX').
 
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
@@ -1652,12 +1654,13 @@ class PSpecData(object):
         # make sure polarizations are the same
         if isinstance(polpair, int):
             polpair = uvputils.polpair_int2tuple(polpair)
+        if isinstance(polpair, str):
+            polpair = (polpair, polpair)
         if polpair[0] != polpair[1]:
             raise NotImplementedError(
                     "Polarizations don't match. Beam scalar can only be "
                     "calculated for auto-polarization pairs at the moment.")
-        else:
-            pol = polpair[0]
+        pol = polpair[0]
         
         # set spw_range and get freqs
         freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]

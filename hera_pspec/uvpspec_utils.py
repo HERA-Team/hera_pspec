@@ -404,7 +404,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         times is fed.
 
     polpairs : list
-        A list of polarization-pair tuples or integers to keep.
+        A list of polarization-pair tuples, integers, or strs to keep.
 
     h5file : h5py file descriptor
         Used for loading in selection of data from HDF5 file.
@@ -523,10 +523,16 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
     if polpairs is not None:
         # assert form
-        assert isinstance(polpairs[0], (tuple, int, np.integer)), \
-            "polpairs must be fed as a list of tuples or pol integers"
+        assert isinstance(polpairs, (list, np.ndarray)), \
+            "polpairs must be passed as a list or ndarray"
+        assert isinstance(polpairs[0], (tuple, int, np.integer, str)), \
+            "polpairs must be fed as a list of tuples or pol integers/strings"
         
-        # convert to polpair integers if needed
+        # convert str to polpair integers
+        polpairs = [polpair_tuple2int((p,p)) if isinstance(p, str) 
+                    else p for p in polpairs]
+        
+        # convert tuples to polpair integers
         polpairs = [polpair_tuple2int(p) if isinstance(p, tuple) 
                     else p for p in polpairs]
         
