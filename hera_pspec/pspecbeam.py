@@ -277,10 +277,11 @@ class PSpecBeamBase(object):
             if isinstance(pol2, (int, np.integer)):
                 pol2 = uvutils.polnum2str(pol2)
             
-            # Check for cross-pol; only auto-pol calculation currently supported
+            # Check for cross-pol; only same-pol calculation currently supported
             if pol1 != pol2:
                 raise NotImplementedError(
-                        "get_Omegas does not support cross-polarized beams yet. "
+                        "get_Omegas does not support cross-correlation between "
+                        "two different visibility polarizations yet. "
                         "Could not calculate Omegas for (%s, %s)" % (pol1, pol2))
             
             # Calculate Omegas

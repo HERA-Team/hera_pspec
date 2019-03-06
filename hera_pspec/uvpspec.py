@@ -151,7 +151,7 @@ class UVPSpec(object):
     def get_cov(self, key, omit_flags=False):
         """
         Slice into covariance array with a specified data key in the format
-        (spw, ((ant1, ant2),(ant3, ant4)), (pol12, pol34))
+        (spw, ((ant1, ant2),(ant3, ant4)), (pol1, pol2))
 
         or
 
@@ -193,7 +193,7 @@ class UVPSpec(object):
         """
         Slice into data_array with a specified data key in the format
 
-        (spw, ((ant1, ant2), (ant3, ant4)), (pol12, pol34))
+        (spw, ((ant1, ant2), (ant3, ant4)), (pol1, pol2))
 
         or
 
@@ -233,7 +233,7 @@ class UVPSpec(object):
         """
         Slice into wgt_array with a specified data key in the format
 
-        (spw, ((ant1, ant2), (ant3, ant4)), (pol12, pol34))
+        (spw, ((ant1, ant2), (ant3, ant4)), (pol1, pol2))
 
         or
 
@@ -266,7 +266,7 @@ class UVPSpec(object):
         """
         Slice into integration_array with a specified data key in the format::
 
-            (spw, ((ant1, ant2), (ant3, ant4)), (pol12, pol34))
+            (spw, ((ant1, ant2), (ant3, ant4)), (pol1, pol2))
 
         or
 
@@ -298,7 +298,7 @@ class UVPSpec(object):
         """
         Slice into nsample_array with a specified data key in the format
 
-        (spw, ((ant1, ant2), (ant3, ant4)), (pol12, pol34))
+        (spw, ((ant1, ant2), (ant3, ant4)), (pol1, pol2))
 
         or
 
@@ -911,7 +911,7 @@ class UVPSpec(object):
         """
         Convert a data key into relevant slice arrays. A data key takes the form
 
-        (spw_integer, ((ant1, ant2), (ant3, ant4)), (pol12, pol34))
+        (spw_integer, ((ant1, ant2), (ant3, ant4)), (pol1, pol2))
 
         or
 
@@ -925,7 +925,7 @@ class UVPSpec(object):
           key = {
             'spw' : spw_integer,
             'blpair' : ((ant1, ant2), (ant3, ant4))
-            'polpair' : (pol12, pol34)
+            'polpair' : (pol1, pol2)
             }
 
         and it will parse the dictionary for you.
@@ -960,13 +960,14 @@ class UVPSpec(object):
         spw_ind = key[0]
         blpair = key[1]
         polpair = key[2]
-
+        
+        
         # assert types
         assert isinstance(spw_ind, (int, np.integer)), "spw must be an integer"
         assert isinstance(blpair, (int, np.integer, tuple)), \
             "blpair must be an integer or nested tuple"
-        assert isinstance(polpair, (tuple, np.integer, int)), \
-            "polpair must be a tuple or integer: %s / %s" % (polpair, key)
+        assert isinstance(polpair, (tuple, np.integer, int, str)), \
+            "polpair must be a tuple, integer, or str: %s / %s" % (polpair, key)
         
         # convert polpair string to tuple
         if isinstance(polpair, str):
@@ -1257,11 +1258,7 @@ class UVPSpec(object):
                     this_attr = [np.string_(lbl) for lbl in this_attr] 
                 
                 # Store attribute in group
-                try:
-                    group.attrs[k] = this_attr
-                except(TypeError):
-                    print("TypeError:", k, this_attr)
-                    continue
+                group.attrs[k] = this_attr
                 
         for k in self._meta_dsets:
             if hasattr(self, k):

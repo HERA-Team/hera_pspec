@@ -1841,14 +1841,16 @@ class PSpecData(object):
             where the first index is for the Left-Hand dataset and second index
             is used for the Right-Hand dataset (see above).
 
-        pols : length-2 tuple of strings or integers or list of length-2 
+        pols : length-2 tuple of strings or integers, or list of length-2 
             tuples of strings or integers
             Contains polarization pairs to use in forming power spectra
             e.g. ('XX','XX') or [('XX','XX'),('pI','pI')] or list of 
             polarization pairs.
-            Only auto/equal polarization pairs are implemented at the moment.
-            It uses the polarizations of the UVData onjects (specified in dsets)
-            by default only if the UVData object consists of equal polarizations.
+            
+            If a primary_beam is specified, only equal-polarization pairs can 
+            be cross-correlated, as the beam scalar normalization is only 
+            implemented in this case. To obtain unnormalized spectra for pairs 
+            of different polarizations, set the primary_beam to None.
 
         n_dlys : list of integer, optional
             The number of delay bins to use. The order in the list corresponds
@@ -2101,8 +2103,10 @@ class PSpecData(object):
                     
                     # Raise error if cross-pol is requested
                     if (p[0] != p[1]):
-                        raise NotImplementedError("Cross-polarized beams are "
-                                                  "not yet implemented")
+                        raise NotImplementedError(
+                            "Visibilities with different polarizations can only "
+                            "be cross-correlated if primary_beam = None. Cannot "
+                            "compute beam scalar for mixed polarizations.")
                     
                     # using zero'th indexed polarization, as cross-polarized 
                     # beams are not yet implemented
