@@ -1,23 +1,15 @@
 import numpy as np
-import os, time, md5, yaml
+import os, time, yaml
 import itertools, argparse, glob
 import traceback, operator
 import aipy, uvtools
 import pylab as plt
-from conversions import Cosmo_Conversions
+from hera_pspec.conversions import Cosmo_Conversions
 from hera_cal import redcal
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
-
-
-def hash(w):
-    """
-    Return an MD5 hash of a set of weights.
-    """
-    DeprecationWarning("utils.hash is deprecated.")
-    return md5.md5(w.copy(order='C')).digest()
 
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
@@ -124,7 +116,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
         blpairs = list(itertools.permutations(bls, 2))
 
     # explicitly add in auto baseline pairs
-    blpairs.extend(zip(bls, bls))
+    blpairs.extend(list(zip(bls, bls)))
 
     # iterate through and eliminate all autos if desired
     if exclude_auto_bls:
@@ -135,8 +127,8 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
         blpairs = new_blpairs
 
     # create bls1 and bls2 list
-    bls1 = map(lambda blp: blp[0], blpairs)
-    bls2 = map(lambda blp: blp[1], blpairs)
+    bls1 = [blp[0] for blp in blpairs]
+    bls2 = [blp[1] for blp in blpairs]
 
     # group baseline pairs if desired
     if group:
@@ -157,11 +149,14 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, g
     return bls1, bls2, blpairs
 
 
-def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thresh=0.95, exclude_auto_bls=False,
-                     exclude_permutations=True, Nblps_per_group=None, bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
+def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, 
+                     xant_flag_thresh=0.95, exclude_auto_bls=False,
+                     exclude_permutations=True, Nblps_per_group=None, 
+                     bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
     """
-    Use hera_cal.redcal to get matching, redundant baseline-pair groups from uvd1 and uvd2
-    within the specified baseline tolerance, not including flagged ants.
+    Use hera_cal.redcal to get matching, redundant baseline-pair groups from 
+    uvd1 and uvd2 within the specified baseline tolerance, not including 
+    flagged ants.
 
     Parameters
     ----------
@@ -173,8 +168,8 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
         Baseline-vector redundancy tolerance in meters
 
     filter_blpairs : bool, optional
-        if True, calculate xants and filters-out baseline pairs based on xant lists
-        and actual baselines in the data.
+        if True, calculate xants and filters-out baseline pairs based on 
+        xant lists and actual baselines in the data.
 
     xant_flag_thresh : float, optional
         Fraction of 2D visibility (per-waterfall) needed to be flagged to
@@ -196,36 +191,31 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
         Default: None
 
     bl_len_range : tuple, optional
-        len-2 tuple containing minimum baseline length and maximum baseline length [meters]
-        to keep in baseline type selection
+        len-2 tuple containing minimum baseline length and maximum baseline 
+        length [meters] to keep in baseline type selection
 
     bl_deg_range : tuple, optional
-        len-2 tuple containing (minimum, maximum) baseline angle in degrees to keep in
-        baseline selection
+        len-2 tuple containing (minimum, maximum) baseline angle in degrees 
+        to keep in baseline selection
 
     Returns
     -------
-    baselines1 : list of baseline tuples
-        Contains list of baseline tuples that should be fed as first argument
-        to PSpecData.pspec(), corresponding to uvd1
-
-    baselines2 : list of baseline tuples
-        Contains list of baseline tuples that should be fed as second argument
-        to PSpecData.pspec(), corresponding to uvd2
+    baselines1, baselines2 : lists of baseline tuples
+        Lists of baseline tuples that should be fed as first/second argument
+        to PSpecData.pspec(), corresponding to uvd1/uvd2
 
     blpairs : list of baseline-pair tuples
         Contains the baseline-pair tuples. i.e. zip(baselines1, baselines2)
 
-    xants1 : list of bad antenna integers for uvd1
-
-    xants2 : list of bad antenna integers for uvd2
+    xants1, xants2 : lists 
+        List of bad antenna integers for uvd1 and uvd2
     """
     # get antenna positions
     antpos1, ants1 = uvd1.get_ENU_antpos(pick_data_ants=False)
-    antpos1 = dict(zip(ants1, antpos1))
+    antpos1 = dict(list(zip(ants1, antpos1)))
     antpos2, ants2 = uvd2.get_ENU_antpos(pick_data_ants=False)
-    antpos2 = dict(zip(ants2, antpos2))
-    antpos = dict(antpos1.items() + antpos2.items())
+    antpos2 = dict(list(zip(ants2, antpos2)))
+    antpos = dict(list(antpos1.items()) + list(antpos2.items()))
 
     # assert antenna positions match
     for a in set(antpos1).union(set(antpos2)):
@@ -251,7 +241,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
                 # get flags
                 f1 = uvd1.get_flags(bl)
                 # remove from bad list if unflagged data exists
-                if np.sum(f1) < reduce(operator.mul, f1.shape) * xant_flag_thresh:
+                if np.sum(f1) < np.prod(f1.shape) * xant_flag_thresh:
                     if antnums[0] in xants1:
                         xants1.remove(antnums[0])
                     if antnums[1] in xants2:
@@ -262,7 +252,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
                 # get flags
                 f2 = uvd2.get_flags(bl)
                 # remove from bad list if unflagged data exists
-                if np.sum(f2) < reduce(operator.mul, f2.shape) * xant_flag_thresh:
+                if np.sum(f2) < np.prod(f2.shape) * xant_flag_thresh:
                     if antnums[0] in xants2:
                         xants2.remove(antnums[0])
                     if antnums[1] in xants2:
@@ -279,8 +269,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
         (bls1, bls2,
-         blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, group=False,
-                                    exclude_permutations=exclude_permutations)
+         blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, 
+                                   group=False, 
+                                   exclude_permutations=exclude_permutations)
         if len(bls1) < 1:
             continue
 
@@ -297,14 +288,17 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, xant_flag_thre
                     _bls1.append(bl1)
                     _bls2.append(bl2)
             bls1, bls2 = _bls1, _bls2
-            blps = zip(bls1, bls2)
+            blps = list(zip(bls1, bls2))
 
         # group if desired
         if Nblps_per_group is not None:
             Ngrps = int(np.ceil(float(len(blps)) / Nblps_per_group))
-            bls1 = [bls1[Nblps_per_group*i:Nblps_per_group*(i+1)] for i in range(Ngrps)]
-            bls2 = [bls2[Nblps_per_group*i:Nblps_per_group*(i+1)] for i in range(Ngrps)]
-            blps = [blps[Nblps_per_group*i:Nblps_per_group*(i+1)] for i in range(Ngrps)]
+            bls1 = [bls1[Nblps_per_group*i:Nblps_per_group*(i+1)] 
+                    for i in range(Ngrps)]
+            bls2 = [bls2[Nblps_per_group*i:Nblps_per_group*(i+1)] 
+                    for i in range(Ngrps)]
+            blps = [blps[Nblps_per_group*i:Nblps_per_group*(i+1)] 
+                    for i in range(Ngrps)]
 
         baselines1.extend(bls1)
         baselines2.extend(bls2)
@@ -661,12 +655,15 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     if xants is not None:
         bls1, bls2 = [], []
         for bl1, bl2 in zip(_bls1, _bls2):
-            if bl1[0] not in xants and bl1[1] not in xants and bl2[0] not in xants and bl2[1] not in xants:
+            if bl1[0] not in xants \
+              and bl1[1] not in xants \
+              and bl2[0] not in xants \
+              and bl2[1] not in xants:
                 bls1.append(bl1)
                 bls2.append(bl2)
     else:
         bls1, bls2 = _bls1, _bls2
-    blps = zip(bls1, bls2)
+    blps = list(zip(bls1, bls2))
 
     # iterate over pol-group pairs that exist
     groupings = odict()
@@ -715,13 +712,15 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
     """
     from hera_pspec import UVPSpec
     # type check
-    assert isinstance(blvecs, (dict, odict, UVPSpec)), "blpairs must be fed as a dict or UVPSpec"
+    assert isinstance(blvecs, (dict, odict, UVPSpec)), \
+        "blpairs must be fed as a dict or UVPSpec"
     if isinstance(blvecs, UVPSpec):
         # get baseline vectors
         uvp = blvecs
         bls = uvp.bl_array
         bl_vecs = uvp.get_ENU_bl_vecs()[:, :2]
-        blvecs = dict(zip(map(uvp.bl_to_antnums, bls), bl_vecs))
+        blvecs = dict(list(zip( [uvp.bl_to_antnums(_bls) for _bls in bls], 
+                                bl_vecs )))
         # get baseline-pairs
         blpairs = uvp.get_blpairs()
         # form dictionary
@@ -820,7 +819,7 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
     t_start = time.time()
 
     # run function over jobs
-    exit_codes = np.array(M(run_func, iterator))
+    exit_codes = np.array(list(M(run_func, iterator)))
     tnow = datetime.utcnow()
 
     # check for len-0
@@ -844,7 +843,7 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
                 # break after certain number of tries
                 break
             # re-run function over jobs that failed
-            exit_codes = np.array(M(run_func, failures))
+            exit_codes = np.array(list(M(run_func, failures)))
             # update counter
             counter += 1
             # update failures
@@ -956,7 +955,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
             uvd = _uvd
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
-        antpos_dict = dict(zip(ants, antpos))
+        antpos_dict = dict(list(zip(ants, antpos)))
 
     # use antenna position dictionary
     elif isinstance(uvd, (dict, odict)):
@@ -972,7 +971,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     # put in autocorrs
     if add_autos:
         ants = antpos_dict.keys()
-        reds = [zip(ants, ants)] + reds
+        reds = [list(zip(ants, ants))] + reds
         lens = np.insert(lens, 0, 0)
         angs = np.insert(angs, 0, 0)
 
