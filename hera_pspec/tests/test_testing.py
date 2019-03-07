@@ -16,7 +16,7 @@ def test_build_vanilla_uvpspec():
 
     beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'))
     uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-    beam_OP = beam.get_Omegas(uvp.pol_array[0])[0]
+    beam_OP = beam.get_Omegas(uvp.polpair_array[0])[0]
     nt.assert_equal(beam_OP.tolist(), uvp.OmegaP.tolist())
 
 def test_uvpspec_from_data():

@@ -157,7 +157,7 @@ class Test_Utils(unittest.TestCase):
         (bls1, bls2, blps, xants1,
          xants2) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True)  
         nt.assert_equal(len(bls1), len(bls2), 15)
-        nt.assert_equal(blps, zip(bls1, bls2))
+        nt.assert_equal(blps, list(zip(bls1, bls2)))
         nt.assert_equal(xants1, xants2)
         nt.assert_equal(len(xants1), 42)
 
@@ -198,13 +198,16 @@ class Test_Utils(unittest.TestCase):
         uvd2 = copy.deepcopy(uvd)
         uvd2.antenna_positions[0] += 2
         nt.assert_raises(AssertionError, utils.calc_blpair_reds, uvd, uvd2)
-
+    
+    def test_get_delays(self):
+        utils.get_delays(np.linspace(100., 200., 50)*1e6)
+    
     def test_get_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
         uvd.read_miriad(fname, read_data=False)
         antpos, ants = uvd.get_ENU_antpos()
-        antpos_d = dict(zip(ants, antpos))
+        antpos_d = dict(list(zip(ants, antpos)))
 
         # test basic execution
         xants = [0, 1, 2]
@@ -237,17 +240,17 @@ class Test_Utils(unittest.TestCase):
         uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
         groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], verbose=False, exclude_auto_bls=True)
         nt.assert_equal(len(groupings), 1)
-        nt.assert_equal(groupings.keys()[0], (('even', 'odd'), ('xx', 'xx')))
-        nt.assert_equal(len(groupings.values()[0]), 11833)
+        nt.assert_equal(list(groupings.keys())[0], (('even', 'odd'), ('xx', 'xx')))
+        nt.assert_equal(len(list(groupings.values())[0]), 11833)
 
         # test multiple, some non-existant pairs
         groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx'), ('yy', 'yy')], [('even', 'odd'), ('even', 'odd')], verbose=False, exclude_auto_bls=True)
         nt.assert_equal(len(groupings), 1)
-        nt.assert_equal(groupings.keys()[0], (('even', 'odd'), ('xx', 'xx')))
+        nt.assert_equal(list(groupings.keys())[0], (('even', 'odd'), ('xx', 'xx')))
 
         # test xants
         groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], xants=[0, 1, 2], verbose=False, exclude_auto_bls=True)
-        nt.assert_equal(len(groupings.values()[0]), 9735)
+        nt.assert_equal(len(list(groupings.values())[0]), 9735)
 
         # test exceptions
         nt.assert_raises(AssertionError, utils.config_pspec_blpairs, uv_template, [('xx', 'xx'), ('xx', 'xx')], [('even', 'odd')], verbose=False)
@@ -281,23 +284,16 @@ def test_log():
     os.remove("logf.log")
 
 
-def test_hash():
-    """
-    Check that MD5 hashing works.
-    """
-    hsh = utils.hash(np.ones((8,16)))
-
-
 def test_get_blvec_reds():
     fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
     uvd = UVData()
     uvd.read_miriad(fname)
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-    reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
+    reds = redcal.get_pos_reds(dict(list(zip(ants, antpos))))
     uvp = testing.uvpspec_from_data(fname, reds[:2], spw_ranges=[(10, 40)])
 
     # test execution w/ dictionary
-    blvecs = dict(zip(uvp.bl_array, uvp.get_ENU_bl_vecs()))
+    blvecs = dict(list(zip(uvp.bl_array, uvp.get_ENU_bl_vecs())))
     (red_bl_grp, red_bl_len, red_bl_ang,
      red_bl_tag) = utils.get_blvec_reds(blvecs, bl_error_tol=1.0)
     nt.assert_equal(len(red_bl_grp), 2)

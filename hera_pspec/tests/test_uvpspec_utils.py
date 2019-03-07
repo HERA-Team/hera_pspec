@@ -35,7 +35,7 @@ def test_select_common():
     # Check that selecting on common times works
     uvp_list = [uvp1, uvp2]
     uvp_new = uvputils.select_common(uvp_list, spws=True, blpairs=True, 
-                                     times=True, pols=True, inplace=False)
+                                     times=True, polpairs=True, inplace=False)
     nt.assert_equal(uvp_new[0], uvp_new[1])
     np.testing.assert_array_equal(uvp_new[0].time_avg_array, 
                                   uvp_new[1].time_avg_array)
@@ -43,7 +43,7 @@ def test_select_common():
     # Check that selecting on common baseline-pairs works
     uvp_list_2 = [uvp1, uvp2, uvp3]
     uvp_new_2 = uvputils.select_common(uvp_list_2, spws=True, blpairs=True, 
-                                       times=True, pols=True, inplace=False)
+                                       times=True, polpairs=True, inplace=False)
     nt.assert_equal(uvp_new_2[0], uvp_new_2[1])
     nt.assert_equal(uvp_new_2[0], uvp_new_2[2])
     np.testing.assert_array_equal(uvp_new_2[0].time_avg_array, 
@@ -52,29 +52,29 @@ def test_select_common():
     # Check that zero overlap in times raises a ValueError
     nt.assert_raises(ValueError, uvputils.select_common, [uvp2, uvp6], 
                                   spws=True, blpairs=True, times=True, 
-                                  pols=True, inplace=False)
+                                  polpairs=True, inplace=False)
     
     # Check that zero overlap in times does *not* raise a ValueError if 
     # not selecting on times
     uvp_new_3 = uvputils.select_common([uvp2, uvp6], spws=True, 
                                        blpairs=True, times=False, 
-                                       pols=True, inplace=False)
+                                       polpairs=True, inplace=False)
     
     # Check that zero overlap in baselines raises a ValueError
     nt.assert_raises(ValueError, uvputils.select_common, [uvp3, uvp5], 
                                   spws=True, blpairs=True, times=True, 
-                                  pols=True, inplace=False)
+                                  polpairs=True, inplace=False)
     
     # Check that matching times are ignored when set to False
     uvp_new = uvputils.select_common(uvp_list, spws=True, blpairs=True, 
-                                     times=False, pols=True, inplace=False)
+                                     times=False, polpairs=True, inplace=False)
     nt.assert_not_equal( np.sum(uvp_new[0].time_avg_array 
                               - uvp_new[1].time_avg_array), 0.)
     nt.assert_equal(len(uvp_new), len(uvp_list))
     
     # Check that in-place selection works
     uvputils.select_common(uvp_list, spws=True, blpairs=True, 
-                           times=True, pols=True, inplace=True)
+                           times=True, polpairs=True, inplace=True)
     nt.assert_equal(uvp1, uvp2)
 
     # check uvplist > 2
@@ -92,11 +92,58 @@ def test_select_common():
 
     # check pol overlap
     uvp7 = copy.deepcopy(uvp1)
-    uvp7.pol_array[0] = -8
-    nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], pols=True)
+    uvp7.polpair_array[0] = 1212 # = (-8,-8)
+    nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], 
+                                 polpairs=True)
 
+def test_get_blpairs_from_bls():
+    """
+    Test conversion of 
+    """
+    # setup uvp
+    beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+    beam = pspecbeam.PSpecBeamUV(beamfile)
+    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
+    
+    # Check that bls can be specified in several different ways
+    blps = uvputils._get_blpairs_from_bls(uvp, bls=101102)
+    blps = uvputils._get_blpairs_from_bls(uvp, bls=(101,102))
+    blps = uvputils._get_blpairs_from_bls(uvp, bls=[101102, 101103])
+    
+
+def test_polpair_int2tuple():
+    """
+    Test conversion of polpair ints to tuples.
+    """
+    # List of polpairs to test
+    polpairs = [('xx','xx'), ('xx','yy'), ('xy', 'yx'), 
+                ('pI','pI'), ('pI','pQ'), ('pQ','pQ'), ('pU','pU'),
+                ('pV','pV') ]
+    
+    # Check that lists and single items work
+    pol_ints = uvputils.polpair_tuple2int(polpairs)
+    uvputils.polpair_tuple2int(polpairs[0])
+    uvputils.polpair_int2tuple(1515)
+    uvputils.polpair_int2tuple([1515,1414])
+    uvputils.polpair_int2tuple(np.array([1515,1414]))
+    
+    # Test converting to int and then back again
+    pol_pairs_returned = uvputils.polpair_int2tuple(pol_ints, pol_strings=True)
+    for i in range(len(polpairs)):
+        nt.assert_equal(polpairs[i], pol_pairs_returned[i])
+    
+    # Check that errors are raised appropriately
+    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, ('xx','xx'))
+    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, 'xx')
+    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, 'pI')
+    nt.assert_raises(ValueError, uvputils.polpair_int2tuple, 999)
+    nt.assert_raises(ValueError, uvputils.polpair_int2tuple, [999,])
+    
+    
 def test_subtract_uvp():
-    """ Test subtraction of two UVPSpec objects """
+    """
+    Test subtraction of two UVPSpec objects
+    """
     # setup uvp
     beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
     beam = pspecbeam.PSpecBeamUV(beamfile)
@@ -146,7 +193,7 @@ def test_fast_is_in():
     times = [ 0.1, 0.15, 0.2, 0.25, 
               0.1, 0.15, 0.2, 0.25, 
               0.1, 0.15, 0.3, 0.3, ]
-    src_blpts = np.array(zip(blps, times))
+    src_blpts = np.array(list(zip(blps, times)))
 
     nt.assert_true(uvputils._fast_is_in(src_blpts, [(101102104103, 0.2)])[0])
 
@@ -159,7 +206,7 @@ def test_fast_lookup_blpairts():
     times = [ 0.1, 0.15, 0.2, 0.25, 
               0.1, 0.15, 0.2, 0.25, 
               0.1, 0.15, 0.3, 0.3, ]
-    src_blpts = np.array(zip(blps, times))
+    src_blpts = np.array(list(zip(blps, times)))
     
     # List of blpair-times to look up
     query_blpts = [(102101103104, 0.1), (101102104103, 0.1), (101102104103, 0.25)]

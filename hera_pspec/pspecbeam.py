@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import hera_pspec.conversions as conversions
+import hera_pspec.uvpspec_utils as uvputils
 import scipy.integrate as integrate
 from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
@@ -71,7 +72,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     
     # Get redshifts and cosmological functions
     redshifts = cosmo.f2z(integration_freqs).flatten()
-    X2Y = np.array(map(lambda z: cosmo.X2Y(z, little_h=little_h), redshifts))
+    X2Y = np.array([cosmo.X2Y(z, little_h=little_h) for z in redshifts])
 
     if exact_norm: #Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
         scalar = integrate.trapz(X2Y, x=integration_freqs)/(np.abs(integration_freqs[-1]-integration_freqs[0]))
@@ -241,14 +242,15 @@ class PSpecBeamBase(object):
         return 1e-20 * conversions.cgs_units.c**2 \
                / (2 * conversions.cgs_units.kb * freqs**2 * Op)
 
-    def get_Omegas(self, pols):
+    def get_Omegas(self, polpairs):
         """
-        Get OmegaP and OmegaPP across beam_freqs for requested polarizations.
+        Get OmegaP and OmegaPP across beam_freqs for requested polarization 
+        pairs.
 
         Parameters
         ----------
-        pols : list
-            List of polarization strings or integers.
+        polpairs : list
+            List of polarization-pair tuples or integers.
 
         Returns
         -------
@@ -258,24 +260,39 @@ class PSpecBeamBase(object):
         OmegaPP : array_like
             Array containing power_sq_beam_int, shape: (Nbeam_freqs, Npols).
         """
-        # type check
-        if isinstance(pols, (int, np.int, np.int32)):
-            pols = [pols]
-        elif isinstance(pols, (str, np.str)):
-            pols = [pols]
-        if isinstance(pols, (list, np.ndarray, tuple)):
-            if isinstance(pols[0], (int, np.int, np.int32)):
-                pols = map(lambda p: uvutils.polnum2str(p), pols)
-                
-        # initialize blank lists
+        # Unpack polpairs into tuples
+        if not isinstance(polpairs, (list, np.ndarray)):
+            if isinstance(polpairs, (tuple, int, np.integer)):
+                polpairs = [polpairs,]
+            else:
+                raise TypeError("polpairs is not a list of integers or tuples")
+        
+        # Convert integers to tuples
+        polpairs = [uvputils.polpair_int2tuple(p) 
+                        if isinstance(p, (int, np.integer, np.int32)) else p 
+                        for p in polpairs]
+        
+        # Calculate Omegas for each pol pair
         OmegaP, OmegaPP = [], []
-        for p in pols:
-            OmegaP.append(self.power_beam_int(pol=p))
-            OmegaPP.append(self.power_beam_sq_int(pol=p))
+        for pol1, pol2 in polpairs:
+            if isinstance(pol1, (int, np.integer)):
+                pol1 = uvutils.polnum2str(pol1)
+            if isinstance(pol2, (int, np.integer)):
+                pol2 = uvutils.polnum2str(pol2)
+            
+            # Check for cross-pol; only same-pol calculation currently supported
+            if pol1 != pol2:
+                raise NotImplementedError(
+                        "get_Omegas does not support cross-correlation between "
+                        "two different visibility polarizations yet. "
+                        "Could not calculate Omegas for (%s, %s)" % (pol1, pol2))
+            
+            # Calculate Omegas
+            OmegaP.append(self.power_beam_int(pol=pol1))
+            OmegaPP.append(self.power_beam_sq_int(pol=pol1))
 
         OmegaP = np.array(OmegaP).T
         OmegaPP = np.array(OmegaPP).T
-
         return OmegaP, OmegaPP
 
 
