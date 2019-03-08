@@ -2014,8 +2014,13 @@ class PSpecData(object):
         # configure spectral window selections
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
-        else:
-            assert np.isclose([len(t) for t in spw_ranges], 2).all(), \
+        
+        # convert to list if only a tuple was given
+        if isinstance(spw_ranges, tuple):
+            spw_ranges = [spw_ranges,]
+        
+        # Check that spw_ranges is list of len-2 tuples    
+        assert np.isclose([len(t) for t in spw_ranges], 2).all(), \
                 "spw_ranges must be fed as a list of length-2 tuples"
 
         # if using default setting of number of delay bins equal to number 
