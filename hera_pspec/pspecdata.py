@@ -2581,7 +2581,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
               beam=None, cosmo=None, rephase_to_dset=None, 
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, 
-              verbose=True, store_cov=False, history=''):
+              file_type='miriad', verbose=True, store_cov=False, 
+              history=''):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2589,7 +2590,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
     Parameters
     ----------
     dsets : list
-        Contains UVData objects or string filepaths to miriad files
+        Contains UVData objects or string filepaths to UVData-compatible files
 
     filename : str
         Output filepath for HDF5 PSpecContainer object
@@ -2719,6 +2720,10 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
 
     overwrite : boolean
         If True, overwrite outputs if they exist on disk.
+    
+    file_type : str, optional
+        If dsets passed as a list of filenames, specify which file format 
+        the files use. Default: 'miriad'.
 
     verbose : boolean
         If True, report feedback to standard output.
@@ -2780,7 +2785,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         try:
             # load data into UVData objects if fed as list of strings
             t0 = time.time()
-            dsets = _load_dsets(dsets, bls=bls, pols=pols, verbose=verbose)
+            dsets = _load_dsets(dsets, bls=bls, pols=pols, file_type=file_type, verbose=verbose)
             utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
                       lvl=1, verbose=verbose)
         except ValueError:
@@ -3041,7 +3046,8 @@ def raise_warning(warning, verbose=True):
         print(warning)
 
 
-def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
+def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True, 
+                file_type='uvh5'):
     """
     Helper function for loading UVData-compatible datasets in pspec_run.
     """
@@ -3053,6 +3059,7 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
         
         # read data
         uvd = UVData()
-        uvd.read(glob.glob(dset), bls=bls, polarizations=pols)
+        uvd.read(glob.glob(dset), bls=bls, polarizations=pols, 
+                 file_type=file_type)
         dsets.append(uvd)
     return dsets

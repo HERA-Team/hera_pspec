@@ -548,7 +548,8 @@ def flatten(nested_list):
 
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
                          exclude_permutations=True, bl_len_range=(0, 1e10),
-                         bl_deg_range=(0, 180), xants=None, verbose=True):
+                         bl_deg_range=(0, 180), xants=None, file_type='miriad', 
+                         verbose=True):
     """
     Given a list of miriad file templates and selections for
     polarization and group labels, construct a master list of
@@ -596,8 +597,11 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     xants : list
         A list of integer antenna numbers to exclude.
 
-    verbose : bool
-        If True, print feedback to stdout.
+    file_type : str, optional
+        File type of the input files. Default: 'miriad'.
+
+    verbose : bool, optional
+        If True, print feedback to stdout. Default: True.
 
     Returns
     -------
@@ -643,7 +647,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     # use a single file from unique_files and a single pol-group combination to get antenna positions
     _file = unique_files[0].format(pol=pol_grps[0][0], group=pol_grps[0][1])
     uvd = UVData()
-    uvd.read(_file, read_data=False)
+    uvd.read(_file, read_data=False, file_type=file_type)
 
     # get baseline pairs
     (_bls1, _bls2, _, _,
