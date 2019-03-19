@@ -3043,7 +3043,7 @@ def raise_warning(warning, verbose=True):
 
 def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
     """
-    Helper function for loading Miriad datasets in pspec_run.
+    Helper function for loading UVData-compatible datasets in pspec_run.
     """
     dsets = []
     Ndsets = len(fnames)
@@ -3053,6 +3053,6 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True):
         
         # read data
         uvd = UVData()
-        uvd.read_miriad(glob.glob(dset), bls=bls, polarizations=pols)
+        uvd.read(glob.glob(dset), bls=bls, polarizations=pols)
         dsets.append(uvd)
     return dsets

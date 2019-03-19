@@ -643,7 +643,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     # use a single file from unique_files and a single pol-group combination to get antenna positions
     _file = unique_files[0].format(pol=pol_grps[0][0], group=pol_grps[0][1])
     uvd = UVData()
-    uvd.read_miriad(_file, read_data=False)
+    uvd.read(_file, read_data=False)
 
     # get baseline pairs
     (_bls1, _bls2, _, _,
@@ -951,7 +951,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         # load filepath
         if isinstance(uvd, (str, np.str)):
             _uvd = UVData()
-            _uvd.read_miriad(uvd, read_data=False)
+            _uvd.read(uvd, read_data=False)
             uvd = _uvd
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
