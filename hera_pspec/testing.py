@@ -59,8 +59,8 @@ def build_vanilla_uvpspec(beam=None):
     freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), 
                            Nspws)
     dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
-    pol_array = np.array([-5])
-    Npols = len(pol_array)
+    polpair_array = np.array([1515,]) # corresponds to ('xx','xx')
+    Npols = len(polpair_array)
     vis_units = 'unknown'
     norm_units = 'Hz str'
     weighting = 'identity'
@@ -76,7 +76,8 @@ def build_vanilla_uvpspec(beam=None):
     label_1_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 0
     label_2_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 1
     if beam is not None:
-        OmegaP, OmegaPP = beam.get_Omegas(beam.primary_beam.polarization_array[0])
+        pol = beam.primary_beam.polarization_array[0]
+        OmegaP, OmegaPP = beam.get_Omegas((pol,pol))
         beam_freqs = beam.beam_freqs
 
     # HERA coordinates in Karoo Desert, SA
@@ -111,7 +112,8 @@ def build_vanilla_uvpspec(beam=None):
               'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys', 'Nbls', 
               'blpair_array', 'time_1_array', 'time_2_array', 
               'lst_1_array', 'lst_2_array', 'spw_array',
-              'dly_array', 'freq_array', 'pol_array', 'data_array', 'wgt_array',
+              'dly_array', 'freq_array', 'polpair_array', 'data_array', 
+              'wgt_array',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
               'vis_units', 'channel_width', 'weighting', 'history', 'taper', 
               'norm', 'git_hash', 'nsample_array', 'time_avg_array', 
@@ -226,6 +228,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', 
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose, 
                    store_cov=store_cov, n_dlys=n_dlys)
+    
     return uvp
 
 

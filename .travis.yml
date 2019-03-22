@@ -2,17 +2,18 @@ language: python
 python:
   # We don't actually use the Travis Python, but this keeps it organized.
   - "2.7"
+  - "3.6"
 
 # Cache pip-installed dependencies
 cache:
     pip: true
 
 env:
-  - PYUVDATA_VERSION="@d6e1c2f80d7b5b59d7794c8f28d867a7030a7c75"
   - PYUVDATA_VERSION=""
+  #- PYUVDATA_VERSION="@d6e1c2f80d7b5b59d7794c8f28d867a7030a7c75"
 
-allow_failures:
-  - env: PYUVDATA_VERSION=""
+#allow_failures:
+#  - env: PYUVDATA_VERSION=""
 
 install:
   # ensure that we have the full tag information available for version.py
@@ -36,8 +37,7 @@ install:
   # create environment and install dependencies
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION numpy scipy nose pip matplotlib coverage
   - source activate test-environment
-  - conda install -c conda-forge healpy aipy
-  - conda install scikit-learn
+  - conda install -c conda-forge healpy aipy scikit-learn
   - pip install coveralls
   - pip install h5py
   - pip install git+https://github.com/HERA-Team/pyuvdata.git$PYUVDATA_VERSION

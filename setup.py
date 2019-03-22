@@ -6,7 +6,7 @@ import json
 
 data = [version.git_origin, version.git_hash, version.git_description, version.git_branch]
 with open(os.path.join('hera_pspec', 'GIT_INFO'), 'w') as outfile:
-    json.dump(data, outfile)
+    json.dump(data, outfile, default=str)
 
 def package_files(package_dir, subdirectory):
     # walk the input package_dir/subdirectory
@@ -38,4 +38,4 @@ setup_args = {
 }
 
 if __name__ == '__main__':
-    apply(setup, (), setup_args)
+    setup(**setup_args)

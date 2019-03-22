@@ -47,7 +47,7 @@ def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
         List of grouped baselines.
     """
     Nbls = len(bls) # Total baselines
-    n = Nbls / Ngroups # Baselines per group
+    n = Nbls // Ngroups # Baselines per group
     rem = Nbls - n*Ngroups
 
     # Sanity check on number of groups
@@ -192,15 +192,15 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
         # Convert blpair_groups to list of blpair group integers
         if isinstance(blpair_groups[0][0], tuple):
-            new_blpair_grps = [map(lambda blp: uvp.antnums_to_blpair(blp), blpg)
+            new_blpair_grps = [[uvp.antnums_to_blpair(blp) for blp in blpg]
                                for blpg in blpair_groups]
             blpair_groups = new_blpair_grps
     else:
         # If not, each baseline pair is its own group
-        blpair_groups = map(lambda blp: [blp], np.unique(uvp.blpair_array))
+        blpair_groups = [[blp] for blp in np.unique(uvp.blpair_array)]
         assert blpair_weights is None, "Cannot specify blpair_weights if "\
                                        "blpair_groups is None."
-        blpair_weights = map(lambda blp: [1.,], np.unique(uvp.blpair_array))
+        blpair_weights = [[1.,] for blp in np.unique(uvp.blpair_array)]
 
     # Print warning if a blpair appears more than once in all of blpair_groups
     all_blpairs = [item for sublist in blpair_groups for item in sublist]
@@ -236,8 +236,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
     # For baseline pairs not in blpair_groups, add them as their own group
     extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
-    blpair_groups += map(lambda blp: [blp], extra_blpairs)
-    blpair_weights += map(lambda blp: [1.,], extra_blpairs)
+    blpair_groups += [[blp] for blp in extra_blpairs]
+    blpair_weights += [[1.,] for blp in extra_blpairs]
 
     # Create new data arrays
     data_array, wgts_array = odict(), odict()
@@ -257,9 +257,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         if store_cov:
             spw_cov_real = odict([[cov_model, []] for cov_model in cov_models])
             spw_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
-
         # Iterate over polarizations
-        for i, p in enumerate(uvp.pol_array):
+        for i, p in enumerate(uvp.polpair_array):
             pol_data, pol_wgts, pol_ints, pol_nsmp = [], [], [], []
             pol_stats = odict([[stat, []] for stat in stat_l])
             if store_cov:
@@ -435,7 +434,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
     # Update arrays
     bl_arr = np.array(sorted(set(bl_arr)))
-    bl_vecs = np.array(map(lambda bl: uvp.bl_vecs[uvp.bl_array.tolist().index(bl)], bl_arr))
+    bl_vecs = np.array([uvp.bl_vecs[uvp.bl_array.tolist().index(bl)] 
+                        for bl in bl_arr])
 
     # Assign arrays and metadata to UVPSpec object
     uvp.Ntimes = len(np.unique(time_avg_arr))
@@ -550,7 +550,7 @@ def fold_spectra(uvp):
                 for stat in uvp.stats_array.keys():
                     left = uvp.stats_array[stat][spw][:, 1:Ndlys//2, :][:, ::-1, :]
                     right = uvp.stats_array[stat][spw][:, Ndlys//2+1:, :]
-                    uvp.stats_array[stat][spw][:, Ndlys//2+1:, :] = (np.sum([1/left**2.0, 1/right**2.0], axis=0))**(-0.5)
+                    uvp.stats_array[stat][spw][:, Ndlys//2+1:, :] = (np.sum([1./left**2.0, 1./right**2.0], axis=0))**(-0.5)
                     uvp.data_array[spw][:, :Ndlys//2, :] = np.nan
 
         else:
@@ -585,13 +585,13 @@ def fold_spectra(uvp):
                                                                              +rightright)
                     uvp.cov_array_imag[cov_model][spw][:, :Ndlys/2, :, :] = 0.0
                     uvp.cov_array_imag[cov_model][spw][:, :, :Ndlys/2, : :] = 0.0
-    
+            
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
                 for stat in uvp.stats_array.keys():
                     left = uvp.stats_array[stat][spw][:, :Ndlys//2, :][:, ::-1, :]
                     right = uvp.stats_array[stat][spw][:, Ndlys//2+1:, :]
-                    uvp.stats_array[stat][spw][:, Ndlys//2+1:, :] = (np.sum([1/left**2.0, 1/right**2.0], axis=0))**(-0.5)
+                    uvp.stats_array[stat][spw][:, Ndlys//2+1:, :] = (np.sum([1./left**2.0, 1./right**2.0], axis=0))**(-0.5)
                     uvp.data_array[spw][:, :Ndlys//2, :] = np.nan
 
     uvp.folded = True
@@ -679,14 +679,15 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
 
     # Convert blpair tuples into blpair integers if necessary
     if isinstance(blpair_groups[0][0], tuple):
-        new_blp_grps = [map(lambda blp: uvputils._antnums_to_blpair(blp), blpg)
+        new_blp_grps = [[uvputils._antnums_to_blpair(blp) for blp in blpg]
                         for blpg in blpair_groups]
         blpair_groups = new_blp_grps
 
     # Homogenise input UVPSpec objects in terms of available polarizations 
     # and spectral windows
     if len(uvp_list) > 1:
-        uvp_list = uvpspec_utils.select_common(uvp_list, spws=True, pols=True, inplace=False)
+        uvp_list = uvpspec_utils.select_common(uvp_list, spws=True, 
+                                               pols=True, inplace=False)
 
     # Loop over UVPSpec objects, looking for available blpairs in each
     avail_blpairs = [np.unique(uvp.blpair_array) for uvp in uvp_list]
@@ -833,12 +834,14 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
 
     # get all keys in uvp_avg and get data from each uvp_boot
     keys = uvp_avg.get_all_keys()
-    uvp_boot_data = odict([(k, np.array(map(lambda u: u.get_data(k), uvp_boots))) for k in keys])
+    uvp_boot_data = odict([(k, np.array([u.get_data(k) for u in uvp_boots])) 
+                           for k in keys])
 
     # calculate various error estimates
     if normal_std:
         for k in keys:
-            nstd = np.std(uvp_boot_data[k].real, axis=0) + 1j*np.std(uvp_boot_data[k].imag, axis=0)
+            nstd = np.std(uvp_boot_data[k].real, axis=0) \
+                 + 1j*np.std(uvp_boot_data[k].imag, axis=0)
             uvp_avg.set_stats("bs_std", k, nstd)
 
     if robust_std:
@@ -943,7 +946,9 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     assert len(groups) > 0, "No groups exist in PSpecContainer"
 
     # get spectra if not fed
-    all_spectra = utils.flatten([map(lambda s: os.path.join(grp, s), psc.spectra(grp)) for grp in groups])
+    all_spectra = utils.flatten([ [os.path.join(grp, s) 
+                                   for s in psc.spectra(grp)] 
+                                 for grp in groups ])
     if spectra is None:
         spectra = all_spectra
     else:
@@ -958,11 +963,15 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
         # run boostrap_resampled_error
         uvp = psc.get_pspec(grp, spc)
         (uvp_avg, uvp_boots,
-         uvp_wgts) = bootstrap_resampled_error(uvp, blpair_groups=blpair_groups, time_avg=time_avg,
-                                              Nsamples=Nsamples, seed=seed, normal_std=normal_std,
-                                              robust_std=robust_std, cintervals=cintervals,
-                                              bl_error_tol=bl_error_tol, add_to_history=add_to_history,
-                                              verbose=verbose)
+         uvp_wgts) = bootstrap_resampled_error(uvp, blpair_groups=blpair_groups, 
+                                               time_avg=time_avg,
+                                               Nsamples=Nsamples, seed=seed, 
+                                               normal_std=normal_std,
+                                               robust_std=robust_std, 
+                                               cintervals=cintervals,
+                                               bl_error_tol=bl_error_tol, 
+                                               add_to_history=add_to_history,
+                                               verbose=verbose)
 
         # set averaged uvp
         psc.set_pspec(grp, spc+"_avg", uvp_avg, overwrite=overwrite)
@@ -978,7 +987,7 @@ def get_bootstrap_run_argparser():
            description="argument parser for grouping.bootstrap_run()")
     
     def list_of_lists_of_tuples(s):
-        s = map(lambda x: map(int, x.split()), s.split(','))
+        s = [[int(_x) for _x in x.split()] for x in s.split(',')]
         return s
 
     # Add list of arguments

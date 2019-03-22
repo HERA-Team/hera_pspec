@@ -12,14 +12,14 @@ try:
     from astropy.cosmology import LambdaCDM
     _astropy = True
 except:
-    print("could not import astropy")
+    print("Could not import astropy")
     _astropy = False
 
 
 class units:
     """
-    fundamental constants and conversion constants
-    in ** SI ** units
+    Fundamental constants and conversion constants
+    in ** SI ** units.
 
     c : speed of light m s-1
     ckm : speed of light in km s-1
@@ -118,24 +118,26 @@ class Cosmo_Conversions(object):
 
     def get_params(self):
         """
-        Return a dictionary with cosmological parameters
+        Return a dictionary with cosmological parameters.
         """
-        return dict(map(lambda p: (p, getattr(self, p)), self.params))
+        return dict([(p, getattr(self, p)) for p in self.params])
 
     def f2z(self, freq, ghz=False):
         """
-        convert frequency to redshift for 21cm line
+        Convert frequency to redshift for 21cm line.
 
         Parameters:
         -----------
-        freq : frequency in Hz, type=float
+        freq : float
+            Frequency in Hz (or GHz if ghz=True).
 
-        ghz : boolean, if True: assume freq is GHz
+        ghz : bool, optional
+            If True: assume freq is GHz. Default: False.
 
         Output:
         -------
         z : float
-            redshift
+            Redshift
         """
         if ghz:
             freq = freq * 1e9
@@ -145,66 +147,70 @@ class Cosmo_Conversions(object):
     @staticmethod
     def z2f(z, ghz=False):
         """
-        convert redshift to frequency in Hz for 21cm line
+        Convert redshift to frequency in Hz for 21cm line.
 
         Parameters:
         -----------
-        z : redshift, type=float
+        z : float
+            Redshift.
 
-        ghz: boolean, if True: convert to GHz
+        ghz : bool, optional
+            If True: convert to GHz. Default: False.
 
         Output:
         -------
         freq : float
-            frequency in Hz
+            Frequency in Hz (or GHz if ghz=True)
         """
         freq = units.f21 / (z + 1)
-        if ghz:
-            freq /= 1e9
-
+        if ghz: freq /= 1e9
         return freq
 
     def E(self, z):
         """
-        ratio of hubble parameters: H(z) / H(z=0)
-        Hogg99 Eqn. 14
+        Ratio of hubble parameters: H(z) / H(z=0)
+        (Hogg99 Eqn. 14)
 
         Parameters:
         -----------
-        z : redshift, type=float
+        z : float
+            Redshift.
         """
         return np.sqrt(self.Om_M*(1+z)**3 + self.Om_k*(1+z)**2 + self.Om_L)
 
     def DC(self, z, little_h=True):
         """
-        line-of-sight comoving distance in Mpc
-        Hogg99 Eqn. 15
+        Line-of-sight comoving distance in Mpc.
+        (Hogg99 Eqn. 15)
 
         Parameters:
         -----------
-        z : redshift, type=float
+        z : float
+            Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Mpc (False). Default: True (h^-1 Mpc)
         """
+        d = integrate.quad(lambda z: 1/self.E(z), 0, z)[0]
         if little_h:
-            return integrate.quad(lambda z: 1/self.E(z), 0, z)[0] * units.ckm / 100.
+            return d * units.ckm / 100.
         else:
-            return integrate.quad(lambda z: 1/self.E(z), 0, z)[0] * units.ckm / self.H0 
+            return d * units.ckm / self.H0 
 
     def DM(self, z, little_h=True):
         """
-        transverse comoving distance in Mpc
-        Hogg99 Eqn. 16
+        Transverse comoving distance in Mpc.
+        (Hogg99 Eqn. 16)
 
         Parameters:
         -----------
-        z : redshift, type=float
+        z : float
+            Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Mpc (False). Default: True (h^-1 Mpc)
         """
         if little_h:
             DH = units.ckm / 100.
@@ -212,9 +218,13 @@ class Cosmo_Conversions(object):
             DH = units.ckm / self.H0
 
         if self.Om_k > 0:
-            DM = DH * np.sinh(np.sqrt(self.Om_k) * self.DC(z, little_h=little_h) / DH) / np.sqrt(self.Om_k)
+            DM = DH * np.sinh(np.sqrt(self.Om_k) \
+                    * self.DC(z, little_h=little_h) / DH) \
+                    / np.sqrt(self.Om_k)
         elif self.Om_k < 0:
-            DM = DH * np.sin(np.sqrt(np.abs(self.Om_k)) * self.DC(z, little_h=little_h) / DH) / np.sqrt(np.abs(self.Om_k))
+            DM = DH * np.sin(np.sqrt(np.abs(self.Om_k)) \
+                    * self.DC(z, little_h=little_h) / DH) \
+                    / np.sqrt(np.abs(self.Om_k))
         else:
             DM = self.DC(z, little_h=little_h)
 
@@ -222,47 +232,52 @@ class Cosmo_Conversions(object):
 
     def DA(self, z, little_h=True):
         """
-        angular diameter (proper) distance in Mpc
-        Hogg99 Eqn. 18
+        Angular diameter (proper) distance in Mpc.
+        (Hogg99 Eqn. 18)
 
         Parameters:
         -----------
-        z : redshift, type=float
+        z : float
+            Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Mpc (False). Default: True (h^-1 Mpc)
         """
         return self.DM(z, little_h=little_h) / (1 + z)
 
     def dRperp_dtheta(self, z, little_h=True):
         """
-        conversion factor from angular size (radian) to transverse
+        Conversion factor from angular size (radian) to transverse
         comoving distance (Mpc) at a specific redshift: [Mpc / radians]
 
         Parameters:
         -----------
-        z : float, redshift
+        z : float
+            Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Mpc (False). Default: True (h^-1 Mpc)
         """
         return self.DM(z, little_h=little_h) 
 
     def dRpara_df(self, z, ghz=False, little_h=True):
         """
-        conversion from frequency bandwidth to radial
-        comoving distance at a specific redshift: [Mpc / Hz]
+        Conversion from frequency bandwidth to radial comoving distance at a 
+        specific redshift: [Mpc / Hz]
 
         Parameters:
         -----------
-        z : float, redshift
-        ghz : convert output to [Mpc / GHz]
+        z : float
+            Redshift.
+            
+        ghz : bool, optional
+            Whether to convert output to [Mpc / GHz] (if True). Default: False.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Mpc (False). Default: True (h^-1 Mpc)
         """
         if little_h:
             y = (1 + z)**2.0 / self.E(z) * units.ckm / 100. / units.f21
@@ -275,34 +290,36 @@ class Cosmo_Conversions(object):
 
     def X2Y(self, z, little_h=True):
         """
-        Conversion from radians^2 Hz -> Mpc^3
-        at a specific redshift.
+        Conversion from radians^2 Hz -> Mpc^3 at a specific redshift.
 
         Parameters:
         -----------
-        z : float, redshift
+        z : float
+            Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Mpc (False). Default: True (h^-1 Mpc)
 
         Notes:
         ------
         Calls Cosmo_Conversions.dRperp_dtheta() and Cosmo_Conversions.dRpara_df().
         """
-        return self.dRperp_dtheta(z, little_h=little_h)**2 * self.dRpara_df(z, little_h=little_h)
+        return self.dRperp_dtheta(z, little_h=little_h)**2 \
+             * self.dRpara_df(z, little_h=little_h)
 
     def bl_to_kperp(self, z, little_h=True):
         """
-        Produce the conversion factor from baseline length [meters] to k_perpendicular mode [h Mpc-1] at a 
-        specified redshift. 
+        Produce the conversion factor from baseline length [meters] to 
+        k_perpendicular mode [h Mpc-1] at a specified redshift. 
 
-        Multiply this conversion factor by a baseline-separation length in [meters]
-        to get its corresponding k_perp mode in [h Mpc-1].
+        Multiply this conversion factor by a baseline-separation length in 
+        [meters] to get its corresponding k_perp mode in [h Mpc-1].
 
         Parameters
         ----------
-        z : float, redshift at which to perform calculation
+        z : float
+            Redshift.
 
         little_h : boolean, optional
             Whether to have cosmological length units be h^-1 Mpc or Mpc
@@ -310,23 +327,26 @@ class Cosmo_Conversions(object):
 
         Return
         ------
-        bl2kperp : float, conversion factor in units [h Mpc-1 / meters]
+        bl2kperp : float
+            Conversion factor in units [h Mpc-1 / meters]
         """
         # Parsons 2012, Pober 2014, Kohn 2018
-        bl2kpara = 2*np.pi / (self.dRperp_dtheta(z, little_h=little_h) * (units.c / self.z2f(z)))
-
+        bl2kpara = 2*np.pi / (self.dRperp_dtheta(z, little_h=little_h) \
+                              * (units.c / self.z2f(z)))
         return bl2kpara
 
     def tau_to_kpara(self, z, little_h=True):
         """
-        Produce the conversion factor from delay [seconds] to k_parallel mode [h Mpc-1] at a specified redshift.
+        Produce the conversion factor from delay [seconds] to k_parallel mode 
+        [h Mpc-1] at a specified redshift.
 
         Multiply this conversion factor by a delay mode in [seconds]
         to get its corresponding k_para mode in [h Mpc-1].
 
         Parameters
         ----------
-        z : float, redshift at which to perform calculation
+        z : float
+            Redshift.
 
         little_h : boolean, optional
             Whether to have cosmological length units be h^-1 Mpc or Mpc
@@ -334,7 +354,8 @@ class Cosmo_Conversions(object):
 
         Return
         ------
-        tau2kpara : float, conversion factor in units [h Mpc-1 / seconds]
+        tau2kpara : float
+            Conversion factor in units [h Mpc-1 / seconds]
         """
         # Parsons 2012, Pober 2014, Kohn 2018
         tau2kpara = 2*np.pi / self.dRpara_df(z, little_h=little_h, ghz=False)
@@ -343,10 +364,13 @@ class Cosmo_Conversions(object):
 
     def __str__(self):
         message = "Cosmo_Conversions object at <{}>\n".format(hex(id(self)))
-        message += "; ".join(map(lambda p: "{:s} : {:0.4f}".format(p, getattr(self, p)), self.params))
+        message += "; ".join( ["{:s} : {:0.4f}".format(p, getattr(self, p)) 
+                               for p in self.params] )
         return message
 
     def __eq__(self, other):
-        """ check two Cosmo_Conversion objects are equivalent """
+        """
+        Check two Cosmo_Conversion objects are equivalent
+        """
         return self.get_params() == other.get_params()
 

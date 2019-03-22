@@ -53,7 +53,7 @@ class Test_PSpecContainer(unittest.TestCase):
                       psname=psname, pspec=self.uvp, overwrite=False)
         
         # Check that wrong pspec types are rejected by the set() method
-        assert_raises(ValueError, ps_store.set_pspec, group=group_names[2], 
+        assert_raises(TypeError, ps_store.set_pspec, group=group_names[2], 
                       psname=psname, pspec=np.arange(11), overwrite=True)
         assert_raises(TypeError, ps_store.set_pspec, group=group_names[2], 
                       psname=psname, pspec=1, overwrite=True)
