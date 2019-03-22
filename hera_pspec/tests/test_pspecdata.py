@@ -1457,8 +1457,8 @@ def test_real_covariance():
     #uvd.data_array = data_array
 
     # slide the time axis of uvd by one integration
-    uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes/2):1], inplace=False)
-    uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes/2):(uvd.Ntimes/2 + uvd.Ntimes/2):1], inplace=False)
+    uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
+    uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
     ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
     ds.rephase_to_dset(0)
 

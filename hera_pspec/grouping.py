@@ -531,8 +531,8 @@ def fold_spectra(uvp):
                                                                              +leftright\
                                                                              +rightleft\
                                                                              +rightright)
-                    uvp.cov_array_real[cov_model][spw][:, :Ndlys/2, :, :] = 0.0
-                    uvp.cov_array_real[cov_model][spw][:, :, :Ndlys/2, : :] = 0.0
+                    uvp.cov_array_real[cov_model][spw][:, :Ndlys//2, :, :] = 0.0
+                    uvp.cov_array_real[cov_model][spw][:, :, :Ndlys//2, : :] = 0.0
 
                     leftleft = uvp.cov_array_imag[cov_model][spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
                     leftright = uvp.cov_array_imag[cov_model][spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
@@ -542,8 +542,8 @@ def fold_spectra(uvp):
                                                                              +leftright\
                                                                              +rightleft\
                                                                              +rightright)
-                    uvp.cov_array_imag[cov_model][spw][:, :Ndlys/2, :, :] = 0.0
-                    uvp.cov_array_imag[cov_model][spw][:, :, :Ndlys/2, : :] = 0.0
+                    uvp.cov_array_imag[cov_model][spw][:, :Ndlys//2, :, :] = 0.0
+                    uvp.cov_array_imag[cov_model][spw][:, :, :Ndlys//2, : :] = 0.0
         
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
@@ -572,8 +572,8 @@ def fold_spectra(uvp):
                                                                              +leftright\
                                                                              +rightleft\
                                                                              +rightright)
-                    uvp.cov_array_real[cov_model][spw][:, :Ndlys/2, :, :] = 0.0
-                    uvp.cov_array_real[cov_model][spw][:, :, :Ndlys/2, : :] = 0.0
+                    uvp.cov_array_real[cov_model][spw][:, :Ndlys//2, :, :] = 0.0
+                    uvp.cov_array_real[cov_model][spw][:, :, :Ndlys//2, : :] = 0.0
 
                     leftleft = uvp.cov_array_imag[cov_model][spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
                     leftright = uvp.cov_array_imag[cov_model][spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
@@ -583,8 +583,8 @@ def fold_spectra(uvp):
                                                                              +leftright\
                                                                              +rightleft\
                                                                              +rightright)
-                    uvp.cov_array_imag[cov_model][spw][:, :Ndlys/2, :, :] = 0.0
-                    uvp.cov_array_imag[cov_model][spw][:, :, :Ndlys/2, : :] = 0.0
+                    uvp.cov_array_imag[cov_model][spw][:, :Ndlys//2, :, :] = 0.0
+                    uvp.cov_array_imag[cov_model][spw][:, :, :Ndlys//2, : :] = 0.0
             
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
@@ -1053,7 +1053,7 @@ def average_spectra_with_error(p, v):
     return p_bar, Sigma  
 
 def normality_test(x, test_type, alpha=0.05):
-    '''
+    """
     A synthesis of different normality test methods.
     
     Parameters
@@ -1063,40 +1063,33 @@ def normality_test(x, test_type, alpha=0.05):
         
     test_type : str
         The type of normality tests.
-        Choices:['Shapiro-Wilk','Kolmogorov-Smirnov','Anderson-Darling','DAgostino-Pearson']
+        Choices: ['Shapiro-Wilk','Kolmogorov-Smirnov','Anderson-Darling', 
+                 'DAgostino-Pearson']
     
     alpha : float
-        The critical value to reject or accept the null hypothesis. 
-    
-    Returns
-    -------
-    '''
+        The critical value to reject or accept the null hypothesis.
+    """
+    p = None
     if test_type == 'Shapiro-Wilk':
         stat, p = scipy.stats.shapiro(x)
-        print 'Statistics={:.3f}, p={:.3f}'.format(stat, p)
-        if p > alpha:
-            print 'Sample looks Gaussian (fail to reject H0)'
-        else:
-            print 'Sample does not look Gaussian (reject H0)'
     if test_type == 'Kolmogorov-Smirnov':
         stat, p = scipy.stats.kstest(x, cdf='norm')
-        print 'Statistics={:.3f}, p={:.3f}'.format(stat, p)
-        if p > alpha:
-            print 'Sample looks Gaussian (fail to reject H0)'
-        else:
-            print 'Sample does not look Gaussian (reject H0)'
     if test_type == 'DAgostino-Pearson':
         stat, p = scipy.stats.normaltest(x)
-        print 'Statistics={:.3f}, p={:.3f}'.format(stat, p)
+    
+    # Print test results if one of the above tests was run
+    if p is not None:
+        print('Statistics={:.3f}, p={:.3f}'.format(stat, p))
         if p > alpha:
-            print 'Sample looks Gaussian (fail to reject H0)'
+            print('Sample looks Gaussian (fail to reject H0)')
         else:
-            print 'Sample does not look Gaussian (reject H0)'
+            print('Sample does not look Gaussian (reject H0)')
+    
     if test_type == 'Anderson-Darling':
         result = scipy.stats.anderson(x)    
         for i in range(len(result.critical_values)):
             sl, cv = result.significance_level[i], result.critical_values[i]
             if result.statistic < result.critical_values[i]:
-                print '{:.3f}: {:.3f}, data looks normal (fail to reject H0)'.format(sl, cv)
+                print('{:.3f}: {:.3f}, data looks normal (fail to reject H0)'.format(sl, cv))
             else:
-                print '{:.3f}: {:.3f}, data does not look normal (reject H0)'.format(sl, cv)
+                print('{:.3f}: {:.3f}, data does not look normal (reject H0)'.format(sl, cv))

@@ -418,8 +418,8 @@ class Test_Plot(unittest.TestCase):
         Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
         uvd.data_array *= Jy_to_mK[None, None, :, None]
 
-        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes/2):1], inplace=False)
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes/2):(uvd.Ntimes/2 + uvd.Ntimes/2):1], inplace=False)
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
 
         uvd1_td = utils.uvd_time_difference(uvd1, 0.0002)
         uvd2_td = utils.uvd_time_difference(uvd2, 0.0002)
@@ -432,7 +432,7 @@ class Test_Plot(unittest.TestCase):
 
         spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 170e6)], bounds_error=True)
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-        antpos = dict(zip(ants, antpos))
+        antpos = dict(list(zip(ants, antpos)))
         red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
         bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 

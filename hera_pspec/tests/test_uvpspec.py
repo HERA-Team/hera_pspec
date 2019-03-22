@@ -102,8 +102,8 @@ class Test_UVPSpec(unittest.TestCase):
         Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
         uvd.data_array *= Jy_to_mK[None, None, :, None]
 
-        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes/2):1], inplace=False)
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes/2):(uvd.Ntimes/2 + uvd.Ntimes/2):1], inplace=False)
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
 
         ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
         ds.rephase_to_dset(0)

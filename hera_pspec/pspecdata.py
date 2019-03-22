@@ -867,7 +867,7 @@ class PSpecData(object):
         Ckey = key + (model,)
 
         # Calculate inverse covariance if not in cache
-        if not self._iC.has_key(Ckey):
+        if Ckey not in self._iC:
             C = self.C_model(key, model=model)[0]
             U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
 
@@ -1032,8 +1032,8 @@ class PSpecData(object):
         """
         assert isinstance(spw_range, tuple), \
             "spw_range must be fed as a len-2 integer tuple"
-        assert isinstance(spw_range[0], (int, np.int)), \
-            "spw_range must be fed as len-2 integer tuple"
+        assert isinstance(spw_range[0], (int, np.int, np.integer)), \
+            "spw_range must be fed as a len-2 integer tuple"
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
 
@@ -1051,9 +1051,11 @@ class PSpecData(object):
         if ndlys == None:
             self.spw_Ndlys = self.spw_Nfreqs
         else:
-            # Check that one is not trying to estimate more delay channels than there are frequencies
+            # Check that one is not trying to estimate more delay channels 
+            # than there are frequencies
             if self.spw_Nfreqs < ndlys:
-                raise ValueError("Cannot estimate more delays than there are frequency channels")
+                raise ValueError("Cannot estimate more delays than there "
+                                 "are frequency channels")
             self.spw_Ndlys = ndlys
 
     def cov_q_hat(self, key1, key2, time_indices=None):
