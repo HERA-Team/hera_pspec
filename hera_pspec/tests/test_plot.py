@@ -437,30 +437,28 @@ class Test_Plot(unittest.TestCase):
         bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 
         uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = True, cov_models = ['time_average', 'time_average_diag'],
+         norm='I', taper='blackman-harris', store_cov = True, cov_models = ['time_average'],
          verbose=False)
 
         uvp_td, uvp_td_q = ds_td.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = True, cov_models = ['time_average', 'time_average_diag'],
-         verbose=False)
+         norm='I', taper='blackman-harris', store_cov = False, verbose=False)
 
-        key = (0,blpairs[0],"xx")
+        key = (0,blpairs[0],("xx","xx"))
 
-        plot.plot_error(uvp, uvp_td, key, 0, 300, extra_error_types=['time_average', 'time_average_diag'])
-        plot.plot_error(uvp, uvp_td, key, 0, 300, extra_error_types=['time_average', 'time_average_diag'])
-        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, inside_wedge=True, extra_error_types=['time_average', 'time_average_diag'], fit_curve='Exponential', plot_mode='density', show_robust=True)
-        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, inside_wedge=False, extra_error_types=['time_average', 'time_average_diag'], plot_mode='normal', show_robust=True)
-        plot.plot_zscore_blpt_hist(uvp, uvp_td, 100, 1000, 0, "xx", blpairs, 
-                              extra_error_types=['time_average', 'time_average_diag'],
+        plot.plot_error(uvp, uvp_td, key, 0, 300, extra_error_types=['time_average'])
+        plot.plot_error(uvp, uvp_td, key, 0, 300, extra_error_types=['time_average'])
+        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, inside_wedge=True, extra_error_types=['time_average'], fit_curve='Exponential', plot_mode='density', show_robust=True)
+        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, inside_wedge=False, extra_error_types=['time_average'], plot_mode='normal', show_robust=True)
+        plot.plot_zscore_blpt_hist(uvp, uvp_td, 100, 1000, 0, ("xx","xx"), blpairs, 
+                              extra_error_types=['time_average'],
                               plot_mode='density', show_robust=True,)
-        plot.plot_error_blpt_avg('blpt', uvp, uvp_td, 0, "xx", blpairs, 300, 
-                    extra_error_types=['time_average', 'time_average_diag'])
+        plot.plot_error_blpt_avg('blpt', uvp, uvp_td, 0, ("xx","xx"), blpairs, 300, 
+                    extra_error_types=['time_average'])
         blpt_weights = abs(np.random.normal(0,1, len(blpairs)*uvp_td.Ntimes).reshape(len(blpairs), uvp_td.Ntimes))
-        plot.plot_error_blpt_avg('blpt_avg', uvp, uvp_td, 0, "xx", blpairs, 300, average_method ='simple',
-                        blpt_weights=blpt_weights, extra_error_types=['time_average', 'time_average_diag'])
+        plot.plot_error_blpt_avg('blpt_avg', uvp, uvp_td, 0, ("xx","xx"), blpairs, 300, average_method ='simple',
+                        blpt_weights=blpt_weights, extra_error_types=['time_average'])
         
         plot.imshow_cov(uvp, key, 0, error_type='time_average')
-        plot.imshow_cov(uvp, key, 0, error_type='time_average_diag')
         plt.close()
 
 

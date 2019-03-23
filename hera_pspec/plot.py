@@ -1142,7 +1142,7 @@ def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=['time_aver
         times, polarizations, and spectral windows.
 
     key : tuple
-        Baseline-pair key, in the format (spw, ((ant1, ant2),(ant3, ant4)), pol)
+        Baseline-pair key, in the format (spw, ((ant1, ant2),(ant3, ant4)), polpair)
     
     time_index : integer
 
@@ -1253,7 +1253,7 @@ def plot_zscore_hist(uvp, uvp_td, key, wedge, inside_wedge=True, extra_error_typ
         times, polarizations, and spectral windows.
 
     key : tuple
-        Baseline-pair key, in the format (spw, ((ant1, ant2),(ant3, ant4)), pol)
+        Baseline-pair key, in the format (spw, ((ant1, ant2),(ant3, ant4)), polpair)
     
     wedge : float
         The position of the wedge in the delay space. 
@@ -1416,7 +1416,7 @@ def plot_zscore_blpt_hist(uvp, uvp_td, dly, wedge, spw, pol, blpairs, extra_erro
     spw : int
         The index for the spectral window.
 
-    pol : str
+    pol : length-2 tuple or str
         The polarization type.
 
     blpairs : list
@@ -1573,7 +1573,7 @@ def plot_error_blpt_avg(mode, uvp, uvp_td, spw, pol, blpairs, Tsys, average_meth
     spw : int
         The index for the spectral window.
 
-    pol : str
+    pol : length-2 tuple or str
         The polarization type.
 
     blpairs : list
@@ -1853,7 +1853,7 @@ def imshow_cov(uvp, key, time_index, error_type, **kwargs):
         times, polarizations, and spectral windows.
 
     key : tuple
-        Baseline-pair key, in the format (spw, ((ant1, ant2),(ant3, ant4)), pol)
+        Baseline-pair key, in the format (spw, ((ant1, ant2),(ant3, ant4)), polpair)
     
     time_index : integer
 
