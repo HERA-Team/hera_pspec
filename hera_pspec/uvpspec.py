@@ -1140,6 +1140,8 @@ class UVPSpec(object):
         """
         # Make sure the group is a UVPSpec object
         assert 'pspec_type' in grp.attrs, "This object is not a UVPSpec object"
+        pstype = grp.attrs['pspec_type']
+        pstype = pstype.decode() if isinstance(pstype, bytes) else pstype
         assert grp.attrs['pspec_type'].decode() == 'UVPSpec', \
             "This object is not a UVPSpec object"
 
