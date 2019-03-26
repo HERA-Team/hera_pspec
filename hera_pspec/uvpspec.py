@@ -1142,8 +1142,7 @@ class UVPSpec(object):
         assert 'pspec_type' in grp.attrs, "This object is not a UVPSpec object"
         pstype = grp.attrs['pspec_type']
         pstype = pstype.decode() if isinstance(pstype, bytes) else pstype
-        assert grp.attrs['pspec_type'].decode() == 'UVPSpec', \
-            "This object is not a UVPSpec object"
+        assert pstype == 'UVPSpec', "This object is not a UVPSpec object"
 
         # Clear all data in the current object
         self._clear()
