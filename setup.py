@@ -30,7 +30,7 @@ setup_args = {
     'packages':     ['hera_pspec'],
     'package_dir':  {'hera_pspec': 'hera_pspec'},
     'package_data': {'hera_pspec': data_files},
-    'install_requires': ['numpy>=1.14', 'scipy','matplotlib>=2.2'],
+    'install_requires': ['numpy>=1.15', 'scipy','matplotlib>=2.2'],
     'include_package_data': True,
     'scripts': ['scripts/pspec_run.py', 'scripts/pspec_red.py',
                 'scripts/bootstrap_run.py'],
