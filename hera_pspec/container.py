@@ -48,7 +48,7 @@ class PSpecContainer(object):
             self._update_header()
 
             # Denote as Container
-            if 'pspec_type' not in self.data.attrs.keys():
+            if 'pspec_type' not in list(self.data.attrs.keys()):
                 self.data.attrs['pspec_type'] = self.__class__.__name__
 
     def _store_pspec(self, pspec_group, uvp):
@@ -88,7 +88,7 @@ class PSpecContainer(object):
             Returns a UVPSpec object constructed from the input HDF5 group.
         """
         # Check that group is tagged as containing UVPSpec (pspec_type attribute)
-        if 'pspec_type' in pspec_group.attrs.keys():
+        if 'pspec_type' in list(pspec_group.attrs.keys()):
             if pspec_group.attrs['pspec_type'] != uvpspec.UVPSpec.__name__:
                 raise TypeError("HDF5 group is not tagged as a UVPSpec object.")
         else:
@@ -104,13 +104,13 @@ class PSpecContainer(object):
         Update the header in the HDF5 file with useful metadata, including the
         git version of hera_pspec.
         """
-        if 'header' not in self.data.keys():
+        if 'header' not in list(self.data.keys()):
             hdr = self.data.create_group('header')
         else:
             hdr = self.data['header']
 
         # Check if versions of hera_pspec are the same
-        if 'hera_pspec.git_hash' in hdr.attrs.keys():
+        if 'hera_pspec.git_hash' in list(hdr.attrs.keys()):
             if hdr.attrs['hera_pspec.git_hash'] != version.git_hash:
                 print("WARNING: HDF5 file was created by a different version "
                       "of hera_pspec.")
@@ -138,13 +138,13 @@ class PSpecContainer(object):
         """
         if self.mode == 'r':
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
-
-        if getattr(group, '__iter__', False):
+        
+        if isinstance(group, (tuple, list, dict)):
             raise ValueError("Only one group can be specified at a time.")
 
         # Handle input arguments that are iterable (i.e. sequences, but not str)
-        if getattr(psname, '__iter__', False):
-            if getattr(pspec, '__iter__', False) and len(pspec) == len(psname):
+        if isinstance(psname, list):
+            if isinstance(pspec, list) and len(pspec) == len(psname):
                 # Recursively call set_pspec() on each item of the list
                 for _psname, _pspec in zip(psname, pspec):
                     if not isinstance(_pspec, uvpspec.UVPSpec):
@@ -156,26 +156,26 @@ class PSpecContainer(object):
                 # Raise exception if psname is a list, but pspec is not
                 raise ValueError("If psname is a list, pspec must be a list of "
                                  "the same length.")
-        if getattr(pspec, '__iter__', False) \
-          and not getattr(psname, '__iter__', False):
+        if isinstance(pspec, list) and not isinstance(psname, list):
             raise ValueError("If pspec is a list, psname must also be a list.")
         # No lists should pass beyond this point
 
         # Check that input is of the correct type
         if not isinstance(pspec, uvpspec.UVPSpec):
+            print("pspec:", type(pspec), pspec)
             raise TypeError("pspec must be a UVPSpec object.")
 
         key1 = "%s" % group
         key2 = "%s" % psname
 
         # Check that the group exists
-        if key1 not in self.data.keys():
+        if key1 not in list(self.data.keys()):
             grp = self.data.create_group(key1)
         else:
             grp = self.data[key1]
 
         # Check that the psname exists
-        if key2 not in grp.keys():
+        if key2 not in list(grp.keys()):
             # Create group if it doesn't exist
             psgrp = grp.create_group(key2)
         else:
@@ -215,7 +215,7 @@ class PSpecContainer(object):
         """
         # Check that group is in keys and extract it if so
         key1 = "%s" % group
-        if key1 in self.data.keys():
+        if key1 in list(self.data.keys()):
             grp = self.data[key1]
         else:
             raise KeyError("No group named '%s'" % key1)
@@ -225,7 +225,7 @@ class PSpecContainer(object):
             key2 = "%s" % psname
 
             # Load power spectrum if it exists
-            if key2 in grp.keys():
+            if key2 in list(grp.keys()):
                 return self._load_pspec(grp[key2])
             else:
                 raise KeyError("No pspec named '%s' in group '%s'" % (key2, key1))
@@ -234,7 +234,7 @@ class PSpecContainer(object):
         # Otherwise, extract all available power spectra
         uvp = []
         def pspec_filter(n, obj):
-            if u'pspec_type' in obj.attrs.keys():
+            if u'pspec_type' in list(obj.attrs.keys()):
                 uvp.append(self._load_pspec(obj))
 
         # Traverse the entire set of groups/datasets looking for pspecs
@@ -258,7 +258,7 @@ class PSpecContainer(object):
         """
         # Check that group is in keys and extract it if so
         key1 = "%s" % group
-        if key1 in self.data.keys():
+        if key1 in list(self.data.keys()):
             grp = self.data[key1]
         else:
             raise KeyError("No group named '%s'" % key1)
@@ -266,7 +266,7 @@ class PSpecContainer(object):
         # Filter to look for pspec objects
         ps_list = []
         def pspec_filter(n, obj):
-            if u'pspec_type' in obj.attrs.keys():
+            if u'pspec_type' in list(obj.attrs.keys()):
                 ps_list.append(n)
 
         # Traverse the entire set of groups/datasets looking for pspecs
@@ -282,7 +282,7 @@ class PSpecContainer(object):
         group_list : list of str
             List of group names.
         """
-        groups = self.data.keys()
+        groups = list(self.data.keys())
         if u'header' in groups: groups.remove(u'header')
         return groups
 
@@ -373,7 +373,7 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
     # Iterate over groups
     for grp in groups:
         # Get spectra in this group
-        spectra = psc.data[grp].keys()
+        spectra = list(psc.data[grp].keys())
 
         # Get unique spectra by splitting and then re-joining
         unique_spectra = []
