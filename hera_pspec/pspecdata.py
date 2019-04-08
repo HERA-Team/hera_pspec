@@ -1004,13 +1004,8 @@ class PSpecData(object):
             raise NotImplementedError("Exact normalization does not support FFT approach at present")
 
         elif exact_norm and not(allow_fft):
-<<<<<<< HEAD
             q          = []
             del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
-=======
-            q = []
-            del_tau = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (seconds)
->>>>>>> 08288262f1b328195edf6388917c722e85b58c78
             Q_matrix_all_delays = np.zeros((self.spw_Ndlys,self.spw_Nfreqs,self.spw_Nfreqs), dtype='complex128')
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau should be part of get_Q. We use it here to 
