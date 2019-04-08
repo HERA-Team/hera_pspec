@@ -11,6 +11,7 @@ from hera_cal import redcal
 from scipy.signal import windows
 from scipy.interpolate import interp1d
 from astropy.time import Time
+from scipy import special
 
 # Data files to use in tests
 dfiles = [
@@ -115,6 +116,11 @@ class Test_PSpecData(unittest.TestCase):
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
         self.bm.filename = 'HERA_NF_dipole_power.beamfits'
+        
+        #Load Gaussian beam file
+        beamfile_Q = os.path.join(DATA_PATH, 'Gaussian_beam_freq_0.beamfits')
+        self.bm_Q  = pspecbeam.PSpecBeamUV(beamfile_Q)
+        self.bm_Q.filename = 'Gaussian_beam_freq_0.beamfits'
 
         # load another data file
         self.uvd = uv.UVData()
@@ -329,6 +335,9 @@ class Test_PSpecData(unittest.TestCase):
                + 1.j * np.random.normal(size=vect_length)
         y_vect = np.random.normal(size=vect_length) \
                + 1.j * np.random.normal(size=vect_length)
+
+       #put in test function for analytic comparison 
+        
 
         self.ds.spw_Nfreqs = vect_length
 
@@ -1038,6 +1047,59 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
         nt.assert_equal(uvp.data_array[0].dtype, np.complex128)
         nt.assert_equal(uvp.data_array[0].shape, (240, 64, 1))
+
+        # compare the output of get_Q function with analytical estimates
+        
+        ds_Q  = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm_Q, labels=['red', 'blue'])
+        bls_Q   = [(24, 25)]
+        uvp = ds_Q.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                       norm='I', taper='none', verbose=True, exact_norm=False)
+        Q_sample = ds_Q.get_Q((ds_Q.spw_range[1] - ds_Q.spw_range[0])/2) #Get Q matrix for 0th delay mode
+
+        nt.assert_equal(np.shape(Q_sample), (ds_Q.spw_range[1] - ds_Q.spw_range[0],\
+                                             ds_Q.spw_range[1] - ds_Q.spw_range[0])) #Check for the right shape
+
+        tau = ds_Q.delays()[(ds_Q.spw_range[1] - ds_Q.spw_range[0])/2] * 1.0e-9 # delay in seconds
+        nu  = ds_Q.freqs[ds_Q.spw_range[0]:ds_Q.spw_range[1]]
+
+        eta_int = np.exp(-2j * np.pi * tau * nu) #exponential part of the expression
+        
+        Q_alt   = np.einsum('i,j', eta_int.conj(), eta_int)
+
+        theta_p = np.pi/20.0
+        c       = 1.0/(2*theta_p**2)
+        Ip      = np.sqrt(np.pi/(4*c)) * special.erf(np.sqrt(c) * np.pi)
+        integral1 = 0.0122864 * np.pi  * 2 
+        integral = integral1 * 1.0/(Ip)**2  
+
+        estimated_Q = Q_alt * integral
+        np.savetxt('/Users/EoR/Desktop/beam_hera_temp/est_Q', np.real(estimated_Q))
+        np.savetxt('/Users/EoR/Desktop/beam_hera_temp/sim_Q', np.real(Q_sample))
+
+        #nt.assert_true(np.allclose(np.real(estimated_Q), np.real(Q_sample), rtol=1e-03))
+
+        #Test if the two pipelines match
+        ds_t    = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm_Q)
+        ds_t.rephase_to_dset(0)
+
+        uvp_new = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                       norm='I', taper='none', verbose=True, exact_norm=True)
+        uvp_ext = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                       norm='I', taper='none', verbose=True, exact_norm=False)
+        spw         = 0
+        blp         = (bls_Q[0], bls_Q[0])
+        key         = (spw, blp, 'xx')
+        power_real_new  = (np.real(uvp_new.get_data(key)))
+        power_real_ext  = (np.real(uvp_ext.get_data(key)))
+        
+        diff = np.median((power_real_new[0]-power_real_ext[0])/power_real_ext[0])
+        nt.assert_true((diff <= 0.05))
+
+        # check basic execution with baseline list
+        bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
+        uvp = ds.pspec(bls, bls, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=False)
+        nt.assert_equal(len(uvp.bl_array), len(bls))
 
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)

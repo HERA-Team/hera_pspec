@@ -14,6 +14,7 @@ import ast
 import glob
 import sys
 from numpy import linalg
+import warnings
 
 
 class PSpecData(object):
@@ -941,8 +942,10 @@ class PSpecData(object):
             of delay bins is equal to the number of frequencies. Default: False.
 
         exact_norm: bool, optional
-            If beam and spectral window factors are taken in the computation of power spectrum (dC/dp = Q, and not Q_alt)
+            If True, beam and spectral window factors are taken 
+            in the computation of power spectrum (dC/dp = Q, and not Q_alt) (HERA memo #44, Eq. 11)
             In this case, it returns normalized power spectrum, except for X2Y term.
+            If False, Q_alt is used (HERA memo #44, Eq. 16)
 
         Returns
         -------
@@ -981,7 +984,7 @@ class PSpecData(object):
 
         elif exact_norm and not(allow_fft):
             q          = []
-            del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (seconds)
+            del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             Q_matrix_all_delays = np.zeros((self.spw_Ndlys,self.spw_Nfreqs,self.spw_Nfreqs), dtype='complex128')
             for i in xrange(self.spw_Ndlys):
                 Q    = del_tau * self.get_Q(i) #ideally, del_tau should be part of get_Q. We use it here to avoid its repeated computation
@@ -1005,7 +1008,8 @@ class PSpecData(object):
         elif allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
             _Rx1 = np.fft.fft(Rx1, axis=0)
             _Rx2 = np.fft.fft(Rx2, axis=0)
-            return 0.5 * np.fft.fftshift(_Rx1, axes=0).conj() * np.fft.fftshift(_Rx2, axes=0)
+            return 0.5 * np.fft.fftshift(_Rx1, axes=0).conj() \
+                       * np.fft.fftshift(_Rx2, axes=0)
 
         else:
             q        = []
@@ -1511,7 +1515,9 @@ class PSpecData(object):
             beam_prod     = beam_res * prod[:, np.newaxis] 
             integral_beam = (np.pi/(3.0*(N)**2))* \
                                       np.dot(beam_prod, beam_prod.T) #beam_prod has omega subsumed, but taper is still part of R matrix
+                                                                     # dtheta^2, where dtheta is the resolution in healpix map
         except(AttributeError):
+            warnings.warn('The beam response could not be calculated. PS will not be normalized!')
             integral_beam = np.ones((len(nu), len(nu)))
 
         eta_int = np.exp(-2j * np.pi * tau * nu) #exponential part of the expression
