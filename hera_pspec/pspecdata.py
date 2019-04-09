@@ -1545,7 +1545,7 @@ class PSpecData(object):
             beam_prod     = beam_res * prod[:, np.newaxis] 
             integral_beam = (np.pi/(3.0*(N)**2))* \
                                       np.dot(beam_prod, beam_prod.T) #beam_prod has omega subsumed, but taper is still part of R matrix
-                                                                     # dtheta^2, where dtheta is the resolution in healpix map
+                                                                     # the nside terms is dtheta^2, where dtheta is the resolution in healpix map
         except(AttributeError):
             warnings.warn('The beam response could not be calculated. PS will not be normalized!')
             integral_beam = np.ones((len(nu), len(nu)))
