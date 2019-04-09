@@ -464,6 +464,7 @@ class PSpecBeamUV(PSpecBeamBase):
 
         nside = self.primary_beam.nside
         beam_res = self.primary_beam._interp_freq(freq) # interpolate beam in frequency, based on the data frequencies 
+        beam_res = beam_res[0]
 
         if isinstance(pol, (str, np.str)):
             pol = uvutils.polstr2num(pol)
@@ -472,6 +473,7 @@ class PSpecBeamUV(PSpecBeamBase):
         
         if pol in pol_array:
             stokes_p_ind = np.where(np.isin(pol_array, pol))[0][0]
+            print stokes_p_ind
             beam_res = beam_res[0, 0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
         else:
             raise ValueError('Do not have the right polarization information')
