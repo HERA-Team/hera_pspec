@@ -7,6 +7,7 @@ from hera_pspec.parameter import PSpecParam
 from pyuvdata import uvutils as uvutils
 import h5py
 import operator
+import warnings
 
 
 class UVPSpec(object):
@@ -128,7 +129,7 @@ class UVPSpec(object):
                        "nsample_array", "cov_array"]
         self._dicts_of_dicts = ["stats_array"]
 
-        # define which attributes are considred meta data. Large attrs should 
+        # define which attributes are considered meta data. Large attrs should 
         # be constructed as datasets
         self._meta_dsets = ["lst_1_array", "lst_2_array", "time_1_array",
                             "time_2_array", "blpair_array", "bl_vecs",
@@ -1139,8 +1140,9 @@ class UVPSpec(object):
         """
         # Make sure the group is a UVPSpec object
         assert 'pspec_type' in grp.attrs, "This object is not a UVPSpec object"
-        assert grp.attrs['pspec_type'] == 'UVPSpec', \
-            "This object is not a UVPSpec object"
+        pstype = grp.attrs['pspec_type']
+        pstype = pstype.decode() if isinstance(pstype, bytes) else pstype
+        assert pstype == 'UVPSpec', "This object is not a UVPSpec object"
 
         # Clear all data in the current object
         self._clear()
@@ -1148,11 +1150,24 @@ class UVPSpec(object):
         # Load-in meta data
         for k in grp.attrs:
             if k in self._meta_attrs:
-                setattr(self, k, grp.attrs[k])
+                val = grp.attrs[k]
+                if isinstance(val, bytes): val = val.decode() # bytes -> str
+                setattr(self, k, val)
         for k in grp:
             if k in self._meta_dsets:
                 setattr(self, k, grp[k][:])
-
+        
+        # Backwards compatibility: pol_array exists (not polpair_array)
+        if 'pol_array' in grp.attrs:
+            warnings.warn("Stored UVPSpec contains pol_array attr, which has "
+                          "been superseded by polpair_array. Converting "
+                          "automatically.", UserWarning)
+            pol_arr = grp.attrs['pol_array']
+            
+            # Convert to polpair array
+            polpair_arr = [uvputils.polpair_tuple2int((p,p)) for p in pol_arr]
+            setattr(self, 'polpair_array', np.array(polpair_arr))
+        
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
             uvputils._select(self, spws=spws, bls=bls, lsts=lsts,
