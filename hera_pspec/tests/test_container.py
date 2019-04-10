@@ -161,7 +161,10 @@ class Test_PSpecContainer(unittest.TestCase):
         
         # Original RO handle should work fine; RW handle will throw an error
         nt.assert_equal(len(psc_ro.groups()), len(group_names))
-        assert_raises(OSError, psc_rw.groups)
+        if sys.version_info[0] < 3: # check Python version
+            assert_raises(IOError, psc_rw.groups)
+        else:
+            assert_raises(OSError, psc_rw.groups)
         
         # Close the non-transactional file; the RW file should now work
         psc_ro_noatom._close()
