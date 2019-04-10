@@ -30,8 +30,8 @@ MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'scipy.integrate',
                 'uvtools', 'hera_cal', 'hera_cal.utils', 'healpy', 
                 'scikit-learn', 'astropy', 'astropy.cosmology', 'astropy.units', 
                 'astropy.constants', 'matplotlib', 'matplotlib.pyplot', 
-                'pylab', 'yaml', 'pyuvdata.utils',
-                'hera_pspec.conversions', 'hera_pspec.uvpspec_utils']
+                'pylab', 'yaml', 'pyuvdata.utils', ]
+                
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 
