@@ -2114,10 +2114,10 @@ class PSpecData(object):
                         # If using decorrelation, the H^-1 normalization 
                         # already deals with the taper, so we need to override 
                         # the taper when computing the scalar
-                        scalar = self.scalar(p, little_h=True, 
+                        scalar = self.scalar(p, little_h=little_h, 
                                              taper_override='none')
                     else:
-                        scalar = self.scalar(p, little_h=True)
+                        scalar = self.scalar(p, little_h=little_h)
                 else:
                     raise_warning("Warning: self.primary_beam is not defined, "
                                   "so pspectra are not properly normalized",
