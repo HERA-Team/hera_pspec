@@ -812,6 +812,8 @@ class Test_PSpecData(unittest.TestCase):
         
         # Check normal execution
         scalar = self.ds.scalar(('xx','xx'))
+        scalar_xx = self.ds.scalar('xx') # Can use single pol string as shorthand
+        nt.assert_equal(scalar, scalar_xx)
         scalar = self.ds.scalar(1515) # polpair-integer = ('xx', 'xx')
         scalar = self.ds.scalar(('xx','xx'), taper_override='none')
         scalar = self.ds.scalar(('xx','xx'), beam=gauss)
@@ -1321,28 +1323,50 @@ def test_pspec_run():
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile,
-                              blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))], verbose=False, overwrite=True,
-                              pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
-                              dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)], n_dlys=[20, 20],
-                              cosmo=cosmo, trim_dset_lsts=False, broadcast_dset_flags=False, store_cov=True)
+    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", 
+                                  dsets_std=fnames_std, 
+                                  Jy2mK=True, 
+                                  beam=beamfile,
+                                  blpairs=[((37, 38), (37, 38)), 
+                                           ((37, 38), (52, 53))], 
+                                  verbose=False, 
+                                  overwrite=True,
+                                  pol_pairs=[('xx', 'xx'), ('xx', 'xx')], 
+                                  dset_labels=["foo", "bar"],
+                                  dset_pairs=[(0, 0), (0, 1)], 
+                                  spw_ranges=[(50, 75), (120, 140)], 
+                                  n_dlys=[20, 20],
+                                  cosmo=cosmo, 
+                                  trim_dset_lsts=False, 
+                                  broadcast_dset_flags=False, 
+                                  store_cov=True)
+    
     # assert groupname is dset1_dset2
     nt.assert_true("foo_bar" in psc.groups())
+    
     # assert uvp names are labeled by dset_pairs
-    nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
+    nt.assert_equal(sorted(psc.spectra('foo_bar')), 
+                    sorted([u'foo_x_bar', u'foo_x_foo']))
+    
     # get UVPSpec for further inspection
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
+    
     # assert Jy2mK worked
     nt.assert_true(uvp.vis_units, "mK")
+    
     # assert only blpairs that were fed are present
     nt.assert_equal(uvp.bl_array.tolist(), [137138, 152153])
     nt.assert_equal(uvp.polpair_array.tolist(), [1515, 1515])
+    
     # assert weird cosmology was passed
     nt.assert_equal(uvp.cosmo, cosmo)
+    
     # assert cov_array was calculated b/c std files were passed and store_cov
     nt.assert_true(hasattr(uvp, 'cov_array'))
+    
     # assert dset labeling propagated
     nt.assert_equal(set(uvp.labels), set(['bar', 'foo']))
+    
     # assert spw_ranges and n_dlys specification worked
     np.testing.assert_array_equal(uvp.get_spw_ranges(), [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)])
 
@@ -1360,12 +1384,17 @@ def test_pspec_run():
                                    blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
                                    verbose=False, overwrite=True, spw_ranges=[(50, 100)], rephase_to_dset=0,
                                    broadcast_dset_flags=True, time_thresh=0.3)
+    
     # assert first integration flagged across entire spw
     nt.assert_true(ds.dsets[0].get_flags(37, 38)[0, 50:100].all())
+    
     # assert first integration flagged *ONLY* across spw
-    nt.assert_false(ds.dsets[0].get_flags(37, 38)[0, :50].any() + ds.dsets[0].get_flags(37, 38)[0, 100:].any())
+    nt.assert_false(  ds.dsets[0].get_flags(37, 38)[0, :50].any() \
+                    + ds.dsets[0].get_flags(37, 38)[0, 100:].any() )
+    
     # assert channel 90 flagged for all ints
     nt.assert_true(ds.dsets[0].get_flags(37, 38)[:, 90].all())
+    
     # assert phase errors decreased after phasing
     phserr_before = np.mean(np.abs(np.angle(uvd1.data_array / uvd2.data_array)))
     phserr_after = np.mean(np.abs(np.angle(ds.dsets[0].data_array / ds.dsets[1].data_array)))
