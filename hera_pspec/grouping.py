@@ -7,7 +7,7 @@ import copy
 import argparse
 from astropy import stats as astats
 import os
-
+import scipy
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
                     seed=None):
@@ -243,32 +243,35 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     data_array, wgts_array = odict(), odict()
     ints_array, nsmp_array = odict(), odict()
     stats_array = odict([[stat, odict()] for stat in stat_l])
-
     # will average covariance array if present
-    store_cov = hasattr(uvp, "cov_array")
+    store_cov = hasattr(uvp, "cov_array_real")
     if store_cov:
-        cov_array = odict()
-
+        cov_models = uvp.cov_array_real.keys()
+        cov_array_real = odict([[cov_model, odict()] for cov_model in cov_models])
+        cov_array_imag = odict([[cov_model, odict()] for cov_model in cov_models])
+    
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
         spw_data, spw_wgts, spw_ints, spw_nsmp = [], [], [], []
         spw_stats = odict([[stat, []] for stat in stat_l])
         if store_cov:
-            spw_cov = []
-        
+            spw_cov_real = odict([[cov_model, []] for cov_model in cov_models])
+            spw_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
         # Iterate over polarizations
         for i, p in enumerate(uvp.polpair_array):
             pol_data, pol_wgts, pol_ints, pol_nsmp = [], [], [], []
             pol_stats = odict([[stat, []] for stat in stat_l])
             if store_cov:
-                pol_cov = []
+                pol_cov_real = odict([[cov_model, []] for cov_model in cov_models])
+                pol_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
 
             # Iterate over baseline-pair groups
             for j, blpg in enumerate(blpair_groups):
                 bpg_data, bpg_wgts, bpg_ints, bpg_nsmp = [], [], [], []
                 bpg_stats = odict([[stat, []] for stat in stat_l])
                 if store_cov:
-                    bpg_cov = []
+                    bpg_cov_real = odict([[cov_model, []] for cov_model in cov_models])
+                    bpg_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
                 w_list = []
 
                 # Sum over all weights within this baseline group to get
@@ -281,7 +284,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     if norm <= 0.:
                         raise ValueError("Sum of baseline-pair weights in "
                                          "group %d is <= 0." % j)
-                    blpg_wgts *= float(blpg_wgts.size) / norm # Apply normalization
+                    blpg_wgts = blpg_wgts * float(blpg_wgts.size) / norm # Apply normalization
                 else:
                     blpg_wgts = np.ones(len(blpg))
 
@@ -295,8 +298,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     wgts = uvp.get_wgts((spw, blp, p))
                     ints = uvp.get_integrations((spw, blp, p))[:, None]
                     w = (ints * np.sqrt(nsmp))
+                    # Get covariance matrices
+                    cov_real = {}
+                    cov_imag = {}
                     if store_cov:
-                        cov = uvp.get_cov((spw, blp, p))
+                        for cov_model in cov_models:
+                            cov_real[cov_model] = uvp.get_cov((spw, blp, p), component="real", cov_model=cov_model)
+                            cov_imag[cov_model] = uvp.get_cov((spw, blp, p), component="imag", cov_model=cov_model)
                     # Get error bar weights and set invalid ones to zero.
                     errws = {}
                     for stat in stat_l:
@@ -316,10 +324,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                            / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
                       nsmp = np.sum(nsmp, axis=0)[None]
                       w = np.sum(w, axis=0)[None]
-                      if store_cov:
-                          cov = (np.sum(cov * w[:, None], axis=0) \
-                          / np.sum(w,axis=0).clip(1e-10, np.inf))[None]
 
+                      if store_cov:
+                        for cov_model in cov_models:
+                             cov_real[cov_model] = (np.sum(cov_real[cov_model] * w[:, None], axis=0)\
+                                / np.sum(w,axis=0).clip(1e-10, np.inf))[None]
+                             cov_imag[cov_model] = (np.sum(cov_imag[cov_model] * w[:, None], axis=0)\
+                                / np.sum(w,axis=0).clip(1e-10, np.inf))[None]
                       for stat in stat_l:
                         errws[stat] = np.sum(errws[stat], axis=0)[None]
                     # Add multiple copies of data for each baseline according
@@ -332,9 +343,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         [bpg_stats[stat].append(errws[stat]) for stat in stat_l]
                         w_list.append(w)
                         if store_cov:
-                            bpg_cov.append(cov * w[:, None])
-
-
+                            for cov_model in cov_models:
+                                bpg_cov_real[cov_model].append(cov_real[cov_model]* w[:, None])
+                                bpg_cov_imag[cov_model].append(cov_imag[cov_model]* w[:, None])
+                
                 # Take integration-weighted averages, with clipping to deal
                 # with zeros
                 bpg_data = np.sum(bpg_data, axis=0) \
@@ -344,9 +356,14 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 bpg_nsmp = np.sum(bpg_nsmp, axis=0)
                 bpg_ints = np.sum(bpg_ints, axis=0) \
                          / np.sum(w_list, axis=0).clip(1e-10, np.inf)
+
                 if store_cov:
-                    bpg_cov = np.sum(bpg_cov, axis=0) \
-                            / np.sum(w_list, axis=0)[:,None].clip(1e-10, np.inf)
+                    for cov_model in cov_models:
+                        bpg_cov_real[cov_model] = np.sum(bpg_cov_real[cov_model], axis=0)\
+                        / np.sum(w_list, axis=0)[:,None].clip(1e-10, np.inf)
+                        bpg_cov_imag[cov_model] = np.sum(bpg_cov_imag[cov_model], axis=0)\
+                        / np.sum(w_list, axis=0)[:,None].clip(1e-10, np.inf)
+                   
                 w_list = np.sum(w_list, axis=0)
 
                 # For errors that are > 0, sum weights and take inverse square
@@ -363,14 +380,16 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
                 [pol_stats[stat].extend(bpg_stats[stat]) for stat in stat_l]
                 if store_cov:
-                    pol_cov.extend(bpg_cov)
+                    [pol_cov_real[cov_model].extend(bpg_cov_real[cov_model]) for cov_model in cov_models]
+                    [pol_cov_imag[cov_model].extend(bpg_cov_imag[cov_model]) for cov_model in cov_models]
 
             # Append to lists (spectral window)
             spw_data.append(pol_data); spw_wgts.append(pol_wgts)
             spw_ints.append(pol_ints); spw_nsmp.append(pol_nsmp)
             [spw_stats[stat].append(pol_stats[stat]) for stat in stat_l]
             if store_cov:
-                spw_cov.append(pol_cov)
+                [spw_cov_real[cov_model].append(pol_cov_real[cov_model]) for cov_model in cov_models]
+                [spw_cov_imag[cov_model].append(pol_cov_imag[cov_model]) for cov_model in cov_models]
 
         # Append to dictionaries
         data_array[spw] = np.moveaxis(spw_data, 0, -1)
@@ -380,7 +399,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         for stat in stat_l:
             stats_array[stat][spw] = np.moveaxis(spw_stats[stat], 0, -1)
         if store_cov:
-            cov_array[spw] = np.moveaxis(np.array(spw_cov), 0, -1)
+            for cov_model in cov_models:
+                cov_array_real[cov_model][spw] = np.moveaxis(np.array(spw_cov_real[cov_model]), 0, -1)
+                cov_array_imag[cov_model][spw] = np.moveaxis(np.array(spw_cov_imag[cov_model]), 0, -1)
 
     # Iterate over blpair groups one more time to assign metadata
     time_1, time_2, time_avg_arr  = [], [], []
@@ -443,7 +464,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     uvp.wgt_array = wgts_array
     uvp.nsample_array = nsmp_array
     if store_cov:
-        uvp.cov_array = cov_array
+        uvp.cov_array_real = cov_array_real
+        uvp.cov_array_imag = cov_array_imag  
     if error_field is not None:
         uvp.stats_array = stats_array
     elif hasattr(uvp, "stats_array"):
@@ -479,7 +501,8 @@ def fold_spectra(uvp):
     """
     # assert folded is False
     assert uvp.folded == False, "cannot fold power spectra if uvp.folded == True"
-
+    store_cov = hasattr(uvp, "cov_array_real")
+    
     # Iterate over spw
     for spw in range(uvp.Nspws):
 
@@ -498,18 +521,30 @@ def fold_spectra(uvp):
             uvp.nsample_array[spw] *= 2.0
 
             # fold covariance array if it exists.
-            if hasattr(uvp,'cov_array'):
-                leftleft = uvp.cov_array[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.cov_array[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.cov_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-                uvp.cov_array[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array[spw][:, :, :Ndlys//2, : :] = 0.0
+            if hasattr(uvp,'cov_array_real'):
+                for cov_model in uvp.cov_array_real.keys():
+                    leftleft = uvp.cov_array_real[cov_model][spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.cov_array_real[cov_model][spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.cov_array_real[cov_model][spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
+                    rightright = uvp.cov_array_real[cov_model][spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                    uvp.cov_array_real[cov_model][spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                             +leftright\
+                                                                             +rightleft\
+                                                                             +rightright)
+                    uvp.cov_array_real[cov_model][spw][:, :Ndlys//2, :, :] = 0.0
+                    uvp.cov_array_real[cov_model][spw][:, :, :Ndlys//2, : :] = 0.0
 
+                    leftleft = uvp.cov_array_imag[cov_model][spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.cov_array_imag[cov_model][spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.cov_array_imag[cov_model][spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
+                    rightright = uvp.cov_array_imag[cov_model][spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                    uvp.cov_array_imag[cov_model][spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                             +leftright\
+                                                                             +rightleft\
+                                                                             +rightright)
+                    uvp.cov_array_imag[cov_model][spw][:, :Ndlys//2, :, :] = 0.0
+                    uvp.cov_array_imag[cov_model][spw][:, :, :Ndlys//2, : :] = 0.0
+        
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
                 for stat in uvp.stats_array.keys():
@@ -527,18 +562,30 @@ def fold_spectra(uvp):
             uvp.nsample_array[spw] *= 2.0
 
             # fold covariance array if it exists.
-            if hasattr(uvp,'cov_array'):
-                leftleft = uvp.cov_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.cov_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.cov_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-                uvp.cov_array[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array[spw][:, :, :Ndlys//2, : :] = 0.0
+            if hasattr(uvp,'cov_array_real'):
+                for cov_model in uvp.cov_array_real.keys():
+                    leftleft = uvp.cov_array_real[cov_model][spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.cov_array_real[cov_model][spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.cov_array_real[cov_model][spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                    rightright = uvp.cov_array_real[cov_model][spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                    uvp.cov_array_real[cov_model][spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                             +leftright\
+                                                                             +rightleft\
+                                                                             +rightright)
+                    uvp.cov_array_real[cov_model][spw][:, :Ndlys//2, :, :] = 0.0
+                    uvp.cov_array_real[cov_model][spw][:, :, :Ndlys//2, : :] = 0.0
 
+                    leftleft = uvp.cov_array_imag[cov_model][spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.cov_array_imag[cov_model][spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.cov_array_imag[cov_model][spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                    rightright = uvp.cov_array_imag[cov_model][spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                    uvp.cov_array_imag[cov_model][spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                             +leftright\
+                                                                             +rightleft\
+                                                                             +rightright)
+                    uvp.cov_array_imag[cov_model][spw][:, :Ndlys//2, :, :] = 0.0
+                    uvp.cov_array_imag[cov_model][spw][:, :, :Ndlys//2, : :] = 0.0
+            
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
                 for stat in uvp.stats_array.keys():
@@ -972,3 +1019,77 @@ def get_bootstrap_run_argparser():
     a.add_argument("--verbose", default=False, action='store_true', help="report feedback to stdout.")
     
     return a
+
+def average_spectra_with_error(p, v):
+    '''
+    Parameters
+    ----------
+    p : The input power spectra array.
+
+    v : The variance array which has the same size with p.
+     
+    The average spectra are constructed in this way:
+    (p1,p2, ) = Ap_bar+(n1,n2, ), 
+    where A is a indentity array.
+    If we denote p=(p1,p2,) and n=(n1,n2,).
+    we can define N=<n n^t>, then we obtain p_bar=[A^tN^{-1}A]^{-1} A^t N^{-1}p, 
+    and Sigma=[A^tN^{-1}A]^{-1}.
+    In the calculation, we use the assumption that N is diagonal.
+
+    Returns
+    -------
+    p_bar : p_bar.
+
+    Sigma : Sigma.
+    '''
+    if len(p) != len(v):
+        raise TypeError("p should be the same array with v.")
+    p = np.array(p)
+    n = np.array(v)
+    N_inv = np.diag(v**(-1.))
+    A = np.ones(len(p)).reshape(-1,1)
+    Sigma = np.linalg.inv(np.matmul(A.T, np.matmul(N_inv, A)))
+    p_bar = np.matmul(Sigma, np.matmul(A.T, np.matmul(N_inv, p)))
+    return p_bar, Sigma  
+
+def normality_test(x, test_type, alpha=0.05):
+    """
+    A synthesis of different normality test methods.
+    
+    Parameters
+    ----------
+    x : array
+        The data array to be tested
+        
+    test_type : str
+        The type of normality tests.
+        Choices: ['Shapiro-Wilk','Kolmogorov-Smirnov','Anderson-Darling', 
+                 'DAgostino-Pearson']
+    
+    alpha : float
+        The critical value to reject or accept the null hypothesis.
+    """
+    p = None
+    if test_type == 'Shapiro-Wilk':
+        stat, p = scipy.stats.shapiro(x)
+    if test_type == 'Kolmogorov-Smirnov':
+        stat, p = scipy.stats.kstest(x, cdf='norm')
+    if test_type == 'DAgostino-Pearson':
+        stat, p = scipy.stats.normaltest(x)
+    
+    # Print test results if one of the above tests was run
+    if p is not None:
+        print('Statistics={:.3f}, p={:.3f}'.format(stat, p))
+        if p > alpha:
+            print('Sample looks Gaussian (fail to reject H0)')
+        else:
+            print('Sample does not look Gaussian (reject H0)')
+    
+    if test_type == 'Anderson-Darling':
+        result = scipy.stats.anderson(x)    
+        for i in range(len(result.critical_values)):
+            sl, cv = result.significance_level[i], result.critical_values[i]
+            if result.statistic < result.critical_values[i]:
+                print('{:.3f}: {:.3f}, data looks normal (fail to reject H0)'.format(sl, cv))
+            else:
+                print('{:.3f}: {:.3f}, data does not look normal (reject H0)'.format(sl, cv))

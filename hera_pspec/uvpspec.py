@@ -35,8 +35,9 @@ class UVPSpec(object):
         # Data attributes
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
-        desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
-        self._cov_array = PSpecParam("cov_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays, stored separately for real and imaginary parts."
+        self._cov_array_real = PSpecParam("cov_array_real", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        self._cov_array_imag = PSpecParam("cov_array_imag", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
@@ -126,8 +127,8 @@ class UVPSpec(object):
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
         self._dicts = ["data_array", "wgt_array", "integration_array",
-                       "nsample_array", "cov_array"]
-        self._dicts_of_dicts = ["stats_array"]
+                       "nsample_array"]
+        self._dicts_of_dicts = ["stats_array", "cov_array_real", "cov_array_imag"]
 
         # define which attributes are considered meta data. Large attrs should 
         # be constructed as datasets
@@ -149,7 +150,7 @@ class UVPSpec(object):
         # Default parameter values
         self.folded = False
 
-    def get_cov(self, key, omit_flags=False):
+    def get_cov(self, key, component='real', cov_model='time_average', omit_flags=False):
         """
         Slice into covariance array with a specified data key in the format
         (spw, ((ant1, ant2),(ant3, ant4)), (pol1, pol2))
@@ -167,6 +168,12 @@ class UVPSpec(object):
         key: tuple
             Contains the baseline-pair, spw, polpair keys
 
+        component : str
+            "real" or "imag". Indicating which cov_array the function calls.   
+
+        cov_model : str
+            The type of the input covariance matrix for the data in the cov_array.
+
         omit_flags : bool, optional
             If True, remove time integrations (or spectra) that
             came from visibility data that were completely flagged
@@ -181,14 +188,26 @@ class UVPSpec(object):
         
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
-        if hasattr(self,'cov_array'):
-            if self.folded:
-                Ndlys = self.data_array[spw].shape[1]
-                return self.cov_array[spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, polpair]
+        if component == 'real':
+            if hasattr(self,'cov_array_real'):
+                if self.folded:
+                    Ndlys = self.data_array[spw].shape[1]
+                    return self.cov_array_real[cov_model][spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, polpair]
+                else:
+                    return self.cov_array_real[cov_model][spw][blpairts, :, :, polpair]
             else:
-                return self.cov_array[spw][blpairts, :, :, polpair]
+                raise AttributeError("No covariance array has been calculated.")
+        elif component == 'imag':
+            if hasattr(self,'cov_array_imag'):
+                if self.folded:
+                    Ndlys = self.data_array[spw].shape[1]
+                    return self.cov_array_imag[cov_model][spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, polpair]
+                else:
+                    return self.cov_array_imag[cov_model][spw][blpairts, :, :, polpair]
+            else:
+                raise AttributeError("No covariance array has been calculated.")
         else:
-            raise AttributeError("No covariance array has been calculated.")
+            raise ValueError("No types besides real and imag.") 
 
     def get_data(self, key, omit_flags=False):
         """
@@ -1280,7 +1299,6 @@ class UVPSpec(object):
                 group.create_dataset(k, data=getattr(self, k))
 
         # Iterate over spectral windows and create datasets
-        store_cov = hasattr(self, 'cov_array')
         for i in np.unique(self.spw_array):
             group.create_dataset("data_spw{}".format(i),
                                  data=self.data_array[i],
@@ -1294,10 +1312,17 @@ class UVPSpec(object):
             group.create_dataset("nsample_spw{}".format(i),
                                  data=self.nsample_array[i],
                                  dtype=np.float)
-            if hasattr(self, "cov_array"):
-                group.create_dataset("cov_spw{}".format(i),
-                                     data=self.cov_array[i],
-                                     dtype=np.complex128)
+        
+        # Store any covariance arrays    
+        if hasattr(self, "cov_array_real"):
+            for cov_model in self.cov_array_real.keys():
+                data_real = self.cov_array_real[cov_model]
+                data_imag = self.cov_array_imag[cov_model]
+                for i in np.unique(self.spw_array):
+                    group.create_dataset("cov_real_{}_{}".format(cov_model, i),
+                                         data=data_real[i], dtype=data_real[i].dtype)
+                    group.create_dataset("cov_imag_{}_{}".format(cov_model, i),
+                                         data=data_imag[i], dtype=data_imag[i].dtype)
 
         # Store any statistics arrays
         if hasattr(self, "stats_array"):
@@ -1545,8 +1570,9 @@ class UVPSpec(object):
                         assert np.isclose(getattr(self, p), getattr(other, p)).all()
                 elif p in self._dicts:
                     for i in getattr(self, p):
-                        assert np.isclose(getattr(self, p)[i], \
-                               getattr(other, p)[i]).all()
+                        assert np.isclose(getattr(self, p)[i],\
+                            getattr(other, p)[i]).all()
+                            
         except AssertionError:
             if verbose:
                 print("UVPSpec parameter '{}' not equivalent between {} and {}" \
@@ -1923,15 +1949,25 @@ def combine_uvpspec(uvps, verbose=True):
     Npols = len(new_polpairs)
 
     # Store covariance only if all uvps have stored covariance.
-    store_cov = np.all([hasattr(uvp, 'cov_array') for uvp in uvps])
+    store_cov = np.all([hasattr(uvp,'cov_array_real') for uvp in uvps])
 
     # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
     u.wgt_array = odict()
     u.nsample_array = odict()
+    cov_models = []
     if store_cov:
-        u.cov_array = odict()
+        for uvp1 in uvps:
+            for cov_model in uvp1.cov_array_real.keys():
+                if cov_model not in cov_models:
+                    cov_models.append(cov_model)
+        for cov_model in cov_models:
+            for uvp1 in uvps:
+                if cov_model not in uvp1.cov_array_real.keys():
+                    cov_models.remove(cov_model)
+        u.cov_array_real = odict([[cov_model, odict()] for cov_model in cov_models])
+        u.cov_array_imag = odict([[cov_model, odict()] for cov_model in cov_models])
     u.scalar_array = np.empty((Nspws, Npols), np.float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     u.spw_dly_array, u.spw_freq_array = [], []
@@ -1946,9 +1982,11 @@ def combine_uvpspec(uvps, verbose=True):
         # so needs to keep this shape)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if store_cov:
-            u.cov_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols),
+            for cov_model in cov_models:
+                u.cov_array_real[cov_model][i] = np.empty((Nblpairts, spw[3], spw[3], Npols),
                                       np.complex128)
-
+                u.cov_array_imag[cov_model][i] = np.empty((Nblpairts, spw[3], spw[3], Npols),
+                                      np.complex128)
         # Set frequencies and delays
         spw_Nfreqs = spw[2]
         spw_Ndlys = spw[3]
@@ -2034,7 +2072,9 @@ def combine_uvpspec(uvps, verbose=True):
                     u.label_1_array[i, j, k] = u_lbls[uvps[l].labels[lbl1]]
                     u.label_2_array[i, j, k] = u_lbls[uvps[l].labels[lbl2]]
                     if store_cov:
-                      u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
+                        for cov_model in cov_models:
+                            u.cov_array_real[cov_model][i][j, :, :, k] = uvps[l].cov_array_real[cov_model][m][n, :, :, q]
+                            u.cov_array_imag[cov_model][i][j, :, :, k] = uvps[l].cov_array_imag[cov_model][m][n, :, :, q]
 
         # Populate new LST, time, and blpair arrays
         for j, blpt in enumerate(new_blpts):
@@ -2067,7 +2107,9 @@ def combine_uvpspec(uvps, verbose=True):
 
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
                     if store_cov:
-                        u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
+                        for cov_model in cov_models:
+                            u.cov_array_real[cov_model][i][j, :, :, k] = uvps[l].cov_array_real[cov_model][m][n, :, :, q]
+                            u.cov_array_imag[cov_model][i][j, :, :, k] = uvps[l].cov_array_imag[cov_model][m][n, :, :, q]
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
@@ -2113,7 +2155,9 @@ def combine_uvpspec(uvps, verbose=True):
                     n = blpts_idxs[j]
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
                     if store_cov:
-                      u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
+                        for cov_model in cov_models:
+                            u.cov_array_real[cov_model][i][j, :, :, k] = uvps[l].cov_array_real[cov_model][m][n, :, :, q]
+                            u.cov_array_imag[cov_model][i][j, :, :, k] = uvps[l].cov_array_imag[cov_model][m][n, :, :, q]
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]

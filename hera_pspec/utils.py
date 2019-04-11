@@ -10,9 +10,11 @@ from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
+import hera_pspec as hp
+import copy
 
 
-def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
+def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True, subtracted=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size
     (M,N), then the output is M x M. In other words, the second axis is the
@@ -41,6 +43,8 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
         Whether to conjugate d1 or not. Default: False
     conj_2 : boolean, optional
         Whether to conjugate d2 or not. Default: True
+    subtracted : boolean, default: True
+            Whether or not to subtract the mean value when calculating the covariance.
 
     Returns
     -------
@@ -71,7 +75,8 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     C = np.dot(z1, z2.T)
     W = np.dot(w1, w2.T)
     C /= np.where(W > 0, W, 1)
-    C -= np.outer(x1, x2)
+    if subtracted==True:
+        C -= np.outer(x1, x2)
     return C
 
 
@@ -216,7 +221,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     antpos2, ants2 = uvd2.get_ENU_antpos(pick_data_ants=False)
     antpos2 = dict(list(zip(ants2, antpos2)))
     antpos = dict(list(antpos1.items()) + list(antpos2.items()))
-
+    
     # assert antenna positions match
     for a in set(antpos1).union(set(antpos2)):
         if a in antpos1 and a in antpos2:
@@ -259,12 +264,10 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                         xants2.remove(antnums[1])
 
         xants1 = sorted(xants1)
-        xants2 = sorted(xants2)
-
+        xants2 = sorted(xants2) 
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
-                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
-
+                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)    
     # construct baseline pairs
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
@@ -960,10 +963,10 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     # use antenna position dictionary
     elif isinstance(uvd, (dict, odict)):
         antpos_dict = uvd
-
+    
     # get redundant baselines
     reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
-
+    
     # get vectors, len and ang for each baseline group
     vecs = np.array([antpos_dict[r[0][0]] - antpos_dict[r[0][1]] for r in reds])
     lens, angs = get_bl_lens_angs(vecs, bl_error_tol=bl_error_tol)
@@ -1001,3 +1004,55 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         reds, lens, angs = _reds, _lens, _angs
 
     return reds, lens, angs
+
+def pspecdata_time_difference(ds, time_diff):
+    """
+    Given a PSpecData object and a time difference, give the time difference PSpecData object.  
+
+    Parameters
+    ----------
+    ds : PSpecData object
+
+    time_diff : float
+        The time difference in seconds. 
+
+    Returns
+    -------
+    ds_td : PSpecData object
+    """
+    uvd1 = ds.dsets[0]
+    uvd2 = ds.dsets[1]
+    uvd10 = uvd_time_difference(uvd1, time_diff)
+    uvd20 = uvd_time_difference(uvd2, time_diff)
+
+    ds_td = hp.PSpecData(dsets=[uvd10, uvd20], wgts=ds.wgts, beam=ds.primary_beam)
+    return ds_td
+
+def uvd_time_difference(uvd, time_diff):
+    """
+    Given a UVData object and a time difference, give the time difference UVData object.  
+
+    Parameters
+    ----------
+    uvd : UVData object
+
+    time_diff : float
+        The time difference in seconds. 
+
+    Returns
+    -------
+    uvd_td : UVData object
+    """
+    min_time_diff = np.mean(np.unique(uvd.time_array)[1:]-np.unique(uvd.time_array)[0:-1])
+    index_diff = int(time_diff / min_time_diff) + 1
+    if index_diff > len(np.unique(uvd.time_array))-2:
+        index_diff = len(np.unique(uvd.time_array))-2
+    
+    uvd0 = uvd.select(times=np.unique(uvd.time_array)[0:-1:index_diff], inplace=False)
+    uvd1 = uvd.select(times=np.unique(uvd.time_array)[1::index_diff], inplace=False)
+    data0 = uvd0.data_array
+    data1 = uvd1.data_array
+    data0 -= data1
+    uvd0.data_array = data0
+
+    return uvd0

@@ -105,7 +105,7 @@ def test_noise_validation():
     ds.Jy_to_mK()
 
     # get pspec
-    uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
+    uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
                    taper='none', sampling=False, little_h=True, spw_ranges=[(0, 50)], verbose=False)
 
     # get noise spectra from one of the blpairs
