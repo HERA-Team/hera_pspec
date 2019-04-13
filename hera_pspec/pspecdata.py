@@ -2237,7 +2237,7 @@ class PSpecData(object):
                         # already deals with the taper, so we need to override 
                         # the taper when computing the scalar
                         scalar = self.scalar(p, little_h=little_h, 
-                                             taper_override='none'
+                                             taper_override='none',
                                              exact_norm=exact_norm)
                     else:
                         scalar = self.scalar(p, little_h=little_h,
