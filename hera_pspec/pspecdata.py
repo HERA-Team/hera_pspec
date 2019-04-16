@@ -1852,11 +1852,12 @@ class PSpecData(object):
             where the first index is for the Left-Hand dataset and second index
             is used for the Right-Hand dataset (see above).
 
-        pols : length-2 tuple of strings or integers, or list of length-2 
-            tuples of strings or integers
+        pols : tuple or list of tuple
             Contains polarization pairs to use in forming power spectra
-            e.g. ('XX','XX') or [('XX','XX'),('pI','pI')] or list of 
-            polarization pairs.
+            e.g. ('XX','XX') or [('XX','XX'),('pI','pI')] or a list of 
+            polarization pairs. Individual strings are also supported, and will 
+            be expanded into a matching pair of polarizations, e.g. 'xx' 
+            becomes ('xx', 'xx'). 
             
             If a primary_beam is specified, only equal-polarization pairs can 
             be cross-correlated, as the beam scalar normalization is only 
