@@ -315,11 +315,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                       ints = (np.sum(ints * w, axis=0) \
                            / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
                       nsmp = np.sum(nsmp, axis=0)[None]
-                      w = np.sum(w, axis=0)[None]
                       if store_cov:
-                          cov = (np.sum(cov * w[:, None], axis=0) \
-                          / np.sum(w,axis=0).clip(1e-10, np.inf))[None]
-
+                          cov = (np.sum(cov * w[:, None]**2., axis=0) \
+                          / (np.sum(w,axis=0)**2.).clip(1e-10, np.inf))[None]
+                      w = np.sum(w, axis=0)[None]
                       for stat in stat_l:
                         errws[stat] = np.sum(errws[stat], axis=0)[None]
                     # Add multiple copies of data for each baseline according
@@ -332,7 +331,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         [bpg_stats[stat].append(errws[stat]) for stat in stat_l]
                         w_list.append(w)
                         if store_cov:
-                            bpg_cov.append(cov * w[:, None])
+                            bpg_cov.append(cov * w[:, None]**2.)
 
 
                 # Take integration-weighted averages, with clipping to deal
@@ -346,7 +345,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                          / np.sum(w_list, axis=0).clip(1e-10, np.inf)
                 if store_cov:
                     bpg_cov = np.sum(bpg_cov, axis=0) \
-                            / np.sum(w_list, axis=0)[:,None].clip(1e-10, np.inf)
+                            / (np.sum(w_list, axis=0)**2.)[:,None].clip(1e-10, np.inf)
                 w_list = np.sum(w_list, axis=0)
 
                 # For errors that are > 0, sum weights and take inverse square
