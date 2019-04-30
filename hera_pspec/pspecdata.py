@@ -369,7 +369,7 @@ class PSpecData(object):
                 return self.labels.index(dset)
             else:
                 raise KeyError("dset '%s' not found." % dset)
-        elif isinstance(dset, int):
+        elif isinstance(dset, (int, np.integer)):
             return dset
         else:
             raise TypeError("dset must be either an int or string")
@@ -412,7 +412,8 @@ class PSpecData(object):
         # put pol into bl key if it exists
         if len(key) > 0:
             pol = key[0]
-            assert isinstance(pol, (str, int, np.int, np.int32)), "pol must be fed as a str or int"
+            assert isinstance(pol, (str, int, np.integer)), \
+                "pol must be fed as a str or int"
             bl += (key[0],)
 
         return dset_idx, bl
@@ -455,7 +456,7 @@ class PSpecData(object):
         dx : array_like
             Array of std data from the requested UVData dataset and baseline.
         """
-        assert isinstance(key,tuple)
+        assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
         spw = slice(self.spw_range[0], self.spw_range[1])
 
@@ -808,7 +809,7 @@ class PSpecData(object):
         """
         assert isinstance(spw_range, tuple), \
             "spw_range must be fed as a len-2 integer tuple"
-        assert isinstance(spw_range[0], (int, np.int)), \
+        assert isinstance(spw_range[0], (int, np.integer)), \
             "spw_range must be fed as len-2 integer tuple"
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
@@ -1663,7 +1664,7 @@ class PSpecData(object):
                 in h^-3 Mpc^3 or Mpc^3.
         """
         # make sure polarizations are the same
-        if isinstance(polpair, int):
+        if isinstance(polpair, (int, np.integer)):
             polpair = uvputils.polpair_int2tuple(polpair)
         if isinstance(polpair, str):
             polpair = (polpair, polpair)
@@ -1976,8 +1977,8 @@ class PSpecData(object):
         assert isinstance(dsets, (list, tuple)), \
             "dsets must be fed as length-2 tuple of integers"
         assert len(dsets) == 2, "len(dsets) must be 2"
-        assert isinstance(dsets[0], (int, np.int)) \
-            and isinstance(dsets[1], (int, np.int)), \
+        assert isinstance(dsets[0], (int, np.integer)) \
+            and isinstance(dsets[1], (int, np.integer)), \
                 "dsets must contain integer indices"
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
