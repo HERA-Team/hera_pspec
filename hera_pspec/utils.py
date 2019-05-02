@@ -36,17 +36,18 @@ def clean_inv_mat(nchan, df, filter_centers, filter_widths, filter_factors):
     """
     if isinstance(filter_centers, float):
         filter_centers = [filter_centers]
-    if isinsance(filter_widths, float):
+    if isinstance(filter_widths, float):
         filter_widths = [filter_widths]
     if isinstance(filter_factors,float):
         filter_factors = [filter_factors]
-    fx, fy = np.meshgrid(range(-nchan/2,nchan/2),range(-nchan/2,nchan/2))
-    tophat_mat = np.identity(igrid.shape[0]).astype(np.complex128)
+    x = range(-int(nchan/2),int(np.ceil(nchan/2)))
+    fx, fy = np.meshgrid(x,x)
+    clean_mat = np.identity(fx.shape[0]).astype(np.complex128)
     for fc, fw, ff in zip(filter_centers, filter_widths, filter_factors):
         if not ff == 0:
-            tophat_mat += np.sinc( 2. * (fx-fy) * df * fw ).astype(np.complex128)\
+            clean_mat += np.sinc( 2. * (fx-fy) * df * fw ).astype(np.complex128)\
                     * np.exp(-2j * np.pi * (fx-fy) * df * fc) / ff
-    return tophat_mat
+    return clean_mat
 
 
 

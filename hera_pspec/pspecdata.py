@@ -779,16 +779,17 @@ class PSpecData(object):
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
 
-        r_params: dictionary with keys specified by (dset, bl) tuples with each key specifying
-                      parameters for the covariance matrix of that dataset/bl. Below we list the
-                      correct parameter format for various models.
-                      'clean':
+        r_params: dictionary with parameters for weighting matrices. Proper fields
+                  and formats depend on the mode of data_weighting.
+                data_weighting == 'clean':
                                 dictionary with fields
-                                'filter_centers', list of floats (or float) specifying the centers of clean windows (in ns).
-                                'filter_widths', list of floats (or float) specifying the width of clean windows (in ns).
+                                'filter_centers', list of floats (or float) specifying the centers of clean windows
+                                                  in units of 1/(channel index)
+                                'filter_widths', list of floats (or float) specifying the width of clean windows
+                                                  in units of 1/(channel index)
                                 'filter_factors', list of floats (or float) specifying how much power within each clean window
                                                   should be suppressed.
-
+                Absence of r_params dictionary will result in identity being used!
 
         Parameters
         ----------
@@ -827,12 +828,18 @@ class PSpecData(object):
                 self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
 
             elif self.data_weighting == 'clean':
+                if r_params is None:
+                    raise_warning("Warnging: no filter params specified for "
+                                    "clean weights! Defaulting to Identity!")
+                    r_params = {'filter_centers':[],
+                                'filter_widths':[],
+                                'filter_factors':[]}
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                utils.clean_inv_mat(nchan = self.N_freqs,
-                                    df = self.channel_width,
-                                    filter_centers = r_params[key]['filter_centers'],
-                                    filter_widths = r_params[key]['filter_widths'],
-                                    filter_factors = r_params[key]['filter_factors'])* sqrtY) * sqrtT
+                utils.clean_inv_mat(nchan = self.spw_Nfreqs,
+                                    df = 1.,
+                                    filter_centers = r_params['filter_centers'],
+                                    filter_widths = r_params['filter_widths'],
+                                    filter_factors = r_params['filter_factors'])* sqrtY) * sqrtT
 
         return self._R[Rkey]
 
@@ -843,7 +850,7 @@ class PSpecData(object):
         Parameters
         ----------
         data_weighting : str
-            Type of data weightings. Options=['identity', 'iC']
+            Type of data weightings. Options=['identity', 'iC', 'clean']
         """
         self.data_weighting = data_weighting
 

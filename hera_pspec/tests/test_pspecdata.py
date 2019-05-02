@@ -240,7 +240,7 @@ class Test_PSpecData(unittest.TestCase):
         print(ds) # print empty psd
         ds.add(self.uvd, None)
         print(ds) # print populated psd
-        
+
 
     def test_get_Q_alt(self):
 
@@ -318,7 +318,7 @@ class Test_PSpecData(unittest.TestCase):
             Q_matrix = self.ds.get_Q_alt(alpha, allow_fft=False)
             Q_diff_norm = np.linalg.norm(Q_matrix - Q_matrix_fft)
             self.assertLessEqual(Q_diff_norm, multiplicative_tolerance)
-        
+
         # Check for error handling
         nt.assert_raises(ValueError, self.ds.set_Ndlys, vect_length+100)
 
@@ -586,10 +586,10 @@ class Test_PSpecData(unittest.TestCase):
                 M, W = self.ds.get_MW(random_G, random_H, mode=mode)
                 self.assertEqual(diagonal_or_not(M), True)
             elif mode == 'L^-1':
-                # Test that Cholesky mode is disabled 
-                nt.assert_raises(NotImplementedError, 
+                # Test that Cholesky mode is disabled
+                nt.assert_raises(NotImplementedError,
                                  self.ds.get_MW, random_G, random_H, mode=mode)
-                
+
             # Test sizes for everyone
             self.assertEqual(M.shape, (n,n))
             self.assertEqual(W.shape, (n,n))
@@ -625,7 +625,7 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         print(cov_analytic)
 
-        for input_data_weight in ['identity','iC']:
+        for input_data_weight in ['identity','iC', 'clean']:
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
                 qc = self.ds.cov_q_hat(key1,key2)
@@ -680,7 +680,7 @@ class Test_PSpecData(unittest.TestCase):
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
 
-        for input_data_weight in ['identity', 'iC']:
+        for input_data_weight in ['identity', 'iC','clean']:
             self.ds.set_weighting(input_data_weight)
 
             # Loop over list of taper functions
@@ -719,7 +719,7 @@ class Test_PSpecData(unittest.TestCase):
 
         self.ds.spw_Ndlys = Nfreq
         # Check that the slow method is the same as the FFT method
-        for input_data_weight in ['identity', 'iC']:
+        for input_data_weight in ['identity', 'iC','clean']:
             self.ds.set_weighting(input_data_weight)
             # Loop over list of taper functions
             for taper in taper_selection:
@@ -743,7 +743,7 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        for input_data_weight in ['identity','iC']:
+        for input_data_weight in ['identity','iC','clean']:
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
@@ -766,7 +766,7 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        for input_data_weight in ['identity','iC']:
+        for input_data_weight in ['identity','iC','clean']:
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
                 self.ds.clear_cache()
@@ -911,14 +911,14 @@ class Test_PSpecData(unittest.TestCase):
         gauss = pspecbeam.PSpecBeamGauss(0.8,
                                   np.linspace(115e6, 130e6, 50, endpoint=False))
         ds2 = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=gauss)
-        
+
         # Check normal execution
         scalar = self.ds.scalar(('xx','xx'))
         scalar = self.ds.scalar(1515) # polpair-integer = ('xx', 'xx')
         scalar = self.ds.scalar(('xx','xx'), taper_override='none')
         scalar = self.ds.scalar(('xx','xx'), beam=gauss)
         nt.assert_raises(NotImplementedError, self.ds.scalar, ('xx','yy'))
-        
+
         # Precomputed results in the following test were done "by hand"
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         # FIXME: Uncomment when pyuvdata support for this is ready
@@ -931,34 +931,34 @@ class Test_PSpecData(unittest.TestCase):
     def test_validate_datasets(self):
         # test freq exception
         uvd = copy.deepcopy(self.d[0])
-        uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10], 
+        uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10],
                           inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
-        
+
         # test time exception
         uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
-        
+
         # test std exception
         ds.dsets_std=ds.dsets_std[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
-        
+
         # test wgt exception
         ds.wgts = ds.wgts[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
-        
+
         # test warnings
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
-        uvd.select(frequencies=np.unique(uvd.freq_array)[:10], 
+        uvd.select(frequencies=np.unique(uvd.freq_array)[:10],
                    times=np.unique(uvd.time_array)[:10])
-        uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], 
+        uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20],
                     times=np.unique(uvd2.time_array)[10:20])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         ds.validate_datasets()
-        
+
         # test phasing
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
@@ -967,15 +967,15 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(ValueError, ds.validate_datasets)
         uvd2.phase_to_time(Time(2458042.5, format='jd'))
         ds.validate_datasets()
-        
+
         # test polarization
         ds.validate_pol((0,1), ('xx', 'xx'))
-        
+
         # test channel widths
         uvd2.channel_width *= 2.
         ds2 = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds2.validate_datasets)
-        
+
 
     def test_rephase_to_dset(self):
         # generate two uvd objects w/ different LST grids
@@ -1080,7 +1080,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_false(ds.check_key_in_dset((24, 26, 'yy'), 0))
         # check exception
         nt.assert_raises(KeyError, ds.check_key_in_dset, (1,2,3,4,5), 0)
-        
+
         # test dset_idx
         nt.assert_raises(TypeError, ds.dset_idx, (1,2))
 
@@ -1456,9 +1456,9 @@ def test_pspec_run():
     # test basic execution
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, 
+    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False,
                                   verbose=False, overwrite=True,
-                                  bl_len_range=(14, 15), bl_deg_range=(50, 70), 
+                                  bl_len_range=(14, 15), bl_deg_range=(50, 70),
                                   psname_ext='_0')
     nt.assert_true(isinstance(psc, container.PSpecContainer))
     nt.assert_equal(psc.groups(), ['dset0_dset1'])
