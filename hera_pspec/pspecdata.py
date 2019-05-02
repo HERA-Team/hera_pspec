@@ -766,7 +766,7 @@ class PSpecData(object):
         """
         for k in d: self._R[k] = d[k]
 
-    def R(self, key, r_params):
+    def R(self, key, r_params = None):
         """
         Return the data-weighting matrix R, which is a product of
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and
