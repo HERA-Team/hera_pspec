@@ -13,26 +13,40 @@ from datetime import datetime
 
 
 
-def wtl(nchan, df, bl_length):
+def clean_inv_mat(nchan, df, filter_centers, filter_widths, filter_factors):
     """
-    Computes way-to-lazy (wtl) weights for a baseline
+    Computes inverse of clean weights for a baseline.
+    This form of weighting is diagonal in delay-space and down-weights tophat regions
     Parameters
     ----------
     nchan: integer
         Number of channels on baseline
     df: float
         channel width (Hz)
-    bl_length: float
-        length of a baseline (nanoseconds)
+    filter_centers: float or list
+        float or list of floats of centers of delay filter windows in nanosec
+    filter_widths: float or list
+        float or list of floats of widths of delay filter windows in nanosec
+    filter_factors: float or list
+        float or list of floats of filtering factors.
     Returns
     ----------
-    cov: (nchan, nchan) lazy-covariance matrix assuming that the delay-space covariance is diagonal and zero outside
+     (nchan, nchan) complex inverse of the tophat filtering matrix assuming that the delay-space covariance is diagonal and zero outside
          of the horizon
     """
-    igrid,jgrid = np.meshgrid(range(-nchan/2,nchan/2),range(-nchan/2,nchan/2))
-    x = 2.*(igrid-jgrid)*df*bl_length
-    output = np.sinc(x)
-
+    if isinstance(filter_centers, float):
+        filter_centers = [filter_centers]
+    if isinsance(filter_widths, float):
+        filter_widths = [filter_widths]
+    if isinstance(filter_factors,float):
+        filter_factors = [filter_factors]
+    fx, fy = np.meshgrid(range(-nchan/2,nchan/2),range(-nchan/2,nchan/2))
+    tophat_mat = np.identity(igrid.shape[0]).astype(np.complex128)
+    for fc, fw, ff in zip(filter_centers, filter_widths, filter_factors):
+        if not ff == 0:
+            tophat_mat += np.sinc( 2. * (fx-fy) * df * fw ).astype(np.complex128)\
+                    * np.exp(-2j * np.pi * (fx-fy) * df * fc) / ff
+    return tophat_mat
 
 
 

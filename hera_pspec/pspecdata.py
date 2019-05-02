@@ -511,7 +511,7 @@ class PSpecData(object):
         self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
 
-    def C_model(self, key, model='empirical'):
+    def C_model(self, key, model='empirical', model_params = None):
         """
         Return a covariance model having specified a key and model type.
 
@@ -523,7 +523,7 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. options=['empirical','wtl','le']
+            Type of covariance model to calculate, if not cached. options=['empirical']
 
         Returns
         -------
@@ -534,7 +534,6 @@ class PSpecData(object):
         assert isinstance(key, tuple), "key must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
         assert model in ['empirical'], "didn't recognize model {}".format(model)
-
         # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
@@ -547,11 +546,6 @@ class PSpecData(object):
             # calculate covariance model
             if model == 'empirical':
                 self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
-            elif model == 'wtl':
-                ind1, ind2, _ = self.dsets[dset]._key2inds(bl)
-                inds = np.hstack([ind1,ind2]).T.astype(int)
-                bl_len = np.linalg.norm(self._dsets[dset].uvw_array[inds,:],axis=1).max()
-                self.set_C({Ckey: utils.wtl(self.spw_Nfreqs, self.channel_width)})
 
         return self._C[Ckey]
 
@@ -578,6 +572,7 @@ class PSpecData(object):
         conj_2 : boolean, optional
             Whether to conjugate second copy of data in covar or not.
             Default: True
+
 
         Returns
         -------
@@ -771,7 +766,7 @@ class PSpecData(object):
         """
         for k in d: self._R[k] = d[k]
 
-    def R(self, key):
+    def R(self, key, r_params):
         """
         Return the data-weighting matrix R, which is a product of
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and
@@ -783,6 +778,17 @@ class PSpecData(object):
         matrix holding flag weights. The K matrix comes from either I or iC
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
+
+        r_params: dictionary with keys specified by (dset, bl) tuples with each key specifying
+                      parameters for the covariance matrix of that dataset/bl. Below we list the
+                      correct parameter format for various models.
+                      'clean':
+                                dictionary with fields
+                                'filter_centers', list of floats (or float) specifying the centers of clean windows (in ns).
+                                'filter_widths', list of floats (or float) specifying the width of clean windows (in ns).
+                                'filter_factors', list of floats (or float) specifying how much power within each clean window
+                                                  should be suppressed.
+
 
         Parameters
         ----------
@@ -819,6 +825,14 @@ class PSpecData(object):
 
             elif self.data_weighting == 'iC':
                 self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
+
+            elif self.data_weighting == 'clean':
+                self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
+                utils.clean_inv_mat(nchan = self.N_freqs,
+                                    df = self.channel_width,
+                                    filter_centers = r_params[key]['filter_centers'],
+                                    filter_widths = r_params[key]['filter_widths'],
+                                    filter_factors = r_params[key]['filter_factors'])* sqrtY) * sqrtT
 
         return self._R[Rkey]
 
@@ -2142,7 +2156,6 @@ class PSpecData(object):
         # set taper and data weighting
         self.set_taper(taper)
         self.set_weighting(input_data_weight)
-        self.set_cov_regularization(cov_regularization)
 
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
