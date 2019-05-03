@@ -1237,6 +1237,9 @@ class Test_PSpecData(unittest.TestCase):
                                 little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
         nt.assert_true(hasattr(uvp, 'cov_array'))
 
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True, cov_method = 'propagated')
+        nt.assert_true(hasattr(uvp, 'cov_array'))
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
                                  beam=self.bm)

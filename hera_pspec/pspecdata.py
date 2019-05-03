@@ -935,7 +935,7 @@ class PSpecData(object):
 
         Returns
         -------
-        cov_q_hat: matrix with covariances between un-normalized band powers
+        cov_q_hat: matrix with covariances between un-normalized band powers (Ntimes, Nfreqs, Nfreqs)
         """
         # type check
         if time_indices is None:
@@ -2096,6 +2096,10 @@ class PSpecData(object):
             channel used to index the `freq_array` of each dataset. The default
             (None) is to use the entire band provided in each dataset.
 
+        cov_method: string, specify whether covariance matrices should be computed
+        empirically ('empircal') from the data or through propagation of error bars provided by
+        std (variance) data sets ('propagate').
+
         baseline_tol : float, optional
             Distance tolerance for notion of baseline "redundancy" in meters.
             Default: 1.0.
@@ -2451,7 +2455,11 @@ class PSpecData(object):
                     # Generate the covariance matrix if error bars provided
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
-                        cov_qv = self.cov_q_hat(key1, key2)
+                        if cov_method == 'empirical':
+                            cov_qv = self.get_unnormed_V(key1, key2)
+                            cov_qv = np.array([cov_qv for m in range(self.Ntimes)])
+                        elif cov_method == 'propagated':
+                            cov_qv = self.cov_q_hat(key1, key2)
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
                             cov_pv *= (scalar * \
