@@ -40,12 +40,12 @@ def clean_inv_mat(nchan, df, filter_centers, filter_widths, filter_factors):
         filter_widths = [filter_widths]
     if isinstance(filter_factors,float):
         filter_factors = [filter_factors]
-    x = range(-int(nchan/2),int(np.ceil(nchan/2)))
+    x = np.arange(-int(nchan/2),int(np.ceil(nchan/2)))
     fx, fy = np.meshgrid(x,x)
     clean_mat = np.identity(fx.shape[0]).astype(np.complex128)
     for fc, fw, ff in zip(filter_centers, filter_widths, filter_factors):
         if not ff == 0:
-            clean_mat += np.sinc( 2. * (fx-fy) * df * fw ).astype(np.complex128)\
+            clean_mat = clean_mat + np.sinc( 2. * (fx-fy) * df * fw ).astype(np.complex128)\
                     * np.exp(-2j * np.pi * (fx-fy) * df * fc) / ff
     return clean_mat
 

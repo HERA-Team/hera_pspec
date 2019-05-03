@@ -661,7 +661,7 @@ class PSpecData(object):
             # FIXME: Is series of dot products quicker?
             self.set_iC({Ckey:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
         return self._iC[Ckey]
-
+    '''
     def RegFactor(self,key):
         """
         Determine ratio between thermal noise covariance and trace empirically
@@ -683,7 +683,7 @@ class PSpecData(object):
                 ctrace = np.trace(self.C_model(key,model='empirical'))
                 self.set_RegFactor({Ckey:rf/ctrace})
         return self._RegFactor[Ckey]
-
+        '''
 
     def Y(self, key):
         """
@@ -740,6 +740,7 @@ class PSpecData(object):
         """
         for k in d: self._iC[k] = d[k]
 
+    '''
     def set_RegFactor(self,d):
         """
         Set the cached regularization factor for covariance matrix of a given dataset
@@ -751,7 +752,7 @@ class PSpecData(object):
             Dictionary containing regularization to insert into regularazation cache
         """
         for k in d: self._RegFactor[k] = d[k]
-
+    '''
     def set_R(self, d):
         """
         Set the data-weighting matrix for a given dataset and baseline to
