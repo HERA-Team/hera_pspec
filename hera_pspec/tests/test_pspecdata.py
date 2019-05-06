@@ -339,9 +339,6 @@ class Test_PSpecData(unittest.TestCase):
         y_vect = np.random.normal(size=vect_length) \
                + 1.j * np.random.normal(size=vect_length)
 
-       #put in test function for analytic comparison 
-        
-
         self.ds.spw_Nfreqs = vect_length
 
         for i in range(vect_length):
@@ -722,6 +719,9 @@ class Test_PSpecData(unittest.TestCase):
                 q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True)
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
+        
+        #Test if error is raised when one tried FFT approach on exact_norm
+        nt.assert_raises(NotImplementedError, self.ds.q_hat, key1, key2, exact_norm=True, allow_fft = True)
 
     def test_get_H(self):
         """
