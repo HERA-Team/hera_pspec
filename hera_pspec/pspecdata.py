@@ -1764,6 +1764,11 @@ class PSpecData(object):
                 Option to override the taper chosen in self.taper (does not
                 overwrite self.taper; just applies to this function).
                 Default: no_override
+        
+        exact_norm : boolean, optional
+                If True, scalar would just be the X2Y term, as the beam and
+                spectral terms are taken into account while constructing
+                Q matrix.
 
         Returns
         -------
@@ -2013,6 +2018,12 @@ class PSpecData(object):
         
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
+
+        exact_norm : bool, optional
+            If True, estimates power spectrum using Q instead of Q_alt 
+            (HERA memo #44). The default options is False. Beware that 
+            turning this True would take ~ 7 sec for computing
+            power spectrum for 100 channels per time sample per baseline.
 
         history : str, optional
             history string to attach to UVPSpec object
