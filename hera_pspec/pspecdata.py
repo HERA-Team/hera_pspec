@@ -1533,8 +1533,7 @@ class PSpecData(object):
         if mode >= self.spw_Ndlys:
             raise IndexError("Cannot compute Q matrix for a mode outside"
                              "of allowed range of delay modes.")
-
-        tau = self.delays()[mode] * 1.0e-9 # delay in seconds
+        tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
         pol = self.spw_pol_i #Get polarization
 
