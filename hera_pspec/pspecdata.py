@@ -19,7 +19,8 @@ import warnings
 
 class PSpecData(object):
 
-    def __init__(self, dsets=[], wgts=[], dsets_std=None, labels=None, beam=None):
+    def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None, 
+                 beam=None):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -33,12 +34,12 @@ class PSpecData(object):
 
         dsets_std: list or dict of UVData objects, optional
             Set of UVData objects containing the standard deviations of each
-            data point in UVData objects in dsets. If specified as a dict, the key names
-            will be used to tag each dataset. Default: Empty list.
+            data point in UVData objects in dsets. If specified as a dict, 
+            the key names will be used to tag each dataset. Default: [].
 
         wgts : list or dict of UVData objects, optional
             Set of UVData objects containing weights for the input data.
-            Default: Empty list.
+            Default: None (will use the flags of each input UVData object).
 
         labels : list of str, optional
             An ordered list of names/labels for each dataset, if dsets was
@@ -63,7 +64,11 @@ class PSpecData(object):
         # and taper to none by default
         self.data_weighting = 'identity'
         self.taper = 'none'
-
+        
+        # Set all weights to None if wgts=None
+        if wgts is None:
+            wgts = [None for dset in dsets]
+        
         # set dsets_std to None if any are None.
         if not dsets_std is None and None in dsets_std:
             dsets_std = None
@@ -88,7 +93,7 @@ class PSpecData(object):
         wgts : UVData or list or dict
             UVData object or list of UVData objects containing weights to add
             to the collection. Must be the same length as dsets. If a weight is
-            set to None, the flags of the corresponding
+            set to None, the flags of the corresponding dset are used. 
 
         labels : list of str
             An ordered list of names/labels for each dataset, if dsets was
@@ -147,9 +152,14 @@ class PSpecData(object):
                             "or lists of UVData")
 
         # Make sure enough weights were specified
-        assert(len(dsets) == len(wgts))
-        assert(len(dsets_std) == len(dsets))
-        if labels is not None: assert(len(dsets) == len(labels))
+        assert len(dsets) == len(wgts), \
+            "The dsets and wgts lists must have equal length"
+        assert len(dsets_std) == len(dsets), \
+            "The dsets and dsets_std lists must have equal length"
+        if labels is not None:
+            assert len(dsets) == len(labels), \
+                "If labels are specified, the dsets and labels lists " \
+                "must have equal length"
 
         # Check that everything is a UVData object
         for d, w, s in zip(dsets, wgts, dsets_std):
@@ -166,7 +176,8 @@ class PSpecData(object):
         if self.labels is None:
             self.labels = []
         if labels is None:
-            labels = ["dset{:d}".format(i) for i in range(len(self.dsets), len(dsets)+len(self.dsets))]
+            labels = ["dset{:d}".format(i) 
+                    for i in range(len(self.dsets), len(dsets)+len(self.dsets))]
         self.labels += labels
 
         # Append to list
@@ -362,7 +373,7 @@ class PSpecData(object):
                 return self.labels.index(dset)
             else:
                 raise KeyError("dset '%s' not found." % dset)
-        elif isinstance(dset, int):
+        elif isinstance(dset, (int, np.integer)):
             return dset
         else:
             raise TypeError("dset must be either an int or string")
@@ -405,7 +416,8 @@ class PSpecData(object):
         # put pol into bl key if it exists
         if len(key) > 0:
             pol = key[0]
-            assert isinstance(pol, (str, int, np.int, np.int32)), "pol must be fed as a str or int"
+            assert isinstance(pol, (str, int, np.integer)), \
+                "pol must be fed as a str or int"
             bl += (key[0],)
 
         return dset_idx, bl
@@ -448,7 +460,7 @@ class PSpecData(object):
         dx : array_like
             Array of std data from the requested UVData dataset and baseline.
         """
-        assert isinstance(key,tuple)
+        assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
         spw = slice(self.spw_range[0], self.spw_range[1])
 
@@ -801,7 +813,7 @@ class PSpecData(object):
         """
         assert isinstance(spw_range, tuple), \
             "spw_range must be fed as a len-2 integer tuple"
-        assert isinstance(spw_range[0], (int, np.int)), \
+        assert isinstance(spw_range[0], (int, np.integer)), \
             "spw_range must be fed as len-2 integer tuple"
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
@@ -1776,7 +1788,7 @@ class PSpecData(object):
                 in h^-3 Mpc^3 or Mpc^3.
         """
         # make sure polarizations are the same
-        if isinstance(polpair, int):
+        if isinstance(polpair, (int, np.integer)):
             polpair = uvputils.polpair_int2tuple(polpair)
         if isinstance(polpair, str):
             polpair = (polpair, polpair)
@@ -1931,8 +1943,9 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None, 
               input_data_weight='identity', norm='I', taper='none', 
-              sampling=False, little_h=True, spw_ranges=None,
-              store_cov=False, exact_norm=False, verbose=True, history=''):
+              sampling=False, little_h=True, spw_ranges=None, 
+              baseline_tol=1.0, store_cov=False, verbose=True,
+              exact_norm=False, history=''):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -1965,11 +1978,12 @@ class PSpecData(object):
             where the first index is for the Left-Hand dataset and second index
             is used for the Right-Hand dataset (see above).
 
-        pols : length-2 tuple of strings or integers, or list of length-2 
-            tuples of strings or integers
+        pols : tuple or list of tuple
             Contains polarization pairs to use in forming power spectra
-            e.g. ('XX','XX') or [('XX','XX'),('pI','pI')] or list of 
-            polarization pairs.
+            e.g. ('XX','XX') or [('XX','XX'),('pI','pI')] or a list of 
+            polarization pairs. Individual strings are also supported, and will 
+            be expanded into a matching pair of polarizations, e.g. 'xx' 
+            becomes ('xx', 'xx'). 
             
             If a primary_beam is specified, only equal-polarization pairs can 
             be cross-correlated, as the beam scalar normalization is only 
@@ -2009,7 +2023,11 @@ class PSpecData(object):
             Each tuple should contain a start (inclusive) and stop (exclusive)
             channel used to index the `freq_array` of each dataset. The default
             (None) is to use the entire band provided in each dataset.
-
+        
+        baseline_tol : float, optional
+            Distance tolerance for notion of baseline "redundancy" in meters. 
+            Default: 1.0.
+        
         store_cov : boolean, optional
             If True, calculate an analytic covariance between bandpowers
             given an input visibility noise model, and store the output
@@ -2090,8 +2108,8 @@ class PSpecData(object):
         assert isinstance(dsets, (list, tuple)), \
             "dsets must be fed as length-2 tuple of integers"
         assert len(dsets) == 2, "len(dsets) must be 2"
-        assert isinstance(dsets[0], (int, np.int)) \
-            and isinstance(dsets[1], (int, np.int)), \
+        assert isinstance(dsets[0], (int, np.integer)) \
+            and isinstance(dsets[1], (int, np.integer)), \
                 "dsets must contain integer indices"
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
@@ -2124,13 +2142,18 @@ class PSpecData(object):
                     [ (bls1[i][j], bls2[i][j]) for j in range(len(bls1[i])) ] )
 
         # validate bl-pair redundancy
-        validate_blpairs(bl_pairs, dset1, dset2, baseline_tol=1.0)
+        validate_blpairs(bl_pairs, dset1, dset2, baseline_tol=baseline_tol)
 
         # configure spectral window selections
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
-        else:
-            assert np.isclose([len(t) for t in spw_ranges], 2).all(), \
+        
+        # convert to list if only a tuple was given
+        if isinstance(spw_ranges, tuple):
+            spw_ranges = [spw_ranges,]
+        
+        # Check that spw_ranges is list of len-2 tuples    
+        assert np.isclose([len(t) for t in spw_ranges], 2).all(), \
                 "spw_ranges must be fed as a list of length-2 tuples"
 
         # if using default setting of number of delay bins equal to number 
@@ -2152,11 +2175,14 @@ class PSpecData(object):
             "Need to specify number of delay bins for each spw"
 
         # setup polarization selection
-        if isinstance(pols, tuple): pols = [pols]
+        if isinstance(pols, (tuple, str)): pols = [pols]
 
         # convert all polarizations to integers if fed as strings
         _pols = []
         for p in pols:
+            if isinstance(p, str):
+                # Convert string to pol-integer pair
+                p = (uvutils.polstr2num(p), uvutils.polstr2num(p))
             if isinstance(p[0], (str, np.str)):
                 p = (uvutils.polstr2num(p[0]), p[1])
             if isinstance(p[1], (str, np.str)):
@@ -3157,7 +3183,8 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     shared = sorted(set(ap1.keys()) & set(ap2.keys()))
     for k in shared:
         assert np.linalg.norm(ap1[k] - ap2[k]) <= baseline_tol, \
-            "uvd1 and uvd2 don't agree on antenna positions within tolerance of {} m".format(baseline_tol)
+            "uvd1 and uvd2 don't agree on antenna positions within " \
+            "tolerance of {} m".format(baseline_tol)
     ap = ap1
     ap.update(ap2)
 
@@ -3170,7 +3197,8 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
             bl1_vec = ap[blp[0][0]] - ap[blp[0][1]]
             bl2_vec = ap[blp[1][0]] - ap[blp[1][1]]
             if np.linalg.norm(bl1_vec - bl2_vec) >= baseline_tol:
-                raise_warning("blpair {} exceeds redundancy tolerance of {} m".format(blp, baseline_tol), verbose=verbose)
+                raise_warning("blpair {} exceeds redundancy tolerance of "
+                              "{} m".format(blp, baseline_tol), verbose=verbose)
 
 
 def raise_warning(warning, verbose=True):
