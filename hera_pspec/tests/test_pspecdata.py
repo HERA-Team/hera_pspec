@@ -325,14 +325,14 @@ class Test_PSpecData(unittest.TestCase):
     def test_get_Q(self):
         """
         Test the Q = dC_ij/dp function.
-        
+
         A general comment here:
         I would really want to do away with try and exception statements. The reason to use them now
         was that current unittests throw in empty datasets to these functions. Given that we are computing
         the actual value of tau/freq/taper etc. we do need datasets! Currently, if there is no dataset,
         Q_matrix is simply an identity matrix with same dimensions as that of vector length.
         It will be very helpful if we can have more elegant solution for this.
-        
+
         """
         vect_length = 50
         x_vect = np.random.normal(size=vect_length) \
@@ -341,7 +341,7 @@ class Test_PSpecData(unittest.TestCase):
                + 1.j * np.random.normal(size=vect_length)
 
         self.ds.spw_Nfreqs = vect_length
-        pol = 'xx' 
+        pol = 'xx'
         #Test if there is a warning if user does not pass the beam
         key1 = (0, 24, 38)
         key2 = (1, 24, 38)
@@ -649,6 +649,7 @@ class Test_PSpecData(unittest.TestCase):
         self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, 200)
         self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, "watch out!")
 
+
     def test_cov_p_hat(self):
         """
         Test cov_p_hat, verify on identity.
@@ -721,6 +722,10 @@ class Test_PSpecData(unittest.TestCase):
         # Check that the slow method is the same as the FFT method
         for input_data_weight in ['identity', 'iC','clean']:
             self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'clean':
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             # Loop over list of taper functions
             for taper in taper_selection:
 
@@ -1053,7 +1058,7 @@ class Test_PSpecData(unittest.TestCase):
         vis_u, norm_u = ds.units()
         nt.assert_equal(vis_u, "UNCALIB")
         nt.assert_equal(norm_u, "Hz str [beam normalization not specified]")
-        ds_b = pspecdata.PSpecData(dsets=[self.uvd, self.uvd], 
+        ds_b = pspecdata.PSpecData(dsets=[self.uvd, self.uvd],
                 wgts=[None, None], beam=self.bm)
         vis_u, norm_u = ds_b.units(little_h=False)
         nt.assert_equal(norm_u,"Mpc^3")
@@ -1104,11 +1109,11 @@ class Test_PSpecData(unittest.TestCase):
         ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=1)
 
         #assert error if baselines are not provided in the right format
-        nt.assert_raises(NotImplementedError, ds.pspec, [[(24,25),(38,39)]],[[(24,25),(38,39)]], 
+        nt.assert_raises(NotImplementedError, ds.pspec, [[(24,25),(38,39)]],[[(24,25),(38,39)]],
                 (0,1),[('xx','xx')])
 
         # compare the output of get_Q function with analytical estimates
-        
+
         ds_Q  = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm_Q)
         bls_Q   = [(24, 25)]
         uvp = ds_Q.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
@@ -1118,7 +1123,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(np.shape(Q_sample), (ds_Q.spw_range[1] - ds_Q.spw_range[0],\
                                              ds_Q.spw_range[1] - ds_Q.spw_range[0])) #Check for the right shape
 
-        estimated_Q = (1.0/(4*np.pi)) * np.ones_like(Q_sample) 
+        estimated_Q = (1.0/(4*np.pi)) * np.ones_like(Q_sample)
 
         nt.assert_true(np.allclose(np.real(estimated_Q), np.real(Q_sample), rtol=1e-05))
 
@@ -1134,7 +1139,7 @@ class Test_PSpecData(unittest.TestCase):
         key         = (spw, blp, 'xx')
         power_real_new  = (np.real(uvp_new.get_data(key)))
         power_real_ext  = (np.real(uvp_ext.get_data(key)))
-        
+
         diff = np.median((power_real_new-power_real_ext)/power_real_ext)
         nt.assert_true((diff <= 0.05))
 

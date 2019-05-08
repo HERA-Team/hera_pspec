@@ -58,6 +58,7 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
+        self.r_params = {}
         self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
@@ -661,29 +662,6 @@ class PSpecData(object):
             # FIXME: Is series of dot products quicker?
             self.set_iC({Ckey:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
         return self._iC[Ckey]
-    '''
-    def RegFactor(self,key):
-        """
-        Determine ratio between thermal noise covariance and trace empirically
-        """
-        assert isinstance(key, tuple)
-        # parse key
-        dset, bl = self.parse_blkey(key)
-        key = (dset,) + (bl,)
-        Ckey = key + (self.cov_regularization,)
-        # Calculate inverse covariance if not in cache
-        if not self._RegFactor.has_key(Ckey):
-            if isinstance(self.cov_regularization,float):
-                self.set_RegFactor({Ckey:self.cov_regularization})
-            if self.cov_regularization == 'empirical':
-                data = self.x(key)
-                wght = np.diagonal(self.Y(key))
-                data = data[wght>0.,:]
-                rf =np.mean(np.mean(np.abs(np.diff(data,axis=0))**2.,axis=1))
-                ctrace = np.trace(self.C_model(key,model='empirical'))
-                self.set_RegFactor({Ckey:rf/ctrace})
-        return self._RegFactor[Ckey]
-        '''
 
     def Y(self, key):
         """
@@ -740,19 +718,6 @@ class PSpecData(object):
         """
         for k in d: self._iC[k] = d[k]
 
-    '''
-    def set_RegFactor(self,d):
-        """
-        Set the cached regularization factor for covariance matrix of a given dataset
-        and baseline to a specified value.
-
-        Parameters
-        ----------
-        d: dict
-            Dictionary containing regularization to insert into regularazation cache
-        """
-        for k in d: self._RegFactor[k] = d[k]
-    '''
     def set_R(self, d):
         """
         Set the data-weighting matrix for a given dataset and baseline to
@@ -767,7 +732,7 @@ class PSpecData(object):
         """
         for k in d: self._R[k] = d[k]
 
-    def R(self, key, r_params = None):
+    def R(self, key):
         """
         Return the data-weighting matrix R, which is a product of
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and
@@ -779,18 +744,6 @@ class PSpecData(object):
         matrix holding flag weights. The K matrix comes from either I or iC
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
-
-        r_params: dictionary with parameters for weighting matrices. Proper fields
-                  and formats depend on the mode of data_weighting.
-                data_weighting == 'clean':
-                                dictionary with fields
-                                'filter_centers', list of floats (or float) specifying the centers of clean windows
-                                                  in units of 1/(channel index)
-                                'filter_widths', list of floats (or float) specifying the width of clean windows
-                                                  in units of 1/(channel index)
-                                'filter_factors', list of floats (or float) specifying how much power within each clean window
-                                                  should be suppressed.
-                Absence of r_params dictionary will result in identity being used!
 
         Parameters
         ----------
@@ -829,15 +782,20 @@ class PSpecData(object):
                 self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
 
             elif self.data_weighting == 'clean':
-                if r_params is None:
+                r_param_key = (self.data_weighting,) + key
+                if not r_param_key in self.r_params:
                     raise_warning("Warnging: no filter params specified for "
                                     "clean weights! Defaulting to Identity!")
                     r_params = {'filter_centers':[],
                                 'filter_widths':[],
                                 'filter_factors':[]}
+                else:
+                    r_params = self.r_params[r_param_key]
+                weights = copy.copy(self.w(key))
+                weights = np.mean(weights,axis=1) #weights are calculated by averaging weights matrix in time.
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
                 utils.clean_inv_mat(nchan = self.spw_Nfreqs,
-                                    df = 1.,
+                                    df = 1., weights = weights,
                                     filter_centers = r_params['filter_centers'],
                                     filter_widths = r_params['filter_widths'],
                                     filter_factors = r_params['filter_factors'])* sqrtY) * sqrtT
@@ -854,6 +812,32 @@ class PSpecData(object):
             Type of data weightings. Options=['identity', 'iC', 'clean']
         """
         self.data_weighting = data_weighting
+
+    def set_r_param(self, key, r_params):
+        """
+        Set the weighting parameters for baseline at (dset,bl, pol)
+
+        Parameters
+        ----------
+        key: tuple (dset, bl, [pol]), where dset is the index of the dataset
+             bl is a 2-tuple
+             pol is an index of polarization of r_matrix.
+
+        r_params: dictionary with parameters for weighting matrix.
+                  Proper fields
+                  and formats depend on the mode of data_weighting.
+                data_weighting == 'clean':
+                                dictionary with fields
+                                'filter_centers', list of floats (or float) specifying the centers of clean windows
+                                                  in units of 1/(channel index)
+                                'filter_widths', list of floats (or float) specifying the width of clean windows
+                                                  in units of 1/(channel index)
+                                'filter_factors', list of floats (or float) specifying how much power within each clean window
+                                                  should be suppressed.
+                Absence of r_params dictionary will result in identity being used!
+        """
+        key = (self.data_weighting,) + key
+        self.r_params[key] = r_params
 
     def set_cov_regularization(self, cov_regularization):
         """
