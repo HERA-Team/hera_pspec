@@ -839,17 +839,6 @@ class PSpecData(object):
         key = (self.data_weighting,) + key
         self.r_params[key] = r_params
 
-    def set_cov_regularization(self, cov_regularization):
-        """
-        Set regularization factor for covariance weights.
-
-        Parameters
-        ----------
-        cov_regularization : float
-            regularization factor for inverted covariance matrices.
-        """
-        self.cov_regularization = cov_regularization
-
     def set_taper(self, taper):
         """
         Set data tapering type.
