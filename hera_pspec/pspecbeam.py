@@ -107,6 +107,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     scalar = 1. / integrate.trapz(d_inv_scalar, x=integration_freqs)
     return scalar
 
+
 class PSpecBeamBase(object):
 
     def __init__(self, cosmo=None):
@@ -429,7 +430,7 @@ class PSpecBeamUV(PSpecBeamBase):
         if uvb.beam_type == 'efield':
             self.primary_beam.efield_to_power(inplace=True)
             self.primary_beam.peak_normalize()
-    
+
     def beam_normalized_response(self, pol='pI', freq=None):
         """
         Evaulates beam response for given polarization and frequencies.
@@ -485,7 +486,7 @@ class PSpecBeamUV(PSpecBeamBase):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency. Uses function
-       in pyuvdata.
+        in pyuvdata.
 
         See Equations 4 and 5 of Moore et al. (2017) ApJ 836, 154
         or arxiv:1502.05072 for details.
@@ -752,3 +753,4 @@ class PSpecBeamFromArray(PSpecBeamBase):
               % (np.min(self.beam_freqs), np.max(self.beam_freqs))
         s += "\tAvailable pols: %s" % (self.available_pols)
         return s
+        

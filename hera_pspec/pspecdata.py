@@ -337,7 +337,7 @@ class PSpecData(object):
         """
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
-            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {} 
+            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -835,7 +835,7 @@ class PSpecData(object):
             if self.spw_Nfreqs < ndlys:
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
-    
+
     def set_pol(self, pol=None):
         """
         Set the polarization, which is used in the get_Q function for extraction 
@@ -918,7 +918,7 @@ class PSpecData(object):
         N2 = np.zeros_like(N1)
         Qalphas = np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[np.newaxis, :, :, :], self.spw_Ndlys, axis=0)
         Qbetas = np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[:, np.newaxis, :, :], self.spw_Ndlys, axis=1)
- 
+
         # Q_alpha/Q_beta are N_dlys x N_dlys x N_freq x N_freq
         # taking advantage of broadcast rules!
         # matmul only applies to the last two dimensions
@@ -1229,8 +1229,8 @@ class PSpecData(object):
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
-            Tuples containing indices of dataset and baselines for the two 
-            input datavectors. If a list of tuples is provided, the baselines 
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
         Returns
@@ -1252,18 +1252,18 @@ class PSpecData(object):
             E_matrices[dly_idx] = np.dot(R1, QR2)
 
         return 0.5 * E_matrices
-    
+
     def get_unnormed_V(self, key1, key2, model='empirical'):
         """
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
-        
+
         .. math ::
             V_ab = 2 tr(C E_a C E_b), where E_a = (1/2) R Q^a R
 
         When the data are complex, the expression becomes considerably more
         complicated. Define
-        
+
         .. math ::
             E^{12,a} = (1/2) R_1 Q^a R_2
             C^1 = <x1 x1^dagger> - <x1><x1^dagger>
@@ -1272,36 +1272,36 @@ class PSpecData(object):
             S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
 
         Then
-        
+
         .. math ::
             V_ab = tr(E^{12,a} C^2 E^{21,b} C^1)
                     + tr(E^{12,a} P^{21} E^{12,b *} S^{21})
 
         Note that
-        
+
         .. math ::
             E^{12,a}_{ij}.conj = E^{21,a}_{ji}
 
-        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by 
-        default. (So while the pointy brackets <...> should in principle be 
+        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by
+        default. (So while the pointy brackets <...> should in principle be
         ensemble averages, in practice the code performs averages in time.)
 
         Empirical covariance estimates are in principle a little risky, as they
         can potentially induce signal loss. This is probably ok if we are just
         looking intending to look at V. It is most dangerous when C_emp^-1 is
         applied to the data. The application of using this to form do a V^-1/2
-        decorrelation is probably medium risk. But this has yet to be proven, 
+        decorrelation is probably medium risk. But this has yet to be proven,
         and results coming from V^-1/2 should be interpreted with caution.
 
-        Note for future: Although the V matrix should be Hermitian by 
-        construction, in practice there are precision issues and the 
-        Hermiticity is violated at ~ 1 part in 10^15. (Which is ~the expected 
-        roundoff error). If something messes up, it may be worth investigating 
+        Note for future: Although the V matrix should be Hermitian by
+        construction, in practice there are precision issues and the
+        Hermiticity is violated at ~ 1 part in 10^15. (Which is ~the expected
+        roundoff error). If something messes up, it may be worth investigating
         this more.
 
         Note for the future: If this ends up too slow, Cholesky tricks can be
         employed to speed up the computation by a factor of a few.
-        
+
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
@@ -1311,7 +1311,7 @@ class PSpecData(object):
 
         model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
-        
+
         Returns
         -------
         V : array_like, complex
@@ -1522,7 +1522,7 @@ class PSpecData(object):
 
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
-    
+
     def get_Q(self, mode):
         '''
         Computed Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha). 
@@ -1733,9 +1733,8 @@ class PSpecData(object):
             raise IndexError("No datasets have been added yet; cannot "
                              "calculate delays.")
         else:
-            return utils.get_delays( 
-                                self.freqs[self.spw_range[0]:self.spw_range[1]],
-                                n_dlys=self.spw_Ndlys) * 1e9 # convert to ns
+            return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
+                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns
 
     def scalar(self, polpair, little_h=True, num_steps=2000, beam=None, 
                taper_override='no_override', exact_norm=False):
@@ -1767,14 +1766,14 @@ class PSpecData(object):
                 Default: 10000
 
         beam : PSpecBeam object
-                Option to use a manually-fed PSpecBeam object instead of using 
+                Option to use a manually-fed PSpecBeam object instead of using
                 self.primary_beam.
 
         taper_override : str, optional
                 Option to override the taper chosen in self.taper (does not
                 overwrite self.taper; just applies to this function).
                 Default: no_override
-        
+
         exact_norm : boolean, optional
                 If True, scalar would just be the X2Y term, as the beam and
                 spectral terms are taken into account while constructing
@@ -1821,7 +1820,7 @@ class PSpecData(object):
                                                num_steps=num_steps, exact_norm=exact_norm)
         return scalar
 
-    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False, 
+    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
         """
         Computes an adjustment factor for the pspec scalar that is needed
@@ -1843,16 +1842,16 @@ class PSpecData(object):
         key1, key2 : tuples or lists of tuples, optional
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
-            in the list will be combined with inverse noise weights. If Gv and 
+            in the list will be combined with inverse noise weights. If Gv and
             Hv are specified, these arguments will be ignored. Default: None.
 
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
-        
+
         Gv, Hv : array_like, optional
-            If specified, use these arrays instead of calling self.get_G() and 
-            self.get_H(). Using precomputed Gv and Hv will speed up this 
+            If specified, use these arrays instead of calling self.get_G() and
+            self.get_H(). Using precomputed Gv and Hv will speed up this
             function significantly. Default: None.
 
         Returns
@@ -1862,7 +1861,7 @@ class PSpecData(object):
         """
         if Gv is None: Gv = self.get_G(key1, key2)
         if Hv is None: Hv = self.get_H(key1, key2, sampling)
-        
+
         # get ratio
         summed_G = np.sum(Gv, axis=1)
         summed_H = np.sum(Hv, axis=1)
@@ -2227,7 +2226,7 @@ class PSpecData(object):
             spw_polpair = []
             spw_cov = []
 
-            d = self.delays()*1e-9
+            d = self.delays() * 1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
             dlys.extend(d)
             dly_spws.extend(np.ones_like(d, np.int16) * i)
@@ -2284,7 +2283,7 @@ class PSpecData(object):
                     scalar = 1.0
                 spw_scalar.append(scalar)
 
-               # Loop over baseline pairs
+                # Loop over baseline pairs
                 for k, blp in enumerate(bl_pairs):
                     # assign keys
                     if isinstance(blp, list):
@@ -2316,9 +2315,9 @@ class PSpecData(object):
 
                     # Build Fisher matrix
                     if input_data_weight == 'identity':
-                        # In this case, all Gv and Hv differ only by flagging 
-                        # pattern, so check if we've already computed this
-                        # First: get flag weighting matrices given key1 + key2
+                        # in this case, all Gv and Hv differ only by flagging pattern
+                        # so check if we've already computed this
+                        # First: get flag weighting matrices given key1 & key2
                         Y = np.vstack([self.Y(key1).diagonal(), 
                                        self.Y(key2).diagonal()])
 
@@ -2326,8 +2325,7 @@ class PSpecData(object):
                         matches = [np.isclose(Y, y).all() 
                                    for y in self._identity_Y.values()]
                         if True in matches:
-                            # This Y exists, so pick appropriate G and H 
-                            # and continue
+                            # This Y exists, so pick appropriate G and H and continue
                             match = list(self._identity_Y.keys())[matches.index(True)]
                             Gv = self._identity_G[match]
                             Hv = self._identity_H[match]
@@ -2349,13 +2347,9 @@ class PSpecData(object):
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, exact_norm=exact_norm) 
-                        
-                    # Multiply by scalar
-                    if self.primary_beam != None:
-                        if verbose: print("  Computing and multiplying scalar...")
-                        qv *= scalar
+                    qv = self.q_hat(key1, key2, exact_norm=exact_norm)
 
+                    # Normalize power spectrum estimate
                     if exact_norm:
                         # The output would be a normalized spectrum, so we 
                         # would skip external normalization
@@ -2365,16 +2359,20 @@ class PSpecData(object):
                         if verbose: print("  Normalizing power spectrum...")
                         if norm == 'V^-1/2':
                             V_mat = self.get_unnormed_V(key1, key2)
-                            Mv, Wv = self.get_MW(Gv, Hv, mode=norm, 
-                                                 band_covar=V_mat)
+                            Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
                         else:
                             Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
                         pv = self.p_hat(Mv, qv)
 
-                        # Wide bin adjustment of scalar, which is only needed 
-                        # for the diagonal norm matrix mode (i.e., norm = 'I')
-                        if norm == 'I':
-                            pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
+                    # Multiply by scalar
+                    if self.primary_beam != None:
+                        if verbose: print("  Computing and multiplying scalar...")
+                        pv *= scalar
+
+                    # Wide bin adjustment of scalar, which is only needed for 
+                    # the diagonal norm matrix mode (i.e., norm = 'I')
+                    if norm == 'I' and not(exact_norm):
+                        pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
 
                     # Generate the covariance matrix if error bars provided
                     if store_cov:
@@ -2414,7 +2412,7 @@ class PSpecData(object):
                     # get integ1
                     blts1 = dset1.antpair2ind(bl1, ordered=False)
                     integ1 = dset1.integration_time[blts1] * nsamp1
-                    
+
                     # get integ2
                     blts2 = dset2.antpair2ind(bl2, ordered=False)
                     integ2 = dset2.integration_time[blts2] * nsamp2
@@ -2543,6 +2541,7 @@ class PSpecData(object):
 
         # run check
         uvp.check()
+
         return uvp
 
 
@@ -3072,7 +3071,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
     # assign group name
     if groupname is None:
         groupname = '_'.join(dset_labels)
-    
+
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
         # check bls lists aren't empty

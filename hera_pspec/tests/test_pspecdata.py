@@ -11,7 +11,6 @@ from hera_cal import redcal
 from scipy.signal import windows
 from scipy.interpolate import interp1d
 from astropy.time import Time
-from scipy import special
 import warnings
 
 # Data files to use in tests
@@ -117,7 +116,7 @@ class Test_PSpecData(unittest.TestCase):
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
         self.bm.filename = 'HERA_NF_dipole_power.beamfits'
-        
+
         #Load isotropic beam file
         beamfile_Q = os.path.join(DATA_PATH, 'isotropic_beam.beamfits')
         self.bm_Q  = pspecbeam.PSpecBeamUV(beamfile_Q)
@@ -321,7 +320,7 @@ class Test_PSpecData(unittest.TestCase):
         
         # Check for error handling
         nt.assert_raises(ValueError, self.ds.set_Ndlys, vect_length+100)
-    
+
     def test_get_Q(self):
         """
         Test the Q = dC_ij/dp function.
@@ -541,7 +540,7 @@ class Test_PSpecData(unittest.TestCase):
         random_V = generate_pos_def_all_pos(n)
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
-        
+
         for mode in ['H^-1', 'V^-1/2', 'I', 'L^-1']:
             if mode == 'H^-1':
                 # Test that if we have full-rank matrices, the resulting window functions
@@ -729,7 +728,7 @@ class Test_PSpecData(unittest.TestCase):
                 q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True)
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
-        
+
         #Test if error is raised when one tried FFT approach on exact_norm
         nt.assert_raises(NotImplementedError, self.ds.q_hat, key1, key2, exact_norm=True, allow_fft = True)
 
@@ -1083,7 +1082,7 @@ class Test_PSpecData(unittest.TestCase):
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
-        ds  = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm, labels=['red', 'blue'])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm, labels=['red', 'blue'])
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
@@ -1124,12 +1123,6 @@ class Test_PSpecData(unittest.TestCase):
         
         diff = np.median((power_real_new-power_real_ext)/power_real_ext)
         nt.assert_true((diff <= 0.05))
-
-        # check basic execution with baseline list
-        bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
-        uvp = ds.pspec(bls, bls, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=False)
-        nt.assert_equal(len(uvp.bl_array), len(bls))
 
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
