@@ -625,7 +625,7 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         print(cov_analytic)
 
-        for input_data_weight in ['identity','iC', 'clean']:
+        for input_data_weight in ['identity','iC', 'sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
                 qc = self.ds.cov_q_hat(key1,key2)
@@ -681,7 +681,7 @@ class Test_PSpecData(unittest.TestCase):
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
 
-        for input_data_weight in ['identity', 'iC','clean']:
+        for input_data_weight in ['identity', 'iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
 
             # Loop over list of taper functions
@@ -720,9 +720,9 @@ class Test_PSpecData(unittest.TestCase):
 
         self.ds.spw_Ndlys = Nfreq
         # Check that the slow method is the same as the FFT method
-        for input_data_weight in ['identity', 'iC','clean']:
+        for input_data_weight in ['identity', 'iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
-            if input_data_weight == 'clean':
+            if input_data_weight == 'sinc_downweight':
                 rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
@@ -748,7 +748,7 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        for input_data_weight in ['identity','iC','clean']:
+        for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
@@ -771,7 +771,7 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        for input_data_weight in ['identity','iC','clean']:
+        for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
             for taper in taper_selection:
                 self.ds.clear_cache()

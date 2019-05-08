@@ -13,7 +13,7 @@ from datetime import datetime
 
 
 
-def clean_inv_mat(nchan, df, weights, filter_centers, filter_widths, filter_factors):
+def sinc_downweight_mat_inv(nchan, df, weights, filter_centers, filter_widths, filter_factors):
     """
     Computes inverse of clean weights for a baseline.
     This form of weighting is diagonal in delay-space and down-weights tophat regions
@@ -44,15 +44,15 @@ def clean_inv_mat(nchan, df, weights, filter_centers, filter_widths, filter_fact
         filter_factors = [filter_factors]
     x = np.arange(-int(nchan/2),int(np.ceil(nchan/2)))
     fx, fy = np.meshgrid(x,x)
-    clean_mat = np.identity(fx.shape[0]).astype(np.complex128)
+    sdwi_mat = np.identity(fx.shape[0]).astype(np.complex128)
     for fc, fw, ff in zip(filter_centers, filter_widths, filter_factors):
         if not ff == 0:
-            clean_mat = clean_mat + np.sinc( 2. * (fx-fy) * df * fw ).astype(np.complex128)\
+            sdwi_mat = sdwi_mat + np.sinc( 2. * (fx-fy) * df * fw ).astype(np.complex128)\
                     * np.exp(-2j * np.pi * (fx-fy) * df * fc) / ff
     #multiply by weights matrix.
     weights_mat = np.outer(weights, weights)
-    clean_mat = clean_mat * weights_mat
-    return clean_mat
+    sdwi_mat = sdwi_mat * weights_mat
+    return sdwi_mat
 
 
 

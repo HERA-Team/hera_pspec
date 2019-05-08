@@ -781,7 +781,7 @@ class PSpecData(object):
             elif self.data_weighting == 'iC':
                 self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
 
-            elif self.data_weighting == 'clean':
+            elif self.data_weighting == 'sinc_downweight':
                 r_param_key = (self.data_weighting,) + key
                 if not r_param_key in self.r_params:
                     raise_warning("Warnging: no filter params specified for "
@@ -794,7 +794,7 @@ class PSpecData(object):
                 weights = copy.copy(self.w(key))
                 weights = np.mean(weights,axis=1) #weights are calculated by averaging weights matrix in time.
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                utils.clean_inv_mat(nchan = self.spw_Nfreqs,
+                utils.sinc_downweight_mat_inv(nchan = self.spw_Nfreqs,
                                     df = 1., weights = weights,
                                     filter_centers = r_params['filter_centers'],
                                     filter_widths = r_params['filter_widths'],
@@ -809,7 +809,7 @@ class PSpecData(object):
         Parameters
         ----------
         data_weighting : str
-            Type of data weightings. Options=['identity', 'iC', 'clean']
+            Type of data weightings. Options=['identity', 'iC', 'sinc_downweight']
         """
         self.data_weighting = data_weighting
 
@@ -826,7 +826,7 @@ class PSpecData(object):
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
-                data_weighting == 'clean':
+                data_weighting == 'sinc_downweight':
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the centers of clean windows
                                                   in units of 1/(channel index)
