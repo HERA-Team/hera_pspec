@@ -342,8 +342,7 @@ class Test_PSpecData(unittest.TestCase):
 
         self.ds.spw_Nfreqs = vect_length
         
-        #####
-        #Trying no beams
+        #Test if there is a warning if user does not pass the beam
         key1 = (0, 24, 38)
         key2 = (1, 24, 38)
         uvd = copy.deepcopy(self.uvd)
@@ -351,7 +350,6 @@ class Test_PSpecData(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             ds_t.get_Q(0)
         assert len(w) > 0
-        #####
 
         for i in range(vect_length):
             try:
@@ -681,7 +679,6 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
-        
 
         for input_data_weight in ['identity', 'iC']:
             self.ds.set_weighting(input_data_weight)
