@@ -12,7 +12,6 @@ import time
 import argparse
 import ast
 import glob
-from numpy import linalg
 import warnings
 
 
