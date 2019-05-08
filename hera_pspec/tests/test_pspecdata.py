@@ -12,6 +12,7 @@ from scipy.signal import windows
 from scipy.interpolate import interp1d
 from astropy.time import Time
 from scipy import special
+import warnings
 
 # Data files to use in tests
 dfiles = [
@@ -117,7 +118,7 @@ class Test_PSpecData(unittest.TestCase):
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
         self.bm.filename = 'HERA_NF_dipole_power.beamfits'
         
-        #Load Gaussian beam file
+        #Load isotropic beam file
         beamfile_Q = os.path.join(DATA_PATH, 'isotropic_beam.beamfits')
         self.bm_Q  = pspecbeam.PSpecBeamUV(beamfile_Q)
         self.bm_Q.filename = 'isotropic_beam.beamfits'
@@ -340,6 +341,17 @@ class Test_PSpecData(unittest.TestCase):
                + 1.j * np.random.normal(size=vect_length)
 
         self.ds.spw_Nfreqs = vect_length
+        
+        #####
+        #Trying no beams
+        key1 = (0, 24, 38)
+        key2 = (1, 24, 38)
+        uvd = copy.deepcopy(self.uvd)
+        ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
+        with warnings.catch_warnings(record=True) as w:
+            ds_t.get_Q(0)
+        assert len(w) > 0
+        #####
 
         for i in range(vect_length):
             try:
@@ -669,6 +681,7 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
+        
 
         for input_data_weight in ['identity', 'iC']:
             self.ds.set_weighting(input_data_weight)
