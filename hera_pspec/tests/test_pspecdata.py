@@ -191,6 +191,7 @@ class Test_PSpecData(unittest.TestCase):
         #test TypeError if dsets is dict but dsets_std is not
         nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,[0])
         nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,{'e':0})
+        nt.assert_raises(TypeError,self.ds.add,{'d':0},[0],None,{'e':0})
 
     def test_labels(self):
         """
@@ -1052,6 +1053,10 @@ class Test_PSpecData(unittest.TestCase):
         vis_u, norm_u = ds.units()
         nt.assert_equal(vis_u, "UNCALIB")
         nt.assert_equal(norm_u, "Hz str [beam normalization not specified]")
+        ds_b = pspecdata.PSpecData(dsets=[self.uvd, self.uvd], 
+                wgts=[None, None], beam=self.bm)
+        vis_u, norm_u = ds_b.units(little_h=False)
+        nt.assert_equal(norm_u,"Mpc^3")
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
@@ -1092,6 +1097,15 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
         nt.assert_equal(uvp.data_array[0].dtype, np.complex128)
         nt.assert_equal(uvp.data_array[0].shape, (240, 64, 1))
+
+        #test for different forms of input parameters
+        ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=(10,20))
+        ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=10, spw_ranges=[(10,20)])
+        ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=1)
+
+        #assert error if baselines are provided in the right format
+        nt.assert_raises(NotImplementedError, ds.pspec, [[(24,25),(38,39)]],[[(24,25),(38,39)]], 
+                (0,1),[('xx','xx')])
 
         # compare the output of get_Q function with analytical estimates
         
