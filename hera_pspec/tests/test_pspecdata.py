@@ -1103,7 +1103,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=10, spw_ranges=[(10,20)])
         ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=1)
 
-        #assert error if baselines are provided in the right format
+        #assert error if baselines are not provided in the right format
         nt.assert_raises(NotImplementedError, ds.pspec, [[(24,25),(38,39)]],[[(24,25),(38,39)]], 
                 (0,1),[('xx','xx')])
 
