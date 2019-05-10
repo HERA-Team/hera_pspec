@@ -56,7 +56,7 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
-        self.spw_pol_i = None
+        self.feed_pol = None
 
         # set data weighting to identity by default
         # and taper to none by default
@@ -847,7 +847,7 @@ class PSpecData(object):
         if isinstance(pol, (str, np.str)):
             pol = (uvutils.polstr2num(pol))
 
-        self.spw_pol_i = pol
+        self.feed_pol = pol
 
     def cov_q_hat(self, key1, key2, time_indices=None):
         """
@@ -1549,7 +1549,7 @@ class PSpecData(object):
                              "of allowed range of delay modes.")
         tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
-        pol = self.spw_pol_i #Get polarization
+        pol = self.feed_pol #Get polarization
 
         try:
             beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(pol, nu) 
