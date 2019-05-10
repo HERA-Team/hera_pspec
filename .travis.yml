@@ -40,7 +40,11 @@ install:
   - conda install -c conda-forge healpy aipy
   - pip install coveralls
   - pip install h5py
-  - pip install scikit-learn
+  - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
+      pip install scikit-learn==0.20.3;
+    else
+      pip install scikit-learn;
+    fi
   - pip install git+https://github.com/HERA-Team/pyuvdata.git$PYUVDATA_VERSION
   - pip install git+https://github.com/HERA-Team/omnical.git
   - pip install git+https://github.com/HERA-Team/linsolve.git
