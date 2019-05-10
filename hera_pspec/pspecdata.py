@@ -1595,37 +1595,77 @@ class PSpecData(object):
             P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov)[:,np.newaxis,:,:]
             S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov)[:,np.newaxis,:,:]
             # (Ntimes, 1, spw_Nfreqs, spw_Nfreqs)
-               
-            E12C21 = np.matmul(E_matrices, C21) 
-            E12P22 = np.matmul(E_matrices, P22) 
-            E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
-            E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
-            E12C22 = np.matmul(E_matrices, C22)
-            E12starS21 = np.matmul(E_matrices.conj(), S21)
-            E12P21 = np.matmul(E_matrices, P21)
-            E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
-            E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
-            E12starS22 = np.matmul(E_matrices.conj(), S22) 
-            # (Ntimes, spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
+            
+            if (C11[0] == C11[-1]).all():
+            # if the covariance matrix is uniform along the time axis
+                E12C21 = np.matmul(E_matrices, C21[0]) 
+                E12P22 = np.matmul(E_matrices, P22[0]) 
+                E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11[0])
+                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11[0])
+                E12C22 = np.matmul(E_matrices, C22[0])
+                E12starS21 = np.matmul(E_matrices.conj(), S21[0])
+                E12P21 = np.matmul(E_matrices, P21[0])
+                E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12[0])
+                E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11[0])
+                E12starS22 = np.matmul(E_matrices.conj(), S22[0]) 
+                # (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
-            # Get q_q, q_qdagger, qdagger_qdagger
-            q_q = np.einsum('abij, acji->abc', E12P22, E21starS11) + np.einsum('abij, acji->abc', E12C21, E12C21)
-            q_qdagger = np.einsum('abij, acji->abc', E12C22, E21C11) + np.einsum('abij, acji->abc', E12P21, E12starS21)
-            qdagger_qdagger = np.einsum('abij, acji->abc', E21C12, E21C12) + np.einsum('abij, acji->abc', E21P11, E12starS22)
-            # (Ntimes, spw_Ndlys, spw_Ndlys)
+                # Get q_q, q_qdagger, qdagger_qdagger
+                q_q = np.einsum('bij, cji->bc', E12P22, E21starS11) + np.einsum('bij, cji->bc', E12C21, E12C21)
+                q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11) + np.einsum('bij, cji->bc', E12P21, E12starS21)
+                qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12) + np.einsum('bij, cji->bc', E21P11, E12starS22)
+                # (spw_Ndlys, spw_Ndlys)
 
-            # Get bandpower covariance 
-            cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
-            cov_q_imag = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
-            cov_p_real = ( np.einsum('ab,cd,ibd->iac', M, M, q_q) +
-                np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) +
-                np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
-                np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-            cov_p_imag = -( np.einsum('ab,cd,ibd->iac', M, M, q_q) -
-                np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) -
-                np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
-                np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-            # (Ntimes, spw_Ndlys, spw_Ndlys)
+                # Get bandpower covariance 
+                cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
+                cov_q_imag = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
+                cov_p_real = ( np.einsum('ab,cd,bd->ac', M, M, q_q) +
+                    np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) +
+                    np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
+                    np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+                cov_p_imag = -( np.einsum('ab,cd,bd->ac', M, M, q_q) -
+                    np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) -
+                    np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
+                    np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+                # (spw_Ndlys, spw_Ndlys)
+
+                cov_q_real = np.repeat(cov_q_real[np.newaxis, :,:], C11.shape[0], axis=0)
+                cov_q_imag = np.repeat(cov_q_imag[np.newaxis, :,:], C11.shape[0], axis=0)
+                cov_p_real = np.repeat(cov_p_real[np.newaxis, :,:], C11.shape[0], axis=0)
+                cov_p_imag = np.repeat(cov_p_imag[np.newaxis, :,:], C11.shape[0], axis=0)
+                # (Ntimes, spw_Ndlys, spw_Ndlys)
+
+            else :
+                E12C21 = np.matmul(E_matrices, C21) 
+                E12P22 = np.matmul(E_matrices, P22) 
+                E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
+                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
+                E12C22 = np.matmul(E_matrices, C22)
+                E12starS21 = np.matmul(E_matrices.conj(), S21)
+                E12P21 = np.matmul(E_matrices, P21)
+                E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
+                E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
+                E12starS22 = np.matmul(E_matrices.conj(), S22) 
+                # (Ntimes, spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
+
+                # Get q_q, q_qdagger, qdagger_qdagger
+                q_q = np.einsum('abij, acji->abc', E12P22, E21starS11) + np.einsum('abij, acji->abc', E12C21, E12C21)
+                q_qdagger = np.einsum('abij, acji->abc', E12C22, E21C11) + np.einsum('abij, acji->abc', E12P21, E12starS21)
+                qdagger_qdagger = np.einsum('abij, acji->abc', E21C12, E21C12) + np.einsum('abij, acji->abc', E21P11, E12starS22)
+                # (Ntimes, spw_Ndlys, spw_Ndlys)
+
+                # Get bandpower covariance 
+                cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
+                cov_q_imag = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
+                cov_p_real = ( np.einsum('ab,cd,ibd->iac', M, M, q_q) +
+                    np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) +
+                    np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
+                    np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+                cov_p_imag = -( np.einsum('ab,cd,ibd->iac', M, M, q_q) -
+                    np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) -
+                    np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
+                    np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+                # (Ntimes, spw_Ndlys, spw_Ndlys)
 
             cov_p_real_list[model] = cov_p_real
             cov_p_imag_list[model] = cov_p_imag
