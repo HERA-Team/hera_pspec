@@ -54,9 +54,9 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
         noise power scalar only differs in that the Bpp_over_BpSq term turns 
         into 1_over_Bp. See Pober et al. 2014, ApJ 782, 66, and Parsons HERA 
         Memo #27. Default: False.
-    exact_norm : boolean
+    exact_norm : boolean, optional
         returns only X2Y for scalar if True, else uses the existing framework
-        involving antenna beam and spectral tapering factors
+        involving antenna beam and spectral tapering factors. Default: False.
 
     Returns
     -------
@@ -176,9 +176,9 @@ class PSpecBeamBase(object):
             The noise power scalar only differs in that the Bpp_over_BpSq term 
             just because 1_over_Bp. See Pober et al. 2014, ApJ 782, 66.
 
-        exact_norm : boolean
+        exact_norm : boolean, optional
             returns only X2Y for scalar if True, else uses the existing framework
-            involving antenna beam and spectral tapering factors
+            involving antenna beam and spectral tapering factors. Default: False. 
 
         Returns
         -------
@@ -433,16 +433,20 @@ class PSpecBeamUV(PSpecBeamBase):
 
     def beam_normalized_response(self, pol='pI', freq=None):
         """
-        Evaulates beam response for given polarization and frequencies.
+        Outputs beam response for given polarization as a function
+        of pixels on the sky and input frequencies.
+        The response needs to be peak normalized, and is read in from 
+        Healpix coordinates.
         Uses interp_freq function from uvbeam for interpolation of beam
-        response over given frequency values
+        response over given frequency values.
 
         Parameters
         ----------
         pol: str, optional
-                Which polarization to compute the beam response for.
-                'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX' 
-                Default: 'pI'
+            Which polarization to compute the beam response for.
+            'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX' 
+            The output shape is (Nfreq, Npixels)
+            Default: 'pI'
 
         Returns
         -------

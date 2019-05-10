@@ -974,9 +974,13 @@ class PSpecData(object):
 
         exact_norm: bool, optional
             If True, beam and spectral window factors are taken 
-            in the computation of power spectrum (dC/dp = Q, and not Q_alt) (HERA memo #44, Eq. 11)
-            In this case, it returns normalized power spectrum, except for X2Y term.
-            If False, Q_alt is used (HERA memo #44, Eq. 16)
+            in the computation of Q_matrix (dC/dp = Q, and not Q_alt) 
+            (HERA memo #44, Eq. 11). Q matrix, for each delay mode, 
+            is weighted by the integral of beam over theta,phi. 
+            Therefore the output power spectra is, by construction, normalized.
+            If True, it returns normalized power spectrum, except for X2Y term.
+            If False, Q_alt is used (HERA memo #44, Eq. 16), and the power 
+            spectrum is normalized separately.
 
         Returns
         -------
@@ -1524,7 +1528,7 @@ class PSpecData(object):
 
     def get_Q(self, mode):
         '''
-        Computed Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha). 
+        Computes Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha). 
         This includes contributions from primary beam.
         
         Parameters
@@ -2251,8 +2255,6 @@ class PSpecData(object):
                 pol_ints = []
                 pol_cov=[]
 
-                self.set_pol(p[0]) # used in get_Q function to specify the correct polarization for the beam
-
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
                     
@@ -2280,6 +2282,8 @@ class PSpecData(object):
                                   "so pspectra are not properly normalized",
                                   verbose=verbose)
                     scalar = 1.0
+
+                self.set_pol(p[0]) # used in get_Q function to specify the correct polarization for the beam
                 spw_scalar.append(scalar)
 
                 # Loop over baseline pairs
