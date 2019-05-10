@@ -917,7 +917,7 @@ class PSpecData(object):
             qc[indnum] = np.trace(np.matmul(Ealphas, np.matmul(N1, np.matmul(Ebetas, N2))), axis1=2, axis2=3)
         return qc/4.
 
-    def q_hat(self, key1, key2, feed_pol, allow_fft=False, exact_norm = False):
+    def q_hat(self, key1, key2, allow_fft=False, exact_norm = False, feed_pol=False):
         """
 
         If exact_norm is False:
@@ -967,9 +967,10 @@ class PSpecData(object):
             If False, Q_alt is used (HERA memo #44, Eq. 16), and the power 
             spectrum is normalized separately.
         
-        feed_pol: str/int
+        feed_pol: str/int/bool, optional
             Used only if exact_norm is True. This argument is passed to get_Q
-            to extract the requested beam polarization.
+            to extract the requested beam polarization. Default is False, in 
+            which case an isotropic beam would be used.
 
         Returns
         -------
@@ -1515,7 +1516,7 @@ class PSpecData(object):
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
 
-    def get_Q(self, mode, feed_pol):
+    def get_Q(self, mode, feed_pol=False):
         '''
         Computes Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha). 
         This includes contributions from primary beam.
@@ -1525,8 +1526,8 @@ class PSpecData(object):
         mode : int
             Central wavenumber (index) of the bandpower, p_alpha.
 
-        feed_pol : str/int
-            Polarization for the beam 
+        feed_pol : str/int/bool, optional
+            Polarization for the beam. If False, isotropic beam would be returned.
 
         Return
         -------
@@ -2342,7 +2343,7 @@ class PSpecData(object):
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, feed_pol, exact_norm=exact_norm)
+                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, feed_pol = feed_pol)
 
                     # Normalize power spectrum estimate
                     if exact_norm:

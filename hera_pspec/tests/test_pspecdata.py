@@ -341,19 +341,19 @@ class Test_PSpecData(unittest.TestCase):
                + 1.j * np.random.normal(size=vect_length)
 
         self.ds.spw_Nfreqs = vect_length
-        
+        pol = 'xx' 
         #Test if there is a warning if user does not pass the beam
         key1 = (0, 24, 38)
         key2 = (1, 24, 38)
         uvd = copy.deepcopy(self.uvd)
         ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
         with warnings.catch_warnings(record=True) as w:
-            ds_t.get_Q(0)
+            ds_t.get_Q(0, pol)
         assert len(w) > 0
 
         for i in range(vect_length):
             try:
-                Q_matrix = self.ds.get_Q(i)
+                Q_matrix = self.ds.get_Q(i, pol)
                 # Test that if the number of delay bins hasn't been set
                 # the code defaults to putting that equal to Nfreqs
                 self.assertEqual(self.ds.spw_Ndlys, self.ds.spw_Nfreqs)
@@ -375,7 +375,7 @@ class Test_PSpecData(unittest.TestCase):
 
         x_vect = np.ones(vect_length)
         try:
-            Q_matrix = self.ds.get_Q(vect_length/2)
+            Q_matrix = self.ds.get_Q(vect_length/2, pol)
         except IndexError:
             Q_matrix = np.ones((vect_length, vect_length))
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
@@ -386,7 +386,7 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.set_Ndlys(vect_length-3)
         for i in range(vect_length-3):
             try:
-                Q_matrix = self.ds.get_Q(i)
+                Q_matrix = self.ds.get_Q(i, pol)
             except IndexError:
                 Q_matrix = np.ones((vect_length,vect_length))
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
@@ -404,7 +404,7 @@ class Test_PSpecData(unittest.TestCase):
 
         x_vect = np.ones(vect_length)
         try:
-            Q_matrix = self.ds.get_Q((vect_length-2)/2-1)
+            Q_matrix = self.ds.get_Q((vect_length-2)/2-1, pol)
         except IndexError:
             Q_matrix = np.ones((vect_length,vect_length))
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
@@ -412,7 +412,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # Make sure that error is raised when asking for a delay mode outside
         # of the range of delay bins
-        nt.assert_raises(IndexError, self.ds.get_Q, vect_length-1)
+        nt.assert_raises(IndexError, self.ds.get_Q, vect_length-1, pol)
 
     def test_get_unnormed_E(self):
         """
@@ -1113,7 +1113,7 @@ class Test_PSpecData(unittest.TestCase):
         bls_Q   = [(24, 25)]
         uvp = ds_Q.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
                                        norm='I', taper='none', verbose=True, exact_norm=False)
-        Q_sample = ds_Q.get_Q((ds_Q.spw_range[1] - ds_Q.spw_range[0])/2) #Get Q matrix for 0th delay mode
+        Q_sample = ds_Q.get_Q((ds_Q.spw_range[1] - ds_Q.spw_range[0])/2, 'xx') #Get Q matrix for 0th delay mode
 
         nt.assert_equal(np.shape(Q_sample), (ds_Q.spw_range[1] - ds_Q.spw_range[0],\
                                              ds_Q.spw_range[1] - ds_Q.spw_range[0])) #Check for the right shape
