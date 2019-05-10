@@ -56,7 +56,6 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
-        self.feed_pol = None
 
         # set data weighting to identity by default
         # and taper to none by default
@@ -835,20 +834,6 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
-    def set_pol(self, pol=None):
-        """
-        Set the polarization, which is used in the get_Q function for extraction 
-        of beam with the specified polarization
-
-        Parameters
-        ----------
-        pol : integer. It converts to the polarization integer if string is provided.
-        """
-        if isinstance(pol, (str, np.str)):
-            pol = (uvutils.polstr2num(pol))
-
-        self.feed_pol = pol
-
     def cov_q_hat(self, key1, key2, time_indices=None):
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
@@ -932,7 +917,7 @@ class PSpecData(object):
             qc[indnum] = np.trace(np.matmul(Ealphas, np.matmul(N1, np.matmul(Ebetas, N2))), axis1=2, axis2=3)
         return qc/4.
 
-    def q_hat(self, key1, key2, allow_fft=False, exact_norm = False):
+    def q_hat(self, key1, key2, feed_pol, allow_fft=False, exact_norm = False):
         """
 
         If exact_norm is False:
@@ -981,6 +966,10 @@ class PSpecData(object):
             If True, it returns normalized power spectrum, except for X2Y term.
             If False, Q_alt is used (HERA memo #44, Eq. 16), and the power 
             spectrum is normalized separately.
+        
+        feed_pol: str/int
+            Used only if exact_norm is True. This argument is passed to get_Q
+            to extract the requested beam polarization.
 
         Returns
         -------
@@ -1024,7 +1013,7 @@ class PSpecData(object):
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau should be part of get_Q. We use it here to 
                 # avoid its repeated computation
-                Q = del_tau * self.get_Q(i)
+                Q = del_tau * self.get_Q(i, feed_pol)
                 Q_matrix_all_delays[i] = Q
                 QRx2 = np.dot(Q, Rx2)
                 
@@ -1526,7 +1515,7 @@ class PSpecData(object):
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
 
-    def get_Q(self, mode):
+    def get_Q(self, mode, feed_pol):
         '''
         Computes Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha). 
         This includes contributions from primary beam.
@@ -1535,6 +1524,9 @@ class PSpecData(object):
         ----------
         mode : int
             Central wavenumber (index) of the bandpower, p_alpha.
+
+        feed_pol : str/int
+            Polarization for the beam 
 
         Return
         -------
@@ -1549,7 +1541,7 @@ class PSpecData(object):
                              "of allowed range of delay modes.")
         tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
-        pol = self.feed_pol #Get polarization
+        pol = feed_pol #Get polarization
 
         try:
             beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(pol, nu) 
@@ -2283,7 +2275,7 @@ class PSpecData(object):
                                   verbose=verbose)
                     scalar = 1.0
 
-                self.set_pol(p[0]) # used in get_Q function to specify the correct polarization for the beam
+                feed_pol = (p[0]) # used in get_Q function to specify the correct polarization for the beam
                 spw_scalar.append(scalar)
 
                 # Loop over baseline pairs
@@ -2350,7 +2342,7 @@ class PSpecData(object):
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, exact_norm=exact_norm)
+                    qv = self.q_hat(key1, key2, feed_pol, exact_norm=exact_norm)
 
                     # Normalize power spectrum estimate
                     if exact_norm:
