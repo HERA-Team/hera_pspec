@@ -6,9 +6,10 @@ import ast
 from collections import OrderedDict as odict
 
 
-def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None):
+def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, component='real'):
     """
-    Calculate the noise power spectrum via Eqn. (21) of Cheng et al. 2018
+    Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
+    component of the power spectrum.
 
     The noise power spectrum is written as 
 
@@ -17,24 +18,21 @@ def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=No
     where scalar is a nomalization given by the cosmological model and beam response, i.e. X2Y * Omega_eff
     Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec], 
     Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the 
-    number of incoherent averages after squaring.
+    number of incoherent averages after squaring. If component is 'real' or 'imag' an additional factor
+    of 1/sqrt(2) is multiplied.
 
     Parameters
     ----------
     scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
-    
     Tsys : float, System temperature in Kelvin
-
     t_int : float, integration time of power spectra in seconds
-
     Ncoherent : int, number of coherent averages of visibility data with integration time t_int
         Total integration time is t_int * Ncoherent
-
     Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
-
     form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
-
     k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
+    component : str, options=['real', 'imag', 'abs']
+        If component is real or imag, divide by an extra factor of sqrt(2)
 
     Returns (P_N)
     -------
@@ -43,6 +41,7 @@ def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=No
     """
     # assert form
     assert form in ('Pk', 'DelSq'), "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
+    assert component in ['abs', 'real', 'imag'], "component must be one of 'real', 'imag', 'abs'"
 
     # convert to mK
     Tsys *= 1e3
@@ -56,6 +55,10 @@ def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=No
     # Mulitply in incoherent averaging
     if Nincoherent is not None:
         P_N /= np.sqrt(Nincoherent)
+
+    # parse component
+    if component in ['real', 'imag']:
+        P_N /= np.sqrt(2)
 
     # Convert to Delta Sq
     if form == 'DelSq':
@@ -160,9 +163,10 @@ class Sensitivity(object):
         self.subband = freqs
         self.pol = pol
 
-    def calc_P_N(self, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None):
+    def calc_P_N(self, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, component='real'):
         """
-        Calculate the noise power spectrum via Eqn. (21) of Cheng et al. 2018
+        Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
+        component of the power spectrum.
 
         The noise power spectrum is written as 
 
@@ -171,22 +175,21 @@ class Sensitivity(object):
         where scalar is a nomalization given by the cosmological model and beam response, i.e. X2Y * Omega_eff
         Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec], 
         Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the 
-        number of incoherent averages after squaring.
+        number of incoherent averages after squaring. If component is 'real' or 'imag' a factor of 1/sqrt(2)
+        is multiplied.
 
         Parameters
         ----------
+        scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
         Tsys : float, System temperature in Kelvin
-
         t_int : float, integration time of power spectra in seconds
-
         Ncoherent : int, number of coherent averages of visibility data with integration time t_int
             Total integration time is t_int * Ncoherent
-
         Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
-
         form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
-
         k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
+        component : str, options=['real', 'imag', 'abs']
+            If component is real or imag, divide by an extra factor of sqrt(2)
 
         Returns (P_N)
         -------
@@ -201,7 +204,7 @@ class Sensitivity(object):
 
         # calculate P_N
         P_N = calc_P_N(self.scalar, Tsys, t_int, Ncoherent=Ncoherent, Nincoherent=Nincoherent, form=form, 
-                       k=k)
+                       k=k, component=component)
 
         return P_N
 

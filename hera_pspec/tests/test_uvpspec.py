@@ -335,24 +335,24 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp)
 
         # test generate noise spectra
-        P_N = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', real=True)
+        P_N = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='real')
         nt.assert_equal(P_N[101102101102].shape, (10, 30))
 
         # test smaller system temp
-        P_N2 = uvp.generate_noise_spectra(0, 1515, 400, form='Pk', real=True)
+        P_N2 = uvp.generate_noise_spectra(0, 1515, 400, form='Pk', component='real')
         nt.assert_true((P_N[101102101102] > P_N2[101102101102]).all())
 
         # test complex
-        P_N2 = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', real=False)
+        P_N2 = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='real')
         nt.assert_true((P_N[101102101102] < P_N2[101102101102]).all())
 
         # test Dsq
-        Dsq = uvp.generate_noise_spectra(0, 1515, 500, form='DelSq', real=True)
+        Dsq = uvp.generate_noise_spectra(0, 1515, 500, form='DelSq', component='real')
         nt.assert_equal(Dsq[101102101102].shape, (10, 30))
         nt.assert_true(Dsq[101102101102][0, 1] < P_N[101102101102][0, 1])
 
         # test a blpair selection
-        P_N = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', real=True)
+        P_N = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='real')
 
     def test_average_spectra(self):
         uvp = copy.deepcopy(self.uvp)

@@ -110,22 +110,15 @@ def test_noise_validation():
 
     # get noise spectra from one of the blpairs
     P_N = list(uvp.generate_noise_spectra(0, ('xx','xx'), Tsys, 
-                                          blpairs=uvp.get_blpairs()[:1], 
-                                          num_steps=2000).values())[0][0, 0]
+                                          blpairs=uvp.get_blpairs()[:1], num_steps=2000,
+                                          component='real').values())[0][0, 0]
 
-    # get P_std of real spectra for each baseline across time axis
-    P_stds = np.array([np.std(uvp.get_data((0, bl, ('xx','xx'))).real, axis=1) 
-                       for bl in uvp.get_blpairs()])
+    # get P_rms of real spectra for each baseline across time axis
+    Pspec = np.array([uvp.get_data((0, bl, ('xx', 'xx'))).real for bl in uvp.get_blpairs()])
+    P_rms = np.sqrt(np.mean(np.abs(Pspec)**2))
 
-    # get average P_std_avg and its standard error
-    P_std_avg = np.mean(P_stds)
-    
     # assert close to P_N: 2%
-    # This should be updated to be within standard error on P_std_avg
+    # This should be updated to be within standard error on P_rms
     # when the spw_range-variable pspec amplitude bug is resolved
-    nt.assert_true(np.abs(P_std_avg - P_N) / P_N < 0.02)
-
-
-
-
+    nt.assert_true(np.abs(P_rms - P_N) / P_N < 0.02)
 
