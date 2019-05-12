@@ -67,7 +67,7 @@ class Test_Sensitivity(unittest.TestCase):
         P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, 
                                   form='Pk')
         nt.assert_true(isinstance(P_N, (float, np.float)))
-        nt.assert_true(np.isclose(P_N, 908472312787.53491))
+        nt.assert_true(np.isclose(P_N, 642386932892.2921))
         # calculate DelSq
         Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, 
                                   Nincoherent=1, form='DelSq')

@@ -20,6 +20,7 @@ def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=No
     Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the 
     number of incoherent averages after squaring. If component is 'real' or 'imag' an additional factor
     of 1/sqrt(2) is multiplied.
+    For an ensemble of power spectra with the same Tsys, this estimate should equal their RMS value.
 
     Parameters
     ----------

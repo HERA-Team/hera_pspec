@@ -343,7 +343,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true((P_N[101102101102] > P_N2[101102101102]).all())
 
         # test complex
-        P_N2 = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='real')
+        P_N2 = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='abs')
         nt.assert_true((P_N[101102101102] < P_N2[101102101102]).all())
 
         # test Dsq
