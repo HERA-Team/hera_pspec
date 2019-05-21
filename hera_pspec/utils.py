@@ -17,6 +17,7 @@ def sinc_downweight_mat_inv(nchan, df, weights, filter_centers, filter_widths, f
     """
     Computes inverse of clean weights for a baseline.
     This form of weighting is diagonal in delay-space and down-weights tophat regions
+
     Parameters
     ----------
     nchan: integer
@@ -24,13 +25,14 @@ def sinc_downweight_mat_inv(nchan, df, weights, filter_centers, filter_widths, f
     df: float
         channel width (Hz)
     weights: array-like (complex or float)
-        nchan array of weights
+        nchan array of weights shape = (Nfreqs,)
     filter_centers: float or list
         float or list of floats of centers of delay filter windows in nanosec
     filter_widths: float or list
         float or list of floats of widths of delay filter windows in nanosec
     filter_factors: float or list
         float or list of floats of filtering factors.
+        
     Returns
     ----------
      (nchan, nchan) complex inverse of the tophat filtering matrix assuming that the delay-space covariance is diagonal and zero outside

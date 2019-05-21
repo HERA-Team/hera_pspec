@@ -339,7 +339,6 @@ class PSpecData(object):
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
             self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
-            self._RegFactor = {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -348,7 +347,7 @@ class PSpecData(object):
                 except(KeyError): pass
                 try: del(self._iC[k])
                 except(KeyError): pass
-                try: del(self._RegFactor[k])
+                try: del(self.r_params[k])
                 except(KeyError): pass
                 try: del(self._Y[k])
                 except(KeyError): pass
@@ -741,7 +740,8 @@ class PSpecData(object):
         R = sqrt(T^t) sqrt(Y^t) K sqrt(Y) sqrt(T)
 
         where T is a diagonal matrix holding the taper and Y is a diagonal
-        matrix holding flag weights. The K matrix comes from either I or iC
+        matrix holding flag weights. The K matrix comes from either `I` or `iC`
+        or a `sinc_downweight`
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
 
@@ -784,8 +784,8 @@ class PSpecData(object):
             elif self.data_weighting == 'sinc_downweight':
                 r_param_key = (self.data_weighting,) + key
                 if not r_param_key in self.r_params:
-                    raise_warning("Warnging: no filter params specified for "
-                                    "clean weights! Defaulting to Identity!")
+                    raise_warning("Warning: no filter params specified for "
+                                    "sinc weights! Defaulting to Identity!")
                     r_params = {'filter_centers':[],
                                 'filter_widths':[],
                                 'filter_factors':[]}
@@ -2429,11 +2429,7 @@ class PSpecData(object):
                     # Generate the covariance matrix if error bars provided
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
-                        if cov_method == 'empirical':
-                            cov_qv = self.get_unnormed_V(key1, key2)
-                            cov_qv = np.array([cov_qv for m in range(self.Ntimes)])
-                        elif cov_method == 'propagated':
-                            cov_qv = self.cov_q_hat(key1, key2)
+                        cov_qv = self.cov_q_hat(key1, key2)
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
                             cov_pv *= (scalar * \
