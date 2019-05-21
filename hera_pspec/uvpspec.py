@@ -1570,7 +1570,7 @@ class UVPSpec(object):
 
     def generate_noise_spectra(self, spw, polpair, Tsys, blpairs=None, 
                                little_h=True, form='Pk', num_steps=2000, 
-                               real=True):
+                               component='real'):
         """
         Generate the expected 1-sigma noise power spectrum given a selection of
         spectral window, system temp., and polarization. This estimate is
@@ -1583,7 +1583,8 @@ class UVPSpec(object):
         calculated from pspecbeam with noise_scalar = True, integration_time is
         in seconds and comes from self.integration_array and Nincoherent is the
         number of incoherent averaging samples and comes from
-        self.nsample_array.
+        self.nsample_array. If component is 'real' or 'imag', P_N is divided by
+        an additional factor of sqrt(2).
 
         If the polarizations specified are pseudo Stokes pol (I, Q, U or V)
         then an extra factor of 2 is divided.
@@ -1626,10 +1627,8 @@ class UVPSpec(object):
             Number of frequency bins to use in integrating power spectrum
             scalar in pspecbeam. Default: 2000.
 
-        real : bool, optional
-            If True assumes the real component of complex power spectrum is
-            used, and will divide P_N by an extra sqrt(2). Otherwise, assume
-            power spectra are complex and keep P_N as is. Default: True.
+        component : str, options=['real', 'imag', 'abs']
+            If component is real or imag, divide by an extra factor of sqrt(2)
 
         Returns
         -------
@@ -1689,14 +1688,11 @@ class UVPSpec(object):
 
                 # Get noise power spectrum
                 pn = noise.calc_P_N(scalar, Tsys, t_int, k=k,
-                                    Nincoherent=n_samp, form=form)
+                                    Nincoherent=n_samp, form=form, component=component)
 
                 # Put into appropriate form
                 if form == 'Pk':
                     pn = np.ones(len(dlys), np.float) * pn
-
-                if real:
-                    pn /= np.sqrt(2) # if real divide by sqrt(2)
 
                 # append to P_blp
                 P_blp.append(pn)
