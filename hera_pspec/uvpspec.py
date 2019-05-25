@@ -1608,8 +1608,9 @@ class UVPSpec(object):
             polpair int. Strings are expanded into polarization pairs, e.g. 
             'XX' becomes ('XX,'XX').
 
-        Tsys : float
-            System temperature in Kelvin.
+        Tsys : dictionary, float or array
+            System temperature in Kelvin for each blpair. Key is blpair-integer,
+            value is Tsys float or ndarray. If fed as an ndarray, shape=(Ntimes,)
 
         blpairs : list
             List of unique blair tuples or i12 integers to calculate noise
@@ -1667,6 +1668,12 @@ class UVPSpec(object):
         # Get delays
         dlys = self.get_dlys(spw)
 
+        # handle Tsys
+        if not isinstance(Tsys, (dict, odict)):
+            if not isinstance(Tsys, np.ndarray):
+                Tsys = np.ones(self.Ntimes) * Tsys
+            Tsys = dict([(blp, Tsys) for blp in blpairs])
+
         # Iterate over blpairs to get P_N
         P_N = odict()
         for i, blp in enumerate(blpairs):
@@ -1687,7 +1694,7 @@ class UVPSpec(object):
                     k = None
 
                 # Get noise power spectrum
-                pn = noise.calc_P_N(scalar, Tsys, t_int, k=k,
+                pn = noise.calc_P_N(scalar, Tsys[blp][j], t_int, k=k,
                                     Nincoherent=n_samp, form=form, component=component)
 
                 # Put into appropriate form

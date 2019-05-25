@@ -334,7 +334,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         if store_cov:
                             bpg_cov.append(cov * w[:, None])
 
-
                 # Take integration-weighted averages, with clipping to deal
                 # with zeros
                 bpg_data = np.sum(bpg_data, axis=0) \

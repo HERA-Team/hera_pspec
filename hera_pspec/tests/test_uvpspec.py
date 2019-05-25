@@ -354,6 +354,8 @@ class Test_UVPSpec(unittest.TestCase):
         # test a blpair selection
         P_N = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='real')
 
+        # test as a dictionary
+
     def test_average_spectra(self):
         uvp = copy.deepcopy(self.uvp)
         # test blpair averaging
