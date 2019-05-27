@@ -1679,7 +1679,7 @@ class UVPSpec(object):
         for i, blp in enumerate(blpairs):
             # get indices
             inds = self.blpair_to_indices(blp)
-
+            assert isinstance(Tsys[blp], (float, np.float, int, np.int)) or Tsys[blp].shape[0] == self.Ntimes, "Tsys must be a float or an ndarray with shape[0] == Ntimes"
             P_blp = []
             # iterate over time axis
             for j, ind in enumerate(inds):
