@@ -14,9 +14,6 @@ import ast
 import glob
 import warnings
 
-SPEED_OF_LIGHT = 299792458.
-
-
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
@@ -58,7 +55,8 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
-        self.r_params = {}
+        self.r_params = {} #r_params is a dictionary that stores parameters for
+                           #parametric R matrices.
         self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
@@ -511,7 +509,7 @@ class PSpecData(object):
         self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
 
-    def C_model(self, key, model='empirical', model_params = None):
+    def C_model(self, key, model='empirical'):
         """
         Return a covariance model having specified a key and model type.
 
@@ -524,6 +522,7 @@ class PSpecData(object):
 
         model : string, optional
             Type of covariance model to calculate, if not cached. options=['empirical']
+
 
         Returns
         -------
@@ -815,27 +814,28 @@ class PSpecData(object):
 
     def set_r_param(self, key, r_params):
         """
-        Set the weighting parameters for baseline at (dset,bl, pol)
+        Set the weighting parameters for baseline at (dset,bl, [pol])
 
         Parameters
         ----------
         key: tuple (dset, bl, [pol]), where dset is the index of the dataset
              bl is a 2-tuple
-             pol is an index of polarization of r_matrix.
+             pol is a float or string specifying polarization
 
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
                 data_weighting == 'sinc_downweight':
                                 dictionary with fields
-                                'filter_centers', list of floats (or float) specifying the centers of clean windows
-                                                  in units of 1/(channel index)
-                                'filter_widths', list of floats (or float) specifying the width of clean windows
-                                                  in units of 1/(channel index)
-                                'filter_factors', list of floats (or float) specifying how much power within each clean window
-                                                  should be suppressed.
+                                'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+                                                  at which to center filtering windows. Can specify fractional channel number.
+                                'filter_widths', list of floats (or float) specifying the width of each
+                                                 filter window in (delay) channel numbers. Can specify fractional channel number.
+                                'filter_factors', list of floats (or float) specifying how much power within each filter window
+                                                  is to be suppressed.
                 Absence of r_params dictionary will result in identity being used!
         """
+        key = self.parse_blkey(key)
         key = (self.data_weighting,) + key
         self.r_params[key] = r_params
 
@@ -2069,10 +2069,6 @@ class PSpecData(object):
             Each tuple should contain a start (inclusive) and stop (exclusive)
             channel used to index the `freq_array` of each dataset. The default
             (None) is to use the entire band provided in each dataset.
-
-        cov_method: string, specify whether covariance matrices should be computed
-        empirically ('empircal') from the data or through propagation of error bars provided by
-        std (variance) data sets ('propagate').
 
         baseline_tol : float, optional
             Distance tolerance for notion of baseline "redundancy" in meters.
