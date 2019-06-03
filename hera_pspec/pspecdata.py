@@ -917,7 +917,7 @@ class PSpecData(object):
             qc[indnum] = np.trace(np.matmul(Ealphas, np.matmul(N1, np.matmul(Ebetas, N2))), axis1=2, axis2=3)
         return qc/4.
 
-    def q_hat(self, key1, key2, allow_fft=False, exact_norm = False, feed_pol=False):
+    def q_hat(self, key1, key2, allow_fft=False, exact_norm = False, pol=False):
         """
 
         If exact_norm is False:
@@ -967,7 +967,7 @@ class PSpecData(object):
             If False, Q_alt is used (HERA memo #44, Eq. 16), and the power 
             spectrum is normalized separately.
         
-        feed_pol: str/int/bool, optional
+        pol: str/int/bool, optional
             Used only if exact_norm is True. This argument is passed to get_Q
             to extract the requested beam polarization. Default is the first
             polarization passed to pspec.
@@ -1014,7 +1014,7 @@ class PSpecData(object):
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau should be part of get_Q. We use it here to 
                 # avoid its repeated computation
-                Q = del_tau * self.get_Q(i, feed_pol)
+                Q = del_tau * self.get_Q(i, pol)
                 Q_matrix_all_delays[i] = Q
                 QRx2 = np.dot(Q, Rx2)
                 
@@ -1516,7 +1516,7 @@ class PSpecData(object):
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
 
-    def get_Q(self, mode, feed_pol=False):
+    def get_Q(self, mode, pol=False):
         '''
         Computes Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha). 
         This includes contributions from primary beam.
@@ -1526,7 +1526,7 @@ class PSpecData(object):
         mode : int
             Central wavenumber (index) of the bandpower, p_alpha.
 
-        feed_pol : str/int/bool, optional
+        pol : str/int/bool, optional
             Polarization for the beam. In case the polarization is not found, 
             isotropic beam would be returned.
 
@@ -1543,7 +1543,6 @@ class PSpecData(object):
                              "of allowed range of delay modes.")
         tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
-        pol = feed_pol #Get polarization
 
         try:
             beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(pol, nu) 
@@ -2277,7 +2276,7 @@ class PSpecData(object):
                                   verbose=verbose)
                     scalar = 1.0
 
-                feed_pol = (p[0]) # used in get_Q function to specify the correct polarization for the beam
+                pol = (p[0]) # used in get_Q function to specify the correct polarization for the beam
                 spw_scalar.append(scalar)
 
                 # Loop over baseline pairs
@@ -2344,7 +2343,7 @@ class PSpecData(object):
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, feed_pol = feed_pol)
+                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol = pol)
 
                     # Normalize power spectrum estimate
                     if exact_norm:
