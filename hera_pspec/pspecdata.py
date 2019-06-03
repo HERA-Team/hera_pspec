@@ -969,8 +969,8 @@ class PSpecData(object):
         
         feed_pol: str/int/bool, optional
             Used only if exact_norm is True. This argument is passed to get_Q
-            to extract the requested beam polarization. Default is False, in 
-            which case an isotropic beam would be used.
+            to extract the requested beam polarization. Default is the first
+            polarization passed to pspec.
 
         Returns
         -------
@@ -1527,7 +1527,8 @@ class PSpecData(object):
             Central wavenumber (index) of the bandpower, p_alpha.
 
         feed_pol : str/int/bool, optional
-            Polarization for the beam. If False, isotropic beam would be returned.
+            Polarization for the beam. In case the polarization is not found, 
+            isotropic beam would be returned.
 
         Return
         -------
