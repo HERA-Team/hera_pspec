@@ -335,24 +335,33 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp)
 
         # test generate noise spectra
-        P_N = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='real')
+        polpair = ('xx', 'xx')
+        P_N = uvp.generate_noise_spectra(0, polpair, 500, form='Pk', component='real')
         nt.assert_equal(P_N[101102101102].shape, (10, 30))
 
         # test smaller system temp
-        P_N2 = uvp.generate_noise_spectra(0, 1515, 400, form='Pk', component='real')
+        P_N2 = uvp.generate_noise_spectra(0, polpair, 400, form='Pk', component='real')
         nt.assert_true((P_N[101102101102] > P_N2[101102101102]).all())
 
         # test complex
-        P_N2 = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='abs')
+        P_N2 = uvp.generate_noise_spectra(0, polpair, 500, form='Pk', component='abs')
         nt.assert_true((P_N[101102101102] < P_N2[101102101102]).all())
 
         # test Dsq
-        Dsq = uvp.generate_noise_spectra(0, 1515, 500, form='DelSq', component='real')
+        Dsq = uvp.generate_noise_spectra(0, polpair, 500, form='DelSq', component='real')
         nt.assert_equal(Dsq[101102101102].shape, (10, 30))
         nt.assert_true(Dsq[101102101102][0, 1] < P_N[101102101102][0, 1])
 
-        # test a blpair selection
-        P_N = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', component='real')
+        # test a blpair selection and int polpair
+        blpairs = uvp.get_blpairs()[:1]
+        P_N = uvp.generate_noise_spectra(0, 1515, 500, form='Pk', blpairs=blpairs, component='real')
+        nt.assert_equal(P_N[101102101102].shape, (10, 30))
+
+        # test as a dictionary of arrays
+        Tsys = dict([(uvp.antnums_to_blpair(k), 500 * np.ones((uvp.Ntimes, uvp.Ndlys)) * np.linspace(1, 2, uvp.Ntimes)[:, None]) for k in uvp.get_blpairs()])
+        P_N = uvp.generate_noise_spectra(0, 1515, Tsys, form='Pk', blpairs=blpairs, component='real')
+        # assert time gradient is captured: 2 * Tsys results in 4 * P_N
+        nt.assert_true(np.isclose(P_N[101102101102][0, 0] * 4, P_N[101102101102][-1, 0]))
 
     def test_average_spectra(self):
         uvp = copy.deepcopy(self.uvp)

@@ -1572,8 +1572,8 @@ class UVPSpec(object):
                                little_h=True, form='Pk', num_steps=2000, 
                                component='real'):
         """
-        Generate the expected 1-sigma noise power spectrum given a selection of
-        spectral window, system temp., and polarization. This estimate is
+        Generate the expected RMS noise power spectrum given a selection of
+        spectral window, system temp. [K], and polarization. This estimate is
         constructed as:
 
         P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
@@ -1588,7 +1588,7 @@ class UVPSpec(object):
 
         If the polarizations specified are pseudo Stokes pol (I, Q, U or V)
         then an extra factor of 2 is divided.
-        If form == 'DelSq' then a factor of k^3 / (2pi^2) is multiplied.
+        If form == 'DelSq' then a factor of |k|^3 / (2pi^2) is multiplied.
         If real is True, a factor of sqrt(2) is divided to account for
         discarding imaginary noise component.
 
@@ -1608,8 +1608,9 @@ class UVPSpec(object):
             polpair int. Strings are expanded into polarization pairs, e.g. 
             'XX' becomes ('XX,'XX').
 
-        Tsys : float
-            System temperature in Kelvin.
+        Tsys : dictionary, float or array
+            System temperature in Kelvin for each blpair. Key is blpair-integer,
+            value is Tsys float or ndarray. If fed as an ndarray, shape=(Ntimes,)
 
         blpairs : list
             List of unique blair tuples or i12 integers to calculate noise
@@ -1667,12 +1668,18 @@ class UVPSpec(object):
         # Get delays
         dlys = self.get_dlys(spw)
 
+        # handle Tsys
+        if not isinstance(Tsys, (dict, odict)):
+            if not isinstance(Tsys, np.ndarray):
+                Tsys = np.ones(self.Ntimes) * Tsys
+            Tsys = dict([(blp, Tsys) for blp in blpairs])
+
         # Iterate over blpairs to get P_N
         P_N = odict()
         for i, blp in enumerate(blpairs):
             # get indices
             inds = self.blpair_to_indices(blp)
-
+            assert isinstance(Tsys[blp], (float, np.float, int, np.int)) or Tsys[blp].shape[0] == self.Ntimes, "Tsys must be a float or an ndarray with shape[0] == Ntimes"
             P_blp = []
             # iterate over time axis
             for j, ind in enumerate(inds):
@@ -1687,7 +1694,7 @@ class UVPSpec(object):
                     k = None
 
                 # Get noise power spectrum
-                pn = noise.calc_P_N(scalar, Tsys, t_int, k=k,
+                pn = noise.calc_P_N(scalar, Tsys[blp][j], t_int, k=k,
                                     Nincoherent=n_samp, form=form, component=component)
 
                 # Put into appropriate form

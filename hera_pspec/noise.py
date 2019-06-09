@@ -44,11 +44,8 @@ def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=No
     assert form in ('Pk', 'DelSq'), "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
     assert component in ['abs', 'real', 'imag'], "component must be one of 'real', 'imag', 'abs'"
 
-    # convert to mK
-    Tsys *= 1e3
-
-    # construct prefactor
-    P_N = scalar * Tsys**2
+    # construct prefactor in mK^2
+    P_N = scalar * (Tsys * 1e3)**2
 
     # Multiply in effective integration time
     P_N /= (t_int * Ncoherent)
