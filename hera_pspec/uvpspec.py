@@ -1572,8 +1572,8 @@ class UVPSpec(object):
                                little_h=True, form='Pk', num_steps=2000, 
                                component='real'):
         """
-        Generate the expected 1-sigma noise power spectrum given a selection of
-        spectral window, system temp., and polarization. This estimate is
+        Generate the expected RMS noise power spectrum given a selection of
+        spectral window, system temp. [K], and polarization. This estimate is
         constructed as:
 
         P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
@@ -1588,7 +1588,7 @@ class UVPSpec(object):
 
         If the polarizations specified are pseudo Stokes pol (I, Q, U or V)
         then an extra factor of 2 is divided.
-        If form == 'DelSq' then a factor of k^3 / (2pi^2) is multiplied.
+        If form == 'DelSq' then a factor of |k|^3 / (2pi^2) is multiplied.
         If real is True, a factor of sqrt(2) is divided to account for
         discarding imaginary noise component.
 
