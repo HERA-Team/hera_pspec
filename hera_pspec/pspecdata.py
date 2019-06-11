@@ -783,11 +783,11 @@ class PSpecData(object):
             elif self.data_weighting == 'sinc_downweight':
                 r_param_key = (self.data_weighting,) + key
                 if not r_param_key in self.r_params:
-                    raise_warning("Warning: no filter params specified for "
-                                    "sinc weights! Defaulting to Identity!")
-                    r_params = {'filter_centers':[],
-                                'filter_widths':[],
-                                'filter_factors':[]}
+                    raise ValueError("Error: no filter params specified for "
+                                    "sinc weights! ")#Defaulting to Identity!")
+                    #r_params = {'filter_centers':[],
+                    #            'filter_widths':[],
+                    #            'filter_factors':[]}
                 else:
                     r_params = self.r_params[r_param_key]
                 weights = copy.copy(self.w(key))

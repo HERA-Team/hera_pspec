@@ -625,8 +625,14 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         print(cov_analytic)
 
-        for input_data_weight in ['identity','iC', 'sinc_downweight']:
+        for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
+            #check error raised
+            if input_data_weight == 'sinc_downweight':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 qc = self.ds.cov_q_hat(key1,key2)
                 self.assertTrue(np.allclose(np.array(list(qc.shape)),
@@ -683,7 +689,11 @@ class Test_PSpecData(unittest.TestCase):
 
         for input_data_weight in ['identity', 'iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
-
+            if input_data_weight == 'sinc_downweight':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             # Loop over list of taper functions
             for taper in taper_selection:
                 self.ds.set_taper(taper)
@@ -722,10 +732,11 @@ class Test_PSpecData(unittest.TestCase):
         # Check that the slow method is the same as the FFT method
         for input_data_weight in ['identity', 'iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
-            if input_data_weight == 'sinc_downweight':
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
-                self.ds.set_r_param(key1,rpk)
-                self.ds.set_r_param(key2,rpk)
+            #nt.assert_raises(ValueError,self.ds.R, key1)
+            #if input_data_weight == 'sinc_downweight':
+            #    rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+            #    self.ds.set_r_param(key1,rpk)
+            #    self.ds.set_r_param(key2,rpk)
             # Loop over list of taper functions
             for taper in taper_selection:
 
@@ -750,6 +761,11 @@ class Test_PSpecData(unittest.TestCase):
 
         for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'sinc_downweight':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
 
@@ -773,6 +789,11 @@ class Test_PSpecData(unittest.TestCase):
 
         for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'sinc_downweight':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.clear_cache()
                 self.ds.set_taper(taper)
