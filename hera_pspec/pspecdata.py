@@ -790,11 +790,11 @@ class PSpecData(object):
                     #            'filter_factors':[]}
                 else:
                     r_params = self.r_params[r_param_key]
-                weights = copy.copy(self.w(key))
-                weights = np.mean(weights,axis=1) #weights are calculated by averaging weights matrix in time.
+                #weights = copy.copy(self.w(key))
+                #weights = np.mean(weights,axis=1) #weights are calculated by averaging weights matrix in time.
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
                 utils.sinc_downweight_mat_inv(nchan = self.spw_Nfreqs,
-                                    df = 1., weights = weights,
+                                    df = 1.,
                                     filter_centers = r_params['filter_centers'],
                                     filter_widths = r_params['filter_widths'],
                                     filter_factors = r_params['filter_factors'])* sqrtY) * sqrtT
