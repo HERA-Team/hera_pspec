@@ -1527,8 +1527,9 @@ class PSpecData(object):
             Central wavenumber (index) of the bandpower, p_alpha.
 
         pol : str/int/bool, optional
-            Polarization for the beam. In case the polarization is not found, 
-            isotropic beam would be returned.
+            Which beam polarization to use. If the specified polarization doesn't exist, 
+            a uniform isotropic beam (with integral 4pi for all frequencies) is assumed. 
+            Default: False (uniform beam).
 
         Return
         -------
