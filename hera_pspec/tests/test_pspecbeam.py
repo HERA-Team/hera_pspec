@@ -259,3 +259,38 @@ class Test_DataSet(unittest.TestCase):
         nt.assert_raises(NotImplementedError, beam.get_Omegas, [('pI','pQ'),])
 
 
+    def test_beam_normalized_response(self):
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+        beam     = pspecbeam.PSpecBeamUV(beamfile)
+        freq     = np.linspace(130.0*1e6, 140.0*1e6, 10)
+        nside    = beam.primary_beam.nside #uvbeam object
+        beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol='xx', freq=freq)
+        
+        #tests for dimensions
+        nt.assert_equal(len(beam_res[1]), len(freq)) 
+        nt.assert_equal(beam_res[0].ndim, 2) 
+        nt.assert_equal(np.shape(beam_res[0]), (len(freq), (12*nside**2)))
+        
+        #tests for polarization
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam, pol='ll', freq=freq) 
+
+        #test if it is a power beam
+        efield_beamfile = os.path.join(DATA_PATH, "HERA_NF_efield.beamfits")
+        beam_efield     = pspecbeam.PSpecBeamUV(efield_beamfile)
+        beam_efield.primary_beam.beam_type='voltage'
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq) 
+
+        #test for right axes
+        beam_efield.primary_beam.beam_type='power'
+        beam_efield.primary_beam.Naxes_vec=2
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq) 
+
+        #test for peak normalization
+        beam_efield.primary_beam.Naxes_vec=1
+        beam_efield.primary_beam._data_normalization.value = 'area'
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq) 
+
+        #test for the coordinate system
+        beam_efield.primary_beam._data_normalization.value = 'peak'
+        beam_efield.primary_beam.pixel_coordinate_system = 'cartesian'
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq) 
