@@ -186,7 +186,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     if blpair_groups is not None:
 
         # Enforce shape of blpair_groups
-        assert isinstance(blpair_groups[0], list), \
+        assert isinstance(blpair_groups[0], (list, np.ndarray)), \
               "blpair_groups must be fed as a list of baseline-pair lists. " \
               "See docstring."
 
