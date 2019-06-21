@@ -13,6 +13,7 @@ import argparse
 import ast
 import glob
 import warnings
+import uvtools.dspec as dspec
 
 class PSpecData(object):
 
@@ -793,7 +794,7 @@ class PSpecData(object):
                 #weights = copy.copy(self.w(key))
                 #weights = np.mean(weights,axis=1) #weights are calculated by averaging weights matrix in time.
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                utils.sinc_downweight_mat_inv(nchan = self.spw_Nfreqs,
+                dspec.sinc_downweight_mat_inv(nchan = self.spw_Nfreqs,
                                     df = 1.,
                                     filter_centers = r_params['filter_centers'],
                                     filter_widths = r_params['filter_widths'],

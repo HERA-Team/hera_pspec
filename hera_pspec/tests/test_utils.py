@@ -328,19 +328,6 @@ def test_get_blvec_reds():
      red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=1.0, match_bl_lens=True)
     nt.assert_equal(len(red_bl_grp), 1)
 
-def test_sinc_downweight_mat_inv():
-    cmat = utils.sinc_downweight_mat_inv(32, 100e3, filter_centers = [], filter_widths = [], filter_factors = [])
-    #verify that the inverse cleaning matrix without cleaning windows is the identity!
-    np.testing.assert_array_equal(cmat, np.identity(32).astype(np.complex128))
-    #next, test with a single filter window with list and float arguments supplied
-    cmat1 = utils.sinc_downweight_mat_inv(32, 100e3, filter_centers = 0., filter_widths = 100e-9, filter_factors = 1e-9)
-    cmat2 = utils.sinc_downweight_mat_inv(32, 100e3, filter_centers = [0.], filter_widths = [100e-9], filter_factors = [1e-9])
-    x,y = np.meshgrid(np.arange(-16,16), np.arange(-16,16))
-    cmata = np.identity(32).astype(np.complex128) + 1e9 * np.sinc( (x-y) * 100e3 * 200e-9 ).astype(np.complex128)
-    np.testing.assert_array_equal(cmat1, cmat2)
-    #next test that the array is equal to what we expect
-    np.testing.assert_almost_equal(cmat1, cmata)
-
 def test_job_monitor():
     # open empty files
     datafiles = ["./{}".format(i) for i in ['a', 'b', 'c', 'd']]

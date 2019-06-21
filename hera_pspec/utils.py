@@ -11,49 +11,6 @@ from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
 
-
-
-def sinc_downweight_mat_inv(nchan, df, filter_centers, filter_widths, filter_factors):
-    """
-    Computes inverse of clean weights for a baseline.
-    This form of weighting is diagonal in delay-space and down-weights tophat regions
-
-    Parameters
-    ----------
-    nchan: integer
-        Number of channels on baseline
-    df: float
-        channel width (Hz)
-    filter_centers: float or list
-        float or list of floats of centers of delay filter windows in nanosec
-    filter_widths: float or list
-        float or list of floats of widths of delay filter windows in nanosec
-    filter_factors: float or list
-        float or list of floats of filtering factors.
-
-    Returns
-    ----------
-     (nchan, nchan) complex inverse of the tophat filtering matrix assuming that the delay-space covariance is diagonal and zero outside
-         of the horizon
-    """
-    if isinstance(filter_centers, float):
-        filter_centers = [filter_centers]
-    if isinstance(filter_widths, float):
-        filter_widths = [filter_widths]
-    if isinstance(filter_factors,float):
-        filter_factors = [filter_factors]
-    x = np.arange(-int(nchan/2),int(np.ceil(nchan/2)))
-    fx, fy = np.meshgrid(x,x)
-    sdwi_mat = np.identity(fx.shape[0]).astype(np.complex128)
-    for fc, fw, ff in zip(filter_centers, filter_widths, filter_factors):
-        if not ff == 0:
-            sdwi_mat = sdwi_mat + np.sinc( 2. * (fx-fy) * df * fw ).astype(np.complex128)\
-                    * np.exp(-2j * np.pi * (fx-fy) * df * fc) / ff
-    #multiply by weights matrix.
-    return sdwi_mat
-
-
-
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size
