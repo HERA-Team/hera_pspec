@@ -154,10 +154,6 @@ class UVPSpec(object):
         self.get_red_bls.__func__.__doc__ = uvputils._get_red_bls.__doc__
         self.get_red_blpairs.__func__.__doc__ = uvputils._get_red_blpairs.__doc__
     
-    
-    def get_red_blpairs(self, bl_len_tol=1., bl_ang_tol=1.):
-        return uvputils._get_red_blpairs(self, bl_len_tol=bl_len_tol, 
-                                         bl_ang_tol=bl_ang_tol)
 
     def get_cov(self, key, omit_flags=False):
         """
