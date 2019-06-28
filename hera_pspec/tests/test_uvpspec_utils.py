@@ -98,7 +98,7 @@ def test_select_common():
 
 def test_get_blpairs_from_bls():
     """
-    Test conversion of 
+    Test conversion of bls to set of blpairs.
     """
     # setup uvp
     beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
@@ -109,7 +109,55 @@ def test_get_blpairs_from_bls():
     blps = uvputils._get_blpairs_from_bls(uvp, bls=101102)
     blps = uvputils._get_blpairs_from_bls(uvp, bls=(101,102))
     blps = uvputils._get_blpairs_from_bls(uvp, bls=[101102, 101103])
+
+
+def test_get_red_bls():
+    """
+    Test retrieval of redundant baseline groups.
+    """
+    # Setup uvp
+    beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+    beam = pspecbeam.PSpecBeamUV(beamfile)
+    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
     
+    # Get redundant baseline groups
+    bls, lens, angs = uvp.get_red_bls()
+    
+    nt.assert_equal(len(bls), 3) # three red grps in this file
+    nt.assert_equal(len(bls), len(lens)) # Should be one length for each group
+    nt.assert_equal(len(bls), len(angs)) # Ditto, for angles
+    
+    # Check that number of grouped baselines = total no. of baselines
+    num_bls = 0
+    for grp in bls:
+        for bl in grp:
+            num_bls += 1
+    nt.assert_equal(num_bls, np.unique(uvp.bl_array).size)
+
+
+def test_get_red_blpairs():
+    """
+    Test retrieval of redundant baseline groups for baseline-pairs.
+    """
+    # Setup uvp
+    beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+    beam = pspecbeam.PSpecBeamUV(beamfile)
+    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
+    
+    # Get redundant baseline groups
+    blps, lens, angs = uvp.get_red_blpairs()
+    
+    nt.assert_equal(len(blps), 3) # three red grps in this file
+    nt.assert_equal(len(blps), len(lens)) # Should be one length for each group
+    nt.assert_equal(len(blps), len(angs)) # Ditto, for angles
+    
+    # Check that number of grouped blps = total no. of blps
+    num_blps = 0
+    for grp in blps:
+        for blp in grp:
+            num_blps += 1
+    nt.assert_equal(num_blps, np.unique(uvp.blpair_array).size)
+
 
 def test_polpair_int2tuple():
     """
