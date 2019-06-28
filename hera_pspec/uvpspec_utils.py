@@ -985,7 +985,7 @@ def _get_red_bls(uvp, bl_len_tol=1., bl_ang_tol=1.):
     # Calculate length and angle of baseline vecs
     bl_vecs = uvp.get_ENU_bl_vecs()
     
-    lens, angs = utils.get_bl_lens_angs(bl_vecs, bl_error_tol=1.0)
+    lens, angs = utils.get_bl_lens_angs(bl_vecs, bl_error_tol=bl_len_tol)
     
     # Baseline indices
     idxs = np.arange(len(lens)).astype(np.int)
