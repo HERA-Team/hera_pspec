@@ -251,6 +251,14 @@ class Test_Utils(unittest.TestCase):
         # test xants
         groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], xants=[0, 1, 2], verbose=False, exclude_auto_bls=True)
         nt.assert_equal(len(list(groupings.values())[0]), 9735)
+        
+        # test exclude_patterns
+        groupings = utils.config_pspec_blpairs(uv_template, 
+                                               [('xx', 'xx'), ('yy', 'yy')], 
+                                               [('even', 'odd'), ('even', 'odd')], 
+                                               exclude_patterns=['1.288'],
+                                               verbose=False, exclude_auto_bls=True)
+        nt.assert_equal(len(groupings), 0)
 
         # test exceptions
         nt.assert_raises(AssertionError, utils.config_pspec_blpairs, uv_template, [('xx', 'xx'), ('xx', 'xx')], [('even', 'odd')], verbose=False)

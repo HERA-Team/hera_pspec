@@ -569,8 +569,8 @@ def flatten(nested_list):
 
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
                          exclude_permutations=True, bl_len_range=(0, 1e10),
-                         bl_deg_range=(0, 180), xants=None, file_type='miriad', 
-                         verbose=True):
+                         bl_deg_range=(0, 180), xants=None, exclude_patterns=None, 
+                         file_type='miriad', verbose=True):
     """
     Given a list of miriad file templates and selections for
     polarization and group labels, construct a master list of
@@ -615,12 +615,18 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
         A len-2 integer tuple specifying the range of baseline angles
         (degrees in ENU frame) to consider.
 
-    xants : list
-        A list of integer antenna numbers to exclude.
-
+    xants : list, optional
+        A list of integer antenna numbers to exclude. Default: None.
+    
+    exclude_patterns : list, optional
+        A list of patterns to exclude if found in the final list of input 
+        files (after the templates have been filled-in). This currently 
+        just takes a list of strings, and does not recognize wildcards. 
+        Default: None.
+        
     file_type : str, optional
         File type of the input files. Default: 'miriad'.
-
+    
     verbose : bool, optional
         If True, print feedback to stdout. Default: True.
 
@@ -664,7 +670,36 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
     unique_files = sorted(unique_files)
-
+    
+    # Exclude user-specified patterns
+    if exclude_patterns is not None:
+        to_exclude = []
+        
+        # Loop over files and patterns
+        for f in unique_files:
+            for pattern in exclude_patterns:
+                
+                # Add to list of files to be excluded
+                if pattern in f:
+                    if verbose:
+                        print("File matches pattern '%s' and will be excluded: %s" \
+                              % (pattern, f))
+                    to_exclude.append(f)
+                    continue
+        
+        # Exclude files that matched a pattern
+        for f in to_exclude:
+            try:
+                unique_files.remove(f)
+            except:
+                pass
+        
+        # Test for empty list and fail if found
+        if len(unique_files) == 0:
+            if verbose:
+                print("config_pspec_blpairs: All files were filtered out!")
+            return []
+        
     # use a single file from unique_files and a single pol-group combination to get antenna positions
     _file = unique_files[0].format(pol=pol_grps[0][0], group=pol_grps[0][1])
     uvd = UVData()
