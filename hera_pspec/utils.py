@@ -75,39 +75,59 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     return C
 
 
-def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, group=False, Nblps_per_group=1):
+def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, 
+                      group=False, Nblps_per_group=1):
     """
-    Construct a list of baseline-pairs from a baseline-group. This function can be used to easily convert a
-    single list of baselines into the input needed by PSpecData.pspec(bls1, bls2, ...).
+    Construct a list of baseline-pairs from a baseline-group. This function 
+    can be used to easily convert a single list of baselines into the input 
+    needed by PSpecData.pspec(bls1, bls2, ...).
 
     Parameters
     ----------
-    bls : list of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]
+    bls : list of tuple
+        List of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]. Baseline 
+        integers are not supported, and must first be converted to tuples 
+        using UVData.baseline_to_antnums().
 
-    exclude_auto_bls: boolean, if True, exclude all baselines crossed with itself from the final blpairs list
+    exclude_auto_bls: bool, optional
+        If True, exclude all baselines crossed with themselves from the final 
+        blpairs list. Default: False.
 
-    exclude_permutations : boolean, if True, exclude permutations and only form combinations of the bls list.
-        For example, if bls = [1, 2, 3] (note this isn't the proper form of bls, but makes this example clearer)
-        and exclude_permutations = False, then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33].
-        If however exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
-        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would additionally be excluded.
+    exclude_permutations : bool, optional
+        If True, exclude permutations and only form combinations of the bls 
+        list.
+        
+        For example, if bls = [1, 2, 3] (note this isn't the proper form of 
+        bls, but makes the example clearer) and exclude_permutations = False, 
+        then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33]. If however 
+        exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
+        
+        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would 
+        also be excluded.
+        
+        Default: False.
 
-    group : boolean, optional
-        if True, group each consecutive Nblps_per_group blpairs into sub-lists
+    group : bool, optional
+        If True, group each consecutive Nblps_per_group blpairs into sub-lists. 
+        Default: False.
 
-    Nblps_per_group : integer, number of baseline-pairs to put into each sub-group
+    Nblps_per_group : int, optional
+        Number of baseline-pairs to put into each sub-group if group = True. 
+        Default: 1.
 
     Returns (bls1, bls2, blpairs)
     -------
-    bls1 : list of baseline tuples from the zeroth index of the blpair
+    bls1, bls2 : list of tuples
+        List of baseline tuples from the zeroth/first index of the blpair.
 
-    bls2 : list of baseline tuples from the first index of the blpair
-
-    blpairs : list of blpair tuples
+    blpairs : list of tuple
+        List of blpair tuples.
     """
     # assert form
-    assert isinstance(bls, list) and isinstance(bls[0], tuple), "bls must be fed as list of baseline tuples"
-
+    assert isinstance(bls, (list, np.ndarray)) and isinstance(bls[0], tuple), \
+        "bls must be fed as list or ndarray of baseline antnum tuples. Use " \
+        "UVData.baseline_to_antnums() to convert baseline integers to tuples."
+    
     # form blpairs w/o explicitly forming auto blpairs
     # however, if there are repeated bl in bls, there will be auto bls in blpairs
     if exclude_permutations:
@@ -160,9 +180,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     Parameters
     ----------
-    uvd1 : UVData instance with visibility data
-
-    uvd2 : UVData instance with visibility data
+    uvd1, uvd2 : UVData
+        UVData instances with visibility data for the first/second visibilities 
+        in the cross-spectra that will be formed.
 
     bl_tol : float, optional
         Baseline-vector redundancy tolerance in meters
@@ -179,7 +199,8 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         If True, exclude all bls crossed with itself from the blpairs list
 
     exclude_permutations : boolean, optional
-        if True, exclude permutations and only form combinations of the bls list.
+        If True, exclude permutations and only form combinations of the bls list.
+        
         For example, if bls = [1, 2, 3] (note this isn't the proper form of bls,
         but makes this example clearer) and exclude_permutations = False,
         then blpairs = [11, 12, 13, 21, 22, 23, 31, 32, 33]. If however
@@ -1005,3 +1026,5 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         reds, lens, angs = _reds, _lens, _angs
 
     return reds, lens, angs
+
+
