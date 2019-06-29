@@ -1445,12 +1445,14 @@ class Test_PSpecData(unittest.TestCase):
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
 def test_pspec_run():
-    fnames = [os.path.join(DATA_PATH, d) for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
-                                                   'zen.odd.xx.LST.1.28828.uvOCRSA']]
+    fnames = [os.path.join(DATA_PATH, d) 
+              for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
+                        'zen.odd.xx.LST.1.28828.uvOCRSA']]
 
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    fnames_std=[os.path.join(DATA_PATH,d) for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
-                                                    'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
+    fnames_std = [os.path.join(DATA_PATH,d) 
+                  for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
+                            'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
     # test basic execution
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
