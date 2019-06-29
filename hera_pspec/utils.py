@@ -929,7 +929,7 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
 
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False):
+             bl_deg_range=(0, 180), xants=None, add_autos=False, file_type='miriad'):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
     calculate redundant baseline groups using hera_cal.redcal and optionally
@@ -938,8 +938,11 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     Parameters
     ----------
     uvd : UVData object or str or dictionary
-        UVData object or Miriad filepath string or antenna position dictionary.
+        UVData object or filepath string or antenna position dictionary.
         An antpos dict is formed via dict(zip(ants, ant_vecs)).
+        
+        N.B. If uvd is a filepath, use the `file_type` kwarg to specify the 
+        file type.
 
     bl_error_tol : float
         Redundancy tolerance in meters
@@ -959,6 +962,9 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
 
     add_autos : bool
         If True, add into autocorrelation group to the redundant group list.
+    
+    file_type : str, optional
+        File type of the input files. Default: 'miriad'.
 
     Returns (reds, lens, angs)
     -------
@@ -976,7 +982,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         # load filepath
         if isinstance(uvd, (str, np.str)):
             _uvd = UVData()
-            _uvd.read(uvd, read_data=False)
+            _uvd.read(uvd, read_data=False, file_type=file_type)
             uvd = _uvd
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
