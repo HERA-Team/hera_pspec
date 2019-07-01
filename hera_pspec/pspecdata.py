@@ -3210,7 +3210,7 @@ def raise_warning(warning, verbose=True):
 
 
 def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True, 
-                file_type='uvh5'):
+                file_type='miriad'):
     """
     Helper function for loading UVData-compatible datasets in pspec_run.
     """
