@@ -1084,7 +1084,9 @@ def _get_red_blpairs(uvp, bl_len_tol=1., bl_ang_tol=1.):
         # This line only keeps blpairs where both bls belong to the same red grp!
         matches = np.where(np.logical_and(bl1_grp == i, bl2_grp == i))
         
-        # Unpack into tuple of bl integer pairs
-        red_grps.append( list(zip(bl1[matches], bl2[matches])) )
+        # Unpack into list of blpair integers
+        blpair_ints = [int("%d%d" % _blp) 
+                       for _blp in zip(bl1[matches], bl2[matches])]
+        red_grps.append(blpair_ints)
     
     return red_grps, red_lens, red_angs
