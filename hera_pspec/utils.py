@@ -543,14 +543,15 @@ def load_config(config_file):
                 # 'None' and '' turn into None
                 if d[k] == 'None': d[k] = None
                 # list of lists turn into lists of tuples
-                if isinstance(d[k], list) and np.all([isinstance(i, list) for i in d[k]]):
+                if isinstance(d[k], list) \
+                and np.all([isinstance(i, list) for i in d[k]]):
                     d[k] = [tuple(i) for i in d[k]]
                 elif isinstance(d[k], (dict, odict)): replace(d[k])
 
     # Open and read config file
     with open(config_file, 'r') as cfile:
         try:
-            cfg = yaml.load(cfile)
+            cfg = yaml.load(cfile, Loader=yaml.FullLoader)
         except yaml.YAMLError as exc:
             raise(exc)
 
@@ -569,7 +570,8 @@ def flatten(nested_list):
 
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
                          exclude_permutations=True, bl_len_range=(0, 1e10),
-                         bl_deg_range=(0, 180), xants=None, verbose=True):
+                         bl_deg_range=(0, 180), xants=None, exclude_patterns=None, 
+                         file_type='miriad', verbose=True):
     """
     Given a list of miriad file templates and selections for
     polarization and group labels, construct a master list of
@@ -614,11 +616,20 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
         A len-2 integer tuple specifying the range of baseline angles
         (degrees in ENU frame) to consider.
 
-    xants : list
-        A list of integer antenna numbers to exclude.
-
-    verbose : bool
-        If True, print feedback to stdout.
+    xants : list, optional
+        A list of integer antenna numbers to exclude. Default: None.
+    
+    exclude_patterns : list, optional
+        A list of patterns to exclude if found in the final list of input 
+        files (after the templates have been filled-in). This currently 
+        just takes a list of strings, and does not recognize wildcards. 
+        Default: None.
+        
+    file_type : str, optional
+        File type of the input files. Default: 'miriad'.
+    
+    verbose : bool, optional
+        If True, print feedback to stdout. Default: True.
 
     Returns
     -------
@@ -660,11 +671,40 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
     unique_files = sorted(unique_files)
-
+    
+    # Exclude user-specified patterns
+    if exclude_patterns is not None:
+        to_exclude = []
+        
+        # Loop over files and patterns
+        for f in unique_files:
+            for pattern in exclude_patterns:
+                
+                # Add to list of files to be excluded
+                if pattern in f:
+                    if verbose:
+                        print("File matches pattern '%s' and will be excluded: %s" \
+                              % (pattern, f))
+                    to_exclude.append(f)
+                    continue
+        
+        # Exclude files that matched a pattern
+        for f in to_exclude:
+            try:
+                unique_files.remove(f)
+            except:
+                pass
+        
+        # Test for empty list and fail if found
+        if len(unique_files) == 0:
+            if verbose:
+                print("config_pspec_blpairs: All files were filtered out!")
+            return []
+        
     # use a single file from unique_files and a single pol-group combination to get antenna positions
     _file = unique_files[0].format(pol=pol_grps[0][0], group=pol_grps[0][1])
     uvd = UVData()
-    uvd.read_miriad(_file, read_data=False)
+    uvd.read(_file, read_data=False, file_type=file_type)
 
     # get baseline pairs
     (_bls1, _bls2, _, _,
@@ -925,7 +965,8 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
 
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False):
+             bl_deg_range=(0, 180), xants=None, add_autos=False, 
+             file_type='miriad'):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
     calculate redundant baseline groups using hera_cal.redcal and optionally
@@ -934,8 +975,11 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     Parameters
     ----------
     uvd : UVData object or str or dictionary
-        UVData object or Miriad filepath string or antenna position dictionary.
+        UVData object or filepath string or antenna position dictionary.
         An antpos dict is formed via dict(zip(ants, ant_vecs)).
+        
+        N.B. If uvd is a filepath, use the `file_type` kwarg to specify the 
+        file type.
 
     bl_error_tol : float
         Redundancy tolerance in meters
@@ -955,6 +999,9 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
 
     add_autos : bool
         If True, add into autocorrelation group to the redundant group list.
+    
+    file_type : str, optional
+        File type of the input files. Default: 'miriad'.
 
     Returns (reds, lens, angs)
     -------
@@ -972,16 +1019,18 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         # load filepath
         if isinstance(uvd, (str, np.str)):
             _uvd = UVData()
-            _uvd.read_miriad(uvd, read_data=False)
+            _uvd.read(uvd, read_data=False, file_type=file_type)
             uvd = _uvd
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
         antpos_dict = dict(list(zip(ants, antpos)))
-
-    # use antenna position dictionary
     elif isinstance(uvd, (dict, odict)):
+        # use antenna position dictionary
         antpos_dict = uvd
-
+    else:
+        raise TypeError("uvd must be a UVData object, filename string, or dict "
+                        "of antenna positions.")
+        
     # get redundant baselines
     reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
 

@@ -151,6 +151,9 @@ def test_get_red_blpairs():
     nt.assert_equal(len(blps), len(lens)) # Should be one length for each group
     nt.assert_equal(len(blps), len(angs)) # Ditto, for angles
     
+    # Check output type
+    nt.assert_equal(isinstance(blps[0][0], (np.int, int)), True)
+    
     # Check that number of grouped blps = total no. of blps
     num_blps = 0
     for grp in blps:
