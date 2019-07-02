@@ -543,14 +543,15 @@ def load_config(config_file):
                 # 'None' and '' turn into None
                 if d[k] == 'None': d[k] = None
                 # list of lists turn into lists of tuples
-                if isinstance(d[k], list) and np.all([isinstance(i, list) for i in d[k]]):
+                if isinstance(d[k], list) \
+                and np.all([isinstance(i, list) for i in d[k]]):
                     d[k] = [tuple(i) for i in d[k]]
                 elif isinstance(d[k], (dict, odict)): replace(d[k])
 
     # Open and read config file
     with open(config_file, 'r') as cfile:
         try:
-            cfg = yaml.load(cfile)
+            cfg = yaml.load(cfile, Loader=yaml.FullLoader)
         except yaml.YAMLError as exc:
             raise(exc)
 
@@ -964,7 +965,8 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
 
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False, file_type='miriad'):
+             bl_deg_range=(0, 180), xants=None, add_autos=False, 
+             file_type='miriad'):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
     calculate redundant baseline groups using hera_cal.redcal and optionally
@@ -1022,11 +1024,13 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         # get antenna position dictionary
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
         antpos_dict = dict(list(zip(ants, antpos)))
-
-    # use antenna position dictionary
     elif isinstance(uvd, (dict, odict)):
+        # use antenna position dictionary
         antpos_dict = uvd
-
+    else:
+        raise TypeError("uvd must be a UVData object, filename string, or dict "
+                        "of antenna positions.")
+        
     # get redundant baselines
     reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
 

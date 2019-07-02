@@ -234,6 +234,10 @@ class Test_Utils(unittest.TestCase):
         nt.assert_almost_equal(l[0], 0)
         nt.assert_almost_equal(a[0], 0)
         nt.assert_true(len(r), 105)
+        
+        # Check errors when wrong types input
+        nt.assert_raises(TypeError, utils.get_reds, [1., 2.])
+        
 
     def test_config_pspec_blpairs(self):
         # test basic execution
