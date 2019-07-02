@@ -795,7 +795,7 @@ class PSpecData(object):
                 #weights = np.mean(weights,axis=1) #weights are calculated by averaging weights matrix in time.
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
                 dspec.sinc_downweight_mat_inv(nchan = self.spw_Nfreqs,
-                                    df = 1.,
+                                    df = np.median(np.diff(self.freqs)),
                                     filter_centers = r_params['filter_centers'],
                                     filter_widths = r_params['filter_widths'],
                                     filter_factors = r_params['filter_factors'])* sqrtY) * sqrtT
@@ -834,7 +834,7 @@ class PSpecData(object):
                                                  filter window in (delay) channel numbers. Can specify fractional channel number.
                                 'filter_factors', list of floats (or float) specifying how much power within each filter window
                                                   is to be suppressed.
-                Absence of r_params dictionary will result in identity being used!
+                Absence of r_params dictionary will result in an error!
         """
         key = self.parse_blkey(key)
         key = (self.data_weighting,) + key
@@ -1992,7 +1992,7 @@ class PSpecData(object):
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None,
               baseline_tol=1.0, store_cov=False, verbose=True,
-              exact_norm=False, history=''):
+              exact_norm=False, history='', r_params = None):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2091,6 +2091,19 @@ class PSpecData(object):
 
         history : str, optional
             history string to attach to UVPSpec object
+
+        r_params: dictionary with parameters for weighting matrix.
+                  Proper fields
+                  and formats depend on the mode of data_weighting.
+                data_weighting == 'sinc_downweight':
+                                dictionary with fields
+                                'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+                                                  at which to center filtering windows. Can specify fractional channel number.
+                                'filter_widths', list of floats (or float) specifying the width of each
+                                                 filter window in (delay) channel numbers. Can specify fractional channel number.
+                                'filter_factors', list of floats (or float) specifying how much power within each filter window
+                                                  is to be suppressed.
+                Absence of r_params dictionary will result in an error!
 
         Returns
         -------
@@ -2361,6 +2374,18 @@ class PSpecData(object):
                             print("WARNING: Number of unflagged chans for key1 "
                                   "and/or key2 < n_dlys\n which may lead to "
                                   "normalization instabilities.")
+                    #if using inverse sinc weighting, set r_params
+                    if input_data_weight == 'sinc_downweight':
+                        key1 = (dsets[0],) + blp[0] + (p_str[0],)
+                        key2 = (dsets[1],) + blp[1] + (p_str[1],)
+                        if not key1 in r_params:
+                            raise ValueError("No r_param dictionary supplied"
+                                             " for baseline %s"%(str(key1)))
+                        if not key2 in r_params:
+                            raise ValueError("No r_param dictionary supplied"
+                                             " for baseline %s"%(str(key2)))
+                        self.set_r_param(key1,r_params[key1])
+                        self.set_r_param(key2,r_params[key2])
 
                     # Build Fisher matrix
                     if input_data_weight == 'identity':
@@ -2795,7 +2820,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True,
               file_type='miriad', verbose=True, store_cov=False,
-              history=''):
+              history='', r_params = None):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2943,6 +2968,19 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
 
     history : str
         String to add to history of each UVPSpec object.
+
+    r_params: dictionary with parameters for weighting matrix.
+              Proper fields
+              and formats depend on the mode of data_weighting.
+            data_weighting == 'sinc_downweight':
+                            dictionary with fields
+                            'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+                                              at which to center filtering windows. Can specify fractional channel number.
+                            'filter_widths', list of floats (or float) specifying the width of each
+                                             filter window in (delay) channel numbers. Can specify fractional channel number.
+                            'filter_factors', list of floats (or float) specifying how much power within each filter window
+                                              is to be suppressed.
+            Absence of r_params dictionary will result in an error!
 
     Returns
     -------
@@ -3134,7 +3172,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
 
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
-                       spw_ranges=spw_ranges, n_dlys=n_dlys,
+                       spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
                        norm=norm, taper=taper, history=history, verbose=verbose)
 

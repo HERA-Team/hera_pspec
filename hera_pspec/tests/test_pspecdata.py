@@ -1129,6 +1129,29 @@ class Test_PSpecData(unittest.TestCase):
         ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=10, spw_ranges=[(10,20)])
         ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=1)
 
+        my_r_params = {}
+        my_r_params_dset0_only = {}
+        rp = {'filter_centers':[0.],
+              'filter_widths':[250e-9],
+              'filter_factors':[1e-9]}
+        for bl in bls:
+            key1 = (0,) + bl + ('xx',)
+            key2 = (1,) + bl + ('xx',)
+            my_r_params[key1] = rp
+            my_r_params_dset0_only[key1] = rp
+            my_r_params[key2] = rp
+        #test inverse sinc weighting.
+        ds.pspec(bls,bls,(0, 1), ('xx','xx'),
+        spw_ranges = (10,20), input_data_weight = 'sinc_downweight',
+        r_params = my_r_params)
+        #test value error
+        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
+        spw_ranges = (10,20), input_data_weight = 'sinc_downweight', r_params = {})
+        #test value error no dset1 keys
+        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
+        spw_ranges = (10,20), input_data_weight = 'sinc_downweight',
+        r_params = my_r_params_dset0_only)
+
         #assert error if baselines are not provided in the right format
         nt.assert_raises(NotImplementedError, ds.pspec, [[(24,25),(38,39)]],[[(24,25),(38,39)]],
                 (0,1),[('xx','xx')])
