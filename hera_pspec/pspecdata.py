@@ -1,6 +1,6 @@
 import numpy as np
 import aipy
-from pyuvdata import UVData
+from pyuvdata import UVData, UVCal
 import copy, operator, itertools, sys
 from collections import OrderedDict as odict
 import hera_cal as hc
@@ -18,7 +18,7 @@ import warnings
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None, 
-                 beam=None):
+                 beam=None, cals=None, cal_flag=True):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -48,10 +48,17 @@ class PSpecData(object):
         beam : PspecBeam object, optional
             PspecBeam object containing information about the primary beam
             Default: None.
+
+        cals : list of UVCal objects, optional
+            Calibration objects to apply to data.
+
+        cal_flag : bool, optional
+            If True, propagate flags from calibration into data
         """
         self.clear_cache()  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
         self.dsets_std = []
+        self.cals = []
         self.Nfreqs = None
         self.spw_range = None
         self.spw_Nfreqs = None
@@ -72,12 +79,12 @@ class PSpecData(object):
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
-            self.add(dsets, wgts, dsets_std=dsets_std, labels=labels)
+            self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag)
 
         # Store a primary beam
         self.primary_beam = beam
 
-    def add(self, dsets, wgts, labels=None, dsets_std=None):
+    def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True):
         """
         Add a dataset to the collection in this PSpecData object.
 
@@ -102,6 +109,12 @@ class PSpecData(object):
             standard deviations (real and imaginary) of data to add to the
             collection. If dsets is a dict, will assume dsets_std is a dict
             and if dsets is a list, will assume dsets_std is a list.
+
+        cals : UVCal or list, optional
+            UVCal objects to apply to data.
+
+        cal_flag : bool, optional
+            If True, propagate flags from calibration into data
         """
         # Check for dicts and unpack into an ordered list if found
         if isinstance(dsets, dict):
@@ -136,23 +149,28 @@ class PSpecData(object):
         if isinstance(wgts, UVData): wgts = [wgts,]
         if isinstance(labels, str): labels = [labels,]
         if isinstance(dsets_std, UVData): dsets_std = [dsets_std,]
+        if isinstance(cals, UVCal): cals = [cals,]
         if wgts is None: wgts = [wgts,]
         if dsets_std is None: dsets_std = [dsets_std for m in range(len(dsets))]
+        if cals is None: cals = [cals for m in range(len(dsets))]
         if isinstance(dsets, tuple): dsets = list(dsets)
         if isinstance(wgts, tuple): wgts = list(wgts)
         if isinstance(dsets_std, tuple): dsets_std = list(dsets_std)
+        if isinstance(cals, tuple): cals = list(cals)
 
         # Only allow UVData or lists
         if not isinstance(dsets, list) or not isinstance(wgts, list)\
-        or not isinstance(dsets_std, list):
-            raise TypeError("dsets, dsets_std, and wgts must be UVData"
-                            "or lists of UVData")
+        or not isinstance(dsets_std, list) or not isinstance(cals, list):
+            raise TypeError("dsets, dsets_std, wgts and cals must be UVData"
+                            "UVCal, or lists of UVData or UVCal")
 
         # Make sure enough weights were specified
         assert len(dsets) == len(wgts), \
             "The dsets and wgts lists must have equal length"
         assert len(dsets_std) == len(dsets), \
             "The dsets and dsets_std lists must have equal length"
+        assert len(cals) == len(dsets), \
+            "The dsets and cals lists must have equal length"
         if labels is not None:
             assert len(dsets) == len(labels), \
                 "If labels are specified, the dsets and labels lists " \
@@ -168,6 +186,9 @@ class PSpecData(object):
             if not isinstance(s, UVData) and s is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "error sets")
+        for c in cals:
+            if not isinstance(c, UVCal):
+                raise TypeError("Only UVCal objects can be used for calibration.")
 
         # Store labels (if they were set)
         if self.labels is None:
@@ -175,12 +196,21 @@ class PSpecData(object):
         if labels is None:
             labels = ["dset{:d}".format(i) 
                     for i in range(len(self.dsets), len(dsets)+len(self.dsets))]
-        self.labels += labels
+
+        # Apply calibration if provided
+        for dset, dset_std, cal in zip(dsets, dsets_std, cals):
+            if cal is not None:
+                if dset is not None:
+                    uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                if dset_std is not None:
+                    uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
 
         # Append to list
         self.dsets += dsets
         self.wgts += wgts
         self.dsets_std += dsets_std
+        self.cals += cals
+        self.labels += labels
 
         # Check for repeated labels, and make them unique
         for i, l in enumerate(self.labels):
@@ -221,7 +251,6 @@ class PSpecData(object):
                 s += "  dset '%s' (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" \
                       % (self.labels[i], i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols)
         return s
-
 
     def validate_datasets(self, verbose=True):
         """
