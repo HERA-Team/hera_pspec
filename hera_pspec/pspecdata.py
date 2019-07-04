@@ -122,6 +122,7 @@ class PSpecData(object):
             if labels is not None:
                 raise ValueError("If 'dsets' is a dict, 'labels' cannot be "
                                  "specified.")
+            labels = list(dsets.keys())
 
             if not isinstance(wgts, dict):
                 raise TypeError("If 'dsets' is a dict, 'wgts' must also be "
@@ -137,12 +138,20 @@ class PSpecData(object):
                 _dsets_std = [dsets_std[key] for key in labels]
                 dsets_std = _dsets_std
 
+            if not isinstance(cals, dict):
+                if cals is None:
+                    cals = [None for m in range(len(dsets))]
+                else:
+                    raise TypeError("If 'dsets' is a dict, 'cals' must"
+                                    "also be a dict")
+
             # Unpack dsets and wgts dicts
-            labels = list(dsets.keys())
             _dsets = [dsets[key] for key in labels]
             _wgts = [wgts[key] for key in labels]
+            _cals = [cals[key] for key in labels]
             dsets = _dsets
             wgts = _wgts
+            cals = _cals
 
         # Convert input args to lists if possible
         if isinstance(dsets, UVData): dsets = [dsets,]
@@ -187,7 +196,7 @@ class PSpecData(object):
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "error sets")
         for c in cals:
-            if not isinstance(c, UVCal):
+            if not isinstance(c, UVCal) and c is not None:
                 raise TypeError("Only UVCal objects can be used for calibration.")
 
         # Store labels (if they were set)
@@ -203,7 +212,7 @@ class PSpecData(object):
                 if dset is not None:
                     uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
                 if dset_std is not None:
-                    uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
 
         # Append to list
         self.dsets += dsets

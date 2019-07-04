@@ -6,12 +6,13 @@ import os, copy, sys
 from scipy.integrate import simps, trapz
 from hera_pspec import pspecdata, pspecbeam, conversions, container, utils
 from hera_pspec.data import DATA_PATH
-from pyuvdata import UVData
+from pyuvdata import UVData, UVCal
 from hera_cal import redcal
 from scipy.signal import windows
 from scipy.interpolate import interp1d
 from astropy.time import Time
 import warnings
+import glob
 
 # Data files to use in tests
 dfiles = [
@@ -1256,7 +1257,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(len(ds._identity_Y), 2)
         nt.assert_true(((0, 24, 25, 'xx'), (1, 24, 25, 'xx')) in ds._identity_Y.keys())
         nt.assert_true(((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys())
-
+ 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
         d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2],
@@ -1581,6 +1582,48 @@ def test_pspec_run():
 
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
+
+
+def test_input_calibration():
+    dfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458116.30*.HH.uvh5")))
+    cfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458116.30*.HH.flagged_abs.calfits")))
+    for i, f in enumerate(zip(dfiles, cfiles)):
+        uvd = UVData()
+        uvd.read(f[0])
+        dfiles[i] = uvd
+        uvc = UVCal()
+        uvc.read_calfits(f[1])
+        cfiles[i] = uvc
+
+    # test add without cal
+    pd = pspecdata.PSpecData()
+    assert pd.cals == []
+    pd.add([copy.deepcopy(uv) for uv in dfiles], None)
+    assert pd.cals == [None]
+
+    # test add with cal
+    pd.add([copy.deepcopy(uv) for uv in dfiles], None, cals=cfiles, cal_flag=False)
+    g = (cfiles[0].get_gains(23, 'x') * np.conj(cfiles[0].get_gains(24, 'x'))).T
+    np.testing.assert_array_almost_equal(pd.dsets[0].get_data(23, 24, 'xx') / g,
+                                         pd.dsets[1].get_data(23, 24, 'xx'))
+
+    # test add with dictionaries
+    pd.add({'one': copy.deepcopy(dfiles[0])}, {'one': None}, cals={'one':cfiles[0]}, cal_flag=False)
+    np.testing.assert_array_almost_equal(pd.dsets[0].get_data(23, 24, 'xx') / g,
+                                         pd.dsets[2].get_data(23, 24, 'xx'))
+
+    # test dset_std calibration
+    pd.add([copy.deepcopy(uv) for uv in dfiles], None, dsets_std=[copy.deepcopy(uv) for uv in dfiles],
+           cals=cfiles, cal_flag=False)
+    np.testing.assert_array_almost_equal(pd.dsets[0].get_data(23, 24, 'xx') / g,
+                                         pd.dsets_std[3].get_data(23, 24, 'xx'))
+
+    # test exceptions
+    pd = pspecdata.PSpecData()
+    nt.assert_raises(TypeError, pd.add, {'one': copy.deepcopy(dfiles[0])}, {'one': None},
+                     cals='foo', cal_flag=False)
+    nt.assert_raises(AssertionError, pd.add, dfiles, [None], cals=[None, None])
+    nt.assert_raises(TypeError, pd.add, dfiles, [None], cals=['foo'])
 
 
 def test_get_argparser():
