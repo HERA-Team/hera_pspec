@@ -1495,7 +1495,7 @@ def test_pspec_run():
     # assert spw_ranges and n_dlys specification worked
     np.testing.assert_array_equal(uvp.get_spw_ranges(), [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)])
 
-    # get shifted UVDatas and test rephasing, flag broadcasting
+    # test time_interleaving, rephasing, flag broadcasting
     uvd = UVData()
     uvd.read_miriad(fnames[0])
     uvd.flag_array[:] = False
@@ -1505,17 +1505,20 @@ def test_pspec_run():
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
     if os.path.exists("./out2.h5"):
         os.remove("./out2.h5")
-    psc, ds = pspecdata.pspec_run([copy.deepcopy(uvd1), copy.deepcopy(uvd2)], "./out2.h5",
-                                   blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
+    psc, ds = pspecdata.pspec_run([copy.deepcopy(uvd), copy.deepcopy(uvd)], "./out2.h5",
+                                   blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))], interleave_times=True,
                                    verbose=False, overwrite=True, spw_ranges=[(50, 100)], rephase_to_dset=0,
                                    broadcast_dset_flags=True, time_thresh=0.3)
+    # assert dsets are properly interleaved
+    nt.assert_true(np.isclose((np.unique(ds.dsets[0].time_array) - np.unique(ds.dsets[1].time_array))[0],
+                              -np.diff(np.unique(uvd.time_array))[0]))
     # assert first integration flagged across entire spw
     nt.assert_true(ds.dsets[0].get_flags(37, 38)[0, 50:100].all())
     # assert first integration flagged *ONLY* across spw
     nt.assert_false(ds.dsets[0].get_flags(37, 38)[0, :50].any() + ds.dsets[0].get_flags(37, 38)[0, 100:].any())
     # assert channel 90 flagged for all ints
     nt.assert_true(ds.dsets[0].get_flags(37, 38)[:, 90].all())
-    # assert phase errors decreased after phasing
+    # assert phase errors decreased after re-phasing
     phserr_before = np.mean(np.abs(np.angle(uvd1.data_array / uvd2.data_array)))
     phserr_after = np.mean(np.abs(np.angle(ds.dsets[0].data_array / ds.dsets[1].data_array)))
     nt.assert_true(phserr_after < phserr_before)
@@ -1572,6 +1575,19 @@ def test_pspec_run():
     nt.assert_equal(uvp.Ntimes, 120)
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
+
+    # test input calibration
+    dfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.uvh5")
+    cfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.flagged_abs.calfits")
+    psc, ds = pspecdata.pspec_run([dfile, dfile], "./out.hdf5", cals=cfile, dsets_std=[dfile, dfile],
+                                   verbose=False, overwrite=True, blpairs=[((23, 24), (24, 25))],
+                                   pol_pairs=[('xx', 'xx')], interleave_times=True, rephase_to_dset=0,
+                                   file_type='uvh5', spw_ranges=[(100, 150)], cal_flag=True)
+    # test calibration flags were propagated to test that cal was applied
+    assert ds.dsets[0].flag_array.any()
+    assert ds.dsets[1].flag_array.any()
+    assert ds.dsets_std[0].flag_array.any()
+    assert ds.dsets_std[1].flag_array.any()
 
     # test exceptions
     nt.assert_raises(AssertionError, pspecdata.pspec_run, (1, 2), "./out.hdf5")

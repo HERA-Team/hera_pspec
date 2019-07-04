@@ -2770,14 +2770,14 @@ class PSpecData(object):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
 
 
-def pspec_run(dsets, filename, dsets_std=None, groupname=None, 
-              dset_labels=None, dset_pairs=None, psname_ext=None, 
+def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
+              groupname=None, dset_labels=None, dset_pairs=None, psname_ext=None, 
               spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), 
               bl_deg_range=(0, 180), bl_error_tol=1.0,
-              beam=None, cosmo=None, rephase_to_dset=None, 
+              beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None, 
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, 
               file_type='miriad', verbose=True, store_cov=False, 
@@ -2801,6 +2801,12 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
     dsets_std : list
         Contains UVData objects or string filepaths to miriad files.
         Default is none.
+
+    cals : list
+        List of UVCal objects or calfits filepaths. Default is None.
+
+    cal_flag : bool
+        If True, use flags in calibration to flag data.
 
     dset_labels : list
         List of strings to label the input datasets. These labels form
@@ -2889,6 +2895,12 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         A Cosmo_Conversions object to use as the cosmology when normalizing
         the power spectra. Default is a Planck cosmology.
         See conversions.Cosmo_Conversions for details.
+
+    interleave_times : bool
+        If True, downselect the times of dset1 as [::2] and dset2 as [1::2]
+        such that their time axes are interleaved. Only applicable if dsets
+        contains two entries. This is only needed if dset1 is the same as dset2.
+        This should be followed by rephase_to_dset.
 
     rephase_to_dset : integer
         Integer index of the anchor dataset when rephasing all other datasets.
@@ -3007,8 +3019,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
             try:
                 # load data into UVData objects if fed as list of strings
                 t0 = time.time()
-                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, 
-                                        verbose=verbose)
+                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, file_type=file_type, verbose=verbose)
                 utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
                           lvl=1, verbose=verbose)
             except ValueError:
@@ -3017,7 +3028,19 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
                 utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
                 return None, None
 
-        assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
+        assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
+
+    # read calibration if provided (calfits partial IO not yet supported)
+    if cals is not None:
+        if not isinstance(cals, (list, tuple)):
+            cals = [cals for d in dsets]
+        if isinstance(cals[0], (str, np.str)):
+            _cals = []
+            for c in cals:
+                uvc = UVCal()
+                uvc.read_calfits(c)
+                _cals.append(uvc)
+            cals = _cals
 
     # configure polarization
     if pol_pairs is None:
@@ -3037,15 +3060,27 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
 
     # package into PSpecData
     ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels, 
-                   dsets_std=dsets_std, beam=beam)
-
-    # Rephase if desired
-    if rephase_to_dset is not None:
-        ds.rephase_to_dset(rephase_to_dset)
+                   dsets_std=dsets_std, beam=beam, cals=cals, cal_flag=cal_flag)
 
     # trim dset LSTs
     if trim_dset_lsts:
         ds.trim_dset_lsts()
+
+    # interleave times
+    if interleave_times:
+        if len(ds.dsets) != 2:
+            raise ValueError("interleave_times only applicable for 2 dsets")
+        Ntimes = min(ds.dsets[0].Ntimes, ds.dsets[1].Ntimes)  # get smallest Ntimes
+        Ntimes -= Ntimes % 2  # make it an even number
+        ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
+        ds.dsets[1].select(times=np.unique(ds.dsets[1].time_array)[1:Ntimes:2], inplace=True)
+        if ds.dsets_std[0] is not None:
+            ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
+            ds.dsets_std[1].select(times=np.unique(ds.dsets_std[1].time_array)[1:Ntimes:2], inplace=True)
+
+    # rephase if desired
+    if rephase_to_dset is not None:
+        ds.rephase_to_dset(rephase_to_dset)
 
     # broadcast flags
     if broadcast_dset_flags:
@@ -3262,5 +3297,7 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
         uvd = UVData()
         uvd.read(glob.glob(dset), bls=bls, polarizations=pols, 
                  file_type=file_type)
+
+        # append
         dsets.append(uvd)
     return dsets
