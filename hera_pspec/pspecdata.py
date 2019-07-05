@@ -2590,6 +2590,8 @@ class PSpecData(object):
                       "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20,
                                 filename1, label1, dset1.history, '-'*20,
                                 filename2, label2, dset2.history, '-'*20)
+        if r_params is None: r_params = {}
+        uvp.r_params = r_params
         uvp.taper = taper
         uvp.norm = norm
 
