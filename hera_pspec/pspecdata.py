@@ -2591,7 +2591,14 @@ class PSpecData(object):
                                 filename1, label1, dset1.history, '-'*20,
                                 filename2, label2, dset2.history, '-'*20)
         if r_params is None: r_params = {}
-        uvp.r_params = r_params
+        r_params_str = ''
+        for r_param in r_params:
+            r_param_key_str = (str(s) for s in r_param)
+            r_params_str +='(' + ','.join(r_param_key_str) +'):\n\t'
+            for rp in r_params[r_param]:
+                r_params_str += str(rp) + str(r_params[r_param][rp]) + '\n'
+
+        uvp.history += '\n+R_PARAMS:\n'+r_params_str
         uvp.taper = taper
         uvp.norm = norm
 

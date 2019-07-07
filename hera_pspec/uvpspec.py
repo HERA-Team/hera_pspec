@@ -88,7 +88,6 @@ class UVPSpec(object):
         self._OmegaPP = PSpecParam("OmegaP", description="Integral of unitless beam power squared over the sky [steradians].", form="(Nbeam_freqs, Npols)", expected_type=np.float64)
         self._beam_freqs = PSpecParam("beam_freqs", description="Frequency bins of the OmegaP and OmegaPP beam-integral arrays [Hz].", form="(Nbeam_freqs,)", expected_type=np.float64)
         self._cosmo = PSpecParam("cosmo", description="Instance of conversion.Cosmo_Conversions class.", expected_type=conversions.Cosmo_Conversions)
-        self._r_params = PSpecParam("r_params", description="Dictionary of dictionaries of parameters used to weight input data.", expected_type = dict)
 
         # Collect all parameters: required and non-required
         self._all_params = sorted( [ p[1:] for p in
@@ -129,7 +128,7 @@ class UVPSpec(object):
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
         self._dicts = ["data_array", "wgt_array", "integration_array",
                        "nsample_array", "cov_array"]
-        self._dicts_of_dicts = ["stats_array", "r_params"]
+        self._dicts_of_dicts = ["stats_array"]
 
         # define which attributes are considered meta data. Large attrs should
         # be constructed as datasets
