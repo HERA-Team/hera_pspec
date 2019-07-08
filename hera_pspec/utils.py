@@ -573,10 +573,10 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                          bl_deg_range=(0, 180), xants=None, exclude_patterns=None, 
                          file_type='miriad', verbose=True):
     """
-    Given a list of miriad file templates and selections for
+    Given a list of glob-parseable file templates and selections for
     polarization and group labels, construct a master list of
     group-pol pairs, and also a list of blpairs for each
-    group-pol pair.
+    group-pol pair given selections on baseline angles and lengths.
 
     A group is a fieldname in the visibility files that denotes the
     "type" of dataset. For example, the group field in the following files
@@ -624,7 +624,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
         files (after the templates have been filled-in). This currently 
         just takes a list of strings, and does not recognize wildcards. 
         Default: None.
-        
+
     file_type : str, optional
         File type of the input files. Default: 'miriad'.
     
@@ -671,7 +671,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
     unique_files = sorted(unique_files)
-    
+
     # Exclude user-specified patterns
     if exclude_patterns is not None:
         to_exclude = []

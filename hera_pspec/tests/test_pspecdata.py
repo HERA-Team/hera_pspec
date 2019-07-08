@@ -1611,14 +1611,10 @@ def test_input_calibration():
         uvc.read_calfits(f[1])
         cfiles[i] = uvc
 
-    # test add without cal
+    # test add
     pd = pspecdata.PSpecData()
-    assert pd.cals == []
-    pd.add([copy.deepcopy(uv) for uv in dfiles], None)
-    assert pd.cals == [None]
-
-    # test add with cal
-    pd.add([copy.deepcopy(uv) for uv in dfiles], None, cals=cfiles, cal_flag=False)
+    pd.add(dfiles, None)  # w/o cal
+    pd.add([copy.deepcopy(uv) for uv in dfiles], None, cals=cfiles, cal_flag=False)  # with cal
     g = (cfiles[0].get_gains(23, 'x') * np.conj(cfiles[0].get_gains(24, 'x'))).T
     np.testing.assert_array_almost_equal(pd.dsets[0].get_data(23, 24, 'xx') / g,
                                          pd.dsets[1].get_data(23, 24, 'xx'))

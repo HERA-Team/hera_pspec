@@ -58,7 +58,6 @@ class PSpecData(object):
         self.clear_cache()  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
         self.dsets_std = []
-        self.cals = []
         self.Nfreqs = None
         self.spw_range = None
         self.spw_Nfreqs = None
@@ -218,7 +217,6 @@ class PSpecData(object):
         self.dsets += dsets
         self.wgts += wgts
         self.dsets_std += dsets_std
-        self.cals += cals
         self.labels += labels
 
         # Check for repeated labels, and make them unique
@@ -2991,8 +2989,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         assert not np.any(['_' in dl for dl in dset_labels]), \
           "cannot accept underscores in input dset_labels: {}".format(dset_labels)
 
-    # load data if fed as filepaths
-    if isinstance(dsets[0], (str, np.str)):
+    # load data if fed as filepaths or list of filepaths
+    if isinstance(dsets[0], (str, np.str)) or isinstance(dsets[0][0], (str, np.str)):
         try:
             # load data into UVData objects if fed as list of strings
             t0 = time.time()
@@ -3014,8 +3012,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         assert isinstance(dsets_std,(list, tuple, np.ndarray)), err_msg
         assert len(dsets_std) == Ndsets, "len(dsets_std) must equal len(dsets)"
 
-        # if path strings provided, read in UVData objects.
-        if isinstance(dsets_std[0], (str, np.str)):
+        # load data if fed as filepaths or list of filepaths
+        if isinstance(dsets_std[0], (str, np.str)) or isinstance(dsets_std[0][0], (str, np.str)):
             try:
                 # load data into UVData objects if fed as list of strings
                 t0 = time.time()
@@ -3034,13 +3032,13 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     if cals is not None:
         if not isinstance(cals, (list, tuple)):
             cals = [cals for d in dsets]
-        if isinstance(cals[0], (str, np.str)):
-            _cals = []
-            for c in cals:
-                uvc = UVCal()
-                uvc.read_calfits(c)
-                _cals.append(uvc)
-            cals = _cals
+        if isinstance(cals[0], (str, np.str)) or isinstance(cals[0][0], (str, np.str)):
+            t0 = time.time()
+            cals = _load_cals(cals, verbose=verbose)
+            utils.log("Loaded calibration in %1.1f sec." % (time.time() - t0),
+                      lvl=1, verbose=verbose)
+        err_msg = "cals must be a list of UVCal, filepaths, or list of filepaths"
+        assert np.all([isinstance(c, UVCal) for c in cals]), err_msg
 
     # configure polarization
     if pol_pairs is None:
@@ -3061,6 +3059,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # package into PSpecData
     ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels, 
                    dsets_std=dsets_std, beam=beam, cals=cals, cal_flag=cal_flag)
+
+    # erase calibration as they are no longer needed
+    del cals
 
     # trim dset LSTs
     if trim_dset_lsts:
@@ -3283,9 +3284,30 @@ def raise_warning(warning, verbose=True):
 
 
 def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True, 
-                file_type='miriad'):
+                file_type='miriad', cals=None, cal_flag=True):
     """
     Helper function for loading UVData-compatible datasets in pspec_run.
+
+    Parameters
+    ----------
+    fnames : list of str, or list of list of str
+        Filenames of load. if an element in fnames is a list of str
+        load them all in one call
+    bls : list of tuples
+        Baselines to load. Default is all.
+    pols : list of str
+        Polarizations to load, default is all.
+    logf : file descriptor
+        Log file to write to
+    verbose : bool
+        Report output to logfile.
+    file_type : str
+        File type of input files.
+
+    Returns
+    -------
+    list
+        List of UVData objects
     """
     dsets = []
     Ndsets = len(fnames)
@@ -3295,9 +3317,49 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
         
         # read data
         uvd = UVData()
-        uvd.read(glob.glob(dset), bls=bls, polarizations=pols, 
+        if isinstance(dset, (str, np.str)):
+            dfiles = glob.glob(dset)
+        else:
+            dfiles = dset
+        uvd.read(dfiles, bls=bls, polarizations=pols, 
                  file_type=file_type)
 
         # append
         dsets.append(uvd)
+
     return dsets
+
+def _load_cals(cnames, logf=None, verbose=True):
+    """
+    Helper function for loading calibration files.
+
+    Parameters
+    ----------
+    cnames : list of str, or list of list of str
+        Calfits filepaths to load. If an element in cnames is a
+        list, load it all at once.
+    logf : file descriptor
+        Log file to write to.
+    verbose : bool
+        Report feedback to log file.
+
+    Returns
+    -------
+    list
+        List of UVCal objects
+    """
+    cals = []
+    Ncals = len(cnames)
+    for i, cfile in enumerate(cnames):
+        utils.log("Reading {} / {} calibrations...".format(i+1, Ncals), 
+                  f=logf, lvl=1, verbose=verbose)
+
+        # read data
+        uvc = UVCal()
+        if isinsntance(cfile, (str, np.str)):
+            uvc.read(glob.glob(cfile))
+        else:
+            uvc.read(cfile)
+        cals.append(uvc)
+
+    return cals
