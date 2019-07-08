@@ -2591,7 +2591,7 @@ class PSpecData(object):
                       "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20,
                                 filename1, label1, dset1.history, '-'*20,
                                 filename2, label2, dset2.history, '-'*20)
-        
+
         r_params_unique = {}
         r_params_unique_bls = {}
         r_params_index = -1
@@ -2600,18 +2600,19 @@ class PSpecData(object):
                 already_in = False
                 for rpu in r_params_unique:
                     if r_params_unique[rpu] == r_params[rp]:
-                        r_params_unique_bls[rpu] += rp
+                        r_params_unique_bls[rpu] += [rp,]
                         already_in = True
                 if not already_in:
                     r_params_index += 1
                     r_params_unique[r_params_index] = r_params[rp]
-                    r_params_unique_bls[r_params_index] = [rp]
+                    r_params_unique_bls[r_params_index] = [rp,]
 
-        for rpi in r_params_unique:
-            r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
+            for rpi in r_params_unique:
+                r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
 
-
+            print(r_params_unique)
             r_params_str = json.dumps(r_params_unique)
+            print(r_params_str)
             uvp.r_params = r_params_str
         else:
             uvp.r_params = ''
