@@ -14,6 +14,7 @@ import ast
 import glob
 import warnings
 import uvtools.dspec as dspec
+import json
 
 class PSpecData(object):
 
@@ -2590,15 +2591,31 @@ class PSpecData(object):
                       "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20,
                                 filename1, label1, dset1.history, '-'*20,
                                 filename2, label2, dset2.history, '-'*20)
-        if r_params is None: r_params = {}
-        r_params_str = ''
-        for r_param in r_params:
-            r_param_key_str = (str(s) for s in r_param)
-            r_params_str +='(' + ','.join(r_param_key_str) +'):\n\t'
-            for rp in r_params[r_param]:
-                r_params_str += str(rp) + str(r_params[r_param][rp]) + '\n'
+        
+        r_params_unique = {}
+        r_params_unique_bls = {}
+        r_params_index = -1
+        if not r_params is None:
+            for rp in r_params:
+                already_in = False
+                for rpu in r_params_unique:
+                    if r_params_unique[rpu] == r_params[rp]:
+                        r_params_unique_bls[rpu] += rp
+                        already_in = True
+                if not already_in:
+                    r_params_index += 1
+                    r_params_unique[r_params_index] = r_params[rp]
+                    r_params_unique_bls[r_params_index] = [rp]
 
-        uvp.history += '\n+R_PARAMS:\n'+r_params_str
+        for rpi in r_params_unique:
+            r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
+
+
+            r_params_str = json.dumps(r_params_unique)
+            uvp.r_params = r_params_str
+        else:
+            uvp.r_params = ''
+
         uvp.taper = taper
         uvp.norm = norm
 
