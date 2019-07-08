@@ -2595,6 +2595,7 @@ class PSpecData(object):
         r_params_unique = {}
         r_params_unique_bls = {}
         r_params_index = -1
+        #build a compressed string to store r_params
         if not r_params is None:
             for rp in r_params:
                 already_in = False
@@ -2604,15 +2605,11 @@ class PSpecData(object):
                         already_in = True
                 if not already_in:
                     r_params_index += 1
-                    r_params_unique[r_params_index] = r_params[rp]
+                    r_params_unique[r_params_index] = copy.copy(r_params[rp])
                     r_params_unique_bls[r_params_index] = [rp,]
-
             for rpi in r_params_unique:
                 r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
-
-            print(r_params_unique)
             r_params_str = json.dumps(r_params_unique)
-            print(r_params_str)
             uvp.r_params = r_params_str
         else:
             uvp.r_params = ''

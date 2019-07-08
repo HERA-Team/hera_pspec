@@ -8,6 +8,7 @@ from pyuvdata import uvutils as uvutils
 import h5py
 import operator
 import warnings
+import json
 
 
 class UVPSpec(object):
@@ -300,6 +301,23 @@ class UVPSpec(object):
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
 
         return self.integration_array[spw][blpairts, polpair]
+
+    def get_r_params(self):
+        """
+        decompress r_params dictionary (so it can be readily used).
+        """
+        decompressed_r_params = {}
+        if not self.r_params == '':
+            r_params = json.loads(self.r_params)
+        for rpi in r_params:
+            rp_dict = {}
+            for r_field in r_params[rpi]:
+                if not r_field == 'baselines':
+                    rp_dict[r_field] = r_params[rpi][r_field]
+            for blkey in r_params[rpi]['baselines']:
+                decompressed_r_params[tuple(blkey)] = rp_dict
+        return decompressed_r_params
+
 
     def get_nsamples(self, key, omit_flags=False):
         """
