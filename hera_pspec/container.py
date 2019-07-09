@@ -98,7 +98,8 @@ class PSpecContainer(object):
 
         # check HDF5 version if swmr
         if swmr:
-            if h5py.version.hdf5_version_tuple[1] < 10:
+            hdf5_v = h5py.version.hdf5_version_tuple[0] + h5py.version.hdf5_version_tuple[1]/100.
+            if hdf5_v < 1.1:
                 print("HDF5 version must be >= 1.10 for SWMR")
 
         # try to open the file
