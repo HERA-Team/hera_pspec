@@ -12,6 +12,8 @@ class Test_PSpecContainer(unittest.TestCase):
     def setUp(self):
         self.fname = os.path.join(DATA_PATH, '_test_container.hdf5')
         self.uvp, self.cosmo = testing.build_vanilla_uvpspec()
+        if os.path.exists(self.fname):
+            os.remove(self.fname)
 
     def tearDown(self):
         # Remove HDF5 file
@@ -161,10 +163,8 @@ class Test_PSpecContainer(unittest.TestCase):
         
         # Original RO handle should work fine; RW handle will throw an error
         nt.assert_equal(len(psc_ro.groups()), len(group_names))
-        if sys.version_info[0] < 3: # check Python version
-            assert_raises(IOError, psc_rw.groups)
-        else:
-            assert_raises(OSError, psc_rw.groups)
+        assert_raises(OSError, psc_rw.groups)
+        assert_raises(OSError, psc_rw.groups)
         
         # Close the non-transactional file; the RW file should now work
         psc_ro_noatom._close()

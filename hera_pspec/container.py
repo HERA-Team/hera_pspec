@@ -2,6 +2,7 @@ import numpy as np
 import h5py
 from hera_pspec import uvpspec, version, utils
 import argparse
+import time
 
 
 def transactional(fn):
@@ -38,7 +39,7 @@ class PSpecContainer(object):
     Container class for managing multiple UVPSpec objects.
     """
 
-    def __init__(self, filename, mode='r', keep_open=True):
+    def __init__(self, filename, mode='r', keep_open=True, tsleep=0.5, maxiter=2):
         """
         Manage a collection of UVPSpec objects that are stored in a structured
         HDF5 file.
@@ -58,17 +59,24 @@ class PSpecContainer(object):
             closed again each time an operation is performed. Setting 
             keep_open=False is helpful for multi-process access patterns. 
             Default: True (keep file open).
+
+        tsleep : float, optional
+            Time to wait in seconds after each attempt at opening the file.
+
+        maxiter : int, optional
+            Maximum number of attempts to open file.
         """
         self.filename = filename
         self.keep_open = keep_open
         self.mode = mode
+        self.tsleep = tsleep
+        self.maxiter = maxiter
         if mode not in ['r', 'rw']:
             raise ValueError("Must set mode to either 'r' or 'rw'.")
 
         # Open file ready for reading and/or writing (if not in transactional mode)
         self.data = None
         if keep_open: self._open()
-    
     
     def _open(self):
         """
@@ -82,33 +90,45 @@ class PSpecContainer(object):
         when a rw instance is created, an error will be raised by h5py. 
         """
         if self.data is not None: return
-        
+
         # Convert user-specified mode to a mode that HDF5 recognizes. We only
         # allow non-destructive operations!
         mode = 'a' if self.mode == 'rw' else 'r'
         swmr = True if self.mode == 'r' else False
-        
-        try:
-            self.data = h5py.File(self.filename, mode, libver='latest', swmr=swmr)
-            if self.mode == 'rw':
-                try:
-                    # Enable single writer, multiple reader mode on HDF5 file. 
-                    # This allows multiple handles to exist for the same file 
-                    # at the same time, as long as only one is in rw mode
-                    self.data.swmr_mode = True
-                except ValueError:
-                    pass
-        except OSError:
-            if self.mode == 'rw':
-                raise OSError("Failed to open HDF5 file. Another process may "
-                              "be holding it open; use \nkeep_open=False to "
-                              "help prevent this from happening (single "
-                              "process), or use the\nlock kwarg (multiple "
-                              "processes).")
-            else:
-                raise
-        except Exception:
-            raise
+
+        # check HDF5 version if swmr
+        if swmr:
+            if h5py.version.hdf5_version_tuple[1] < 10:
+                print("HDF5 version must be >= 1.10 for SWMR")
+
+        # try to open the file
+        Ncount = 0
+        while True:
+            try:
+                self.data = h5py.File(self.filename, mode, libver='latest', swmr=swmr)
+                if self.mode == 'rw':
+                    try:
+                        # Enable single writer, multiple reader mode on HDF5 file. 
+                        # This allows multiple handles to exist for the same file 
+                        # at the same time, as long as only one is in rw mode
+                        self.data.swmr_mode = True
+                    except ValueError:
+                        pass
+                break
+            except (IOError, OSError):
+                # raise Exception if exceeded maxiter
+                if Ncount >= self.maxiter:
+                    if self.mode == 'rw':
+                        raise OSError("Failed to open HDF5 file. Another process may "
+                                      "be holding it open; use \nkeep_open=False to "
+                                      "help prevent this from happening (single "
+                                      "process), or use the\nlock kwarg (multiple "
+                                      "processes).")
+                    else:
+                        raise
+                # sleep and try again
+                Ncount += 1
+                time.sleep(self.tsleep)
 
         # Update header info
         if self.mode == 'rw':
