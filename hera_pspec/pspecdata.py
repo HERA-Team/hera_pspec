@@ -786,14 +786,14 @@ class PSpecData(object):
                 r_param_key = (self.data_weighting,) + key
                 if not r_param_key in self.r_params:
                     raise ValueError("Error: no filter params specified for "
-                                    "sinc weights! ")#Defaulting to Identity!")
-                    #r_params = {'filter_centers':[],
-                    #            'filter_widths':[],
-                    #            'filter_factors':[]}
+                                    "sinc weights! ")
                 else:
                     r_params = self.r_params[r_param_key]
-                #weights = copy.copy(self.w(key))
-                #weights = np.mean(weights,axis=1) #weights are calculated by averaging weights matrix in time.
+
+                #This line retrieves a the psuedo-inverse of a lazy covariance
+                #matrix given by dspec.sinc_downweight_mat_inv.
+                # Note that we multiply sqrtY inside of the pinv
+                #to apply flagging weights before taking psuedo inverse.
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
                 dspec.sinc_downweight_mat_inv(nchan = self.spw_Nfreqs,
                                     df = np.median(np.diff(self.freqs)),
@@ -911,7 +911,8 @@ class PSpecData(object):
 
         Returns
         -------
-        cov_q_hat: matrix with covariances between un-normalized band powers (Ntimes, Nfreqs, Nfreqs)
+        cov_q_hat: array_like
+            Matrix with covariances between un-normalized band powers (Ntimes, Nfreqs, Nfreqs)
         """
         # type check
         if time_indices is None:

@@ -732,11 +732,6 @@ class Test_PSpecData(unittest.TestCase):
         # Check that the slow method is the same as the FFT method
         for input_data_weight in ['identity', 'iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
-            #nt.assert_raises(ValueError,self.ds.R, key1)
-            #if input_data_weight == 'sinc_downweight':
-            #    rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
-            #    self.ds.set_r_param(key1,rpk)
-            #    self.ds.set_r_param(key2,rpk)
             # Loop over list of taper functions
             for taper in taper_selection:
 
@@ -1497,12 +1492,12 @@ class Test_PSpecData(unittest.TestCase):
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
 def test_pspec_run():
-    fnames = [os.path.join(DATA_PATH, d) 
+    fnames = [os.path.join(DATA_PATH, d)
               for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
                         'zen.odd.xx.LST.1.28828.uvOCRSA']]
 
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    fnames_std = [os.path.join(DATA_PATH,d) 
+    fnames_std = [os.path.join(DATA_PATH,d)
                   for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
                             'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
     # test basic execution
