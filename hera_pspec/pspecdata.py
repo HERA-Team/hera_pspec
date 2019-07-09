@@ -266,11 +266,13 @@ class PSpecData(object):
         """
         # check dsets and wgts have same number of elements
         if len(self.dsets) != len(self.wgts):
-            raise ValueError("self.wgts does not have same length as self.dsets")
+            raise ValueError("self.wgts does not have same len as self.dsets")
 
         if len(self.dsets_std) != len(self.dsets):
-            raise ValueError("self.dsets_std does not have the same length as "
+            raise ValueError("self.dsets_std does not have the same len as "
                              "self.dsets")
+        if len(self.labels) != len(self.dsets):
+            raise ValueError("self.labels does not have same len as self.dsets")
 
         # Check if dsets are all the same shape along freq axis
         Nfreqs = [d.Nfreqs for d in self.dsets]
@@ -286,22 +288,21 @@ class PSpecData(object):
             raise ValueError("all dsets must have the same Ntimes")
 
         # raise warnings if times don't match
-        lst_diffs = np.array( [ np.unique(self.dsets[0].lst_array) 
-                              - np.unique(dset.lst_array) 
-                               for dset in self.dsets[1:]] )
-        if np.max(np.abs(lst_diffs)) > 0.001:
-            raise_warning("Warning: taking power spectra between LST bins "
-                          "misaligned by more than 15 seconds",
-                          verbose=verbose)
+        if len(self.dsets) > 1:
+            lst_diffs = np.array( [ np.unique(self.dsets[0].lst_array) 
+                                  - np.unique(dset.lst_array) 
+                                   for dset in self.dsets[1:]] )
+            if np.max(np.abs(lst_diffs)) > 0.001:
+                raise_warning("Warning: LST bins in dsets misaligned by more than 15 seconds",
+                              verbose=verbose)
 
-        # raise warning if frequencies don't match
-        freq_diffs = np.array( [ np.unique(self.dsets[0].freq_array) 
-                               - np.unique(dset.freq_array) 
-                                for dset in self.dsets[1:]] )
-        if np.max(np.abs(freq_diffs)) > 0.001e6:
-            raise_warning("Warning: taking power spectra between frequency "
-                          "bins misaligned by more than 0.001 MHz",
-                          verbose=verbose)
+            # raise warning if frequencies don't match
+            freq_diffs = np.array( [ np.unique(self.dsets[0].freq_array) 
+                                   - np.unique(dset.freq_array) 
+                                    for dset in self.dsets[1:]] )
+            if np.max(np.abs(freq_diffs)) > 0.001e6:
+                raise_warning("Warning: frequency bins in dsets misaligned by more than 0.001 MHz",
+                              verbose=verbose)
 
         # Check phase type
         phase_types = []
@@ -2784,6 +2785,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
 
+    Warning: if dsets is a list of UVData objects, they might be edited in place!
+
     Parameters
     ----------
     dsets : list
@@ -2811,7 +2814,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         the psname of each UVPSpec object. Default is "dset0_x_dset1"
         where 0 and 1 are replaced with the dset index in dsets.
         Note: it is not advised to put underscores in the dset label names,
-        as some downstream functions assume this to be the case.
+        as some downstream functions use this as a special character.
 
     dset_pairs : list of len-2 integer tuples
         List of tuples specifying the dset pairs to use in OQE estimation.
@@ -2895,10 +2898,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         See conversions.Cosmo_Conversions for details.
 
     interleave_times : bool
-        If True, downselect the times of dset1 as [::2] and dset2 as [1::2]
-        such that their time axes are interleaved. Only applicable if dsets
-        contains two entries. This is only needed if dset1 is the same as dset2.
-        This should be followed by rephase_to_dset.
+        Only applicable if Ndsets == 1. If True, copy dset[0] into
+        a dset[1] slot and interleave their time arrays. This updates
+        dset_pairs to [(0, 1)].
 
     rephase_to_dset : integer
         Integer index of the anchor dataset when rephasing all other datasets.
@@ -2989,8 +2991,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         assert not np.any(['_' in dl for dl in dset_labels]), \
           "cannot accept underscores in input dset_labels: {}".format(dset_labels)
 
-    # load data if fed as filepaths or list of filepaths
-    if isinstance(dsets[0], (str, np.str)) or isinstance(dsets[0][0], (str, np.str)):
+    # if dsets are not UVData, assume they are filepaths or list of filepaths
+    if not isinstance(dsets[0], UVData):
         try:
             # load data into UVData objects if fed as list of strings
             t0 = time.time()
@@ -3012,8 +3014,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         assert isinstance(dsets_std,(list, tuple, np.ndarray)), err_msg
         assert len(dsets_std) == Ndsets, "len(dsets_std) must equal len(dsets)"
 
-        # load data if fed as filepaths or list of filepaths
-        if isinstance(dsets_std[0], (str, np.str)) or isinstance(dsets_std[0][0], (str, np.str)):
+        # load data if not UVData
+        if not isinstance(dsets_std[0], UVData):
             try:
                 # load data into UVData objects if fed as list of strings
                 t0 = time.time()
@@ -3032,7 +3034,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     if cals is not None:
         if not isinstance(cals, (list, tuple)):
             cals = [cals for d in dsets]
-        if isinstance(cals[0], (str, np.str)) or isinstance(cals[0][0], (str, np.str)):
+        if not isinstance(cals[0], UVCal):
             t0 = time.time()
             cals = _load_cals(cals, verbose=verbose)
             utils.log("Loaded calibration in %1.1f sec." % (time.time() - t0),
@@ -3043,6 +3045,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # configure polarization
     if pol_pairs is None:
         unique_pols = np.unique(np.hstack([d.polarization_array for d in dsets]))
+        unique_pols = [uvutils.polnum2str(up) for up in unique_pols]
         pol_pairs = [(up, up) for up in unique_pols]
     assert len(pol_pairs) > 0, "no pol_pairs specified"
 
@@ -3069,15 +3072,30 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # interleave times
     if interleave_times:
-        if len(ds.dsets) != 2:
-            raise ValueError("interleave_times only applicable for 2 dsets")
-        Ntimes = min(ds.dsets[0].Ntimes, ds.dsets[1].Ntimes)  # get smallest Ntimes
+        if len(ds.dsets) != 1:
+            raise ValueError("interleave_times only applicable for Ndsets == 1")
+        Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
         Ntimes -= Ntimes % 2  # make it an even number
+        # update dsets
+        ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
         ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
-        ds.dsets[1].select(times=np.unique(ds.dsets[1].time_array)[1:Ntimes:2], inplace=True)
-        if ds.dsets_std[0] is not None:
+        ds.labels.append("dset1")
+
+        # update dsets_std
+        if ds.dsets_std[0] is None:
+            ds.dsets_std.append(None)
+        else:
+            ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
             ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
-            ds.dsets_std[1].select(times=np.unique(ds.dsets_std[1].time_array)[1:Ntimes:2], inplace=True)
+
+        # wgts is currently always None
+        ds.wgts.append(None)
+
+        dset_pairs = [(0, 1)]
+        dsets = ds.dsets
+        dsets_std = ds.dsets_std
+        wgts = ds.wgts
+        dset_labels = ds.labels
 
     # rephase if desired
     if rephase_to_dset is not None:
@@ -3142,6 +3160,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             bls2_list.append(_bls2)
 
     # Open PSpecContainer to store all output in
+    if verbose: print("Opening {}".format(filename))
     psc = container.PSpecContainer(filename, mode='rw')
 
     # assign group name
@@ -3163,7 +3182,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
-        
+        if verbose: print("Storing {}".format(psname))        
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
                       overwrite=overwrite)
 
@@ -3309,6 +3328,9 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
     list
         List of UVData objects
     """
+    ### TODO: data loading for cross-polarization power
+    ### spectra is sub-optimal: only dset1 pol1 and dset2 pol2
+    ### is needed instead of pol1 & pol2 for dset1 & dset2
     dsets = []
     Ndsets = len(fnames)
     for i, dset in enumerate(fnames):
@@ -3323,8 +3345,6 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
             dfiles = dset
         uvd.read(dfiles, bls=bls, polarizations=pols, 
                  file_type=file_type)
-
-        # append
         dsets.append(uvd)
 
     return dsets
@@ -3356,10 +3376,10 @@ def _load_cals(cnames, logf=None, verbose=True):
 
         # read data
         uvc = UVCal()
-        if isinsntance(cfile, (str, np.str)):
-            uvc.read(glob.glob(cfile))
+        if isinstance(cfile, (str, np.str)):
+            uvc.read_calfits(glob.glob(cfile))
         else:
-            uvc.read(cfile)
+            uvc.read_calfits(cfile)
         cals.append(uvc)
 
     return cals

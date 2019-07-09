@@ -942,13 +942,23 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
         
-        # test std exception
-        ds.dsets_std=ds.dsets_std[:1]
+        # test label exception
+        _labels = ds.labels
+        ds.labels = ds.labels[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
+        ds.labels = _labels
+
+        # test std exception
+        _std = ds.dsets_std
+        ds.dsets_std = ds.dsets_std[:1]
+        nt.assert_raises(ValueError, ds.validate_datasets)
+        ds.dsets_std = _std
         
         # test wgt exception
+        _wgts = ds.wgts
         ds.wgts = ds.wgts[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
+        ds.wgts = _wgts
         
         # test warnings
         uvd = copy.deepcopy(self.d[0])
@@ -976,7 +986,6 @@ class Test_PSpecData(unittest.TestCase):
         uvd2.channel_width *= 2.
         ds2 = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds2.validate_datasets)
-        
 
     def test_rephase_to_dset(self):
         # generate two uvd objects w/ different LST grids
@@ -1455,22 +1464,22 @@ def test_pspec_run():
                   for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
                             'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
     # test basic execution
-    if os.path.exists("./out.hdf5"):
-        os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, 
-                                  verbose=False, overwrite=True,
+    if os.path.exists("./out.h5"):
+        os.remove("./out.h5")
+    psc, ds = pspecdata.pspec_run(fnames, "./out.h5", Jy2mK=False, 
+                                  verbose=False, overwrite=True, dset_pairs=[(0, 1)],
                                   bl_len_range=(14, 15), bl_deg_range=(50, 70), 
-                                  psname_ext='_0')
+                                  psname_ext='_0', spw_ranges=[(0, 25)])
     nt.assert_true(isinstance(psc, container.PSpecContainer))
     nt.assert_equal(psc.groups(), ['dset0_dset1'])
     nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1_0'])
-    nt.assert_true(os.path.exists("./out.hdf5"))
+    nt.assert_true(os.path.exists("./out.h5"))
 
     # test Jy2mK, blpairs, cosmo, cov_array, spw_ranges, dset labeling
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
-    if os.path.exists("./out.hdf5"):
-        os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile,
+    if os.path.exists("./out.h5"):
+        os.remove("./out.h5")
+    psc, ds = pspecdata.pspec_run(fnames, "./out.h5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile,
                               blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))], verbose=False, overwrite=True,
                               pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
                               dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)], n_dlys=[20, 20],
@@ -1495,33 +1504,53 @@ def test_pspec_run():
     # assert spw_ranges and n_dlys specification worked
     np.testing.assert_array_equal(uvp.get_spw_ranges(), [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)])
 
-    # test time_interleaving, rephasing, flag broadcasting
+    # test single_dset, time_interleaving, rephasing, flag broadcasting
     uvd = UVData()
     uvd.read_miriad(fnames[0])
+    # interleave the data by hand, and add some flags in
     uvd.flag_array[:] = False
-    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False)[0], 0, 75, 0] = True
-    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False)[:3], 0, 90, 0] = True
+    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False)[0], 0, 10, 0] = True
+    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False)[:3], 0, 15, 0] = True
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[::2], inplace=False)
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
     if os.path.exists("./out2.h5"):
         os.remove("./out2.h5")
-    psc, ds = pspecdata.pspec_run([copy.deepcopy(uvd), copy.deepcopy(uvd)], "./out2.h5",
+    psc, ds = pspecdata.pspec_run([copy.deepcopy(uvd)], "./out2.h5",
                                    blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))], interleave_times=True,
-                                   verbose=False, overwrite=True, spw_ranges=[(50, 100)], rephase_to_dset=0,
+                                   verbose=False, overwrite=True, spw_ranges=[(0, 25)], rephase_to_dset=0,
                                    broadcast_dset_flags=True, time_thresh=0.3)
+
+    nt.assert_true(isinstance(psc, container.PSpecContainer))
+    nt.assert_equal(psc.groups(), ['dset0_dset1'])
+    nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1'])
+    nt.assert_true(os.path.exists("./out2.h5"))
+
     # assert dsets are properly interleaved
     nt.assert_true(np.isclose((np.unique(ds.dsets[0].time_array) - np.unique(ds.dsets[1].time_array))[0],
                               -np.diff(np.unique(uvd.time_array))[0]))
     # assert first integration flagged across entire spw
-    nt.assert_true(ds.dsets[0].get_flags(37, 38)[0, 50:100].all())
+    nt.assert_true(ds.dsets[0].get_flags(37, 38)[0, 0:25].all())
     # assert first integration flagged *ONLY* across spw
-    nt.assert_false(ds.dsets[0].get_flags(37, 38)[0, :50].any() + ds.dsets[0].get_flags(37, 38)[0, 100:].any())
-    # assert channel 90 flagged for all ints
-    nt.assert_true(ds.dsets[0].get_flags(37, 38)[:, 90].all())
+    nt.assert_false(ds.dsets[0].get_flags(37, 38)[0, :0].any() + ds.dsets[0].get_flags(37, 38)[0, 25:].any())
+    # assert channel 15 flagged for all ints
+    nt.assert_true(ds.dsets[0].get_flags(37, 38)[:, 15].all())
     # assert phase errors decreased after re-phasing
     phserr_before = np.mean(np.abs(np.angle(uvd1.data_array / uvd2.data_array)))
     phserr_after = np.mean(np.abs(np.angle(ds.dsets[0].data_array / ds.dsets[1].data_array)))
     nt.assert_true(phserr_after < phserr_before)
+
+    # repeat feeding dsets_std and wgts
+    if os.path.exists("./out2.h5"):
+        os.remove("./out2.h5")
+    psc, ds = pspecdata.pspec_run([copy.deepcopy(uvd)], "./out2.h5", dsets_std=[copy.deepcopy(uvd)],
+                                   blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))], interleave_times=True,
+                                   verbose=False, overwrite=True, spw_ranges=[(0, 25)], rephase_to_dset=0,
+                                   broadcast_dset_flags=True, time_thresh=0.3)
+    # assert ds passes validation
+    assert ds.dsets_std[0] is not None
+    ds.validate_datasets()
+    assert os.path.exists("./out2.h5")
+    os.remove("./out2.h5")
 
     # test lst trimming
     if os.path.exists("./out2.h5"):
@@ -1540,9 +1569,9 @@ def test_pspec_run():
         os.remove("./out2.h5")
 
     # test when no data is loaded in dset
-    if os.path.exists("./out.hdf5"):
-        os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+    if os.path.exists("./out.h5"):
+        os.remove("./out.h5")
+    psc, ds = pspecdata.pspec_run(fnames, "./out.h5", Jy2mK=False, verbose=False, overwrite=True,
                             blpairs=[((500, 501), (600, 601))])
     nt.assert_equal(psc, None)
     nt.assert_false(os.path.exists("./out.h5"))
@@ -1551,15 +1580,15 @@ def test_pspec_run():
         uvd = UVData()
         uvd.read_miriad(f)
         uvds.append(uvd)
-    psc, ds = pspecdata.pspec_run(uvds, "./out.hdf5", dsets_std=fnames_std, Jy2mK=False, verbose=False, overwrite=True,
+    psc, ds = pspecdata.pspec_run(uvds, "./out.h5", dsets_std=fnames_std, Jy2mK=False, verbose=False, overwrite=True,
                               blpairs=[((500, 501), (600, 601))])
     nt.assert_equal(psc, None)
     nt.assert_false(os.path.exists("./out.h5"))
 
     # test when data is loaded, but no blpairs match
-    if os.path.exists("./out.hdf5"):
-        os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.hdf5", Jy2mK=False, verbose=False, overwrite=True,
+    if os.path.exists("./out.h5"):
+        os.remove("./out.h5")
+    psc, ds = pspecdata.pspec_run(fnames, "./out.h5", Jy2mK=False, verbose=False, overwrite=True,
                               blpairs=[((37, 38), (600, 601))])
     nt.assert_true(psc is not None)
     nt.assert_equal(len(psc.groups()), 0)
@@ -1567,21 +1596,21 @@ def test_pspec_run():
     # test glob-parseable input dataset
     dsets = [os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA"),
              os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA")]
-    if os.path.exists("./out.hdf5"):
-        os.remove("./out.hdf5")
-    psc, ds = pspecdata.pspec_run(dsets, "./out.hdf5", Jy2mK=False, verbose=True, overwrite=True,
+    if os.path.exists("./out.h5"):
+        os.remove("./out.h5")
+    psc, ds = pspecdata.pspec_run(dsets, "./out.h5", Jy2mK=False, verbose=True, overwrite=True,
                               blpairs=[((24, 25), (37, 38))])
     uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
     nt.assert_equal(uvp.Ntimes, 120)
-    if os.path.exists("./out.hdf5"):
-        os.remove("./out.hdf5")
+    if os.path.exists("./out.h5"):
+        os.remove("./out.h5")
 
     # test input calibration
     dfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.uvh5")
     cfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.flagged_abs.calfits")
-    psc, ds = pspecdata.pspec_run([dfile, dfile], "./out.hdf5", cals=cfile, dsets_std=[dfile, dfile],
+    psc, ds = pspecdata.pspec_run([dfile, dfile], "./out.h5", cals=cfile, dsets_std=[dfile, dfile],
                                    verbose=False, overwrite=True, blpairs=[((23, 24), (24, 25))],
-                                   pol_pairs=[('xx', 'xx')], interleave_times=True, rephase_to_dset=0,
+                                   pol_pairs=[('xx', 'xx')], interleave_times=False,
                                    file_type='uvh5', spw_ranges=[(100, 150)], cal_flag=True)
     # test calibration flags were propagated to test that cal was applied
     assert ds.dsets[0].flag_array.any()
@@ -1590,14 +1619,27 @@ def test_pspec_run():
     assert ds.dsets_std[1].flag_array.any()
 
     # test exceptions
-    nt.assert_raises(AssertionError, pspecdata.pspec_run, (1, 2), "./out.hdf5")
-    nt.assert_raises(AssertionError, pspecdata.pspec_run, [1, 2], "./out.hdf5")
-    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=(1, 2), verbose=False)
-    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", blpairs=[1, 2], verbose=False)
-    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.hdf5", beam=1, verbose=False)
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, 'foo', "./out.h5")
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.h5", blpairs=(1, 2), verbose=False)
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.h5", blpairs=[1, 2], verbose=False)
+    nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.h5", beam=1, verbose=False)
 
-    if os.path.exists("./out.hdf5"):
-        os.remove("./out.hdf5")
+    # test execution with list of files for each dataset and list of cals
+    if os.path.exists("./out.h5"):
+        os.remove("./out.h5")
+    fnames = glob.glob(os.path.join(DATA_PATH, "zen.2458116.*.HH.uvh5"))
+    cals = glob.glob(os.path.join(DATA_PATH, "zen.2458116.*.HH.flagged_abs.calfits"))
+    psc, ds = pspecdata.pspec_run([fnames, fnames], "./out.h5", Jy2mK=False, 
+                                  verbose=False, overwrite=True, file_type='uvh5',
+                                  bl_len_range=(14, 15), bl_deg_range=(0, 1), 
+                                  psname_ext='_0', spw_ranges=[(0, 25)], cals=[cals, cals])
+    nt.assert_true(isinstance(psc, container.PSpecContainer))
+    nt.assert_equal(psc.groups(), ['dset0_dset1'])
+    nt.assert_equal(psc.spectra(psc.groups()[0]), ['dset0_x_dset1_0'])
+    nt.assert_true(os.path.exists("./out.h5"))
+
+    if os.path.exists("./out.h5"):
+        os.remove("./out.h5")
 
 
 def test_input_calibration():

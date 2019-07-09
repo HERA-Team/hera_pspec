@@ -245,9 +245,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                   "tolerance of {} m".format(bl_tol)
             assert np.linalg.norm(antpos1[a] - antpos2[a]) < bl_tol, msg
 
-    # get xants
+    # calculate xants via flags if asked
     xants1, xants2 = [], []
-    if filter_blpairs:
+    if filter_blpairs and uvd1.flag_array is not None and uvd2.flag_array is not None:
         xants1, xants2 = set(ants1), set(ants2)
         baselines = sorted(set(uvd1.baseline_array).union(set(uvd2.baseline_array)))
         for bl in baselines:
