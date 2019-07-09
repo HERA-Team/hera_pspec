@@ -3001,8 +3001,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                       lvl=1, verbose=verbose)
         except ValueError:
             # at least one of the dset loads failed due to no data being present
-            utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
-            return None, None
+            utils.log("One of the dset loads failed due to no data overlap given "
+                      "the bls and pols selection", verbose=verbose)
+            return None
 
     err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
     assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
@@ -3025,8 +3026,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data 
                 # being present
-                utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
-                return None, None
+                utils.log("One of the dsets_std loads failed due to no data overlap given "
+                          "the bls and pols selection", verbose=verbose)
+                return None
 
         assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
 
@@ -3161,7 +3163,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # Open PSpecContainer to store all output in
     if verbose: print("Opening {}".format(filename))
-    psc = container.PSpecContainer(filename, mode='rw')
 
     # assign group name
     if groupname is None:
@@ -3182,11 +3183,23 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
-        if verbose: print("Storing {}".format(psname))        
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
-                      overwrite=overwrite)
+        if verbose: print("Storing {}".format(psname))
+        # possibly multiple writers per container, so handle file locking
+        Ncount = 0
+        while Ncount < 10:
+            try:
+                # open, write, then close it
+                psc = container.PSpecContainer(filename, mode='rw')
+                psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
+                              overwrite=overwrite)
+                del psc
+                break
+            except (OSError, IOError):
+                # if file is locked, wait 5 seconds and try again
+                time.sleep(5)
+                Ncount += 1
 
-    return psc, ds
+    return ds
 
 
 def get_pspec_run_argparser():
