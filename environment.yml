@@ -1,0 +1,23 @@
+name: hera_pspec
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - aipy>=3.0.0rc2
+  - astropy>=2.0
+  - h5py
+  - matplotlib>=2.0
+  - nose
+  - numpy>=1.15
+  - pip
+  - pyyaml
+  - scikit-learn
+  - scipy
+  - six
+  - pip:
+    - git+https://github.com/HERA-Team/linsolve
+    - git+https://github.com/HERA-Team/uvtools
+    - git+https://github.com/HERA-Team/hera_cal
+    - pyephem
+    - multiprocess
+

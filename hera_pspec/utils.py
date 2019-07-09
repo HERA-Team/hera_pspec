@@ -5,7 +5,6 @@ import traceback, operator
 import aipy, uvtools
 from hera_cal import redcal
 from collections import OrderedDict as odict
-from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
 
