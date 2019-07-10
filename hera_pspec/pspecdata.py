@@ -3157,8 +3157,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             bls2_list.append(_bls2)
 
     # Open PSpecContainer to store all output in
-    if verbose: print("Opening {}".format(filename))
-    psc = container.PSpecContainer(filename, mode='rw', keep_open=False)
+    if verbose: print("Opening {} in transactional mode".format(filename))
+    psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=1, maxiter=20)
 
     # assign group name
     if groupname is None:
@@ -3179,21 +3179,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
+
+        # write in transactional mode
         if verbose: print("Storing {}".format(psname))
-        # possibly multiple writers per container, so handle file locking
-        Ncount = 0
-        while Ncount < 10:
-            try:
-                # open, write, then close it
-                psc = container.PSpecContainer(filename, mode='rw')
-                psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
-                              overwrite=overwrite)
-                del psc
-                break
-            except (OSError, IOError):
-                # if file is locked, wait 5 seconds and try again
-                time.sleep(5)
-                Ncount += 1
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
+                      overwrite=overwrite)
 
     return ds
 
