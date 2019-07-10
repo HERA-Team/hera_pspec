@@ -15,18 +15,21 @@ def transactional(fn):
         psc = args[0] # self object
         
         # Open HDF5 file if needed
-        if not psc.keep_open: psc._open()
+        if not psc.keep_open:
+            psc._open()
         
         # Run function
         try:
             f = fn(*args, **kwargs)
         except Exception as err:
             # Close file before raising error
-            if not psc.keep_open: psc._close()
+            if not psc.keep_open:
+                psc._close()
             raise err
         
         # Close HDF5 file if necessary
-        if not psc.keep_open: psc._close()
+        if not psc.keep_open:
+            psc._close()
         
         # Return function result
         return f
@@ -57,14 +60,20 @@ class PSpecContainer(object):
         keep_open : bool, optional
             Whether the HDF5 file should be kept open, or opened and then 
             closed again each time an operation is performed. Setting 
-            keep_open=False is helpful for multi-process access patterns. 
+            `keep_open=False` is helpful for multi-process access patterns.
+            
+            This feature uses the Single-Writer Multiple-Reader (SWMR) feature 
+            of HDF5. Note that SWMR can only be used on POSIX-compliant 
+            filesystems, and so may not work on some network filesystems.
+            
             Default: True (keep file open).
 
         tsleep : float, optional
             Time to wait in seconds after each attempt at opening the file.
 
         maxiter : int, optional
-            Maximum number of attempts to open file.
+            Maximum number of attempts to open file (useful for concurrent 
+            access when file may be locked temporarily by other processes).
         """
         self.filename = filename
         self.keep_open = keep_open
@@ -76,7 +85,8 @@ class PSpecContainer(object):
 
         # Open file ready for reading and/or writing (if not in transactional mode)
         self.data = None
-        if keep_open: self._open()
+        if keep_open:
+            self._open()
     
     def _open(self):
         """
@@ -93,20 +103,28 @@ class PSpecContainer(object):
 
         # Convert user-specified mode to a mode that HDF5 recognizes. We only
         # allow non-destructive operations!
-        mode = 'a' if self.mode == 'rw' else 'r'
-        swmr = True if self.mode == 'r' else False
+        if self.mode == 'rw':
+            mode = 'a'
+        else:
+            mode = 'r'
+        if self.mode == 'r':
+            swmr = True
+        else:
+            swmr = False
 
         # check HDF5 version if swmr
         if swmr:
-            hdf5_v = h5py.version.hdf5_version_tuple[0] + h5py.version.hdf5_version_tuple[1]/100.
+            hdf5_v = h5py.version.hdf5_version_tuple[0] \
+                   + h5py.version.hdf5_version_tuple[1]/100.
             if hdf5_v < 1.1:
                 print("HDF5 version must be >= 1.10 for SWMR")
 
-        # try to open the file
+        # Try to open the file
         Ncount = 0
         while True:
             try:
-                self.data = h5py.File(self.filename, mode, libver='latest', swmr=swmr)
+                self.data = h5py.File(self.filename, mode, libver='latest', 
+                                      swmr=swmr)
                 if self.mode == 'rw':
                     try:
                         # Enable single writer, multiple reader mode on HDF5 file. 
@@ -120,13 +138,15 @@ class PSpecContainer(object):
                 # raise Exception if exceeded maxiter
                 if Ncount >= self.maxiter:
                     if self.mode == 'rw':
-                        raise OSError("Failed to open HDF5 file. Another process may "
-                                      "be holding it open; use \nkeep_open=False to "
-                                      "help prevent this from happening (single "
-                                      "process), or use the\nlock kwarg (multiple "
-                                      "processes).")
+                        raise OSError(
+                            "Failed to open HDF5 file. Another process may "
+                            "be holding it open; use \nkeep_open=False to "
+                            "help prevent this from happening (single "
+                            "process), or use the\nlock kwarg (multiple "
+                            "processes).")
                     else:
                         raise
+                
                 # sleep and try again
                 Ncount += 1
                 time.sleep(self.tsleep)
@@ -144,7 +164,8 @@ class PSpecContainer(object):
         """
         Close HDF5 file. DOes nothing if file is already closed.
         """
-        if self.data is None: return
+        if self.data is None:
+            return
         self.data.close()
         self.data = None
     
@@ -381,7 +402,8 @@ class PSpecContainer(object):
             List of group names.
         """
         groups = list(self.data.keys())
-        if u'header' in groups: groups.remove(u'header')
+        if u'header' in groups:
+            groups.remove(u'header')
         return groups
     
     @transactional
@@ -418,23 +440,24 @@ class PSpecContainer(object):
 def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_',
                         verbose=True, overwrite=False):
     """
-    Iterate through a PSpecContainer and, within each specified group,
-    combine UVPSpec (i.e. spectra) of similar name but varying psname extension.
+    Iterate through a PSpecContainer and, within each specified group, combine 
+    UVPSpec (i.e. spectra) of similar name but varying psname extension.
 
     Power spectra to-be-merged are assumed to follow the naming convention
 
     dset1_x_dset2_ext1, dset1_x_dset2_ext2, ...
 
     where _x_ is the default dset_split_str, and _ is the default ext_split_str.
-    The spectra names are first split by dset_split_str, and then by ext_split_str. In
-    this particular case, all instances of dset1_x_dset2* will be merged together.
+    The spectra names are first split by dset_split_str, and then by 
+    ext_split_str. In this particular case, all instances of dset1_x_dset2* 
+    will be merged together.
 
-    In order to merge spectra names with no dset distinction and only an extension,
-    feed dset_split_str as '' or None. Example, to merge together: uvp_1, uvp_2, uvp_3
-    feed dset_split_str=None and ext_split_str='_'.
+    In order to merge spectra names with no dset distinction and only an 
+    extension, feed dset_split_str as '' or None. Example, to merge together: 
+    uvp_1, uvp_2, uvp_3, feed dset_split_str=None and ext_split_str='_'.
 
-    Note this is a destructive and inplace operation, all of the *_ext1 objects are
-    removed after merge.
+    Note this is a destructive and inplace operation, all of the *_ext1 objects 
+    are removed after merge.
 
     Parameters
     ----------
@@ -461,9 +484,6 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
         psc = PSpecContainer(psc, mode='rw')
     else:
         assert isinstance(psc, PSpecContainer)
-    
-    # Check whether PSpecContainer is in transactional mode and a lock is defined
-     
     
     # Get groups
     _groups = psc.groups()
@@ -528,11 +548,12 @@ def get_combine_psc_spectra_argparser():
     a.add_argument("filename", type=str,
                    help="Filename of HDF5 container (PSpecContainer) containing "
                         "groups / input power spectra.")
-
-    a.add_argument("--dset_split_str", default='_x_', type=str, help='The pattern used to split dset1 '
-                   'from dset2 in the psname.')
-    a.add_argument("--ext_split_str", default='_', type=str, help='The pattern used to split the dset '
-                   'names from their extension in the psname (if it exists).')
-    a.add_argument("--verbose", default=False, action='store_true', help='Report feedback to stdout.')
-
+    a.add_argument("--dset_split_str", default='_x_', type=str, 
+                   help='The pattern used to split dset1 from dset2 in the '
+                        'psname.')
+    a.add_argument("--ext_split_str", default='_', type=str, 
+                   help='The pattern used to split the dset names from their '
+                        'extension in the psname (if it exists).')
+    a.add_argument("--verbose", default=False, action='store_true', 
+                   help='Report feedback to stdout.')
     return a
