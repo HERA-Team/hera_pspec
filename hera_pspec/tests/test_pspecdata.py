@@ -915,6 +915,8 @@ class Test_PSpecData(unittest.TestCase):
         
         # Check normal execution
         scalar = self.ds.scalar(('xx','xx'))
+        scalar_xx = self.ds.scalar('xx') # Can use single pol string as shorthand
+        nt.assert_equal(scalar, scalar_xx)
         scalar = self.ds.scalar(1515) # polpair-integer = ('xx', 'xx')
         scalar = self.ds.scalar(('xx','xx'), taper_override='none')
         scalar = self.ds.scalar(('xx','xx'), beam=gauss)
@@ -1481,29 +1483,51 @@ def test_pspec_run():
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
-    ds = pspecdata.pspec_run(fnames, "./out.h5", dsets_std=fnames_std, Jy2mK=True, beam=beamfile,
-                             blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))], verbose=False, overwrite=True,
-                             pol_pairs=[('xx', 'xx'), ('xx', 'xx')], dset_labels=["foo", "bar"],
-                             dset_pairs=[(0, 0), (0, 1)], spw_ranges=[(50, 75), (120, 140)], n_dlys=[20, 20],
-                             cosmo=cosmo, trim_dset_lsts=False, broadcast_dset_flags=False, store_cov=True)
+    psc, ds = pspecdata.pspec_run(fnames, "./out.h5", 
+                                  dsets_std=fnames_std, 
+                                  Jy2mK=True, 
+                                  beam=beamfile,
+                                  blpairs=[((37, 38), (37, 38)), 
+                                           ((37, 38), (52, 53))], 
+                                  verbose=False, 
+                                  overwrite=True,
+                                  pol_pairs=[('xx', 'xx'), ('xx', 'xx')], 
+                                  dset_labels=["foo", "bar"],
+                                  dset_pairs=[(0, 0), (0, 1)], 
+                                  spw_ranges=[(50, 75), (120, 140)], 
+                                  n_dlys=[20, 20],
+                                  cosmo=cosmo, 
+                                  trim_dset_lsts=False, 
+                                  broadcast_dset_flags=False, 
+                                  store_cov=True)
+    
     # assert groupname is dset1_dset2
     psc =  container.PSpecContainer('./out.h5')
     nt.assert_true("foo_bar" in psc.groups())
+    
     # assert uvp names are labeled by dset_pairs
-    nt.assert_equal(psc.spectra('foo_bar'), [u'foo_x_bar', u'foo_x_foo'])
+    nt.assert_equal(sorted(psc.spectra('foo_bar')), 
+                    sorted([u'foo_x_bar', u'foo_x_foo']))
+    
     # get UVPSpec for further inspection
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
+    
     # assert Jy2mK worked
     nt.assert_true(uvp.vis_units, "mK")
+    
     # assert only blpairs that were fed are present
     nt.assert_equal(uvp.bl_array.tolist(), [137138, 152153])
     nt.assert_equal(uvp.polpair_array.tolist(), [1515, 1515])
+    
     # assert weird cosmology was passed
     nt.assert_equal(uvp.cosmo, cosmo)
+    
     # assert cov_array was calculated b/c std files were passed and store_cov
     nt.assert_true(hasattr(uvp, 'cov_array'))
+    
     # assert dset labeling propagated
     nt.assert_equal(set(uvp.labels), set(['bar', 'foo']))
+    
     # assert spw_ranges and n_dlys specification worked
     np.testing.assert_array_equal(uvp.get_spw_ranges(), [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)])
 

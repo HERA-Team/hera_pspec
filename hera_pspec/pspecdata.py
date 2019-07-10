@@ -2941,7 +2941,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     history : str
         String to add to history of each UVPSpec object.
-
+    
     Returns
     -------
     psc : PSpecContainer object
@@ -2953,8 +2953,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         weighting matrices.
     """
     # type check
-    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
-    assert isinstance(dsets, (list, tuple, np.ndarray)), err_msg
+    assert isinstance(dsets, (list, tuple, np.ndarray)), \
+        "dsets must be fed as a list of dataset string paths or UVData objects."
 
     # parse psname
     if psname_ext is not None:
@@ -3005,8 +3005,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                       "the bls and pols selection", verbose=verbose)
             return None
 
-    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
-    assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
+    assert np.all([isinstance(d, UVData) for d in dsets]), \
+        "dsets must be fed as a list of dataset string paths or UVData objects."
 
     # check dsets_std input
     if dsets_std is not None:
@@ -3163,6 +3163,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # Open PSpecContainer to store all output in
     if verbose: print("Opening {}".format(filename))
+    psc = container.PSpecContainer(filename, mode='rw', keep_open=False)
 
     # assign group name
     if groupname is None:
