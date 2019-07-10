@@ -2845,7 +2845,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True,
               file_type='miriad', verbose=True, store_cov=False,
-              history='', r_params = None):
+              history='', r_params=None):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2994,18 +2994,23 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
     history : str
         String to add to history of each UVPSpec object.
 
-    r_params: dictionary with parameters for weighting matrix.
-              Proper fields
-              and formats depend on the mode of data_weighting.
-            data_weighting == 'sinc_downweight':
-                            dictionary with fields
-                            'filter_centers', list of floats (or float) specifying the (delay) channel numbers
-                                              at which to center filtering windows. Can specify fractional channel number.
-                            'filter_widths', list of floats (or float) specifying the width of each
-                                             filter window in (delay) channel numbers. Can specify fractional channel number.
-                            'filter_factors', list of floats (or float) specifying how much power within each filter window
-                                              is to be suppressed.
-            Absence of r_params dictionary will result in an error!
+    r_params: dict, optional
+        Dictionary with parameters for weighting matrix. Required fields and 
+        formats depend on the mode of `data_weighting`. Default: None.
+        
+        - `sinc_downweight` fields:
+            - `filter_centers`: list of floats (or float) specifying the 
+                                (delay) channel numbers at which to center 
+                                filtering windows. Can specify fractional 
+                                channel number.
+                                
+            - `filter_widths`:  list of floats (or float) specifying the width 
+                                of each filter window in (delay) channel 
+                                numbers. Can specify fractional channel number.
+
+            - `filter_factors`: list of floats (or float) specifying how much 
+                                power within each filter window is to be 
+                                suppressed.
 
     Returns
     -------
@@ -3018,8 +3023,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         weighting matrices.
     """
     # type check
-    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
-    assert isinstance(dsets, (list, tuple, np.ndarray)), err_msg
+    assert isinstance(dsets, (list, tuple, np.ndarray)), \
+        "dsets must be fed as a list of dataset string paths or UVData objects."
 
     # parse psname
     if psname_ext is not None:
@@ -3066,11 +3071,12 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
                       lvl=1, verbose=verbose)
         except ValueError:
             # at least one of the dset loads failed due to no data being present
-            utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
+            utils.log("One of the dset loads failed due to no data overlap "
+                      "given the bls and pols selection", verbose=verbose)
             return None, None
 
-    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
-    assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
+    assert np.all([isinstance(d, UVData) for d in dsets]), \
+        "dsets must be fed as a list of dataset string paths or UVData objects."
 
     # check dsets_std input
     if dsets_std is not None:
@@ -3091,7 +3097,9 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data
                 # being present
-                utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
+                utils.log("One of the dsets_std loads failed due to no data "
+                          "overlap given the bls and pols selection", 
+                          verbose=verbose)
                 return None, None
 
         assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
@@ -3183,7 +3191,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
             bls2_list.append(_bls2)
 
     # Open PSpecContainer to store all output in
-    psc = container.PSpecContainer(filename, mode='rw')
+    psc = container.PSpecContainer(filename, mode='rw', keep_open=False)
 
     # assign group name
     if groupname is None:
