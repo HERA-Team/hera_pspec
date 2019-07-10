@@ -1,5 +1,6 @@
 import numpy as np
 import copy, operator
+from . import utils
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 
@@ -945,3 +946,147 @@ def _fast_lookup_blpairts(src_blpts, query_blpts, time_prec=8):
     blpts_idxs = np.where(src_blpts == query_blpts[:,np.newaxis])[1]
 
     return blpts_idxs
+
+
+def _get_red_bls(uvp, bl_len_tol=1., bl_ang_tol=1.):
+    """
+    Get redundant baseline groups that are present in a UVPSpec object.
+    
+    Parameters
+    ----------
+    uvp : UVPSpec
+        UVPSpec object.
+    
+    bl_len_tol : float, optional
+        Maximum difference in length to use for grouping baselines. 
+        This does not guarantee that the maximum length difference 
+        between any two baselines in a group is less than bl_len_tol 
+        however. Default: 1.0.
+    
+    bl_ang_tol : float, optional
+        Maximum separation in angle to use for grouping baselines. 
+        This does not guarantee that the maximum angle between any 
+        two baselines in a group is less than bl_ang_tol however. 
+        Default: 1.0.
+    
+    Returns
+    -------
+    grp_bls : list of array_like
+        List of redundant baseline groups. Each list item contains 
+        an array of baseline integers corresponding to the members 
+        of the group.
+        
+    grp_lens : list of float
+        Average length of the baselines in each group.
+        
+    grp_angs : list of float
+        Average angle of the baselines in each group.
+    """
+    # Calculate length and angle of baseline vecs
+    bl_vecs = uvp.get_ENU_bl_vecs()
+    
+    lens, angs = utils.get_bl_lens_angs(bl_vecs, bl_error_tol=bl_len_tol)
+    
+    # Baseline indices
+    idxs = np.arange(len(lens)).astype(np.int)
+    grp_bls = []; grp_len = []; grp_ang = []
+    
+    # Group baselines by length and angle
+    max_loops = idxs.size
+    nloops = 0
+    while len(idxs) > 0 and nloops < max_loops:
+        nloops += 1
+        
+        # Match bls within some tolerance in length and angle
+        matches = np.where(np.logical_and(
+                            np.abs(lens - lens[0]) < bl_len_tol,
+                            np.abs(angs - angs[0]) < bl_ang_tol) )
+        
+        # Save info about this group
+        grp_bls.append(uvp.bl_array[idxs[matches]])
+        grp_len.append(np.mean(lens[matches]))
+        grp_ang.append(np.mean(angs[matches]))
+        
+        # Remove bls that were matched so we don't try to group them again
+        idxs = np.delete(idxs, matches)
+        lens = np.delete(lens, matches)
+        angs = np.delete(angs, matches)
+    
+    return grp_bls, grp_len, grp_ang
+
+
+def _get_red_blpairs(uvp, bl_len_tol=1., bl_ang_tol=1.):
+    """
+    Group baseline-pairs from a UVPSpec object according to the 
+    redundant groups that their constituent baselines belong to.
+    
+    NOTE: Baseline-pairs made up of baselines from two different 
+    redundant groups are ignored.
+    
+    Parameters
+    ----------
+    uvp : UVPSpec
+        UVPSpec object.
+    
+    bl_len_tol : float, optional
+        Maximum difference in length to use for grouping baselines. 
+        This does not guarantee that the maximum length difference 
+        between any two baselines in a group is less than bl_len_tol 
+        however. Default: 1.0.
+    
+    bl_ang_tol : float, optional
+        Maximum separation in angle to use for grouping baselines. 
+        This does not guarantee that the maximum angle between any 
+        two baselines in a group is less than bl_ang_tol however. 
+        Default: 1.0.
+    
+    Returns
+    -------
+    grp_bls : list of array_like
+        List of redundant baseline groups. Each list item contains 
+        an array of baseline-pair integers corresponding to the 
+        members of the group.
+        
+    grp_lens : list of float
+        Average length of the baselines in each group.
+        
+    grp_angs : list of float
+        Average angle of the baselines in each group.
+    """
+    # Get redundant baseline groups
+    red_bls, red_lens, red_angs = _get_red_bls(uvp=uvp, 
+                                               bl_len_tol=bl_len_tol, 
+                                               bl_ang_tol=bl_ang_tol)
+    
+    # Get all available blpairs and convert to pairs of integers
+    blps = [(uvp.antnums_to_bl(blp[0]), uvp.antnums_to_bl(blp[1]))
+            for blp in uvp.get_blpairs()]
+    bl1, bl2 = zip(*blps)
+    
+    # Build bl -> group index dict
+    group_idx = {}
+    for i, grp in enumerate(red_bls):
+        for bl in grp:
+            group_idx[bl] = i
+    
+    # Get red. group that each bl belongs to
+    bl1_grp = np.array([group_idx[bl] for bl in bl1])
+    bl2_grp = np.array([group_idx[bl] for bl in bl2])
+    
+    # Convert to arrays for easier indexing
+    bl1 = np.array(bl1)
+    bl2 = np.array(bl2)
+    
+    # Loop over redundant groups; assign blpairs to each group
+    red_grps = []
+    grp_ids = np.arange(len(red_bls))
+    for i in grp_ids:
+        # This line only keeps blpairs where both bls belong to the same red grp!
+        matches = np.where(np.logical_and(bl1_grp == i, bl2_grp == i))
+        
+        # Unpack into list of blpair integers
+        blpair_ints = [int("%d%d" % _blp) 
+                       for _blp in zip(bl1[matches], bl2[matches])]
+        red_grps.append(blpair_ints)
+    
+    return red_grps, red_lens, red_angs

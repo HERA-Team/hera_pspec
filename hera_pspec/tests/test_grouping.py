@@ -215,17 +215,16 @@ def test_validate_bootstrap_errorbar():
                    taper='none', sampling=False, little_h=False, spw_ranges=[(0, 50)], verbose=False)
 
     # bootstrap resample
+    Nsamples = 1000
     seed = 0
-    Nsamples = 200
     uvp_avg, uvp_boots, uvp_wgts = grouping.bootstrap_resampled_error(uvp, time_avg=False, Nsamples=Nsamples,
                                                                       seed=seed, normal_std=True,
                                                                       blpair_groups=[uvp.get_blpairs()])
-
     # assert z-score has std of ~1.0 along time ax to within 1/sqrt(Nsamples)
-    bs_std_zscr_real = np.std(uvp_avg.data_array[0].real) / np.mean(uvp_avg.stats_array['bs_std'][0].real)
-    nt.assert_true(np.abs(1.0 - bs_std_zscr_real) < 1/np.sqrt(Nsamples))
-    bs_std_zscr_imag = np.std(uvp_avg.data_array[0].imag) / np.mean(uvp_avg.stats_array['bs_std'][0].imag)
-    nt.assert_true(np.abs(1.0 - bs_std_zscr_imag) < 1/np.sqrt(Nsamples))
+    zscr_real = np.std(uvp_avg.data_array[0].real / uvp_avg.stats_array['bs_std'][0].real)
+    zscr_imag = np.std(uvp_avg.data_array[0].imag / uvp_avg.stats_array['bs_std'][0].imag)
+    nt.assert_true(np.abs(1.0 - zscr_real) < 1/np.sqrt(Nsamples))
+    nt.assert_true(np.abs(1.0 - zscr_imag) < 1/np.sqrt(Nsamples))
 
 
 def test_bootstrap_run():

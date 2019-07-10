@@ -11,7 +11,7 @@ from collections import OrderedDict as odict
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, 
                           num_steps=5000, taper='none', little_h=True, 
-                          noise_scalar=False):
+                          noise_scalar=False, exact_norm=False):
     """
     This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
@@ -54,6 +54,9 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
         noise power scalar only differs in that the Bpp_over_BpSq term turns 
         into 1_over_Bp. See Pober et al. 2014, ApJ 782, 66, and Parsons HERA 
         Memo #27. Default: False.
+    exact_norm : boolean, optional
+        returns only X2Y for scalar if True, else uses the existing framework
+        involving antenna beam and spectral tapering factors. Default: False.
 
     Returns
     -------
@@ -73,6 +76,10 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     # Get redshifts and cosmological functions
     redshifts = cosmo.f2z(integration_freqs).flatten()
     X2Y = np.array([cosmo.X2Y(z, little_h=little_h) for z in redshifts])
+
+    if exact_norm: #Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
+        scalar = integrate.trapz(X2Y, x=integration_freqs)/(np.abs(integration_freqs[-1]-integration_freqs[0]))
+        return scalar
 
     # Use linear interpolation to interpolate the frequency-dependent 
     # quantities derived from the beam model to the same frequency grid as the 
@@ -122,7 +129,7 @@ class PSpecBeamBase(object):
 
     def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs, 
                              num_steps=5000, pol='pI', taper='none', 
-                             little_h=True, noise_scalar=False):
+                             little_h=True, noise_scalar=False, exact_norm=False):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -169,6 +176,10 @@ class PSpecBeamBase(object):
             The noise power scalar only differs in that the Bpp_over_BpSq term 
             just because 1_over_Bp. See Pober et al. 2014, ApJ 782, 66.
 
+        exact_norm : boolean, optional
+            returns only X2Y for scalar if True, else uses the existing framework
+            involving antenna beam and spectral tapering factors. Default: False. 
+
         Returns
         -------
         scalar: float
@@ -188,7 +199,7 @@ class PSpecBeamBase(object):
                                        omega_ratio, pspec_freqs,
                                        num_steps=num_steps, taper=taper, 
                                        little_h=little_h,
-                                       noise_scalar=noise_scalar)
+                                       noise_scalar=noise_scalar, exact_norm=exact_norm)
         return scalar
 
     def Jy_to_mK(self, freqs, pol='pI'):
@@ -419,6 +430,61 @@ class PSpecBeamUV(PSpecBeamBase):
         if uvb.beam_type == 'efield':
             self.primary_beam.efield_to_power(inplace=True)
             self.primary_beam.peak_normalize()
+
+    def beam_normalized_response(self, pol='pI', freq=None):
+        """
+        Outputs beam response for given polarization as a function
+        of pixels on the sky and input frequencies.
+        The response needs to be peak normalized, and is read in from 
+        Healpix coordinates.
+        Uses interp_freq function from uvbeam for interpolation of beam
+        response over given frequency values.
+
+        Parameters
+        ----------
+        pol: str, optional
+            Which polarization to compute the beam response for.
+            'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX' 
+            The output shape is (Nfreq, Npixels)
+            Default: 'pI'
+
+        Returns
+        -------
+        beam_res : float, array-like
+            Beam response as a function healpix indices and frequency.
+        omega : float, array-like
+            Beam solid angle as a function of frequency
+        nside : int, scalar 
+            used to compute resolution
+        """
+        
+        if self.primary_beam.beam_type != 'power':
+            raise ValueError('beam_type must be power')
+        if self.primary_beam.Naxes_vec > 1:
+            raise ValueError('Expect scalar for power beam, found vector')
+        if self.primary_beam._data_normalization.value != 'peak':
+            raise ValueError('beam must be peak normalized')
+        if self.primary_beam.pixel_coordinate_system != 'healpix':
+            raise ValueError('Currently only healpix format supported')
+
+        nside = self.primary_beam.nside
+        beam_res = self.primary_beam._interp_freq(freq) # interpolate beam in frequency, based on the data frequencies 
+        beam_res = beam_res[0]
+
+        if isinstance(pol, (str, np.str)):
+            pol = uvutils.polstr2num(pol)
+        
+        pol_array = self.primary_beam.polarization_array
+        
+        if pol in pol_array:
+            stokes_p_ind = np.where(np.isin(pol_array, pol))[0][0]
+            beam_res = beam_res[0, 0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
+        else:
+            raise ValueError('Do not have the right polarization information')
+
+        omega = np.sum(beam_res, axis=-1) * np.pi / (3. * nside**2) #compute beam solid angle as a function of frequency 
+        
+        return beam_res, omega, nside
 
     def power_beam_int(self, pol='pI'):
         """

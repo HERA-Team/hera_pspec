@@ -199,7 +199,7 @@ class PSpecContainer(object):
         pspec_group : HDF5 group
             Group containing datasets that contain power spectrum and
             supporting information, in a standard format expected by UVPSpec.
-
+        
         Returns
         -------
         uvp : UVPSpec
@@ -207,7 +207,11 @@ class PSpecContainer(object):
         """
         # Check that group is tagged as containing UVPSpec (pspec_type attribute)
         if 'pspec_type' in list(pspec_group.attrs.keys()):
-            if pspec_group.attrs['pspec_type'] != uvpspec.UVPSpec.__name__:
+            
+            # Convert bytes -> str if needed
+            pspec_type = pspec_group.attrs['pspec_type']
+            if isinstance(pspec_type, bytes): pspec_type = pspec_type.decode()
+            if pspec_type != uvpspec.UVPSpec.__name__:
                 raise TypeError("HDF5 group is not tagged as a UVPSpec object.")
         else:
             raise TypeError("HDF5 group is not tagged as a UVPSpec object.")
@@ -325,7 +329,7 @@ class PSpecContainer(object):
 
         psname : str, optional
             The name of the power spectrum to return.
-
+        
         Returns
         -------
         uvp : UVPSpec or list of UVPSpec

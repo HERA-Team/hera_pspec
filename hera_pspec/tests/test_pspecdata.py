@@ -11,6 +11,7 @@ from hera_cal import redcal
 from scipy.signal import windows
 from scipy.interpolate import interp1d
 from astropy.time import Time
+import warnings
 
 # Data files to use in tests
 dfiles = [
@@ -116,6 +117,11 @@ class Test_PSpecData(unittest.TestCase):
         self.bm = pspecbeam.PSpecBeamUV(beamfile)
         self.bm.filename = 'HERA_NF_dipole_power.beamfits'
 
+        #Load isotropic beam file
+        beamfile_Q = os.path.join(DATA_PATH, 'isotropic_beam.beamfits')
+        self.bm_Q  = pspecbeam.PSpecBeamUV(beamfile_Q)
+        self.bm_Q.filename = 'isotropic_beam.beamfits'
+
         # load another data file
         self.uvd = uv.UVData()
         self.uvd.read_miriad(os.path.join(DATA_PATH,
@@ -185,6 +191,7 @@ class Test_PSpecData(unittest.TestCase):
         #test TypeError if dsets is dict but dsets_std is not
         nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,[0])
         nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,{'e':0})
+        nt.assert_raises(TypeError,self.ds.add,{'d':0},[0],None,{'e':0})
 
     def test_labels(self):
         """
@@ -314,6 +321,98 @@ class Test_PSpecData(unittest.TestCase):
         
         # Check for error handling
         nt.assert_raises(ValueError, self.ds.set_Ndlys, vect_length+100)
+
+    def test_get_Q(self):
+        """
+        Test the Q = dC_ij/dp function.
+        
+        A general comment here:
+        I would really want to do away with try and exception statements. The reason to use them now
+        was that current unittests throw in empty datasets to these functions. Given that we are computing
+        the actual value of tau/freq/taper etc. we do need datasets! Currently, if there is no dataset,
+        Q_matrix is simply an identity matrix with same dimensions as that of vector length.
+        It will be very helpful if we can have more elegant solution for this.
+        
+        """
+        vect_length = 50
+        x_vect = np.random.normal(size=vect_length) \
+               + 1.j * np.random.normal(size=vect_length)
+        y_vect = np.random.normal(size=vect_length) \
+               + 1.j * np.random.normal(size=vect_length)
+
+        self.ds.spw_Nfreqs = vect_length
+        pol = 'xx' 
+        #Test if there is a warning if user does not pass the beam
+        key1 = (0, 24, 38)
+        key2 = (1, 24, 38)
+        uvd = copy.deepcopy(self.uvd)
+        ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
+        with warnings.catch_warnings(record=True) as w:
+            ds_t.get_Q(0, pol)
+        assert len(w) > 0
+
+        for i in range(vect_length):
+            try:
+                Q_matrix = self.ds.get_Q(i, pol)
+                # Test that if the number of delay bins hasn't been set
+                # the code defaults to putting that equal to Nfreqs
+                self.assertEqual(self.ds.spw_Ndlys, self.ds.spw_Nfreqs)
+            except IndexError:
+                Q_matrix = np.ones((vect_length, vect_length))
+
+            xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
+            yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
+            xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
+
+            # Test that Q matrix has the right shape
+            self.assertEqual(Q_matrix.shape, (vect_length, vect_length))
+
+            # Test that x^t Q y == conj(y^t Q x)
+            self.assertAlmostEqual(xQy, np.conjugate(yQx))
+
+            # x^t Q x should be real
+            self.assertAlmostEqual(np.imag(xQx), 0.)
+
+        x_vect = np.ones(vect_length)
+        try:
+            Q_matrix = self.ds.get_Q(vect_length/2, pol)
+        except IndexError:
+            Q_matrix = np.ones((vect_length, vect_length))
+        xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
+        self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
+
+        # Now do all the same tests from above but for a different number
+        # of delay channels
+        self.ds.set_Ndlys(vect_length-3)
+        for i in range(vect_length-3):
+            try:
+                Q_matrix = self.ds.get_Q(i, pol)
+            except IndexError:
+                Q_matrix = np.ones((vect_length,vect_length))
+            xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
+            yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
+            xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
+
+            # Test that Q matrix has the right shape
+            self.assertEqual(Q_matrix.shape, (vect_length, vect_length))
+
+            # Test that x^t Q y == conj(y^t Q x)
+            self.assertAlmostEqual(xQy, np.conjugate(yQx))
+
+            # x^t Q x should be real
+            self.assertAlmostEqual(np.imag(xQx), 0.)
+
+        x_vect = np.ones(vect_length)
+        try:
+            Q_matrix = self.ds.get_Q((vect_length-2)/2-1, pol)
+        except IndexError:
+            Q_matrix = np.ones((vect_length,vect_length))
+        xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
+        self.assertAlmostEqual(xQx, np.abs(vect_length**2.))
+
+        # Make sure that error is raised when asking for a delay mode outside
+        # of the range of delay bins
+        nt.assert_raises(IndexError, self.ds.get_Q, vect_length-1, pol)
 
     def test_get_unnormed_E(self):
         """
@@ -630,6 +729,9 @@ class Test_PSpecData(unittest.TestCase):
                 q_hat_a = self.ds.q_hat(key1, key2, allow_fft=True)
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
+
+        #Test if error is raised when one tried FFT approach on exact_norm
+        nt.assert_raises(NotImplementedError, self.ds.q_hat, key1, key2, exact_norm=True, allow_fft = True)
 
     def test_get_H(self):
         """
@@ -953,6 +1055,10 @@ class Test_PSpecData(unittest.TestCase):
         vis_u, norm_u = ds.units()
         nt.assert_equal(vis_u, "UNCALIB")
         nt.assert_equal(norm_u, "Hz str [beam normalization not specified]")
+        ds_b = pspecdata.PSpecData(dsets=[self.uvd, self.uvd], 
+                wgts=[None, None], beam=self.bm)
+        vis_u, norm_u = ds_b.units(little_h=False)
+        nt.assert_equal(norm_u,"Mpc^3")
 
     def test_delays(self):
         ds = pspecdata.PSpecData()
@@ -993,6 +1099,46 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
         nt.assert_equal(uvp.data_array[0].dtype, np.complex128)
         nt.assert_equal(uvp.data_array[0].shape, (240, 64, 1))
+
+        #test for different forms of input parameters
+        ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=(10,20))
+        ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=10, spw_ranges=[(10,20)])
+        ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=1)
+
+        #assert error if baselines are not provided in the right format
+        nt.assert_raises(NotImplementedError, ds.pspec, [[(24,25),(38,39)]],[[(24,25),(38,39)]], 
+                (0,1),[('xx','xx')])
+
+        # compare the output of get_Q function with analytical estimates
+        
+        ds_Q  = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm_Q)
+        bls_Q   = [(24, 25)]
+        uvp = ds_Q.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                       norm='I', taper='none', verbose=True, exact_norm=False)
+        Q_sample = ds_Q.get_Q((ds_Q.spw_range[1] - ds_Q.spw_range[0])/2, 'xx') #Get Q matrix for 0th delay mode
+
+        nt.assert_equal(np.shape(Q_sample), (ds_Q.spw_range[1] - ds_Q.spw_range[0],\
+                                             ds_Q.spw_range[1] - ds_Q.spw_range[0])) #Check for the right shape
+
+        estimated_Q = (1.0/(4*np.pi)) * np.ones_like(Q_sample) 
+
+        nt.assert_true(np.allclose(np.real(estimated_Q), np.real(Q_sample), rtol=1e-05))
+
+        #Test if the two pipelines match
+
+        ds_t    = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm_Q)
+        uvp_new = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                       norm='I', taper='none', verbose=True, exact_norm=True)
+        uvp_ext = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                       norm='I', taper='none', verbose=True, exact_norm=False)
+        spw         = 0
+        blp         = (bls_Q[0], bls_Q[0])
+        key         = (spw, blp, 'xx')
+        power_real_new  = (np.real(uvp_new.get_data(key)))
+        power_real_ext  = (np.real(uvp_ext.get_data(key)))
+        
+        diff = np.median((power_real_new-power_real_ext)/power_real_ext)
+        nt.assert_true((diff <= 0.05))
 
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
@@ -1301,12 +1447,14 @@ class Test_PSpecData(unittest.TestCase):
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
 def test_pspec_run():
-    fnames = [os.path.join(DATA_PATH, d) for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
-                                                   'zen.odd.xx.LST.1.28828.uvOCRSA']]
+    fnames = [os.path.join(DATA_PATH, d) 
+              for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
+                        'zen.odd.xx.LST.1.28828.uvOCRSA']]
 
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    fnames_std=[os.path.join(DATA_PATH,d) for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
-                                                    'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
+    fnames_std = [os.path.join(DATA_PATH,d) 
+                  for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
+                            'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
     # test basic execution
     if os.path.exists("./out.hdf5"):
         os.remove("./out.hdf5")
