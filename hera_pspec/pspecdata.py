@@ -2891,7 +2891,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
 
     history : str
         String to add to history of each UVPSpec object.
-
+    
     Returns
     -------
     psc : PSpecContainer object
@@ -2903,8 +2903,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         weighting matrices.
     """
     # type check
-    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
-    assert isinstance(dsets, (list, tuple, np.ndarray)), err_msg
+    assert isinstance(dsets, (list, tuple, np.ndarray)), \
+        "dsets must be fed as a list of dataset string paths or UVData objects."
 
     # parse psname
     if psname_ext is not None:
@@ -2951,11 +2951,12 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
                       lvl=1, verbose=verbose)
         except ValueError:
             # at least one of the dset loads failed due to no data being present
-            utils.log("One of the dset loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
+            utils.log("One of the dset loads failed due to no data overlap "
+                      "given the bls and pols selection", verbose=verbose)
             return None, None
 
-    err_msg = "dsets must be fed as a list of dataset string paths or UVData objects."
-    assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
+    assert np.all([isinstance(d, UVData) for d in dsets]), \
+        "dsets must be fed as a list of dataset string paths or UVData objects."
 
     # check dsets_std input
     if dsets_std is not None:
@@ -2976,7 +2977,9 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data 
                 # being present
-                utils.log("One of the dsets_std loads failed due to no data overlap given the bls and pols selection", verbose=verbose)
+                utils.log("One of the dsets_std loads failed due to no data "
+                          "overlap given the bls and pols selection", 
+                          verbose=verbose)
                 return None, None
 
         assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
@@ -3068,7 +3071,7 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
             bls2_list.append(_bls2)
 
     # Open PSpecContainer to store all output in
-    psc = container.PSpecContainer(filename, mode='rw')
+    psc = container.PSpecContainer(filename, mode='rw', keep_open=False)
 
     # assign group name
     if groupname is None:
