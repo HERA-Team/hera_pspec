@@ -123,34 +123,29 @@ class PSpecData(object):
                                  "specified.")
             labels = list(dsets.keys())
 
-            if not isinstance(wgts, dict):
+            if wgts is None:
+                wgts = dict([(l, None) for l in labels])
+            elif not isinstance(wgts, dict):
                 raise TypeError("If 'dsets' is a dict, 'wgts' must also be "
                                 "a dict")
 
-            if not isinstance(dsets_std, dict):
-                if dsets_std is None:
-                    dsets_std = [None for m in range(len(dsets))]
-                else:
-                    raise TypeError("If 'dsets' is a dict, 'dsets_std' must"
-                                    "also be a dict")
-            else:
-                _dsets_std = [dsets_std[key] for key in labels]
-                dsets_std = _dsets_std
+            if dsets_std is None:
+                dsets_std = dict([(l, None) for l in labels])
+            elif not isinstance(dsets_std, dict):
+                raise TypeError("If 'dsets' is a dict, 'dsets_std' must also be "
+                                "a dict")
 
-            if not isinstance(cals, dict):
-                if cals is None:
-                    cals = [None for m in range(len(dsets))]
-                else:
-                    raise TypeError("If 'dsets' is a dict, 'cals' must"
-                                    "also be a dict")
+            if cals is None:
+                cals = dict([(l, None) for l in labels])
+            elif not isinstance(cals, dict):
+                raise TypeError("If 'cals' is a dict, 'cals' must also be "
+                                "a dict")
 
             # Unpack dsets and wgts dicts
-            _dsets = [dsets[key] for key in labels]
-            _wgts = [wgts[key] for key in labels]
-            _cals = [cals[key] for key in labels]
-            dsets = _dsets
-            wgts = _wgts
-            cals = _cals
+            dsets = [dsets[key] for key in labels]
+            dsets_std = [dsets_std[key] for key in labels]
+            wgts = [wgts[key] for key in labels]
+            cals = [cals[key] for key in labels]
 
         # Convert input args to lists if possible
         if isinstance(dsets, UVData): dsets = [dsets,]
@@ -203,7 +198,7 @@ class PSpecData(object):
             self.labels = []
         if labels is None:
             labels = ["dset{:d}".format(i) 
-                    for i in range(len(self.dsets), len(dsets)+len(self.dsets))]
+                    for i in range(len(self.dsets), len(dsets) + len(self.dsets))]
 
         # Apply calibration if provided
         for dset, dset_std, cal in zip(dsets, dsets_std, cals):

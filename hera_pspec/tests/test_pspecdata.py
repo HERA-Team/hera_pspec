@@ -186,13 +186,28 @@ class Test_PSpecData(unittest.TestCase):
 
     def test_add_data(self):
         """
-        Test adding non UVData object.
+        Test PSpecData add()
         """
+        uv = self.d[0]
+        # test adding non list objects
         nt.assert_raises(TypeError, self.ds.add, 1, 1)
-        #test TypeError if dsets is dict but dsets_std is not
-        nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,[0])
-        nt.assert_raises(TypeError,self.ds.add,{'d':0},{'w':0},None,{'e':0})
-        nt.assert_raises(TypeError,self.ds.add,{'d':0},[0],None,{'e':0})
+        # test adding non UVData objects
+        nt.assert_raises(TypeError, self.ds.add, [1], None)
+        nt.assert_raises(TypeError, self.ds.add, [uv], [1])
+        nt.assert_raises(TypeError, self.ds.add, [uv], None, dsets_std=[1])
+        # test adding non UVCal for cals
+        nt.assert_raises(TypeError, self.ds.add, [uv], None, cals=[1])
+        # test TypeError if dsets is dict but other inputs are not
+        nt.assert_raises(TypeError, self.ds.add, {'d':uv}, [0])
+        nt.assert_raises(TypeError, self.ds.add, {'d':uv}, {'d':uv}, dsets_std=[0])
+        nt.assert_raises(TypeError, self.ds.add, {'d':uv}, {'d':uv}, cals=[0])
+        # specifying labels when dsets is a dict is a ValueError
+        nt.assert_raises(ValueError, self.ds.add, {'d':uv}, None, labels=['d'])
+        # use lists, but not appropriate lengths
+        nt.assert_raises(AssertionError, self.ds.add, [uv], [uv, uv])
+        nt.assert_raises(AssertionError, self.ds.add, [uv], None, dsets_std=[uv, uv])
+        nt.assert_raises(AssertionError, self.ds.add, [uv], None, cals=[None, None])
+        nt.assert_raises(AssertionError, self.ds.add, [uv], None, labels=['foo', 'bar'])
 
     def test_labels(self):
         """
@@ -208,11 +223,11 @@ class Test_PSpecData(unittest.TestCase):
         # Check specifying labels using dicts
         dsdict = {'a':self.d[0], 'b':self.d[1]}
         psd = pspecdata.PSpecData(dsets=dsdict, wgts=dsdict)
-        self.assertRaises(ValueError, pspecdata.PSpecData, dsets=dsdict,
+        nt.assert_raises(ValueError, pspecdata.PSpecData, dsets=dsdict,
                           wgts=dsdict, labels=['a', 'b'])
 
         # Check that invalid labels raise errors
-        self.assertRaises(KeyError, psd.x, ('green', 24, 38))
+        nt.assert_raises(KeyError, psd.x, ('green', 24, 38))
 
     def test_parse_blkey(self):
         # make a double-pol UVData
@@ -241,10 +256,8 @@ class Test_PSpecData(unittest.TestCase):
         print(ds) # print empty psd
         ds.add(self.uvd, None)
         print(ds) # print populated psd
-        
 
     def test_get_Q_alt(self):
-
         """
         Test the Q = dC/dp function.
         """
@@ -533,7 +546,6 @@ class Test_PSpecData(unittest.TestCase):
         for i in range(self.ds.spw_Ndlys):
             for j in range(self.ds.spw_Ndlys):
                 self.assertLessEqual(frac_non_herm[i,j], tol)
-
 
     def test_get_MW(self):
         n = 17
@@ -904,7 +916,6 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.spw_Ndlys = self.ds.spw_Nfreqs
         adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
         self.assertAlmostEqual(adjustment, 1.0)
-
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)
@@ -1456,6 +1467,7 @@ class Test_PSpecData(unittest.TestCase):
         blpairs = [((24, 25), (24, 38))]
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
+
 def test_pspec_run():
     fnames = [os.path.join(DATA_PATH, d) 
               for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
@@ -1483,23 +1495,23 @@ def test_pspec_run():
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
-    psc, ds = pspecdata.pspec_run(fnames, "./out.h5", 
-                                  dsets_std=fnames_std, 
-                                  Jy2mK=True, 
-                                  beam=beamfile,
-                                  blpairs=[((37, 38), (37, 38)), 
-                                           ((37, 38), (52, 53))], 
-                                  verbose=False, 
-                                  overwrite=True,
-                                  pol_pairs=[('xx', 'xx'), ('xx', 'xx')], 
-                                  dset_labels=["foo", "bar"],
-                                  dset_pairs=[(0, 0), (0, 1)], 
-                                  spw_ranges=[(50, 75), (120, 140)], 
-                                  n_dlys=[20, 20],
-                                  cosmo=cosmo, 
-                                  trim_dset_lsts=False, 
-                                  broadcast_dset_flags=False, 
-                                  store_cov=True)
+    ds = pspecdata.pspec_run(fnames, "./out.h5", 
+                             dsets_std=fnames_std, 
+                             Jy2mK=True, 
+                             beam=beamfile,
+                             blpairs=[((37, 38), (37, 38)), 
+                                      ((37, 38), (52, 53))], 
+                             verbose=False, 
+                             overwrite=True,
+                             pol_pairs=[('xx', 'xx'), ('xx', 'xx')], 
+                             dset_labels=["foo", "bar"],
+                             dset_pairs=[(0, 0), (0, 1)], 
+                             spw_ranges=[(50, 75), (120, 140)], 
+                             n_dlys=[20, 20],
+                             cosmo=cosmo, 
+                             trim_dset_lsts=False, 
+                             broadcast_dset_flags=False, 
+                             store_cov=True)
     
     # assert groupname is dset1_dset2
     psc =  container.PSpecContainer('./out.h5')
