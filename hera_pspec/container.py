@@ -3,6 +3,7 @@ import h5py
 from hera_pspec import uvpspec, version, utils
 import argparse
 import time
+from functools import wraps
 
 
 def transactional(fn):
@@ -11,6 +12,7 @@ def transactional(fn):
     opened and then closed again for every operation. This is done when 
     keep_open = False.
     """
+    @wraps(fn)
     def wrapper(*args, **kwargs):
         psc = args[0] # self object
         
@@ -42,10 +44,14 @@ class PSpecContainer(object):
     Container class for managing multiple UVPSpec objects.
     """
 
-    def __init__(self, filename, mode='r', keep_open=True, tsleep=0.5, maxiter=2):
+    def __init__(self, filename, mode='r', keep_open=True, swmr=False, tsleep=0.5, maxiter=2):
         """
         Manage a collection of UVPSpec objects that are stored in a structured
         HDF5 file.
+
+        Note: one should not create new groups or datasets with SWMR. See page 6 of
+        https://support.hdfgroup.org/HDF5/docNewFeatures/SWMR/HDF5_SWMR_Users_Guide.pdf
+        for SWMR limitations.
 
         Parameters
         ----------
@@ -61,12 +67,13 @@ class PSpecContainer(object):
             Whether the HDF5 file should be kept open, or opened and then 
             closed again each time an operation is performed. Setting 
             `keep_open=False` is helpful for multi-process access patterns.
-            
-            This feature uses the Single-Writer Multiple-Reader (SWMR) feature 
-            of HDF5. Note that SWMR can only be used on POSIX-compliant 
-            filesystems, and so may not work on some network filesystems.
-            
             Default: True (keep file open).
+
+        swmr : bool, optional
+            Enable Single-Writer Multiple-Reader (SWMR) feature of HDF5.
+            Note that SWMR can only be used on POSIX-compliant 
+            filesystems, and so may not work on some network filesystems.
+            Default: False (do not use SWMR)
 
         tsleep : float, optional
             Time to wait in seconds after each attempt at opening the file.
@@ -80,6 +87,7 @@ class PSpecContainer(object):
         self.mode = mode
         self.tsleep = tsleep
         self.maxiter = maxiter
+        self.swmr = swmr
         if mode not in ['r', 'rw']:
             raise ValueError("Must set mode to either 'r' or 'rw'.")
 
@@ -107,7 +115,7 @@ class PSpecContainer(object):
             mode = 'a'
         else:
             mode = 'r'
-        if self.mode == 'r':
+        if self.swmr and self.mode == 'r':
             swmr = True
         else:
             swmr = False
@@ -130,7 +138,8 @@ class PSpecContainer(object):
                         # Enable single writer, multiple reader mode on HDF5 file. 
                         # This allows multiple handles to exist for the same file 
                         # at the same time, as long as only one is in rw mode
-                        self.data.swmr_mode = True
+                        if self.swmr:
+                            self.data.swmr_mode = True
                     except ValueError:
                         pass
                 break
@@ -262,6 +271,9 @@ class PSpecContainer(object):
         if self.mode == 'r':
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
         
+        if self.swmr:
+            print("Warning: HDF5 forbids creating new groups or datasets with SWMR")
+
         if isinstance(group, (tuple, list, dict)):
             raise ValueError("Only one group can be specified at a time.")
 

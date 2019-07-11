@@ -25,7 +25,7 @@ class Test_PSpecContainer(unittest.TestCase):
     def runTest(self):
         pass
 
-    def test_PSpecContainer(self, keep_open=True):
+    def test_PSpecContainer(self, keep_open=True, swmr=False):
         """
         Test that PSpecContainer works properly.
         """
@@ -34,7 +34,7 @@ class Test_PSpecContainer(unittest.TestCase):
         pspec_names = ['pspec_dset(0,1)', 'pspec_dset(1,0)', 'pspec_dset(1,1)']
         
         # Create a new container
-        ps_store = PSpecContainer(fname, mode='rw', keep_open=keep_open)
+        ps_store = PSpecContainer(fname, mode='rw', keep_open=keep_open, swmr=swmr)
         
         # Make sure that invalid mode arguments are caught
         assert_raises(ValueError, PSpecContainer, fname, mode='x')
@@ -86,7 +86,7 @@ class Test_PSpecContainer(unittest.TestCase):
         assert(len(ps_store.tree()) > 0)
         
         # Check that read-only mode is respected
-        ps_readonly = PSpecContainer(fname, mode='r', keep_open=keep_open)
+        ps_readonly = PSpecContainer(fname, mode='r', keep_open=keep_open, swmr=swmr)
         ps = ps_readonly.get_pspec(group_names[0], pspec_names[0])
         assert(isinstance(ps, UVPSpec))
         assert_raises(IOError, ps_readonly.set_pspec, group=group_names[2], 
@@ -99,7 +99,7 @@ class Test_PSpecContainer(unittest.TestCase):
         assert( len(grplist) == len(group_names) )
         assert( len(pslist) == len(pspec_names) )
         for g in grplist: assert(g in group_names)
-        
+
         # Check that spectra() raises an error if group doesn't exist
         assert_raises(KeyError, ps_store.spectra, "x")
         
@@ -120,7 +120,7 @@ class Test_PSpecContainer(unittest.TestCase):
         assert_raises(TypeError, ps_store.set_pspec, group='g1', 
                       psname=pspec_names, pspec=[self.uvp,None,self.uvp], 
                       overwrite=True)
-                      
+     
         # Check that lists can be used to set pspec
         ps_store.set_pspec(group='g1', psname=pspec_names, 
                            pspec=[self.uvp,self.uvp,self.uvp], overwrite=True)
@@ -128,13 +128,11 @@ class Test_PSpecContainer(unittest.TestCase):
         # Check that save() can be called
         ps_store.save()
         
-    
     def test_PSpecContainer_transactional(self):
         """
         Test that PSpecContainer works properly (transactional mode).
         """
-        self.test_PSpecContainer(keep_open=False)
-    
+        self.test_PSpecContainer(keep_open=False, swmr=True)
     
     def test_container_transactional_mode(self):
         """
@@ -143,9 +141,11 @@ class Test_PSpecContainer(unittest.TestCase):
         fname = self.fname
         group_names = ['group1', 'group2', 'group3']
         pspec_names = ['pspec_dset(0,1)', 'pspec_dset(1,0)', 'pspec_dset(1,1)']
+        if os.path.exists(fname):
+            os.remove(fname)
         
         # Test to see whether concurrent read/write works
-        psc_rw = PSpecContainer(fname, mode='rw', keep_open=False)
+        psc_rw = PSpecContainer(fname, mode='rw', keep_open=False, swmr=True)
         
         # Check that multiple power spectra can be stored in the container
         for grp in group_names:
@@ -154,11 +154,11 @@ class Test_PSpecContainer(unittest.TestCase):
                                  pspec=self.uvp, overwrite=False)
         
         # Try to open container read-only (transactional)
-        psc_ro = PSpecContainer(fname, mode='r', keep_open=False)
+        psc_ro = PSpecContainer(fname, mode='r', keep_open=False, swmr=True)
         nt.assert_equal(len(psc_ro.groups()), len(group_names))
         
         # Open container read-only in non-transactional mode
-        psc_ro_noatom = PSpecContainer(fname, mode='r', keep_open=True)
+        psc_ro_noatom = PSpecContainer(fname, mode='r', keep_open=True, swmr=True)
         nt.assert_equal(len(psc_ro_noatom.groups()), len(group_names))
         
         # Original RO handle should work fine; RW handle will throw an error
@@ -172,6 +172,17 @@ class Test_PSpecContainer(unittest.TestCase):
                          pspec=self.uvp, overwrite=False)
         nt.assert_equal(len(psc_rw.groups()), len(group_names)+1)
         
+        # ensure SWMR is propagated
+        for m in ['r', 'rw']:
+            psc = PSpecContainer(fname, mode=m, keep_open=True, swmr=True)
+            assert psc.swmr
+            assert psc.data.swmr_mode
+            psc._close()
+            psc = PSpecContainer(fname, mode=m, keep_open=True, swmr=False)
+            assert not psc.swmr
+            assert not psc.data.swmr_mode
+            psc._close()
+
 
 def test_combine_psc_spectra():
     fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
