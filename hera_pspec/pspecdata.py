@@ -1011,10 +1011,12 @@ class PSpecData(object):
             q          = []
             del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             Q_matrix_all_delays = np.zeros((self.spw_Ndlys,self.spw_Nfreqs,self.spw_Nfreqs), dtype='complex128')
+            integral_beam = self.get_integral_beam(pol) # This result does not depend on delay modes. We can remove it from the for loop to avoid its repeated computation
+
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau should be part of get_Q. We use it here to 
                 # avoid its repeated computation
-                Q = del_tau * self.get_Q(i, pol)
+                Q = del_tau * self.get_Q(i, pol) * integral_beam
                 Q_matrix_all_delays[i] = Q
                 QRx2 = np.dot(Q, Rx2)
                 
@@ -1515,7 +1517,43 @@ class PSpecData(object):
 
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
+    
+    def get_integral_beam(self, pol=False):
+        '''
+        Computes the integral containing the spectral beam and tapering function in Q_alpha(i,j).
 
+        Parameters
+        ----------
+        mode : int
+            Central wavenumber (index) of the bandpower, p_alpha.
+
+        pol : str/int/bool, optional
+            Which beam polarization to use. If the specified polarization doesn't exist, 
+            a uniform isotropic beam (with integral 4pi for all frequencies) is assumed. 
+            Default: False (uniform beam).
+
+        Return
+        -------
+        Q : array_like
+            Response matrix for bandpower p_alpha.
+        '''
+
+        nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
+
+        try:
+            beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(pol, nu) 
+            #Get beam response in (frequency, pixel), beam area(freq) and Nside, used in computing dtheta.
+            prod          = (1.0/beam_omega) 
+            beam_prod     = beam_res * prod[:, np.newaxis] 
+            integral_beam = (np.pi/(3.0*(N)**2))* \
+                                  np.dot(beam_prod, beam_prod.T) #beam_prod has omega subsumed, but taper is still part of R matrix
+                                                                 # the nside terms is dtheta^2, where dtheta is the resolution in healpix map
+        except(AttributeError):
+            warnings.warn('The beam response could not be calculated. PS will not be normalized!')
+            integral_beam = np.ones((len(nu), len(nu)))
+
+        return integral_beam
+    
     def get_Q(self, mode, pol=False):
         '''
         Computes Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha). 
@@ -1545,21 +1583,9 @@ class PSpecData(object):
         tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
 
-        try:
-            beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(pol, nu) 
-            #Get beam response in (frequency, pixel), beam area(freq) and Nside, used in computing dtheta.
-            prod          = (1.0/beam_omega) 
-            beam_prod     = beam_res * prod[:, np.newaxis] 
-            integral_beam = (np.pi/(3.0*(N)**2))* \
-                                      np.dot(beam_prod, beam_prod.T) #beam_prod has omega subsumed, but taper is still part of R matrix
-                                                                     # the nside terms is dtheta^2, where dtheta is the resolution in healpix map
-        except(AttributeError):
-            warnings.warn('The beam response could not be calculated. PS will not be normalized!')
-            integral_beam = np.ones((len(nu), len(nu)))
-
         eta_int = np.exp(-2j * np.pi * tau * nu) #exponential part of the expression
         Q_alt   = np.einsum('i,j', eta_int.conj(), eta_int) # dot it with its conjugate
-        Q       = Q_alt * integral_beam 
+        Q       = Q_alt
         return Q
 
     def p_hat(self, M, q):
