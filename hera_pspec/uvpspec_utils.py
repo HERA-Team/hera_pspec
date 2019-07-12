@@ -753,15 +753,15 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 blkeys += [key1,]
             if not key2 in blkeys:
                 blkeys += [key2,]
-
+        new_r_params = {}
         if not uvp.r_params == '':
             r_params = uvp.get_r_params()
             for rpkey in r_params:
-                if not rpkey in blkeys:
-                    del r_params[rpkey]
+                if rpkey in blkeys:
+                    new_r_params[rpkey] = r_params[rpkey]
         else:
-            r_params = {}
-        uvp.r_params = compress_r_params(r_params)
+            new_r_params = {}
+        uvp.r_params = compress_r_params(new_r_params)
 
 
 def _blpair_to_antnums(blpair):

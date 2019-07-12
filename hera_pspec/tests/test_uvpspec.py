@@ -226,14 +226,26 @@ class Test_UVPSpec(unittest.TestCase):
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam)
+        rp = {'filter_centers':[0.],
+              'filter_widths':[250e-9],
+              'filter_factors':[1e-9]}
+        r_params = {}
+        for bl in bls:
+            key1 =  bl + ('xx',)
+            r_params[key1] = rp
+
+        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam,
+                                         r_params = r_params)
         uvp2 = uvp1.select(spws=0, inplace=False)
         nt.assert_equal(uvp2.Nspws, 1)
         uvp2 = uvp2.select(bls=[(37, 38), (38, 39)], inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_equal(uvp2.data_array[0].shape, (10, 10, 1))
         nt.assert_almost_equal(uvp2.data_array[0][0,0,0], (-3831605.3903496987+8103523.9604128916j))
-
+        nt.assert_equal(len(uvp2.get_r_params().keys()), 2)
+        for rpkey in uvp2.get_r_params():
+            nt.assert_true(rpkey == (37, 38, 'xx') or rpkey == (38, 39, 'xx'))
+        
         # blpair select
         uvp = copy.deepcopy(self.uvp)
         uvp2 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
