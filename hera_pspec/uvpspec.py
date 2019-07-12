@@ -98,7 +98,7 @@ class UVPSpec(object):
         # self.check()
         self._req_params = ["Ntimes", "Nblpairts", "Nblpairs",
                             "Nspws", "Ndlys", "Npols", "Nfreqs", "history",
-                            "Nspwdlys", "Nspwfreqs",
+                            "Nspwdlys", "Nspwfreqs", "r_params",
                             "data_array", "wgt_array", "integration_array",
                             "spw_array", "freq_array", "dly_array",
                             "polpair_array",
@@ -306,17 +306,7 @@ class UVPSpec(object):
         """
         decompress r_params dictionary (so it can be readily used).
         """
-        decompressed_r_params = {}
-        if not self.r_params == '':
-            r_params = json.loads(self.r_params)
-        for rpi in r_params:
-            rp_dict = {}
-            for r_field in r_params[rpi]:
-                if not r_field == 'baselines':
-                    rp_dict[r_field] = r_params[rpi][r_field]
-            for blkey in r_params[rpi]['baselines']:
-                decompressed_r_params[tuple(blkey)] = rp_dict
-        return decompressed_r_params
+        return uvputils.decompress_r_params(self.r_params)
 
 
     def get_nsamples(self, key, omit_flags=False):
@@ -2038,6 +2028,28 @@ def combine_uvpspec(uvps, verbose=True):
     # Construct dict of label indices, to be used for re-ordering later
     u_lbls = {lbl: ll for ll, lbl in enumerate(u.labels)}
 
+    # Concatenate r_params arrays
+    #check that r_params are either all empty or all full.
+    _r_param_strs = [_uvp.r_params for _uvp in uvps]
+    if '' in _r_param_strs:
+        if not np.all(np.asarray([rp == '' for rp in _r_param_strs])):
+            raise ValueError("All r_params must be set or empty."
+                             "Combinging empty with non-empty r_params"
+                             "is not yet supported.")
+    _r_params = [_uvp.get_r_params() for _uvp in uvps]
+    #check for conflicts by iterating through each key in the first _uvp, store
+    #in list of new keys.
+    r_params = {}
+    for _r_param in _r_params:
+        for rkey in _r_param:
+            if not rkey in r_params:
+                r_params[rkey] = _r_param[rkey]
+            elif r_params[rkey] != _r_param[rkey]:
+                #For now, we won't support inconsistent weightings.
+                raise ValueError("Conflict between weightings"
+                                 "Only consistent weightings are supported!")
+
+
     # fill in data arrays depending on concat ax
     if concat_ax == 'spw':
 
@@ -2191,6 +2203,8 @@ def combine_uvpspec(uvps, verbose=True):
     u.Ntimes = len(np.unique(u.time_avg_array))
     u.history = "".join([uvp.history for uvp in uvps])
     u.labels = np.array(u.labels, np.str)
+
+    u.r_params = uvputils.compress_r_params(r_params)
 
     for k in static_meta.keys():
         setattr(u, k, static_meta[k])
