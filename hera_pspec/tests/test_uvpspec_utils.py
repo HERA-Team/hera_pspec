@@ -281,9 +281,7 @@ def test_r_param_compression():
         r_params[key2] = rp
 
     rp_str_1 = uvputils.compress_r_params(r_params)
-    print(rp_str_1)
     rp = uvputils.decompress_r_params(rp_str_1)
-    print(rp)
     for rpk in rp:
         for rpfk in rp[rpk]:
             nt.assert_true(rp[rpk][rpfk] == r_params[rpk][rpfk])
@@ -296,3 +294,6 @@ def test_r_param_compression():
 
     nt.assert_true(uvputils.compress_r_params({}) == '')
     nt.assert_true(uvputils.decompress_r_params('') == {})
+
+    print(rp_str_1)
+    print(rp_str_2)
