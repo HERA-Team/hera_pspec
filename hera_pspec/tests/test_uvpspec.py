@@ -245,7 +245,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(len(uvp2.get_r_params().keys()), 2)
         for rpkey in uvp2.get_r_params():
             nt.assert_true(rpkey == (37, 38, 'xx') or rpkey == (38, 39, 'xx'))
-        
+
         # blpair select
         uvp = copy.deepcopy(self.uvp)
         uvp2 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
@@ -317,40 +317,21 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_false(hasattr(uvp, 'data_array'))
 
     def test_get_r_params(self):
-        uvp = copy.deepcopy(self.uvp)
-        baselines = [(24,25), (37,38), (38,39)]
 
+        # inplace vs not inplace, spw selection
+        uvd = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+        bls = [(37, 38), (38, 39), (52, 53)]
         rp = {'filter_centers':[0.],
               'filter_widths':[250e-9],
               'filter_factors':[1e-9]}
-
         r_params = {}
-
-        for bl in baselines:
-            key1 = (0,) + bl + ('xx',)
-            key2 = (1,) + bl + ('xx',)
+        for bl in bls:
+            key1 =  bl + ('xx',)
             r_params[key1] = rp
-            r_params[key2] = rp
-
-        r_params_unique = {}
-        r_params_unique_bls = {}
-        r_params_index = -1
-        #build a compressed string to store r_params
-        for rp in r_params:
-            already_in = False
-            for rpu in r_params_unique:
-                if r_params_unique[rpu] == r_params[rp]:
-                    r_params_unique_bls[rpu] += [rp,]
-                    already_in = True
-            if not already_in:
-                r_params_index += 1
-                r_params_unique[r_params_index] = copy.copy(r_params[rp])
-                r_params_unique_bls[r_params_index] = [rp,]
-        for rpi in r_params_unique:
-            r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
-        r_params_str = json.dumps(r_params_unique)
-        uvp.r_params = r_params_str
-
+        uvp = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam,
+                                         r_params = r_params)
         nt.assert_equal(r_params, uvp.get_r_params())
 
     def test_write_read_hdf5(self):
