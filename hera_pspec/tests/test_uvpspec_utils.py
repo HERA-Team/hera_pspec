@@ -295,5 +295,7 @@ def test_r_param_compression():
     nt.assert_true(uvputils.compress_r_params({}) == '')
     nt.assert_true(uvputils.decompress_r_params('') == {})
 
+    print("rp_str_1")
     print(rp_str_1)
+    print("rp_str_2")
     print(rp_str_2)
