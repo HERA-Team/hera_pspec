@@ -7,6 +7,7 @@ from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 import os
 import copy
+import json
 
 
 def test_select_common():
@@ -290,7 +291,7 @@ def test_r_param_compression():
             nt.assert_true(r_params[rpk][rpfk] == rp[rpk][rpfk])
 
     rp_str_2 = uvputils.compress_r_params(rp)
-    nt.assert_true(rp_str_1 == rp_str_2)
+    nt.assert_true(json.loads(rp_str_1) == json.loads(rp_str_2))
 
     nt.assert_true(uvputils.compress_r_params({}) == '')
     nt.assert_true(uvputils.decompress_r_params('') == {})
