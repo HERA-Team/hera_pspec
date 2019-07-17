@@ -33,7 +33,10 @@ class UVPSpec(object):
         self._Nfreqs = PSpecParam("Nfreqs", description="Number of unique frequency bins in the data.", expected_type=int)
         self._Npols = PSpecParam("Npols", description="Number of polarizations in the data.", expected_type=int)
         self._history = PSpecParam("history", description='The file history.', expected_type=str)
-        self._r_params = PSpecParam("r_params", description = 'r_params.', expected_type = str)
+        desc =  ('A compressed json string version of the r_params dictionary of pspecdata object.'
+                'uvpspec only stores each unique weighting along with a list of unique baselines'
+                'corresponding to that weighting.')
+        self._r_params = PSpecParam("r_params", description = desc, expected_type = str)
         # Data attributes
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
