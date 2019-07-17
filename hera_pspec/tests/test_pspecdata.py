@@ -321,7 +321,81 @@ class Test_PSpecData(unittest.TestCase):
         
         # Check for error handling
         nt.assert_raises(ValueError, self.ds.set_Ndlys, vect_length+100)
+    
+    def test_get_integral_beam(self):
+        """
+        Test the integral of the beam and tapering function in Q.
+        """
+        vect_length = 50
 
+        self.ds.spw_Nfreqs = vect_length
+        pol = 'xx' 
+        #Test if there is a warning if user does not pass the beam
+        key1 = (0, 24, 38)
+        key2 = (1, 24, 38)
+        uvd = copy.deepcopy(self.uvd)
+        ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
+        with warnings.catch_warnings(record=True) as w:
+            ds_t.get_Q(0, pol)
+        assert len(w) > 0
+        
+        for i in range(vect_length):
+            try:
+                Q_matrix = self.ds.get_Q(i, pol)
+                # Test that if the number of delay bins hasn't been set
+                # the code defaults to putting that equal to Nfreqs
+                self.assertEqual(self.ds.spw_Ndlys, self.ds.spw_Nfreqs)
+            except IndexError:
+                Q_matrix = np.ones((vect_length, vect_length))
+            try:
+                integral_matrix = self.ds.get_integral_beam(pol)
+                # Test that if the number of delay bins hasn't been set
+                # the code defaults to putting that equal to Nfreqs
+                self.assertEqual(self.ds.spw_Ndlys, self.ds.spw_Nfreqs)
+            except IndexError:
+                integral_matrix = np.ones((vect_length, vect_length))
+                
+            # Test that Q matrix has the right shape
+            self.assertEqual(Q_matrix.shape, (vect_length, vect_length))
+            
+            # Test that integral matrix has the right shape
+            self.assertEqual(integral_matrix.shape, (vect_length, vect_length))
+
+        x_vect = np.ones(vect_length)
+        try:
+            Q_matrix = self.ds.get_Q(vect_length/2, pol)
+        except IndexError:
+            Q_matrix = np.ones((vect_length, vect_length))
+
+        # Now do all the same tests from above but for a different number
+        # of delay channels
+        self.ds.set_Ndlys(vect_length-3)
+        for i in range(vect_length-3):
+            try:
+                Q_matrix = self.ds.get_Q(i, pol)
+            except IndexError:
+                Q_matrix = np.ones((vect_length,vect_length))
+            try:
+                integral_matrix = self.ds.get_integral_beam(pol)
+            except IndexError:
+                integral_matrix = np.ones((vect_length,vect_length))
+
+            # Test that Q matrix has the right shape
+            self.assertEqual(Q_matrix.shape, (vect_length, vect_length))
+
+            # Test that integral matrix has the right shape
+            self.assertEqual(integral_matrix.shape, (vect_length, vect_length))
+            
+        x_vect = np.ones(vect_length)
+        try:
+            Q_matrix = self.ds.get_Q((vect_length-2)/2-1, pol)
+        except IndexError:
+            Q_matrix = np.ones((vect_length,vect_length))
+
+        # Make sure that error is raised when asking for a delay mode outside
+        # of the range of delay bins
+        nt.assert_raises(IndexError, self.ds.get_Q, vect_length-1, pol)
+        
     def test_get_Q(self):
         """
         Test the Q = dC_ij/dp function.
@@ -359,7 +433,7 @@ class Test_PSpecData(unittest.TestCase):
                 self.assertEqual(self.ds.spw_Ndlys, self.ds.spw_Nfreqs)
             except IndexError:
                 Q_matrix = np.ones((vect_length, vect_length))
-
+            
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
             xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
