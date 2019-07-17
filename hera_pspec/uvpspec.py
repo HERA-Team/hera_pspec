@@ -305,6 +305,23 @@ class UVPSpec(object):
     def get_r_params(self):
         """
         decompress r_params dictionary (so it can be readily used).
+        in a pspecdata object, r_parms are stored as a dictionary
+        with one entry per baseline.
+        In uvpspec, the dictionary is compressed so that a single r_param entry
+        correspondsto multiple baselines and is stored as a json format string.
+        get_r_params() reads the compressed string and returns the dictionary
+        with the format
+        r_params: dictionary with parameters for weighting matrix.
+          Proper fields
+          and formats depend on the mode of data_weighting.
+          data_weighting == 'sinc_downweight':
+            dictionary with fields
+            'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+                              at which to center filtering windows. Can specify fractional channel number.
+            'filter_widths', list of floats (or float) specifying the width of each
+                             filter window in (delay) channel numbers. Can specify fractional channel number.
+            'filter_factors', list of floats (or float) specifying how much power within each filter window
+                              is to be suppressed.
         """
         return uvputils.decompress_r_params(self.r_params)
 
