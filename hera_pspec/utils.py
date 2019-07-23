@@ -3,7 +3,7 @@ import os, time, yaml
 import itertools, argparse, glob
 import traceback, operator
 import aipy, uvtools
-import pylab as plt
+import matplotlib.pyplot as plt
 from hera_pspec.conversions import Cosmo_Conversions
 from hera_cal import redcal
 from collections import OrderedDict as odict
