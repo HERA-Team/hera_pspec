@@ -1657,11 +1657,15 @@ def test_pspec_run():
                              pol_pairs=[('xx', 'xx')], interleave_times=False,
                              file_type='uvh5', spw_ranges=[(100, 150)], cal_flag=True)
     psc = container.PSpecContainer('./out.h5', 'rw')
+    uvp = psc.get_pspec('dset0_dset1', 'dset0_x_dset1')
     # test calibration flags were propagated to test that cal was applied
     assert ds.dsets[0].flag_array.any()
     assert ds.dsets[1].flag_array.any()
     assert ds.dsets_std[0].flag_array.any()
     assert ds.dsets_std[1].flag_array.any()
+    assert ds.dsets[0].extra_keywords['filename'] is not '""'
+    assert ds.dsets[0].extra_keywords['calibration'] is not '""'
+    assert 'cal: /' in uvp.history
 
     # test exceptions
     nt.assert_raises(AssertionError, pspecdata.pspec_run, 'foo', "./out.h5")

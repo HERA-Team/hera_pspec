@@ -13,6 +13,7 @@ import argparse
 import ast
 import glob
 import warnings
+import json
 
 
 class PSpecData(object):
@@ -50,7 +51,8 @@ class PSpecData(object):
             Default: None.
 
         cals : list of UVCal objects, optional
-            Calibration objects to apply to data.
+            Calibration objects to apply to data. One per dset or
+            one for all dsets.
 
         cal_flag : bool, optional
             If True, propagate flags from calibration into data
@@ -205,8 +207,10 @@ class PSpecData(object):
             if cal is not None:
                 if dset is not None:
                     uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    dset.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
                 if dset_std is not None:
                     uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    dset_std.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
 
         # Append to list
         self.dsets += dsets
@@ -2529,8 +2533,10 @@ class PSpecData(object):
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
-        filename1 = getattr(dset1.extra_keywords, 'filename', None)
-        filename2 = getattr(dset2.extra_keywords, 'filename', None)
+        filename1 = json.loads(dset1.extra_keywords.get('filename', '""'))
+        cal1 = json.loads(dset1.extra_keywords.get('calibration', '""'))
+        filename2 = json.loads(dset2.extra_keywords.get('filename', '""'))
+        cal2 = json.loads(dset2.extra_keywords.get('calibration', '""'))
         label1 = self.labels[self.dset_idx(dsets[0])]
         label2 = self.labels[self.dset_idx(dsets[1])]
         uvp.labels = sorted(set([label1, label2]))
@@ -2540,11 +2546,11 @@ class PSpecData(object):
                             * uvp.labels.index(label2)
         uvp.labels = np.array(uvp.labels, np.str)
         uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
-                      "dataset1: filename: {}, label: {}, history:\n{}\n{}\n" \
-                      "dataset2: filename: {}, label: {}, history:\n{}\n{}\n" \
+                      "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
+                      "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
                       "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20,
-                                filename1, label1, dset1.history, '-'*20,
-                                filename2, label2, dset2.history, '-'*20)
+                                filename1, label1, cal1, dset1.history, '-'*20,
+                                filename2, label2, cal2, dset2.history, '-'*20)
         uvp.taper = taper
         uvp.norm = norm
 
@@ -3335,7 +3341,7 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
     for i, dset in enumerate(fnames):
         utils.log("Reading {} / {} datasets...".format(i+1, Ndsets), 
                   f=logf, lvl=1, verbose=verbose)
-        
+
         # read data
         uvd = UVData()
         if isinstance(dset, (str, np.str)):
@@ -3344,6 +3350,7 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
             dfiles = dset
         uvd.read(dfiles, bls=bls, polarizations=pols, 
                  file_type=file_type)
+        uvd.extra_keywords['filename'] = json.dumps(dfiles)
         dsets.append(uvd)
 
     return dsets
@@ -3379,6 +3386,7 @@ def _load_cals(cnames, logf=None, verbose=True):
             uvc.read_calfits(glob.glob(cfile))
         else:
             uvc.read_calfits(cfile)
+        uvc.extra_keywords['filename'] = json.dumps(cfile)
         cals.append(uvc)
 
     return cals

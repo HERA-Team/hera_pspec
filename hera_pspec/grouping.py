@@ -819,7 +819,7 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
 
 def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Nsamples=1000, seed=0,
                   normal_std=True, robust_std=True, cintervals=None, keep_samples=False,
-                  bl_error_tol=1.0, overwrite=False, add_to_history='', verbose=True, maxiter=40):
+                  bl_error_tol=1.0, overwrite=False, add_to_history='', verbose=True, maxiter=1):
     """
     Run bootstrap resampling on a PSpecContainer object to estimate errorbars.
     For each group/spectrum specified in the PSpecContainer, this function produces
@@ -830,7 +830,7 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     The output of 1. and 2. are placed in a *_avg spectrum, while the output of 3.
     is placed in *_bs0, *_bs1, *_bs2 etc. objects.
 
-    Note: PSpecContainers should nont be opened in SWMR mode for this function.
+    Note: PSpecContainers should not be opened in SWMR mode for this function.
 
     Parameters:
     -----------
@@ -885,8 +885,10 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     verbose : bool
         If True, report feedback to stdout.
 
-    maxiter : int
-        Maximum number of attempts to open the PSpecContainer. 0.5 sec wait per attempt.
+    maxiter : int, optional, default=1
+        Maximum number of attempts to open the PSpecContainer by a single process.
+        0.5 sec wait per attempt. Useful in the case of multiprocesses bootstrapping
+        different groups of the same container.
     """
     from hera_pspec import uvpspec
     from hera_pspec import PSpecContainer
