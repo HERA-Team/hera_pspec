@@ -14,7 +14,7 @@ import ast
 import glob
 import warnings
 import json
-
+import uvtools.dspec as dspec
 
 class PSpecData(object):
 
