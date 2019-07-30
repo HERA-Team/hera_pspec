@@ -1,6 +1,6 @@
 import numpy as np
 import aipy
-from pyuvdata import UVData
+from pyuvdata import UVData, UVCal
 import copy, operator, itertools, sys
 from collections import OrderedDict as odict
 import hera_cal as hc
@@ -13,13 +13,13 @@ import argparse
 import ast
 import glob
 import warnings
-import uvtools.dspec as dspec
 import json
+
 
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
-                 beam=None):
+                 beam=None, cals=None, cal_flag=True):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -49,6 +49,13 @@ class PSpecData(object):
         beam : PspecBeam object, optional
             PspecBeam object containing information about the primary beam
             Default: None.
+
+        cals : list of UVCal objects, optional
+            Calibration objects to apply to data. One per dset or
+            one for all dsets.
+
+        cal_flag : bool, optional
+            If True, propagate flags from calibration into data
         """
         self.clear_cache()  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
@@ -75,12 +82,12 @@ class PSpecData(object):
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
-            self.add(dsets, wgts, dsets_std=dsets_std, labels=labels)
+            self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag)
 
         # Store a primary beam
         self.primary_beam = beam
 
-    def add(self, dsets, wgts, labels=None, dsets_std=None):
+    def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True):
         """
         Add a dataset to the collection in this PSpecData object.
 
@@ -105,6 +112,12 @@ class PSpecData(object):
             standard deviations (real and imaginary) of data to add to the
             collection. If dsets is a dict, will assume dsets_std is a dict
             and if dsets is a list, will assume dsets_std is a list.
+
+        cals : UVCal or list, optional
+            UVCal objects to apply to data.
+
+        cal_flag : bool, optional
+            If True, propagate flags from calibration into data
         """
         # Check for dicts and unpack into an ordered list if found
         if isinstance(dsets, dict):
@@ -112,50 +125,59 @@ class PSpecData(object):
             if labels is not None:
                 raise ValueError("If 'dsets' is a dict, 'labels' cannot be "
                                  "specified.")
+            labels = list(dsets.keys())
 
-            if not isinstance(wgts, dict):
+            if wgts is None:
+                wgts = dict([(l, None) for l in labels])
+            elif not isinstance(wgts, dict):
                 raise TypeError("If 'dsets' is a dict, 'wgts' must also be "
                                 "a dict")
 
-            if not isinstance(dsets_std, dict):
-                if dsets_std is None:
-                    dsets_std = [None for m in range(len(dsets))]
-                else:
-                    raise TypeError("If 'dsets' is a dict, 'dsets_std' must"
-                                    "also be a dict")
-            else:
-                _dsets_std = [dsets_std[key] for key in labels]
-                dsets_std = _dsets_std
+            if dsets_std is None:
+                dsets_std = dict([(l, None) for l in labels])
+            elif not isinstance(dsets_std, dict):
+                raise TypeError("If 'dsets' is a dict, 'dsets_std' must also be "
+                                "a dict")
+
+            if cals is None:
+                cals = dict([(l, None) for l in labels])
+            elif not isinstance(cals, dict):
+                raise TypeError("If 'cals' is a dict, 'cals' must also be "
+                                "a dict")
 
             # Unpack dsets and wgts dicts
-            labels = list(dsets.keys())
-            _dsets = [dsets[key] for key in labels]
-            _wgts = [wgts[key] for key in labels]
-            dsets = _dsets
-            wgts = _wgts
+            dsets = [dsets[key] for key in labels]
+            dsets_std = [dsets_std[key] for key in labels]
+            wgts = [wgts[key] for key in labels]
+            cals = [cals[key] for key in labels]
 
         # Convert input args to lists if possible
         if isinstance(dsets, UVData): dsets = [dsets,]
         if isinstance(wgts, UVData): wgts = [wgts,]
         if isinstance(labels, str): labels = [labels,]
         if isinstance(dsets_std, UVData): dsets_std = [dsets_std,]
+        if isinstance(cals, UVCal): cals = [cals,]
         if wgts is None: wgts = [wgts,]
         if dsets_std is None: dsets_std = [dsets_std for m in range(len(dsets))]
+        if cals is None: cals = [cals for m in range(len(dsets))]
         if isinstance(dsets, tuple): dsets = list(dsets)
         if isinstance(wgts, tuple): wgts = list(wgts)
         if isinstance(dsets_std, tuple): dsets_std = list(dsets_std)
+        if isinstance(cals, tuple): cals = list(cals)
 
         # Only allow UVData or lists
         if not isinstance(dsets, list) or not isinstance(wgts, list)\
-        or not isinstance(dsets_std, list):
-            raise TypeError("dsets, dsets_std, and wgts must be UVData"
-                            "or lists of UVData")
+        or not isinstance(dsets_std, list) or not isinstance(cals, list):
+            raise TypeError("dsets, dsets_std, wgts and cals must be UVData"
+                            "UVCal, or lists of UVData or UVCal")
 
         # Make sure enough weights were specified
         assert len(dsets) == len(wgts), \
             "The dsets and wgts lists must have equal length"
         assert len(dsets_std) == len(dsets), \
             "The dsets and dsets_std lists must have equal length"
+        assert len(cals) == len(dsets), \
+            "The dsets and cals lists must have equal length"
         if labels is not None:
             assert len(dsets) == len(labels), \
                 "If labels are specified, the dsets and labels lists " \
@@ -171,19 +193,32 @@ class PSpecData(object):
             if not isinstance(s, UVData) and s is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "error sets")
+        for c in cals:
+            if not isinstance(c, UVCal) and c is not None:
+                raise TypeError("Only UVCal objects can be used for calibration.")
 
         # Store labels (if they were set)
         if self.labels is None:
             self.labels = []
         if labels is None:
             labels = ["dset{:d}".format(i)
-                    for i in range(len(self.dsets), len(dsets)+len(self.dsets))]
-        self.labels += labels
+                    for i in range(len(self.dsets), len(dsets) + len(self.dsets))]
+
+        # Apply calibration if provided
+        for dset, dset_std, cal in zip(dsets, dsets_std, cals):
+            if cal is not None:
+                if dset is not None:
+                    uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    dset.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
+                if dset_std is not None:
+                    uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    dset_std.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
 
         # Append to list
         self.dsets += dsets
         self.wgts += wgts
         self.dsets_std += dsets_std
+        self.labels += labels
 
         # Check for repeated labels, and make them unique
         for i, l in enumerate(self.labels):
@@ -225,7 +260,6 @@ class PSpecData(object):
                       % (self.labels[i], i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols)
         return s
 
-
     def validate_datasets(self, verbose=True):
         """
         Validate stored datasets and weights to make sure they are consistent
@@ -233,11 +267,13 @@ class PSpecData(object):
         """
         # check dsets and wgts have same number of elements
         if len(self.dsets) != len(self.wgts):
-            raise ValueError("self.wgts does not have same length as self.dsets")
+            raise ValueError("self.wgts does not have same len as self.dsets")
 
         if len(self.dsets_std) != len(self.dsets):
-            raise ValueError("self.dsets_std does not have the same length as "
+            raise ValueError("self.dsets_std does not have the same len as "
                              "self.dsets")
+        if len(self.labels) != len(self.dsets):
+            raise ValueError("self.labels does not have same len as self.dsets")
 
         # Check if dsets are all the same shape along freq axis
         Nfreqs = [d.Nfreqs for d in self.dsets]
@@ -253,22 +289,21 @@ class PSpecData(object):
             raise ValueError("all dsets must have the same Ntimes")
 
         # raise warnings if times don't match
-        lst_diffs = np.array( [ np.unique(self.dsets[0].lst_array)
-                              - np.unique(dset.lst_array)
-                               for dset in self.dsets[1:]] )
-        if np.max(np.abs(lst_diffs)) > 0.001:
-            raise_warning("Warning: taking power spectra between LST bins "
-                          "misaligned by more than 15 seconds",
-                          verbose=verbose)
+        if len(self.dsets) > 1:
+            lst_diffs = np.array( [ np.unique(self.dsets[0].lst_array)
+                                  - np.unique(dset.lst_array)
+                                   for dset in self.dsets[1:]] )
+            if np.max(np.abs(lst_diffs)) > 0.001:
+                raise_warning("Warning: LST bins in dsets misaligned by more than 15 seconds",
+                              verbose=verbose)
 
-        # raise warning if frequencies don't match
-        freq_diffs = np.array( [ np.unique(self.dsets[0].freq_array)
-                               - np.unique(dset.freq_array)
-                                for dset in self.dsets[1:]] )
-        if np.max(np.abs(freq_diffs)) > 0.001e6:
-            raise_warning("Warning: taking power spectra between frequency "
-                          "bins misaligned by more than 0.001 MHz",
-                          verbose=verbose)
+            # raise warning if frequencies don't match
+            freq_diffs = np.array( [ np.unique(self.dsets[0].freq_array)
+                                   - np.unique(dset.freq_array)
+                                    for dset in self.dsets[1:]] )
+            if np.max(np.abs(freq_diffs)) > 0.001e6:
+                raise_warning("Warning: frequency bins in dsets misaligned by more than 0.001 MHz",
+                              verbose=verbose)
 
         # Check phase type
         phase_types = []
@@ -2576,8 +2611,10 @@ class PSpecData(object):
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
-        filename1 = getattr(dset1.extra_keywords, 'filename', None)
-        filename2 = getattr(dset2.extra_keywords, 'filename', None)
+        filename1 = json.loads(dset1.extra_keywords.get('filename', '""'))
+        cal1 = json.loads(dset1.extra_keywords.get('calibration', '""'))
+        filename2 = json.loads(dset2.extra_keywords.get('filename', '""'))
+        cal2 = json.loads(dset2.extra_keywords.get('calibration', '""'))
         label1 = self.labels[self.dset_idx(dsets[0])]
         label2 = self.labels[self.dset_idx(dsets[1])]
         uvp.labels = sorted(set([label1, label2]))
@@ -2587,15 +2624,12 @@ class PSpecData(object):
                             * uvp.labels.index(label2)
         uvp.labels = np.array(uvp.labels, np.str)
         uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
-                      "dataset1: filename: {}, label: {}, history:\n{}\n{}\n" \
-                      "dataset2: filename: {}, label: {}, history:\n{}\n{}\n" \
+                      "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
+                      "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
                       "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20,
-                                filename1, label1, dset1.history, '-'*20,
-                                filename2, label2, dset2.history, '-'*20)
-
-
+                                filename1, label1, cal1, dset1.history, '-'*20,
+                                filename2, label2, cal2, dset2.history, '-'*20)
         uvp.r_params = uvputils.compress_r_params(r_params)
-
         uvp.taper = taper
         uvp.norm = norm
 
@@ -2815,14 +2849,14 @@ class PSpecData(object):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
 
 
-def pspec_run(dsets, filename, dsets_std=None, groupname=None,
-              dset_labels=None, dset_pairs=None, psname_ext=None,
+def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
+              groupname=None, dset_labels=None, dset_pairs=None, psname_ext=None,
               spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0,
-              beam=None, cosmo=None, rephase_to_dset=None,
+              beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True,
               file_type='miriad', verbose=True, store_cov=False,
@@ -2830,6 +2864,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
+
+    Warning: if dsets is a list of UVData objects, they might be edited in place!
 
     Parameters
     ----------
@@ -2847,12 +2883,18 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         Contains UVData objects or string filepaths to miriad files.
         Default is none.
 
+    cals : list
+        List of UVCal objects or calfits filepaths. Default is None.
+
+    cal_flag : bool
+        If True, use flags in calibration to flag data.
+
     dset_labels : list
         List of strings to label the input datasets. These labels form
         the psname of each UVPSpec object. Default is "dset0_x_dset1"
         where 0 and 1 are replaced with the dset index in dsets.
         Note: it is not advised to put underscores in the dset label names,
-        as some downstream functions assume this to be the case.
+        as some downstream functions use this as a special character.
 
     dset_pairs : list of len-2 integer tuples
         List of tuples specifying the dset pairs to use in OQE estimation.
@@ -2935,6 +2977,11 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         the power spectra. Default is a Planck cosmology.
         See conversions.Cosmo_Conversions for details.
 
+    interleave_times : bool
+        Only applicable if Ndsets == 1. If True, copy dset[0] into
+        a dset[1] slot and interleave their time arrays. This updates
+        dset_pairs to [(0, 1)].
+
     rephase_to_dset : integer
         Integer index of the anchor dataset when rephasing all other datasets.
         This adds a phasor correction to all others dataset to phase the
@@ -2976,21 +3023,21 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         String to add to history of each UVPSpec object.
 
     r_params: dict, optional
-        Dictionary with parameters for weighting matrix. Required fields and 
+        Dictionary with parameters for weighting matrix. Required fields and
         formats depend on the mode of `data_weighting`. Default: None.
-        
+
         - `sinc_downweight` fields:
-            - `filter_centers`: list of floats (or float) specifying the 
-                                (delay) channel numbers at which to center 
-                                filtering windows. Can specify fractional 
+            - `filter_centers`: list of floats (or float) specifying the
+                                (delay) channel numbers at which to center
+                                filtering windows. Can specify fractional
                                 channel number.
-                                
-            - `filter_widths`:  list of floats (or float) specifying the width 
-                                of each filter window in (delay) channel 
+
+            - `filter_widths`:  list of floats (or float) specifying the width
+                                of each filter window in (delay) channel
                                 numbers. Can specify fractional channel number.
 
-            - `filter_factors`: list of floats (or float) specifying how much 
-                                power within each filter window is to be 
+            - `filter_factors`: list of floats (or float) specifying how much
+                                power within each filter window is to be
                                 suppressed.
 
     Returns
@@ -3042,8 +3089,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         assert not np.any(['_' in dl for dl in dset_labels]), \
           "cannot accept underscores in input dset_labels: {}".format(dset_labels)
 
-    # load data if fed as filepaths
-    if isinstance(dsets[0], (str, np.str)):
+    # if dsets are not UVData, assume they are filepaths or list of filepaths
+    if not isinstance(dsets[0], UVData):
         try:
             # load data into UVData objects if fed as list of strings
             t0 = time.time()
@@ -3052,9 +3099,9 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
                       lvl=1, verbose=verbose)
         except ValueError:
             # at least one of the dset loads failed due to no data being present
-            utils.log("One of the dset loads failed due to no data overlap "
-                      "given the bls and pols selection", verbose=verbose)
-            return None, None
+            utils.log("One of the dset loads failed due to no data overlap given "
+                      "the bls and pols selection", verbose=verbose)
+            return None
 
     assert np.all([isinstance(d, UVData) for d in dsets]), \
         "dsets must be fed as a list of dataset string paths or UVData objects."
@@ -3066,28 +3113,39 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         assert isinstance(dsets_std,(list, tuple, np.ndarray)), err_msg
         assert len(dsets_std) == Ndsets, "len(dsets_std) must equal len(dsets)"
 
-        # if path strings provided, read in UVData objects.
-        if isinstance(dsets_std[0], (str, np.str)):
+        # load data if not UVData
+        if not isinstance(dsets_std[0], UVData):
             try:
                 # load data into UVData objects if fed as list of strings
                 t0 = time.time()
-                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols,
-                                        verbose=verbose)
+                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, file_type=file_type, verbose=verbose)
                 utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
                           lvl=1, verbose=verbose)
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data
                 # being present
-                utils.log("One of the dsets_std loads failed due to no data "
-                          "overlap given the bls and pols selection", 
-                          verbose=verbose)
-                return None, None
+                utils.log("One of the dsets_std loads failed due to no data overlap given "
+                          "the bls and pols selection", verbose=verbose)
+                return None
 
-        assert np.all([isinstance(d, UVData) for d in dsets]), err_msg
+        assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
+
+    # read calibration if provided (calfits partial IO not yet supported)
+    if cals is not None:
+        if not isinstance(cals, (list, tuple)):
+            cals = [cals for d in dsets]
+        if not isinstance(cals[0], UVCal):
+            t0 = time.time()
+            cals = _load_cals(cals, verbose=verbose)
+            utils.log("Loaded calibration in %1.1f sec." % (time.time() - t0),
+                      lvl=1, verbose=verbose)
+        err_msg = "cals must be a list of UVCal, filepaths, or list of filepaths"
+        assert np.all([isinstance(c, UVCal) for c in cals]), err_msg
 
     # configure polarization
     if pol_pairs is None:
         unique_pols = np.unique(np.hstack([d.polarization_array for d in dsets]))
+        unique_pols = [uvutils.polnum2str(up) for up in unique_pols]
         pol_pairs = [(up, up) for up in unique_pols]
     assert len(pol_pairs) > 0, "no pol_pairs specified"
 
@@ -3103,15 +3161,45 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
 
     # package into PSpecData
     ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels,
-                   dsets_std=dsets_std, beam=beam)
+                   dsets_std=dsets_std, beam=beam, cals=cals, cal_flag=cal_flag)
 
-    # Rephase if desired
-    if rephase_to_dset is not None:
-        ds.rephase_to_dset(rephase_to_dset)
+    # erase calibration as they are no longer needed
+    del cals
 
     # trim dset LSTs
     if trim_dset_lsts:
         ds.trim_dset_lsts()
+
+    # interleave times
+    if interleave_times:
+        if len(ds.dsets) != 1:
+            raise ValueError("interleave_times only applicable for Ndsets == 1")
+        Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
+        Ntimes -= Ntimes % 2  # make it an even number
+        # update dsets
+        ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
+        ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
+        ds.labels.append("dset1")
+
+        # update dsets_std
+        if ds.dsets_std[0] is None:
+            ds.dsets_std.append(None)
+        else:
+            ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
+            ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
+
+        # wgts is currently always None
+        ds.wgts.append(None)
+
+        dset_pairs = [(0, 1)]
+        dsets = ds.dsets
+        dsets_std = ds.dsets_std
+        wgts = ds.wgts
+        dset_labels = ds.labels
+
+    # rephase if desired
+    if rephase_to_dset is not None:
+        ds.rephase_to_dset(rephase_to_dset)
 
     # broadcast flags
     if broadcast_dset_flags:
@@ -3172,7 +3260,8 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
             bls2_list.append(_bls2)
 
     # Open PSpecContainer to store all output in
-    psc = container.PSpecContainer(filename, mode='rw', keep_open=False)
+    if verbose: print("Opening {} in transactional mode".format(filename))
+    psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=1, maxiter=20)
 
     # assign group name
     if groupname is None:
@@ -3194,10 +3283,12 @@ def pspec_run(dsets, filename, dsets_std=None, groupname=None,
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
 
+        # write in transactional mode
+        if verbose: print("Storing {}".format(psname))
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
                       overwrite=overwrite)
 
-    return psc, ds
+    return ds
 
 
 def get_pspec_run_argparser():
@@ -3314,10 +3405,34 @@ def raise_warning(warning, verbose=True):
 
 
 def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
-                file_type='miriad'):
+                file_type='miriad', cals=None, cal_flag=True):
     """
     Helper function for loading UVData-compatible datasets in pspec_run.
+
+    Parameters
+    ----------
+    fnames : list of str, or list of list of str
+        Filenames of load. if an element in fnames is a list of str
+        load them all in one call
+    bls : list of tuples
+        Baselines to load. Default is all.
+    pols : list of str
+        Polarizations to load, default is all.
+    logf : file descriptor
+        Log file to write to
+    verbose : bool
+        Report output to logfile.
+    file_type : str
+        File type of input files.
+
+    Returns
+    -------
+    list
+        List of UVData objects
     """
+    ### TODO: data loading for cross-polarization power
+    ### spectra is sub-optimal: only dset1 pol1 and dset2 pol2
+    ### is needed instead of pol1 & pol2 for dset1 & dset2
     dsets = []
     Ndsets = len(fnames)
     for i, dset in enumerate(fnames):
@@ -3326,7 +3441,49 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
 
         # read data
         uvd = UVData()
-        uvd.read(glob.glob(dset), bls=bls, polarizations=pols,
+        if isinstance(dset, (str, np.str)):
+            dfiles = glob.glob(dset)
+        else:
+            dfiles = dset
+        uvd.read(dfiles, bls=bls, polarizations=pols,
                  file_type=file_type)
+        uvd.extra_keywords['filename'] = json.dumps(dfiles)
         dsets.append(uvd)
+
     return dsets
+
+def _load_cals(cnames, logf=None, verbose=True):
+    """
+    Helper function for loading calibration files.
+
+    Parameters
+    ----------
+    cnames : list of str, or list of list of str
+        Calfits filepaths to load. If an element in cnames is a
+        list, load it all at once.
+    logf : file descriptor
+        Log file to write to.
+    verbose : bool
+        Report feedback to log file.
+
+    Returns
+    -------
+    list
+        List of UVCal objects
+    """
+    cals = []
+    Ncals = len(cnames)
+    for i, cfile in enumerate(cnames):
+        utils.log("Reading {} / {} calibrations...".format(i+1, Ncals),
+                  f=logf, lvl=1, verbose=verbose)
+
+        # read data
+        uvc = UVCal()
+        if isinstance(cfile, (str, np.str)):
+            uvc.read_calfits(glob.glob(cfile))
+        else:
+            uvc.read_calfits(cfile)
+        uvc.extra_keywords['filename'] = json.dumps(cfile)
+        cals.append(uvc)
+
+    return cals
