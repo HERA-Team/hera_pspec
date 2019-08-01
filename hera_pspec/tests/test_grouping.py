@@ -240,7 +240,7 @@ def test_bootstrap_run():
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
     if os.path.exists("ex.h5"):
         os.remove("ex.h5")
-    psc = container.PSpecContainer("ex.h5", mode='rw')
+    psc = container.PSpecContainer("ex.h5", mode='rw', keep_open=False, swmr=False)
     psc.set_pspec("grp1", "uvp", uvp)
 
     # Test basic bootstrap run
@@ -271,7 +271,7 @@ def test_bootstrap_run():
     del psc
     if os.path.exists("ex.h5"):
         os.remove("ex.h5")
-    psc = container.PSpecContainer("ex.h5", mode='rw')
+    psc = container.PSpecContainer("ex.h5", mode='rw', keep_open=False, swmr=False)
     # test empty groups
     nt.assert_raises(AssertionError, grouping.bootstrap_run, "ex.h5")
     # test bad filename
@@ -279,6 +279,10 @@ def test_bootstrap_run():
     # test fed spectra doesn't exist
     psc.set_pspec("grp1", "uvp", uvp)
     nt.assert_raises(AssertionError, grouping.bootstrap_run, psc, spectra=['grp1/foo'])
+    # test assertionerror if SWMR
+    psc = container.PSpecContainer("ex.h5", mode='rw', keep_open=False, swmr=True)
+    nt.assert_raises(AssertionError, grouping.bootstrap_run, psc, spectra=['grp1/foo'])
+
     if os.path.exists("ex.h5"):
         os.remove("ex.h5")
 
