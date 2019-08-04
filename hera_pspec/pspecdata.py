@@ -3273,7 +3273,7 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
 
     # get antenna position dictionary
     ap1, a1 = uvd1.get_ENU_antpos(pick_data_ants=True)
-    ap2, a2 = uvd1.get_ENU_antpos(pick_data_ants=True)
+    ap2, a2 = uvd2.get_ENU_antpos(pick_data_ants=True)
     ap1 = dict(zip(a1, ap1))
     ap2 = dict(zip(a2, ap2))
 
