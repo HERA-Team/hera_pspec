@@ -156,16 +156,17 @@ def decompress_r_params(r_params_str):
 
     Returns
     -------
-    dictionary with parameters for weighting matrix. Proper fields
-    and formats depend on the mode of data_weighting.
-    data_weighting == 'sinc_downweight':
-                  dictionary with fields
-                  'filter_centers', list of floats (or float) specifying the (delay) channel numbers
-                                    at which to center filtering windows. Can specify fractional channel number.
-                  'filter_widths', list of floats (or float) specifying the width of each
-                                   filter window in (delay) channel numbers. Can specify fractional channel number.
-                  'filter_factors', list of floats (or float) specifying how much power within each filter window
-                                    is to be suppressed.
+    r_params: dict
+        Dictionary with parameters for weighting matrix. Proper fields
+        and formats depend on the mode of data_weighting.
+        data_weighting == 'sinc_downweight':
+                      dictionary with fields
+                      'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+                                        at which to center filtering windows. Can specify fractional channel number.
+                      'filter_widths', list of floats (or float) specifying the width of each
+                                       filter window in (delay) channel numbers. Can specify fractional channel number.
+                      'filter_factors', list of floats (or float) specifying how much power within each filter window
+                                        is to be suppressed.
     """
     decompressed_r_params = {}
     if r_params_str != '' and not r_params_str is None:

@@ -2054,7 +2054,7 @@ def combine_uvpspec(uvps, verbose=True):
     if '' in _r_param_strs:
         if not np.all(np.asarray([rp == '' for rp in _r_param_strs])):
             raise ValueError("All r_params must be set or empty."
-                             "Combinging empty with non-empty r_params"
+                             "Combining empty with non-empty r_params"
                              "is not yet supported.")
     _r_params = [_uvp.get_r_params() for _uvp in uvps]
     #check for conflicts by iterating through each key in the first _uvp, store
