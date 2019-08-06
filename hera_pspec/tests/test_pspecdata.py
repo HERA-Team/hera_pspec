@@ -332,21 +332,21 @@ class Test_PSpecData(unittest.TestCase):
             Q_matrix = self.ds.get_Q_alt(alpha, allow_fft=False)
             Q_diff_norm = np.linalg.norm(Q_matrix - Q_matrix_fft)
             self.assertLessEqual(Q_diff_norm, multiplicative_tolerance)
-        
+
         # Check for error handling
         nt.assert_raises(ValueError, self.ds.set_Ndlys, vect_length+100)
 
     def test_get_Q(self):
         """
         Test the Q = dC_ij/dp function.
-        
+
         A general comment here:
         I would really want to do away with try and exception statements. The reason to use them now
         was that current unittests throw in empty datasets to these functions. Given that we are computing
         the actual value of tau/freq/taper etc. we do need datasets! Currently, if there is no dataset,
         Q_matrix is simply an identity matrix with same dimensions as that of vector length.
         It will be very helpful if we can have more elegant solution for this.
-        
+
         """
         vect_length = 50
         x_vect = np.random.normal(size=vect_length) \
@@ -355,7 +355,7 @@ class Test_PSpecData(unittest.TestCase):
                + 1.j * np.random.normal(size=vect_length)
 
         self.ds.spw_Nfreqs = vect_length
-        pol = 'xx' 
+        pol = 'xx'
         #Test if there is a warning if user does not pass the beam
         key1 = (0, 24, 38)
         key2 = (1, 24, 38)
@@ -599,10 +599,10 @@ class Test_PSpecData(unittest.TestCase):
                 M, W = self.ds.get_MW(random_G, random_H, mode=mode)
                 self.assertEqual(diagonal_or_not(M), True)
             elif mode == 'L^-1':
-                # Test that Cholesky mode is disabled 
-                nt.assert_raises(NotImplementedError, 
+                # Test that Cholesky mode is disabled
+                nt.assert_raises(NotImplementedError,
                                  self.ds.get_MW, random_G, random_H, mode=mode)
-                
+
             # Test sizes for everyone
             self.assertEqual(M.shape, (n,n))
             self.assertEqual(W.shape, (n,n))
@@ -638,8 +638,14 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         print(cov_analytic)
 
-        for input_data_weight in ['identity','iC']:
+        for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
+            #check error raised
+            if input_data_weight == 'sinc_downweight':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 qc = self.ds.cov_q_hat(key1,key2)
                 self.assertTrue(np.allclose(np.array(list(qc.shape)),
@@ -661,6 +667,7 @@ class Test_PSpecData(unittest.TestCase):
                         np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
         self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, 200)
         self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, "watch out!")
+
 
     def test_cov_p_hat(self):
         """
@@ -693,9 +700,13 @@ class Test_PSpecData(unittest.TestCase):
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
 
-        for input_data_weight in ['identity', 'iC']:
+        for input_data_weight in ['identity', 'iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
-
+            if input_data_weight == 'sinc_downweight':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             # Loop over list of taper functions
             for taper in taper_selection:
                 self.ds.set_taper(taper)
@@ -732,7 +743,7 @@ class Test_PSpecData(unittest.TestCase):
 
         self.ds.spw_Ndlys = Nfreq
         # Check that the slow method is the same as the FFT method
-        for input_data_weight in ['identity', 'iC']:
+        for input_data_weight in ['identity', 'iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
             # Loop over list of taper functions
             for taper in taper_selection:
@@ -756,8 +767,13 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        for input_data_weight in ['identity','iC']:
+        for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'sinc_downweight':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
 
@@ -779,8 +795,13 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        for input_data_weight in ['identity','iC']:
+        for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'sinc_downweight':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.clear_cache()
                 self.ds.set_taper(taper)
@@ -923,7 +944,7 @@ class Test_PSpecData(unittest.TestCase):
         gauss = pspecbeam.PSpecBeamGauss(0.8,
                                   np.linspace(115e6, 130e6, 50, endpoint=False))
         ds2 = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=gauss)
-        
+
         # Check normal execution
         scalar = self.ds.scalar(('xx','xx'))
         scalar_xx = self.ds.scalar('xx') # Can use single pol string as shorthand
@@ -932,7 +953,7 @@ class Test_PSpecData(unittest.TestCase):
         scalar = self.ds.scalar(('xx','xx'), taper_override='none')
         scalar = self.ds.scalar(('xx','xx'), beam=gauss)
         nt.assert_raises(NotImplementedError, self.ds.scalar, ('xx','yy'))
-        
+
         # Precomputed results in the following test were done "by hand"
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         # FIXME: Uncomment when pyuvdata support for this is ready
@@ -945,16 +966,16 @@ class Test_PSpecData(unittest.TestCase):
     def test_validate_datasets(self):
         # test freq exception
         uvd = copy.deepcopy(self.d[0])
-        uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10], 
+        uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10],
                           inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
-        
+
         # test time exception
         uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         nt.assert_raises(ValueError, ds.validate_datasets)
-        
+
         # test label exception
         _labels = ds.labels
         ds.labels = ds.labels[:1]
@@ -966,23 +987,23 @@ class Test_PSpecData(unittest.TestCase):
         ds.dsets_std = ds.dsets_std[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
         ds.dsets_std = _std
-        
+
         # test wgt exception
         _wgts = ds.wgts
         ds.wgts = ds.wgts[:1]
         nt.assert_raises(ValueError, ds.validate_datasets)
         ds.wgts = _wgts
-        
+
         # test warnings
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
-        uvd.select(frequencies=np.unique(uvd.freq_array)[:10], 
+        uvd.select(frequencies=np.unique(uvd.freq_array)[:10],
                    times=np.unique(uvd.time_array)[:10])
-        uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], 
+        uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20],
                     times=np.unique(uvd2.time_array)[10:20])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
         ds.validate_datasets()
-        
+
         # test phasing
         uvd = copy.deepcopy(self.d[0])
         uvd2 = copy.deepcopy(self.d[0])
@@ -991,10 +1012,10 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(ValueError, ds.validate_datasets)
         uvd2.phase_to_time(Time(2458042.5, format='jd'))
         ds.validate_datasets()
-        
+
         # test polarization
         ds.validate_pol((0,1), ('xx', 'xx'))
-        
+
         # test channel widths
         uvd2.channel_width *= 2.
         ds2 = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
@@ -1076,7 +1097,7 @@ class Test_PSpecData(unittest.TestCase):
         vis_u, norm_u = ds.units()
         nt.assert_equal(vis_u, "UNCALIB")
         nt.assert_equal(norm_u, "Hz str [beam normalization not specified]")
-        ds_b = pspecdata.PSpecData(dsets=[self.uvd, self.uvd], 
+        ds_b = pspecdata.PSpecData(dsets=[self.uvd, self.uvd],
                 wgts=[None, None], beam=self.bm)
         vis_u, norm_u = ds_b.units(little_h=False)
         nt.assert_equal(norm_u,"Mpc^3")
@@ -1103,7 +1124,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_false(ds.check_key_in_dset((24, 26, 'yy'), 0))
         # check exception
         nt.assert_raises(KeyError, ds.check_key_in_dset, (1,2,3,4,5), 0)
-        
+
         # test dset_idx
         nt.assert_raises(TypeError, ds.dset_idx, (1,2))
 
@@ -1126,12 +1147,35 @@ class Test_PSpecData(unittest.TestCase):
         ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=10, spw_ranges=[(10,20)])
         ds.pspec(bls, bls, (0, 1), ('xx','xx'), n_dlys=1)
 
+        my_r_params = {}
+        my_r_params_dset0_only = {}
+        rp = {'filter_centers':[0.],
+              'filter_widths':[250e-9],
+              'filter_factors':[1e-9]}
+        for bl in bls:
+            key1 = (0,) + bl + ('xx',)
+            key2 = (1,) + bl + ('xx',)
+            my_r_params[key1] = rp
+            my_r_params_dset0_only[key1] = rp
+            my_r_params[key2] = rp
+        #test inverse sinc weighting.
+        ds.pspec(bls,bls,(0, 1), ('xx','xx'),
+        spw_ranges = (10,20), input_data_weight = 'sinc_downweight',
+        r_params = my_r_params)
+        #test value error
+        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
+        spw_ranges = (10,20), input_data_weight = 'sinc_downweight', r_params = {})
+        #test value error no dset1 keys
+        nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
+        spw_ranges = (10,20), input_data_weight = 'sinc_downweight',
+        r_params = my_r_params_dset0_only)
+
         #assert error if baselines are not provided in the right format
-        nt.assert_raises(NotImplementedError, ds.pspec, [[(24,25),(38,39)]],[[(24,25),(38,39)]], 
+        nt.assert_raises(NotImplementedError, ds.pspec, [[(24,25),(38,39)]],[[(24,25),(38,39)]],
                 (0,1),[('xx','xx')])
 
         # compare the output of get_Q function with analytical estimates
-        
+
         ds_Q  = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm_Q)
         bls_Q   = [(24, 25)]
         uvp = ds_Q.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
@@ -1141,7 +1185,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(np.shape(Q_sample), (ds_Q.spw_range[1] - ds_Q.spw_range[0],\
                                              ds_Q.spw_range[1] - ds_Q.spw_range[0])) #Check for the right shape
 
-        estimated_Q = (1.0/(4*np.pi)) * np.ones_like(Q_sample) 
+        estimated_Q = (1.0/(4*np.pi)) * np.ones_like(Q_sample)
 
         nt.assert_true(np.allclose(np.real(estimated_Q), np.real(Q_sample), rtol=1e-05))
 
@@ -1157,7 +1201,7 @@ class Test_PSpecData(unittest.TestCase):
         key         = (spw, blp, 'xx')
         power_real_new  = (np.real(uvp_new.get_data(key)))
         power_real_ext  = (np.real(uvp_ext.get_data(key)))
-        
+
         diff = np.median((power_real_new-power_real_ext)/power_real_ext)
         nt.assert_true((diff <= 0.05))
 
@@ -1260,6 +1304,9 @@ class Test_PSpecData(unittest.TestCase):
                                 little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
         nt.assert_true(hasattr(uvp, 'cov_array'))
 
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
+        nt.assert_true(hasattr(uvp, 'cov_array'))
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
                                  beam=self.bm)
@@ -1279,7 +1326,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(len(ds._identity_Y), 2)
         nt.assert_true(((0, 24, 25, 'xx'), (1, 24, 25, 'xx')) in ds._identity_Y.keys())
         nt.assert_true(((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys())
- 
+
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
         d1 = self.uvd.select(times=np.unique(self.uvd.time_array)[:-1:2],
@@ -1469,21 +1516,21 @@ class Test_PSpecData(unittest.TestCase):
 
 
 def test_pspec_run():
-    fnames = [os.path.join(DATA_PATH, d) 
+    fnames = [os.path.join(DATA_PATH, d)
               for d in ['zen.even.xx.LST.1.28828.uvOCRSA',
                         'zen.odd.xx.LST.1.28828.uvOCRSA']]
 
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    fnames_std = [os.path.join(DATA_PATH,d) 
+    fnames_std = [os.path.join(DATA_PATH,d)
                   for d in ['zen.even.std.xx.LST.1.28828.uvOCRSA',
                             'zen.odd.std.xx.LST.1.28828.uvOCRSA']]
 
     # test basic execution
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
-    ds = pspecdata.pspec_run(fnames, "./out.h5", Jy2mK=False, 
+    ds = pspecdata.pspec_run(fnames, "./out.h5", Jy2mK=False,
                              verbose=False, overwrite=True, dset_pairs=[(0, 1)],
-                             bl_len_range=(14, 15), bl_deg_range=(50, 70), 
+                             bl_len_range=(14, 15), bl_deg_range=(50, 70),
                              psname_ext='_0', spw_ranges=[(0, 25)])
     psc =  container.PSpecContainer('./out.h5')
     nt.assert_true(isinstance(psc, container.PSpecContainer))
@@ -1495,51 +1542,51 @@ def test_pspec_run():
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
-    ds = pspecdata.pspec_run(fnames, "./out.h5", 
-                             dsets_std=fnames_std, 
-                             Jy2mK=True, 
+    ds = pspecdata.pspec_run(fnames, "./out.h5",
+                             dsets_std=fnames_std,
+                             Jy2mK=True,
                              beam=beamfile,
-                             blpairs=[((37, 38), (37, 38)), 
-                                      ((37, 38), (52, 53))], 
-                             verbose=False, 
+                             blpairs=[((37, 38), (37, 38)),
+                                      ((37, 38), (52, 53))],
+                             verbose=False,
                              overwrite=True,
-                             pol_pairs=[('xx', 'xx'), ('xx', 'xx')], 
+                             pol_pairs=[('xx', 'xx'), ('xx', 'xx')],
                              dset_labels=["foo", "bar"],
-                             dset_pairs=[(0, 0), (0, 1)], 
-                             spw_ranges=[(50, 75), (120, 140)], 
+                             dset_pairs=[(0, 0), (0, 1)],
+                             spw_ranges=[(50, 75), (120, 140)],
                              n_dlys=[20, 20],
-                             cosmo=cosmo, 
-                             trim_dset_lsts=False, 
-                             broadcast_dset_flags=False, 
+                             cosmo=cosmo,
+                             trim_dset_lsts=False,
+                             broadcast_dset_flags=False,
                              store_cov=True)
-    
+
     # assert groupname is dset1_dset2
     psc =  container.PSpecContainer('./out.h5')
     nt.assert_true("foo_bar" in psc.groups())
-    
+
     # assert uvp names are labeled by dset_pairs
-    nt.assert_equal(sorted(psc.spectra('foo_bar')), 
+    nt.assert_equal(sorted(psc.spectra('foo_bar')),
                     sorted([u'foo_x_bar', u'foo_x_foo']))
-    
+
     # get UVPSpec for further inspection
     uvp = psc.get_pspec("foo_bar", "foo_x_bar")
-    
+
     # assert Jy2mK worked
     nt.assert_true(uvp.vis_units, "mK")
-    
+
     # assert only blpairs that were fed are present
     nt.assert_equal(uvp.bl_array.tolist(), [137138, 152153])
     nt.assert_equal(uvp.polpair_array.tolist(), [1515, 1515])
-    
+
     # assert weird cosmology was passed
     nt.assert_equal(uvp.cosmo, cosmo)
-    
+
     # assert cov_array was calculated b/c std files were passed and store_cov
     nt.assert_true(hasattr(uvp, 'cov_array'))
-    
+
     # assert dset labeling propagated
     nt.assert_equal(set(uvp.labels), set(['bar', 'foo']))
-    
+
     # assert spw_ranges and n_dlys specification worked
     np.testing.assert_array_equal(uvp.get_spw_ranges(), [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)])
 
@@ -1678,9 +1725,9 @@ def test_pspec_run():
         os.remove("./out.h5")
     fnames = glob.glob(os.path.join(DATA_PATH, "zen.2458116.*.HH.uvh5"))
     cals = glob.glob(os.path.join(DATA_PATH, "zen.2458116.*.HH.flagged_abs.calfits"))
-    ds = pspecdata.pspec_run([fnames, fnames], "./out.h5", Jy2mK=False, 
+    ds = pspecdata.pspec_run([fnames, fnames], "./out.h5", Jy2mK=False,
                              verbose=False, overwrite=True, file_type='uvh5',
-                             bl_len_range=(14, 15), bl_deg_range=(0, 1), 
+                             bl_len_range=(14, 15), bl_deg_range=(0, 1),
                              psname_ext='_0', spw_ranges=[(0, 25)], cals=[cals, cals])
     psc = container.PSpecContainer('./out.h5', 'rw')
     nt.assert_true(isinstance(psc, container.PSpecContainer))

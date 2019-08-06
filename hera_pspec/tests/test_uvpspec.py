@@ -10,7 +10,7 @@ import copy
 import h5py
 from collections import OrderedDict as odict
 from pyuvdata import UVData
-
+import json
 
 class Test_UVPSpec(unittest.TestCase):
 
@@ -82,7 +82,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(blps, [((1, 2), (1, 2)), ((1, 3), (1, 3)), ((2, 3), (2, 3))])
         # test get all keys
         keys = self.uvp.get_all_keys()
-        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), ('xx','xx')), 
+        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), ('xx','xx')),
                                (0, ((1, 3), (1, 3)), ('xx','xx')),
                                (0, ((2, 3), (2, 3)), ('xx','xx'))])
         # test omit_flags
@@ -110,14 +110,14 @@ class Test_UVPSpec(unittest.TestCase):
         u2 = uvp.average_spectra([blpairs], time_avg=True, error_field=["errors", "who?"], inplace=False)
         nt.assert_true(np.all( u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0])))
         u.select(times=np.unique(u.time_avg_array)[:20])
-        
+
         u3 = uvp.average_spectra([blpairs], time_avg=True, inplace=False)
         nt.assert_raises(KeyError, uvp.average_spectra, [blpairs], time_avg=True, inplace=False, error_field=["..............."])
         nt.assert_false(hasattr(u3, "stats_array"))
         if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
         u.write_hdf5('./ex.hdf5')
         u.read_hdf5('./ex.hdf5')
-        os.remove('./ex.hdf5')        
+        os.remove('./ex.hdf5')
 
         # test folding
         uvp = copy.deepcopy(self.uvp)
@@ -155,14 +155,14 @@ class Test_UVPSpec(unittest.TestCase):
         spw, blpairts, pol = self.uvp.key_to_indices( (0, ((1,2),(1,2)), 1515) )
         nt.assert_equal(spw, 0)
         nt.assert_equal(pol, 0)
-        nt.assert_true(np.isclose(blpairts, 
+        nt.assert_true(np.isclose(blpairts,
                                   np.array([0,3,6,9,12,15,18,21,24,27])).min())
         spw, blpairts, pol = self.uvp.key_to_indices( (0, 101102101102, ('xx','xx')) )
         nt.assert_equal(spw, 0)
         nt.assert_equal(pol, 0)
-        nt.assert_true(np.isclose(blpairts, 
+        nt.assert_true(np.isclose(blpairts,
                        np.array([0,3,6,9,12,15,18,21,24,27])).min())
-        
+
         # Check different polpair specification methods give the same results
         s1, b1, p1 = self.uvp.key_to_indices( (0, ((1,2),(1,2)), 1515) )
         s2, b2, p2 = self.uvp.key_to_indices( (0, ((1,2),(1,2)), ('xx','xx')) )
@@ -226,13 +226,25 @@ class Test_UVPSpec(unittest.TestCase):
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam)
+        rp = {'filter_centers':[0.],
+              'filter_widths':[250e-9],
+              'filter_factors':[1e-9]}
+        r_params = {}
+        for bl in bls:
+            key1 =  bl + ('xx',)
+            r_params[key1] = rp
+
+        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam,
+                                         r_params = r_params)
         uvp2 = uvp1.select(spws=0, inplace=False)
         nt.assert_equal(uvp2.Nspws, 1)
         uvp2 = uvp2.select(bls=[(37, 38), (38, 39)], inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_equal(uvp2.data_array[0].shape, (10, 10, 1))
         nt.assert_almost_equal(uvp2.data_array[0][0,0,0], (-3831605.3903496987+8103523.9604128916j))
+        nt.assert_equal(len(uvp2.get_r_params().keys()), 2)
+        for rpkey in uvp2.get_r_params():
+            nt.assert_true(rpkey == (37, 38, 'xx') or rpkey == (38, 39, 'xx'))
 
         # blpair select
         uvp = copy.deepcopy(self.uvp)
@@ -250,7 +262,7 @@ class Test_UVPSpec(unittest.TestCase):
         # test pol and blpair select, and check dimensionality of output
         uvp = copy.deepcopy(self.uvp)
         uvp.set_stats('hi', uvp.get_all_keys()[0], np.ones(300).reshape(10, 30))
-        uvp2 = uvp.select(blpairs=uvp.get_blpairs(), polpairs=uvp.polpair_array, 
+        uvp2 = uvp.select(blpairs=uvp.get_blpairs(), polpairs=uvp.polpair_array,
                           inplace=False)
         nt.assert_equal(uvp2.data_array[0].shape, (30, 30, 1))
         nt.assert_equal(uvp2.stats_array['hi'][0].shape, (30, 30, 1))
@@ -261,7 +273,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp3.polpair_array[0] = 1313
         uvp4.polpair_array[0] = 1212
         uvp = uvp + uvp2 + uvp3 + uvp4
-        uvp5 = uvp.select(blpairs=[101102101102], polpairs=[1515, 1414, 1313], 
+        uvp5 = uvp.select(blpairs=[101102101102], polpairs=[1515, 1414, 1313],
                           inplace=False)
         nt.assert_equal(uvp5.data_array[0].shape, (10, 30, 3))
 
@@ -303,6 +315,24 @@ class Test_UVPSpec(unittest.TestCase):
         uvp._clear()
         nt.assert_false(hasattr(uvp, 'Ntimes'))
         nt.assert_false(hasattr(uvp, 'data_array'))
+
+    def test_get_r_params(self):
+
+        # inplace vs not inplace, spw selection
+        uvd = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+        bls = [(37, 38), (38, 39), (52, 53)]
+        rp = {'filter_centers':[0.],
+              'filter_widths':[250e-9],
+              'filter_factors':[1e-9]}
+        r_params = {}
+        for bl in bls:
+            key1 =  bl + ('xx',)
+            r_params[key1] = rp
+        uvp = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam,
+                                         r_params = r_params)
+        nt.assert_equal(r_params, uvp.get_r_params())
 
     def test_write_read_hdf5(self):
         # test basic write execution
@@ -366,9 +396,9 @@ class Test_UVPSpec(unittest.TestCase):
     def test_average_spectra(self):
         uvp = copy.deepcopy(self.uvp)
         # test blpair averaging
-        blpairs = uvp.get_blpair_groups_from_bl_groups([[101102, 102103, 101103]], 
+        blpairs = uvp.get_blpair_groups_from_bl_groups([[101102, 102103, 101103]],
                                                        only_pairs_in_bls=False)
-        uvp2 = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, 
+        uvp2 = uvp.average_spectra(blpair_groups=blpairs, time_avg=False,
                                    inplace=False)
         nt.assert_equal(uvp2.Nblpairs, 1)
         nt.assert_true(np.isclose(uvp2.get_nsamples((0, 101102101102, ('xx','xx'))), 3.0).all())
@@ -390,13 +420,13 @@ class Test_UVPSpec(unittest.TestCase):
                         uvp3a.get_data((0, 101102101102, ('xx','xx'))),
                         uvp3b.get_data((0, 101102101102, ('xx','xx')))).all())
         #nt.assert_equal(uvp2.get_data((0, 101102101102, 'xx')).shape, (10, 30))
-        
+
         # test time averaging
         uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
         nt.assert_true(uvp2.Ntimes, 1)
         nt.assert_true(np.isclose(
                 uvp2.get_nsamples((0, 101102101102, ('xx','xx'))), 10.0).all())
-        nt.assert_true(uvp2.get_data((0, 101102101102, ('xx','xx'))).shape, 
+        nt.assert_true(uvp2.get_data((0, 101102101102, ('xx','xx'))).shape,
                        (1, 30))
         # ensure averaging works when multiple repeated baselines are present, but only
         # if time_avg = True
@@ -418,10 +448,10 @@ class Test_UVPSpec(unittest.TestCase):
         uvd_std = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
         uvd_std.read_miriad(os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'))
-        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, 
+        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std,
                                          spw_ranges=[(0,17)], beam=beam)
         uvp1.fold_spectra()
         cov_folded = uvp1.get_cov((0, ((37, 38), (38, 39)), ('xx','xx')))
@@ -467,20 +497,36 @@ class Test_UVPSpec(unittest.TestCase):
         # setup uvp build
         uvd = UVData()
         uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
-        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(uvd, bls, 
-                                         spw_ranges=[(20, 30), (60, 90)], 
-                                         beam=beam)
-        
+
+        rp = {'filter_centers':[0.],
+              'filter_widths':[250e-9],
+              'filter_factors':[1e-9]}
+
+        r_params = {}
+
+        for bl in bls:
+            key1 =  bl + ('xx',)
+            r_params[key1] = rp
+
+        #create an r_params copy with inconsistent weighting to test
+        #error case
+        r_params_inconsistent = copy.deepcopy(r_params)
+        r_params[key1]['filter_widths'] = [100e-9]
+
+        uvp1 = testing.uvpspec_from_data(uvd, bls,
+                                         spw_ranges=[(20, 30), (60, 90)],
+                                         beam=beam, r_params = r_params)
+
         print("uvp1 unique blps:", np.unique(uvp1.blpair_array))
 
         # test failure due to overlapping data
         uvp2 = copy.deepcopy(uvp1)
-        
+
         print("uvp2 unique blps:", np.unique(uvp2.blpair_array))
-        
+
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test success across pol
@@ -489,22 +535,34 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(out.Npols, 2)
         nt.assert_true(len(set(out.polpair_array) ^ set([1515, 1414])) == 0)
         key = (0, ((37, 38), (38, 39)), ('xx','xx'))
-        nt.assert_true(np.all(np.isclose(out.get_nsamples(key), 
+        nt.assert_true(np.all(np.isclose(out.get_nsamples(key),
                        np.ones(10, dtype=np.float64))))
-        nt.assert_true(np.all(np.isclose(out.get_integrations(key), 
+        nt.assert_true(np.all(np.isclose(out.get_integrations(key),
                        190 * np.ones(10, dtype=np.float64), atol=5, rtol=2)))
+        #test errors when combining with pspecs without r_params
+        uvp3 = copy.deepcopy(uvp2)
+        uvp3.r_params = ''
+        nt.assert_raises(ValueError, uvpspec.combine_uvpspec, [uvp1, uvp3])
+        #combining multiple uvp objects without r_params should run fine
+        uvp4 = copy.deepcopy(uvp1)
+        uvp4.r_params = ''
+        uvpspec.combine_uvpspec([uvp3, uvp4])
+        #now test error case with inconsistent weightings.
+        uvp5 = copy.deepcopy(uvp2)
+        uvp5.r_params = uvputils.compress_r_params(r_params_inconsistent)
+        nt.assert_raises(ValueError, uvpspec.combine_uvpspec, [uvp1, uvp5])
 
         # test multiple non-overlapping data axes
         uvp2.freq_array[0] = 0.0
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test partial data overlap failure
-        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], 
-                                         spw_ranges=[(20, 30), (60, 90)], 
+        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)],
+                                         spw_ranges=[(20, 30), (60, 90)],
                                          beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
-        uvp2 = testing.uvpspec_from_data(uvd, bls, 
-                                         spw_ranges=[(20, 30), (60, 105)], 
+        uvp2 = testing.uvpspec_from_data(uvd, bls,
+                                         spw_ranges=[(20, 30), (60, 105)],
                                          beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2 = copy.deepcopy(uvp1)
@@ -513,17 +571,17 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test concat across spw
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)], 
-                                         beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)],
+                                         beam=beam, r_params = r_params)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nspws, 3)
         nt.assert_equal(out.Nfreqs, 51)
         nt.assert_equal(out.Nspwdlys, 56)
 
         # test concat across blpairts
-        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], 
-                                         spw_ranges=[(20, 30), (60, 90)], 
-                                         beam=beam)
+        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)],
+                                         spw_ranges=[(20, 30), (60, 90)],
+                                         beam=beam, r_params = r_params)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nblpairs, 4)
         nt.assert_equal(out.Nbls, 5)
@@ -553,15 +611,15 @@ class Test_UVPSpec(unittest.TestCase):
         uvp3.polpair_array[0] = 1313
         out = uvp1 + uvp2 + uvp3
         nt.assert_equal(out.Npols, 3)
-        
+
         # Test whether n_dlys != Nfreqs works
-        uvp4 = testing.uvpspec_from_data(uvd, bls, beam=beam, 
-                                         spw_ranges=[(20, 30), (60, 90)], 
+        uvp4 = testing.uvpspec_from_data(uvd, bls, beam=beam,
+                                         spw_ranges=[(20, 30), (60, 90)],
                                          n_dlys=[5, 15])
         uvp4b = copy.deepcopy(uvp4)
         uvp4b.polpair_array[0] = 1414
         out = uvpspec.combine_uvpspec([uvp4, uvp4b], verbose=False)
-        
+
 
     def test_combine_uvpspec_std(self):
         # setup uvp build
@@ -573,8 +631,8 @@ class Test_UVPSpec(unittest.TestCase):
         beam = pspecbeam.PSpecBeamUV(
                       os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std, 
-                                         spw_ranges=[(20, 24), (64, 68)], 
+        uvp1 = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std,
+                                         spw_ranges=[(20, 24), (64, 68)],
                                          beam=beam)
         # test failure due to overlapping data
         uvp2 = copy.deepcopy(uvp1)
@@ -589,13 +647,13 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test partial data overlap failure
-        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)], 
-                                         data_std=uvd_std, 
-                                         spw_ranges=[(20, 24), (64, 68)], 
+        uvp2 = testing.uvpspec_from_data(uvd, [(37, 38), (38, 39), (53, 54)],
+                                         data_std=uvd_std,
+                                         spw_ranges=[(20, 24), (64, 68)],
                                          beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
-        uvp2 = testing.uvpspec_from_data(uvd, bls, 
-                                         spw_ranges=[(20, 24), (64, 68)], 
+        uvp2 = testing.uvpspec_from_data(uvd, bls,
+                                         spw_ranges=[(20, 24), (64, 68)],
                                          data_std=uvd_std, beam=beam)
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
         uvp2 = copy.deepcopy(uvp1)
@@ -604,7 +662,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test concat across spw
-        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 91)], 
+        uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 91)],
                                          data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nspws, 3)
@@ -612,8 +670,8 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(out.Nspwdlys, 14)
 
         # test concat across blpairts
-        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)], 
-                                         spw_ranges=[(20, 24), (64, 68)], 
+        uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)],
+                                         spw_ranges=[(20, 24), (64, 68)],
                                          data_std=uvd_std, beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nblpairs, 4)
@@ -628,7 +686,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test feed as strings
-        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)], 
+        uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)],
                                          data_std=uvd_std, beam=beam)
         uvp2 = copy.deepcopy(uvp1)
         uvp2.polpair_array[0] = 1414
@@ -638,7 +696,7 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_true(out.Npols, 2)
         for ff in ['uvp1.hdf5', 'uvp2.hdf5']:
             if os.path.exists(ff): os.remove(ff)
-        
+
         # test UVPSpec __add__
         uvp3 = copy.deepcopy(uvp1)
         uvp3.polpair_array[0] = 1313
@@ -661,4 +719,3 @@ def test_conj_blpair():
     blpair = uvputils._conj_blpair(101102103104, which='both')
     nt.assert_equal(blpair, 102101104103)
     nt.assert_raises(ValueError, uvputils._conj_blpair, 102101103104, which='foo')
-    
