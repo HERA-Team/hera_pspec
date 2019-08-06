@@ -1656,14 +1656,14 @@ class PSpecData(object):
 
                 # Get bandpower covariance 
                 cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
-                cov_q_imag = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
+                cov_q_imag = ( q_qdagger + q_qdagger.conj() - q_q - qdagger_qdagger) / 4.
                 cov_p_real = ( np.einsum('ab,cd,ibd->iac', M, M, q_q) +
                     np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) +
                     np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
                     np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-                cov_p_imag = -( np.einsum('ab,cd,ibd->iac', M, M, q_q) -
-                    np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) -
-                    np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
+                cov_p_imag = ( np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) +
+                    np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) - 
+                    np.einsum('ab,cd,ibd->iac', M, M, q_q) -
                     np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
                 # (Ntimes, spw_Ndlys, spw_Ndlys)
 
@@ -3565,7 +3565,7 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
 
     # get antenna position dictionary
     ap1, a1 = uvd1.get_ENU_antpos(pick_data_ants=True)
-    ap2, a2 = uvd1.get_ENU_antpos(pick_data_ants=True)
+    ap2, a2 = uvd2.get_ENU_antpos(pick_data_ants=True)
     ap1 = dict(zip(a1, ap1))
     ap2 = dict(zip(a2, ap2))
 

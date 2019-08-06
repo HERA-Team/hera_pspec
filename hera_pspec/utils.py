@@ -1053,6 +1053,6 @@ def uvd_time_difference(uvd, time_diff):
     data0 = uvd0.data_array
     data1 = uvd1.data_array
     data0 -= data1
-    uvd0.data_array = data0
+    uvd0.data_array = data0 / np.sqrt(2)
 
     return uvd0

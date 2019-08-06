@@ -1075,6 +1075,7 @@ def plot_uvdata_vis_hist(uvd, axis, index, fit_curve='Gaussian', plot_mode='norm
     if axis == 'baseline-times':
         fig.suptitle('Distribution of the visibility at frequency {} across baseline-time axis'.format(uvd.freq_array[0,index]), fontsize=14)
         d = uvd.data_array[:, 0, index, 0]
+
     # Make plots
     ax_list = [axes[0], axes[1]]
     data_list = [d.real,d.imag]
@@ -1185,7 +1186,7 @@ def plot_error(uvp, uvp_td, key, time_index, Tsys, extra_error_types=['time_aver
     psn_imag = np.sqrt(np.abs(uvp.get_data(key)[time_index].real * uvp_td.get_data(key)[time_index].imag)) 
     
     if not uvp.norm == 'Unnormalized':
-        noise = uvp.generate_noise_spectra(0, 'xx', Tsys)[uvp.antnums_to_blpair(key[1])]
+        noise = uvp.generate_noise_spectra(key[0], key[2], Tsys)[uvp.antnums_to_blpair(key[1])]
 
     fig = plt.figure(figsize=(10, 8))
     fig.suptitle("Error bars at time {} on baseline-pair {}".format((np.unique(uvp.time_1_array)[time_index],np.unique(uvp.time_2_array)[time_index]), key[1]), y=0.55, fontsize=12)
@@ -1872,7 +1873,7 @@ def imshow_cov(uvp, key, time_index, error_type, **kwargs):
     # Get covariance matrix
     cov_real = np.abs(uvp.get_cov(key, component='real', cov_model=error_type)[time_index])
     cov_imag = np.abs(uvp.get_cov(key, component='imag', cov_model=error_type)[time_index])
-    dlys = np.array(uvp.get_dlys(0)*1e9, dtype=np.int)
+    dlys = np.array(uvp.get_dlys(key[0])*1e9, dtype=np.int)
     # Make plots
     fig = plt.figure(figsize=(6,10))
     fig.suptitle("Bandpower covariance matrix \nat time {} \non baseline-pair {}".format((np.unique(uvp.time_1_array)[time_index],np.unique(uvp.time_2_array)[time_index]), key[1]), 

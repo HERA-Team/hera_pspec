@@ -1045,7 +1045,7 @@ def average_spectra_with_error(p, v):
     if len(p) != len(v):
         raise TypeError("p should be the same array with v.")
     p = np.array(p)
-    n = np.array(v)
+    v = np.array(v)
     N_inv = np.diag(v**(-1.))
     A = np.ones(len(p)).reshape(-1,1)
     Sigma = np.linalg.inv(np.matmul(A.T, np.matmul(N_inv, A)))
