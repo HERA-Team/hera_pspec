@@ -1634,7 +1634,7 @@ class PSpecData(object):
             # Nside, used in computing dtheta
             beam_res, beam_omega, N = \
                 self.primary_beam.beam_normalized_response(pol, nu) 
-            prod = 1. / beam_omega)
+            prod = 1. / beam_omega
             beam_prod = beam_res * prod[:, np.newaxis]
             
             # beam_prod has omega subsumed, but taper is still part of R matrix
