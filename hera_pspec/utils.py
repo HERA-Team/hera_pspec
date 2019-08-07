@@ -3,14 +3,12 @@ import os, time, yaml
 import itertools, argparse, glob
 import traceback, operator
 import aipy, uvtools
-import pylab as plt
 from hera_pspec.conversions import Cosmo_Conversions
 from hera_cal import redcal
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
-
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
@@ -75,44 +73,44 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     return C
 
 
-def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False, 
+def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
                       group=False, Nblps_per_group=1):
     """
-    Construct a list of baseline-pairs from a baseline-group. This function 
-    can be used to easily convert a single list of baselines into the input 
+    Construct a list of baseline-pairs from a baseline-group. This function
+    can be used to easily convert a single list of baselines into the input
     needed by PSpecData.pspec(bls1, bls2, ...).
 
     Parameters
     ----------
     bls : list of tuple
-        List of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]. Baseline 
-        integers are not supported, and must first be converted to tuples 
+        List of baseline tuples, Ex. [(1, 2), (2, 3), (3, 4)]. Baseline
+        integers are not supported, and must first be converted to tuples
         using UVData.baseline_to_antnums().
 
     exclude_auto_bls: bool, optional
-        If True, exclude all baselines crossed with themselves from the final 
+        If True, exclude all baselines crossed with themselves from the final
         blpairs list. Default: False.
 
     exclude_permutations : bool, optional
-        If True, exclude permutations and only form combinations of the bls 
+        If True, exclude permutations and only form combinations of the bls
         list.
-        
-        For example, if bls = [1, 2, 3] (note this isn't the proper form of 
-        bls, but makes the example clearer) and exclude_permutations = False, 
-        then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33]. If however 
+
+        For example, if bls = [1, 2, 3] (note this isn't the proper form of
+        bls, but makes the example clearer) and exclude_permutations = False,
+        then blpairs = [11, 12, 13, 21, 22, 23,, 31, 32, 33]. If however
         exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
-        
-        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would 
+
+        Furthermore, if exclude_auto_bls = True then 11, 22, and 33 would
         also be excluded.
-        
+
         Default: False.
 
     group : bool, optional
-        If True, group each consecutive Nblps_per_group blpairs into sub-lists. 
+        If True, group each consecutive Nblps_per_group blpairs into sub-lists.
         Default: False.
 
     Nblps_per_group : int, optional
-        Number of baseline-pairs to put into each sub-group if group = True. 
+        Number of baseline-pairs to put into each sub-group if group = True.
         Default: 1.
 
     Returns (bls1, bls2, blpairs)
@@ -127,7 +125,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
     assert isinstance(bls, (list, np.ndarray)) and isinstance(bls[0], tuple), \
         "bls must be fed as list or ndarray of baseline antnum tuples. Use " \
         "UVData.baseline_to_antnums() to convert baseline integers to tuples."
-    
+
     # form blpairs w/o explicitly forming auto blpairs
     # however, if there are repeated bl in bls, there will be auto bls in blpairs
     if exclude_permutations:
@@ -169,26 +167,26 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
     return bls1, bls2, blpairs
 
 
-def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True, 
+def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                      xant_flag_thresh=0.95, exclude_auto_bls=False,
-                     exclude_permutations=True, Nblps_per_group=None, 
+                     exclude_permutations=True, Nblps_per_group=None,
                      bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
     """
-    Use hera_cal.redcal to get matching, redundant baseline-pair groups from 
-    uvd1 and uvd2 within the specified baseline tolerance, not including 
+    Use hera_cal.redcal to get matching, redundant baseline-pair groups from
+    uvd1 and uvd2 within the specified baseline tolerance, not including
     flagged ants.
 
     Parameters
     ----------
     uvd1, uvd2 : UVData
-        UVData instances with visibility data for the first/second visibilities 
+        UVData instances with visibility data for the first/second visibilities
         in the cross-spectra that will be formed.
 
     bl_tol : float, optional
         Baseline-vector redundancy tolerance in meters
 
     filter_blpairs : bool, optional
-        if True, calculate xants and filters-out baseline pairs based on 
+        if True, calculate xants and filters-out baseline pairs based on
         xant lists and actual baselines in the data.
 
     xant_flag_thresh : float, optional
@@ -200,7 +198,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     exclude_permutations : boolean, optional
         If True, exclude permutations and only form combinations of the bls list.
-        
+
         For example, if bls = [1, 2, 3] (note this isn't the proper form of bls,
         but makes this example clearer) and exclude_permutations = False,
         then blpairs = [11, 12, 13, 21, 22, 23, 31, 32, 33]. If however
@@ -212,11 +210,11 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         Default: None
 
     bl_len_range : tuple, optional
-        len-2 tuple containing minimum baseline length and maximum baseline 
+        len-2 tuple containing minimum baseline length and maximum baseline
         length [meters] to keep in baseline type selection
 
     bl_deg_range : tuple, optional
-        len-2 tuple containing (minimum, maximum) baseline angle in degrees 
+        len-2 tuple containing (minimum, maximum) baseline angle in degrees
         to keep in baseline selection
 
     Returns
@@ -228,7 +226,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     blpairs : list of baseline-pair tuples
         Contains the baseline-pair tuples. i.e. zip(baselines1, baselines2)
 
-    xants1, xants2 : lists 
+    xants1, xants2 : lists
         List of bad antenna integers for uvd1 and uvd2
     """
     # get antenna positions
@@ -245,9 +243,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                   "tolerance of {} m".format(bl_tol)
             assert np.linalg.norm(antpos1[a] - antpos2[a]) < bl_tol, msg
 
-    # get xants
+    # calculate xants via flags if asked
     xants1, xants2 = [], []
-    if filter_blpairs:
+    if filter_blpairs and uvd1.flag_array is not None and uvd2.flag_array is not None:
         xants1, xants2 = set(ants1), set(ants2)
         baselines = sorted(set(uvd1.baseline_array).union(set(uvd2.baseline_array)))
         for bl in baselines:
@@ -290,8 +288,8 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     baselines1, baselines2, blpairs = [], [], []
     for r in reds:
         (bls1, bls2,
-         blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls, 
-                                   group=False, 
+         blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls,
+                                   group=False,
                                    exclude_permutations=exclude_permutations)
         if len(bls1) < 1:
             continue
@@ -314,11 +312,11 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         # group if desired
         if Nblps_per_group is not None:
             Ngrps = int(np.ceil(float(len(blps)) / Nblps_per_group))
-            bls1 = [bls1[Nblps_per_group*i:Nblps_per_group*(i+1)] 
+            bls1 = [bls1[Nblps_per_group*i:Nblps_per_group*(i+1)]
                     for i in range(Ngrps)]
-            bls2 = [bls2[Nblps_per_group*i:Nblps_per_group*(i+1)] 
+            bls2 = [bls2[Nblps_per_group*i:Nblps_per_group*(i+1)]
                     for i in range(Ngrps)]
-            blps = [blps[Nblps_per_group*i:Nblps_per_group*(i+1)] 
+            blps = [blps[Nblps_per_group*i:Nblps_per_group*(i+1)]
                     for i in range(Ngrps)]
 
         baselines1.extend(bls1)
@@ -573,10 +571,10 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                          bl_deg_range=(0, 180), xants=None, exclude_patterns=None, 
                          file_type='miriad', verbose=True):
     """
-    Given a list of miriad file templates and selections for
+    Given a list of glob-parseable file templates and selections for
     polarization and group labels, construct a master list of
     group-pol pairs, and also a list of blpairs for each
-    group-pol pair.
+    group-pol pair given selections on baseline angles and lengths.
 
     A group is a fieldname in the visibility files that denotes the
     "type" of dataset. For example, the group field in the following files
@@ -624,7 +622,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
         files (after the templates have been filled-in). This currently 
         just takes a list of strings, and does not recognize wildcards. 
         Default: None.
-        
+
     file_type : str, optional
         File type of the input files. Default: 'miriad'.
     
@@ -671,7 +669,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
     unique_files = sorted(unique_files)
-    
+
     # Exclude user-specified patterns
     if exclude_patterns is not None:
         to_exclude = []
@@ -780,7 +778,7 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
         uvp = blvecs
         bls = uvp.bl_array
         bl_vecs = uvp.get_ENU_bl_vecs()[:, :2]
-        blvecs = dict(list(zip( [uvp.bl_to_antnums(_bls) for _bls in bls], 
+        blvecs = dict(list(zip( [uvp.bl_to_antnums(_bls) for _bls in bls],
                                 bl_vecs )))
         # get baseline-pairs
         blpairs = uvp.get_blpairs()

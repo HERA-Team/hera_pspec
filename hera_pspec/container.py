@@ -3,6 +3,7 @@ import h5py
 from hera_pspec import uvpspec, version, utils
 import argparse
 import time
+from functools import wraps
 
 
 def transactional(fn):
@@ -10,14 +11,24 @@ def transactional(fn):
     Handle 'transactional' operations on PSpecContainer, where the HDF5 file is 
     opened and then closed again for every operation. This is done when 
     keep_open = False.
+
+    For calling a @transactional function within another @transactional function,
+    feed the kwarg nested=True in the nested function call, and it will not close
+    the container upon exit even if keep_open = False, until the outer-most
+    @transactional function exits, in which case it will close the container
+    if keep_open = False.
     """
+    @wraps(fn)
     def wrapper(*args, **kwargs):
         psc = args[0] # self object
         
         # Open HDF5 file if needed
-        if not psc.keep_open:
+        if psc.data is None:
             psc._open()
-        
+
+        # if passed 'nested' kwarg get it
+        nested = kwargs.pop('nested', False)
+
         # Run function
         try:
             f = fn(*args, **kwargs)
@@ -26,9 +37,9 @@ def transactional(fn):
             if not psc.keep_open:
                 psc._close()
             raise err
-        
+
         # Close HDF5 file if necessary
-        if not psc.keep_open:
+        if not psc.keep_open and not nested:
             psc._close()
         
         # Return function result
@@ -41,11 +52,15 @@ class PSpecContainer(object):
     """
     Container class for managing multiple UVPSpec objects.
     """
-
-    def __init__(self, filename, mode='r', keep_open=True, tsleep=0.5, maxiter=2):
+    def __init__(self, filename, mode='r', keep_open=True, swmr=False,
+                 tsleep=0.5, maxiter=2):
         """
         Manage a collection of UVPSpec objects that are stored in a structured
         HDF5 file.
+
+        Note: one should not create new groups or datasets with SWMR. See page 6 of
+        https://support.hdfgroup.org/HDF5/docNewFeatures/SWMR/HDF5_SWMR_Users_Guide.pdf
+        for SWMR limitations.
 
         Parameters
         ----------
@@ -61,12 +76,13 @@ class PSpecContainer(object):
             Whether the HDF5 file should be kept open, or opened and then 
             closed again each time an operation is performed. Setting 
             `keep_open=False` is helpful for multi-process access patterns.
-            
-            This feature uses the Single-Writer Multiple-Reader (SWMR) feature 
-            of HDF5. Note that SWMR can only be used on POSIX-compliant 
-            filesystems, and so may not work on some network filesystems.
-            
             Default: True (keep file open).
+
+        swmr : bool, optional
+            Enable Single-Writer Multiple-Reader (SWMR) feature of HDF5.
+            Note that SWMR can only be used on POSIX-compliant 
+            filesystems, and so may not work on some network filesystems.
+            Default: False (do not use SWMR)
 
         tsleep : float, optional
             Time to wait in seconds after each attempt at opening the file.
@@ -80,6 +96,7 @@ class PSpecContainer(object):
         self.mode = mode
         self.tsleep = tsleep
         self.maxiter = maxiter
+        self.swmr = swmr
         if mode not in ['r', 'rw']:
             raise ValueError("Must set mode to either 'r' or 'rw'.")
 
@@ -87,7 +104,7 @@ class PSpecContainer(object):
         self.data = None
         if keep_open:
             self._open()
-    
+
     def _open(self):
         """
         Open HDF5 file ready for reading/writing. Does nothing if the file is 
@@ -107,17 +124,17 @@ class PSpecContainer(object):
             mode = 'a'
         else:
             mode = 'r'
-        if self.mode == 'r':
+        if self.swmr and self.mode == 'r':
             swmr = True
         else:
             swmr = False
 
         # check HDF5 version if swmr
         if swmr:
-            hdf5_v = h5py.version.hdf5_version_tuple[0] \
-                   + h5py.version.hdf5_version_tuple[1]/100.
+            hdf5_v = float('.'.join(h5py.version.hdf5_version.split('.')[:2]))
             if hdf5_v < 1.1:
-                print("HDF5 version must be >= 1.10 for SWMR")
+                raise NotImplementedError("HDF5 version is {}: must "
+                                          "be >= 1.10 for SWMR".format(hdf5_v))
 
         # Try to open the file
         Ncount = 0
@@ -130,7 +147,8 @@ class PSpecContainer(object):
                         # Enable single writer, multiple reader mode on HDF5 file. 
                         # This allows multiple handles to exist for the same file 
                         # at the same time, as long as only one is in rw mode
-                        self.data.swmr_mode = True
+                        if self.swmr:
+                            self.data.swmr_mode = True
                     except ValueError:
                         pass
                 break
@@ -159,7 +177,7 @@ class PSpecContainer(object):
             # Denote as Container
             if 'pspec_type' not in list(self.data.attrs.keys()):
                 self.data.attrs['pspec_type'] = self.__class__.__name__
-    
+
     def _close(self):
         """
         Close HDF5 file. DOes nothing if file is already closed.
@@ -227,7 +245,10 @@ class PSpecContainer(object):
         git version of hera_pspec.
         """
         if 'header' not in list(self.data.keys()):
-            hdr = self.data.create_group('header')
+            if not self.swmr:
+                hdr = self.data.create_group('header')
+            else:
+                raise ValueError("Cannot create a header group with SWMR")
         else:
             hdr = self.data['header']
 
@@ -236,7 +257,7 @@ class PSpecContainer(object):
             if hdr.attrs['hera_pspec.git_hash'] != version.git_hash:
                 print("WARNING: HDF5 file was created by a different version "
                       "of hera_pspec.")
-        else:
+        elif not self.swmr:
             hdr.attrs['hera_pspec.git_hash'] = version.git_hash
     
     @transactional
@@ -261,7 +282,7 @@ class PSpecContainer(object):
         """
         if self.mode == 'r':
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
-        
+
         if isinstance(group, (tuple, list, dict)):
             raise ValueError("Only one group can be specified at a time.")
 
@@ -282,6 +303,12 @@ class PSpecContainer(object):
         if isinstance(pspec, list) and not isinstance(psname, list):
             raise ValueError("If pspec is a list, psname must also be a list.")
         # No lists should pass beyond this point
+
+        # check for swmr write of new group or dataset
+        if self.swmr:
+            tree = self.tree(return_str=False, nested=True)
+            if group not in tree or psname not in tree[group]:
+                raise ValueError("Cannot write new group or dataset with SWMR")
 
         # Check that input is of the correct type
         if not isinstance(pspec, uvpspec.UVPSpec):
@@ -394,7 +421,7 @@ class PSpecContainer(object):
         # Traverse the entire set of groups/datasets looking for pspecs
         grp.visititems(pspec_filter)
         return ps_list
-    
+
     @transactional
     def groups(self):
         """
@@ -409,19 +436,37 @@ class PSpecContainer(object):
         if u'header' in groups:
             groups.remove(u'header')
         return groups
-    
+
     @transactional
-    def tree(self):
+    def tree(self, return_str=True):
         """
         Output a string containing a tree diagram of groups and the power
         spectra that they contain.
+
+        Parameters
+        ----------
+        return_str : bool, optional
+            If True, return the tree as a string, otherwise
+            return as a dictionary
+
+        Returns
+        -------
+        str or dict
+            Tree structure of HDF5 file
         """
-        s = ""
-        for grp in self.groups():
-            s += "(%s)\n" % grp
-            for pspec in self.spectra(grp):
-                s += "  |--%s\n" % pspec
-        return s
+        grps = self.groups(nested=True)
+        tree = dict()
+        for grp in grps:
+            tree[grp] = self.spectra(grp, nested=True)
+        if not return_str:
+            return tree
+        else:
+            s = ""
+            for grp in grps:
+                s += "(%s)\n" % grp
+                for pspec in tree[grp]:
+                    s += "  |--%s\n" % pspec
+            return s
     
     @transactional
     def save(self):
