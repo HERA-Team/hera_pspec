@@ -1203,7 +1203,7 @@ class Test_PSpecData(unittest.TestCase):
         bls_Q   = [(24, 25)]
         uvp = ds_Q.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
                                        norm='I', taper='none', verbose=True, exact_norm=False)
-        Q_sample = ds_Q.get_integral_beam('xx') #Get Q matrix for 0th delay mode
+        Q_sample = ds_Q.get_integral_beam('xx') #Get integral beam for pol 'xx'
 
         nt.assert_equal(np.shape(Q_sample), (ds_Q.spw_range[1] - ds_Q.spw_range[0],\
                                              ds_Q.spw_range[1] - ds_Q.spw_range[0])) #Check for the right shape

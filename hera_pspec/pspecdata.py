@@ -1614,8 +1614,6 @@ class PSpecData(object):
 
         Parameters
         ----------
-        mode : int
-            Central wavenumber (index) of the bandpower, p_alpha.
 
         pol : str/int/bool, optional
             Which beam polarization to use. If the specified polarization 
@@ -1624,8 +1622,8 @@ class PSpecData(object):
 
         Return
         -------
-        Q : array_like
-            Response matrix for bandpower p_alpha.
+        integral_beam : array_like
+            integral containing the spectral beam and tapering.
         """
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
 
@@ -1668,8 +1666,8 @@ class PSpecData(object):
 
         Return
         -------
-        Q : array_like
-            Response matrix for bandpower p_alpha.
+        Q_alt : array_like
+            Exponential part of Q (HERA memo #44, Eq. 11).
         """
         if self.spw_Ndlys == None:
             self.set_Ndlys()
@@ -2160,8 +2158,8 @@ class PSpecData(object):
         exact_norm : bool, optional
             If True, estimates power spectrum using Q instead of Q_alt
             (HERA memo #44). The default options is False. Beware that
-            turning this True would take ~ 7 sec for computing
-            power spectrum for 100 channels per time sample per baseline.
+            turning this True would take ~ 6 sec for computing
+            power spectrum for 100 channels for 30 time samples per baseline.
 
         history : str, optional
             history string to attach to UVPSpec object
