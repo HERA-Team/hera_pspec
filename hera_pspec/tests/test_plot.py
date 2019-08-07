@@ -404,63 +404,6 @@ class Test_Plot(unittest.TestCase):
         plot.plot_uvdata_vis_hist(uvd, 'baseline-times', 0, fit_curve='Gaussian', plot_mode='density', show_robust=True)
         
         plt.close()
-
-    def test_plot_covariance(self):
-
-        dfile = os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA')
-        uvd = UVData()
-        uvd.read(dfile)
-
-        cosmo = conversions.Cosmo_Conversions()
-        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
-        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-
-        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
-        uvd.data_array *= Jy_to_mK[None, None, :, None]
-
-        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
-
-        uvd1_td = utils.uvd_time_difference(uvd1, 0.0002)
-        uvd2_td = utils.uvd_time_difference(uvd2, 0.0002)
-
-        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
-        ds.rephase_to_dset(0)
-
-        ds_td = pspecdata.PSpecData(dsets=[uvd1_td, uvd2_td], wgts=[None, None], beam=uvb)
-        ds_td.rephase_to_dset(0)
-
-        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 170e6)], bounds_error=True)
-        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-        antpos = dict(list(zip(ants, antpos)))
-        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
-        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
-
-        uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = True, cov_models = ['time_average'],
-         verbose=False)
-
-        uvp_td, uvp_td_q = ds_td.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = False, verbose=False)
-
-        key = (0,blpairs[0],("xx","xx"))
-
-        plot.plot_error(uvp, uvp_td, key, 0, 300, extra_error_types=['time_average'])
-        plot.plot_error(uvp, uvp_td, key, 0, 300, extra_error_types=['time_average'])
-        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, inside_wedge=True, extra_error_types=['time_average'], fit_curve='Exponential', plot_mode='density', show_robust=True)
-        plot.plot_zscore_hist(uvp, uvp_td, key, 1000, inside_wedge=False, extra_error_types=['time_average'], plot_mode='normal', show_robust=True)
-        plot.plot_zscore_blpt_hist(uvp, uvp_td, 100, 1000, 0, ("xx","xx"), blpairs, 
-                              extra_error_types=['time_average'],
-                              plot_mode='density', show_robust=True,)
-        plot.plot_error_blpt_avg('blpt', uvp, uvp_td, 0, ("xx","xx"), blpairs, 300, 
-                    extra_error_types=['time_average'])
-        blpt_weights = abs(np.random.normal(0,1, len(blpairs)*uvp_td.Ntimes).reshape(len(blpairs), uvp_td.Ntimes))
-        plot.plot_error_blpt_avg('blpt_avg', uvp, uvp_td, 0, ("xx","xx"), blpairs, 300, average_method ='simple',
-                        blpt_weights=blpt_weights, extra_error_types=['time_average'])
         
-        plot.imshow_cov(uvp, key, 0, error_type='time_average')
-        plt.close()
-
-
 if __name__ == "__main__":
     unittest.main()
