@@ -2158,8 +2158,12 @@ class PSpecData(object):
         exact_norm : bool, optional
             If True, estimates power spectrum using Q instead of Q_alt
             (HERA memo #44). The default options is False. Beware that
-            turning this True would take ~ 6 sec for computing
-            power spectrum for 100 channels for 30 time samples per baseline.
+            turning this True would take ~ 0.2 sec for computing
+            power spectrum for 100 channels per time sample per baseline. 
+	    If False, computing a power spectrum for 100 channels would 
+	    take ~ 0.04 sec per time sample per baseline. This means 
+	    that computing a power spectrum when exact_norm is set to 
+	    False runs five times faster than setting it to True.
 
         history : str, optional
             history string to attach to UVPSpec object
