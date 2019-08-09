@@ -1,10 +1,11 @@
-v0.2.0 (2019-07-12)
+v0.2.0 (2019-08-09)
     * Python 3 compatibility.
     * Allow cross-polarization spectra to be calculated as long as they 
       aren't beam-normalized; polarizations now specified as polpairs.
     * Time-dependent noise power spectra capability in generate_noise.
     * Methods to fetch redundant baselines/blpairs from UVPSpec objects.
-    * Exact normalization mode (Saurabh Singh).
+    * Exact normalization mode (Saurabh Singh) with optimization (Ronan 
+      Legin).
     * Updated covariance handling, incl. averaging and analytic variance 
       (Jianrong Tan).
     * New 'lazy covariance' weighting mode (Aaron Ewall-Wice).
