@@ -1100,10 +1100,12 @@ class PSpecData(object):
             q          = []
             del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             Q_matrix_all_delays = np.zeros((self.spw_Ndlys,self.spw_Nfreqs,self.spw_Nfreqs), dtype='complex128')
+            integral_beam = self.get_integral_beam(pol) # This result does not depend on delay modes. We can remove it from the for loop to avoid its repeated computation
+
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau should be part of get_Q. We use it here to
                 # avoid its repeated computation
-                Q = del_tau * self.get_Q(i, pol)
+                Q = del_tau * self.get_Q(i, pol) * integral_beam
                 Q_matrix_all_delays[i] = Q
                 QRx2 = np.dot(Q, Rx2)
 
@@ -1604,11 +1606,53 @@ class PSpecData(object):
 
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
+    
+    def get_integral_beam(self, pol=False):
+        """
+        Computes the integral containing the spectral beam and tapering 
+        function in Q_alpha(i,j).
 
+        Parameters
+        ----------
+
+        pol : str/int/bool, optional
+            Which beam polarization to use. If the specified polarization 
+            doesn't exist, a uniform isotropic beam (with integral 4pi for all 
+            frequencies) is assumed. Default: False (uniform beam).
+
+        Return
+        -------
+        integral_beam : array_like
+            integral containing the spectral beam and tapering.
+        """
+        nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
+
+        try:
+            # Get beam response in (frequency, pixel), beam area(freq) and 
+            # Nside, used in computing dtheta
+            beam_res, beam_omega, N = \
+                self.primary_beam.beam_normalized_response(pol, nu) 
+            prod = 1. / beam_omega
+            beam_prod = beam_res * prod[:, np.newaxis]
+            
+            # beam_prod has omega subsumed, but taper is still part of R matrix
+            # The nside term is dtheta^2, where dtheta is the resolution in 
+            # healpix map
+            integral_beam = np.pi/(3.*N*N) * np.dot(beam_prod, beam_prod.T)
+                                                                 
+        except(AttributeError):
+            warnings.warn("The beam response could not be calculated. "
+                          "PS will not be normalized!")
+            integral_beam = np.ones((len(nu), len(nu)))
+
+        return integral_beam
+    
+    
     def get_Q(self, mode, pol=False):
-        '''
-        Computes Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha).
-        This includes contributions from primary beam.
+        """
+        Computes Q_alpha(i,j), which is the response of the data covariance to 
+        the bandpower (dC/dP_alpha). This includes contributions from primary 
+        beam.
 
         Parameters
         ----------
@@ -1616,16 +1660,15 @@ class PSpecData(object):
             Central wavenumber (index) of the bandpower, p_alpha.
 
         pol : str/int/bool, optional
-            Which beam polarization to use. If the specified polarization doesn't exist,
-            a uniform isotropic beam (with integral 4pi for all frequencies) is assumed.
-            Default: False (uniform beam).
+            Which beam polarization to use. If the specified polarization 
+            doesn't exist, a uniform isotropic beam (with integral 4pi for all 
+            frequencies) is assumed. Default: False (uniform beam).
 
         Return
         -------
-        Q : array_like
-            Response matrix for bandpower p_alpha.
-        '''
-
+        Q_alt : array_like
+            Exponential part of Q (HERA memo #44, Eq. 11).
+        """
         if self.spw_Ndlys == None:
             self.set_Ndlys()
         if mode >= self.spw_Ndlys:
@@ -1633,23 +1676,10 @@ class PSpecData(object):
                              "of allowed range of delay modes.")
         tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
-
-        try:
-            beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(pol, nu)
-            #Get beam response in (frequency, pixel), beam area(freq) and Nside, used in computing dtheta.
-            prod          = (1.0/beam_omega)
-            beam_prod     = beam_res * prod[:, np.newaxis]
-            integral_beam = (np.pi/(3.0*(N)**2))* \
-                                      np.dot(beam_prod, beam_prod.T) #beam_prod has omega subsumed, but taper is still part of R matrix
-                                                                     # the nside terms is dtheta^2, where dtheta is the resolution in healpix map
-        except(AttributeError):
-            warnings.warn('The beam response could not be calculated. PS will not be normalized!')
-            integral_beam = np.ones((len(nu), len(nu)))
-
-        eta_int = np.exp(-2j * np.pi * tau * nu) #exponential part of the expression
-        Q_alt   = np.einsum('i,j', eta_int.conj(), eta_int) # dot it with its conjugate
-        Q       = Q_alt * integral_beam
-        return Q
+        
+        eta_int = np.exp(-2j * np.pi * tau * nu) # exponential part
+        Q_alt = np.einsum('i,j', eta_int.conj(), eta_int) # dot with conjugate
+        return Q_alt
 
     def p_hat(self, M, q):
         """
@@ -1673,7 +1703,8 @@ class PSpecData(object):
     def cov_p_hat(self, M, q_cov):
         """
         Covariance estimate between two different band powers p_alpha and p_beta
-        given by M_{alpha i} M^*_{beta,j} C_q^{ij} where C_q^{ij} is the q-covariance
+        given by M_{alpha i} M^*_{beta,j} C_q^{ij} where C_q^{ij} is the 
+        q-covariance.
 
         Parameters
         ----------
@@ -1688,7 +1719,8 @@ class PSpecData(object):
             p_cov[tnum] = np.einsum('ab,cd,bd->ac', M, M, q_cov[tnum])
         return p_cov
 
-    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, unflag=False):
+    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, 
+                             unflag=False):
         """
         For each dataset in self.dset, update the flag_array such that
         the flagging patterns are time-independent for each baseline given
@@ -1701,8 +1733,9 @@ class PSpecData(object):
 
         Additionally, one can also unflag the flag_array entirely if desired.
 
-        Note: although technically allowed, this function may give unexpected results
-        if multiple spectral windows in spw_ranges have frequency overlap.
+        Note: although technically allowed, this function may give unexpected 
+        results if multiple spectral windows in spw_ranges have frequency 
+        overlap.
 
         Note: it is generally not recommended to set time_thresh > 0.5, which
         could lead to substantial amounts of data being flagged.
@@ -1712,11 +1745,12 @@ class PSpecData(object):
         spw_ranges : list of tuples
             list of len-2 spectral window tuples, specifying the start (inclusive)
             and stop (exclusive) index of the frequency array for each spw.
-            Default is to use the whole band
+            Default is to use the whole band.
 
         time_thresh : float
-            Fractional threshold of flagged pixels across time needed to flag all times
-            per freq channel. It is not recommend to set this greater than 0.5
+            Fractional threshold of flagged pixels across time needed to flag 
+            all times per freq channel. It is not recommend to set this greater 
+            than 0.5.
 
         unflag : bool
             If True, unflag all data in the spectral window.
@@ -1730,7 +1764,8 @@ class PSpecData(object):
         # spw type check
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
-        assert isinstance(spw_ranges, list), "spw_ranges must be fed as a list of tuples"
+        assert isinstance(spw_ranges, list), \
+            "spw_ranges must be fed as a list of tuples"
 
         # iterate over datasets
         for dset in self.dsets:
@@ -1740,7 +1775,7 @@ class PSpecData(object):
                 # unflag
                 if unflag:
                     # unflag for all times
-                    dset.flag_array[:, :, self.spw_range[0]:self.spw_range[1], :] = False
+                    dset.flag_array[:,:,self.spw_range[0]:self.spw_range[1],:] = False
                     continue
                 # enact time threshold on flag waterfalls
                 # iterate over polarizations
@@ -2123,8 +2158,12 @@ class PSpecData(object):
         exact_norm : bool, optional
             If True, estimates power spectrum using Q instead of Q_alt
             (HERA memo #44). The default options is False. Beware that
-            turning this True would take ~ 7 sec for computing
-            power spectrum for 100 channels per time sample per baseline.
+            turning this True would take ~ 0.2 sec for computing
+            power spectrum for 100 channels per time sample per baseline. 
+	    If False, computing a power spectrum for 100 channels would 
+	    take ~ 0.04 sec per time sample per baseline. This means 
+	    that computing a power spectrum when exact_norm is set to 
+	    False runs five times faster than setting it to True.
 
         history : str, optional
             history string to attach to UVPSpec object
