@@ -14,6 +14,7 @@ import ast
 import glob
 import warnings
 import json
+import os
 import uvtools.dspec as dspec
 
 class PSpecData(object):
@@ -2889,13 +2890,15 @@ class PSpecData(object):
 
 
 def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
-              groupname=None, dset_labels=None, dset_pairs=None, psname_ext=None,
+              groupname=None, dset_labels=None, dset_pairs=None, 
+              psname_ext=None, use_container=True,
               spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0,
-              beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
+              beam=None, cosmo=None, interleave_times=False, 
+              rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True,
               file_type='miriad', verbose=True, store_cov=False,
@@ -2904,7 +2907,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
 
-    Warning: if dsets is a list of UVData objects, they might be edited in place!
+    Warning: if dsets is a list of UVData objects, they might be edited in 
+    place!
 
     Parameters
     ----------
@@ -2916,7 +2920,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     groupname : str
         Groupname of the subdirectory in the HDF5 container to store the
-        UVPSpec objects in. Default is a concatenation the dset_labels.
+        UVPSpec objects in, if `use_container=True`. Default is a concatenation 
+        of the dset_labels.
 
     dsets_std : list
         Contains UVData objects or string filepaths to miriad files.
@@ -2942,7 +2947,12 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     psname_ext : string
         A string extension for the psname in the PSpecContainer object.
         Example: 'group/psname{}'.format(psname_ext)
-
+    
+    use_container : bool, optional
+        Whether to output the spectra into a PSpecContainer. If False, the 
+        spectra will be stored in a series of HDF5 files with filenames 
+        "{filename}.{psname}.{psname_ext}.uvp5". Default: True.
+    
     spw_ranges : list of len-2 integer tuples
         List of tuples specifying the spectral window range. See
         PSpecData.pspec() for details. Default is the entire band.
@@ -2962,10 +2972,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         Ex. [((1, 2), (3, 4)), ((1, 2), (5, 6)), ...]
         The first bl in a tuple is drawn from zeroth index of a tuple in
         dset_pairs, while the second bl is drawn from the first index.
-        See pspecdata.construct_blpairs for details. If None, the default
-        behavior is to use the antenna positions in each UVData object to
-        construct lists of redundant baseline groups to to take all
-        cross-multiplies in each redundant baseline group.
+        See pspecdata.construct_blpairs for details.
+        
+        If None, the default behavior is to use the antenna positions in each 
+        UVData object to construct lists of redundant baseline groups to to 
+        take all cross-multiplies in each redundant baseline group.
 
     input_data_weight : string
         Data weighting to use in OQE. See PSpecData.pspec for details.
@@ -3133,13 +3144,14 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         try:
             # load data into UVData objects if fed as list of strings
             t0 = time.time()
-            dsets = _load_dsets(dsets, bls=bls, pols=pols, file_type=file_type, verbose=verbose)
+            dsets = _load_dsets(dsets, bls=bls, pols=pols, file_type=file_type, 
+                                verbose=verbose)
             utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
                       lvl=1, verbose=verbose)
         except ValueError:
             # at least one of the dset loads failed due to no data being present
-            utils.log("One of the dset loads failed due to no data overlap given "
-                      "the bls and pols selection", verbose=verbose)
+            utils.log("One of the dset loads failed due to no data overlap "
+                      "given the bls and pols selection", verbose=verbose)
             return None
 
     assert np.all([isinstance(d, UVData) for d in dsets]), \
@@ -3157,14 +3169,16 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             try:
                 # load data into UVData objects if fed as list of strings
                 t0 = time.time()
-                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, file_type=file_type, verbose=verbose)
+                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, 
+                                        file_type=file_type, verbose=verbose)
                 utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
                           lvl=1, verbose=verbose)
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data
                 # being present
-                utils.log("One of the dsets_std loads failed due to no data overlap given "
-                          "the bls and pols selection", verbose=verbose)
+                utils.log("One of the dsets_std loads failed due to no data "
+                          "overlap given the bls and pols selection", 
+                          verbose=verbose)
                 return None
 
         assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
@@ -3183,7 +3197,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # configure polarization
     if pol_pairs is None:
-        unique_pols = np.unique(np.hstack([d.polarization_array for d in dsets]))
+        unique_pols = np.unique(np.hstack(
+                                        [d.polarization_array for d in dsets] ))
         unique_pols = [uvutils.polnum2str(up) for up in unique_pols]
         pol_pairs = [(up, up) for up in unique_pols]
     assert len(pol_pairs) > 0, "no pol_pairs specified"
@@ -3216,16 +3231,21 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
         Ntimes -= Ntimes % 2  # make it an even number
         # update dsets
-        ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
-        ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
+        uniq_times = np.unique(ds.dsets[0].time_array) 
+        ds.dsets.append(ds.dsets[0].select(times=uniq_times[1:Ntimes:2], 
+                                           inplace=False))
+        ds.dsets[0].select(times=uniq_times[0:Ntimes:2], inplace=True)
         ds.labels.append("dset1")
 
         # update dsets_std
         if ds.dsets_std[0] is None:
             ds.dsets_std.append(None)
         else:
-            ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
-            ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
+            uniq_times = np.unique(ds.dsets_std[0].time_array)
+            ds.dsets_std.append( ds.dsets_std[0].select(
+                                                  times=uniq_times[1:Ntimes:2], 
+                                                  inplace=False) )
+            ds.dsets_std[0].select(times=uniq_times[0:Ntimes:2], inplace=True)
 
         # wgts is currently always None
         ds.wgts.append(None)
@@ -3300,7 +3320,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # Open PSpecContainer to store all output in
     if verbose: print("Opening {} in transactional mode".format(filename))
-    psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=1, maxiter=20)
+    if use_container:
+        psc = container.PSpecContainer(filename, mode='rw', keep_open=False, 
+                                       tsleep=1, maxiter=20)
 
     # assign group name
     if groupname is None:
@@ -3314,7 +3336,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
-                       spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params,
+                       spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
                        norm=norm, taper=taper, history=history, verbose=verbose)
 
@@ -3323,10 +3345,16 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                     dset_labels[dset_idxs[1]], psname_ext)
 
         # write in transactional mode
-        if verbose: print("Storing {}".format(psname))
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
-                      overwrite=overwrite)
-
+        if use_container:
+            # Store in PSpecContainer
+            if verbose: print("Storing {}".format(psname))
+            psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
+                          overwrite=overwrite)
+        else:
+            # Store as uvh5 file
+            fname = "{}.{}{}.uvp5".format(filename, psname, psname_ext)
+            if verbose: print("Storing {}".format(fname))
+            uvp.write_hdf5(fname, overwrite=overwrite)
     return ds
 
 
@@ -3375,6 +3403,7 @@ def get_pspec_run_argparser():
     a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
+    a.add_argument("--use_container", default=True, type=bool, help="Whether to store in a PSpecContainer, or just output as a UVH5 file.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
     return a
 
