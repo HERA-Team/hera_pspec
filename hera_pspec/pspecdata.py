@@ -1105,7 +1105,7 @@ class PSpecData(object):
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau should be part of get_Q. We use it here to
                 # avoid its repeated computation
-                Q = del_tau * self.get_Q(i, pol) * integral_beam
+                Q = del_tau * self.get_Q(i) * integral_beam
                 Q_matrix_all_delays[i] = Q
                 QRx2 = np.dot(Q, Rx2)
 
@@ -1114,20 +1114,7 @@ class PSpecData(object):
                 q.append(qi)
 
             q = np.asarray(q) #(Ndlys X Ntime)
-            q_norm  = np.zeros_like(q, dtype='complex128')
-            wt_norm = np.zeros(len(q), dtype='complex128')
-
-            # One normalization for each delay bin
-            for i in range(self.spw_Ndlys):
-                for j in range(self.spw_Ndlys):
-                    wt_norm[i] += np.trace(
-                                    np.linalg.multi_dot(
-                                        [R1, Q_matrix_all_delays[i], \
-                                         R2, Q_matrix_all_delays[j]] ) )
-                q_norm[i] = (q[i])/(0.5 * wt_norm[i])
-
-            # Return normalized band powers
-            return q_norm
+            return q
 
         # use FFT if possible and allowed
         elif allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
@@ -1145,7 +1132,7 @@ class PSpecData(object):
                 q.append(qi)
             return 0.5 * np.array(q)
 
-    def get_G(self, key1, key2):
+    def get_G(self, key1, key2, exact_norm=False, pol=False):
         """
         Calculates
 
@@ -1179,15 +1166,19 @@ class PSpecData(object):
         R2 = self.R(key2)
 
         iR1Q, iR2Q = {}, {}
+        if (exact_norm):
+            integral_beam = self.get_integral_beam(pol) 
+            del_tau = np.median(np.diff(self.delays()))*1e-9  
         for ch in range(self.spw_Ndlys):
-            Q = self.get_Q_alt(ch)
+            if exact_norm: Q = self.get_Q(ch) * del_tau * integral_beam
+            else: Q = self.get_Q_alt(ch)
+
             iR1Q[ch] = np.dot(R1, Q) # R_1 Q
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
-
         for i in range(self.spw_Ndlys):
             for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
-                G[i,j] += np.einsum('ab,ba', iR1Q[i], iR2Q[j])
+                G[i,j] = np.einsum('ab,ba', iR1Q[i], iR2Q[j]) 
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(G) == 0:
@@ -1195,7 +1186,7 @@ class PSpecData(object):
 
         return G / 2.
 
-    def get_H(self, key1, key2, sampling=False):
+    def get_H(self, key1, key2, sampling=False, exact_norm = False, pol=False):
         """
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -1269,8 +1260,12 @@ class PSpecData(object):
             sinc_matrix = np.sinc(sinc_matrix / np.float(self.spw_Ndlys))
 
         iR1Q_alt, iR2Q = {}, {}
+        if (exact_norm):
+            integral_beam = self.get_integral_beam(pol) 
+            del_tau = np.median(np.diff(self.delays()))*1e-9  
         for ch in range(self.spw_Ndlys):
-            Q_alt = self.get_Q_alt(ch)
+            if exact_norm: Q_alt = self.get_Q(ch) * del_tau * integral_beam
+            else: Q_alt = self.get_Q_alt(ch)
             iR1Q_alt[ch] = np.dot(R1, Q_alt) # R_1 Q_alt
             Q = Q_alt
 
@@ -1282,7 +1277,7 @@ class PSpecData(object):
         for i in range(self.spw_Ndlys): # this loop goes as nchan^4
             for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
-                H[i,j] += np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
+                H[i,j] = np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(H) == 0:
@@ -1648,7 +1643,7 @@ class PSpecData(object):
         return integral_beam
     
     
-    def get_Q(self, mode, pol=False):
+    def get_Q(self, mode):
         """
         Computes Q_alpha(i,j), which is the response of the data covariance to 
         the bandpower (dC/dP_alpha). This includes contributions from primary 
@@ -1658,11 +1653,6 @@ class PSpecData(object):
         ----------
         mode : int
             Central wavenumber (index) of the bandpower, p_alpha.
-
-        pol : str/int/bool, optional
-            Which beam polarization to use. If the specified polarization 
-            doesn't exist, a uniform isotropic beam (with integral 4pi for all 
-            frequencies) is assumed. Default: False (uniform beam).
 
         Return
         -------
@@ -2482,8 +2472,8 @@ class PSpecData(object):
                         else:
                             # This Y doesn't exist, so compute it
                             if verbose: print("  Building G...")
-                            Gv = self.get_G(key1, key2)
-                            Hv = self.get_H(key1, key2, sampling=sampling)
+                            Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
+                            Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
                             # cache it
                             self._identity_Y[(key1, key2)] = Y
                             self._identity_G[(key1, key2)] = Gv
@@ -2492,27 +2482,20 @@ class PSpecData(object):
                         # for non identity weighting (i.e. iC weighting)
                         # Gv and Hv are always different, so compute them
                         if verbose: print("  Building G...")
-                        Gv = self.get_G(key1, key2)
-                        Hv = self.get_H(key1, key2, sampling=sampling)
+                        Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
+                        Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
                     qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol = pol)
 
-                    # Normalize power spectrum estimate
-                    if exact_norm:
-                        # The output would be a normalized spectrum, so we
-                        # would skip external normalization
-                        pv = qv
+                    if verbose: print("  Normalizing power spectrum...")
+                    if norm == 'V^-1/2':
+                        V_mat = self.get_unnormed_V(key1, key2)
+                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
                     else:
-                        # Use the existing routine for normalization
-                        if verbose: print("  Normalizing power spectrum...")
-                        if norm == 'V^-1/2':
-                            V_mat = self.get_unnormed_V(key1, key2)
-                            Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
-                        else:
-                            Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
-                        pv = self.p_hat(Mv, qv)
+                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
+                    pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
                     if self.primary_beam != None:
