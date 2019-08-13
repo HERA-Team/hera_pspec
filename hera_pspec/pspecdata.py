@@ -1165,20 +1165,20 @@ class PSpecData(object):
         R1 = self.R(key1)
         R2 = self.R(key2)
 
-        iR1Q, iR2Q = {}, {}
+        iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
             integral_beam = self.get_integral_beam(pol) 
             del_tau = np.median(np.diff(self.delays()))*1e-9  
         for ch in range(self.spw_Ndlys):
-            if exact_norm: Q = self.get_Q(ch) * del_tau * integral_beam
-            else: Q = self.get_Q_alt(ch)
-
-            iR1Q[ch] = np.dot(R1, Q) # R_1 Q
-            iR2Q[ch] = np.dot(R2, Q) # R_2 Q
+            if exact_norm: Q1 = self.get_Q(ch) * del_tau * integral_beam
+            else: Q1 = self.get_Q_alt(ch)
+            Q2 = Q1
+            iR1Q1[ch] = np.dot(R1, Q1) # R_1 Q
+            iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
         for i in range(self.spw_Ndlys):
             for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
-                G[i,j] = np.einsum('ab,ba', iR1Q[i], iR2Q[j]) 
+                G[i,j] = np.einsum('ab,ba', iR1Q1[i], iR2Q2[j]) 
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(G) == 0:
@@ -1251,7 +1251,6 @@ class PSpecData(object):
         H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
-
         if not sampling:
             sinc_matrix = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs))
             for i in range(self.spw_Nfreqs):
@@ -1259,25 +1258,24 @@ class PSpecData(object):
                     sinc_matrix[i,j] = np.float(i - j)
             sinc_matrix = np.sinc(sinc_matrix / np.float(self.spw_Ndlys))
 
-        iR1Q_alt, iR2Q = {}, {}
+        iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
             integral_beam = self.get_integral_beam(pol) 
             del_tau = np.median(np.diff(self.delays()))*1e-9  
         for ch in range(self.spw_Ndlys):
-            if exact_norm: Q_alt = self.get_Q(ch) * del_tau * integral_beam
-            else: Q_alt = self.get_Q_alt(ch)
-            iR1Q_alt[ch] = np.dot(R1, Q_alt) # R_1 Q_alt
-            Q = Q_alt
-
+            if exact_norm: Q1 = self.get_Q(ch) * del_tau * integral_beam
+            else: Q1 = self.get_Q_alt(ch)
+            Q2 = Q1
             if not sampling:
-                Q *= sinc_matrix
+                Q2 *= sinc_matrix
 
-            iR2Q[ch] = np.dot(R2, Q) # R_2 Q
+            iR1Q1[ch] = np.dot(R1, Q1) # R_1 Q_alt
+            iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
 
         for i in range(self.spw_Ndlys): # this loop goes as nchan^4
             for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
-                H[i,j] = np.einsum('ab,ba', iR1Q_alt[i], iR2Q[j])
+                H[i,j] = np.einsum('ab,ba', iR1Q1[i], iR2Q2[j])
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(H) == 0:
@@ -1285,7 +1283,7 @@ class PSpecData(object):
 
         return H / 2.
 
-    def get_unnormed_E(self, key1, key2):
+    def get_unnormed_E(self, key1, key2, exact_norm = False, pol = False):
         """
         Calculates a series of unnormalized E matrices, such that
 
@@ -1332,7 +1330,7 @@ class PSpecData(object):
 
         return 0.5 * E_matrices
 
-    def get_unnormed_V(self, key1, key2, model='empirical'):
+    def get_unnormed_V(self, key1, key2, model='empirical', exact_norm=False, pol = False):
         """
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
@@ -1397,7 +1395,7 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         # Collect all the relevant pieces
-        E_matrices = self.get_unnormed_E(key1, key2)
+        E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm, pol = pol)
         C1 = self.C_model(key1)
         C2 = self.C_model(key2)
         P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
@@ -2491,7 +2489,7 @@ class PSpecData(object):
 
                     if verbose: print("  Normalizing power spectrum...")
                     if norm == 'V^-1/2':
-                        V_mat = self.get_unnormed_V(key1, key2)
+                        V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol)
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
                     else:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
