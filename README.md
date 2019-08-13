@@ -12,10 +12,11 @@ For usage examples and documentation, see http://hera-pspec.readthedocs.io/en/la
 
 ### Code Dependencies
 
-* numpy >= 1.14
+* numpy >= 1.15
 * pyuvdata (`pip install pyuvdata` or use https://github.com/HERA-Team/pyuvdata.git)
 * aipy (```conda install -c conda-forge aipy```)
 * scipy >= 0.19
+* matplotlib >= 2.2
 * astropy >= 2.0
 * hera_cal (https://github.com/HERA-Team/hera_cal.git)
 * pyyaml

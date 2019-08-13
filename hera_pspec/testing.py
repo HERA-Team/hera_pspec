@@ -6,11 +6,12 @@ from hera_pspec import uvpspec, pspecdata, conversions, pspecbeam, utils
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
 from scipy import stats
+import hera_pspec.uvpspec_utils as uvputils
 
 
 def build_vanilla_uvpspec(beam=None):
     """
-    Build an example vanilla UVPSpec object from scratch, with all necessary 
+    Build an example vanilla UVPSpec object from scratch, with all necessary
     metadata.
 
     Parameters
@@ -56,7 +57,7 @@ def build_vanilla_uvpspec(beam=None):
     spw_freq_array = np.tile(np.arange(Nspws), Nfreqs)
     spw_dly_array = np.tile(np.arange(Nspws), Ndlys)
     spw_array = np.arange(Nspws)
-    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), 
+    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False),
                            Nspws)
     dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
     polpair_array = np.array([1515,]) # corresponds to ('xx','xx')
@@ -72,6 +73,7 @@ def build_vanilla_uvpspec(beam=None):
     scalar_array = np.ones((Nspws, Npols), np.float)
     label1 = 'red'
     label2 = 'blue'
+    r_params = ''
     labels = np.array([label1, label2])
     label_1_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 0
     label_2_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 1
@@ -97,7 +99,7 @@ def build_vanilla_uvpspec(beam=None):
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
         wgt_array[s] = np.ones((Nblpairts, Nfreqs, 2, Npols), dtype=np.float)
-        # NB: The wgt_array has dimensions Nfreqs rather than Ndlys; it has the 
+        # NB: The wgt_array has dimensions Nfreqs rather than Ndlys; it has the
         # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
@@ -108,12 +110,12 @@ def build_vanilla_uvpspec(beam=None):
         	cov_array_imag[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
         		for m in range(Nblpairts)] for n in range(Npols)]), 0, -1)
 
-    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws', 
-              'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys', 'Nbls', 
-              'blpair_array', 'time_1_array', 'time_2_array', 
+    params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws',
+              'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys', 'Nbls',
+              'blpair_array', 'time_1_array', 'time_2_array',
               'lst_1_array', 'lst_2_array', 'spw_array',
-              'dly_array', 'freq_array', 'polpair_array', 'data_array', 
-              'wgt_array',
+              'dly_array', 'freq_array', 'polpair_array', 'data_array',
+              'wgt_array', 'r_params',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
               'vis_units', 'channel_width', 'weighting', 'history', 'taper', 
               'norm', 'git_hash', 'nsample_array', 'time_avg_array', 
@@ -133,9 +135,9 @@ def build_vanilla_uvpspec(beam=None):
     return uvp, cosmo
 
 
-def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None, 
-                      beam=None, taper='none', cosmo=None, n_dlys=None, 
-                      verbose=False):
+def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
+                      beam=None, taper='none', cosmo=None, n_dlys=None,
+                      r_params = None, verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -145,16 +147,16 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         This can be a UVData object or a string filepath to a miriad file.
 
     bl_grps : list
-        This is a list of baseline groups (e.g. redundant groups) to form 
+        This is a list of baseline groups (e.g. redundant groups) to form
         blpairs from.
         Ex: [[(24, 25), (37, 38), ...], [(24, 26), (37, 39), ...], ... ]
 
     data_std: UVData object or str, optional
-        Can be UVData object or a string filepath to a miriad file. 
+        Can be UVData object or a string filepath to a miriad file.
         Default: None.
 
     spw_ranges : list, optional
-        List of spectral window tuples. See PSpecData.pspec docstring for 
+        List of spectral window tuples. See PSpecData.pspec docstring for
         details. Default: None.
 
     beam : PSpecBeamBase subclass or str, optional
@@ -166,11 +168,22 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
 
     cosmo : Cosmo_Conversions object
         Cosmology object.
-    
+
     n_dlys : int, optional
-        Number of delay bins to use. Default: None (uses as many delay bins as 
+        Number of delay bins to use. Default: None (uses as many delay bins as
         frequency channels).
 
+    r_params: dictionary with parameters for weighting matrix.
+              Proper fields
+              and formats depend on the mode of data_weighting.
+            data_weighting == 'sinc_downweight':
+                            dictionary with fields
+                            'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+                                              at which to center filtering windows. Can specify fractional channel number.
+                            'filter_widths', list of floats (or float) specifying the width of each
+                                             filter window in (delay) channel numbers. Can specify fractional channel number.
+                            'filter_factors', list of floats (or float) specifying how much power within each filter window
+                                              is to be suppressed.
     verbose : bool, optional
         if True, report feedback to standard output. Default: False.
 
@@ -207,7 +220,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         beam.cosmo = cosmo
 
     # instantiate pspecdata
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std], 
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], dsets_std=[uvd_std, uvd_std],
                              wgts=[None, None], labels=['d1', 'd2'], beam=beam)
 
     # get blpair groups
@@ -219,16 +232,15 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         "bl_grps must be fed as a list of lists of tuples"
     bls1, bls2 = [], []
     for blgrp in bl_grps:
-        _bls1, _bls2, _ = utils.construct_blpairs(blgrp, exclude_auto_bls=True, 
+        _bls1, _bls2, _ = utils.construct_blpairs(blgrp, exclude_auto_bls=True,
                                                   exclude_permutations=True)
         bls1.extend(_bls1)
         bls2.extend(_bls2)
 
     # run pspec
-    uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity', 
-                   spw_ranges=spw_ranges, taper=taper, verbose=verbose, 
-                   store_cov=store_cov, n_dlys=n_dlys)
-    
+    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
+                   spw_ranges=spw_ranges, taper=taper, verbose=verbose,
+                   store_cov=store_cov, n_dlys=n_dlys, r_params = r_params)
     return uvp
 
 
@@ -298,7 +310,7 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
     if beam is not None:
         if isinstance(beam, (str, np.str)):
             beam = pspecbeam.PSpecBeamUV(beam)
-        assert isinstance(beam, pspecbeam.PSpecBeamBase)    
+        assert isinstance(beam, pspecbeam.PSpecBeamBase)
 
     # Extend times
     Nextend = int(Nextend)
@@ -348,4 +360,3 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
 
     if not inplace:
         return data
-

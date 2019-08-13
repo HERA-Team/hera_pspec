@@ -19,9 +19,8 @@ The following example shows how to load ``UVData`` objects into a ``PSpecData`` 
   uvd1.read_miriad(datafile1)
   uvd2.read_miriad(datafile2)
   
-  # Create a new PSpecData object. When 'wgts' is None, the flags from the 
-  # UVData objects are used as weights
-  ds = hp.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=beam)
+  # Create a new PSpecData object
+  ds = hp.PSpecData(dsets=[uvd1, uvd2], beam=beam)
   
   # bls1 and bls2 are lists of tuples specifying baselines (antenna pairs)
   # Here, we specify three baseline-pairs, i.e. bls1[0] x bls2[0], 
@@ -34,7 +33,7 @@ The following example shows how to load ``UVData`` objects into a ``PSpecData`` 
   # dataset 1 (and i goes from 0..2). This is done for two spectral windows 
   # (freq. channel indexes between 300-400 and 600-721), with unity weights 
   # and a Blackman-Harris taper in each spectral window
-  uvp = ds.pspec(bls1, bls2, dsets=(0, 1), spw_ranges=[(300, 400), (600,721)], 
+  uvp = ds.pspec(bls1, bls2, dsets=(0, 1), spw_ranges=[(300, 400), (600, 721)], 
                  input_data_weight='identity', norm='I', taper='blackman-harris', 
                  verbose=True)
 
@@ -48,11 +47,11 @@ To get power spectra from the ``UVPSpec`` object that was returned by ``pspec``:
 
 .. code-block:: python
   
-  # Key specifying desired spectral window, baseline-pair, and polarization
+  # Key specifying desired spectral window, baseline-pair, and polarization pair
   spw = 1
-  pol = 'xx'
+  polpair = ('xx', 'xx')
   blpair =((24, 25), (37, 38))
-  key = (spw, blpair, pol)
+  key = (spw, blpair, polpair)
   
   # Get delay bins and power spectrum
   dlys = uvp.get_dlys(spw)
@@ -102,15 +101,15 @@ The most frequently-used methods from ``PSpecData`` are listed below. See :any:`
 
 The :meth:`~hera_pspec.PSpecData.pspec` method outputs power spectra as a single ``UVPSpec`` object, which also contains metadata and various methods for accessing the data, input/output etc.
 
-To access the power spectra, use the :meth:`~hera_pspec.UVPSpec.get_data` method, which takes a key of the form: ``(spw, blpair, pol)``. For example:
+To access the power spectra, use the :meth:`~hera_pspec.UVPSpec.get_data` method, which takes a key of the form: ``(spw, blpair, polpair)``. For example:
 
 .. code-block:: python
   
   # Key specifying desired spectral window, baseline-pair, and polarization
   spw = 1
-  pol = 'xx'
+  polpair = ('xx', 'xx')
   blpair =((24, 25), (37, 38))
-  key = (spw, blpair, pol)
+  key = (spw, blpair, polpair)
     
   # Get delay bins and power spectrum
   dlys = uvp.get_dlys(spw)

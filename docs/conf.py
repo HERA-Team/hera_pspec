@@ -28,8 +28,10 @@ import mock
 MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'scipy.integrate', 
                 'pyuvdata', 'h5py', 'aipy', 'omnical', 'linsolve', 'hera_qm', 
                 'uvtools', 'hera_cal', 'hera_cal.utils', 'healpy', 
-                'scikit-learn', 'astropy', 'astropy.cosmology', 'matplotlib', 
-                'matplotlib.pyplot', 'pylab', 'yaml']
+                'scikit-learn', 'astropy', 'astropy.cosmology', 'astropy.units', 
+                'astropy.constants', 'matplotlib', 'matplotlib.pyplot', 
+                'pylab', 'yaml', 'pyuvdata.utils', ]
+                
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 

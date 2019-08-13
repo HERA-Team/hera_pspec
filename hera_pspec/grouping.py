@@ -186,7 +186,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     if blpair_groups is not None:
 
         # Enforce shape of blpair_groups
-        assert isinstance(blpair_groups[0], list), \
+        assert isinstance(blpair_groups[0], (list, np.ndarray)), \
               "blpair_groups must be fed as a list of baseline-pair lists. " \
               "See docstring."
 
@@ -303,8 +303,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     cov_imag = {}
                     if store_cov:
                         for cov_model in cov_models:
-                            cov_real[cov_model] = uvp.get_cov((spw, blp, p), component="real", cov_model=cov_model)
-                            cov_imag[cov_model] = uvp.get_cov((spw, blp, p), component="imag", cov_model=cov_model)
+                            cov_real[cov_model] = uvp.get_cov((spw, blp, p), cov_model=cov_model, component="real")
+                            cov_imag[cov_model] = uvp.get_cov((spw, blp, p), cov_model=cov_model, component="imag")
                     # Get error bar weights and set invalid ones to zero.
                     errws = {}
                     for stat in stat_l:
@@ -867,7 +867,7 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
 
 def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Nsamples=1000, seed=0,
                   normal_std=True, robust_std=True, cintervals=None, keep_samples=False,
-                  bl_error_tol=1.0, overwrite=False, add_to_history='', verbose=True):
+                  bl_error_tol=1.0, overwrite=False, add_to_history='', verbose=True, maxiter=1):
     """
     Run bootstrap resampling on a PSpecContainer object to estimate errorbars.
     For each group/spectrum specified in the PSpecContainer, this function produces
@@ -876,7 +876,9 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
        (3.) series of bootstrap resamples of UVPSpec average (optional)
 
     The output of 1. and 2. are placed in a *_avg spectrum, while the output of 3.
-    is placed in *_bs0, *_bs1, *_bs2 etc. objects. 
+    is placed in *_bs0, *_bs1, *_bs2 etc. objects.
+
+    Note: PSpecContainers should not be opened in SWMR mode for this function.
 
     Parameters:
     -----------
@@ -930,14 +932,21 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
 
     verbose : bool
         If True, report feedback to stdout.
+
+    maxiter : int, optional, default=1
+        Maximum number of attempts to open the PSpecContainer by a single process.
+        0.5 sec wait per attempt. Useful in the case of multiprocesses bootstrapping
+        different groups of the same container.
     """
     from hera_pspec import uvpspec
     from hera_pspec import PSpecContainer
     # type check
     if isinstance(filename, (str, np.str)):
-        psc = PSpecContainer(filename)
+        # open in transactional mode
+        psc = PSpecContainer(filename, mode='rw', keep_open=False, swmr=False, tsleep=0.5, maxiter=maxiter)
     elif isinstance(filename, PSpecContainer):
         psc = filename
+        assert not psc.swmr, "PSpecContainer should not be in SWMR mode"
     else:
         raise AssertionError("filename must be a PSpecContainer or filepath to one")
 
@@ -948,7 +957,7 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     # get spectra if not fed
     all_spectra = utils.flatten([ [os.path.join(grp, s) 
                                    for s in psc.spectra(grp)] 
-                                 for grp in groups ])
+                                   for grp in groups])
     if spectra is None:
         spectra = all_spectra
     else:
