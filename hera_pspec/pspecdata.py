@@ -1324,8 +1324,12 @@ class PSpecData(object):
                                dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
+        if (exact_norm):
+            integral_beam = self.get_integral_beam(pol) 
+            del_tau = np.median(np.diff(self.delays()))*1e-9  
         for dly_idx in range(self.spw_Ndlys):
-            QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
+            if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q(dly_idx), R2)
+            else: QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
             E_matrices[dly_idx] = np.dot(R1, QR2)
 
         return 0.5 * E_matrices
