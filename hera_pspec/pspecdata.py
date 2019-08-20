@@ -1006,7 +1006,7 @@ class PSpecData(object):
             qc[indnum] = np.trace(np.matmul(Ealphas, np.matmul(N1, np.matmul(Ebetas, N2))), axis1=2, axis2=3)
         return qc/4.
 
-    def q_hat(self, key1, key2, allow_fft=False, exact_norm = False, pol=False):
+    def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
         """
 
         If exact_norm is False:
@@ -1099,14 +1099,12 @@ class PSpecData(object):
         elif exact_norm and not(allow_fft):
             q          = []
             del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
-            Q_matrix_all_delays = np.zeros((self.spw_Ndlys,self.spw_Nfreqs,self.spw_Nfreqs), dtype='complex128')
-            integral_beam = self.get_integral_beam(pol) # This result does not depend on delay modes. We can remove it from the for loop to avoid its repeated computation
+            integral_beam = self.get_integral_beam(pol) #Integral of beam in Eq.11(a) (HERA memo #44) 
 
             for i in range(self.spw_Ndlys):
-                # Ideally, del_tau should be part of get_Q. We use it here to
-                # avoid its repeated computation
-                Q = del_tau * self.get_Q(i) * integral_beam
-                Q_matrix_all_delays[i] = Q
+                # Ideally, del_tau and integral_beam should be part of get_Q. We use them here to
+                # avoid their repeated computation for each delay mode.
+                Q = del_tau * self.get_Q_alt(i) * integral_beam
                 QRx2 = np.dot(Q, Rx2)
 
                 # Square and sum over columns
@@ -1170,7 +1168,7 @@ class PSpecData(object):
             integral_beam = self.get_integral_beam(pol) 
             del_tau = np.median(np.diff(self.delays()))*1e-9  
         for ch in range(self.spw_Ndlys):
-            if exact_norm: Q1 = self.get_Q(ch) * del_tau * integral_beam
+            if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
             else: Q1 = self.get_Q_alt(ch)
             Q2 = Q1
             iR1Q1[ch] = np.dot(R1, Q1) # R_1 Q
@@ -1263,7 +1261,7 @@ class PSpecData(object):
             integral_beam = self.get_integral_beam(pol) 
             del_tau = np.median(np.diff(self.delays()))*1e-9  
         for ch in range(self.spw_Ndlys):
-            if exact_norm: Q1 = self.get_Q(ch) * del_tau * integral_beam
+            if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
             else: Q1 = self.get_Q_alt(ch)
             Q2 = Q1
             if not sampling:
@@ -1328,7 +1326,7 @@ class PSpecData(object):
             integral_beam = self.get_integral_beam(pol) 
             del_tau = np.median(np.diff(self.delays()))*1e-9  
         for dly_idx in range(self.spw_Ndlys):
-            if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q(dly_idx), R2)
+            if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
             else: QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
             E_matrices[dly_idx] = np.dot(R1, QR2)
 
@@ -1972,7 +1970,7 @@ class PSpecData(object):
         adjustment : float
 
         """
-        if Gv is None: Gv = self.get_G(key1, key2)
+        if Gv is None: Gv = self.get_G(key1, key2) 
         if Hv is None: Hv = self.get_H(key1, key2, sampling)
 
         # get ratio
