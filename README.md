@@ -34,31 +34,9 @@ This will install extra dependencies required for testing/development as well as
 standard ones.
 
 ### Running Tests
-Uses the `pytest` package to execute test suite.
-From the source `hera_qm` directory run: ```pytest``` or ```python -m pytest```.
+Uses the `nose` package to execute test suite.
+From the source `hera_pspec` directory run: `nosetests`.
 
-## Installation
-
-
-### Code Dependencies
-
-* numpy >= 1.15
-* pyuvdata (`pip install pyuvdata` or use https://github.com/HERA-Team/pyuvdata.git)
-* aipy (```conda install -c conda-forge aipy```)
-* scipy >= 0.19
-* matplotlib >= 2.2
-* astropy >= 2.0
-* hera_cal (https://github.com/HERA-Team/hera_cal.git)
-* pyyaml
-* hdf5
-
-For anaconda users, we suggest using conda to install astropy, numpy and scipy.
-
-### Installing hera_pspec
-Clone the repo using
-`git clone https://github.com/HERA-Team/hera_pspec.git`
-
-Navigate into the directory and run `python setup.py install`.
 
 ## Running `hera_pspec`
 

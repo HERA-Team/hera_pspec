@@ -14,6 +14,7 @@ dependencies:
   - scikit-learn
   - scipy
   - six
+  - pyuvdata
   - pip:
     - git+https://github.com/HERA-Team/linsolve
     - git+https://github.com/HERA-Team/uvtools
