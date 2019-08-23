@@ -50,12 +50,11 @@ install:
       pip install scikit-learn;
     fi
   - pip install .
-  - ls hera_pspec/
 
 before_script:
   - "export MPLBACKEND=agg"
 
-script: nosetests hera_pspec --with-coverage --cover-package=hera_pspec --verbose
+script: nosetests -P hera_pspec --with-coverage --cover-package=hera_pspec --verbose
 
 after_success:
   - coveralls
