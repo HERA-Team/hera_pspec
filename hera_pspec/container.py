@@ -1,9 +1,10 @@
 import numpy as np
 import h5py
-from hera_pspec import uvpspec, version, utils
 import argparse
 import time
 from functools import wraps
+
+from . import uvpspec, version, utils
 
 
 def transactional(fn):
@@ -208,7 +209,7 @@ class PSpecContainer(object):
         # Write UVPSpec to group
         uvp.write_to_group(pspec_group, run_check=True)
 
-    def _load_pspec(self, pspec_group):
+    def _load_pspec(self, pspec_group, **kwargs):
         """
         Load a new UVPSpec object from a HDF5 group.
 
@@ -218,6 +219,9 @@ class PSpecContainer(object):
             Group containing datasets that contain power spectrum and
             supporting information, in a standard format expected by UVPSpec.
         
+        kwargs : dict, optional
+            UVPSpec.read_from_group partial IO keyword arguments
+
         Returns
         -------
         uvp : UVPSpec
@@ -236,7 +240,7 @@ class PSpecContainer(object):
 
         # Create new UVPSpec object and fill with data from this group
         uvp = uvpspec.UVPSpec()
-        uvp.read_from_group(pspec_group)
+        uvp.read_from_group(pspec_group, **kwargs)
         return uvp
 
     def _update_header(self):
@@ -345,7 +349,7 @@ class PSpecContainer(object):
         psgrp.attrs['pspec_type'] = pspec.__class__.__name__
 
     @transactional
-    def get_pspec(self, group, psname=None):
+    def get_pspec(self, group, psname=None, **kwargs):
         """
         Get a UVPSpec power spectrum object from a given group.
 
@@ -357,6 +361,9 @@ class PSpecContainer(object):
         psname : str, optional
             The name of the power spectrum to return.
         
+        kwargs : dict
+            UVPSpec.read_from_group partial IO keyword arguments
+
         Returns
         -------
         uvp : UVPSpec or list of UVPSpec
@@ -376,7 +383,7 @@ class PSpecContainer(object):
 
             # Load power spectrum if it exists
             if key2 in list(grp.keys()):
-                return self._load_pspec(grp[key2])
+                return self._load_pspec(grp[key2], **kwargs)
             else:
                 raise KeyError("No pspec named '%s' in group '%s'" % (key2, key1))
 
@@ -384,7 +391,7 @@ class PSpecContainer(object):
         uvp = []
         def pspec_filter(n, obj):
             if u'pspec_type' in list(obj.attrs.keys()):
-                uvp.append(self._load_pspec(obj))
+                uvp.append(self._load_pspec(obj, **kwargs))
 
         # Traverse the entire set of groups/datasets looking for pspecs
         grp.visititems(pspec_filter) # This adds power spectra to the uvp list
