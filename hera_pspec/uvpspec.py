@@ -1,15 +1,14 @@
 import numpy as np
 from collections import OrderedDict as odict
 import os, copy, shutil, operator, ast, fnmatch
-from hera_pspec import conversions, noise, version, pspecbeam, grouping, utils
-from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec.parameter import PSpecParam
 from pyuvdata import uvutils as uvutils
 import h5py
 import operator
 import warnings
 import json
 
+from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_utils as uvputils
+from .parameter import PSpecParam
 
 class UVPSpec(object):
     """

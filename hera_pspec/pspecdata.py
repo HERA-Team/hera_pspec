@@ -4,8 +4,6 @@ from pyuvdata import UVData, UVCal
 import copy, operator, itertools, sys
 from collections import OrderedDict as odict
 import hera_cal as hc
-from hera_pspec import uvpspec, utils, version, pspecbeam, container
-from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
 import datetime
 import time
@@ -15,6 +13,9 @@ import glob
 import warnings
 import json
 import uvtools.dspec as dspec
+
+from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
+
 
 class PSpecData(object):
 

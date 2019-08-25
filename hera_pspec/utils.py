@@ -3,12 +3,14 @@ import os, time, yaml
 import itertools, argparse, glob
 import traceback, operator
 import aipy, uvtools
-from hera_pspec.conversions import Cosmo_Conversions
 from hera_cal import redcal
 from collections import OrderedDict as odict
 from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
+
+from .conversions import Cosmo_Conversions
+
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """

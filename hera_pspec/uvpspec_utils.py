@@ -1,9 +1,10 @@
 import numpy as np
 import copy, operator
-from . import utils
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 import json
+
+from . import utils
 
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     """
