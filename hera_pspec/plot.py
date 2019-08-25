@@ -1,14 +1,13 @@
 import numpy as np
 import pyuvdata
-from hera_pspec import conversions, uvpspec, utils
-import matplotlib
-import matplotlib.pyplot as plt
 import copy
 from collections import OrderedDict as odict
 import astropy.units as u
 import astropy.constants as c
 from pyuvdata import UVData
 import uvtools
+
+from . import conversions, uvpspec, utils
 
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
@@ -107,6 +106,9 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance.
     """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
     # Create new Axes if none specified
     new_plot = False
     if ax is None:
@@ -373,6 +375,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real',
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance if input ax is None.
     """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
     # assert component
     assert component in ['real', 'abs', 'imag'], "Can't parse specified component {}".format(component)
 
@@ -715,6 +720,9 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance if ax is None.
     """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
     # type checking
     uvp = copy.deepcopy(uvp)
     assert isinstance(uvp, uvpspec.UVPSpec), "input uvp must be a UVPSpec object"
@@ -964,6 +972,9 @@ def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
         Keyword arguments passed to uvtools.plot.waterfall, which passes them 
         on to matplotlib.imshow.
     """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
     assert isinstance(uvd, UVData), "'uvd' must be a UVData object."
     assert data in ['data', 'flags', 'nsamples'], \
             "'%s' not a valid data array; use 'data', 'flags', or 'nsamples'" \
