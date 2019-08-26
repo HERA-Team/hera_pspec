@@ -54,7 +54,7 @@ class PSpecContainer(object):
     Container class for managing multiple UVPSpec objects.
     """
     def __init__(self, filename, mode='r', keep_open=True, swmr=False,
-                 tsleep=0.5, maxiter=2):
+                 tsleep=0.1, maxiter=1):
         """
         Manage a collection of UVPSpec objects that are stored in a structured
         HDF5 file.
