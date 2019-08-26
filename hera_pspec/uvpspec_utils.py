@@ -329,7 +329,7 @@ def polpair_int2tuple(polpair, pol_strings=False):
 
     pol_strings : bool, optional
         If True, return polarization pair tuples with polarization strings.
-        Otherwise, use polarization integers. Default: True.
+        Otherwise, use polarization integers. Default: False.
 
     Returns
     -------

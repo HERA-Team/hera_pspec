@@ -479,6 +479,14 @@ class UVPSpec(object):
         return [self.blpair_to_antnums(blp)
                 for blp in np.unique(self.blpair_array)]
 
+    def get_polpairs(self):
+        """
+        Returns a list of all unique polarization pairs in the data_array.
+        """
+        polpairs = [uvputils.polpair_int2tuple(pp, pol_strings=True)
+                    for pp in self.polpair_array]
+        return sorted(set(polpairs))
+
     def get_all_keys(self):
         """
         Returns a list of all possible tuple keys in the data_array, in the

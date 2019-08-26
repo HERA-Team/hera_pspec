@@ -80,6 +80,9 @@ class Test_UVPSpec(unittest.TestCase):
         # test get_blpairs
         blps = self.uvp.get_blpairs()
         nt.assert_equal(blps, [((1, 2), (1, 2)), ((1, 3), (1, 3)), ((2, 3), (2, 3))])
+        # test get_polpairs
+        polpairs = self.uvp.get_polpairs()
+        nt.assert_equal(polpairs, [('xx', 'xx')])
         # test get all keys
         keys = self.uvp.get_all_keys()
         nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), ('xx','xx')),
