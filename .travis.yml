@@ -42,7 +42,7 @@ install:
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION coveralls
   - source activate test-environment
   - conda env update -n test-environment -f environment.yml
-  - pip install .
+  - pip install -e .  # force it to have a GIT_INFO file in the repo directory
 
 before_script:
   - "export MPLBACKEND=agg"
