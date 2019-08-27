@@ -1,8 +1,7 @@
 import numpy as np
-import os, time, yaml
-import itertools, argparse, glob
-import traceback, operator
-import aipy, uvtools
+import time, yaml
+import itertools, glob
+import traceback
 from hera_cal import redcal
 from collections import OrderedDict as odict
 from pyuvdata import UVData

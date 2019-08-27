@@ -14,7 +14,8 @@ services:
 env:
   - PYUVDATA_VERSION=""
   #- PYUVDATA_VERSION="@d6e1c2f80d7b5b59d7794c8f28d867a7030a7c75"
-
+  global:
+    - COVERALLS_PARALLEL=true
 #allow_failures:
 #  - env: PYUVDATA_VERSION=""
 
