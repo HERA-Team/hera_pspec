@@ -12,11 +12,8 @@ services:
   - xvfb
 
 env:
-  - PYUVDATA_VERSION=""
   global:
     - COVERALLS_PARALLEL=true
-#allow_failures:
-#  - env: PYUVDATA_VERSION=""
 
 install:
   # ensure that we have the full tag information available for version.py
