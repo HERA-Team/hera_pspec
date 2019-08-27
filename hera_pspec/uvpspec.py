@@ -3,7 +3,6 @@ from collections import OrderedDict as odict
 import os, copy, shutil, operator, ast, fnmatch
 from pyuvdata import uvutils as uvutils
 import h5py
-import operator
 import warnings
 import json
 
