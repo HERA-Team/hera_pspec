@@ -41,14 +41,6 @@ install:
   - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION coveralls
   - source activate test-environment
   - conda env update -n test-environment -f environment.yml
-  - pip install git+https://github.com/HERA-Team/linsolve.git #only required till it updates
-  - pip install git+https://github.com/HERA-Team/uvtools.git #only required till it updates
-  - pip install git+https://github.com/HERA-Team/hera_cal.git
-  - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
-      pip install scikit-learn==0.20.3;
-    else
-      pip install scikit-learn;
-    fi
   - pip install .
 
 before_script:
