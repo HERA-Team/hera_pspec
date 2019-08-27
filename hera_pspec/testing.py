@@ -2,11 +2,11 @@
 import numpy as np
 import copy, operator, itertools
 from collections import OrderedDict as odict
-from hera_pspec import uvpspec, pspecdata, conversions, pspecbeam, utils
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
 from scipy import stats
-import hera_pspec.uvpspec_utils as uvputils
+
+from . import uvpspec, pspecdata, conversions, pspecbeam, utils, uvpspec_utils as uvputils
 
 
 def build_vanilla_uvpspec(beam=None):

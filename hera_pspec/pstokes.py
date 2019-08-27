@@ -4,9 +4,9 @@ Module to construct pseudo-Stokes (I,Q,U,V) visibilities from miriad files or UV
 import numpy as np, os
 import pyuvdata
 import copy
-from hera_pspec import version
 from collections import OrderedDict as odict
 
+from . import version
 
 # Weights used in forming Stokes visibilities.
 # See pyuvdata.utils.polstr2num for conversion between polarization string

@@ -1,12 +1,12 @@
 import numpy as np
 import os
-import hera_pspec.conversions as conversions
-import hera_pspec.uvpspec_utils as uvputils
 import scipy.integrate as integrate
 from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
 import aipy
 from collections import OrderedDict as odict
+
+from . import conversions as conversions, uvpspec_utils as uvputils
 
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs, 

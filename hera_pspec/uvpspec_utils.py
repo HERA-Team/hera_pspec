@@ -1,9 +1,10 @@
 import numpy as np
 import copy, operator
-from . import utils
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 import json
+
+from . import utils
 
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     """
@@ -328,7 +329,7 @@ def polpair_int2tuple(polpair, pol_strings=False):
 
     pol_strings : bool, optional
         If True, return polarization pair tuples with polarization strings.
-        Otherwise, use polarization integers. Default: True.
+        Otherwise, use polarization integers. Default: False.
 
     Returns
     -------

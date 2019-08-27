@@ -1,13 +1,12 @@
 import numpy as np
 from collections import OrderedDict as odict
-from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec import utils, version
 import random
 import copy
 import argparse
 from astropy import stats as astats
 import os
 
+from . import utils, version, uvpspec_utils as uvputils
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
                     seed=None):

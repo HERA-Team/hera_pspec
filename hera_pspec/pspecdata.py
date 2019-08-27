@@ -4,8 +4,6 @@ from pyuvdata import UVData, UVCal
 import copy, operator, itertools, sys
 from collections import OrderedDict as odict
 import hera_cal as hc
-from hera_pspec import uvpspec, utils, version, pspecbeam, container
-from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
 import datetime
 import time
@@ -15,6 +13,9 @@ import glob
 import warnings
 import json
 import uvtools.dspec as dspec
+
+from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
+
 
 class PSpecData(object):
 
@@ -2892,7 +2893,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               groupname=None, dset_labels=None, dset_pairs=None, psname_ext=None,
               spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
-              exclude_auto_bls=False, exclude_permutations=True,
+              exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
@@ -2984,6 +2985,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         all cross-multiplies will be constructed. In doing so, if
         exclude_auto_bls is True, eliminate all instances of a bl crossed
         with itself. Default: False
+
+    exclude_cross_bls : boolean
+        If True and if blpairs is None, exclude all bls crossed with a
+        different baseline. Note if this and exclude_auto_bls are True
+        then no blpairs will exist. Default: False
 
     exclude_permutations : boolean
         If blpairs is None, redundant baseline groups will be formed and
@@ -3276,6 +3282,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       dsets[dsetp[0]], dsets[dsetp[1]],
                                       filter_blpairs=True,
                                       exclude_auto_bls=exclude_auto_bls,
+                                      exclude_cross_bls=exclude_cross_bls,
                                       exclude_permutations=exclude_permutations,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
@@ -3367,6 +3374,7 @@ def get_pspec_run_argparser():
     a.add_argument("--time_thresh", default=0.2, type=float, help="Fractional flagging threshold across time to trigger flag broadcast if broadcast_dset_flags is True")
     a.add_argument("--Jy2mK", default=False, action='store_true', help="Convert datasets from Jy to mK if a beam model is provided.")
     a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
+    a.add_argument("--exclude_cross_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with a different baseline.')
     a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')
     a.add_argument("--Nblps_per_group", default=None, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
     a.add_argument("--bl_len_range", default=(0, 1e10), nargs='+', type=float, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
