@@ -65,8 +65,9 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
-        self.r_params = {} #r_params is a dictionary that stores parameters for
-                           #parametric R matrices.
+        # r_params is a dictionary that stores parameters for
+        # parametric R matrices.
+        self.r_params = {} 
         self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
@@ -831,11 +832,11 @@ class PSpecData(object):
                 # Note that we multiply sqrtY inside of the pinv
                 #to apply flagging weights before taking psuedo inverse.
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                dspec.sinc_downweight_mat_inv(nchan = self.spw_Nfreqs,
-                                    df = np.median(np.diff(self.freqs)),
-                                    filter_centers = r_params['filter_centers'],
-                                    filter_widths = r_params['filter_widths'],
-                                    filter_factors = r_params['filter_factors'])* sqrtY) * sqrtT
+                dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs,
+                                    df=np.median(np.diff(self.freqs)),
+                                    filter_centers=r_params['filter_centers'],
+                                    filter_widths=r_params['filter_widths'],
+                                    filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
 
         return self._R[Rkey]
 
@@ -2065,7 +2066,7 @@ class PSpecData(object):
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None,
               baseline_tol=1.0, store_cov=False, verbose=True,
-              exact_norm=False, history='', r_params = None):
+              exact_norm=False, history='', r_params=None):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2461,8 +2462,8 @@ class PSpecData(object):
                         if not key2 in r_params:
                             raise ValueError("No r_param dictionary supplied"
                                              " for baseline %s"%(str(key2)))
-                        self.set_r_param(key1,r_params[key1])
-                        self.set_r_param(key2,r_params[key2])
+                        self.set_r_param(key1, r_params[key1])
+                        self.set_r_param(key2, r_params[key2])
 
                     # Build Fisher matrix
                     if input_data_weight == 'identity':

@@ -745,7 +745,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         if store_cov:
             uvp.cov_array = cov
 
-        #select r_params based on new bl_array
+        # select r_params based on new bl_array
         blp_keys = uvp.get_all_keys()
         blkeys = []
         for blpkey in blp_keys:
@@ -756,7 +756,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
             if not key2 in blkeys:
                 blkeys += [key2,]
         new_r_params = {}
-        if not uvp.r_params == '':
+        if hasattr(uvp, 'r_params') and uvp.r_params != '':
             r_params = uvp.get_r_params()
             for rpkey in r_params:
                 if rpkey in blkeys:

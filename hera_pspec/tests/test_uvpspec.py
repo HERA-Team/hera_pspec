@@ -722,3 +722,10 @@ def test_conj_blpair():
     blpair = uvputils._conj_blpair(101102103104, which='both')
     nt.assert_equal(blpair, 102101104103)
     nt.assert_raises(ValueError, uvputils._conj_blpair, 102101103104, which='foo')
+
+def test_compatibility_read():
+    # test read in of a static test file dated 8/2019
+    uvp = uvpspec.UVPSpec()
+    uvp.read_hdf5(os.path.join(DATA_PATH, 'test_uvp.h5'))
+    # assert check does not fail
+    uvp.check()
