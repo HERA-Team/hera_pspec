@@ -800,7 +800,7 @@ class PSpecData(object):
             if self.taper == 'none':
                 sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
-                sqrtT = np.sqrt(aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)).reshape(1, -1)
+                sqrtT = np.sqrt(dspec.gen_window(self.taper, self.spw_Nfreqs)).reshape(1, -1)
 
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
@@ -884,7 +884,7 @@ class PSpecData(object):
         Parameters
         ----------
         taper : str
-            Type of data tapering. See aipy.dsp.gen_window for options.
+            Type of data tapering. See uvtools.dspec.gen_window for options.
         """
         self.taper = taper
 
@@ -2002,7 +2002,7 @@ class PSpecData(object):
         adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
 
         if self.taper != 'none':
-            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)
+            tapering_fct = dspec.gen_window(self.taper, self.spw_Nfreqs)
             adjustment *= np.mean(tapering_fct**2)
 
         return adjustment
@@ -2126,7 +2126,7 @@ class PSpecData(object):
 
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
+            arguments as uvtools.dspec.gen_window(). Default: 'none'.
 
         sampling : boolean, optional
             Whether output pspec values are samples at various delay bins
