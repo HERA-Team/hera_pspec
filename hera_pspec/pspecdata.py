@@ -1,5 +1,4 @@
 import numpy as np
-import aipy
 from pyuvdata import UVData, UVCal
 import copy, operator, itertools, sys
 from collections import OrderedDict as odict

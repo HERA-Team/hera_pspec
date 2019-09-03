@@ -4,7 +4,9 @@
 [![Coverage Status](https://coveralls.io/repos/github/HERA-Team/hera_pspec/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/hera_pspec?branch=master)
 [![Documentation](https://readthedocs.org/projects/hera-pspec/badge/?version=latest)](https://readthedocs.org/projects/hera-pspec/badge/?version=latest)
 
-The ``hera_pspec`` library provides all of the tools and data structures needed to perform a delay spectrum analysis on interferometric data. The input data can be in any format supported by ``pyuvdata``, and the output data are stored in HDF5 containers.
+The ``hera_pspec`` library provides all of the tools and data structures needed to perform a delay 
+spectrum analysis on interferometric data. The input data can be in any format supported by ``pyuvdata``, 
+and the output data are stored in HDF5 containers.
 
 For usage examples and documentation, see http://hera-pspec.readthedocs.io/en/latest/.
 
