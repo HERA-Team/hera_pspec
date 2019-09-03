@@ -2232,7 +2232,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     if merge_history:
         u.history = "".join([uvp.history for uvp in uvps])
     else:
-        u.history == uvps[0].history
+        u.history = uvps[0].history
     u.labels = np.array(u.labels, np.str)
 
     u.r_params = uvputils.compress_r_params(r_params)
