@@ -131,7 +131,7 @@ def build_vanilla_uvpspec(beam=None):
 
 def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
                       beam=None, taper='none', cosmo=None, n_dlys=None,
-                      r_params = None, verbose=False):
+                      r_params=None, verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -234,7 +234,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     # run pspec
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
-                   store_cov=store_cov, n_dlys=n_dlys, r_params = r_params)
+                   store_cov=store_cov, n_dlys=n_dlys, r_params=r_params)
 
     return uvp
 
