@@ -3,8 +3,9 @@ import os
 import scipy.integrate as integrate
 from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
-import aipy
+import uvtools.dspec as dspec
 from collections import OrderedDict as odict
+
 
 from . import conversions as conversions, uvpspec_utils as uvputils
 
@@ -93,7 +94,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     if taper == 'none':
         dBpp_over_BpSq = np.ones_like(integration_freqs, np.float)
     else:
-        dBpp_over_BpSq = aipy.dsp.gen_window(len(pspec_freqs), taper)**2.
+        dBpp_over_BpSq = dspec.gen_window(taper, len(pspec_freqs))**2.
         dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest', 
                                   fill_value='extrapolate')(integration_freqs)
     dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2.

@@ -78,7 +78,7 @@ class UVPSpec(object):
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.float64)
         self._weighting = PSpecParam("weighting", description="Form of data weighting used when forming power spectra.", expected_type=str)
         self._norm = PSpecParam("norm", description="Normalization method adopted in OQE (M matrix).", expected_type=str)
-        self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT."', expected_type=str)
+        self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT. See uvtools.dspec.gen_window for options."', expected_type=str)
         self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
         self._norm_units = PSpecParam("norm_units", description="Power spectra normalization units, i.e. telescope units [Hz str] or cosmological [(h^-3) Mpc^3].", expected_type=str)
         self._labels = PSpecParam("labels", description="Array of dataset string labels.", expected_type=np.str)
