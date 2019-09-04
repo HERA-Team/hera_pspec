@@ -42,7 +42,6 @@ setup_args = {
         'matplotlib>=2.2'
         'pyuvdata',
         'astropy>=2.0',
-        'aipy>=3.0rc2',
         'pyyaml',
         'h5py',
         'uvtools @ git+git://github.com/HERA-Team/uvtools',
