@@ -1026,7 +1026,7 @@ class UVPSpec(object):
         assert spw_ind in self.spw_freq_array and spw_ind in self.spw_dly_array, \
             "spw {} not found in data".format(spw_ind)
         assert blpair in self.blpair_array, \
-            "blpair {} not found in data, blpairs are: {}".format(blpair, self.blpair_array)
+            "blpair {} not found in data".format(blpair)
         assert polpair in self.polpair_array, \
             "polpair {} not found in data".format(polpair)
 
