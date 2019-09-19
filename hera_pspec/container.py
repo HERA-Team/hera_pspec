@@ -494,7 +494,7 @@ class PSpecContainer(object):
 
 
 def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_',
-                        verbose=True, overwrite=False):
+                        merge_history=True, verbose=True, overwrite=False):
     """
     Iterate through a PSpecContainer and, within each specified group, combine 
     UVPSpec (i.e. spectra) of similar name but varying psname extension.
@@ -528,6 +528,9 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
 
     ext_split_str : str
         The pattern used to split the dset name from its extension in the psname.
+
+    merge_history : bool
+        If True merge UVPSpec histories. Else use zeroth object's history.
 
     verbose : bool
         If True, report feedback to stdout.
@@ -581,7 +584,7 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
             try:
                 # merge
                 uvps = [psc.get_pspec(grp, uvp) for uvp in to_merge]
-                merged_uvp = uvpspec.combine_uvpspec(uvps, verbose=verbose)
+                merged_uvp = uvpspec.combine_uvpspec(uvps, merge_history=merge_history, verbose=verbose)
                 # write to file
                 psc.set_pspec(grp, spc, merged_uvp, overwrite=True)
                 # if successful merge, remove uvps

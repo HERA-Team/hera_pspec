@@ -2900,7 +2900,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True,
               file_type='miriad', verbose=True, store_cov=False,
-              history='', r_params=None):
+              history='', r_params=None, tsleep=0.1, maxiter=1):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -3067,6 +3067,13 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     history : str
         String to add to history of each UVPSpec object.
 
+    tsleep : float, optional
+        Time to wait in seconds after each attempt at opening the container file.
+
+    maxiter : int, optional
+        Maximum number of attempts to open container file (useful for concurrent 
+        access when file may be locked temporarily by other processes).
+
     r_params: dict, optional
         Dictionary with parameters for weighting matrix. Required fields and
         formats depend on the mode of `data_weighting`. Default: None.
@@ -3087,10 +3094,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     Returns
     -------
-    psc : PSpecContainer object
-        A container for the output UVPSpec objects, which themselves contain
-        the power spectra and their metadata.
-
     ds : PSpecData object
         The PSpecData object used for OQE of power spectrum, with cached
         weighting matrices.
@@ -3307,7 +3310,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # Open PSpecContainer to store all output in
     if verbose: print("Opening {} in transactional mode".format(filename))
-    psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=1, maxiter=20)
+    psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=tsleep, maxiter=maxiter)
 
     # assign group name
     if groupname is None:

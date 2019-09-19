@@ -1026,7 +1026,7 @@ class UVPSpec(object):
         assert spw_ind in self.spw_freq_array and spw_ind in self.spw_dly_array, \
             "spw {} not found in data".format(spw_ind)
         assert blpair in self.blpair_array, \
-            "blpair {} not found in data, blpairs are: {}".format(blpair, self.blpair_array)
+            "blpair {} not found in data".format(blpair)
         assert polpair in self.polpair_array, \
             "polpair {} not found in data".format(polpair)
 
@@ -1940,7 +1940,7 @@ class UVPSpec(object):
         return scalar
 
 
-def combine_uvpspec(uvps, verbose=True):
+def combine_uvpspec(uvps, merge_history=True, verbose=True):
     """
     Combine (concatenate) multiple UVPSpec objects into a single object,
     combining along one of either spectral window [spw], baseline-pair-times
@@ -1954,6 +1954,8 @@ def combine_uvpspec(uvps, verbose=True):
     ----------
     uvps : list
         A list of UVPSpec objects to combine.
+    merge_history : bool
+        If True, merge all histories. Else use zeroth object's history.
 
     Returns
     -------
@@ -2227,7 +2229,10 @@ def combine_uvpspec(uvps, verbose=True):
         u.bl_vecs.append(uvps[l].bl_vecs[h])
     u.bl_vecs = np.array(u.bl_vecs)
     u.Ntimes = len(np.unique(u.time_avg_array))
-    u.history = "".join([uvp.history for uvp in uvps])
+    if merge_history:
+        u.history = "".join([uvp.history for uvp in uvps])
+    else:
+        u.history = uvps[0].history
     u.labels = np.array(u.labels, np.str)
 
     u.r_params = uvputils.compress_r_params(r_params)

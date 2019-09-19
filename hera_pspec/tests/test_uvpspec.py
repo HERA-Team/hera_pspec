@@ -12,6 +12,7 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 import json
 
+
 class Test_UVPSpec(unittest.TestCase):
 
     def setUp(self):
@@ -503,33 +504,12 @@ class Test_UVPSpec(unittest.TestCase):
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
-
-        rp = {'filter_centers':[0.],
-              'filter_widths':[250e-9],
-              'filter_factors':[1e-9]}
-
-        r_params = {}
-
-        for bl in bls:
-            key1 =  bl + ('xx',)
-            r_params[key1] = rp
-
-        #create an r_params copy with inconsistent weighting to test
-        #error case
-        r_params_inconsistent = copy.deepcopy(r_params)
-        r_params[key1]['filter_widths'] = [100e-9]
-
-        uvp1 = testing.uvpspec_from_data(uvd, bls,
-                                         spw_ranges=[(20, 30), (60, 90)],
-                                         beam=beam, r_params = r_params)
-
-        print("uvp1 unique blps:", np.unique(uvp1.blpair_array))
+        uvp1 = testing.uvpspec_from_data(uvd, bls, 
+                                         spw_ranges=[(20, 30), (60, 90)], 
+                                         beam=beam)
 
         # test failure due to overlapping data
         uvp2 = copy.deepcopy(uvp1)
-
-        print("uvp2 unique blps:", np.unique(uvp2.blpair_array))
-
         nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
 
         # test success across pol
@@ -538,22 +518,10 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(out.Npols, 2)
         nt.assert_true(len(set(out.polpair_array) ^ set([1515, 1414])) == 0)
         key = (0, ((37, 38), (38, 39)), ('xx','xx'))
-        nt.assert_true(np.all(np.isclose(out.get_nsamples(key),
+        nt.assert_true(np.all(np.isclose(out.get_nsamples(key), 
                        np.ones(10, dtype=np.float64))))
-        nt.assert_true(np.all(np.isclose(out.get_integrations(key),
+        nt.assert_true(np.all(np.isclose(out.get_integrations(key), 
                        190 * np.ones(10, dtype=np.float64), atol=5, rtol=2)))
-        #test errors when combining with pspecs without r_params
-        uvp3 = copy.deepcopy(uvp2)
-        uvp3.r_params = ''
-        nt.assert_raises(ValueError, uvpspec.combine_uvpspec, [uvp1, uvp3])
-        #combining multiple uvp objects without r_params should run fine
-        uvp4 = copy.deepcopy(uvp1)
-        uvp4.r_params = ''
-        uvpspec.combine_uvpspec([uvp3, uvp4])
-        #now test error case with inconsistent weightings.
-        uvp5 = copy.deepcopy(uvp2)
-        uvp5.r_params = uvputils.compress_r_params(r_params_inconsistent)
-        nt.assert_raises(ValueError, uvpspec.combine_uvpspec, [uvp1, uvp5])
 
         # test multiple non-overlapping data axes
         uvp2.freq_array[0] = 0.0
@@ -575,7 +543,7 @@ class Test_UVPSpec(unittest.TestCase):
 
         # test concat across spw
         uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)],
-                                         beam=beam, r_params = r_params)
+                                         beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nspws, 3)
         nt.assert_equal(out.Nfreqs, 51)
@@ -584,7 +552,7 @@ class Test_UVPSpec(unittest.TestCase):
         # test concat across blpairts
         uvp2 = testing.uvpspec_from_data(uvd, [(53, 54), (67, 68)],
                                          spw_ranges=[(20, 30), (60, 90)],
-                                         beam=beam, r_params = r_params)
+                                         beam=beam)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         nt.assert_equal(out.Nblpairs, 4)
         nt.assert_equal(out.Nbls, 5)
@@ -623,6 +591,68 @@ class Test_UVPSpec(unittest.TestCase):
         uvp4b.polpair_array[0] = 1414
         out = uvpspec.combine_uvpspec([uvp4, uvp4b], verbose=False)
 
+        # test history adding
+        uvp_a = copy.deepcopy(uvp1)
+        uvp_b = copy.deepcopy(uvp1)
+        uvp_b.polpair_array[0] = 1414
+        uvp_a.history = 'batwing'
+        uvp_b.history = 'foobar'
+
+        # w/ merge
+        out = uvpspec.combine_uvpspec([uvp_a, uvp_b], merge_history=True, verbose=False)
+        assert 'batwing' in out.history and 'foobar' in out.history
+        # w/o merge
+        out = uvpspec.combine_uvpspec([uvp_a, uvp_b], merge_history=False, verbose=False)
+        assert 'batwing' in out.history and not 'foobar' in out.history
+
+    def test_combine_uvpspec_r_params(self):
+        # setup uvp build
+        uvd = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
+                                               "HERA_NF_dipole_power.beamfits"))
+        bls = [(37, 38), (38, 39), (52, 53)]
+
+        rp = {'filter_centers':[0.],
+              'filter_widths':[250e-9],
+              'filter_factors':[1e-9]}
+
+        r_params = {}
+
+        for bl in bls:
+            key1 =  bl + ('xx',)
+            r_params[key1] = rp
+
+        # create an r_params copy with inconsistent weighting to test
+        # error case
+        r_params_inconsistent = copy.deepcopy(r_params)
+        r_params[key1]['filter_widths'] = [100e-9]
+
+        uvp1 = testing.uvpspec_from_data(uvd, bls,
+                                         spw_ranges=[(20, 30), (60, 90)],
+                                         beam=beam, r_params=r_params)
+
+        # test failure due to overlapping data
+        uvp2 = copy.deepcopy(uvp1)
+        nt.assert_raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, uvp2])
+
+        # test success across pol
+        uvp2.polpair_array[0] = 1414
+
+        # test errors when combining with pspecs without r_params
+        uvp3 = copy.deepcopy(uvp2)
+        uvp3.r_params = ''
+        nt.assert_raises(ValueError, uvpspec.combine_uvpspec, [uvp1, uvp3])
+
+        # combining multiple uvp objects without r_params should run fine
+        uvp4 = copy.deepcopy(uvp1)
+        uvp4.r_params = ''
+        uvpspec.combine_uvpspec([uvp3, uvp4])
+
+        # now test error case with inconsistent weightings.
+        uvp5 = copy.deepcopy(uvp2)
+        uvp5.r_params = uvputils.compress_r_params(r_params_inconsistent)
+        nt.assert_raises(ValueError, uvpspec.combine_uvpspec, [uvp1, uvp5])
 
     def test_combine_uvpspec_std(self):
         # setup uvp build
