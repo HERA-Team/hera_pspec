@@ -395,7 +395,7 @@ class UVPSpec(object):
         blp_avg_sep = np.empty(self.Nblpairts, np.float)
 
         # construct blpair_bls
-        blpairs = _unique_ordered(self.blpair_array)
+        blpairs = _ordered_unqique(self.blpair_array)
         bl1 = np.floor(blpairs / 1e6)
         blpair_bls = np.vstack([bl1, blpairs - bl1*1e6]).astype(np.int32).T
 
@@ -477,7 +477,7 @@ class UVPSpec(object):
         Returns a list of all blpair tuples in the data_array.
         """
         return [self.blpair_to_antnums(blp)
-                for blp in _unique_ordered(self.blpair_array)]
+                for blp in _ordered_unqique(self.blpair_array)]
 
     def get_polpairs(self):
         """
@@ -1702,7 +1702,7 @@ class UVPSpec(object):
 
         # get blpairs
         if blpairs is None:
-            blpairs = _unique_ordered(self.blpair_array)
+            blpairs = _ordered_unqique(self.blpair_array)
         elif isinstance(blpairs[0], tuple):
             blpairs = [self.antnums_to_blpair(blp) for blp in blpairs]
 
