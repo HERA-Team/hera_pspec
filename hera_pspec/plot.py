@@ -610,6 +610,8 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     Plot a 2D delay spectrum (or spectra) from a UVPSpec object. Note that
     all integrations and redundant baselines are averaged (unless specifying 
     times) before plotting.
+
+    Note: this deepcopies input uvp before averaging.
     
     Parameters
     ----------
@@ -740,15 +742,20 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     else:
         fig = ax.get_figure()
 
-    # Select out times if provided
+    # Select out times and blpairs if provided
     if times is not None:
-        uvp.select(times=times, inplace=True)
+        uvp.select(blpairs=blpairs, times=times, inplace=True)
 
     # Average across redundant groups and time
     # this also ensures blpairs are ordered from short_bl --> long_bl
     blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol, 
                                                       match_bl_lens=True)
     uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, inplace=True)
+
+    # get blpairs and order by len and enforce bl len ordering anyways
+    blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps()
+    osort = np.argsort(blpair_seps)
+    blpairs, blpair_seps = [blpairs[oi] for oi in osort], blpair_seps[osort]
 
     # Convert to DeltaSq
     if deltasq and not delay:
@@ -761,7 +768,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     # Format ticks
     if delay:
         x_axis = uvp.get_dlys(spw) * 1e9
-        y_axis = uvp.get_blpair_seps()
+        y_axis = blpair_seps
     else:
         x_axis = uvp.get_kparas(spw, little_h=little_h)
         y_axis = uvp.get_kperps(spw, little_h=little_h)
@@ -795,7 +802,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         raise ValueError("Did not understand component {}".format(component))
 
     # get data with shape (Nblpairs, Ndlys)
-    data = cast([uvp.get_data((spw, blp, pol)).squeeze() for blp in uvp.get_blpairs()])
+    data = cast([uvp.get_data((spw, blp, pol)).squeeze() for blp in blpairs])
 
     # take log10
     if log10:
@@ -884,7 +891,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     # Plot horizons
     if horizon_lines:
         # get horizon in ns
-        horizons = uvp.get_blpair_seps() / conversions.units.c * 1e9
+        horizons = blpair_seps / conversions.units.c * 1e9
 
         # convert to cosmological wave vector
         if not delay:
