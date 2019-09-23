@@ -118,6 +118,14 @@ class Test_PSpecContainer(unittest.TestCase):
                 ps = ps_store.get_pspec(g, psname=psname)
                 assert(isinstance(ps, UVPSpec))
         
+        # check partial IO in get_pspec
+        ps = ps_store.get_pspec(group_names[0], pspec_names[0], just_meta=True)
+        assert not hasattr(ps, 'data_array')
+        assert hasattr(ps, 'time_avg_array')
+        ps = ps_store.get_pspec(group_names[0], pspec_names[0], blpairs=[((1, 2), (1, 2))])
+        assert hasattr(ps, 'data_array')
+        assert np.all(np.isclose(ps.blpair_array, 101102101102))
+
         # Check that invalid list arguments raise errors in set_pspec()
         assert_raises(ValueError, ps_store.set_pspec, group=group_names[:2], 
                       psname=pspec_names[0], pspec=self.uvp, overwrite=True)

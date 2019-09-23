@@ -1,14 +1,14 @@
 import numpy as np
-import os, time, yaml
-import itertools, argparse, glob
-import traceback, operator
-import aipy, uvtools
-from hera_pspec.conversions import Cosmo_Conversions
+import time, yaml
+import itertools, glob
+import traceback
 from hera_cal import redcal
 from collections import OrderedDict as odict
-from pyuvdata import utils as uvutils
 from pyuvdata import UVData
 from datetime import datetime
+
+from .conversions import Cosmo_Conversions
+
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
@@ -73,8 +73,8 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     return C
 
 
-def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
-                      group=False, Nblps_per_group=1):
+def construct_blpairs(bls, exclude_auto_bls=False, exclude_cross_bls=False,
+                      exclude_permutations=False, group=False, Nblps_per_group=1):
     """
     Construct a list of baseline-pairs from a baseline-group. This function
     can be used to easily convert a single list of baselines into the input
@@ -90,6 +90,10 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
     exclude_auto_bls: bool, optional
         If True, exclude all baselines crossed with themselves from the final
         blpairs list. Default: False.
+
+    exclude_cross_bls : bool, optional
+        If True, exclude all bls crossed with a different baseline. Note if
+        this and exclude_auto_bls are True then no blpairs will exist.
 
     exclude_permutations : bool, optional
         If True, exclude permutations and only form combinations of the bls
@@ -125,6 +129,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
     assert isinstance(bls, (list, np.ndarray)) and isinstance(bls[0], tuple), \
         "bls must be fed as list or ndarray of baseline antnum tuples. Use " \
         "UVData.baseline_to_antnums() to convert baseline integers to tuples."
+    assert (not exclude_auto_bls) or (not exclude_cross_bls), "Can't exclude both auto and cross blpairs"
 
     # form blpairs w/o explicitly forming auto blpairs
     # however, if there are repeated bl in bls, there will be auto bls in blpairs
@@ -141,6 +146,14 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
         new_blpairs = []
         for blp in blpairs:
             if blp[0] != blp[1]:
+                new_blpairs.append(blp)
+        blpairs = new_blpairs
+
+    # same for cross
+    if exclude_cross_bls:
+        new_blpairs = []
+        for blp in blpairs:
+            if blp[0] == blp[1]:
                 new_blpairs.append(blp)
         blpairs = new_blpairs
 
@@ -169,6 +182,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_permutations=False,
 
 def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                      xant_flag_thresh=0.95, exclude_auto_bls=False,
+                     exclude_cross_bls=False,
                      exclude_permutations=True, Nblps_per_group=None,
                      bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
     """
@@ -195,6 +209,10 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     exclude_auto_bls: boolean, optional
         If True, exclude all bls crossed with itself from the blpairs list
+
+    exclude_cross_bls : boolean, optional
+        If True, exclude all bls crossed with a different baseline. Note if
+        this and exclude_auto_bls are True then no blpairs will exist.
 
     exclude_permutations : boolean, optional
         If True, exclude permutations and only form combinations of the bls list.
@@ -289,7 +307,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     for r in reds:
         (bls1, bls2,
          blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls,
-                                   group=False,
+                                   exclude_cross_bls=exclude_cross_bls, group=False,
                                    exclude_permutations=exclude_permutations)
         if len(bls1) < 1:
             continue

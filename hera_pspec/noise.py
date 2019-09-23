@@ -1,9 +1,10 @@
 import numpy as np
 import os
-from hera_pspec import conversions, pspecbeam
 import copy
 import ast
 from collections import OrderedDict as odict
+
+from . import conversions, pspecbeam
 
 
 def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, component='real'):

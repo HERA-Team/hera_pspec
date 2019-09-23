@@ -1,11 +1,8 @@
 import numpy as np
-import aipy
 from pyuvdata import UVData, UVCal
 import copy, operator, itertools, sys
 from collections import OrderedDict as odict
 import hera_cal as hc
-from hera_pspec import uvpspec, utils, version, pspecbeam, container
-from hera_pspec import uvpspec_utils as uvputils
 from pyuvdata import utils as uvutils
 import datetime
 import time
@@ -15,6 +12,9 @@ import glob
 import warnings
 import json
 import uvtools.dspec as dspec
+
+from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
+
 
 class PSpecData(object):
 
@@ -64,8 +64,9 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
-        self.r_params = {} #r_params is a dictionary that stores parameters for
-                           #parametric R matrices.
+        # r_params is a dictionary that stores parameters for
+        # parametric R matrices.
+        self.r_params = {} 
         self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
@@ -799,7 +800,7 @@ class PSpecData(object):
             if self.taper == 'none':
                 sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
-                sqrtT = np.sqrt(aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)).reshape(1, -1)
+                sqrtT = np.sqrt(dspec.gen_window(self.taper, self.spw_Nfreqs)).reshape(1, -1)
 
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
@@ -830,11 +831,11 @@ class PSpecData(object):
                 # Note that we multiply sqrtY inside of the pinv
                 #to apply flagging weights before taking psuedo inverse.
                 self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                dspec.sinc_downweight_mat_inv(nchan = self.spw_Nfreqs,
-                                    df = np.median(np.diff(self.freqs)),
-                                    filter_centers = r_params['filter_centers'],
-                                    filter_widths = r_params['filter_widths'],
-                                    filter_factors = r_params['filter_factors'])* sqrtY) * sqrtT
+                dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs,
+                                    df=np.median(np.diff(self.freqs)),
+                                    filter_centers=r_params['filter_centers'],
+                                    filter_widths=r_params['filter_widths'],
+                                    filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
 
         return self._R[Rkey]
 
@@ -883,7 +884,7 @@ class PSpecData(object):
         Parameters
         ----------
         taper : str
-            Type of data tapering. See aipy.dsp.gen_window for options.
+            Type of data tapering. See uvtools.dspec.gen_window for options.
         """
         self.taper = taper
 
@@ -1991,7 +1992,7 @@ class PSpecData(object):
         adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
 
         if self.taper != 'none':
-            tapering_fct = aipy.dsp.gen_window(self.spw_Nfreqs, self.taper)
+            tapering_fct = dspec.gen_window(self.taper, self.spw_Nfreqs)
             adjustment *= np.mean(tapering_fct**2)
 
         return adjustment
@@ -2054,7 +2055,7 @@ class PSpecData(object):
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None,
               baseline_tol=1.0, store_cov=False, verbose=True,
-              exact_norm=False, history='', r_params = None):
+              exact_norm=False, history='', r_params=None):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2115,7 +2116,7 @@ class PSpecData(object):
 
         taper : str, optional
             Tapering (window) function to apply to the data. Takes the same
-            arguments as aipy.dsp.gen_window(). Default: 'none'.
+            arguments as uvtools.dspec.gen_window(). Default: 'none'.
 
         sampling : boolean, optional
             Whether output pspec values are samples at various delay bins
@@ -2450,8 +2451,8 @@ class PSpecData(object):
                         if not key2 in r_params:
                             raise ValueError("No r_param dictionary supplied"
                                              " for baseline %s"%(str(key2)))
-                        self.set_r_param(key1,r_params[key1])
-                        self.set_r_param(key2,r_params[key2])
+                        self.set_r_param(key1, r_params[key1])
+                        self.set_r_param(key2, r_params[key2])
 
                     # Build Fisher matrix
                     if input_data_weight == 'identity':
@@ -2875,14 +2876,14 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               groupname=None, dset_labels=None, dset_pairs=None, psname_ext=None,
               spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none',
-              exclude_auto_bls=False, exclude_permutations=True,
+              exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True,
               file_type='miriad', verbose=True, store_cov=False,
-              history='', r_params=None):
+              history='', r_params=None, tsleep=0.1, maxiter=1):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -2968,6 +2969,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         exclude_auto_bls is True, eliminate all instances of a bl crossed
         with itself. Default: False
 
+    exclude_cross_bls : boolean
+        If True and if blpairs is None, exclude all bls crossed with a
+        different baseline. Note if this and exclude_auto_bls are True
+        then no blpairs will exist. Default: False
+
     exclude_permutations : boolean
         If blpairs is None, redundant baseline groups will be formed and
         all cross-multiplies will be constructed. In doing so, if
@@ -3044,6 +3050,13 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     history : str
         String to add to history of each UVPSpec object.
 
+    tsleep : float, optional
+        Time to wait in seconds after each attempt at opening the container file.
+
+    maxiter : int, optional
+        Maximum number of attempts to open container file (useful for concurrent 
+        access when file may be locked temporarily by other processes).
+
     r_params: dict, optional
         Dictionary with parameters for weighting matrix. Required fields and
         formats depend on the mode of `data_weighting`. Default: None.
@@ -3064,10 +3077,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     Returns
     -------
-    psc : PSpecContainer object
-        A container for the output UVPSpec objects, which themselves contain
-        the power spectra and their metadata.
-
     ds : PSpecData object
         The PSpecData object used for OQE of power spectrum, with cached
         weighting matrices.
@@ -3259,6 +3268,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       dsets[dsetp[0]], dsets[dsetp[1]],
                                       filter_blpairs=True,
                                       exclude_auto_bls=exclude_auto_bls,
+                                      exclude_cross_bls=exclude_cross_bls,
                                       exclude_permutations=exclude_permutations,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
@@ -3283,7 +3293,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # Open PSpecContainer to store all output in
     if verbose: print("Opening {} in transactional mode".format(filename))
-    psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=1, maxiter=20)
+    psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=tsleep, maxiter=maxiter)
 
     # assign group name
     if groupname is None:
@@ -3350,6 +3360,7 @@ def get_pspec_run_argparser():
     a.add_argument("--time_thresh", default=0.2, type=float, help="Fractional flagging threshold across time to trigger flag broadcast if broadcast_dset_flags is True")
     a.add_argument("--Jy2mK", default=False, action='store_true', help="Convert datasets from Jy to mK if a beam model is provided.")
     a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
+    a.add_argument("--exclude_cross_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with a different baseline.')
     a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')
     a.add_argument("--Nblps_per_group", default=None, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
     a.add_argument("--bl_len_range", default=(0, 1e10), nargs='+', type=float, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")

@@ -4,13 +4,15 @@
 
 from __future__ import print_function, division, absolute_import
 
-import os
-import six
-import subprocess
-import json
 import inspect
+import json
+import os
+import subprocess
+import sys
 
 hera_pspec_dir = os.path.dirname(os.path.realpath(__file__))
+
+PY2 = sys.version_info < (3, 0)
 
 
 def _get_git_output(args, capture_stderr=False):
@@ -27,7 +29,7 @@ def _get_git_output(args, capture_stderr=False):
 
     data = data.strip()
 
-    if six.PY2:
+    if PY2:
         return data
     return data.decode('utf8')
 
@@ -51,7 +53,7 @@ def _get_gitinfo_file(git_file=None):
 
 
 def _unicode_to_str(u):
-    if six.PY2:
+    if PY2:
         return u.encode('utf8')
     return u
 
@@ -71,16 +73,16 @@ def construct_version_info():
 
     try:
         version_info['git_origin'] = _get_git_output(
-                                      ['config', '--get', 'remote.origin.url'], 
-                                      capture_stderr=True)
+            ['config', '--get', 'remote.origin.url'],
+            capture_stderr=True)
         version_info['git_hash'] = _get_git_output(
-                                      ['rev-parse', 'HEAD'], 
-                                      capture_stderr=True)
+            ['rev-parse', 'HEAD'],
+            capture_stderr=True)
         version_info['git_description'] = _get_git_output(
-                                   ['describe', '--dirty', '--tag', '--always'])
+            ['describe', '--dirty', '--tag', '--always'])
         version_info['git_branch'] = _get_git_output(
-                                      ['rev-parse', '--abbrev-ref', 'HEAD'], 
-                                      capture_stderr=True)
+            ['rev-parse', '--abbrev-ref', 'HEAD'],
+            capture_stderr=True)
     except subprocess.CalledProcessError:  # pragma: no cover
         try:
             # Check if a GIT_INFO file was created when installing package
@@ -97,21 +99,22 @@ def history_string(notes=''):
     disk can use. Optionally add notes.
     """
     history = '\n------------\nThis file was produced by the function ' \
-            + str(inspect.stack()[1][3]) + '()'
+              + str(inspect.stack()[1][3]) + '()'
     # inspect.stack()[1][3] is the name of the function that called this fn
-    
+
     history += ' in ' + os.path.basename(inspect.stack()[1][1]) + ' using: '
     # inspect.stack()[1][1] is path to the file that contains the function 
     # that called this function
     version_info = construct_version_info()
-    
+
     for v in sorted(version_info.keys()):
         history += '\n    ' + v + ': ' + version_info[v]
-    
+
     if (notes is not None) and (notes != ''):
         history += '\n\nNotes:\n'
         history += notes
     return history + '\n------------\n'
+
 
 def print_version_info():
     """
@@ -121,6 +124,7 @@ def print_version_info():
     print('git origin = {0}'.format(git_origin))
     print('git branch = {0}'.format(git_branch))
     print('git description = {0}'.format(git_description))
+
 
 version_info = construct_version_info()
 version = version_info['version']
@@ -132,6 +136,7 @@ git_branch = version_info['git_branch']
 
 def main():
     print_version_info()
+
 
 if __name__ == '__main__':
     main()

@@ -25,7 +25,7 @@ dfiles_std = [
 ]
 
 # List of tapering function to use in tests
-taper_selection = ['none', 'blackman',]
+taper_selection = ['none', 'bh7',]
 #taper_selection = ['blackman', 'blackman-harris', 'gaussian0.4', 'kaiser2',
 #                   'kaiser3', 'hamming', 'hanning', 'parzen']
 
