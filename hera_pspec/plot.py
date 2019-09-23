@@ -384,7 +384,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
 
     # assert component
     assert component in ['real', 'abs', 'imag', 'abs-real', 'abs-imag'], "Can't parse specified component {}".format(component)
-    fix_negval = compoent in ['real', 'imag'] and log
+    fix_negval = component in ['real', 'imag'] and log
 
     # Add ungrouped baseline-pairs into a group of their own (expected by the
     # averaging routines)
@@ -756,7 +756,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     assert isinstance(uvp, uvpspec.UVPSpec), "input uvp must be a UVPSpec object"
     assert isinstance(spw, (int, np.integer))
     assert isinstance(pol, (int, np.integer, tuple))
-    fix_negval = compoent in ['real', 'imag'] and log10
+    fix_negval = component in ['real', 'imag'] and log10
 
     # check pspec units for little h
     little_h = 'h^-3' in uvp.norm_units
