@@ -1030,7 +1030,7 @@ class PSpecData(object):
         in constructing q_hat. See PSpecData.pspec for details.
 
         If exact_norm is True:
-        It uses get_Q function to return normalized power spectrum (Eq. 14 in HERA memo #44)
+        Takes beam factors into account (Eq. 14 in HERA memo #44)
 
         Parameters
         ----------
@@ -1052,13 +1052,9 @@ class PSpecData(object):
             in the computation of Q_matrix (dC/dp = Q, and not Q_alt)
             (HERA memo #44, Eq. 11). Q matrix, for each delay mode,
             is weighted by the integral of beam over theta,phi.
-            Therefore the output power spectra is, by construction, normalized.
-            If True, it returns normalized power spectrum, except for X2Y term.
-            If False, Q_alt is used (HERA memo #44, Eq. 16), and the power
-            spectrum is normalized separately.
 
         pol: str/int/bool, optional
-            Used only if exact_norm is True. This argument is passed to get_Q
+            Used only if exact_norm is True. This argument is passed to get_integral_beam
             to extract the requested beam polarization. Default is the first
             polarization passed to pspec.
 
@@ -1150,6 +1146,14 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
+        
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details). 
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam. 
+            Used only if exact_norm is True. 
 
         Returns
         -------
@@ -1237,6 +1241,14 @@ class PSpecData(object):
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
+        
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details). 
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam. 
+            Used only if exact_norm is True. 
 
         Returns
         -------
@@ -1308,6 +1320,14 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
+        
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details). 
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam. 
+            Used only if exact_norm is True. 
 
         Returns
         -------
@@ -1388,6 +1408,14 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
+        
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details). 
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam. 
+            Used only if exact_norm is True. 
 
         model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
@@ -1646,9 +1674,14 @@ class PSpecData(object):
     
     def get_Q(self, mode):
         """
-        Computes Q_alpha(i,j), which is the response of the data covariance to 
-        the bandpower (dC/dP_alpha). This includes contributions from primary 
-        beam.
+        Computes Q_alt(i,j), which is the exponential part of the
+        response of the data covariance to the bandpower (dC/dP_alpha).
+
+        Note: This function is not being used right now, since get_q_alt and 
+        get_Q are essentially the same functions. However, since we want to attempt 
+        non-uniform bins, we do intend to use get_Q (which uses physical
+        units, and hence there is not contraint of uniformly spaced
+        data).
 
         Parameters
         ----------
@@ -1889,7 +1922,7 @@ class PSpecData(object):
         exact_norm : boolean, optional
                 If True, scalar would just be the X2Y term, as the beam and
                 spectral terms are taken into account while constructing
-                Q matrix.
+                power spectrum.
 
         Returns
         -------
@@ -2409,7 +2442,7 @@ class PSpecData(object):
                                   verbose=verbose)
                     scalar = 1.0
 
-                pol = (p[0]) # used in get_Q function to specify the correct polarization for the beam
+                pol = (p[0]) # used in get_integral_beam function to specify the correct polarization for the beam
                 spw_scalar.append(scalar)
 
                 # Loop over baseline pairs
