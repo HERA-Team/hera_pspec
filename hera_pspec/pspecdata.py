@@ -1264,7 +1264,7 @@ class PSpecData(object):
         for ch in range(self.spw_Ndlys):
             if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
             else: Q1 = self.get_Q_alt(ch)
-            Q2 = Q1
+            Q2 = copy.deepcopy(Q1)
             if not sampling:
                 Q2 *= sinc_matrix
 
