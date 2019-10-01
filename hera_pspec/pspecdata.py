@@ -1351,10 +1351,11 @@ class PSpecData(object):
             q          = []
             del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             pol = self.pol
+            integral_beam = self.get_integral_beam(pol) # This result does not depend on delay modes. We can remove it from the for loop to avoid its repeated computation
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau should be part of get_Q. We use it here to
                 # avoid its repeated computation
-                Q = del_tau * self.get_Q(i)
+                Q = del_tau * self.get_Q(i) * integral_beam
                 QRx2 = np.dot(Q, Rx2)
                 # Square and sum over columns
                 qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
@@ -1512,6 +1513,9 @@ class PSpecData(object):
             sinc_matrix = np.sinc(sinc_matrix / np.float(self.spw_Ndlys))
 
         iR1Q_alt, iR2Q = {}, {}
+        pol = self.pol
+        integral_beam = self.get_integral_beam(pol) # This result does not depend on delay modes. We can remove it from the for loop to avoid its repeated computation
+        del_tau = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
         for ch in range(self.spw_Ndlys):
             Q_alt = self.get_Q_alt(ch)
             iR1Q_alt[ch] = np.dot(R1, Q_alt) # R_1 Q_alt
@@ -1522,8 +1526,7 @@ class PSpecData(object):
                 if not sampling:
                     Q *= sinc_matrix
             else:
-                Q = self.get_Q(ch)
-
+                Q = self.get_Q(ch) * integral_beam * del_tau
             iR2Q[ch] = np.dot(R2, Q) # R_2 Q
 
         for i in range(self.spw_Ndlys): # this loop goes as nchan^4
@@ -1588,9 +1591,12 @@ class PSpecData(object):
                                dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
+        pol = self.pol
+        integral_beam = self.get_integral_beam(pol) # This result does not depend on delay modes. We can remove it from the for loop to avoid its repeated computation
+        del_tau = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
         if exact_norm:
             for dly_idx in range(self.spw_Ndlys):
-                QR2 = np.dot(self.get_Q(dly_idx), R2)
+                QR2 = np.dot(del_tau * self.get_Q(dly_idx) * integral_beam, R2)
                 E_matrices[dly_idx] = np.dot(R1, QR2)
         else:
             for dly_idx in range(self.spw_Ndlys):
@@ -1966,10 +1972,11 @@ class PSpecData(object):
             del_tau = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             Q_matrix_all_delays = np.zeros((self.spw_Ndlys,self.spw_Nfreqs,self.spw_Nfreqs), dtype='complex128')
             pol = self.pol
+            integral_beam = self.get_integral_beam(pol) # This result does not depend on delay modes. We can remove it from the for loop to avoid its repeated computation
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau should be part of get_Q. We use it here to
                 # avoid its repeated computation
-                Q_matrix_all_delays[i] = del_tau * self.get_Q(i)
+                Q_matrix_all_delays[i] = del_tau * self.get_Q(i) * integral_beam
 
             q_response = np.zeros((self.spw_Ndlys,self.spw_Ndlys), dtype='complex128')
 
@@ -2107,28 +2114,64 @@ class PSpecData(object):
 
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
+    
+    def get_integral_beam(self, pol=False):
+        """
+        Computes the integral containing the spectral beam and tapering 
+        function in Q_alpha(i,j).
 
+        Parameters
+        ----------
+
+        pol : str/int/bool, optional
+            Which beam polarization to use. If the specified polarization 
+            doesn't exist, a uniform isotropic beam (with integral 4pi for all 
+            frequencies) is assumed. Default: False (uniform beam).
+
+        Return
+        -------
+        integral_beam : array_like
+            integral containing the spectral beam and tapering.
+        """
+        nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
+
+        try:
+            # Get beam response in (frequency, pixel), beam area(freq) and 
+            # Nside, used in computing dtheta
+            beam_res, beam_omega, N = \
+                self.primary_beam.beam_normalized_response(pol, nu) 
+            prod = 1. / beam_omega
+            beam_prod = beam_res * prod[:, np.newaxis]
+            
+            # beam_prod has omega subsumed, but taper is still part of R matrix
+            # The nside term is dtheta^2, where dtheta is the resolution in 
+            # healpix map
+            integral_beam = np.pi/(3.*N*N) * np.dot(beam_prod, beam_prod.T)
+                                                                 
+        except(AttributeError):
+            warnings.warn("The beam response could not be calculated. "
+                          "PS will not be normalized!")
+            integral_beam = np.ones((len(nu), len(nu)))
+
+        return integral_beam
+    
+    
     def get_Q(self, mode):
-        '''
-        Computes Q_alpha(i,j), which is the response of the data covariance to the bandpower (dC/dP_alpha).
-        This includes contributions from primary beam.
+        """
+        Computes Q_alpha(i,j), which is the response of the data covariance to 
+        the bandpower (dC/dP_alpha). This includes contributions from primary 
+        beam.
 
         Parameters
         ----------
         mode : int
             Central wavenumber (index) of the bandpower, p_alpha.
 
-        pol : str/int/bool, optional
-            Which beam polarization to use. If the specified polarization doesn't exist,
-            a uniform isotropic beam (with integral 4pi for all frequencies) is assumed.
-            Default: False (uniform beam).
-
         Return
         -------
-        Q : array_like
-            Response matrix for bandpower p_alpha.
-        '''
-
+        Q_alt : array_like
+            Exponential part of Q (HERA memo #44, Eq. 11).
+        """
         if self.spw_Ndlys == None:
             self.set_Ndlys()
         if mode >= self.spw_Ndlys:
@@ -2139,24 +2182,9 @@ class PSpecData(object):
 
         tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
-        pol = self.pol
-
-        try:
-            beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(pol, nu)
-            #Get beam response in (frequency, pixel), beam area(freq) and Nside, used in computing dtheta.
-            prod          = (1.0/beam_omega)
-            beam_prod     = beam_res * prod[:, np.newaxis]
-            integral_beam = (np.pi/(3.0*(N)**2))* \
-                                      np.dot(beam_prod, beam_prod.T) #beam_prod has omega subsumed, but taper is still part of R matrix
-                                                                     # the nside terms is dtheta^2, where dtheta is the resolution in healpix map
-        except(AttributeError):
-            warnings.warn('The beam response could not be calculated. PS will not be normalized!')
-            integral_beam = np.ones((len(nu), len(nu)))
-
-        eta_int = np.exp(-2j * np.pi * tau * nu) #exponential part of the expression
-        Q_alt   = np.einsum('i,j', eta_int.conj(), eta_int) # dot it with its conjugate
-        Q       = Q_alt * integral_beam
-        return Q
+        eta_int = np.exp(-2j * np.pi * tau * nu) # exponential part
+        Q_alt = np.einsum('i,j', eta_int.conj(), eta_int) # dot with conjugate
+        return Q_alt
 
     def p_hat(self, M, q):
         """
@@ -2180,7 +2208,8 @@ class PSpecData(object):
     def cov_p_hat(self, M, q_cov):
         """
         Covariance estimate between two different band powers p_alpha and p_beta
-        given by M_{alpha i} M^*_{beta,j} C_q^{ij} where C_q^{ij} is the q-covariance
+        given by M_{alpha i} M^*_{beta,j} C_q^{ij} where C_q^{ij} is the 
+        q-covariance.
 
         Parameters
         ----------
@@ -2195,7 +2224,8 @@ class PSpecData(object):
             p_cov[tnum] = np.einsum('ab,cd,bd->ac', M, M, q_cov[tnum])
         return p_cov
 
-    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, unflag=False):
+    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, 
+                             unflag=False):
         """
         For each dataset in self.dset, update the flag_array such that
         the flagging patterns are time-independent for each baseline given
@@ -2208,8 +2238,9 @@ class PSpecData(object):
 
         Additionally, one can also unflag the flag_array entirely if desired.
 
-        Note: although technically allowed, this function may give unexpected results
-        if multiple spectral windows in spw_ranges have frequency overlap.
+        Note: although technically allowed, this function may give unexpected 
+        results if multiple spectral windows in spw_ranges have frequency 
+        overlap.
 
         Note: it is generally not recommended to set time_thresh > 0.5, which
         could lead to substantial amounts of data being flagged.
@@ -2219,11 +2250,12 @@ class PSpecData(object):
         spw_ranges : list of tuples
             list of len-2 spectral window tuples, specifying the start (inclusive)
             and stop (exclusive) index of the frequency array for each spw.
-            Default is to use the whole band
+            Default is to use the whole band.
 
         time_thresh : float
-            Fractional threshold of flagged pixels across time needed to flag all times
-            per freq channel. It is not recommend to set this greater than 0.5
+            Fractional threshold of flagged pixels across time needed to flag 
+            all times per freq channel. It is not recommend to set this greater 
+            than 0.5.
 
         unflag : bool
             If True, unflag all data in the spectral window.
@@ -2237,7 +2269,8 @@ class PSpecData(object):
         # spw type check
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
-        assert isinstance(spw_ranges, list), "spw_ranges must be fed as a list of tuples"
+        assert isinstance(spw_ranges, list), \
+            "spw_ranges must be fed as a list of tuples"
 
         # iterate over datasets
         for dset in self.dsets:
@@ -2247,7 +2280,7 @@ class PSpecData(object):
                 # unflag
                 if unflag:
                     # unflag for all times
-                    dset.flag_array[:, :, self.spw_range[0]:self.spw_range[1], :] = False
+                    dset.flag_array[:,:,self.spw_range[0]:self.spw_range[1],:] = False
                     continue
                 # enact time threshold on flag waterfalls
                 # iterate over polarizations
@@ -2656,8 +2689,12 @@ class PSpecData(object):
             If True, estimates power spectrum using Q instead of Q_alt
             (HERA memo #44), where q = R_1 x_1 Q R_2 x_2. 
             The default options is False. Beware that
-            turning this True would take ~ 7 sec for computing
-            power spectrum for 100 channels per time sample per baseline.
+            turning this True would take ~ 0.2 sec for computing
+            power spectrum for 100 channels per time sample per baseline. 
+	        If False, computing a power spectrum for 100 channels would 
+    	    take ~ 0.04 sec per time sample per baseline. This means 
+    	    that computing a power spectrum when exact_norm is set to 
+    	    False runs five times faster than setting it to True.
 
         exact_Q : boolean, optional
             exact_Q may lead to misconceptions with exact_norm. 
@@ -2863,6 +2900,7 @@ class PSpecData(object):
         cov_array_imag = odict([[cov_model, odict()] for cov_model in cov_models])
         cov_array_q_real = odict([[cov_model, odict()] for cov_model in cov_models])
         cov_array_q_imag = odict([[cov_model, odict()] for cov_model in cov_models])
+        window_function = odict()
         time1 = []
         time2 = []
         lst1 = []
@@ -2899,6 +2937,7 @@ class PSpecData(object):
             spw_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
             spw_cov_q_real = odict([[cov_model, []] for cov_model in cov_models])
             spw_cov_q_imag = odict([[cov_model, []] for cov_model in cov_models])
+            spw_window_function = []
 
             d = self.delays() * 1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
@@ -2929,6 +2968,7 @@ class PSpecData(object):
                 pol_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
                 pol_cov_q_real = odict([[cov_model, []] for cov_model in cov_models])
                 pol_cov_q_imag = odict([[cov_model, []] for cov_model in cov_models])
+                pol_window_function = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
@@ -3096,6 +3136,8 @@ class PSpecData(object):
                                 pol_cov_q_imag[cov_model].extend(
                                                         cov_q_imag[cov_model] ) 
 
+                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0))
+
                     # Get baseline keys
                     if isinstance(blp, list):
                         bl1 = blp[0][0]
@@ -3162,6 +3204,7 @@ class PSpecData(object):
                 [spw_cov_imag[cov_model].append(pol_cov_imag[cov_model]) for cov_model in cov_models]
                 [spw_cov_q_real[cov_model].append(pol_cov_q_real[cov_model]) for cov_model in cov_models]
                 [spw_cov_q_imag[cov_model].append(pol_cov_q_imag[cov_model]) for cov_model in cov_models]
+                spw_window_function.append(pol_window_function)
  
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
@@ -3173,6 +3216,7 @@ class PSpecData(object):
                 spw_cov_imag[cov_model] = np.moveaxis(np.array(spw_cov_imag[cov_model]), 0, -1)
                 spw_cov_q_real[cov_model] = np.moveaxis(np.array(spw_cov_q_real[cov_model]), 0, -1)
                 spw_cov_q_imag[cov_model] = np.moveaxis(np.array(spw_cov_q_imag[cov_model]), 0, -1)
+            spw_window_function = np.moveaxis(np.array(spw_window_function), 0, -1)
 
             data_array[i] = spw_data
             data_array_q[i] = spw_data_q
@@ -3181,6 +3225,7 @@ class PSpecData(object):
                 cov_array_imag[cov_model][i] = spw_cov_imag[cov_model]
                 cov_array_q_real[cov_model][i] = spw_cov_q_real[cov_model]
                 cov_array_q_imag[cov_model][i] = spw_cov_q_imag[cov_model]
+            window_function[i] = spw_window_function
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
@@ -3265,6 +3310,7 @@ class PSpecData(object):
         if store_cov:
             uvp.cov_array_real = cov_array_real
             uvp.cov_array_imag = cov_array_imag
+        uvp.window_function = window_function
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(
