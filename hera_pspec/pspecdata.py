@@ -1441,7 +1441,7 @@ class PSpecData(object):
 
         return auto_term + cross_term
 
-    def get_MW(self, G, H, mode='I', band_covar=None):
+    def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False):
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -1485,6 +1485,10 @@ class PSpecData(object):
             covariance to put in here, or provide your own array.
             Default: None
 
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details). Currently, this is supported only for mode I
+
         Returns
         -------
         M : array_like
@@ -1506,6 +1510,9 @@ class PSpecData(object):
         # Check that mode is supported
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1']
         assert(mode in modes)
+
+        if mode!='I' and exact_norm==True:
+            raise NotImplementedError("Exact norm is not supported for non-I modes")
 
         # Build M matrix according to specified mode
         if mode == 'H^-1':
@@ -2522,9 +2529,9 @@ class PSpecData(object):
                     if verbose: print("  Normalizing power spectrum...")
                     if norm == 'V^-1/2':
                         V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol)
-                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat)
+                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
                     else:
-                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm)
+                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar

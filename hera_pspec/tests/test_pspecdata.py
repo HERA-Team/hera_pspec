@@ -473,6 +473,17 @@ class Test_PSpecData(unittest.TestCase):
             diff_norm = np.linalg.norm(matrix.T.conj() - matrix)
             self.assertLessEqual(diff_norm, multiplicative_tolerance)
 
+        #Test for the correct shape when exact_norm is True
+        ds_c = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'], beam=self.bm)
+        ds_c.spw_Ndlys = 10
+        random_R = generate_pos_def_all_pos(ds_c.spw_Nfreqs)
+        wgt_matrix_dict = {} 
+        wgt_matrix_dict[('red', (24, 25))] = random_R
+        wgt_matrix_dict[('blue', (24, 25))] = random_R
+        ds_c.set_R(wgt_matrix_dict)
+        E_matrices = ds_c.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), exact_norm=True, pol='xx')
+        self.assertEqual(E_matrices.shape, (ds_c.spw_Ndlys, ds_c.spw_Nfreqs, ds_c.spw_Nfreqs))
+
         # Test that if R1 != R2, then i) E^{12,dagger} = E^{21}
         random_R2 = generate_pos_def_all_pos(ds.spw_Nfreqs)
         wgt_matrix_dict = {}
@@ -576,6 +587,7 @@ class Test_PSpecData(unittest.TestCase):
         random_V = generate_pos_def_all_pos(n)
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
+        nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode='H^-1', exact_norm=True)
 
         for mode in ['H^-1', 'V^-1/2', 'I', 'L^-1']:
             if mode == 'H^-1':
