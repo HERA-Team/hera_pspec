@@ -790,11 +790,24 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
         """
         assert isinstance(key, tuple)
-        # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-        Rkey = key + (self.data_weighting,) + (self.taper,)
-
+        r_param_key = (self.data_weighting,) + key
+        if not r_param_key in self.r_params:
+            r_params = {}
+        else:
+            r_params = self.r_params[r_param_key]
+        #Allows for truncation after filtering and before Fourier transform
+        #to be encoded in R-params. Provides better signal loss properties and
+        #enables jackknifes between independent bands.
+        if not 'truncation_window' in r_params:
+            fstart = self.freqs[self.spw_range[0]]
+            fend = self.freqs[self.spw_range[1]-1]
+        else:
+            fstart = r_params['truncation_window']['start_frequency']
+            fend = r_params['truncation_window']['end_frequency']
+        # parse key
+        Rkey = key + (self.data_weighting,) + (self.taper, fstart, fend)
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -811,26 +824,26 @@ class PSpecData(object):
             sqrtT[np.isnan(sqrtT)] = 0.0
             sqrtY[np.isnan(sqrtY)] = 0.0
 
+            tmat = np.diag((np.logical_and(self.freqs[self.spw_range[0]:self.spw_range[1]]>=fstart,
+                            self.freqs[self.spw_range[0]:self.spw_range[1]]<=fend)).astype(np.complex))
+
             # form R matrix
             if self.data_weighting == 'identity':
-                self._R[Rkey] = sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT
+                self._R[Rkey] = np.dot(tmat, sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT)
 
             elif self.data_weighting == 'iC':
-                self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
+                self._R[Rkey] = np.dot(tmat, sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT)
 
             elif self.data_weighting == 'sinc_downweight':
-                r_param_key = (self.data_weighting,) + key
-                if not r_param_key in self.r_params:
-                    raise ValueError("Error: no filter params specified for "
-                                    "sinc weights! ")
-                else:
-                    r_params = self.r_params[r_param_key]
-
+                if not 'filter_centers' in r_params or\
+                   not 'filter_widths' in r_params or\
+                   not  'filter_factors' in r_params:
+                       raise ValueError("filtering parameters not specified!")
                 #This line retrieves a the psuedo-inverse of a lazy covariance
                 #matrix given by dspec.sinc_downweight_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 #to apply flagging weights before taking psuedo inverse.
-                self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
+                self._R[Rkey] = np.dot(tmat, sqrtT.T * np.linalg.pinv(sqrtY.T * \
                 dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs,
                                     df=np.median(np.diff(self.freqs)),
                                     filter_centers=r_params['filter_centers'],

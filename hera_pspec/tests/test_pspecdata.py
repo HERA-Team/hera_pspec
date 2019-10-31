@@ -335,8 +335,8 @@ class Test_PSpecData(unittest.TestCase):
 
         # Check for error handling
         nt.assert_raises(ValueError, self.ds.set_Ndlys, vect_length+100)
-    
-        
+
+
     def test_get_Q(self):
         """
         Test the Q = dC_ij/dp function.
@@ -370,7 +370,7 @@ class Test_PSpecData(unittest.TestCase):
                 self.assertEqual(self.ds.spw_Ndlys, self.ds.spw_Nfreqs)
             except IndexError:
                 Q_matrix = np.ones((vect_length, vect_length))
-            
+
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
             xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
@@ -429,16 +429,16 @@ class Test_PSpecData(unittest.TestCase):
         """
         Test the integral of the beam and tapering function in Q.
         """
-        pol = 'xx' 
+        pol = 'xx'
         #Test if there is a warning if user does not pass the beam
         uvd = copy.deepcopy(self.uvd)
         ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], beam=self.bm)
-        
+
         with warnings.catch_warnings(record=True) as w:
             ds_t.get_integral_beam(pol)
         assert len(w) > 0
-        
+
         try:
             integral_matrix = ds.get_integral_beam(pol)
             # Test that if the number of delay bins hasn't been set
@@ -446,7 +446,7 @@ class Test_PSpecData(unittest.TestCase):
             self.assertEqual(ds.spw_Ndlys, ds.spw_Nfreqs)
         except IndexError:
             integral_matrix = np.ones((ds.spw_Ndlys, ds.spw_Ndlys))
-            
+
         # Test that integral matrix has the right shape
         self.assertEqual(integral_matrix.shape, (ds.spw_Nfreqs, ds.spw_Nfreqs))
 
@@ -670,7 +670,7 @@ class Test_PSpecData(unittest.TestCase):
                 cov_analytic[alpha, beta] = np.exp(-2j*np.pi*(alpha-beta)*(chan_x-chan_y)/self.ds.spw_Ndlys).sum()
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-        print(cov_analytic)
+        #print(cov_analytic)
 
         for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
@@ -715,6 +715,41 @@ class Test_PSpecData(unittest.TestCase):
                     self.assertTrue(np.isclose(30., cov_p[0, p, q], atol=1e-6))
                 else:
                     self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
+
+    def test_R_truncation(self):
+        """
+        Test truncation of R-matrices. These should give a q_hat that is all
+        zeros outside of the with f-start and f-end.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        Ntime = self.ds.Ntimes
+        Ndlys = Nfreq - 3
+        self.ds.spw_Ndlys = Ndlys
+
+
+        # Set baselines to use for tests
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        key3 = [(0, 24, 38), (0, 24, 38)]
+        key4 = [(1, 25, 38), (1, 25, 38)]
+        fmin = self.ds.freqs[10]
+        fmax = self.ds.freqs[-10]
+        rpk1 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9],
+               'truncation_window':{'start_frequency':fmin,'end_frequency':fmax}}
+        rpk2 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9]}
+        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_r_param(key1,rpk1)
+        self.ds.set_r_param(key2,rpk2)
+        self.ds.set_Ndlys(self.ds.spw_Nfreqs - 20)
+        fx, fy = np.meshgrid(self.ds.freqs,self.ds.freqs)
+        qts_1d = np.logical_or(fy < fmin, fy > fmax)
+        #test that all values of q matrix outside of selected band are zero.
+        rm1 = self.ds.R(key1)
+        rm2 = self.ds.R(key2)
+        self.assertTrue(np.all(rm1[qts_1d] == 0.))
+        #check that all values that are not truncated match values of untrancated matrix.
+        self.assertTrue(np.all(np.isclose(rm1[~qts_1d], rm2[~qts_1d], atol=1e-6)))
 
     def test_q_hat(self):
         """
@@ -1467,7 +1502,6 @@ class Test_PSpecData(unittest.TestCase):
         uvd = copy.deepcopy(self.uvd)
         uvd.flag_array[:] = False
         Nfreq = uvd.data_array.shape[2]
-
         # Basic test of shape
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         test_R = ds.R((1, 37, 38, 'XX'))
@@ -1529,7 +1563,7 @@ class Test_PSpecData(unittest.TestCase):
         # # assert answers are same to within 3%
         # nt.assert_true(np.isclose(np.real(qe_flagged_asymm)/np.real(qe_flagged), 1, atol=0.03, rtol=0.03).all())
 
-        print(uvd.data_array.shape)
+        #print(uvd.data_array.shape)
 
     def test_validate_blpairs(self):
         # test exceptions
