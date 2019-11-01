@@ -737,11 +737,7 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         #print(cov_analytic)
 
-<<<<<<< HEAD
         for input_data_weight in ['identity','iC', 'dayenu']:
-=======
-        for input_data_weight in ['identity','iC','sinc_downweight']:
->>>>>>> consolidated covariance calculations.
             self.ds.set_weighting(input_data_weight)
             #check error raised
             if input_data_weight == 'dayenu':
@@ -762,13 +758,6 @@ class Test_PSpecData(unittest.TestCase):
         """
         self.ds.set_weighting('identity')
         qc = self.ds.cov_q_hat(key1, key2, model='dsets')
-<<<<<<< HEAD
-=======
-        print('numerical')
-        print(qc[0,0,:])
-        print('analytic')
-        print(cov_analytic[0,:])
->>>>>>> consolidated covariance calculations.
         self.assertTrue(np.allclose(qc,
                         np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
         """
