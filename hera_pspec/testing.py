@@ -74,6 +74,7 @@ def build_vanilla_uvpspec(beam=None):
     label1 = 'red'
     label2 = 'blue'
     r_params = ''
+    cov_model = 'dsets'
     labels = np.array([label1, label2])
     label_1_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 0
     label_2_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 1
@@ -115,7 +116,7 @@ def build_vanilla_uvpspec(beam=None):
               'norm', 'git_hash', 'nsample_array', 'time_avg_array',
               'lst_avg_array', 'cosmo', 'scalar_array', 'labels', 'norm_units',
               'labels', 'label_1_array', 'label_2_array', 'store_cov',
-              'cov_array', 'spw_dly_array', 'spw_freq_array']
+              'cov_array', 'spw_dly_array', 'spw_freq_array', 'cov_model']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
@@ -201,8 +202,10 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         uvd_std = None
     if uvd_std is not None:
         store_cov = True
+        cov_model = "dsets"
     else:
         store_cov = False
+        cov_model = "empirical"
 
     # get pol
     pol = uvd.polarization_array[0]
@@ -234,7 +237,8 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     # run pspec
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
-                   store_cov=store_cov, n_dlys=n_dlys, r_params=r_params)
+                   store_cov=store_cov, n_dlys=n_dlys, r_params=r_params,
+                   cov_model=cov_model)
 
     return uvp
 

@@ -2736,6 +2736,7 @@ class PSpecData(object):
         uvp.data_array = data_array
         if store_cov:
             uvp.cov_array = cov_array
+            uvp.cov_model = cov_model
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(
@@ -3437,7 +3438,7 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_len_range", default=(0, 1e10), nargs='+', type=float, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
     a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
-    a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files.")
+    a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files or empirical covarianc.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--cov_model", default='empirical', type=str, help="Model for computing covariance, currently supports empirical or dsets")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
