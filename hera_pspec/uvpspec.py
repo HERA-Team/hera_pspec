@@ -36,6 +36,8 @@ class UVPSpec(object):
                 'corresponding to that weighting.')
         self._r_params = PSpecParam("r_params", description = desc, expected_type = str)
         # Data attributes
+        desc = ("A string indicating what covariance model was used for calculating cov array. Only required if covariance is stored.")
+        self._cov_model = PSpecParam("cov_model", description=desc, expected_type=str)
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
@@ -116,7 +118,7 @@ class UVPSpec(object):
         # groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys",
                             "Nspwfreqs", "Nspws", "Ndlys", "Npols", "Nfreqs",
-                            "history", "r_params",
+                            "history", "r_params", "cov_model",
                             "Nbls", "channel_width", "weighting", "vis_units",
                             "norm", "norm_units", "taper", "cosmo", "beamfile",
                             'folded']
@@ -1981,7 +1983,6 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
 
     # Store covariance only if all uvps have stored covariance.
     store_cov = np.all([hasattr(uvp, 'cov_array') for uvp in uvps])
-
     # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
@@ -1989,6 +1990,8 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.nsample_array = odict()
     if store_cov:
         u.cov_array = odict()
+        #cov_model will track whether error bars are from cmobination of techniques
+        u.cov_model = ','.join([uvp.cov_model for uvp in uvps])
     u.scalar_array = np.empty((Nspws, Npols), np.float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     u.spw_dly_array, u.spw_freq_array = [], []

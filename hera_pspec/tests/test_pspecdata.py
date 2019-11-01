@@ -692,11 +692,7 @@ class Test_PSpecData(unittest.TestCase):
         Now test that analytic Error calculation gives Nchan^2
         """
         self.ds.set_weighting('identity')
-        qc = self.ds.cov_q_hat(key1, key2, model='dsets')
-        print('numerical')
-        print(qc[0,0,:])
-        print('analytic')
-        print(cov_analytic[0,:])
+        qc = self.ds.cov_q_hat(key1, key2, model='dsets')ß
         self.assertTrue(np.allclose(qc,
                         np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
         """
