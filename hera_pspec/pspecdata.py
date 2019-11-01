@@ -572,7 +572,7 @@ class PSpecData(object):
         # type check
         assert isinstance(key, tuple), "key must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
-        assert model in ['empirical'], "didn't recognize model {}".format(model)
+        assert model in ['empirical', 'dsets'], "didn't recognize model {}".format(model)
         # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
@@ -591,7 +591,7 @@ class PSpecData(object):
             if model == 'empirical':
                 self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
             elif model == 'dsets':
-                self.set_C({Ckey: np.diag(self.w(key)[time_index] * self.dx(key)[time_index]) ** 2.})
+                self.set_C({Ckey: np.diag( np.abs(self.w(key)[:,time_index] * self.dx(key)[:,time_index]) ** 2. )})
 
 
         return self._C[Ckey]
@@ -626,11 +626,11 @@ class PSpecData(object):
             Cross covariance model for the specified key.
         """
         # type check
+        assert isinstance(key1, tuple), "key1 must be fed as a tuple"
+        assert isinstance(key2, tuple), "key2 must be fed as a tuple"
+        assert isinstance(model, (str, np.str)), "model must be a string"
+        assert model in ['empirical', 'dsets'], "didn't recognize model {}".format(model)
         if model == 'empirical':
-            assert isinstance(key1, tuple), "key1 must be fed as a tuple"
-            assert isinstance(key2, tuple), "key2 must be fed as a tuple"
-            assert isinstance(model, (str, np.str)), "model must be a string"
-            assert model in ['empirical', 'dsets'], "didn't recognize model {}".format(model)
             # parse key
             dset, bl = self.parse_blkey(key1)
             key1 = (dset,) + (bl,)
@@ -641,8 +641,8 @@ class PSpecData(object):
                               self.x(key2), self.w(key2),
                               conj_1=conj_1, conj_2=conj_2)
         elif model == 'dsets':
-            covar = np.zeros((self.dx(key1).shape[-1],
-                              self.dx(key1).shape[-1]),
+            covar = np.zeros((self.spw_Nfreqs,
+                              self.spw_Nfreqs),
                               dtype=complex)
         #for dsets, we assume no baseline-baseline covariances.
         return covar
@@ -998,21 +998,34 @@ class PSpecData(object):
             time_indices = [time_indices]
         if not isinstance(time_indices, list):
             raise ValueError("time_indices must be an integer or list of integers.")
-
+        if isinstance(key1,list):
+            assert isinstance(key2, list), "key1 is a list, key2 must be a list"
+            assert len(key2) == len(key1), "key1 length must equal key2 length"
+        if isinstance(key2,list):
+            assert isinstance(key1, list), "key2 is a list, key1 must be a list"
         #check time_indices
         for tind in time_indices:
             if not (tind >= 0 and tind <= self.Ntimes):
                 raise ValueError("Invalid time index provided.")
 
-        if model == 'dsets':
-            return np.asarray([self.get_unnormed_V(key1, key2, model=model,
-                              exact_norm=exact_norm, pol=pol,time_index=t)\
-                              for t in time_indices])
-        elif model == 'empirical':
-            cm = self.get_unnormed_V(key1, key2, model=model,
-                              exact_norm=exact_norm, pol=pol)
-            return np.asarray([cm for m in range(len(time_indices))])
+        if not isinstance(key1,list):
+            key1 = [key1]
+        if not isinstance(key2,list):
+            key2 = [key2]
 
+        output = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
+        for k1, k2 in zip(key1, key2):
+            if model == 'dsets':
+                output+=1./np.asarray([self.get_unnormed_V(k1, k2, model=model,
+                                  exact_norm=exact_norm, pol=pol, time_index=t)\
+                                  for t in time_indices])
+
+            elif model == 'empirical':
+                cm = self.get_unnormed_V(k1, k2, model=model,
+                                  exact_norm=exact_norm, pol=pol)
+                output+=1./np.asarray([cm for m in range(len(time_indices))])
+
+        return float(len(key1)) / output
 
     def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
         """

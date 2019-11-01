@@ -672,7 +672,7 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         #print(cov_analytic)
 
-        for input_data_weight in ['identity']:#,'iC','sinc_downweight']:
+        for input_data_weight in ['identity','iC','sinc_downweight']:
             self.ds.set_weighting(input_data_weight)
             #check error raised
             if input_data_weight == 'sinc_downweight':
@@ -681,8 +681,10 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
-                qc = self.ds.cov_q_hat(key1,key2)
-                print(qc)
+                qc = self.ds.cov_q_hat(key1,key2,model='dsets')
+                self.assertTrue(np.allclose(np.array(list(qc.shape)),
+                np.array([self.ds.Ntimes, self.ds.spw_Ndlys, self.ds.spw_Ndlys]), atol=1e-6))
+                qc = self.ds.cov_q_hat(key1,key2,model='empirical')
                 self.assertTrue(np.allclose(np.array(list(qc.shape)),
                 np.array([self.ds.Ntimes, self.ds.spw_Ndlys, self.ds.spw_Ndlys]), atol=1e-6))
 
@@ -690,18 +692,22 @@ class Test_PSpecData(unittest.TestCase):
         Now test that analytic Error calculation gives Nchan^2
         """
         self.ds.set_weighting('identity')
-        qc = self.ds.cov_q_hat(key1, key2)
+        qc = self.ds.cov_q_hat(key1, key2, model='dsets')
+        print('numerical')
+        print(qc[0,0,:])
+        print('analytic')
+        print(cov_analytic[0,:])
         self.assertTrue(np.allclose(qc,
                         np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
         """
         Test lists of keys
         """
         self.ds.set_weighting('identity')
-        qc=self.ds.cov_q_hat([key1], [key2], time_indices=[0])
+        qc=self.ds.cov_q_hat([key1], [key2], time_indices=[0], model='dsets')
         self.assertTrue(np.allclose(qc,
                         np.repeat(cov_analytic[np.newaxis, :, :], self.ds.Ntimes, axis=0), atol=1e-6))
-        self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, 200)
-        self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, "watch out!")
+        self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, time_indices=200)
+        self.assertRaises(ValueError, self.ds.cov_q_hat, key1, key2, time_indices="watch out!")
 
 
     def test_cov_p_hat(self):
