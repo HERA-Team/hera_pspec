@@ -1825,9 +1825,6 @@ class PSpecData(object):
             # FFT to transform to frequency space
             m = np.fft.fft(np.fft.ifftshift(_m))
         else:
-            nfreq = self.spw_Nfreqs
-            if include_extension:
-                nfreq = nfreq + np.sum(self.filter_extension)
             if self.spw_Ndlys % 2 == 0:
                 start_idx = -self.spw_Ndlys/2
             else:
