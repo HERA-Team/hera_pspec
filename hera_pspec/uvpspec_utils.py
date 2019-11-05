@@ -132,15 +132,19 @@ def compress_r_params(r_params_dict):
         r_params_index = -1
         for rp in r_params_dict:
             #do not include data set in tuple key
-            already_in = False
-            for rpu in r_params_unique:
-                if r_params_unique[rpu] == r_params_dict[rp]:
-                    r_params_unique_bls[rpu] += [rp,]
-                    already_in = True
-            if not already_in:
-                r_params_index += 1
-                r_params_unique[r_params_index] = copy.copy(r_params_dict[rp])
-                r_params_unique_bls[r_params_index] = [rp,]
+            if not rp in ['filter_extension']:
+                already_in = False
+                for rpu in r_params_unique:
+                    if r_params_unique[rpu] == r_params_dict[rp]:
+                        r_params_unique_bls[rpu] += [rp,]
+                        already_in = True
+                if not already_in:
+                    r_params_index += 1
+                    r_params_unique[r_params_index] = copy.copy(r_params_dict[rp])
+                    r_params_unique_bls[r_params_index] = [rp,]
+            else:
+                r_params_unique[rp] = r_params_dict[rp]
+
         for rpi in r_params_unique:
             r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
         r_params_str = json.dumps(r_params_unique)
@@ -173,12 +177,15 @@ def decompress_r_params(r_params_str):
     if r_params_str != '' and not r_params_str is None:
         r_params = json.loads(r_params_str)
         for rpi in r_params:
-            rp_dict = {}
-            for r_field in r_params[rpi]:
-                if not r_field == 'baselines':
-                    rp_dict[r_field] = r_params[rpi][r_field]
-            for blkey in r_params[rpi]['baselines']:
-                decompressed_r_params[tuple(blkey)] = rp_dict
+            if not rpi in ['filter_extension']:
+                rp_dict = {}
+                for r_field in r_params[rpi]:
+                    if not r_field == 'baselines':
+                        rp_dict[r_field] = r_params[rpi][r_field]
+                for blkey in r_params[rpi]['baselines']:
+                    decompressed_r_params[tuple(blkey)] = rp_dict
+            else:
+                decompress_r_params[rpi] = r_params[rpi]
     else:
         decompressed_r_params = {}
     return decompressed_r_params

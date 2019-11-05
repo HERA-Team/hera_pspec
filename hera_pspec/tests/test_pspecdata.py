@@ -725,7 +725,7 @@ class Test_PSpecData(unittest.TestCase):
         zeros outside of the with f-start and f-end.
         """
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
-        Nfreq = self.ds.Nfreqs
+        Nfreq = self.ds.spw_Nfreqs
         Ntime = self.ds.Ntimes
         Ndlys = Nfreq - 3
         self.ds.spw_Ndlys = Ndlys
@@ -736,23 +736,22 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
-        fmin = self.ds.freqs[10]
-        fmax = self.ds.freqs[-10]
-        rpk1 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9],
-               'truncation_window':{'start_frequency':fmin,'end_frequency':fmax}}
+
+        rpk1 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9]}
         rpk2 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9]}
         self.ds.set_weighting('sinc_downweight')
         self.ds.set_r_param(key1,rpk1)
         self.ds.set_r_param(key2,rpk2)
-        self.ds.set_Ndlys(self.ds.spw_Nfreqs - 20)
-        fx, fy = np.meshgrid(self.ds.freqs,self.ds.freqs)
-        qts_1d = np.logical_or(fy < fmin, fy > fmax)
-        #test that all values of q matrix outside of selected band are zero.
+        ds1 = copy.deepcopy(self.ds)
+        ds1.set_spw((10,Nfreq-10))
+        ds1.set_filter_extension([10,10])
+        ds1.set_filter_extension((10,10))
         rm1 = self.ds.R(key1)
-        rm2 = self.ds.R(key2)
-        self.assertTrue(np.all(rm1[qts_1d] == 0.))
+        rm2 = ds1.R(key2)
+        self.assertTrue(np.shape(rm2) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
         #check that all values that are not truncated match values of untrancated matrix.
-        self.assertTrue(np.all(np.isclose(rm1[~qts_1d], rm2[~qts_1d], atol=1e-6)))
+        self.assertTrue(np.all(np.isclose(rm1[10:-10], rm2, atol=1e-6)))
+
 
     def test_q_hat(self):
         """

@@ -67,6 +67,7 @@ class PSpecData(object):
         # r_params is a dictionary that stores parameters for
         # parametric R matrices.
         self.r_params = {}
+        self.r_params['filter_extension'] = [0, 0]
         self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
@@ -478,7 +479,8 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0], self.spw_range[1])
+        spw = slice(self.spw_range[0]-self.r_params['filter_extension'][0],
+                    self.spw_range[1]+self.r_params['filter_extension'][1])
         return self.dsets[dset].get_data(bl).T[spw]
 
     def dx(self, key):
@@ -500,8 +502,8 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0], self.spw_range[1])
-
+        spw = slice(self.spw_range[0]-self.r_params['filter_extension'][0],
+                    self.spw_range[1]+self.r_params['filter_extension'][1])
         return self.dsets_std[dset].get_data(bl).T[spw]
 
     def w(self, key):
@@ -522,8 +524,8 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0], self.spw_range[1])
-
+        spw = slice(self.spw_range[0]-self.r_params['filter_extension'][0],
+                    self.spw_range[1]+self.r_params['filter_extension'][1])
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T[spw]
         else:
@@ -805,22 +807,8 @@ class PSpecData(object):
         assert isinstance(key, tuple)
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-        r_param_key = (self.data_weighting,) + key
-        if not r_param_key in self.r_params:
-            r_params = {}
-        else:
-            r_params = self.r_params[r_param_key]
-        #Allows for truncation after filtering and before Fourier transform
-        #to be encoded in R-params. Provides better signal loss properties and
-        #enables jackknifes between independent bands.
-        if not 'truncation_window' in r_params:
-            fstart = self.freqs[self.spw_range[0]]
-            fend = self.freqs[self.spw_range[1]-1]
-        else:
-            fstart = r_params['truncation_window']['start_frequency']
-            fend = r_params['truncation_window']['end_frequency']
         # parse key
-        Rkey = key + (self.data_weighting,) + (self.taper, fstart, fend)
+        Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.r_params['filter_extension'])
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -836,18 +824,23 @@ class PSpecData(object):
             # in sqrt for some reason)
             sqrtT[np.isnan(sqrtT)] = 0.0
             sqrtY[np.isnan(sqrtY)] = 0.0
-
-            tmat = np.diag((np.logical_and(self.freqs[self.spw_range[0]:self.spw_range[1]]>=fstart,
-                            self.freqs[self.spw_range[0]:self.spw_range[1]]<=fend)).astype(np.complex))
-
+            fext = self.r_params['filter_extension']
+            #if we want to use a full-band filter, set the R-matrix to filter and then truncate.
+            tmat = np.zeros((self.spw_Nfreqs,
+                             self.spw_Nfreqs+np.sum(fext)),dtype=complex)
+            tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
             # form R matrix
             if self.data_weighting == 'identity':
-                self._R[Rkey] = np.dot(tmat, sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT)
+                self._R[Rkey] =  sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.I(key) * sqrtY)
 
             elif self.data_weighting == 'iC':
-                self._R[Rkey] = np.dot(tmat, sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT)
+                self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.iC(key) * sqrtY )
 
             elif self.data_weighting == 'sinc_downweight':
+                r_param_key = (self.data_weighting,) + key
+                if not r_param_key in self.r_params:
+                    raise ValueError("r_param not set for %s!"%str(r_param_key))
+                r_params = self.r_params[r_param_key]
                 if not 'filter_centers' in r_params or\
                    not 'filter_widths' in r_params or\
                    not  'filter_factors' in r_params:
@@ -856,14 +849,34 @@ class PSpecData(object):
                 #matrix given by dspec.sinc_downweight_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 #to apply flagging weights before taking psuedo inverse.
-                self._R[Rkey] = np.dot(tmat, sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs,
+                self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, np.linalg.pinv(sqrtY.T * \
+                dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
                                     df=np.median(np.diff(self.freqs)),
                                     filter_centers=r_params['filter_centers'],
                                     filter_widths=r_params['filter_widths'],
-                                    filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT)
+                                    filter_factors=r_params['filter_factors']) * sqrtY))
 
         return self._R[Rkey]
+
+    def set_filter_extension(self, filter_extension):
+        """
+        Set extensions to filtering matrix
+
+        Parameters
+        ----------
+        filter_extension: 2-tuple or 2-list
+            must be integers. Specify how many channels below spw_min/max
+            filter will be applied to data.
+            filter_extensions will be clipped to not extend beyond data range.
+        """
+        assert isinstance(filter_extension, (list, tuple)), "filter_extension must a tuple or list"
+        assert len(filter_extension) == 2, "filter extension must be length 2"
+        assert isinstance(filter_extension[0], int) and\
+               isinstance(filter_extension[1], int), "filter extension must contain only integers"
+        filter_extension=list(filter_extension)
+        filter_extension[0] = np.min([self.spw_range[0], filter_extension[0]])#clip extension to not extend beyond data range
+        filter_extension[1] = np.min([self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
+        self.r_params['filter_extension'] = filter_extension
 
     def set_weighting(self, data_weighting):
         """
