@@ -189,15 +189,12 @@ def decompress_r_params(r_params_str):
     if r_params_str != '' and not r_params_str is None:
         r_params = json.loads(r_params_str)
         for rpi in r_params:
-            if not rpi in ['filter_extension']:
-                rp_dict = {}
-                for r_field in r_params[rpi]:
-                    if not r_field == 'baselines':
-                        rp_dict[r_field] = r_params[rpi][r_field]
-                for blkey in r_params[rpi]['baselines']:
-                    decompressed_r_params[tuple(blkey)] = rp_dict
-            else:
-                decompress_r_params[rpi] = r_params[rpi]
+            rp_dict = {}
+            for r_field in r_params[rpi]:
+                if not r_field == 'baselines':
+                    rp_dict[r_field] = r_params[rpi][r_field]
+            for blkey in r_params[rpi]['baselines']:
+                decompressed_r_params[tuple(blkey)] = rp_dict
     else:
         decompressed_r_params = {}
     return decompressed_r_params
