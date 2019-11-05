@@ -67,7 +67,7 @@ class PSpecData(object):
         # r_params is a dictionary that stores parameters for
         # parametric R matrices.
         self.r_params = {}
-        self.r_params['filter_extension'] = [0, 0]
+        self.filter_extension = (0, 0)
         self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
@@ -479,8 +479,8 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0]-self.r_params['filter_extension'][0],
-                    self.spw_range[1]+self.r_params['filter_extension'][1])
+        spw = slice(self.spw_range[0]-self.filter_extension[0],
+                    self.spw_range[1]+self.filter_extension[1])
         return self.dsets[dset].get_data(bl).T[spw]
 
     def dx(self, key):
@@ -502,8 +502,8 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0]-self.r_params['filter_extension'][0],
-                    self.spw_range[1]+self.r_params['filter_extension'][1])
+        spw = slice(self.spw_range[0]-self.filter_extension[0],
+                    self.spw_range[1]+self.filter_extension[1])
         return self.dsets_std[dset].get_data(bl).T[spw]
 
     def w(self, key):
@@ -524,8 +524,8 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0]-self.r_params['filter_extension'][0],
-                    self.spw_range[1]+self.r_params['filter_extension'][1])
+        spw = slice(self.spw_range[0]-self.filter_extension[0],
+                    self.spw_range[1]+self.filter_extension[1])
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T[spw]
         else:
@@ -808,7 +808,7 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
         # parse key
-        Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.r_params['filter_extension'])
+        Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.filter_extension)
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -824,7 +824,7 @@ class PSpecData(object):
             # in sqrt for some reason)
             sqrtT[np.isnan(sqrtT)] = 0.0
             sqrtY[np.isnan(sqrtY)] = 0.0
-            fext = self.r_params['filter_extension']
+            fext = self.filter_extension
             #if we want to use a full-band filter, set the R-matrix to filter and then truncate.
             tmat = np.zeros((self.spw_Nfreqs,
                              self.spw_Nfreqs+np.sum(fext)),dtype=complex)
@@ -876,7 +876,7 @@ class PSpecData(object):
         filter_extension=list(filter_extension)
         filter_extension[0] = np.min([self.spw_range[0], filter_extension[0]])#clip extension to not extend beyond data range
         filter_extension[1] = np.min([self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
-        self.r_params['filter_extension'] = filter_extension
+        self.filter_extension = tuple(filter_extension)
 
     def set_weighting(self, data_weighting):
         """
@@ -2131,7 +2131,7 @@ class PSpecData(object):
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None,
-              baseline_tol=1.0, store_cov=False, verbose=True,
+              baseline_tol=1.0, store_cov=False, verbose=True, filter_extensions=None,
               exact_norm=False, history='', r_params=None, cov_model='empirical'):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
@@ -2226,6 +2226,9 @@ class PSpecData(object):
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
+
+        filter_extensions : list of 2-tuple or 2-list, optional
+            Set number of channels to extend filtering width.
 
         exact_norm : bool, optional
             If True, estimates power spectrum using Q instead of Q_alt
@@ -2351,10 +2354,16 @@ class PSpecData(object):
         # configure spectral window selections
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
-
-        # convert to list if only a tuple was given
         if isinstance(spw_ranges, tuple):
             spw_ranges = [spw_ranges,]
+
+        if filter_extensions is None:
+            filter_extensions = [(0, 0) for m in range(len(spw_ranges))]
+        # convert to list if only a tuple was given
+        if isinstance(filter_extensions, tuple):
+            filter_extensions = [filter_extensions,]
+
+        assert len(spw_ranges) == len(filter_extensions), "must provide same number of spw_ranges as filter_extensions"
 
         # Check that spw_ranges is list of len-2 tuples
         assert np.isclose([len(t) for t in spw_ranges], 2).all(), \
@@ -2410,14 +2419,13 @@ class PSpecData(object):
         sclr_arr = []
         blp_arr = []
         bls_arr = []
-
         # Loop over spectral windows
         for i in range(len(spw_ranges)):
             # set spectral range
             if verbose:
                 print( "\nSetting spectral range: {}".format(spw_ranges[i]))
             self.set_spw(spw_ranges[i])
-
+            self.set_filter_extension(filter_extensions[i])
             # set number of delay bins
             self.set_Ndlys(n_dlys[i])
 
@@ -2962,7 +2970,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True,
-              file_type='miriad', verbose=True, store_cov=False,
+              file_type='miriad', verbose=True, store_cov=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, cov_model='empirical'):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -3116,6 +3124,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     store_cov : boolean, optional
         If True, solve for covariance between bandpowers and store in
         output UVPSpec object.
+
+    filter_extensions : list of 2-tuple or 2-list, optional
+        Set number of channels to extend filtering width.
 
     overwrite : boolean
         If True, overwrite outputs if they exist on disk.
@@ -3394,7 +3405,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
                        norm=norm, taper=taper, history=history, verbose=verbose,
-                       cov_model=cov_model)
+                       cov_model=cov_model, filter_extensions=filter_extensions)
 
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
@@ -3456,6 +3467,7 @@ def get_pspec_run_argparser():
     a.add_argument("--cov_model", default='empirical', type=str, help="Model for computing covariance, currently supports empirical or dsets")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
+    a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20 20, 40 40' ->> [(20, 20), (40, 40), ...]")
     return a
 
 
