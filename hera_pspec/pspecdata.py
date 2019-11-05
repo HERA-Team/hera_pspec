@@ -808,7 +808,8 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
         # parse key
-        Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.filter_extension)
+        Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.filter_extension,)\
+                   + (self.spw_Nfreqs,)
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -1205,11 +1206,14 @@ class PSpecData(object):
         if (exact_norm):
             integral_beam = self.get_integral_beam(pol)
             del_tau = np.median(np.diff(self.delays()))*1e-9
+        if exact_norm:
+            qnorm =  del_tau * integral_beam
+        else:
+            qnorm = 1.
         for ch in range(self.spw_Ndlys):
-            if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
-            else: Q1 = self.get_Q_alt(ch)
-            Q2 = Q1
-            iR1Q1[ch] = np.dot(R1, Q1) # R_1 Q
+            Q1 = self.get_Q_alt(ch) * qnorm
+            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
+            iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
         for i in range(self.spw_Ndlys):
             for j in range(self.spw_Ndlys):
@@ -1296,24 +1300,28 @@ class PSpecData(object):
         R1 = self.R(key1)
         R2 = self.R(key2)
         if not sampling:
-            sinc_matrix = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs))
-            for i in range(self.spw_Nfreqs):
-                for j in range(self.spw_Nfreqs):
+            nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
+            sinc_matrix = np.zeros((nfreq, nfreq))
+            for i in range(nfreq):
+                for j in range(nfreq):
                     sinc_matrix[i,j] = np.float(i - j)
-            sinc_matrix = np.sinc(sinc_matrix / np.float(self.spw_Ndlys))
+            sinc_matrix = np.sinc(sinc_matrix / np.float(nfreq))
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
             integral_beam = self.get_integral_beam(pol)
             del_tau = np.median(np.diff(self.delays()))*1e-9
+        if exact_norm:
+            qnorm = del_tau * integral_beam
+        else:
+            qnorm = 1.
         for ch in range(self.spw_Ndlys):
-            if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
-            else: Q1 = self.get_Q_alt(ch)
-            Q2 = copy.deepcopy(Q1)
+            Q1 = self.get_Q_alt(ch) * qnorm
+            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
             if not sampling:
                 Q2 *= sinc_matrix
 
-            iR1Q1[ch] = np.dot(R1, Q1) # R_1 Q_alt
+            iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q_alt
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
 
         for i in range(self.spw_Ndlys): # this loop goes as nchan^4
@@ -1371,8 +1379,8 @@ class PSpecData(object):
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None")
-
-        E_matrices = np.zeros((self.spw_Ndlys, self.spw_Nfreqs, self.spw_Nfreqs),
+        nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
+        E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
                                dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
@@ -1382,7 +1390,7 @@ class PSpecData(object):
         for dly_idx in range(self.spw_Ndlys):
             if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
             else: QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
-            E_matrices[dly_idx] = np.dot(R1, QR2)
+            E_matrices[dly_idx] = np.dot(np.conj(R1).T, QR2)
 
         return 0.5 * E_matrices
 
@@ -1617,7 +1625,7 @@ class PSpecData(object):
 
         return M, W
 
-    def get_Q_alt(self, mode, allow_fft=True):
+    def get_Q_alt(self, mode, allow_fft=True, include_extension=False):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha,
         EXCEPT without the primary beam factors. This is Q_alt as defined
@@ -1647,6 +1655,10 @@ class PSpecData(object):
             the number of delay bins equals the number of delay channels.
             Default: True
 
+        include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
+        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
+        (spw_Nfreq x spw_Nfreq).
+
         Return
         -------
         Q : array_like
@@ -1665,11 +1677,14 @@ class PSpecData(object):
             # FFT to transform to frequency space
             m = np.fft.fft(np.fft.ifftshift(_m))
         else:
+            nfreq = self.spw_Nfreqs
+            if include_extension:
+                nfreq = nfreq + np.sum(self.filter_extension)
             if self.spw_Ndlys % 2 == 0:
                 start_idx = -self.spw_Ndlys/2
             else:
                 start_idx = -(self.spw_Ndlys - 1)/2
-            m = (start_idx + mode) * np.arange(self.spw_Nfreqs)
+            m = (start_idx + mode) * np.arange(nfreq)
             m = np.exp(-2j * np.pi * m / self.spw_Ndlys)
 
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate

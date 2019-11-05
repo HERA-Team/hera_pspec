@@ -748,10 +748,16 @@ class Test_PSpecData(unittest.TestCase):
         ds1.set_filter_extension((10,10))
         rm1 = self.ds.R(key1)
         rm2 = ds1.R(key2)
+        rm3 = ds1.R(key1)
         self.assertTrue(np.shape(rm2) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
         #check that all values that are not truncated match values of untrancated matrix.
         self.assertTrue(np.all(np.isclose(rm1[10:-10], rm2, atol=1e-6)))
-
+        #make sure no errors are thrown by get_V, get_E, etc...
+        ds1.get_unnormed_E(key1, key2)
+        ds1.get_unnormed_V(key1, key2)
+        h=ds1.get_H(key1, key2)
+        g=ds1.get_G(key1, key2)
+        ds1.get_MW(g, h)
 
     def test_q_hat(self):
         """
@@ -919,10 +925,13 @@ class Test_PSpecData(unittest.TestCase):
                     # In general, when R_1 != R_2, there is a more restricted
                     # symmetry where swapping R_1 and R_2 *and* taking the
                     # transpose gives the same result
-                    G_swapped = self.ds.get_G(key2, key1)
-                    G_diff_norm = np.linalg.norm(G - G_swapped.T)
-                    self.assertLessEqual(G_diff_norm,
-                                         matrix_scale * multiplicative_tolerance)
+                    #UPDATE: Taper now occurs after filter so this
+                    #symmetry only holds when taper = 'none'. 
+                    if taper_selection == 'none':
+                        G_swapped = self.ds.get_G(key2, key1)
+                        G_diff_norm = np.linalg.norm(G - G_swapped.T)
+                        self.assertLessEqual(G_diff_norm,
+                                             matrix_scale * multiplicative_tolerance)
 
 
     '''
