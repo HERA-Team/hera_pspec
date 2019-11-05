@@ -1670,21 +1670,23 @@ class PSpecData(object):
         if mode >= self.spw_Ndlys:
             raise IndexError("Cannot compute Q matrix for a mode outside"
                              "of allowed range of delay modes.")
-
-        if (self.spw_Ndlys == self.spw_Nfreqs) and (allow_fft == True):
-            _m = np.zeros((self.spw_Nfreqs,), dtype=np.complex)
+        nfreq = self.spw_Nfreqs
+        if include_extension:
+            nfreq = nfreq + np.sum(self.filter_extension)
+            phase_correction = self.filter_extension[0]
+        else:
+            phase_correction = 0.
+        if (self.spw_Ndlys == nfreq) and (allow_fft == True):
+            _m = np.zeros((nfreq,), dtype=np.complex)
             _m[mode] = 1. # delta function at specific delay mode
             # FFT to transform to frequency space
             m = np.fft.fft(np.fft.ifftshift(_m))
         else:
-            nfreq = self.spw_Nfreqs
-            if include_extension:
-                nfreq = nfreq + np.sum(self.filter_extension)
             if self.spw_Ndlys % 2 == 0:
                 start_idx = -self.spw_Ndlys/2
             else:
                 start_idx = -(self.spw_Ndlys - 1)/2
-            m = (start_idx + mode) * np.arange(nfreq)
+            m = (start_idx + mode) * (np.arange(nfreq) - phase_correction)
             m = np.exp(-2j * np.pi * m / self.spw_Ndlys)
 
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
