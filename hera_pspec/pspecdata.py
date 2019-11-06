@@ -461,7 +461,7 @@ class PSpecData(object):
 
         return dset_idx, bl
 
-    def x(self, key):
+    def x(self, key, filter_extension=False):
         """
         Get data for a given dataset and baseline, as specified in a standard
         key format.
@@ -473,17 +473,25 @@ class PSpecData(object):
             of the tuple is the dataset index (or label), and the subsequent
             elements are the baseline ID.
 
+        filter_extension : bool (optional)
+            default=False
+            If True, extend spw to include filtering window extensions.
+
         Returns
         -------
         x : array_like
             Array of data from the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0]-self.filter_extension[0],
-                    self.spw_range[1]+self.filter_extension[1])
+        if filter_extension:
+            spw = slice(self.spw_range[0]-self.filter_extension[0],
+                        self.spw_range[1]+self.filter_extension[1])
+        else:
+            spw = slice(self.spw_range[0],
+                        self.spw_range[1])
         return self.dsets[dset].get_data(bl).T[spw]
 
-    def dx(self, key):
+    def dx(self, key, filter_extension=False):
         """
         Get standard deviation of data for given dataset and baseline as
         pecified in standard key format.
@@ -495,6 +503,10 @@ class PSpecData(object):
             of the tuple is the dataset index (or label), and the subsequent
             elements are the baseline ID.
 
+        filter_extension : bool (optional)
+            default=False
+            If True, extend spw to include filtering window extensions.
+
         Returns
         -------
         dx : array_like
@@ -502,11 +514,15 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0]-self.filter_extension[0],
-                    self.spw_range[1]+self.filter_extension[1])
+        if filter_extension:
+            spw = slice(self.spw_range[0]-self.filter_extension[0],
+                        self.spw_range[1]+self.filter_extension[1])
+        else:
+            spw = slice(self.spw_range[0],
+                        self.spw_range[1])
         return self.dsets_std[dset].get_data(bl).T[spw]
 
-    def w(self, key):
+    def w(self, key, filter_extension=False):
         """
         Get weights for a given dataset and baseline, as specified in a
         standard key format.
@@ -518,14 +534,22 @@ class PSpecData(object):
             of the tuple is the dataset index, and the subsequent elements are
             the baseline ID.
 
+        filter_extension : bool (optional)
+            default=False
+            If True, extend spw to include filtering window extensions.
+
         Returns
         -------
         w : array_like
             Array of weights for the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0]-self.filter_extension[0],
-                    self.spw_range[1]+self.filter_extension[1])
+        if filter_extension:
+            spw = slice(self.spw_range[0]-self.filter_extension[0],
+                        self.spw_range[1]+self.filter_extension[1])
+        else:
+            spw = slice(self.spw_range[0],
+                        self.spw_range[1])
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T[spw]
         else:
@@ -591,9 +615,9 @@ class PSpecData(object):
         if Ckey not in self._C:
             # calculate covariance model
             if model == 'empirical':
-                self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
+                self.set_C({Ckey: utils.cov(self.x(key, filter_extension=True), self.w(key, filter_extension=True))})
             elif model == 'dsets':
-                self.set_C({Ckey: np.diag( np.abs(self.w(key)[:,time_index] * self.dx(key)[:,time_index]) ** 2. )})
+                self.set_C({Ckey: np.diag( np.abs(self.w(key, filter_extension=True)[:,time_index] * self.dx(key, filter_extension=True)[:,time_index]) ** 2. )})
 
 
         return self._C[Ckey]
@@ -639,8 +663,8 @@ class PSpecData(object):
             dset, bl = self.parse_blkey(key2)
             key2 = (dset,) + (bl,)
 
-            covar = utils.cov(self.x(key1), self.w(key1),
-                              self.x(key2), self.w(key2),
+            covar = utils.cov(self.x(key1, filter_extension=True), self.w(key1, filter_extension=True),
+                              self.x(key2, filter_extension=True), self.w(key2, filter_extension=True),
                               conj_1=conj_1, conj_2=conj_2)
         elif model == 'dsets':
             covar = np.zeros((self.spw_Nfreqs,
@@ -748,7 +772,7 @@ class PSpecData(object):
         key = (dset,) + (bl,)
 
         if key not in self._Y:
-            self._Y[key] = np.diag(np.max(self.w(key), axis=1))
+            self._Y[key] = np.diag(np.max(self.w(key, filter_extension=True), axis=1))
             if not np.all(np.isclose(self._Y[key], 0.0) \
                         + np.isclose(self._Y[key], 1.0)):
                 raise NotImplementedError("Non-binary weights not currently implmented")
@@ -1103,19 +1127,19 @@ class PSpecData(object):
         # Calculate R x_1
         if isinstance(key1, list):
             for _key in key1:
-                Rx1 += np.dot(self.R(_key), self.x(_key))
+                Rx1 += np.dot(self.R(_key), self.x(_key, filter_extension=True))
                 R1 += self.R(_key)
         else:
-            Rx1 = np.dot(self.R(key1), self.x(key1))
+            Rx1 = np.dot(self.R(key1), self.x(key1, filter_extension=True))
             R1  = self.R(key1)
 
         # Calculate R x_2
         if isinstance(key2, list):
             for _key in key2:
-                Rx2 += np.dot(self.R(_key), self.x(_key))
+                Rx2 += np.dot(self.R(_key), self.x(_key, filter_extension=True))
                 R2 += self.R(_key)
         else:
-            Rx2 = np.dot(self.R(key2), self.x(key2))
+            Rx2 = np.dot(self.R(key2), self.x(key2, filter_extension=True))
             R2  = self.R(key2)
 
         # The set of operations for exact_norm == True are drawn from Equations
