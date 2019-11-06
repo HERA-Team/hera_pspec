@@ -900,7 +900,7 @@ class PSpecData(object):
                isinstance(filter_extension[1], int), "filter extension must contain only integers"
         filter_extension=list(filter_extension)
         filter_extension[0] = np.min([self.spw_range[0], filter_extension[0]])#clip extension to not extend beyond data range
-        filter_extension[1] = np.min([self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
+        filter_extension[1] = np.min([self.Nfreqs - self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
         self.filter_extension = tuple(filter_extension)
 
     def set_weighting(self, data_weighting):
