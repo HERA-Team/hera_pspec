@@ -593,7 +593,7 @@ class Test_PSpecData(unittest.TestCase):
             if mode == 'H^-1':
                 # Test that if we have full-rank matrices, the resulting window functions
                 # are indeed delta functions
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
                 Hinv = np.linalg.inv(random_H)
                 for i in range(n):
                     self.assertAlmostEqual(W[i,i], 1.)
@@ -749,10 +749,11 @@ class Test_PSpecData(unittest.TestCase):
         rm1 = self.ds.R(key1)
         rm2 = ds1.R(key2)
         rm3 = ds1.R(key1)
-        self.assertTrue(np.shape(rm2) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
-        #check that all values that are not truncated match values of untrancated matrix.
-        self.assertTrue(np.all(np.isclose(rm1[10:-10], rm2, atol=1e-6)))
-        #make sure no errors are thrown by get_V, get_E, etc...
+        for m in range(self.Ntimes):
+            self.assertTrue(np.shape(rm2[m]) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
+            #check that all values that are not truncated match values of untrancated matrix.
+            self.assertTrue(np.all(np.isclose(rm1[m][10:-10], rm2[m], atol=1e-6)))
+            #make sure no errors are thrown by get_V, get_E, etc...
         ds1.get_unnormed_E(key1, key2)
         ds1.get_unnormed_V(key1, key2)
         h=ds1.get_H(key1, key2)
@@ -855,11 +856,11 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_taper(taper)
 
                 self.ds.set_Ndlys(Nfreq//3)
-                H = self.ds.get_H(key1, key2)
+                H = self.ds.get_H(key1, key2, average_times=True)
                 self.assertEqual(H.shape, (Nfreq//3, Nfreq//3)) # Test shape
 
                 self.ds.set_Ndlys()
-                H = self.ds.get_H(key1, key2)
+                H = self.ds.get_H(key1, key2, average_times=True)
                 self.assertEqual(H.shape, (Nfreq, Nfreq)) # Test shape
 
     def test_get_G(self):
@@ -884,7 +885,7 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_taper(taper)
                 #print 'input_data_weight', input_data_weight
                 self.ds.set_Ndlys(Nfreq-2)
-                G = self.ds.get_G(key1, key2)
+                G = self.ds.get_G(key1, key2, average_times=True)
                 self.assertEqual(G.shape, (Nfreq-2, Nfreq-2)) # Test shape
                 #print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
@@ -907,7 +908,7 @@ class Test_PSpecData(unittest.TestCase):
                     # same test as the symmetry test, but perhaps there are
                     # creative ways to break the code to break one test but not
                     # the other.
-                    G_swapped = self.ds.get_G(key2, key1)
+                    G_swapped = self.ds.get_G(key2, key1, average_times=True)
                     G_diff_norm = np.linalg.norm(G - G_swapped)
                     self.assertLessEqual(G_diff_norm,
                                         matrix_scale * multiplicative_tolerance)
@@ -926,7 +927,7 @@ class Test_PSpecData(unittest.TestCase):
                     # symmetry where swapping R_1 and R_2 *and* taking the
                     # transpose gives the same result
                     #UPDATE: Taper now occurs after filter so this
-                    #symmetry only holds when taper = 'none'. 
+                    #symmetry only holds when taper = 'none'.
                     if taper_selection == 'none':
                         G_swapped = self.ds.get_G(key2, key1)
                         G_diff_norm = np.linalg.norm(G - G_swapped.T)
