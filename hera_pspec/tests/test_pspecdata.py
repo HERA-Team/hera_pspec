@@ -797,7 +797,7 @@ class Test_PSpecData(unittest.TestCase):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.spw_Nfreqs
         Ntime = self.ds.Ntimes
-        Ndlys = Nfreq - 3
+        Ndlys = Nfreq - 20
         self.ds.spw_Ndlys = Ndlys
 
 
@@ -820,15 +820,20 @@ class Test_PSpecData(unittest.TestCase):
         rm1 = self.ds.R(key1)
         rm2 = ds1.R(key2)
         rm3 = ds1.R(key1)
-        for m in range(self.Ntimes):
+        for m in range(self.ds.Ntimes):
             self.assertTrue(np.shape(rm2[m]) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
             #check that all values that are not truncated match values of untrancated matrix.
             self.assertTrue(np.all(np.isclose(rm1[m][10:-10], rm2[m], atol=1e-6)))
             #make sure no errors are thrown by get_V, get_E, etc...
-        ds1.get_unnormed_E(key1, key2)
-        ds1.get_unnormed_V(key1, key2)
+        ds1.get_unnormed_E(key1, key2, time_index=0)
+        ds1.get_unnormed_V(key1, key2, time_index=0)
         h=ds1.get_H(key1, key2)
         g=ds1.get_G(key1, key2)
+        print(h.shape)
+        print(g.shape)
+        print(ds1.spw_Nfreqs)
+        print(ds1.spw_Ndlys)
+        print(ds1.Ntimes)
         ds1.get_MW(g, h)
         #make sure identity weighting isn't broken.
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
@@ -1592,6 +1597,8 @@ class Test_PSpecData(unittest.TestCase):
                         spw_ranges=[(400, 450)], verbose=False)
         avg_uvp2 = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # assert average before and after are the same!
+        print(avg_uvp)
+        print(avg_uvp2)
         nt.assert_equal(avg_uvp, avg_uvp2)
 
     def test_RFI_flag_propagation(self):
@@ -1601,9 +1608,8 @@ class Test_PSpecData(unittest.TestCase):
         Nfreq = uvd.data_array.shape[2]
         # Basic test of shape
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        test_R = ds.R((1, 37, 38, 'XX'))
+        test_R = ds.R((1, 37, 38, 'XX'), average_times=True)
         nt.assert_equal(test_R.shape, (Nfreq, Nfreq))
-
         # First test that turning-off flagging does nothing if there are no flags in the data
         bls1 = [(24, 25)]
         bls2 = [(37, 38)]
@@ -1616,7 +1622,7 @@ class Test_PSpecData(unittest.TestCase):
 
         qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
         qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
-
+        print(np.real(qe_unflagged)/np.real(qe_flagged))
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
 
