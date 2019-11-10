@@ -788,8 +788,7 @@ class PSpecData(object):
         Returns
         -------
         Y : array_like
-            Ntimes x (spw_Nfreqs + sum(filter_extension)) matrix of weights.
-            Simple as that.
+            (spw_Nfreqs + sum(filter_extension)) x Ntimes matrix of weights.
         """
         assert isinstance(key, tuple)
         # parse key
@@ -1207,7 +1206,7 @@ class PSpecData(object):
         q_hat : array_like
             Unnormalized/normalized bandpowers
         """
-        Rx1 = np.zeros((self.Ntimes, self.spw_Nfreqs, self.spw_Nfreqs),
+        Rx1 = np.zeros((self.Ntimes, self.spw_Nfreqs),
                             dtype=complex)
         Rx2 = np.zeros_like(Rx1)
         R1, R2 = 0.0, 0.0
@@ -1266,8 +1265,8 @@ class PSpecData(object):
         elif allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
             _Rx1 = np.fft.fft(Rx1, axis=1)
             _Rx2 = np.fft.fft(Rx2, axis=1)
-            return 0.5 * np.fft.fftshift(_Rx1, axes=1).conj() \
-                       * np.fft.fftshift(_Rx2, axes=1)
+            return (0.5 * np.fft.fftshift(_Rx1, axes=1).conj() \
+                       * np.fft.fftshift(_Rx2, axes=1)).T
 
         else:
             q = []
@@ -1275,7 +1274,7 @@ class PSpecData(object):
                 Q = self.get_Q_alt(i)
                 QRx2 = np.dot(Q, Rx2.T).T
                 #qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
-                qi = 0.5 * np.sum(Rx1.conj() * QRx2, axis=1)
+                qi = np.sum(Rx1.conj() * QRx2, axis=1)
                 q.append(qi)
             return 0.5 * np.array(q)
 
@@ -1646,7 +1645,7 @@ class PSpecData(object):
         return auto_term + cross_term
 
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False,
-               average_times=True):
+               average_times=False):
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -1721,12 +1720,18 @@ class PSpecData(object):
 
         if mode!='I' and exact_norm==True:
             raise NotImplementedError("Exact norm is not supported for non-I modes")
-
+        if H.ndim == 2:
+            H = np.asarray([H])
+        if G.ndim == 2:
+            G = np.asarray([G])
+        if not band_covar is None:
+            if band_covar.ndim == 2:
+                band_covar=np.asarray([band_covar])
+        Ms = np.zeros_like(H)
+        Ws = np.zeros_like(G)
+        for tind in range(H.shape[0]):
         # Build M matrix according to specified mode
-        if mode == 'H^-1':
-            Ms = np.zeros((self.Ntimes, self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
-            Ws = np.zeros((self.Ntimes, self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
-            for tind in range(self.spw_Ntimes):
+            if mode == 'H^-1':
                 try:
                     M = np.linalg.inv(H[tind])
                 except np.linalg.LinAlgError as err:
@@ -1742,16 +1747,11 @@ class PSpecData(object):
                 W = np.dot(M, H[tind])
                 W_norm = np.sum(W, axis=1)
                 W = (W.T / W_norm).T
-                Ms[tind] = M
-                Ws[tind] = W
-        elif mode == 'V^-1/2':
-            Ms = np.zeros((self.Ntimes, self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
-            Ws = np.zeros((self.Ntimes, self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
-            if np.sum(band_covar) == None:
-                raise ValueError("Covariance not supplied for V^-1/2 normalization")
-            for tind in range(self.Ntimes):
-                # First find the eigenvectors and eigenvalues of the unnormalizd covariance
-                # Then use it to compute V^-1/2
+            elif mode == 'V^-1/2':
+                if np.sum(band_covar) == None:
+                    raise ValueError("Covariance not supplied for V^-1/2 normalization")
+                    # First find the eigenvectors and eigenvalues of the unnormalizd covariance
+                    # Then use it to compute V^-1/2
                 eigvals, eigvects = np.linalg.eigh(band_covar[tind])
                 if (eigvals <= 0.).any():
                     raise_warning("At least one non-positive eigenvalue for the "
@@ -1761,43 +1761,43 @@ class PSpecData(object):
                 W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H[tind]), axis=1))
                 M = np.dot(W_norm, V_minus_half)
                 W = np.dot(M, H[tind])
-                Ws[tind] = W
-                Ms[tind] = M
 
-        elif mode == 'I':
-            Ms = np.zeros((self.Ntimes, self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
-            Ws = np.zeros((self.Ntimes, self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
-            # This is not the M matrix as is rigorously defined in the
-            # OQE formalism, because the power spectrum scalar is excluded
-            # in this matrix normalization (i.e., M doesn't do the full
-            # normalization)
-            for tind in range(self.Ntimes):
+            elif mode == 'I':
+                # This is not the M matrix as is rigorously defined in the
+                # OQE formalism, because the power spectrum scalar is excluded
+                # in this matrix normalization (i.e., M doesn't do the full
+                # normalization)
                 M = np.diag(1. / np.sum(G[tind], axis=1))
                 W_norm = np.diag(1. / np.sum(H[tind], axis=1))
                 W = np.dot(W_norm, H[tind])
-                Ws[tind] = W
-                Ms[tind] = M
-        else:
-            raise NotImplementedError("Cholesky decomposition mode not currently supported.")
-            # # Cholesky decomposition
-            # order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
-            # order[order < 0] = order[order < 0] - 0.1
 
-            # # Negative integers have larger absolute value so they are sorted
-            # # after positive integers.
-            # order = (np.abs(order)).argsort()
-            # if np.mod(G.shape[0], 2) == 1:
-            #     endindex = -2
-            # else:
-            #     endindex = -1
-            # order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
-            # iorder = np.argsort(order)
+            else:
+                raise NotImplementedError("Cholesky decomposition mode not currently supported.")
+                # # Cholesky decomposition
+                # order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
+                # order[order < 0] = order[order < 0] - 0.1
 
-            # G_o = np.take(np.take(G, order, axis=0), order, axis=1)
-            # L_o = np.linalg.cholesky(G_o)
-            # U,S,V = np.linalg.svd(L_o.conj())
-            # M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
-            # M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
+                # # Negative integers have larger absolute value so they are sorted
+                # # after positive integers.
+                # order = (np.abs(order)).argsort()
+                # if np.mod(G.shape[0], 2) == 1:
+                #     endindex = -2
+                # else:
+                #     endindex = -1
+                # order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
+                # iorder = np.argsort(order)
+
+                # G_o = np.take(np.take(G, order, axis=0), order, axis=1)
+                # L_o = np.linalg.cholesky(G_o)
+                # U,S,V = np.linalg.svd(L_o.conj())
+                # M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
+                # M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
+            Ws[tind] = W
+            Ms[tind] = M
+        Ms[np.isnan(Ms)] = 0.
+        Ws[np.isnan(Ws)] = 0.
+        Ms[np.isinf(Ms)] = 0.
+        Ws[np.isinf(Ws)] = 0.
         if average_times:
             Ms = np.mean(Ms, axis=0)
             Ws = np.mean(Ws, axis=0)
@@ -1961,7 +1961,10 @@ class PSpecData(object):
         p_hat : array_like
             Optimal estimate of bandpower, \hat{p}.
         """
-        return np.dot(M, q)
+        if M.ndim == 3:
+            return np.asarray([np.dot(M[tind, :, :], q[:,tind]) for tind in range(self.Ntimes)]).T
+        else:
+            return np.dot(M, q)
 
     def cov_p_hat(self, M, q_cov):
         """
@@ -1972,14 +1975,14 @@ class PSpecData(object):
         Parameters
         ----------
         M : array_like
-            Normalization matrix, M.
+            Normalization matrix, M. Ntimes x Ndlys x Ndlys
 
         q_cov : array_like
-            covariance between bandpowers in q_alpha and q_beta
+            covariance between bandpowers in q_alpha and q_beta, Ntimes x Ndlys x Ndlys
         """
         p_cov = np.zeros_like(q_cov)
         for tnum in range(len(p_cov)):
-            p_cov[tnum] = np.einsum('ab,cd,bd->ac', M, M, q_cov[tnum])
+            p_cov[tnum] = np.einsum('ab,cd,bd->ac', M[tnum], M[tnum], q_cov[tnum])
         return p_cov
 
     def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2,
@@ -2742,10 +2745,9 @@ class PSpecData(object):
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
 
                     # Check that number of non-zero weight chans >= n_dlys
-                    key1_dof = np.sum(~np.isclose(self.Y(key1).diagonal(), 0.0))
-                    key2_dof = np.sum(~np.isclose(self.Y(key2).diagonal(), 0.0))
-                    if key1_dof - np.sum(self.filter_extension) < self.spw_Ndlys\
-                     or key2_dof - np.sum(self.filter_extension) < self.spw_Ndlys:
+                    key1_dof = np.sum(~np.isclose(self.Y(key1), 0.0), axis=1)
+                    key2_dof = np.sum(~np.isclose(self.Y(key2), 0.0), axis=1)
+                    if np.any(key1_dof < self.spw_Ndlys) or np.any(key2_dof < self.spw_Ndlys):
                         if verbose:
                             print("WARNING: Number of unflagged chans for key1 "
                                   "and/or key2 < n_dlys\n which may lead to "
@@ -2768,8 +2770,8 @@ class PSpecData(object):
                         # in this case, all Gv and Hv differ only by flagging pattern
                         # so check if we've already computed this
                         # First: get flag weighting matrices given key1 & key2
-                        Y = np.vstack([self.Y(key1).diagonal(),
-                                       self.Y(key2).diagonal()])
+                        Y = np.vstack([self.Y(key1),
+                                       self.Y(key2)])
 
                         # Second: check cache for Y
                         matches = [np.isclose(Y, y).all()
@@ -3186,6 +3188,7 @@ class PSpecData(object):
             trim_inds = np.array([l not in common_lsts for l in lst_arrs[i]])
             if np.any(trim_inds):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
+        self.Ntimes = self.dsets[i].Ntimes#update Ntimes Dammnit!
 
 
 def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
@@ -3543,7 +3546,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
         ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
         ds.labels.append("dset1")
-
+        ds.Ntimes = ds.Ntimes // 2#divide number of times by two.
         # update dsets_std
         if ds.dsets_std[0] is None:
             ds.dsets_std.append(None)
