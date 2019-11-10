@@ -1255,7 +1255,7 @@ class PSpecData(object):
 
                 # Square and sum over columns
                 #qi = 0.5 * np.einsum('i...,i...->...', Rx1.conj(), QRx2)
-                qi = 0.5 * np.sum(Rx1.conj * QRx2, axis=1)
+                qi = 0.5 * np.sum(Rx1.conj() * QRx2, axis=1)
                 q.append(qi)
 
             q = np.asarray(q) #(Ndlys X Ntime)
@@ -1437,7 +1437,7 @@ class PSpecData(object):
         R2 = self.R(key2)
         if not sampling:
             nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
-            sinc_matrix = np.zeros((nfreq, nfreq))
+            sinc_matrix = np.zeros((nfreq, nfreq), dtype=complex)
             for i in range(nfreq):
                 for j in range(nfreq):
                     sinc_matrix[i,j] = np.float(i - j)
@@ -2251,8 +2251,8 @@ class PSpecData(object):
         adjustment : float if the data_weighting is 'identity'
                      1d array of floats with length spw_Ndlys otherwise.
         """
-        if Gv is None: Gv = self.get_G(key1, key2)
-        if Hv is None: Hv = self.get_H(key1, key2, sampling)
+        if Gv is None: Gv = self.get_G(key1, key2, average_times=True)
+        if Hv is None: Hv = self.get_H(key1, key2, sampling, average_times=True)
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
