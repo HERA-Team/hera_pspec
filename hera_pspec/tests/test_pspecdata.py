@@ -527,7 +527,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'])
         ds.spw_Ndlys = None
-        nt.assert_raises(ValueError, ds.get_unnormed_E, 'placeholder', 'placeholder')
+        nt.assert_raises(ValueError, ds.get_unnormed_E, 'placeholder', 'placeholder',0 )
 
         # Test that if R1 = R2, then the result is Hermitian
         ds.spw_Ndlys = 7
@@ -536,7 +536,7 @@ class Test_PSpecData(unittest.TestCase):
         wgt_matrix_dict[('red', (24, 25))] = random_R
         wgt_matrix_dict[('blue', (24, 25))] = random_R
         ds.set_R(wgt_matrix_dict)
-        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), time_index=0)
         multiplicative_tolerance = 0.0000001
         for matrix in E_matrices:
             diff_norm = np.linalg.norm(matrix.T.conj() - matrix)
@@ -550,7 +550,7 @@ class Test_PSpecData(unittest.TestCase):
         wgt_matrix_dict[('red', (24, 25))] = random_R
         wgt_matrix_dict[('blue', (24, 25))] = random_R
         ds_c.set_R(wgt_matrix_dict)
-        E_matrices = ds_c.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), exact_norm=True, pol='xx')
+        E_matrices = ds_c.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), exact_norm=True, pol='xx', time_index=0)
         self.assertEqual(E_matrices.shape, (ds_c.spw_Ndlys, ds_c.spw_Nfreqs, ds_c.spw_Nfreqs))
 
         # Test that if R1 != R2, then i) E^{12,dagger} = E^{21}
@@ -559,8 +559,8 @@ class Test_PSpecData(unittest.TestCase):
         wgt_matrix_dict[('red', (24, 25))] = random_R
         wgt_matrix_dict[('blue', (24, 25))] = random_R2
         ds.set_R(wgt_matrix_dict)
-        E12_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
-        E21_matrices = ds.get_unnormed_E(('blue', (24, 25)), ('red', (24, 25)))
+        E12_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), time_index=0)
+        E21_matrices = ds.get_unnormed_E(('blue', (24, 25)), ('red', (24, 25)), time_index=0)
         multiplicative_tolerance = 0.0000001
         for mat12,mat21 in zip(E12_matrices,E21_matrices):
             diff_norm = np.linalg.norm(mat12.T.conj() - mat21)
@@ -572,10 +572,10 @@ class Test_PSpecData(unittest.TestCase):
         wgt_matrix_dict = {}
         wgt_matrix_dict[('red', (24, 25))] = np.eye(ds.spw_Nfreqs)
         wgt_matrix_dict[('blue', (24, 25))] = np.eye(ds.spw_Nfreqs)
-        flags1 = np.diag(ds.Y(('red', (24, 25))))
-        flags2 = np.diag(ds.Y(('blue', (24, 25))))
+        flags1 = ds.Y(('red', (24, 25)))[:,0]
+        flags2 = ds.Y(('blue', (24, 25)))[:,0]
         ds.set_R(wgt_matrix_dict)
-        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), time_index=0)
         multiplicative_tolerance = 0.0000001
         for matrix in E_matrices:
             for i in range(ds.spw_Nfreqs):
@@ -638,7 +638,7 @@ class Test_PSpecData(unittest.TestCase):
         key2 = ('blue', (25, 38), 'xx')
         self.ds.spw_Ndlys = 5
 
-        V = self.ds.get_unnormed_V(key1, key2)
+        V = self.ds.get_unnormed_V(key1, key2, time_index=0)
         # Check size
         self.assertEqual(V.shape, (self.ds.spw_Ndlys,self.ds.spw_Ndlys))
         # Test hermiticity. Generally this is only good to about 1 part in 10^15.
@@ -672,14 +672,14 @@ class Test_PSpecData(unittest.TestCase):
                 # When the matrices are not full rank, test that the window functions
                 # are at least properly normalized.
                 deficient_H = np.ones((3,3))
-                M, W = self.ds.get_MW(deficient_H, deficient_H, mode=mode)
+                M, W = self.ds.get_MW(deficient_H, deficient_H, mode=mode, average_times=True)
                 norm = np.sum(W, axis=1)
                 for i in range(3):
                     self.assertAlmostEqual(norm[i], 1.)
 
                 # Check that the method ignores G
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
-                M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
+                M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode, average_times=True)
                 for i in range(n):
                     for j in range(n):
                         self.assertAlmostEqual(M[i,j], M_other[i,j])
@@ -687,20 +687,20 @@ class Test_PSpecData(unittest.TestCase):
 
             elif mode == 'V^-1/2':
                 # Test that we are checking for the presence of a covariance matrix
-                nt.assert_raises(ValueError, self.ds.get_MW, random_G, random_H, mode=mode)
+                nt.assert_raises(ValueError, self.ds.get_MW, random_G, random_H, mode=mode, average_times=True)
                 # Test that the error covariance is diagonal
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V, average_times=True)
                 band_covar = np.dot(M, np.dot(random_V, M.T))
                 self.assertEqual(diagonal_or_not(band_covar), True)
 
             elif mode == 'I':
                 # Test that the norm matrix is diagonal
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
                 self.assertEqual(diagonal_or_not(M), True)
             elif mode == 'L^-1':
                 # Test that Cholesky mode is disabled
                 nt.assert_raises(NotImplementedError,
-                                 self.ds.get_MW, random_G, random_H, mode=mode)
+                                 self.ds.get_MW, random_G, random_H, mode=mode, average_times=True)
 
             # Test sizes for everyone
             self.assertEqual(M.shape, (n,n))
@@ -776,7 +776,8 @@ class Test_PSpecData(unittest.TestCase):
         Test cov_p_hat, verify on identity.
         """
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, dsets_std=self.d_std)
-        cov_p = self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),np.array([5.*np.identity(10)]))
+        cov_p = self.ds.cov_p_hat(np.asarray([np.sqrt(6.)*np.identity(10)]),
+                                  np.array([5.*np.identity(10)]))
         for p in range(10):
             for q in range(10):
                 if p == q:
@@ -1593,8 +1594,8 @@ class Test_PSpecData(unittest.TestCase):
                         spw_ranges=[(400, 450)], verbose=False)
         avg_uvp2 = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # assert average before and after are the same!
-        print(avg_uvp)
-        print(avg_uvp2)
+        print(avg_uvp.data_array)
+        print(avg_uvp2.data_array)
         nt.assert_equal(avg_uvp, avg_uvp2)
 
     def test_RFI_flag_propagation(self):
@@ -1618,7 +1619,6 @@ class Test_PSpecData(unittest.TestCase):
 
         qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
         qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
-        print(np.real(qe_unflagged)/np.real(qe_flagged))
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
 
