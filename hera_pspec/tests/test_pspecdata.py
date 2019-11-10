@@ -1248,7 +1248,7 @@ class Test_PSpecData(unittest.TestCase):
         #test inverse sinc weighting.
         ds.pspec(bls,bls,(0, 1), ('xx','xx'),
         spw_ranges = (10,20), input_data_weight = 'sinc_downweight',
-        r_params = my_r_params)
+        r_params = my_r_params, sampling=True)
         #test value error
         nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
         spw_ranges = (10,20), input_data_weight = 'sinc_downweight', r_params = {})
