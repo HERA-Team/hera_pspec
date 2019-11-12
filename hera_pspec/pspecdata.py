@@ -905,7 +905,7 @@ class PSpecData(object):
                 #matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 #to apply flagging weights before taking psuedo inverse.
-                rmat = np.asarray([dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
+                rmat = np.asarray([dspec.sinc_downweight_mat_inv(nchan=nfreq,
                                     df=np.median(np.diff(self.freqs)),
                                     filter_centers=r_params['filter_centers'],
                                     filter_widths=r_params['filter_widths'],
@@ -2686,7 +2686,7 @@ class PSpecData(object):
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
-                pol_cov=[]
+                #pol_cov=[]
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
@@ -2820,18 +2820,18 @@ class PSpecData(object):
                             pv = np.atleast_2d(sa).T * pv
 
                     # Generate the covariance matrix if error bars provided
-                    if store_cov:
-                        if verbose: print(" Building q_hat covariance...")
+                    #if store_cov:
+                        #if verbose: print(" Building q_hat covariance...")
                         #cov_qv = self.cov_q_hat(key1, key2)
-                        cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
-                                            exact_norm=exact_norm, pol=pol)
-                        cov_pv = self.cov_p_hat(Mv, cov_qv)
-                        if self.primary_beam != None:
-                            cov_pv *= (scalar)**2.
-                        if norm == 'I' and not(exact_norm):
-                            cov_pv *= self.scalar_delay_adjustment(key1, key2,
-                                                 sampling=sampling) ** 2.
-                        pol_cov.extend(cov_pv)
+                        #cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
+                        #                    exact_norm=exact_norm, pol=pol)
+                        #cov_pv = self.cov_p_hat(Mv, cov_qv)
+                        #if self.primary_beam != None:
+                        #    cov_pv *= (scalar)**2.
+                        #if norm == 'I' and not(exact_norm):
+                        #    cov_pv *= self.scalar_delay_adjustment(key1, key2,
+                        #                         sampling=sampling) ** 2.
+                        #pol_cov.extend(cov_pv)
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2892,15 +2892,15 @@ class PSpecData(object):
                 spw_data.append(pol_data)
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
-                spw_cov.append(pol_cov)
+                #spw_cov.append(pol_cov)
 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
-            spw_cov = np.moveaxis(np.array(spw_cov), 0, -1)
+            #spw_cov = np.moveaxis(np.array(spw_cov), 0, -1)
             data_array[i] = spw_data
-            cov_array[i] = spw_cov
+            #cov_array[i] = spw_cov
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
@@ -2909,6 +2909,35 @@ class PSpecData(object):
             if len(spw_polpair) == 0:
                 raise ValueError("None of the specified polarization pairs "
                                  "match that of the UVData objects")
+
+        if store_cov:
+            for i in range(len(spw_ranges)):
+                # Loop over polarizations
+                spw_cov=[]
+                for j, p in enumerate(pols):
+                    p_str = tuple([uvutils.polnum2str(_p) for _p in p])
+                    pol_cov = []
+                    #loop over baseline
+                    for k, blp in enumerate(bl_pairs):
+                        key1 = (dsets[0],) + blp[0] + (p_str[0],)
+                        key2 = (dsets[1],) + blp[1] + (p_str[1],)
+
+                        if cov_model == 'empirical':
+                            self.broadcast_dset_flags(spw_ranges = [spw_ranges[i]])
+                        if verbose: print(" Building q_hat covariance...")
+                        #cov_qv = self.cov_q_hat(key1, key2)
+                        cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
+                                            exact_norm=exact_norm, pol=pol)
+                        cov_pv = self.cov_p_hat(Mv, cov_qv)
+                        if self.primary_beam != None:
+                            cov_pv *= (sclr_arr[i][j])**2.
+                        if norm == 'I' and not(exact_norm):
+                            cov_pv *= self.scalar_delay_adjustment(key1, key2,
+                                                 sampling=sampling) ** 2.
+                        pol_cov.extend(cov_pv)
+                    spw_cov.append(pol_cov)
+                spw_cov = np.moveaxis(np.array(spw_cov), 0, -1)
+                cov_array[i] = spw_cov
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
