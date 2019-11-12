@@ -2059,7 +2059,9 @@ class PSpecData(object):
                 # unflag
                 if unflag:
                     # unflag for all times
-                    dset.flag_array[:,:,self.spw_range[0]:self.spw_range[1],:] = False
+                    dset.flag_array[:,:,
+                    self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1],
+                    :] = False
                     continue
                 # enact time threshold on flag waterfalls
                 # iterate over polarizations
@@ -2083,8 +2085,12 @@ class PSpecData(object):
                         # for pixels that have flags but didn't meet broadcasting limit
                         # flag the integration within the spw
                         flags[:, np.where(exceeds_thresh)[0]] = False
-                        flag_ints = np.max(flags[:, self.spw_range[0]:self.spw_range[1]], axis=1)
-                        dset.flag_array[bl_inds[flag_ints], :, self.spw_range[0]:self.spw_range[1], i] = True
+                        flag_ints = np.max(flags[:,
+                        self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1]],
+                         axis=1)
+                        dset.flag_array[bl_inds[flag_ints], :,
+                        self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1],
+                        i] = True
 
     def units(self, little_h=True):
         """
