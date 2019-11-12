@@ -912,16 +912,12 @@ class PSpecData(object):
                                     filter_factors=r_params['filter_factors'])\
                                      * wgt_sq[m] for m in range(self.Ntimes)])
                 for m in range(self.Ntimes):
-                    try:
-                        rmat[m] = np.linalg.inv(rmat[m])
-                    except np.linalg.LinAlgError as err:
-                        if 'Singular matrix' in str(err):
-                            rmat[m] = np.linalg.pinv(rmat[m])
+                    rmat[m] = np.linalg.pinv(rmat[m])
 
             if self.symmetric_taper
                 rmat = np.transpose(sqrtT.T * np.transpose(rmat, (1,0,2)) * sqrtT, (1,0,2))
             else:
-                rmat = np.transpose(myT.T * np.transpose(rmat, (1,0,2)), (1,0,2))
+                rmat = np.transpose(myT.T * tmat @ np.transpose(rmat, (1,0,2)), (1,0,2))
             #move time-axis to the back. This is helpful for future broadcasting
             #exploitation
             #self._R[Rkey] = np.swap_axes(np.swap_axes(rmat, 1, 2), 0, 1)
@@ -2831,9 +2827,10 @@ class PSpecData(object):
                                             exact_norm=exact_norm, pol=pol)
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
-                            cov_pv *= (scalar * \
-                                       self.scalar_delay_adjustment(key1, key2,
-                                                         sampling=sampling))**2.
+                            cov_pv *= (scalar)**2.
+                        if norm == 'I' and not(exact_norm):
+                            cov_pv *= self.scalar_delay_adjustment(key1, key2,
+                                                 sampling=sampling) ** 2.
                         pol_cov.extend(cov_pv)
 
                     # Get baseline keys
