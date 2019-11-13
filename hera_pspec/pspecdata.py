@@ -1150,15 +1150,22 @@ class PSpecData(object):
 
         output = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
         for k1, k2 in zip(key1, key2):
-            if model == 'dsets':
+            if model in ['dsets']:
                 output+=1./np.asarray([self.get_unnormed_V(k1, k2, model=model,
                                   exact_norm=exact_norm, pol=pol, time_index=t)\
                                   for t in time_indices])
 
-            elif model == 'empirical':
-                output += 1./np.asarray([self.get_unnormed_V(k1, k2, model=model,
-                                  exact_norm=exact_norm, time_index = t, pol=pol)\
-                                  for t in time_indices])
+            elif model in ['empirical', 'empirical_pspec']:
+                #empirical error bars require broadcasting flags
+                if model == 'empirical':
+                    flag_backup=self.broadcast_dset_flags(spw_ranges = [self.spw_range])
+                vm = self.get_unnormed_V(k1, k2, model=model,
+                                  exact_norm=exact_norm, time_index = 0, pol=pol)
+                if model == 'empirical':
+                    for dset,flag in zip(self.dsets, flag_backup):
+                        dset.flag_array = flag
+                output += 1./np.asarray([vm for t in time_indices])
+
         return float(len(key1)) / output
 
     def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
@@ -1639,21 +1646,26 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         # Collect all the relevant pieces
-        E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm,
-                                         time_index = time_index, pol = pol)
-        C1 = self.C_model(key1, model=model, time_index=time_index)
-        C2 = self.C_model(key2, model=model, time_index=time_index)
-        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
-        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
+        if model in ['dsets', 'empirical']:
+            E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm,
+                                             time_index = time_index, pol = pol)
+            C1 = self.C_model(key1, model=model, time_index=time_index)
+            C2 = self.C_model(key2, model=model, time_index=time_index)
+            P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
+            S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
 
-        E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
-        E12C2 = np.dot(E_matrices, C2)
-        auto_term = np.einsum('aij,bji', E12C2, E21C1)
-        E12starS21 = np.dot(E_matrices.conj(), S21)
-        E12P21 = np.dot(E_matrices, P21)
-        cross_term = np.einsum('aij,bji', E12P21, E12starS21)
-
-        return auto_term + cross_term
+            E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
+            E12C2 = np.dot(E_matrices, C2)
+            auto_term = np.einsum('aij,bji', E12C2, E21C1)
+            E12starS21 = np.dot(E_matrices.conj(), S21)
+            E12P21 = np.dot(E_matrices, P21)
+            cross_term = np.einsum('aij,bji', E12P21, E12starS21)
+            output = auto_term + cross_term
+        elif model in ['empirical_pspec']:
+            print((self.spw_Nfreqs, self.Ntimes))
+            output = utils.cov(self.q_hat(key1, key2),
+                    np.ones((self.spw_Nfreqs, self.Ntimes)))
+        return output
 
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15,
                average_times=False):
@@ -2050,10 +2062,11 @@ class PSpecData(object):
             spw_ranges = [(0, self.Nfreqs)]
         assert isinstance(spw_ranges, list), \
             "spw_ranges must be fed as a list of tuples"
-
+        backup_flags = []
         # iterate over datasets
         for dset in self.dsets:
             # iterate over spw ranges
+            backup_flags.append(copy.deepcopy(dset.flag_array))
             for spw in spw_ranges:
                 self.set_spw(spw)
                 # unflag
@@ -2091,6 +2104,8 @@ class PSpecData(object):
                         dset.flag_array[bl_inds[flag_ints], :,
                         self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1],
                         i] = True
+                return backup_flags
+
 
     def units(self, little_h=True):
         """
@@ -2718,6 +2733,7 @@ class PSpecData(object):
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
+                pol_cov = []
                 pol_window_function = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
@@ -2851,13 +2867,20 @@ class PSpecData(object):
                         else:
                             pv = np.atleast_2d(sa).T * pv
 
-                    # Generate the covariance matrix if error bars provided
-                    #if store_cov:
-                        #if verbose: print(" Building q_hat covariance...")
-                        #cov_qv = self.cov_q_hat(key1, key2)
-
-                    # store the window_function
+                     #Generate the covariance matrix if error bars provided
                     pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
+                    if store_cov:
+                        if verbose: print(" Building q_hat covariance...")
+                        cov_qv = self.cov_q_hat(key1, key2)
+                        cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
+                                            exact_norm=exact_norm, pol=pol)
+                        cov_pv = self.cov_p_hat(Mv, cov_qv)
+                        if self.primary_beam != None:
+                            cov_pv *= (scalar)**2.
+                        if norm == 'I' and not(exact_norm):
+                            cov_pv *= self.scalar_delay_adjustment(key1, key2,
+                                                 sampling=sampling) ** 2.
+                        pol_cov.extend(cov_pv)
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2919,13 +2942,16 @@ class PSpecData(object):
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
                 spw_window_function.append(pol_window_function)
+                spw_cov.append(pol_cov)
 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
             spw_window_function = np.moveaxis(np.array(spw_window_function), 0, -1)
+            spw_cov = np.moveaxis(np.array(spw_cov), 0, -1)
             data_array[i] = spw_data
+            cov_array[i] = spw_cov
             window_function_array[i] = spw_window_function
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
@@ -2936,7 +2962,10 @@ class PSpecData(object):
                 raise ValueError("None of the specified polarization pairs "
                                  "match that of the UVData objects")
 
+        '''
         if store_cov:
+            if cov_model == 'empirical':
+                flag_backup=self.broadcast_dset_flags(spw_ranges = [spw_ranges[i]])
             for i in range(len(spw_ranges)):
                 # Loop over polarizations
                 spw_cov=[]
@@ -2948,8 +2977,6 @@ class PSpecData(object):
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
 
-                        if cov_model == 'empirical':
-                            self.broadcast_dset_flags(spw_ranges = [spw_ranges[i]])
                         if verbose: print(" Building q_hat covariance...")
                         #cov_qv = self.cov_q_hat(key1, key2)
                         cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
@@ -2964,6 +2991,9 @@ class PSpecData(object):
                     spw_cov.append(pol_cov)
                 spw_cov = np.moveaxis(np.array(spw_cov), 0, -1)
                 cov_array[i] = spw_cov
+            for dset,flag in zip(self.dsets, flag_backup):
+                dset.flag_array = flag
+            '''
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
