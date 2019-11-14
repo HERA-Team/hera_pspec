@@ -1741,8 +1741,8 @@ class PSpecData(object):
         #     return M, W
 
         # Check that mode is supported
-        modes = ['H^-1', 'V^-1/2', 'I', 'L^-1']
-        assert (mode in modes)
+        modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
+        assert(mode in modes)
 
         if mode != 'I' and exact_norm is True:
             raise NotImplementedError("Exact norm is not supported for non-I modes")
@@ -1790,6 +1790,16 @@ class PSpecData(object):
 
                 W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H[tind]), axis=1))
                 M = np.dot(W_norm, V_minus_half)
+                W = np.dot(M, H[tind])
+
+            elif mode == 'H^-1/2':
+                eigvals, eigvects = np.linalg.eig(H[tind])
+                if (eigvals <= 0.).any():
+                    raise_warning("At least one non-positive eigenvalue for the "
+                                  "unnormed bandpower covariance matrix.")
+                H_minus_half =  np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
+                W_norm = np.diag(1. / np.sum(np.dot(H_minus_half, H[tind]), axis=1))
+                M = np.dot(W_norm, H_minus_half)
                 W = np.dot(M, H[tind])
 
             elif mode == 'I':
@@ -2847,7 +2857,7 @@ class PSpecData(object):
 
                     if verbose: print("  Normalizing power spectrum...")
                     if norm == 'V^-1/2':
-                        V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol)
+                        V_mat = self.cov_q_hat(key1, key2, exact_norm=exact_norm, pol = pol, model=cov_model)
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
                     else:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
