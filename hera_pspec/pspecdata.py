@@ -884,7 +884,8 @@ class PSpecData(object):
                              nfreq), dtype=complex)
             tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
             # form R matrix
-            wgt_sq = np.asarray([np.outer(self.Y(key)[:,m], self.Y(key)[:,m]) for m in range(self.Ntimes)])
+            wgts = self.Y(key)[:,m]
+            wgt_sq = np.asarray([np.outer(wgts, wgts) for m in range(self.Ntimes)])
             wgt_sq[np.isnan(wgt_sq)] = 0.
             if self.data_weighting == 'identity':
                 rmat =  np.asarray([self.I(key) * wgt_sq[m] for m in range(self.Ntimes)])
@@ -904,7 +905,7 @@ class PSpecData(object):
                 #This line retrieves a the psuedo-inverse of a lazy covariance
                 #matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
-                #to apply flagging weights before taking psuedo inverse.
+                # to apply flagging weights before taking psuedo inverse.
                 rmat = np.asarray([dspec.sinc_downweight_mat_inv(nchan=nfreq,
                                     df=np.median(np.diff(self.freqs)),
                                     filter_centers=r_params['filter_centers'],
@@ -913,6 +914,20 @@ class PSpecData(object):
                                      * wgt_sq[m] for m in range(self.Ntimes)])
                 for m in range(self.Ntimes):
                     rmat[m] = np.linalg.pinv(rmat[m])
+                # allow for restore_foregrounds option which introduces clean-interpolated
+                # foregrounds that are propagated to the power-spectrum.
+                if 'restore_width' in r_params and isinstance(r_params['restore_width'], (float, int)):
+                    ndlys_restore = int(r_params['restore_width'] / (.5 * nfreq / self.spw_Ndlys) * nfreq)
+                    for m in range(self.Ntimes):
+                        rmat[m] = rmat[m] + \
+                        dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
+                        wgts, dres=nfreq/self.spw_Ndlys, cache={})\
+                        @ (np.identity(nfreq, dtype=complex) - rmat[m])
+                else:
+                    raise ValueError("'restore_width' must be supplied as an integer or float.")
+
+
+
 
             if self.symmetric_taper
                 rmat = np.transpose(sqrtT.T * np.transpose(rmat, (1,0,2)) * sqrtT, (1,0,2))
