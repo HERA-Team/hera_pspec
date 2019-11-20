@@ -864,8 +864,8 @@ class PSpecData(object):
                              nfreq), dtype=complex)
             tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
             # form R matrix
-            wgts = self.Y(key)[:,m]
-            wgt_sq = np.asarray([np.outer(wgts, wgts) for m in range(self.Ntimes)])
+            wgts = np.asarray([self.Y(key)[:,m] for m in range(self.Ntimes)])
+            wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
             wgt_sq[np.isnan(wgt_sq)] = 0.
             if self.data_weighting == 'identity':
                 rmat = np.asarray([self.I(key) * np.sqrt(wgt_sq[m]) for m in range(self.Ntimes)])
@@ -896,16 +896,17 @@ class PSpecData(object):
                     rmat[m] = np.linalg.pinv(rmat[m])
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
-                if 'restore_width' in r_params and isinstance(r_params['restore_width'], (float, int)):
-                    ndlys_restore = int(r_params['restore_width'] / (.5 * nfreq / self.spw_Ndlys) * nfreq)
-                    for m in range(self.Ntimes):
-                        rmat[m] = rmat[m] + \
-                        dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
-                        wgts, dres=nfreq/self.spw_Ndlys, cache={})\
-                        @ (np.identity(nfreq, dtype=complex) - rmat[m])
-                else:
-                    raise ValueError("'restore_width' must be supplied as an integer or float.")
-                    
+                if 'restore_width' in r_params:
+                    if isinstance(r_params['restore_width'], (float, int)):
+                        ndlys_restore = int(r_params['restore_width'] / (.5 * nfreq / self.spw_Ndlys) * nfreq)
+                        for m in range(self.Ntimes):
+                            rmat[m] = rmat[m] + \
+                            dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
+                            wgts[m], dres=nfreq/self.spw_Ndlys, cache={})\
+                            @ (np.identity(nfreq, dtype=complex) - rmat[m])
+                    else:
+                        raise ValueError("'restore_width' must be supplied as an integer or float.")
+
 
 
 
@@ -2746,7 +2747,7 @@ class PSpecData(object):
 
                     # Wide bin adjustment of scalar, which is only needed for
                     # the diagonal norm matrix mode (i.e., norm = 'I')
-                    if norm == 'I' and not(exact_norm):
+                    if norm == 'I' and not(exact_norm) and self.data_weighting == 'identity':
                         pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
 
                      #Generate the covariance matrix if error bars provided
@@ -2758,7 +2759,7 @@ class PSpecData(object):
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
                             cov_pv *= (scalar)**2.
-                        if norm == 'I' and not(exact_norm):
+                        if norm == 'I' and not(exact_norm) and self.data_weighting == 'identity':
                             cov_pv *= self.scalar_delay_adjustment(key1, key2,
                                                  sampling=sampling) ** 2.
                         pol_cov.extend(cov_pv)
