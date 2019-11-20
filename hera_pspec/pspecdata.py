@@ -896,8 +896,8 @@ class PSpecData(object):
                              nfreq), dtype=complex)
             tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
             # form R matrix
-            wgts = self.Y(key)[:,m]
-            wgt_sq = np.asarray([np.outer(wgts, wgts) for m in range(self.Ntimes)])
+            wgts = np.asarray([self.Y(key)[:,m] for m in range(self.Ntimes)])
+            wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
             wgt_sq[np.isnan(wgt_sq)] = 0.
             if self.data_weighting == 'identity':
                 rmat =  np.asarray([self.I(key) * wgt_sq[m] for m in range(self.Ntimes)])
@@ -2902,7 +2902,7 @@ class PSpecData(object):
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
                             cov_pv *= (scalar)**2.
-                        if norm == 'I' and not(exact_norm):
+                        if norm == 'I' and not(exact_norm) and self.data_weighting == 'identity':
                             cov_pv *= self.scalar_delay_adjustment(key1, key2,
                                                  sampling=sampling) ** 2.
                         pol_cov.extend(cov_pv)
