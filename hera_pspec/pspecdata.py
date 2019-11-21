@@ -898,7 +898,7 @@ class PSpecData(object):
                 # foregrounds that are propagated to the power-spectrum.
                 if 'restore_width' in r_params:
                     if isinstance(r_params['restore_width'], (float, int)):
-                        ndlys_restore = int(r_params['restore_width'] / (.5 * nfreq / self.spw_Ndlys) * nfreq)
+                        ndlys_restore = 2 * int(r_params['restore_width'] / (nfreq / self.spw_Ndlys) * nfreq * np.mean(np.diff(self.freqs)))
                         for m in range(self.Ntimes):
                             rmat[m] = rmat[m] + \
                             dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
