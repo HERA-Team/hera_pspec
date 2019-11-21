@@ -14,6 +14,7 @@ from astropy.time import Time
 import warnings
 import glob
 from uvtools import dspec
+
 # Data files to use in tests
 dfiles = [
     'zen.2458042.12552.xx.HH.uvXAA',
@@ -789,6 +790,33 @@ class Test_PSpecData(unittest.TestCase):
                 else:
                     self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
 
+    def test_R_interpolation(self):
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.spw_Nfreqs
+        Ntime = self.ds.Ntimes
+        Ndlys = Nfreq - 20
+        self.ds.spw_Ndlys = Ndlys
+
+
+        # Set baselines to use for tests
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+
+        rpk1 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9], 'restore_width':100e-9}
+        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_r_param(key1,rpk1)
+        df = np.mean(np.diff(self.ds.freqs))
+        nd = 2 * int(df * 100e-9 / (Nfreq / Ndlys) * Nfreq)
+        wgt = self.ds.w(key1)[:,0].squeeze()
+        imat=dspec.delay_interpolation_matrix(Nfreq, nd, wgts=wgt, dres=Nfreq/Ndlys)
+        fmati=dspec.sinc_downweight_mat_inv(nchan=Nfreq, df=df, filter_centers=[0.],
+                                            filter_widths=[100e-9], filter_factors=[1e-9])
+        fmat = np.linalg.pinv(fmati * np.outer(wgt, wgt))
+        rmat = self.ds.R(key1)[0].squeeze()
+        mymat = imat @ (np.identity(Nfreq, dtype=complex) - fmat) + fmat
+        assert(np.all(np.isclose(mymat, rmat, atol=1e-3)))
+
+
 
     def test_R_truncation(self):
         """
@@ -805,8 +833,6 @@ class Test_PSpecData(unittest.TestCase):
         # Set baselines to use for tests
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-        key3 = [(0, 24, 38), (0, 24, 38)]
-        key4 = [(1, 25, 38), (1, 25, 38)]
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
         rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
