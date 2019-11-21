@@ -928,15 +928,15 @@ class PSpecData(object):
                     rmat[m] = np.linalg.pinv(rmat[m])
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
-                if 'restore_width' in r_params and isinstance(r_params['restore_width'], (float, int)):
-                    ndlys_restore = int(r_params['restore_width'] / (.5 * nfreq / self.spw_Ndlys) * nfreq)
-                    for m in range(self.Ntimes):
-                        rmat[m] = rmat[m] + \
-                        dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
-                        wgts, dres=nfreq/self.spw_Ndlys, cache={})\
-                        @ (np.identity(nfreq, dtype=complex) - rmat[m])
-                else:
-                    raise ValueError("'restore_width' must be supplied as an integer or float.")
+<<<<<<<                ndlys_restore = 2 * int(r_params['restore_width'] / (nfreq / self.spw_Ndlys) * nfreq * np.mean(np.diff(self.freqs)))
+                        for m in range(self.Ntimes):
+                            rmat[m] = rmat[m] + \
+                            dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
+                            wgts[m], dres=nfreq/self.spw_Ndlys, cache={})\
+                            @ (np.identity(nfreq, dtype=complex) - rmat[m])
+                    else:
+                        raise ValueError("'restore_width' must be supplied as an integer or float.")
+>>>>>>> added tests for interp weighting.
 
 
 
