@@ -899,6 +899,10 @@ class PSpecData(object):
         assert isinstance(filter_extension[0], int) and\
                isinstance(filter_extension[1], int), "filter extension must contain only integers"
         filter_extension=list(filter_extension)
+        if filter_extension[0] > self.spw_range[0]:
+            raise Warning("filter_extension[0] exceeds data spw_range. Defaulting to spw_range[0]!")
+        if filter_extension[1] > self.Nfreqs - self.spw_range[1]:
+            raise Warning("filter_extension[1] exceeds channels between spw_range[1] and Nfreqs. Defaulting to Nfreqs-spw_range[1]!")
         filter_extension[0] = np.min([self.spw_range[0], filter_extension[0]])#clip extension to not extend beyond data range
         filter_extension[1] = np.min([self.Nfreqs - self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
         self.filter_extension = tuple(filter_extension)
