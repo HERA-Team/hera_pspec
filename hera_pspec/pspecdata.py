@@ -558,6 +558,23 @@ class PSpecData(object):
             wgts = (~self.dsets[dset].get_flags(bl)).astype(float).T[spw]
             return wgts
 
+    def z(self, key):
+        """
+        Get data after the application of the R-matrix (filtering and tapering).
+        This is super-useful for inspecting the qualitative impact of various input
+        data weightings.
+
+        Parameters
+        ----------
+        key : tuple
+            Tuple containing dataset ID and baseline index. The first element
+            of the tuple is the dataset index (or label), and the subsequent
+            elements are the baseline ID.
+        """
+        tr = self.R(key)
+        tx = self.x(key,filter_extension=True)
+        return np.asarray([ tr[m] @ tx[:,m] for m in range(self.Ntimes)])
+
     def set_C(self, cov):
         """
         Set the cached covariance matrix to a set of user-provided values.
@@ -916,12 +933,22 @@ class PSpecData(object):
                     rmat[m] = np.linalg.pinv(rmat[m])
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
-<<<<<<<                ndlys_restore = 2 * int(r_params['restore_width'] / (nfreq / self.spw_Ndlys) * nfreq * np.mean(np.diff(self.freqs)))
+                if 'restore_width' in r_params:
+                    if isinstance(r_params['restore_width'], (float, int)):
+                        # Do not actually specify 'restore_res' in your r_params!
+                        # It only exists to mess up power spectra.
+                        # You've been warned! ;)
+                        if not 'restore_res' in r_params:
+                            dres = nfreq/self.spw_Ndlys
+                        else:
+                            dres = r_params['restore_res']
+                        ndlys_restore = 2 * int(r_params['restore_width'] * nfreq / dres * np.mean(np.diff(self.freqs)))
                         for m in range(self.Ntimes):
-                            rmat[m] = rmat[m] + \
-                            dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
-                            wgts[m], dres=nfreq/self.spw_Ndlys, cache={})\
-                            @ (np.identity(nfreq, dtype=complex) - rmat[m])
+                            if np.sum((wgts[m]>0).astype(float)) >= ndlys_restore:
+                                rmat[m] = rmat[m] + \
+                                dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
+                                wgts[m], dres=dres, cache={})\
+                                @ (np.identity(nfreq, dtype=complex) - rmat[m])
                     else:
                         raise ValueError("'restore_width' must be supplied as an integer or float.")
 >>>>>>> added tests for interp weighting.
