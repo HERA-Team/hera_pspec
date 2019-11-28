@@ -678,7 +678,7 @@ class Test_PSpecData(unittest.TestCase):
             #check error raised
             if input_data_weight == 'sinc_downweight':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
@@ -733,7 +733,7 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        rpk1 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9], 'restore_width':100e-9}
+        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9], 'restore_half_width':100e-9}
         self.ds.set_weighting('sinc_downweight')
         self.ds.set_r_param(key1,rpk1)
         df = np.mean(np.diff(self.ds.freqs))
@@ -741,7 +741,7 @@ class Test_PSpecData(unittest.TestCase):
         wgt = self.ds.w(key1)[:,0].squeeze()
         imat=dspec.delay_interpolation_matrix(Nfreq, nd, wgts=wgt, dres=Nfreq/Ndlys)
         fmati=dspec.sinc_downweight_mat_inv(nchan=Nfreq, df=df, filter_centers=[0.],
-                                            filter_widths=[100e-9], filter_factors=[1e-9])
+                                            filter_half_widths=[100e-9], filter_factors=[1e-9])
         fmat = np.linalg.pinv(fmati * np.outer(wgt, wgt))
         rmat = self.ds.R(key1)[0].squeeze()
         mymat = imat @ (np.identity(Nfreq, dtype=complex) - fmat) + fmat
@@ -765,8 +765,8 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        rpk1 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9]}
-        rpk2 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9]}
+        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
+        rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
         self.ds.set_weighting('sinc_downweight')
         self.ds.set_r_param(key1,rpk1)
         self.ds.set_r_param(key2,rpk2)
@@ -815,7 +815,7 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'sinc_downweight':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             # Loop over list of taper functions
@@ -882,7 +882,7 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'sinc_downweight':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
@@ -910,7 +910,7 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'sinc_downweight':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
@@ -1264,7 +1264,7 @@ class Test_PSpecData(unittest.TestCase):
         my_r_params = {}
         my_r_params_dset0_only = {}
         rp = {'filter_centers':[0.],
-              'filter_widths':[250e-9],
+              'filter_half_widths':[250e-9],
               'filter_factors':[1e-9]}
         for bl in bls:
             key1 = (0,) + bl + ('xx',)

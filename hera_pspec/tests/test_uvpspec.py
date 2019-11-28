@@ -231,7 +231,7 @@ class Test_UVPSpec(unittest.TestCase):
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
         rp = {'filter_centers':[0.],
-              'filter_widths':[250e-9],
+              'filter_half_widths':[250e-9],
               'filter_factors':[1e-9]}
         r_params = {}
         for bl in bls:
@@ -328,7 +328,7 @@ class Test_UVPSpec(unittest.TestCase):
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
         rp = {'filter_centers':[0.],
-              'filter_widths':[250e-9],
+              'filter_half_widths':[250e-9],
               'filter_factors':[1e-9]}
         r_params = {}
         for bl in bls:
@@ -614,7 +614,7 @@ class Test_UVPSpec(unittest.TestCase):
         bls = [(37, 38), (38, 39), (52, 53)]
 
         rp = {'filter_centers':[0.],
-              'filter_widths':[250e-9],
+              'filter_half_widths':[250e-9],
               'filter_factors':[1e-9]}
 
         r_params = {}
@@ -626,7 +626,7 @@ class Test_UVPSpec(unittest.TestCase):
         # create an r_params copy with inconsistent weighting to test
         # error case
         r_params_inconsistent = copy.deepcopy(r_params)
-        r_params[key1]['filter_widths'] = [100e-9]
+        r_params[key1]['filter_half_widths'] = [100e-9]
 
         uvp1 = testing.uvpspec_from_data(uvd, bls,
                                          spw_ranges=[(20, 30), (60, 90)],
