@@ -926,34 +926,32 @@ class PSpecData(object):
                 rmat = np.asarray([dspec.sinc_downweight_mat_inv(nchan=nfreq,
                                     df=np.median(np.diff(self.freqs)),
                                     filter_centers=r_params['filter_centers'],
-                                    filter_widths=r_params['filter_widths'],
+                                    filter_half_widths=r_params['filter_half_widths'],
                                     filter_factors=r_params['filter_factors'])\
                                      * wgt_sq[m] for m in range(self.Ntimes)])
                 for m in range(self.Ntimes):
                     rmat[m] = np.linalg.pinv(rmat[m])
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
-                if 'restore_width' in r_params:
-                    if isinstance(r_params['restore_width'], (float, int)):
-                        # Do not actually specify 'restore_res' in your r_params!
-                        # It only exists to mess up power spectra.
-                        # You've been warned! ;)
-                        if not 'restore_res' in r_params:
-                            dres = nfreq/self.spw_Ndlys
-                        else:
-                            dres = r_params['restore_res']
-                        ndlys_restore = 2 * int(r_params['restore_width'] * nfreq / dres * np.mean(np.diff(self.freqs)))
-                        for m in range(self.Ntimes):
-                            if np.sum((wgts[m]>0).astype(float)) >= ndlys_restore:
-                                rmat[m] = rmat[m] + \
-                                dspec.delay_interpolation_matrix(nfreq, ndlys_restore,
-                                wgts[m], dres=dres, cache={})\
-                                @ (np.identity(nfreq, dtype=complex) - rmat[m])
+            rmat =  np.transpose(np.dot(tmat, rmat), (1, 0, 2))
+
+            if self.data_weighting == 'sinc_downweight' and 'restore_half_width' in r_params:
+                if isinstance(r_params['restore_half_width'], (float, int)) and r_params['restore_half_width']>0:
+                    if not 'restore_fundamental_period' in r_params:
+                        fundamental_period = 2 * self.spw_Nfreqs
                     else:
-                        raise ValueError("'restore_width' must be supplied as an integer or float.")
->>>>>>> added tests for interp weighting.
+                        fundamental_period = r_params['restore_fundamental_period']
+                    ndlys_restore = int(r_params['restore_half_width'] * np.mean(np.diff(self.freqs)) * fundamental_period)
+                    for m in range(self.Ntimes):
+                        if np.sum((wgts[m]>0).astype(float)) >= ndlys_restore:
+                            rmat[m] = rmat[m] + \
+                            dspec.delay_interpolation_matrix(self.spw_Nfreqs, ndlys_restore,
+                            wgts[m][self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
+                            @ (tmat - rmat[m])
+                else:
+                    raise ValueError("'restore_half_width' must be supplied as an integer or float >0.")
 
-
+            rmat = myT.T * rmat
 
 
             if self.symmetric_taper
@@ -1324,7 +1322,7 @@ class PSpecData(object):
             return 0.5 * np.array(q)
 
     def get_G(self, key1, key2, exact_norm=False, pol=False,
-              average_times=False):
+              average_times=False, time_indices=None):
         """
         Calculates
 
@@ -1355,18 +1353,23 @@ class PSpecData(object):
         average_times : bool, optional
             If true, average G over all times so that output is (Ndlys x Ndlys)
 
+        time_indices : list of integers or array like integer list
+            List of time indices to compute G. Default, compute for all times.
+
         Returns
         -------
         G : array_like, complex
             Fisher matrix, with dimensions (Ntimes, spw_Nfreqs, spw_Nfreqs).
         """
+        if time_indices is None:
+            time_indices = np.arange(self.Ntimes).astype(int)
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None")
 
         G = np.zeros((self.Ntimes, self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        R1 = self.R(key1)
-        R2 = self.R(key2)
+        R1 = self.R(key1)[time_indices]
+        R2 = self.R(key2)[time_indices]
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
@@ -1393,18 +1396,18 @@ class PSpecData(object):
         for i in range(self.spw_Ndlys):
             for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
-                for tind in range(self.Ntimes):
+                for tind in range(len(time_indices)):
                     G[tind, i, j] = np.trace(np.dot(iR1Q1[i][tind], iR2Q2[j][tind]))
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(G) == 0:
-            G = np.asarray([np.eye(self.spw_Ndlys) for m in range(self.Ntimes)])
+            G = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
         if average_times:
             G = np.mean(G, axis=0)
         return G / 2.
 
     def get_H(self, key1, key2, sampling=False, exact_norm = False, pol=False,
-              average_times=False):
+              average_times=False, time_indices=None):
         """
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -1473,13 +1476,15 @@ class PSpecData(object):
         H : array_like, complex
             Dimensions (Ntimes, Nfreqs, Nfreqs).
         """
+        if time_indices is None:
+            time_indices = np.arange(self.Ntimes).astype(int)
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None.")
 
         H = np.zeros((self.Ntimes,self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        R1 = self.R(key1)
-        R2 = self.R(key2)
+        R1 = self.R(key1)[time_indices]
+        R2 = self.R(key2)[time_indices]
         if not sampling:
             nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
             sinc_matrix = np.zeros((nfreq, nfreq), dtype=complex)
@@ -1514,12 +1519,12 @@ class PSpecData(object):
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
         for i in range(self.spw_Ndlys): # this loop goes as nchan^4
             for j in range(self.spw_Ndlys):
-                for tind in range(self.Ntimes):
+                for tind in range(len(time_indices)):
                     H[tind,i,j] = np.trace(np.dot(iR1Q1[i][tind], iR2Q2[j][tind]))
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(H) == 0:
-            H = np.asarray([np.eye(self.spw_Ndlys) for m in range(self.Ntimes)])
+            H = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
         if average_times:
             H = np.mean(H, axis=0)
         return H / 2.
@@ -2277,7 +2282,7 @@ class PSpecData(object):
         return scalar
 
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
-                                Gv=None, Hv=None):
+                                Gv=None, Hv=None, time_index=None):
         """
         Computes an adjustment factor for the pspec scalar that is needed
         when the number of delay bins is not equal to the number of
@@ -2320,8 +2325,8 @@ class PSpecData(object):
         adjustment : float if the data_weighting is 'identity'
                      1d array of floats with length spw_Ndlys otherwise.
         """
-        if Gv is None: Gv = self.get_G(key1, key2, average_times=True)
-        if Hv is None: Hv = self.get_H(key1, key2, sampling, average_times=True)
+        if Gv is None: Gv = self.get_G(key1, key2, time_indices=[time_index])
+        if Hv is None: Hv = self.get_H(key1, key2, time_indices=[time_index])
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
@@ -2886,11 +2891,9 @@ class PSpecData(object):
                     # Wide bin adjustment of scalar, which is only needed for
                     # the diagonal norm matrix mode (i.e., norm = 'I')
                     if norm == 'I' and not(exact_norm):
-                        sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
-                        if isinstance(sa, (np.float, float)):
-                            pv *= sa
-                        else:
-                            pv = np.atleast_2d(sa).T * pv
+                        for t in range(self.Ntimes):
+                            sd = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
+                            pv[t] = pv[:,t] * sd
 
                      #Generate the covariance matrix if error bars provided
                     if store_cov:
@@ -2901,9 +2904,10 @@ class PSpecData(object):
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
                             cov_pv *= (scalar)**2.
-                        if norm == 'I' and not(exact_norm) and self.data_weighting == 'identity':
-                            cov_pv *= self.scalar_delay_adjustment(key1, key2,
-                                                 sampling=sampling) ** 2.
+                        if norm == 'I' and not(exact_norm):
+                            for t in range(self.Ntimes):
+                                sd = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
+                                cov_pv[:,t] = cov_pv[:,t] * np.outer(sd, sd)
                         pol_cov.extend(cov_pv)
 
                     # Get baseline keys
