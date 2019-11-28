@@ -1610,7 +1610,7 @@ class PSpecData(object):
         elif model in ['empirical_pspec']:
             print((self.spw_Nfreqs, self.Ntimes))
             output = utils.cov(self.q_hat(key1, key2),
-                    np.ones((self.spw_Nfreqs, self.Ntimes)))
+                    np.ones((self.spw_Ndlys, self.Ntimes)))
         return output
 
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False,
