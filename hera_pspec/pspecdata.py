@@ -2781,7 +2781,7 @@ class PSpecData(object):
                     if norm == 'I' and not(exact_norm):
                         for t in range(self.Ntimes):
                             sd = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
-                            pv[t] = pv[:,t] * sd
+                            pv[:,t] = pv[:,t] * sd
 
                      #Generate the covariance matrix if error bars provided
                     if store_cov:
@@ -2795,7 +2795,7 @@ class PSpecData(object):
                         if norm == 'I' and not(exact_norm):
                             for t in range(self.Ntimes):
                                 sd = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
-                                cov_pv[:,t] = cov_pv[:,t] * np.outer(sd, sd)
+                                cov_pv[t] = cov_pv[t] * np.outer(sd, sd)
                         pol_cov.extend(cov_pv)
 
                     # Get baseline keys
