@@ -1313,15 +1313,18 @@ class PSpecData(object):
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
-            integral_beam = self.get_integral_beam(pol)
+            integral_beam1 = self.get_integral_beam(pol)
+            integral_beam2 = self.get_integral_beam(pol, include_extension=True)
             del_tau = np.median(np.diff(self.delays()))*1e-9
         if exact_norm:
-            qnorm =  del_tau * integral_beam
+            qnorm1 =  del_tau * integral_beam1
+            qnorm2 =  del_tau * integral_beam2
         else:
-            qnorm = 1.
+            qnorm1 = 1.
+            qnorm2 = 1.
         for ch in range(self.spw_Ndlys):
-            Q1 = self.get_Q_alt(ch) * qnorm
-            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
+            Q1 = self.get_Q_alt(ch) * qnorm1
+            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
             iR1Q1[ch] = np.dot(np.transpose(np.conj(R1),axes=(0,2,1)), Q1) # R_1 Q
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
         for i in range(self.spw_Ndlys):
@@ -1426,15 +1429,18 @@ class PSpecData(object):
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
-            integral_beam = self.get_integral_beam(pol)
+            integral_beam1 = self.get_integral_beam(pol)
+            integral_beam2 = self.get_integral_beam(pol, include_extension=True)
             del_tau = np.median(np.diff(self.delays()))*1e-9
         if exact_norm:
-            qnorm = del_tau * integral_beam
+            qnorm1 = del_tau * integral_beam1
+            qnorm2 = del_tau * integral_beam2
         else:
-            qnorm = 1.
+            qnorm1 = 1.
+            qnorm2 = 1.
         for ch in range(self.spw_Ndlys):
-            Q1 = self.get_Q_alt(ch) * qnorm
-            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
+            Q1 = self.get_Q_alt(ch) * qnorm1
+            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
             if not sampling:
                 Q2 *= sinc_matrix
 
@@ -1849,7 +1855,7 @@ class PSpecData(object):
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
 
-    def get_integral_beam(self, pol=False):
+    def get_integral_beam(self, pol=False, include_extension=False):
         """
         Computes the integral containing the spectral beam and tapering
         function in Q_alpha(i,j).
@@ -1867,7 +1873,10 @@ class PSpecData(object):
         integral_beam : array_like
             integral containing the spectral beam and tapering.
         """
-        nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
+        if include_extension:
+            nu = self.freqs[self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1]]
+        else:
+            nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
 
         try:
             # Get beam response in (frequency, pixel), beam area(freq) and
