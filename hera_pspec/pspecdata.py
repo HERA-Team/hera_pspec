@@ -381,6 +381,7 @@ class PSpecData(object):
             self._H, self._G = {}, {}
             self._W, self._M = {}, {}
             self._E, self._V = {}, {}
+            self._R_assist = {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -1590,7 +1591,7 @@ class PSpecData(object):
             Set of E matrices, with dimensions (Ndlys, Nfreqs, Nfreqs).
 
         """
-        Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.Ndlys)\
+        Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.Ndlys, self.data_weighting)\
         + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Ekey in self._E:
@@ -1693,9 +1694,9 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         # Collect all the relevant pieces
-        Vkey = key1 + key2 + (pol, exact_norm, self.taper, self.Ndlys, model)\
+        Vkey = key1 + key2 + (pol, exact_norm, self.taper, self.Ndlys, model, self.data_weighting)\
         + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
-        
+
         if not Vkey in self._V:
             if model in ['dsets', 'empirical']:
                 E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm,
@@ -1774,7 +1775,7 @@ class PSpecData(object):
 
 
             if mode == 'H^-1':
-                H = _get_H(self, key1, key2, time_index, sampling=False, exact_norm=exact_norm, pol=pol)
+                H = self._get_H(key1, key2, time_index, sampling=False, exact_norm=exact_norm, pol=pol)
                 try:
                     M = np.linalg.inv(H)
                 except np.linalg.LinAlgError as err:
@@ -1801,7 +1802,7 @@ class PSpecData(object):
                 M = np.dot(W_norm, V_minus_half)
 
             elif mode == 'H^-1/2':
-                H = _get_H(self, key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
+                H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
                 eigvals, eigvects = np.linalg.eig(H)
                 if (eigvals <= 0.).any():
                     raise_warning("At least one non-positive eigenvalue for the "
@@ -1811,8 +1812,8 @@ class PSpecData(object):
                 M = np.dot(W_norm, H_minus_half)
 
             elif mode == 'I':
-                H = _get_H(self, key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
-                H = _get_G(self, key1, key2, time_index, exact_norm=exact_norm, pol=pol)
+                H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
+                H = self._get_G(key1, key2, time_index, exact_norm=exact_norm, pol=pol)
                 # This is not the M matrix as is rigorously defined in the
                 # OQE formalism, because the power spectrum scalar is excluded
                 # in this matrix normalization (i.e., M doesn't do the full
@@ -1876,7 +1877,7 @@ class PSpecData(object):
         return self._W[Wkey]
 
     def get_M(self, key1, key2, mode='I', exact_norm=False,
-             average_times=False, time_indices=None):
+             average_times=False, sampling=False, time_indices=None):
         """
         Construct the normalization matrix M This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
