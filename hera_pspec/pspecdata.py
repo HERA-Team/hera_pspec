@@ -1702,8 +1702,17 @@ class PSpecData(object):
                     np.ones((self.spw_Ndlys, self.Ntimes)))
         return output
 
+    def _get_M(self, key1, key2, time_index, mode='I', band_covar=None, exact_norm=False):
+        return
+    def _get_W(self, key1, key2, time_index, mode='I', band_covar=None, exact_norm=False):
+        return
+    def get_M(self, key1, key2, mode='I', band_covar=None, exact_norm=False, time_indices=None):
+        return
+    def get_W(self, key1, key2, mode='I', band_covar=None, exact_norm=False, time_indices=None):
+        return
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False,
                average_times=False):
+        return 
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
