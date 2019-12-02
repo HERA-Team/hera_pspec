@@ -2934,6 +2934,7 @@ class PSpecData(object):
                         self.set_r_param(key2, r_params[key2])
 
                     # Build Fisher matrix
+                    '''
                     if input_data_weight == 'identity':
                         # in this case, all Gv and Hv differ only by flagging pattern
                         # so check if we've already computed this
@@ -2961,9 +2962,10 @@ class PSpecData(object):
                     else:
                         # for non identity weighting (i.e. iC weighting)
                         # Gv and Hv are always different, so compute them
-                        if verbose: print("  Building G...")
-                        Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
-                        Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
+                    '''
+                    if verbose: print("  Building G...")
+                    Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
+                    Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
