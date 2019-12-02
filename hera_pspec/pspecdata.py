@@ -64,11 +64,10 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
-        self._H = {}
-        self._G = {}
+        #Here are some cache dictionaries
+        #Necesary for speeding up calculations
         # r_params is a dictionary that stores parameters for
         # parametric R matrices.
-        self.r_params = {}
         self.filter_extension = (0, 0)
         self.cov_regularization = 0.
         # set data weighting to identity by default
@@ -376,9 +375,12 @@ class PSpecData(object):
             keys will be removed. Default: None.
         """
         if keys is None:
+            self.r_params = {}
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
             self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
             self._H, self._G = {}, {}
+            self._W, self._M = {}, {}
+            self._E, self._V = {}, {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -1294,7 +1296,7 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (spw_Nfreqs, spw_Nfreqs).
         """
-        Gkey = key1 + key2 + (self.data_weighting, self.taper, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
+        Gkey = key1 + key2 + (self.data_weighting, self.taper, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Gkey in self._G:
@@ -1392,6 +1394,9 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
 
+        time_index : integer
+            Specify time-step index to calculate H for.
+
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
@@ -1406,11 +1411,11 @@ class PSpecData(object):
         Returns
         -------
         H : array_like, complex
-            Dimensions (Nfreqs, Nfreqs).
+            Dimensions (Ndlys, Ndlys).
         """
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
-        Hkey = key1 + key2 + (self.data_weighting, self.taper, sampling, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
+        Hkey = key1 + key2 + (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Hkey in self._H:
@@ -1585,24 +1590,31 @@ class PSpecData(object):
             Set of E matrices, with dimensions (Ndlys, Nfreqs, Nfreqs).
 
         """
-        assert time_index >= 0 and time_index < self.Ntimes, "time_index must be between 0 and Ntimes"
-        if self.spw_Ndlys == None:
-            raise ValueError("Number of delay bins should have been set"
-                             "by now! Cannot be equal to None")
-        nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
-        E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
-                               dtype=np.complex)
-        R1 = self.R(key1)[time_index]
-        R2 = self.R(key2)[time_index]
-        if (exact_norm):
-            integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays()))*1e-9
-        for dly_idx in range(self.spw_Ndlys):
-            if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
-            else: QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
-            E_matrices[dly_idx] = np.dot(np.conj(R1).T, QR2)
+        Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.Ndlys)\
+        + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
 
-        return 0.5 * E_matrices
+        if not Ekey in self._E:
+            assert time_index >= 0 and time_index < self.Ntimes, "time_index must be between 0 and Ntimes"
+            if self.spw_Ndlys == None:
+                raise ValueError("Number of delay bins should have been set"
+                                 "by now! Cannot be equal to None")
+            nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
+            E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
+                                   dtype=np.complex)
+            R1 = self.R(key1)[time_index]
+            R2 = self.R(key2)[time_index]
+            if (exact_norm):
+                integral_beam = self.get_integral_beam(pol)
+                del_tau = np.median(np.diff(self.delays()))*1e-9
+            for dly_idx in range(self.spw_Ndlys):
+                if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
+                else: QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
+                E_matrices[dly_idx] = np.dot(np.conj(R1).T, QR2)
+
+            self._E[Ekey] = 0.5 * E_matrices
+
+        return self._E[Ekey]
+
 
     def get_unnormed_V(self, key1, key2, time_index, model='empirical', exact_norm=False,
                        pol = False):
@@ -1681,28 +1693,34 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         # Collect all the relevant pieces
-        if model in ['dsets', 'empirical']:
-            E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm,
-                                             time_index = time_index, pol = pol)
-            C1 = self.C_model(key1, model=model, time_index=time_index)
-            C2 = self.C_model(key2, model=model, time_index=time_index)
-            P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
-            S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
+        Vkey = key1 + key2 + (pol, exact_norm, self.taper, self.Ndlys, model)\
+        + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
+        
+        if not Vkey in self._V:
+            if model in ['dsets', 'empirical']:
+                E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm,
+                                                 time_index = time_index, pol = pol)
+                C1 = self.C_model(key1, model=model, time_index=time_index)
+                C2 = self.C_model(key2, model=model, time_index=time_index)
+                P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
+                S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
 
-            E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
-            E12C2 = np.dot(E_matrices, C2)
-            auto_term = np.einsum('aij,bji', E12C2, E21C1)
-            E12starS21 = np.dot(E_matrices.conj(), S21)
-            E12P21 = np.dot(E_matrices, P21)
-            cross_term = np.einsum('aij,bji', E12P21, E12starS21)
-            output = auto_term + cross_term
-        elif model in ['empirical_pspec']:
-            print((self.spw_Nfreqs, self.Ntimes))
-            output = utils.cov(self.q_hat(key1, key2),
-                    np.ones((self.spw_Ndlys, self.Ntimes)))
-        return output
+                E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
+                E12C2 = np.dot(E_matrices, C2)
+                auto_term = np.einsum('aij,bji', E12C2, E21C1)
+                E12starS21 = np.dot(E_matrices.conj(), S21)
+                E12P21 = np.dot(E_matrices, P21)
+                cross_term = np.einsum('aij,bji', E12P21, E12starS21)
+                output = auto_term + cross_term
+            elif model in ['empirical_pspec']:
+                print((self.spw_Nfreqs, self.Ntimes))
+                output = utils.cov(self.q_hat(key1, key2),
+                        np.ones((self.spw_Ndlys, self.Ntimes)))
+            self._V[Vkey] = output
 
-    def _get_M(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False):
+        return self._V[Vkey]
+
+    def _get_M(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False, pol=False):
         """
         Helper function that returns M-matrix for a single time step.
         Several choices for M are supported:
@@ -1720,26 +1738,35 @@ class PSpecData(object):
 
         Parameters
         ----------
-        G : array_like
-            Denominator matrix for the bandpowers, with dimensions (Ntimes, Nfreqs, Nfreqs).
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
+            in the list will be combined with inverse noise weights.
 
-        H : array_like
-            Response matrix for the bandpowers, with dimensions (Ntimes, Nfreqs, Nfreqs).
+        time_index : integer
+            Specify time-step index to calculate H for.
 
-        mode : str, optional
-            Definition to use for M. Must be one of the options listed above.
-            Default: 'I'.
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
 
         exact_norm : boolean, optional
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
-            of q_hat for details). Currently, this is supported only for mode I
+            of q_hat for details).
 
-        average_times : bool, optional
-            If true, average G over all times so that output is (Ndlys x Ndlys)
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+
+        Returns
+        -------
+        M : array_like, complex
+            Dimensions (Ndlys, Ndlys).
+
         """
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
         assert(mode in modes)
-        Mkey = (key1, key2, mode, exact_norm,) + (self.taper, self.input_data_weight)\
+        Mkey = (key1, key2, mode, exact_norm, self.spw_Ndlys) + (self.taper, self.data_weighting)\
         + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
         if not Mkey in self._M:
             if mode!='I' and exact_norm==True:
@@ -1796,24 +1823,182 @@ class PSpecData(object):
             else:
                 raise NotImplementedError("Cholesky decomposition mode not currently supported.")
 
+            M[np.isnan(M)] = 0.
+            M[np.isinf(M)] = 0.
+
             self._M[Mkey] = M
 
         return self._M[Mkey]
-    def _get_W(self, key1, key2, time_index, mode='I', band_covar=None, exact_norm=False):
+
+    def _get_W(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False):
         """
         Helper function that returns W-matrix for a single time step.
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
+            in the list will be combined with inverse noise weights.
+
+        time_index : integer
+            Specify time-step index to calculate H for.
+
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details).
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+
+        Returns
+        -------
+        W : array_like, complex
+            Dimensions (Ndlys, Ndlys).
         """
+        Wkey = key1 + key2 + (mode, sampling, exact_norm, self.taper, self.data_weighting, self.spw_Ndlys) + \
+        tuple(self.Y(key1)[time_index].flatten()) + tuple(self.Y(key2)[time_index].flatten())
+        if not Wkey in self._W:
+            M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
+            H = self._get_H(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
+            W = np.dot(M, H)
+            if mode == 'H^-1':
+                W_norm = np.sum(W, axis=1)
+                W = (W.T / W_norm).T
+            elif mode == 'I':
+                W_norm = np.diag(1. / np.sum(H, axis=1))
+                W = np.dot(W_norm, H)
+            self._W[Wkey] = W
+        return self._W[Wkey]
 
-        return
-    def get_M(self, key1, key2, mode='I', band_covar=None, exact_norm=False, time_indices=None):
+    def get_M(self, key1, key2, mode='I', exact_norm=False,
+             average_times=False, time_indices=None):
+        """
+        Construct the normalization matrix M This is defined through Eqs. 14-16 of
+        arXiv:1502.06016:
 
-        return
-    def get_W(self, key1, key2, mode='I', band_covar=None, exact_norm=False, time_indices=None):
-        return
+            \hat{p} = M \hat{q}
+            <\hat{p}> = W p
+            W = M H,
+
+        where p is the true band power and H is the response matrix (defined above
+        in get_H) of unnormalized bandpowers to normed bandpowers.
+
+        Several choices for M are supported:
+            'I':      Set M to be diagonal (e.g. HERA Memo #44)
+            'H^-1':   Set M = H^-1, the (pseudo)inverse response matrix.
+            'V^-1/2': Set M = V^-1/2, the root-inverse response matrix (using SVD).
+
+        These choices will be supported very soon:
+            'L^-1':   Set M = L^-1, Cholesky decomposition.
+
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
+            in the list will be combined with inverse noise weights.
+
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details).
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+
+        average_times : bool, optional
+            If true, average M-matrices along time-axis.
+
+        time_indices : list, optional
+            List of time-indices to calculate M-matrices for. Default: All times.
+
+        Returns
+        -------
+        M : array_like, complex
+            Dimensions (Ntimes Ndlys, Ndlys) or (Ndlys, Ndlys) if average_times is True.
+        """
+        if time_indices is None:
+            time_indices = np.arange(self.Ntimes).astype(int)
+        M = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+        for tind, time_index in enumerate(time_indices):
+            M[tind] = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
+        if average_times:
+            M = np.mean(M, axis=0)
+        return M
+
+    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None):
+        """
+        Construct the Window function matrix W. This is defined through Eqs. 14-16 of
+        arXiv:1502.06016:
+
+            \hat{p} = M \hat{q}
+            <\hat{p}> = W p
+            W = M H,
+
+        where p is the true band power and H is the response matrix (defined above
+        in get_H) of unnormalized bandpowers to normed bandpowers.
+
+        Several choices for M are supported:
+            'I':      Set M to be diagonal (e.g. HERA Memo #44)
+            'H^-1':   Set M = H^-1, the (pseudo)inverse response matrix.
+            'V^-1/2': Set M = V^-1/2, the root-inverse response matrix (using SVD).
+
+        These choices will be supported very soon:
+            'L^-1':   Set M = L^-1, Cholesky decomposition.
+
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
+            in the list will be combined with inverse noise weights.
+
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details).
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+
+        average_times : bool, optional
+            If true, average M-matrices along time-axis.
+
+        time_indices : list, optional
+            List of time-indices to calculate M-matrices for. Default: All times.
+
+        Returns
+        -------
+        W : array_like, complex
+            Dimensions (Ntimes Ndlys, Ndlys) or (Ndlys, Ndlys) if average_times is True.
+        """
+        if time_indices is None:
+            time_indices = np.arange(self.Ntimes).astype(int)
+        W = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+        for tind, time_index in enumerate(time_indices):
+            W[tind] = self._get_W(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
+        if average_times:
+            W = np.mean(W, axis=0)
+        return W
+
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False,
                average_times=False):
         return
         """
+        WARNING: ThIS FUNCTION IS GOING TO BE DEPRECATED!!!
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2967,11 +3152,12 @@ class PSpecData(object):
                     qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol = pol)
 
                     if verbose: print("  Normalizing power spectrum...")
-                    if norm == 'V^-1/2':
-                        V_mat = self.cov_q_hat(key1, key2, exact_norm=exact_norm, pol = pol, model=cov_model)
-                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
-                    else:
-                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
+                    #if norm == 'V^-1/2':
+                    #    V_mat = self.cov_q_hat(key1, key2, exact_norm=exact_norm, pol = pol, model=cov_model)
+                        #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)                                    #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
+                    #else:
+                    #    Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
+                    Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm)
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
