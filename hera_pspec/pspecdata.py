@@ -1264,7 +1264,7 @@ class PSpecData(object):
                 q.append(qi)
             return 0.5 * np.array(q)
 
-    def _get_G(self, key1, key2, time_index, sampling=False, exact_norm=False, pol=False):
+    def _get_G(self, key1, key2, time_index, exact_norm=False, pol=False):
         """
         helper function for get_G that uses caching to speed things up.
 
@@ -1294,41 +1294,38 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (spw_Nfreqs, spw_Nfreqs).
         """
-        Gkey = key1 + key2 + (self.input_data_weight, self.taper, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
+        Gkey = key1 + key2 + (self.data_weighting, self.taper, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Gkey in self._G:
             if self.spw_Ndlys == None:
                 raise ValueError("Number of delay bins should have been set"
                                  "by now! Cannot be equal to None.")
-        G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        R1 = self.R(key1)[time_index].squeeze()
-        R2 = self.R(key2)[time_index].squeeze()
-        iR1Q1, iR2Q2 = {}, {}
-        if (exact_norm):
-            integral_beam1 = self.get_integral_beam(pol)
-            integral_beam2 = self.get_integral_beam(pol, include_extension=True)
-            del_tau = np.median(np.diff(self.delays()))*1e-9
-        if exact_norm:
-            qnorm1 = del_tau * integral_beam1
-            qnorm2 = del_tau * integral_beam2
-        else:
-            qnorm1 = 1.
-            qnorm2 = 1.
-        for ch in range(self.spw_Ndlys):
-            Q1 = self.get_Q_alt(ch) * qnorm1
-            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
-            if not sampling:
-                Q2 *= sinc_matrix
+            G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+            R1 = self.R(key1)[time_index].squeeze()
+            R2 = self.R(key2)[time_index].squeeze()
+            iR1Q1, iR2Q2 = {}, {}
+            if (exact_norm):
+                integral_beam1 = self.get_integral_beam(pol)
+                integral_beam2 = self.get_integral_beam(pol, include_extension=True)
+                del_tau = np.median(np.diff(self.delays()))*1e-9
+            if exact_norm:
+                qnorm1 = del_tau * integral_beam1
+                qnorm2 = del_tau * integral_beam2
+            else:
+                qnorm1 = 1.
+                qnorm2 = 1.
+            for ch in range(self.spw_Ndlys):
+                Q1 = self.get_Q_alt(ch) * qnorm1
+                Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
+                iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q_alt
+                iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
+            for i in range(self.spw_Ndlys): # this loop goes as nchan^4
+                for j in range(self.spw_Ndlys):
+                    G[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
+            self._G[Gkey] = G
 
-            iR1Q1[ch] = np.dot(np.conj(R1), Q1) # R_1 Q_alt
-            iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
-        for i in range(self.spw_Ndlys): # this loop goes as nchan^4
-            for j in range(self.spw_Ndlys):
-                G[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
-        self._G[Gkey] = G
-
-    return self._G[Gkey]
+        return self._G[Gkey]
 
     def get_G(self, key1, key2, exact_norm=False, pol=False,
               average_times=False, time_indices=None):
@@ -1413,7 +1410,7 @@ class PSpecData(object):
         """
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
-        Hkey = key1 + key2 + (self.input_data_weight, self.taper, sampling, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
+        Hkey = key1 + key2 + (self.data_weighting, self.taper, sampling, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Hkey in self._H:
@@ -1447,7 +1444,7 @@ class PSpecData(object):
                 if not sampling:
                     Q2 *= sinc_matrix
 
-                iR1Q1[ch] = np.dot(np.conj(R1), Q1) # R_1 Q_alt
+                iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q_alt
                 iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
             for i in range(self.spw_Ndlys): # this loop goes as nchan^4
                 for j in range(self.spw_Ndlys):
