@@ -1328,7 +1328,7 @@ class PSpecData(object):
                 G[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
         self._G[Gkey] = G
 
-    return self._G[Gkey]     
+    return self._G[Gkey]
 
     def get_G(self, key1, key2, exact_norm=False, pol=False,
               average_times=False, time_indices=None):
@@ -1372,36 +1372,10 @@ class PSpecData(object):
         """
         if time_indices is None:
             time_indices = np.arange(self.Ntimes).astype(int)
-        if self.spw_Ndlys == None:
-            raise ValueError("Number of delay bins should have been set"
-                             "by now! Cannot be equal to None")
-
         G = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        R1 = self.R(key1)[time_indices]
-        R2 = self.R(key2)[time_indices]
-
-        iR1Q1, iR2Q2 = {}, {}
-        if (exact_norm):
-            integral_beam1 = self.get_integral_beam(pol)
-            integral_beam2 = self.get_integral_beam(pol, include_extension=True)
-            del_tau = np.median(np.diff(self.delays()))*1e-9
-        if exact_norm:
-            qnorm1 =  del_tau * integral_beam1
-            qnorm2 =  del_tau * integral_beam2
-        else:
-            qnorm1 = 1.
-            qnorm2 = 1.
-        for ch in range(self.spw_Ndlys):
-            Q1 = self.get_Q_alt(ch) * qnorm1
-            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
-            iR1Q1[ch] = np.dot(np.transpose(np.conj(R1),axes=(0,2,1)), Q1) # R_1 Q
-            iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
-        for i in range(self.spw_Ndlys):
-            for j in range(self.spw_Ndlys):
-                # tr(R_2 Q_i R_1 Q_j)
-                for tind in range(len(time_indices)):
-                    G[tind, i, j] = np.trace(np.dot(iR1Q1[i][tind], iR2Q2[j][tind]))
-
+        for tind, time_index in enumerate(time_indices):
+            G[tind] = self._get_G(key1=key1, key2=key2, time_index=time_index,
+            exact_norm=exact_norm, pol=pol)
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(G) == 0:
             G = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
@@ -1559,8 +1533,8 @@ class PSpecData(object):
                              "by now! Cannot be equal to None.")
         H = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
 
-        for tind in range(len(time_indices)):
-            H[tind,i,j] = self._get_H(key1=key1, key2=key2, time_index=tind,
+        for tind,time_index in enumerate(time_indices):
+            H[tind] = self._get_H(key1=key1, key2=key2, time_index=time_index,
             sampling=sampling, exact_norm=exact_norm, pol=pol)
 
         # check if all zeros, in which case turn into identity
