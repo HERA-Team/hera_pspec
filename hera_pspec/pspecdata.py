@@ -461,7 +461,7 @@ class PSpecData(object):
 
         return dset_idx, bl
 
-    def x(self, key, filter_extension=False):
+    def x(self, key, include_extension=False):
         """
         Get data for a given dataset and baseline, as specified in a standard
         key format.
@@ -483,7 +483,7 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        if filter_extension:
+        if include_extension:
             spw = slice(self.spw_range[0]-self.filter_extension[0],
                         self.spw_range[1]+self.filter_extension[1])
         else:
@@ -491,7 +491,7 @@ class PSpecData(object):
                         self.spw_range[1])
         return self.dsets[dset].get_data(bl).T[spw]
 
-    def dx(self, key, filter_extension=False):
+    def dx(self, key, include_extension=False):
         """
         Get standard deviation of data for given dataset and baseline as
         pecified in standard key format.
@@ -514,7 +514,7 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
-        if filter_extension:
+        if include_extension:
             spw = slice(self.spw_range[0]-self.filter_extension[0],
                         self.spw_range[1]+self.filter_extension[1])
         else:
@@ -572,7 +572,7 @@ class PSpecData(object):
             elements are the baseline ID.
         """
         tr = self.R(key)
-        tx = self.x(key,filter_extension=True)
+        tx = self.x(key,include_extension=True)
         return np.asarray([ tr[m] @ tx[:,m] for m in range(self.Ntimes)])
 
     def set_C(self, cov):
@@ -638,9 +638,9 @@ class PSpecData(object):
         if Ckey not in self._C:
             # calculate covariance model
             if model == 'empirical':
-                self.set_C({Ckey: utils.cov(self.x(key, filter_extension=True), self.w(key, filter_extension=True))})
+                self.set_C({Ckey: utils.cov(self.x(key, include_extension=True), self.w(key, include_extension=True))})
             elif model == 'dsets':
-                self.set_C({Ckey: np.diag( np.abs(self.w(key, filter_extension=True)[:,time_index] * self.dx(key, filter_extension=True)[:,time_index]) ** 2. )})
+                self.set_C({Ckey: np.diag( np.abs(self.w(key, include_extension=True)[:,time_index] * self.dx(key, include_extension=True)[:,time_index]) ** 2. )})
 
 
         return self._C[Ckey]
@@ -691,8 +691,8 @@ class PSpecData(object):
             dset, bl = self.parse_blkey(key2)
             key2 = (dset,) + (bl,)
 
-            covar = utils.cov(self.x(key1, filter_extension=True), self.w(key1, filter_extension=True),
-                              self.x(key2, filter_extension=True), self.w(key2, filter_extension=True),
+            covar = utils.cov(self.x(key1, include_extension=True), self.w(key1, include_extension=True),
+                              self.x(key2, include_extension=True), self.w(key2, include_extension=True),
                               conj_1=conj_1, conj_2=conj_2)
         elif model == 'dsets':
             covar = np.zeros((self.spw_Nfreqs,
@@ -767,7 +767,7 @@ class PSpecData(object):
             #if self.lmin is not None: S += self.lmin # ensure invertibility
             #if self.lmode is not None: S += S[self.lmode-1]
             _iC = np.zeros((self.Ntimes, nfreq, nfreq))
-            wgts = self.w(key, filter_extension=True)
+            wgts = self.Y(key, include_extension=True)
             wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
             for m in range(self.Ntimes):
                 _iC[m] = wgts_sq[m] * C
@@ -1272,22 +1272,22 @@ class PSpecData(object):
         # Calculate R x_1
         if isinstance(key1, list):
             for _key in key1:
-                Rx1 += np.asarray([np.dot(self.R(_key)[m], self.x(_key, filter_extension=True)[:,m])\
+                Rx1 += np.asarray([np.dot(self.R(_key)[m], self.x(_key, include_extension=True)[:,m])\
                                    for m in range(self.Ntimes)])
                 R1 += self.R(_key)
         else:
-            Rx1 = np.asarray([np.dot(self.R(key1)[m], self.x(key1, filter_extension=True)[:,m])\
+            Rx1 = np.asarray([np.dot(self.R(key1)[m], self.x(key1, include_extension=True)[:,m])\
                               for m in range(self.Ntimes)])
             R1  = self.R(key1)
 
         # Calculate R x_2
         if isinstance(key2, list):
             for _key in key2:
-                Rx2 += np.asarray([np.dot(self.R(_key)[m], self.x(_key, filter_extension=True)[:,m])\
+                Rx2 += np.asarray([np.dot(self.R(_key)[m], self.x(_key, include_extension=True)[:,m])\
                                    for m in range(self.Ntimes)])
                 R2 += self.R(_key)
         else:
-            Rx2 = np.asarray([np.dot(self.R(key2)[m], self.x(key2, filter_extension=True)[:,m])\
+            Rx2 = np.asarray([np.dot(self.R(key2)[m], self.x(key2, include_extension=True)[:,m])\
                               for m in range(self.Ntimes)])
             R2  = self.R(key2)
 
@@ -1415,6 +1415,35 @@ class PSpecData(object):
             G = np.mean(G, axis=0)
         return G / 2.
 
+    def _get_H(self, key1, key2, time_index, sampling=False, exact_norm=False, pol=False):
+        """
+        Helper function that calculates the response matrix H at a single time.
+        takes advantage of caching.
+
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
+            in the list will be combined with inverse noise weights.
+
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details).
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+        """
+        #Each H with fixed taper, input data weight, and weightings on key1 and key2
+        #pol, and sampling bool is unique. This reduces need to recompute H over multiple times. 
+        Hkey = key1 + key2 + (self.input_data_weight, self.taper, sampling, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
+               + tuple(self.Y(key2)[:,time_index].flatten())
+
     def get_H(self, key1, key2, sampling=False, exact_norm = False, pol=False,
               average_times=False, time_indices=None):
         """
@@ -1490,7 +1519,6 @@ class PSpecData(object):
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None.")
-
         H = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)[time_indices]
         R2 = self.R(key2)[time_indices]
