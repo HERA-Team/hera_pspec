@@ -64,6 +64,8 @@ class PSpecData(object):
         self.spw_range = None
         self.spw_Nfreqs = None
         self.spw_Ndlys = None
+        self._H = {}
+        self._G = {}
         # r_params is a dictionary that stores parameters for
         # parametric R matrices.
         self.r_params = {}
@@ -376,6 +378,7 @@ class PSpecData(object):
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
             self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
+            self._H, self._G = {}, {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -1321,6 +1324,72 @@ class PSpecData(object):
                 q.append(qi)
             return 0.5 * np.array(q)
 
+    def _get_G(self, key1, key2, time_index, sampling=False, exact_norm=False, pol=False):
+        """
+        helper function for get_G that uses caching to speed things up.
+
+        Parameters
+        ----------
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
+            in the list will be combined with inverse noise weights.
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details).
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+
+        average_times : bool, optional
+            If true, average G over all times so that output is (Ndlys x Ndlys)
+
+        time_indices : list of integers or array like integer list
+            List of time indices to compute G. Default, compute for all times.
+
+        Returns
+        -------
+        G : array_like, complex
+            Fisher matrix, with dimensions (spw_Nfreqs, spw_Nfreqs).
+        """
+        Gkey = key1 + key2 + (self.input_data_weight, self.taper, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
+               + tuple(self.Y(key2)[:,time_index].flatten())
+
+        if not Gkey in self._G:
+            if self.spw_Ndlys == None:
+                raise ValueError("Number of delay bins should have been set"
+                                 "by now! Cannot be equal to None.")
+        G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+        R1 = self.R(key1)[time_index].squeeze()
+        R2 = self.R(key2)[time_index].squeeze()
+        iR1Q1, iR2Q2 = {}, {}
+        if (exact_norm):
+            integral_beam1 = self.get_integral_beam(pol)
+            integral_beam2 = self.get_integral_beam(pol, include_extension=True)
+            del_tau = np.median(np.diff(self.delays()))*1e-9
+        if exact_norm:
+            qnorm1 = del_tau * integral_beam1
+            qnorm2 = del_tau * integral_beam2
+        else:
+            qnorm1 = 1.
+            qnorm2 = 1.
+        for ch in range(self.spw_Ndlys):
+            Q1 = self.get_Q_alt(ch) * qnorm1
+            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
+            if not sampling:
+                Q2 *= sinc_matrix
+
+            iR1Q1[ch] = np.dot(np.conj(R1), Q1) # R_1 Q_alt
+            iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
+        for i in range(self.spw_Ndlys): # this loop goes as nchan^4
+            for j in range(self.spw_Ndlys):
+                G[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
+        self._G[Gkey] = G
+
+    return self._G[Gkey]
+
     def get_G(self, key1, key2, exact_norm=False, pol=False,
               average_times=False, time_indices=None):
         """
@@ -1385,6 +1454,15 @@ class PSpecData(object):
         for ch in range(self.spw_Ndlys):
             Q1 = self.get_Q_alt(ch) * qnorm1
             Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
+            #G is given by Tr[E^\alpha C,\beta]
+            #where E^\alpha = R_1^\dagger Q^\apha R_2
+            #C,\beta = Q2 and Q^\alpha = Q1
+            #Note that we conjugate transpose R
+            #because we want to E^\alpha to
+            #give the absolute value squared of z = m_\alpha \dot R @ x
+            #where m_alpha takes the FT from frequency to the \alpha fourier mode.
+            #Q is essentially m_\alpha^\dagger m
+            # so we need to sandwhich it between R_1^\dagger and R_2
             iR1Q1[ch] = np.dot(np.transpose(np.conj(R1),axes=(0,2,1)), Q1) # R_1 Q
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
         for i in range(self.spw_Ndlys):
@@ -1423,11 +1501,63 @@ class PSpecData(object):
         pol : str/int/bool, optional
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
+        Returns
+        -------
+        H : array_like, complex
+            Dimensions (Nfreqs, Nfreqs).
         """
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
-        #pol, and sampling bool is unique. This reduces need to recompute H over multiple times. 
+        #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
         Hkey = key1 + key2 + (self.input_data_weight, self.taper, sampling, pol, exact_norm) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten())
+
+        if not Hkey in self._H:
+            if self.spw_Ndlys == None:
+                raise ValueError("Number of delay bins should have been set"
+                                 "by now! Cannot be equal to None.")
+            H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+            R1 = self.R(key1)[time_index].squeeze()
+            R2 = self.R(key2)[time_index].squeeze()
+            if not sampling:
+                nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
+                sinc_matrix = np.zeros((nfreq, nfreq), dtype=complex)
+                for i in range(nfreq):
+                    for j in range(nfreq):
+                        sinc_matrix[i,j] = np.float(i - j)
+                sinc_matrix = np.sinc(sinc_matrix / np.float(nfreq))
+            iR1Q1, iR2Q2 = {}, {}
+            if (exact_norm):
+                integral_beam1 = self.get_integral_beam(pol)
+                integral_beam2 = self.get_integral_beam(pol, include_extension=True)
+                del_tau = np.median(np.diff(self.delays()))*1e-9
+            if exact_norm:
+                qnorm1 = del_tau * integral_beam1
+                qnorm2 = del_tau * integral_beam2
+            else:
+                qnorm1 = 1.
+                qnorm2 = 1.
+            for ch in range(self.spw_Ndlys):
+                Q1 = self.get_Q_alt(ch) * qnorm1
+                Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
+                if not sampling:
+                    Q2 *= sinc_matrix
+                #H is given by Tr[E^\alpha C,\beta]
+                #where E^\alpha = R_1^\dagger Q^\apha R_2
+                #C,\beta = Q2 and Q^\alpha = Q1
+                #Note that we conjugate transpose R
+                #because we want to E^\alpha to
+                #give the absolute value squared of z = m_\alpha \dot R @ x
+                #where m_alpha takes the FT from frequency to the \alpha fourier mode.
+                #Q is essentially m_\alpha^\dagger m
+                # so we need to sandwhich it between R_1^\dagger and R_2
+                iR1Q1[ch] = np.dot(np.conj(R1), Q1) # R_1 Q_alt
+                iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
+            for i in range(self.spw_Ndlys): # this loop goes as nchan^4
+                for j in range(self.spw_Ndlys):
+                    H[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
+            self._H[Hkey] = H
+
+        return self._H[Hkey]
 
     def get_H(self, key1, key2, sampling=False, exact_norm = False, pol=False,
               average_times=False, time_indices=None):
@@ -1505,48 +1635,10 @@ class PSpecData(object):
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None.")
         H = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        R1 = self.R(key1)[time_indices]
-        R2 = self.R(key2)[time_indices]
-        if not sampling:
-            nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
-            sinc_matrix = np.zeros((nfreq, nfreq), dtype=complex)
-            for i in range(nfreq):
-                for j in range(nfreq):
-                    sinc_matrix[i,j] = np.float(i - j)
-            sinc_matrix = np.sinc(sinc_matrix / np.float(nfreq))
 
-        iR1Q1, iR2Q2 = {}, {}
-        if (exact_norm):
-            integral_beam1 = self.get_integral_beam(pol)
-            integral_beam2 = self.get_integral_beam(pol, include_extension=True)
-            del_tau = np.median(np.diff(self.delays()))*1e-9
-        if exact_norm:
-            qnorm1 = del_tau * integral_beam1
-            qnorm2 = del_tau * integral_beam2
-        else:
-            qnorm1 = 1.
-            qnorm2 = 1.
-        for ch in range(self.spw_Ndlys):
-            Q1 = self.get_Q_alt(ch) * qnorm1
-            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
-            if not sampling:
-                Q2 *= sinc_matrix
-            #H is given by Tr([E^\alpha C,\beta])
-            #where E^\alpha = R_1^\dagger Q^\apha R_2
-            #C,\beta = Q2 and Q^\alpha = Q1
-            #Note that we conjugate transpose R
-            #because we want to E^\alpha to
-            #give the absolute value squared of z = m_\alpha \dot R @ x
-            #where m_alpha takes the FT from frequency to the \alpha fourier mode.
-            #Q is essentially m_\alpha^\dagger m
-            # so we need to sandwhich it between R_1^\dagger and R_2
-            iR1Q1[ch] = np.dot(np.transpose(np.conj(R1),axes=(0,2,1)), Q1) # R_1 Q
-            iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
-
-        for i in range(self.spw_Ndlys): # this loop goes as nchan^4
-            for j in range(self.spw_Ndlys):
-                for tind in range(len(time_indices)):
-                    H[tind,i,j] = np.trace(np.dot(iR1Q1[i][tind], iR2Q2[j][tind]))
+        for tind in range(len(time_indices)):
+            H[tind,i,j] = self._get_H(key1=key1, key2=key2, time_index=tind,
+            sampling=sampling, exact_norm=exact_norm, pol=pol)
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(H) == 0:
