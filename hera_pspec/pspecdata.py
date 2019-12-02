@@ -1788,17 +1788,117 @@ class PSpecData(object):
                     np.ones((self.spw_Ndlys, self.Ntimes)))
         return output
 
-    def _get_M(self, key1, key2, time_index, mode='I', band_covar=None, exact_norm=False):
-        return
+    def _get_M(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False):
+        """
+        Helper function that returns M-matrix for a single time step.
+        Several choices for M are supported:
+            'I':      Set M to be diagonal (e.g. HERA Memo #44)
+            'H^-1':   Set M = H^-1, the (pseudo)inverse response matrix.
+            'V^-1/2': Set M = V^-1/2, the root-inverse response matrix (using SVD).
+
+        These choices will be supported very soon:
+            'L^-1':   Set M = L^-1, Cholesky decomposition.
+
+        As written, the window functions will not be correclty normalized; it needs
+        to be adjusted by the pspec scalar for it to be approximately correctly
+        normalized. If the beam is being provided, this will be done in the pspec
+        function.
+
+        Parameters
+        ----------
+        G : array_like
+            Denominator matrix for the bandpowers, with dimensions (Ntimes, Nfreqs, Nfreqs).
+
+        H : array_like
+            Response matrix for the bandpowers, with dimensions (Ntimes, Nfreqs, Nfreqs).
+
+        mode : str, optional
+            Definition to use for M. Must be one of the options listed above.
+            Default: 'I'.
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details). Currently, this is supported only for mode I
+
+        average_times : bool, optional
+            If true, average G over all times so that output is (Ndlys x Ndlys)
+        """
+        modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
+        assert(mode in modes)
+        Mkey = (key1, key2, mode, exact_norm,) + (self.taper, self.input_data_weight)\
+        + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
+        if not Mkey in self._M:
+            if mode!='I' and exact_norm==True:
+                raise NotImplementedError("Exact norm is not supported for non-I modes")
+
+
+            if mode == 'H^-1':
+                H = _get_H(self, key1, key2, time_index, sampling=False, exact_norm=exact_norm, pol=pol)
+                try:
+                    M = np.linalg.inv(H)
+                except np.linalg.LinAlgError as err:
+                    if 'Singular matrix' in str(err):
+                        M = np.linalg.pinv(H)
+                        raise_warning("Warning: Window function matrix is singular "
+                                      "and cannot be inverted, so using "
+                                      " pseudoinverse instead.")
+                    else:
+                        raise np.linalg.LinAlgError("Linear algebra error with H matrix "
+                                                    "during MW computation.")
+            elif mode == 'V^-1/2':
+                    # First find the eigenvectors and eigenvalues of the unnormalizd covariance
+                    # Then use it to compute V^-1/2
+                band_covar = self.get_unnormed_V(key1, key2, time_index, model=self.cov_model, exact_norm=exact_norm,
+                                                 pol = pol)
+                eigvals, eigvects = np.linalg.eig(band_covar)
+                if (eigvals <= 0.).any():
+                    raise_warning("At least one non-positive eigenvalue for the "
+                                  "unnormed bandpower covariance matrix.")
+                V_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
+
+                W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H[tind]), axis=1))
+                M = np.dot(W_norm, V_minus_half)
+
+            elif mode == 'H^-1/2':
+                H = _get_H(self, key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
+                eigvals, eigvects = np.linalg.eig(H)
+                if (eigvals <= 0.).any():
+                    raise_warning("At least one non-positive eigenvalue for the "
+                                  "unnormed bandpower covariance matrix.")
+                H_minus_half =  np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
+                W_norm = np.diag(1. / np.sum(np.dot(H_minus_half, H[tind]), axis=1))
+                M = np.dot(W_norm, H_minus_half)
+
+            elif mode == 'I':
+                H = _get_H(self, key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
+                H = _get_G(self, key1, key2, time_index, exact_norm=exact_norm, pol=pol)
+                # This is not the M matrix as is rigorously defined in the
+                # OQE formalism, because the power spectrum scalar is excluded
+                # in this matrix normalization (i.e., M doesn't do the full
+                # normalization)
+                M = np.diag(1. / np.sum(G, axis=1))
+                W_norm = np.diag(1. / np.sum(H, axis=1))
+
+            else:
+                raise NotImplementedError("Cholesky decomposition mode not currently supported.")
+
+            self._M[Mkey] = M
+
+        return self._M[Mkey]
     def _get_W(self, key1, key2, time_index, mode='I', band_covar=None, exact_norm=False):
+        """
+        Helper function that returns W-matrix for a single time step.
+        """
+
         return
     def get_M(self, key1, key2, mode='I', band_covar=None, exact_norm=False, time_indices=None):
+
         return
     def get_W(self, key1, key2, mode='I', band_covar=None, exact_norm=False, time_indices=None):
         return
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False,
                average_times=False):
-        return 
+        return
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
