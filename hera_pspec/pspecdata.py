@@ -522,7 +522,7 @@ class PSpecData(object):
                         self.spw_range[1])
         return self.dsets_std[dset].get_data(bl).T[spw]
 
-    def w(self, key, filter_extension=False):
+    def w(self, key, include_extension=False):
         """
         Get weights for a given dataset and baseline, as specified in a
         standard key format.
@@ -534,7 +534,7 @@ class PSpecData(object):
             of the tuple is the dataset index, and the subsequent elements are
             the baseline ID.
 
-        filter_extension : bool (optional)
+        include_extension : bool (optional)
             default=False
             If True, extend spw to include filtering window extensions.
 
@@ -544,7 +544,7 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        if filter_extension:
+        if include_extension:
             spw = slice(self.spw_range[0]-self.filter_extension[0],
                         self.spw_range[1]+self.filter_extension[1])
         else:
@@ -767,7 +767,7 @@ class PSpecData(object):
             #if self.lmin is not None: S += self.lmin # ensure invertibility
             #if self.lmode is not None: S += S[self.lmode-1]
             _iC = np.zeros((self.Ntimes, nfreq, nfreq))
-            wgts = self.Y(key)
+            wgts = self.w(key, filter_extension=True)
             wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
             for m in range(self.Ntimes):
                 _iC[m] = wgts_sq[m] * C
@@ -813,7 +813,7 @@ class PSpecData(object):
         key = (dset,) + (bl,)
 
         if key not in self._Y:
-            self._Y[key] = self.w(key, filter_extension=True)
+            self._Y[key] = self.w(key, include_extension=True)
         return self._Y[key]
 
     def set_iC(self, d):
@@ -886,7 +886,7 @@ class PSpecData(object):
             if self.taper == 'none':
                 myT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
-                myT = dspec.gen_window(self.taper, self.spw_Nfreqs).reshape(1, -1)
+                myT = dspec.gen_window(self.taper, self.spw_Nfreqs, normalization='rms').reshape(1, -1)
             sqrtT = np.sqrt(myT)
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
@@ -901,7 +901,7 @@ class PSpecData(object):
                              nfreq), dtype=complex)
             tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
             # form R matrix
-            wgts = np.asarray([self.Y(key)[:,m] for m in range(self.Ntimes)])
+            wgts = np.asarray([self.Y(key)[:,m].squeeze() for m in range(self.Ntimes)])
             wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
             wgt_sq[np.isnan(wgt_sq)] = 0.
             if self.data_weighting == 'identity':
@@ -1367,7 +1367,7 @@ class PSpecData(object):
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None")
 
-        G = np.zeros((self.Ntimes, self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+        G = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)[time_indices]
         R2 = self.R(key2)[time_indices]
 
@@ -1476,7 +1476,7 @@ class PSpecData(object):
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None.")
 
-        H = np.zeros((self.Ntimes,self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+        H = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         R1 = self.R(key1)[time_indices]
         R2 = self.R(key2)[time_indices]
         if not sampling:
@@ -1514,6 +1514,7 @@ class PSpecData(object):
             # so we need to sandwhich it between R_1^\dagger and R_2
             iR1Q1[ch] = np.dot(np.transpose(np.conj(R1),axes=(0,2,1)), Q1) # R_1 Q
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
+
         for i in range(self.spw_Ndlys): # this loop goes as nchan^4
             for j in range(self.spw_Ndlys):
                 for tind in range(len(time_indices)):
@@ -2819,8 +2820,8 @@ class PSpecData(object):
                         print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
 
                     # Check that number of non-zero weight chans >= n_dlys
-                    key1_dof = np.sum(~np.isclose(self.Y(key1), 0.0), axis=1)
-                    key2_dof = np.sum(~np.isclose(self.Y(key2), 0.0), axis=1)
+                    key1_dof = np.sum(~np.isclose(self.w(key1).T, 0.0), axis=1)
+                    key2_dof = np.sum(~np.isclose(self.w(key2).T, 0.0), axis=1)
                     if np.any(key1_dof < self.spw_Ndlys) or np.any(key2_dof < self.spw_Ndlys):
                         if verbose:
                             print("WARNING: Number of unflagged chans for key1 "
