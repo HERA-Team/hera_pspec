@@ -378,7 +378,7 @@ class PSpecData(object):
             self.r_params = {}
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
-            self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
+            #self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
             self._H, self._G = {}, {}
             self._W, self._M = {}, {}
             self._E, self._V = {}, {}
@@ -2111,7 +2111,6 @@ class PSpecData(object):
 
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15,
                average_times=False):
-        return
         """
         WARNING: ThIS FUNCTION IS GOING TO BE DEPRECATED!!!
         Construct the normalization matrix M and window function matrix W for
