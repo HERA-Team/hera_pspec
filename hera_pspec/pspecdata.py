@@ -57,7 +57,7 @@ class PSpecData(object):
         cal_flag : bool, optional
             If True, propagate flags from calibration into data
         """
-        self.clear_cache()  # clear matrix cache
+        self.clear_cache(clear_r_params=True)  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
         self.dsets_std = []
         self.Nfreqs = None
@@ -364,7 +364,7 @@ class PSpecData(object):
         except KeyError:
             return False
 
-    def clear_cache(self, keys=None):
+    def clear_cache(self, clear_r_params=False, keys=None):
         """
         Clear stored matrix data (or some subset of it).
 
@@ -374,14 +374,14 @@ class PSpecData(object):
             List of keys to remove from matrix cache. If None, all
             keys will be removed. Default: None.
         """
-        if keys is None:
+        if clear_r_params:
             self.r_params = {}
+        if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
             self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
             self._H, self._G = {}, {}
             self._W, self._M = {}, {}
             self._E, self._V = {}, {}
-            self._R_assist = {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -1668,7 +1668,7 @@ class PSpecData(object):
             Set of E matrices, with dimensions (Ndlys, Nfreqs, Nfreqs).
 
         """
-        Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.Ndlys, self.data_weighting)\
+        Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.spw_Ndlys, self.data_weighting)\
         + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Ekey in self._E:
@@ -1780,7 +1780,7 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Nfreqs, Nfreqs).
         """
         # Collect all the relevant pieces
-        Vkey = key1 + key2 + (pol, exact_norm, self.taper, self.Ndlys, model, self.data_weighting)\
+        Vkey = key1 + key2 + (pol, exact_norm, self.taper, self.spw_Ndlys, model, self.data_weighting)\
         + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Vkey in self._V:
@@ -1884,7 +1884,7 @@ class PSpecData(object):
                                   "unnormed bandpower covariance matrix.")
                 V_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
 
-                W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H[tind]), axis=1))
+                W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H), axis=1))
                 M = np.dot(W_norm, V_minus_half)
 
             elif mode == 'H^-1/2':
@@ -1894,12 +1894,12 @@ class PSpecData(object):
                     raise_warning("At least one non-positive eigenvalue for the "
                                   "unnormed bandpower covariance matrix.")
                 H_minus_half =  np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
-                W_norm = np.diag(1. / np.sum(np.dot(H_minus_half, H[tind]), axis=1))
+                W_norm = np.diag(1. / np.sum(np.dot(H_minus_half, H), axis=1))
                 M = np.dot(W_norm, H_minus_half)
 
             elif mode == 'I':
                 H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
-                H = self._get_G(key1, key2, time_index, exact_norm=exact_norm, pol=pol)
+                G = self._get_G(key1, key2, time_index, exact_norm=exact_norm, pol=pol)
                 # This is not the M matrix as is rigorously defined in the
                 # OQE formalism, because the power spectrum scalar is excluded
                 # in this matrix normalization (i.e., M doesn't do the full
@@ -1951,7 +1951,7 @@ class PSpecData(object):
         tuple(self.Y(key1)[time_index].flatten()) + tuple(self.Y(key2)[time_index].flatten())
         if not Wkey in self._W:
             M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
-            H = self._get_H(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
+            H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm)
             W = np.dot(M, H)
             if mode == 'H^-1':
                 W_norm = np.sum(W, axis=1)
@@ -2022,7 +2022,7 @@ class PSpecData(object):
             M = np.mean(M, axis=0)
         return M
 
-    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None):
+    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, average_times=False):
         """
         Construct the Window function matrix W. This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -3288,7 +3288,7 @@ class PSpecData(object):
                      #Generate the covariance matrix if error bars provided
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
-                        cov_qv = self.cov_q_hat(key1, key2)
+                        #cov_qv = self.cov_q_hat(key1, key2)
                         cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
                                             exact_norm=exact_norm, pol=pol)
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
