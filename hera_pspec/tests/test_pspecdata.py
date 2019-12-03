@@ -1124,11 +1124,11 @@ class Test_PSpecData(unittest.TestCase):
         # are all satisfied, the scalar adjustment factor is unity
         self.ds.set_weighting('identity')
         self.ds.spw_Ndlys = self.ds.spw_Nfreqs
-        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
+        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True, time_index=0)
         self.assertAlmostEqual(adjustment, 1.0)
         self.ds.set_weighting('iC')
         #if weighting is not identity, then the adjustment should be a vector.
-        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
+        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True, time_index=0)
         self.assertTrue(len(adjustment) == self.ds.spw_Ndlys)
 
     def test_scalar(self):
@@ -1604,7 +1604,7 @@ class Test_PSpecData(unittest.TestCase):
         # test pspec run sets flagged integration to have zero weight
         uvd.flag_array[uvd.antpair2ind(24, 25, ordered=False)[3], 0, 400, :] = True
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
-        ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=0.25)
+        ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=.25)
         uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
                         spw_ranges=[(400, 450)], verbose=False)
         # assert flag broadcast above hits weight arrays in uvp
