@@ -636,7 +636,7 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
         if model == 'dsets':
-            assert isinstance(time_index, int), "time_index must be integer if cov-model=dsets"
+            assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
             Ckey = key + (model, time_index)
 
         elif model == 'empirical':
@@ -1362,7 +1362,7 @@ class PSpecData(object):
         """
         Gkey = key1 + key2 + (self.data_weighting, self.taper, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten())
-
+        assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
         if not Gkey in self._G:
             G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1)[time_index].squeeze()
@@ -1439,11 +1439,12 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (Ntimes, spw_Nfreqs, spw_Nfreqs).
         """
+        #This check is kind of arbitrary. I see it in a lot of places but there
+        #really isn't anything special about Ndlys versus Ntimes, spw_Nfreqs,
+        #and other ``essential" fields. I think we should remove this in future
+        #releases. -AEW
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
-                             "by now! Cannot be equal to None.")
-        if self.Ntimes == None:
-            raise ValueError("Number of times should have been set"
                              "by now! Cannot be equal to None.")
         if time_indices is None:
             time_indices = np.arange(self.Ntimes).astype(int)
@@ -1491,9 +1492,9 @@ class PSpecData(object):
         """
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
+        assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
         Hkey = key1 + key2 + (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten())
-
         if not Hkey in self._H:
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1)[time_index].squeeze()
@@ -1609,11 +1610,12 @@ class PSpecData(object):
         H : array_like, complex
             Dimensions (Ntimes, Nfreqs, Nfreqs).
         """
+        #This check is kind of arbitrary. I see it in a lot of places but there
+        #really isn't anything special about Ndlys versus Ntimes, Nfreqs,
+        #and other ``essential" fields. I think we should remove this in future
+        #releases. -AEW
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
-                             "by now! Cannot be equal to None.")
-        if self.Ntimes == None:
-            raise ValueError("Number of times should have been set"
                              "by now! Cannot be equal to None.")
         if time_indices is None:
             time_indices = np.arange(self.Ntimes).astype(int)
@@ -1677,14 +1679,18 @@ class PSpecData(object):
             Set of E matrices, with dimensions (Ndlys, Nfreqs, Nfreqs).
 
         """
+        #This check is kind of arbitrary. I see it in a lot of places but there
+        #really isn't anything special about Ndlys versus Ntimes, Nfreqs,
+        #and other ``essential" fields. I think we should remove this in future
+        #releases. -AEW
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None")
         Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.spw_Ndlys, self.data_weighting)\
         + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Ekey in self._E:
             assert time_index >= 0 and time_index < self.Ntimes, "time_index must be between 0 and Ntimes"
-            if self.spw_Ndlys == None:
-                raise ValueError("Number of delay bins should have been set"
-                                 "by now! Cannot be equal to None")
             nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
             E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
                                    dtype=np.complex)
@@ -2162,7 +2168,7 @@ class PSpecData(object):
 
         # Check that mode is supported
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
-        assert(mode in modes)
+        assert mode in modes, "Support for ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']. Provided %s"%(mode)
 
         if mode!='I' and exact_norm==True:
             raise NotImplementedError("Exact norm is not supported for non-I modes")
@@ -2719,12 +2725,8 @@ class PSpecData(object):
         adjustment : float if the data_weighting is 'identity'
                      1d array of floats with length spw_Ndlys otherwise.
         """
-        if Gv is None:
-            print(time_index)
-            Gv = self.get_G(key1, key2, time_indices=[time_index])
-        if Hv is None:
-            print(time_index)
-            Hv = self.get_H(key1, key2, time_indices=[time_index])
+        if Gv is None: Gv = self.get_G(key1, key2, time_indices=[time_index])
+        if Hv is None: Hv = self.get_H(key1, key2, time_indices=[time_index])
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
