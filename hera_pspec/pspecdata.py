@@ -1945,7 +1945,7 @@ class PSpecData(object):
 
         return self._M[Mkey]
 
-    def _get_W(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False):
+    def _get_W(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False, pol=False):
         """
         Helper function that returns W-matrix for a single time step.
         Parameters
@@ -1978,8 +1978,8 @@ class PSpecData(object):
         Wkey = key1 + key2 + (mode, sampling, exact_norm, self.taper, self.data_weighting, self.spw_Ndlys) + \
         tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
         if not Wkey in self._W:
-            M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
-            H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm)
+            M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol)
+            H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
             W = np.dot(M, H)
             if mode == 'H^-1':
                 W_norm = np.sum(W, axis=1)
@@ -1991,7 +1991,7 @@ class PSpecData(object):
         return self._W[Wkey]
 
     def get_M(self, key1, key2, mode='I', exact_norm=False,
-             average_times=False, sampling=False, time_indices=None):
+             average_times=False, sampling=False, time_indices=None, pol=False):
         """
         Construct the normalization matrix M This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2045,7 +2045,7 @@ class PSpecData(object):
             time_indices = np.arange(self.Ntimes).astype(int)
         M = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         for tind, time_index in enumerate(time_indices):
-            M[tind] = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
+            M[tind] = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol)
         if average_times:
             M = np.mean(M, axis=0)
         return M
@@ -2561,7 +2561,7 @@ class PSpecData(object):
                         dset.flag_array[bl_inds[flag_ints], :,
                         self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1],
                         i] = True
-                return backup_flags
+        return backup_flags
 
 
     def units(self, little_h=True):
@@ -2703,8 +2703,8 @@ class PSpecData(object):
                                                num_steps=num_steps, exact_norm=exact_norm)
         return scalar
 
-    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
-                                Gv=None, Hv=None, time_index=None):
+    def scalar_delay_adjustment(self, key1=None, key2=None, time_index=None, sampling=False,
+                                Gv=None, Hv=None):
         """
         Computes an adjustment factor for the pspec scalar that is needed
         when the number of delay bins is not equal to the number of
@@ -2747,8 +2747,10 @@ class PSpecData(object):
         adjustment : float if the data_weighting is 'identity'
                      1d array of floats with length spw_Ndlys otherwise.
         """
-        if Gv is None: Gv = self.get_G(key1, key2, time_indices=[time_index])
-        if Hv is None: Hv = self.get_H(key1, key2, time_indices=[time_index])
+        if Gv is None or Hv is None:
+            assert isinstance(time_index,(int,np.int64, np.int32)),"Must provide valid time index! None supplied!"
+        if Gv is None: Gv = self.get_G(key1, key2)
+        if Hv is None: Hv = self.get_H(key1, key2)
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
@@ -3310,7 +3312,7 @@ class PSpecData(object):
                         #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)                                    #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
                     #else:
                     #    Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
-                    Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm)
+                    Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol)
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
