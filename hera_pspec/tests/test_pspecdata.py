@@ -782,11 +782,8 @@ class Test_PSpecData(unittest.TestCase):
             #check that all values that are not truncated match values of untrancated matrix.
             self.assertTrue(np.all(np.isclose(rm1[m][10:-10], rm2[m], atol=1e-6)))
             #make sure no errors are thrown by get_V, get_E, etc...
-        print(ds1.r_params)
         ds1.get_unnormed_E(key1, key2, time_index=0)
-        print(ds1.r_params)
         ds1.get_unnormed_V(key1, key2, time_index=0)
-        print(ds1.r_params)
         h=ds1.get_H(key1, key2)
         g=ds1.get_G(key1, key2)
         ds1.get_MW(g, h)
