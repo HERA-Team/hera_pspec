@@ -1423,16 +1423,16 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec([(24, 25), (24, 25)], [(24, 25), (24, 25)], (0, 1), ('xx', 'xx'),
                        input_data_weight='identity', norm='I', taper='none', verbose=False,
                        spw_ranges=[(20, 30)])
-        nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
-        nt.assert_equal(len(ds._identity_Y), 1)
-        nt.assert_equal(list(ds._identity_Y.keys())[0], ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')))
+        #nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
+        #nt.assert_equal(len(ds._identity_Y), 1)
+        #nt.assert_equal(list(ds._identity_Y.keys())[0], ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')))
         # assert caching is not used when inappropriate
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), :, 25, :] = True
         uvp = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
                        input_data_weight='identity', norm='I', taper='none', verbose=False,
                        spw_ranges=[(20, 30)])
-        nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
-        nt.assert_equal(len(ds._identity_Y), 2)
+        #nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
+        #nt.assert_equal(len(ds._identity_Y), 2)
         nt.assert_true(((0, 24, 25, 'xx'), (1, 24, 25, 'xx')) in ds._identity_Y.keys())
         nt.assert_true(((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys())
 
