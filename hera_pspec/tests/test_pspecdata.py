@@ -737,9 +737,9 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.set_weighting('sinc_downweight')
         self.ds.set_r_param(key1,rpk1)
         df = np.mean(np.diff(self.ds.freqs))
-        nd = 2 * int(df * 100e-9 / (Nfreq / Ndlys) * Nfreq)
+        nd = int(df * 100e-9 * Nfreq * 2)
         wgt = self.ds.w(key1)[:,0].squeeze()
-        imat=dspec.delay_interpolation_matrix(Nfreq, nd, wgts=wgt, dres=Nfreq/Ndlys)
+        imat=dspec.delay_interpolation_matrix(Nfreq, nd, wgts=wgt, fundamental_period=2*Nfreq)
         fmati=dspec.sinc_downweight_mat_inv(nchan=Nfreq, df=df, filter_centers=[0.],
                                             filter_half_widths=[100e-9], filter_factors=[1e-9])
         fmat = np.linalg.pinv(fmati * np.outer(wgt, wgt))
@@ -782,15 +782,13 @@ class Test_PSpecData(unittest.TestCase):
             #check that all values that are not truncated match values of untrancated matrix.
             self.assertTrue(np.all(np.isclose(rm1[m][10:-10], rm2[m], atol=1e-6)))
             #make sure no errors are thrown by get_V, get_E, etc...
+        print(ds1.r_params)
         ds1.get_unnormed_E(key1, key2, time_index=0)
+        print(ds1.r_params)
         ds1.get_unnormed_V(key1, key2, time_index=0)
+        print(ds1.r_params)
         h=ds1.get_H(key1, key2)
         g=ds1.get_G(key1, key2)
-        print(h.shape)
-        print(g.shape)
-        print(ds1.spw_Nfreqs)
-        print(ds1.spw_Ndlys)
-        print(ds1.Ntimes)
         ds1.get_MW(g, h)
 
     def test_q_hat(self):
