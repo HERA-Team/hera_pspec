@@ -593,7 +593,10 @@ class PSpecData(object):
             being the ID (index) of the dataset, and subsequent items being the
             baseline indices.
         """
-        self.clear_cache(cov.keys())
+        # self.clear_cache(cov.keys()) This line is problematic.
+        # because it clears all cached quantities associated with
+        # this key value when really we just want to reset the
+        # covariance -- which is done below anyways... AEW
         for key in cov: self._C[key] = cov[key]
 
     def C_model(self, key, model='empirical', time_index=None):
@@ -773,7 +776,7 @@ class PSpecData(object):
             #if self.lmin is not None: S += self.lmin # ensure invertibility
             #if self.lmode is not None: S += S[self.lmode-1]
             _iC = np.zeros((self.Ntimes, nfreq, nfreq))
-            wgts = self.Y(key, include_extension=True)
+            wgts = self.Y(key)
             wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
             for m in range(self.Ntimes):
                 _iC[m] = wgts_sq[m] * C
@@ -1376,9 +1379,6 @@ class PSpecData(object):
                + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Gkey in self._G:
-            if self.spw_Ndlys == None:
-                raise ValueError("Number of delay bins should have been set"
-                                 "by now! Cannot be equal to None.")
             G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1)[time_index].squeeze()
             R2 = self.R(key2)[time_index].squeeze()
@@ -1454,6 +1454,12 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (Ntimes, spw_Nfreqs, spw_Nfreqs).
         """
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None.")
+        if self.Ntimes == None:
+            raise ValueError("Number of times should have been set"
+                             "by now! Cannot be equal to None.")
         if time_indices is None:
             time_indices = np.arange(self.Ntimes).astype(int)
         G = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
@@ -1504,9 +1510,6 @@ class PSpecData(object):
                + tuple(self.Y(key2)[:,time_index].flatten())
 
         if not Hkey in self._H:
-            if self.spw_Ndlys == None:
-                raise ValueError("Number of delay bins should have been set"
-                                 "by now! Cannot be equal to None.")
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1)[time_index].squeeze()
             R2 = self.R(key2)[time_index].squeeze()
@@ -1621,6 +1624,12 @@ class PSpecData(object):
         H : array_like, complex
             Dimensions (Ntimes, Nfreqs, Nfreqs).
         """
+        if self.spw_Ndlys == None:
+            raise ValueError("Number of delay bins should have been set"
+                             "by now! Cannot be equal to None.")
+        if self.Ntimes == None:
+            raise ValueError("Number of times should have been set"
+                             "by now! Cannot be equal to None.")
         if time_indices is None:
             time_indices = np.arange(self.Ntimes).astype(int)
         if self.spw_Ndlys == None:
@@ -1806,7 +1815,6 @@ class PSpecData(object):
                 C2 = self.C_model(key2, model=model, time_index=time_index)
                 P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
                 S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
-
                 E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
                 E12C2 = np.dot(E_matrices, C2)
                 auto_term = np.einsum('aij,bji', E12C2, E21C1)
@@ -1815,7 +1823,6 @@ class PSpecData(object):
                 cross_term = np.einsum('aij,bji', E12P21, E12starS21)
                 output = auto_term + cross_term
             elif model in ['empirical_pspec']:
-                print((self.spw_Nfreqs, self.Ntimes))
                 output = utils.cov(self.q_hat(key1, key2),
                         np.ones((self.spw_Ndlys, self.Ntimes)))
             self._V[Vkey] = output
@@ -1963,7 +1970,7 @@ class PSpecData(object):
             Dimensions (Ndlys, Ndlys).
         """
         Wkey = key1 + key2 + (mode, sampling, exact_norm, self.taper, self.data_weighting, self.spw_Ndlys) + \
-        tuple(self.Y(key1)[time_index].flatten()) + tuple(self.Y(key2)[time_index].flatten())
+        tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
         if not Wkey in self._W:
             M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
             H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm)
@@ -2734,8 +2741,12 @@ class PSpecData(object):
         adjustment : float if the data_weighting is 'identity'
                      1d array of floats with length spw_Ndlys otherwise.
         """
-        if Gv is None: Gv = self.get_G(key1, key2, time_indices=[time_index])
-        if Hv is None: Hv = self.get_H(key1, key2, time_indices=[time_index])
+        if Gv is None:
+            print(time_index)
+            Gv = self.get_G(key1, key2, time_indices=[time_index])
+        if Hv is None:
+            print(time_index)
+            Hv = self.get_H(key1, key2, time_indices=[time_index])
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
