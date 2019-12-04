@@ -1395,7 +1395,7 @@ class PSpecData(object):
             G = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
         if average_times:
             G = np.mean(G, axis=0)
-        return G / 2.
+        return G
 
     def _get_H(self, key1, key2, time_index, sampling=False, exact_norm=False, pol=False):
         """
@@ -1563,7 +1563,7 @@ class PSpecData(object):
             H = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
         if average_times:
             H = np.mean(H, axis=0)
-        return H / 2.
+        return H
 
     def get_unnormed_E(self, key1, key2, time_index, exact_norm = False, pol = False):
         """
