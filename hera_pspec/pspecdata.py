@@ -564,10 +564,11 @@ class PSpecData(object):
             wgts = (~self.dsets[dset].get_flags(bl)).astype(float).T[spw]
             return wgts
 
-    def z(self, key):
+    def z(self, key, include_taper=True):
         """
-        Get data after the application of the R-matrix (filtering and tapering).
-        This is super-useful for inspecting the qualitative impact of various input
+        Data-inspection utility function for
+        getting data after the application of the R-matrix.
+        Usful for inspecting the qualitative impact of various input
         data weightings.
 
         Parameters
@@ -576,10 +577,16 @@ class PSpecData(object):
             Tuple containing dataset ID and baseline index. The first element
             of the tuple is the dataset index (or label), and the subsequent
             elements are the baseline ID.
+        include_taper : bool (optional)
+            If False, do not include multiplicative tapering function.
         """
         tr = self.R(key)
         tx = self.x(key,include_extension=True)
-        return np.asarray([ tr[m] @ tx[:,m] for m in range(self.Ntimes)])
+        output = np.asarray([ tr[m] @ tx[:,m] for m in range(self.Ntimes)])
+        if not include_taper:
+            output = output / dspec.gen_window(self.taper, self.spw_Nfreqs, normalization='rms')
+        return output
+
 
     def set_C(self, cov):
         """
@@ -1783,10 +1790,8 @@ class PSpecData(object):
         Mkey = (key1, key2, mode, exact_norm, self.spw_Ndlys) + (self.taper, self.data_weighting)\
         + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
         if not Mkey in self._M:
-            if mode!='I' and exact_norm==True:
+            if mode != 'I' and exact_norm==True:
                 raise NotImplementedError("Exact norm is not supported for non-I modes")
-
-
             if mode == 'H^-1':
                 H = self._get_H(key1, key2, time_index, sampling=False, exact_norm=exact_norm, pol=pol)
                 try:
@@ -1800,6 +1805,7 @@ class PSpecData(object):
                     else:
                         raise np.linalg.LinAlgError("Linear algebra error with H matrix "
                                                     "during MW computation.")
+
             elif mode == 'V^-1/2':
                     # First find the eigenvectors and eigenvalues of the unnormalizd covariance
                     # Then use it to compute V^-1/2
@@ -1825,21 +1831,17 @@ class PSpecData(object):
                 M = np.dot(W_norm, H_minus_half)
 
             elif mode == 'I':
-                H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol)
                 G = self._get_G(key1, key2, time_index, exact_norm=exact_norm, pol=pol)
                 # This is not the M matrix as is rigorously defined in the
                 # OQE formalism, because the power spectrum scalar is excluded
                 # in this matrix normalization (i.e., M doesn't do the full
                 # normalization)
                 M = np.diag(1. / np.sum(G, axis=1))
-                W_norm = np.diag(1. / np.sum(H, axis=1))
-
             else:
                 raise NotImplementedError("Cholesky decomposition mode not currently supported.")
 
             M[np.isnan(M)] = 0.
             M[np.isinf(M)] = 0.
-
             self._M[Mkey] = M
 
         return self._M[Mkey]
