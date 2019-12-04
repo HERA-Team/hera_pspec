@@ -1417,7 +1417,7 @@ class PSpecData(object):
             for i in range(self.spw_Ndlys): # this loop goes as nchan^4
                 for j in range(self.spw_Ndlys):
                     G[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
-            self._G[Gkey] = G
+            self._G[Gkey] = G / 2.
 
         return self._G[Gkey]
 
@@ -1558,7 +1558,7 @@ class PSpecData(object):
             for i in range(self.spw_Ndlys): # this loop goes as nchan^4
                 for j in range(self.spw_Ndlys):
                     H[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
-            self._H[Hkey] = H
+            self._H[Hkey] = H / 2.
 
         return self._H[Hkey]
 
