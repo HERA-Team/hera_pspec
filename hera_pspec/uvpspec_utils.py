@@ -115,7 +115,7 @@ def compress_r_params(r_params_dict):
                             dictionary with fields
                             'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                               at which to center filtering windows. Can specify fractional channel number.
-                            'filter_widths', list of floats (or float) specifying the width of each
+                            'filter_half_widths', list of floats (or float) specifying the width of each
                                              filter window in (delay) channel numbers. Can specify fractional channel number.
                             'filter_factors', list of floats (or float) specifying how much power within each filter window
                                               is to be suppressed.
@@ -164,7 +164,7 @@ def decompress_r_params(r_params_str):
                       dictionary with fields
                       'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                         at which to center filtering windows. Can specify fractional channel number.
-                      'filter_widths', list of floats (or float) specifying the width of each
+                      'filter_half_widths', list of floats (or float) specifying the width of each
                                        filter window in (delay) channel numbers. Can specify fractional channel number.
                       'filter_factors', list of floats (or float) specifying how much power within each filter window
                                         is to be suppressed.

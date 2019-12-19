@@ -66,7 +66,7 @@ class PSpecData(object):
         self.spw_Ndlys = None
         # r_params is a dictionary that stores parameters for
         # parametric R matrices.
-        self.r_params = {} 
+        self.r_params = {}
         self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
@@ -834,7 +834,7 @@ class PSpecData(object):
                 dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs,
                                     df=np.median(np.diff(self.freqs)),
                                     filter_centers=r_params['filter_centers'],
-                                    filter_widths=r_params['filter_widths'],
+                                    filter_half_widths=r_params['filter_half_widths'],
                                     filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
 
         return self._R[Rkey]
@@ -867,7 +867,7 @@ class PSpecData(object):
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
-                                'filter_widths', list of floats (or float) specifying the width of each
+                                'filter_half_widths', list of floats (or float) specifying the width of each
                                                  filter window in (delay) channel numbers. Can specify fractional channel number.
                                 'filter_factors', list of floats (or float) specifying how much power within each filter window
                                                   is to be suppressed.
@@ -1096,7 +1096,7 @@ class PSpecData(object):
         elif exact_norm and not(allow_fft):
             q          = []
             del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
-            integral_beam = self.get_integral_beam(pol) #Integral of beam in Eq.11(a) (HERA memo #44) 
+            integral_beam = self.get_integral_beam(pol) #Integral of beam in Eq.11(a) (HERA memo #44)
 
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau and integral_beam should be part of get_Q. We use them here to
@@ -1146,14 +1146,14 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
-        
+
         exact_norm : boolean, optional
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
-            of q_hat for details). 
+            of q_hat for details).
 
         pol : str/int/bool, optional
-            Polarization parameter to be used for extracting the correct beam. 
-            Used only if exact_norm is True. 
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
 
         Returns
         -------
@@ -1170,8 +1170,8 @@ class PSpecData(object):
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
-            integral_beam = self.get_integral_beam(pol) 
-            del_tau = np.median(np.diff(self.delays()))*1e-9  
+            integral_beam = self.get_integral_beam(pol)
+            del_tau = np.median(np.diff(self.delays()))*1e-9
         for ch in range(self.spw_Ndlys):
             if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
             else: Q1 = self.get_Q_alt(ch)
@@ -1181,7 +1181,7 @@ class PSpecData(object):
         for i in range(self.spw_Ndlys):
             for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
-                G[i,j] = np.einsum('ab,ba', iR1Q1[i], iR2Q2[j]) 
+                G[i,j] = np.einsum('ab,ba', iR1Q1[i], iR2Q2[j])
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(G) == 0:
@@ -1241,14 +1241,14 @@ class PSpecData(object):
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
-        
+
         exact_norm : boolean, optional
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
-            of q_hat for details). 
+            of q_hat for details).
 
         pol : str/int/bool, optional
-            Polarization parameter to be used for extracting the correct beam. 
-            Used only if exact_norm is True. 
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
 
         Returns
         -------
@@ -1271,8 +1271,8 @@ class PSpecData(object):
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
-            integral_beam = self.get_integral_beam(pol) 
-            del_tau = np.median(np.diff(self.delays()))*1e-9  
+            integral_beam = self.get_integral_beam(pol)
+            del_tau = np.median(np.diff(self.delays()))*1e-9
         for ch in range(self.spw_Ndlys):
             if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
             else: Q1 = self.get_Q_alt(ch)
@@ -1320,14 +1320,14 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
-        
+
         exact_norm : boolean, optional
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
-            of q_hat for details). 
+            of q_hat for details).
 
         pol : str/int/bool, optional
-            Polarization parameter to be used for extracting the correct beam. 
-            Used only if exact_norm is True. 
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
 
         Returns
         -------
@@ -1344,8 +1344,8 @@ class PSpecData(object):
         R1 = self.R(key1)
         R2 = self.R(key2)
         if (exact_norm):
-            integral_beam = self.get_integral_beam(pol) 
-            del_tau = np.median(np.diff(self.delays()))*1e-9  
+            integral_beam = self.get_integral_beam(pol)
+            del_tau = np.median(np.diff(self.delays()))*1e-9
         for dly_idx in range(self.spw_Ndlys):
             if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
             else: QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
@@ -1408,14 +1408,14 @@ class PSpecData(object):
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
-        
+
         exact_norm : boolean, optional
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
-            of q_hat for details). 
+            of q_hat for details).
 
         pol : str/int/bool, optional
-            Polarization parameter to be used for extracting the correct beam. 
-            Used only if exact_norm is True. 
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
 
         model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
@@ -1637,18 +1637,18 @@ class PSpecData(object):
 
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
         return Q_alt
-    
+
     def get_integral_beam(self, pol=False):
         """
-        Computes the integral containing the spectral beam and tapering 
+        Computes the integral containing the spectral beam and tapering
         function in Q_alpha(i,j).
 
         Parameters
         ----------
 
         pol : str/int/bool, optional
-            Which beam polarization to use. If the specified polarization 
-            doesn't exist, a uniform isotropic beam (with integral 4pi for all 
+            Which beam polarization to use. If the specified polarization
+            doesn't exist, a uniform isotropic beam (with integral 4pi for all
             frequencies) is assumed. Default: False (uniform beam).
 
         Return
@@ -1659,33 +1659,33 @@ class PSpecData(object):
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
 
         try:
-            # Get beam response in (frequency, pixel), beam area(freq) and 
+            # Get beam response in (frequency, pixel), beam area(freq) and
             # Nside, used in computing dtheta
             beam_res, beam_omega, N = \
-                self.primary_beam.beam_normalized_response(pol, nu) 
+                self.primary_beam.beam_normalized_response(pol, nu)
             prod = 1. / beam_omega
             beam_prod = beam_res * prod[:, np.newaxis]
-            
+
             # beam_prod has omega subsumed, but taper is still part of R matrix
-            # The nside term is dtheta^2, where dtheta is the resolution in 
+            # The nside term is dtheta^2, where dtheta is the resolution in
             # healpix map
             integral_beam = np.pi/(3.*N*N) * np.dot(beam_prod, beam_prod.T)
-                                                                 
+
         except(AttributeError):
             warnings.warn("The beam response could not be calculated. "
                           "PS will not be normalized!")
             integral_beam = np.ones((len(nu), len(nu)))
 
         return integral_beam
-    
-    
+
+
     def get_Q(self, mode):
         """
         Computes Q_alt(i,j), which is the exponential part of the
         response of the data covariance to the bandpower (dC/dP_alpha).
 
-        Note: This function is not being used right now, since get_q_alt and 
-        get_Q are essentially the same functions. However, since we want to attempt 
+        Note: This function is not being used right now, since get_q_alt and
+        get_Q are essentially the same functions. However, since we want to attempt
         non-uniform bins, we do intend to use get_Q (which uses physical
         units, and hence there is not contraint of uniformly spaced
         data).
@@ -1707,7 +1707,7 @@ class PSpecData(object):
                              "of allowed range of delay modes.")
         tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
         nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
-        
+
         eta_int = np.exp(-2j * np.pi * tau * nu) # exponential part
         Q_alt = np.einsum('i,j', eta_int.conj(), eta_int) # dot with conjugate
         return Q_alt
@@ -1734,7 +1734,7 @@ class PSpecData(object):
     def cov_p_hat(self, M, q_cov):
         """
         Covariance estimate between two different band powers p_alpha and p_beta
-        given by M_{alpha i} M^*_{beta,j} C_q^{ij} where C_q^{ij} is the 
+        given by M_{alpha i} M^*_{beta,j} C_q^{ij} where C_q^{ij} is the
         q-covariance.
 
         Parameters
@@ -1750,7 +1750,7 @@ class PSpecData(object):
             p_cov[tnum] = np.einsum('ab,cd,bd->ac', M, M, q_cov[tnum])
         return p_cov
 
-    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, 
+    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2,
                              unflag=False):
         """
         For each dataset in self.dset, update the flag_array such that
@@ -1764,8 +1764,8 @@ class PSpecData(object):
 
         Additionally, one can also unflag the flag_array entirely if desired.
 
-        Note: although technically allowed, this function may give unexpected 
-        results if multiple spectral windows in spw_ranges have frequency 
+        Note: although technically allowed, this function may give unexpected
+        results if multiple spectral windows in spw_ranges have frequency
         overlap.
 
         Note: it is generally not recommended to set time_thresh > 0.5, which
@@ -1779,8 +1779,8 @@ class PSpecData(object):
             Default is to use the whole band.
 
         time_thresh : float
-            Fractional threshold of flagged pixels across time needed to flag 
-            all times per freq channel. It is not recommend to set this greater 
+            Fractional threshold of flagged pixels across time needed to flag
+            all times per freq channel. It is not recommend to set this greater
             than 0.5.
 
         unflag : bool
@@ -2011,7 +2011,7 @@ class PSpecData(object):
         adjustment : float
 
         """
-        if Gv is None: Gv = self.get_G(key1, key2) 
+        if Gv is None: Gv = self.get_G(key1, key2)
         if Hv is None: Hv = self.get_H(key1, key2, sampling)
 
         # get ratio
@@ -2189,7 +2189,7 @@ class PSpecData(object):
         exact_norm : bool, optional
             If True, estimates power spectrum using Q instead of Q_alt
             (HERA memo #44). The default options is False. Beware that
-	    computing a power spectrum when exact_norm is set to 
+	    computing a power spectrum when exact_norm is set to
 	    False runs two times faster than setting it to True.
 
         history : str, optional
@@ -2202,7 +2202,7 @@ class PSpecData(object):
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
-                                'filter_widths', list of floats (or float) specifying the width of each
+                                'filter_half_widths', list of floats (or float) specifying the width of each
                                                  filter window in (delay) channel numbers. Can specify fractional channel number.
                                 'filter_factors', list of floats (or float) specifying how much power within each filter window
                                                   is to be suppressed.
@@ -3090,7 +3090,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         Time to wait in seconds after each attempt at opening the container file.
 
     maxiter : int, optional
-        Maximum number of attempts to open container file (useful for concurrent 
+        Maximum number of attempts to open container file (useful for concurrent
         access when file may be locked temporarily by other processes).
 
     r_params: dict, optional
@@ -3103,7 +3103,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                 filtering windows. Can specify fractional
                                 channel number.
 
-            - `filter_widths`:  list of floats (or float) specifying the width
+            - `filter_half_widths`:  list of floats (or float) specifying the width
                                 of each filter window in (delay) channel
                                 numbers. Can specify fractional channel number.
 
