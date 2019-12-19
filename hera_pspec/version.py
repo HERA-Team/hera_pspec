@@ -12,7 +12,6 @@ import sys
 
 hera_pspec_dir = os.path.dirname(os.path.realpath(__file__))
 
-PY2 = sys.version_info < (3, 0)
 
 
 def _get_git_output(args, capture_stderr=False):
@@ -29,8 +28,6 @@ def _get_git_output(args, capture_stderr=False):
 
     data = data.strip()
 
-    if PY2:
-        return data
     return data.decode('utf8')
 
 
@@ -53,8 +50,6 @@ def _get_gitinfo_file(git_file=None):
 
 
 def _unicode_to_str(u):
-    if PY2:
-        return u.encode('utf8')
     return u
 
 
@@ -95,7 +90,7 @@ def construct_version_info():
 
 def history_string(notes=''):
     """
-    Creates a standardized history string that all functions that write to 
+    Creates a standardized history string that all functions that write to
     disk can use. Optionally add notes.
     """
     history = '\n------------\nThis file was produced by the function ' \
@@ -103,7 +98,7 @@ def history_string(notes=''):
     # inspect.stack()[1][3] is the name of the function that called this fn
 
     history += ' in ' + os.path.basename(inspect.stack()[1][1]) + ' using: '
-    # inspect.stack()[1][1] is path to the file that contains the function 
+    # inspect.stack()[1][1] is path to the file that contains the function
     # that called this function
     version_info = construct_version_info()
 
