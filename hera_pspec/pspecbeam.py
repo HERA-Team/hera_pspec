@@ -432,7 +432,7 @@ class PSpecBeamUV(PSpecBeamBase):
             self.primary_beam.efield_to_power(inplace=True)
             self.primary_beam.peak_normalize()
 
-    def beam_normalized_response(self, pol='pI', freq=None):
+    def beam_normalized_response(self, pol='pI', freq=None, x_orientation=None):
         """
         Outputs beam response for given polarization as a function
         of pixels on the sky and input frequencies.
@@ -448,6 +448,10 @@ class PSpecBeamUV(PSpecBeamBase):
             'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX' 
             The output shape is (Nfreq, Npixels)
             Default: 'pI'
+        freq: array, optional
+            Frequencies [Hz] to interpolate onto.
+        x_orientation: str, optional
+            Orientation in cardinal direction east or north of X dipole.
 
         Returns
         -------
@@ -473,7 +477,7 @@ class PSpecBeamUV(PSpecBeamBase):
         beam_res = beam_res[0]
 
         if isinstance(pol, (str, np.str)):
-            pol = uvutils.polstr2num(pol)
+            pol = uvutils.polstr2num(pol, x_orientation=x_orientation)
         
         pol_array = self.primary_beam.polarization_array
         
@@ -541,7 +545,7 @@ class PSpecBeamUV(PSpecBeamBase):
 
 class PSpecBeamFromArray(PSpecBeamBase):
     
-    def __init__(self, OmegaP, OmegaPP, beam_freqs, cosmo=None):
+    def __init__(self, OmegaP, OmegaPP, beam_freqs, cosmo=None, x_orientation=None):
         """
         Primary beam model built from user-defined arrays for the integrals 
         over beam solid angle and beam solid angle squared.
@@ -576,8 +580,12 @@ class PSpecBeamFromArray(PSpecBeamBase):
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not 
             specified. Default: None.
+
+        x_orientation : str, optional
+            Orientation in cardinal direction east or north of X dipole.
         """
         self.OmegaP = {}; self.OmegaPP = {}
+        self.x_orientation = x_orientation
         # these are allowed pols in AIPS polarization integer convention
         # see pyuvdata.utils.polstr2num() for details
         self.allowed_pols = [1, 2, 3, 4, -5, -6, -7, -8]
@@ -607,7 +615,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         for key in OmegaP.keys():
             # turn into pol integer if a pol string
             if isinstance(key, str):
-                new_key = uvutils.polstr2num(key)
+                new_key = uvutils.polstr2num(key, x_orientation=self.x_orientation)
                 OmegaP[new_key] = OmegaP.pop(key)
                 key = new_key
             # check its an allowed pol
@@ -616,7 +624,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         for key in OmegaPP.keys():
             # turn into pol integer if a pol string
             if isinstance(key, str):
-                new_key = uvutils.polstr2num(key)
+                new_key = uvutils.polstr2num(key, x_orientation=self.x_orientation)
                 OmegaPP[new_key] = OmegaPP.pop(key)
                 key = new_key
             # check its an allowed pol
@@ -666,7 +674,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         """
         # Type check
         if isinstance(pol, str):
-            pol = uvutils.polstr2num(pol)
+            pol = uvutils.polstr2num(pol, x_orientation=self.x_orientation)
 
         # Check for allowed polarization
         if pol not in self.allowed_pols:
@@ -711,7 +719,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         """
         # type check
         if isinstance(pol, str):
-            pol = uvutils.polstr2num(pol)
+            pol = uvutils.polstr2num(pol, x_orientation=self.x_orientation)
 
         if pol in self.OmegaP.keys():
             return self.OmegaP[pol]
@@ -740,7 +748,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         """
         # type check
         if isinstance(pol, str):
-            pol = uvutils.polstr2num(pol)
+            pol = uvutils.polstr2num(pol, x_orientation=self.x_orientation)
             
         if pol in self.OmegaPP.keys():
             return self.OmegaPP[pol]
