@@ -356,7 +356,6 @@ class Test_PSpecData(unittest.TestCase):
                + 1.j * np.random.normal(size=vect_length)
 
         self.ds.spw_Nfreqs = vect_length
-        pol = 'xx'
         #Test if there is a warning if user does not pass the beam
         key1 = (0, 24, 38)
         key2 = (1, 24, 38)
@@ -365,7 +364,7 @@ class Test_PSpecData(unittest.TestCase):
 
         for i in range(vect_length):
             try:
-                Q_matrix = self.ds.get_Q(i, pol)
+                Q_matrix = self.ds.get_Q(i)
                 # Test that if the number of delay bins hasn't been set
                 # the code defaults to putting that equal to Nfreqs
                 self.assertEqual(self.ds.spw_Ndlys, self.ds.spw_Nfreqs)
@@ -387,7 +386,7 @@ class Test_PSpecData(unittest.TestCase):
 
         x_vect = np.ones(vect_length)
         try:
-            Q_matrix = self.ds.get_Q(vect_length/2, pol)
+            Q_matrix = self.ds.get_Q(vect_length/2)
         except IndexError:
             Q_matrix = np.ones((vect_length, vect_length))
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
@@ -398,7 +397,7 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.set_Ndlys(vect_length-3)
         for i in range(vect_length-3):
             try:
-                Q_matrix = self.ds.get_Q(i, pol)
+                Q_matrix = self.ds.get_Q(i)
             except IndexError:
                 Q_matrix = np.ones((vect_length,vect_length))
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
@@ -416,7 +415,7 @@ class Test_PSpecData(unittest.TestCase):
 
         x_vect = np.ones(vect_length)
         try:
-            Q_matrix = self.ds.get_Q((vect_length-2)/2-1, pol)
+            Q_matrix = self.ds.get_Q((vect_length-2)/2-1)
         except IndexError:
             Q_matrix = np.ones((vect_length,vect_length))
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
@@ -424,7 +423,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # Make sure that error is raised when asking for a delay mode outside
         # of the range of delay bins
-        nt.assert_raises(IndexError, self.ds.get_Q, vect_length-1, pol)
+        nt.assert_raises(IndexError, self.ds.get_Q, vect_length-1)
 
     def test_get_integral_beam(self):
         """
@@ -473,6 +472,17 @@ class Test_PSpecData(unittest.TestCase):
         for matrix in E_matrices:
             diff_norm = np.linalg.norm(matrix.T.conj() - matrix)
             self.assertLessEqual(diff_norm, multiplicative_tolerance)
+
+        #Test for the correct shape when exact_norm is True
+        ds_c = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'], beam=self.bm)
+        ds_c.spw_Ndlys = 10
+        random_R = generate_pos_def_all_pos(ds_c.spw_Nfreqs)
+        wgt_matrix_dict = {} 
+        wgt_matrix_dict[('red', (24, 25))] = random_R
+        wgt_matrix_dict[('blue', (24, 25))] = random_R
+        ds_c.set_R(wgt_matrix_dict)
+        E_matrices = ds_c.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), exact_norm=True, pol='xx')
+        self.assertEqual(E_matrices.shape, (ds_c.spw_Ndlys, ds_c.spw_Nfreqs, ds_c.spw_Nfreqs))
 
         # Test that if R1 != R2, then i) E^{12,dagger} = E^{21}
         random_R2 = generate_pos_def_all_pos(ds.spw_Nfreqs)
@@ -577,6 +587,7 @@ class Test_PSpecData(unittest.TestCase):
         random_V = generate_pos_def_all_pos(n)
 
         nt.assert_raises(AssertionError, self.ds.get_MW, random_G, random_H, mode='L^3')
+        nt.assert_raises(NotImplementedError, self.ds.get_MW, random_G, random_H, mode='H^-1', exact_norm=True)
 
         for mode in ['H^-1', 'V^-1/2', 'I', 'L^-1']:
             if mode == 'H^-1':
@@ -666,7 +677,7 @@ class Test_PSpecData(unittest.TestCase):
             #check error raised
             if input_data_weight == 'sinc_downweight':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
@@ -727,7 +738,7 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'sinc_downweight':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             # Loop over list of taper functions
@@ -794,7 +805,7 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'sinc_downweight':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
@@ -822,7 +833,7 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'sinc_downweight':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
@@ -1173,7 +1184,7 @@ class Test_PSpecData(unittest.TestCase):
         my_r_params = {}
         my_r_params_dset0_only = {}
         rp = {'filter_centers':[0.],
-              'filter_widths':[250e-9],
+              'filter_half_widths':[250e-9],
               'filter_factors':[1e-9]}
         for bl in bls:
             key1 = (0,) + bl + ('xx',)
