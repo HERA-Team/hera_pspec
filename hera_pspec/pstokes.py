@@ -62,7 +62,7 @@ def miriad2pyuvdata(dset, antenna_nums=None, bls=None, polarizations=None,
     return uvd
 
 
-def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI'):
+def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     """
     Combines UVData visibilities to form the desired pseudo-stokes visibilities.
     It returns UVData object containing the pseudo-stokes visibilities
@@ -89,6 +89,10 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI'):
         Pseudo stokes polarization to form, can be 'pI' or 'pQ' or 'pU' or 'pV'.
         Default: pI
 
+    x_orientation: str, optional
+        Orientation in cardinal direction east or north of X dipole.
+        Default keeps polarization in X and Y basis.
+
     Returns
     -------
     uvdS : UVData object
@@ -100,9 +104,9 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI'):
 
     # convert pol1 and/or pol2 to integer if fed as a string
     if isinstance(pol1, (str, np.str)):
-        pol1 = pyuvdata.utils.polstr2num(pol1)
+        pol1 = pyuvdata.utils.polstr2num(pol1, x_orientation=x_orientation)
     if isinstance(pol2, (str, np.str)):
-        pol2 = pyuvdata.utils.polstr2num(pol2)
+        pol2 = pyuvdata.utils.polstr2num(pol2, x_orientation=x_orientation)
 
     # extracting data array from the UVData objects
     data1 = uvd1.data_array
@@ -117,7 +121,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI'):
 
     # convert pStokes to polarization integer if a string
     if isinstance(pstokes, (str, np.str)):
-        pstokes = pyuvdata.utils.polstr2num(pstokes)
+        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=x_orientation)
 
     # get string form of polarizations
     pol1_str = pyuvdata.utils.polnum2str(pol1)
@@ -232,7 +236,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
 
     # convert pstokes to integer if fed as a string
     if isinstance(pstokes, (str, np.str)):
-        pstokes = pyuvdata.utils.polstr2num(pstokes)
+        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dset1.x_orientation)
 
     # check if dset1 and dset2 habe the same spectral window
     spw1 = uvd1.spw_array
@@ -321,7 +325,7 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
 
     # convert pstokes to integer if a string
     if isinstance(pstokes, (str, np.str)):
-        pstokes = pyuvdata.utils.polstr2num(pstokes)
+        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dsets[0].x_orientation)
     assert pstokes in [1, 2, 3, 4], \
         "pstokes must be fed as a pseudo-Stokes parameter"
 

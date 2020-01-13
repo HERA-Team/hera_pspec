@@ -1056,10 +1056,11 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(ValueError, ds2.validate_datasets)
 
     def test_rephase_to_dset(self):
-        # generate two uvd objects w/ different LST grids
+        # get uvd
         uvd1 = copy.deepcopy(self.uvd)
-        uvd2 = uv.UVData()
-        uvd2.read_miriad(os.path.join(DATA_PATH, "zen.2458042.19263.xx.HH.uvXA"))
+
+        # give the uvd an x_orientation to test x_orientation propagation
+        uvd1.x_orienation = 'east'
 
         # null test: check nothing changes when dsets contain same UVData object
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd1)], wgts=[None, None])
