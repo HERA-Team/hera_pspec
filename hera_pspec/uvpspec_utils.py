@@ -379,6 +379,7 @@ def polpair_tuple2int(polpair, x_orientation=None):
 
     x_orientation: str, optional
         Orientation in cardinal direction east or north of X dipole.
+        Default keeps polarization in X and Y basis.
 
     Returns
     -------

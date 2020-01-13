@@ -452,6 +452,7 @@ class PSpecBeamUV(PSpecBeamBase):
             Frequencies [Hz] to interpolate onto.
         x_orientation: str, optional
             Orientation in cardinal direction east or north of X dipole.
+            Default keeps polarization in X and Y basis.
 
         Returns
         -------
@@ -583,6 +584,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
 
         x_orientation : str, optional
             Orientation in cardinal direction east or north of X dipole.
+            Default keeps polarization in X and Y basis.
         """
         self.OmegaP = {}; self.OmegaPP = {}
         self.x_orientation = x_orientation

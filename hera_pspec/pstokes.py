@@ -91,6 +91,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
 
     x_orientation: str, optional
         Orientation in cardinal direction east or north of X dipole.
+        Default keeps polarization in X and Y basis.
 
     Returns
     -------
