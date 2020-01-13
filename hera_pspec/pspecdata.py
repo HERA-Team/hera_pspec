@@ -2063,11 +2063,14 @@ class PSpecData(object):
         err_msg = "polarization must be fed as len-2 tuple of strings or ints"
         assert isinstance(pol_pair, tuple), err_msg
 
+        # take x_orientation from first dset
+        x_orientation = self.dsets[0].x_orientation
+
         # convert elements to integers if fed as strings
         if isinstance(pol_pair[0], (str, np.str)):
-            pol_pair = (uvutils.polstr2num(pol_pair[0]), pol_pair[1])
+            pol_pair = (uvutils.polstr2num(pol_pair[0], x_orientation=x_orientation), pol_pair[1])
         if isinstance(pol_pair[1], (str, np.str)):
-            pol_pair = (pol_pair[0], uvutils.polstr2num(pol_pair[1]))
+            pol_pair = (pol_pair[0], uvutils.polstr2num(pol_pair[1], x_orientation=x_orientation))
 
         assert isinstance(pol_pair[0], (int, np.integer)), err_msg
         assert isinstance(pol_pair[1], (int, np.integer)), err_msg
@@ -2345,11 +2348,12 @@ class PSpecData(object):
         for p in pols:
             if isinstance(p, str):
                 # Convert string to pol-integer pair
-                p = (uvutils.polstr2num(p), uvutils.polstr2num(p))
+                p = (uvutils.polstr2num(p, x_orientation=self.dsets[0].x_orientation),
+                     uvutils.polstr2num(p, x_orientation=self.dsets[0].x_orientation))
             if isinstance(p[0], (str, np.str)):
-                p = (uvutils.polstr2num(p[0]), p[1])
+                p = (uvutils.polstr2num(p[0], x_orientation=self.dsets[0].x_orientation), p[1])
             if isinstance(p[1], (str, np.str)):
-                p = (p[0], uvutils.polstr2num(p[1]))
+                p = (p[0], uvutils.polstr2num(p[1], x_orientation=self.dsets[0].x_orientation))
             _pols.append(p)
         pols = _pols
 
@@ -2808,7 +2812,7 @@ class PSpecData(object):
                 indices = dset.antpair2ind(k[:2], ordered=False)
 
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(uvutils.polstr2num(k[-1]))
+                polind = pol_list.index(uvutils.polstr2num(k[-1], x_orientation=self.dsets[0].x_orientation))
 
                 # insert into dset
                 dset.data_array[indices, 0, :, polind] = data[k]

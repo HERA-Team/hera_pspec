@@ -361,7 +361,7 @@ def polpair_int2tuple(polpair, pol_strings=False):
         return (pol1, pol2)
 
 
-def polpair_tuple2int(polpair):
+def polpair_tuple2int(polpair, x_orientation=None):
     """
     Convert a tuple pair of polarization strings/integers into
     an pol-pair integer.
@@ -376,6 +376,10 @@ def polpair_tuple2int(polpair):
     polpair : tuple, length 2
         A length-2 tuple containing a pair of polarization strings
         or integers, e.g. ('XX', 'YY') or (-5, -5).
+
+    x_orientation: str, optional
+        Orientation in cardinal direction east or north of X dipole.
+        Default keeps polarization in X and Y basis.
 
     Returns
     -------
@@ -392,8 +396,8 @@ def polpair_tuple2int(polpair):
 
     # Convert strings to ints if necessary
     pol1, pol2 = polpair
-    if type(pol1) in (str, np.str): pol1 = polstr2num(pol1)
-    if type(pol2) in (str, np.str): pol2 = polstr2num(pol2)
+    if type(pol1) in (str, np.str): pol1 = polstr2num(pol1, x_orientation=x_orientation)
+    if type(pol2) in (str, np.str): pol2 = polstr2num(pol2, x_orientation=x_orientation)
 
     # Convert to polpair integer
     ppint = (20 + pol1)*100 + (20 + pol2)
