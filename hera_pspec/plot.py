@@ -511,18 +511,15 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     # Get LST range: setting y-ticks is tricky due to LST wrapping...
     y = uvp_plt.lst_avg_array[
             uvp_plt.key_to_indices(list(waterfall.keys())[0])[1] ]
+    y = np.unwrap(y)
+    if y[0] > np.pi:
+        # if start is closer to 2pi than 0, lower axis by an octave
+        y -= 2 * np.pi
     if lst_in_hrs:
         lst_units = "Hr"
-        y = np.around(y * 24 / (2*np.pi), 2)
+        y *= 24 / (2 * np.pi)
     else:
         lst_units = "rad"
-        y = np.around(y, 3)
-    Ny = len(y)
-    if Ny <= 10:
-        Ny_thin = 1
-    else:
-        Ny_thin = int(round(Ny / 10.0))
-    Nx = len(x)
 
     # get baseline vectors
     blvecs = dict(zip([uvp_plt.bl_to_antnums(bl) for bl in uvp_plt.bl_array], uvp_plt.get_ENU_bl_vecs()))
@@ -561,7 +558,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
             # plot waterfall
             cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', 
                              vmin=vmin, vmax=vmax, 
-                             extent=[np.min(x), np.max(x), Ny, 0])
+                             extent=[x[0], x[-1], y[-1], y[0]])
 
             # ax config
             ax.xaxis.set_ticks_position('bottom')
@@ -588,8 +585,6 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
             # configure left-column plots
             if j == 0:
                 # set yticks
-                ax.set_yticks(np.arange(Ny)[::Ny_thin])
-                ax.set_yticklabels(y[::Ny_thin])
                 ax.set_ylabel(r"LST [{}]".format(lst_units), fontsize=16)
             else:
                 ax.set_yticklabels([])
