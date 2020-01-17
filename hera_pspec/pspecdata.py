@@ -854,7 +854,7 @@ class PSpecData(object):
 
         where T is a diagonal matrix holding the taper and Y is a diagonal
         matrix holding flag weights. The K matrix comes from either `I` or `iC`
-        or a `sinc_downweight`
+        or a `dayenu`
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
 
@@ -906,7 +906,7 @@ class PSpecData(object):
             elif self.data_weighting == 'iC':
                 rmat = self.iC(key)
 
-            elif self.data_weighting == 'sinc_downweight':
+            elif self.data_weighting in ['dayenu', 'dft_interp']:
                 r_param_key = (self.data_weighting,) + key
                 if not r_param_key in self.r_params:
                     raise ValueError("r_param not set for %s!"%str(r_param_key))
@@ -916,22 +916,27 @@ class PSpecData(object):
                    not  'filter_factors' in r_params:
                        raise ValueError("filtering parameters not specified!")
                 # This line retrieves a the psuedo-inverse of a lazy covariance
-                # matrix given by dspec.sinc_downweight_mat_inv.
+                # matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 # to apply flagging weights before taking psuedo inverse.
-                rmat = np.asarray([dspec.sinc_downweight_mat_inv(nchan=nfreq,
-                                    df=np.median(np.diff(self.freqs)),
-                                    filter_centers=r_params['filter_centers'],
-                                    filter_half_widths=r_params['filter_half_widths'],
-                                    filter_factors=r_params['filter_factors'])\
-                                     * wgt_sq[m] for m in range(self.Ntimes)])
-                for m in range(self.Ntimes):
-                    rmat[m] = np.linalg.pinv(rmat[m])
+                if self.data_weighting == 'dayenu':
+                    rmat = np.asarray([dspec.dayenu_mat_inv(nchan=nfreq,
+                                        df=np.median(np.diff(self.freqs)),
+                                        filter_centers=r_params['filter_centers'],
+                                        filter_half_widths=r_params['filter_half_widths'],
+                                        filter_factors=r_params['filter_factors'])\
+                                         * wgt_sq[m] for m in range(self.Ntimes)])
+                    for m in range(self.Ntimes):
+                        rmat[m] = np.linalg.pinv(rmat[m])
+                elif self.data_weighting == 'dft_interp':
+                    if not 'fundamental_period' in r_params:
+                        raise ValueError("fundamental interpolation period needs to be specified!")
+                    rmat =
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
             rmat =  np.transpose(np.dot(tmat, rmat), (1, 0, 2))
 
-            if self.data_weighting == 'sinc_downweight' and 'restore_half_width' in r_params:
+            if self.data_weighting == 'dayenu' and 'restore_half_width' in r_params:
                 if isinstance(r_params['restore_half_width'], (float, int)) and r_params['restore_half_width']>0:
                     if not 'restore_fundamental_period' in r_params:
                         fundamental_period = 2 * self.spw_Nfreqs
@@ -988,7 +993,7 @@ class PSpecData(object):
         Parameters
         ----------
         data_weighting : str
-            Type of data weightings. Options=['identity', 'iC', 'sinc_downweight']
+            Type of data weightings. Options=['identity', 'iC', 'dayenu']
         """
         self.data_weighting = data_weighting
 
@@ -1005,7 +1010,7 @@ class PSpecData(object):
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
-                data_weighting == 'sinc_downweight':
+                data_weighting == 'dayenu':
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
@@ -2833,7 +2838,7 @@ class PSpecData(object):
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
-                data_weighting == 'sinc_downweight':
+                data_weighting == 'dayenu':
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
@@ -3118,7 +3123,7 @@ class PSpecData(object):
                                   "and/or key2 < n_dlys\n which may lead to "
                                   "normalization instabilities.")
                     #if using inverse sinc weighting, set r_params
-                    if input_data_weight == 'sinc_downweight':
+                    if input_data_weight == 'dayenu':
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
                         if not key1 in r_params:
@@ -3788,7 +3793,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         Dictionary with parameters for weighting matrix. Required fields and
         formats depend on the mode of `data_weighting`. Default: None.
 
-        - `sinc_downweight` fields:
+        - `dayenu` fields:
             - `filter_centers`: list of floats (or float) specifying the
                                 (delay) channel numbers at which to center
                                 filtering windows. Can specify fractional
