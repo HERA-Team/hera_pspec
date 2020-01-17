@@ -2411,7 +2411,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 
 def _ordered_unique(arr):
     """
-    Get the unique of an array while preserving order.
+    Get the unique elements of an array while preserving order.
     """
     arr = np.asarray(arr)
     _, idx = np.unique(arr, return_index=True)
