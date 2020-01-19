@@ -80,15 +80,15 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_equal(d.shape, (10, 30))
         # test get_blpairs
         blps = self.uvp.get_blpairs()
-        nt.assert_equal(blps, [((1, 2), (1, 2)), ((1, 3), (1, 3)), ((2, 3), (2, 3))])
+        nt.assert_equal(blps, [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))])
         # test get_polpairs
         polpairs = self.uvp.get_polpairs()
         nt.assert_equal(polpairs, [('xx', 'xx')])
         # test get all keys
         keys = self.uvp.get_all_keys()
-        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), ('xx','xx')),
-                               (0, ((1, 3), (1, 3)), ('xx','xx')),
-                               (0, ((2, 3), (2, 3)), ('xx','xx'))])
+        nt.assert_equal(keys, [(0, ((1, 2), (1, 2)), ('xx', 'xx')),
+                               (0, ((2, 3), (2, 3)), ('xx', 'xx')),
+                               (0, ((1, 3), (1, 3)), ('xx', 'xx'))])
         # test omit_flags
         self.uvp.integration_array[0][self.uvp.blpair_to_indices(((1, 2), (1, 2)))[:2]] = 0.0
         nt.assert_equal(self.uvp.get_integrations((0, ((1, 2), (1, 2)), ('xx','xx')), omit_flags=True).shape, (8,))

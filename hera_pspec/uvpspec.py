@@ -377,7 +377,8 @@ class UVPSpec(object):
     def get_blpair_seps(self):
         """
         For each baseline-pair, get the average baseline separation in ENU
-        frame in meters.
+        frame in meters between its bl1 and bl2. Ordering matches
+        self.get_blpairs()
 
         Returns
         -------
@@ -394,7 +395,7 @@ class UVPSpec(object):
         blp_avg_sep = np.empty(self.Nblpairts, np.float)
 
         # construct blpair_bls
-        blpairs = np.unique(self.blpair_array)
+        blpairs = _ordered_unique(self.blpair_array)
         bl1 = np.floor(blpairs / 1e6)
         blpair_bls = np.vstack([bl1, blpairs - bl1*1e6]).astype(np.int32).T
 
@@ -476,7 +477,7 @@ class UVPSpec(object):
         Returns a list of all blpair tuples in the data_array.
         """
         return [self.blpair_to_antnums(blp)
-                for blp in np.unique(self.blpair_array)]
+                for blp in _ordered_unique(self.blpair_array)]
 
     def get_polpairs(self):
         """
@@ -1701,7 +1702,7 @@ class UVPSpec(object):
 
         # get blpairs
         if blpairs is None:
-            blpairs = np.unique(self.blpair_array)
+            blpairs = _ordered_unique(self.blpair_array)
         elif isinstance(blpairs[0], tuple):
             blpairs = [self.antnums_to_blpair(blp) for blp in blpairs]
 
@@ -2406,3 +2407,12 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 
     return uvps, concat_ax, unique_spws, unique_blpts, \
            unique_polpairs, static_meta
+
+
+def _ordered_unique(arr):
+    """
+    Get the unique elements of an array while preserving order.
+    """
+    arr = np.asarray(arr)
+    _, idx = np.unique(arr, return_index=True)
+    return arr[np.sort(idx)]

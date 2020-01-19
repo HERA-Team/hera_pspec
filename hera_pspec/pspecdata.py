@@ -348,7 +348,7 @@ class PSpecData(object):
         """
         #FIXME: Fix this to enable label keys
         # get iterable
-        key = uvutils.get_iterable(key)
+        key = uvutils._get_iterable(key)
         if isinstance(key, str):
             key = (key,)
 
