@@ -931,7 +931,7 @@ class PSpecData(object):
                 elif self.data_weighting == 'dft_interp':
                     if not 'fundamental_period' in r_params:
                         raise ValueError("fundamental interpolation period needs to be specified!")
-                    rmat =
+                    if not 
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
             rmat =  np.transpose(np.dot(tmat, rmat), (1, 0, 2))
