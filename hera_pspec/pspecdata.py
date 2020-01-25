@@ -867,7 +867,7 @@ class PSpecData(object):
                     raise ValueError("r_param not set for %s!"%str(r_param_key))
                 r_params = self.r_params[r_param_key]
                 if not 'filter_centers' in r_params or\
-                   not 'filter_widths' in r_params or\
+                   not 'filter_half_widths' in r_params or\
                    not  'filter_factors' in r_params:
                        raise ValueError("filtering parameters not specified!")
                 #This line retrieves a the psuedo-inverse of a lazy covariance
@@ -879,7 +879,7 @@ class PSpecData(object):
                                     df=np.median(np.diff(self.freqs)),
                                     filter_centers=r_params['filter_centers'],
                                     filter_half_widths=r_params['filter_half_widths'],
-                                    filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
+                                    filter_factors=r_params['filter_factors']) * sqrtY))
 
         return self._R[Rkey]
 

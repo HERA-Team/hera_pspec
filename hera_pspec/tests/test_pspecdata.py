@@ -737,8 +737,8 @@ class Test_PSpecData(unittest.TestCase):
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
 
-        rpk1 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9]}
-        rpk2 = {'filter_centers':[0.],'filter_widths':[100e-9],'filter_factors':[1e-9]}
+        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
+        rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
         self.ds.set_weighting('sinc_downweight')
         self.ds.set_r_param(key1,rpk1)
         self.ds.set_r_param(key2,rpk2)
@@ -926,7 +926,7 @@ class Test_PSpecData(unittest.TestCase):
                     # symmetry where swapping R_1 and R_2 *and* taking the
                     # transpose gives the same result
                     #UPDATE: Taper now occurs after filter so this
-                    #symmetry only holds when taper = 'none'. 
+                    #symmetry only holds when taper = 'none'.
                     if taper_selection == 'none':
                         G_swapped = self.ds.get_G(key2, key1)
                         G_diff_norm = np.linalg.norm(G - G_swapped.T)
