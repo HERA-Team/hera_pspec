@@ -758,6 +758,15 @@ class Test_PSpecData(unittest.TestCase):
         h=ds1.get_H(key1, key2)
         g=ds1.get_G(key1, key2)
         ds1.get_MW(g, h)
+        #make sure identity weighting isn't broken.
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        ds1 = copy.deepcopy(self.ds)
+        ds1.set_spw((10,Nfreq-10))
+        ds1.set_weighting('identity')
+        ds1.set_filter_extension([10,10])
+        rm1 = ds1.R(key1)
+
+
 
     def test_q_hat(self):
         """

@@ -695,7 +695,7 @@ class PSpecData(object):
         key = (dset,) + (bl,)
 
         if key not in self._I:
-            self._I[key] = np.identity(self.spw_Nfreqs)
+            self._I[key] = np.identity(self.spw_Nfreqs + np.sum(self.filter_extension))
         return self._I[key]
 
     def iC(self, key, model='empirical'):
