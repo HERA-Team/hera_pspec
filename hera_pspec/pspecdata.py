@@ -2570,7 +2570,8 @@ class PSpecData(object):
                     # Check that number of non-zero weight chans >= n_dlys
                     key1_dof = np.sum(~np.isclose(self.Y(key1).diagonal(), 0.0))
                     key2_dof = np.sum(~np.isclose(self.Y(key2).diagonal(), 0.0))
-                    if key1_dof < self.spw_Ndlys or key2_dof < self.spw_Ndlys:
+                    if key1_dof - np.sum(self.filter_extension) < self.spw_Ndlys\
+                     or key2_dof - np.sum(self.filter_extension) < self.spw_Ndlys:
                         if verbose:
                             print("WARNING: Number of unflagged chans for key1 "
                                   "and/or key2 < n_dlys\n which may lead to "
