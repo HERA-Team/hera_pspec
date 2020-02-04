@@ -586,6 +586,13 @@ class PSpecData(object):
 
         model : string, optional
             Type of covariance model to calculate, if not cached. options=['empirical', 'dsets']
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
 
         time_index : integer, compute covariance at specific time-step in dset
                        only supported if mode == 'dsets'
@@ -635,8 +642,13 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached.
-            options=['empirical']
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
 
         conj_1 : boolean, optional
             Whether to conjugate first copy of data in covar or not.
@@ -710,8 +722,13 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string
-            Type of covariance model to calculate, if not cached.
-            options=['empirical']
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
 
         Returns
         -------
@@ -820,6 +837,9 @@ class PSpecData(object):
         or a `sinc_downweight`
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
+
+        Right now, the data covariance can be identity ('I'), C^-1 ('iC'), or
+        dayenu weighting 'sinc_downweight'.
 
         Parameters
         ----------
@@ -1024,6 +1044,12 @@ class PSpecData(object):
 
         model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+             frequency-domain covariances.
 
         time_indices: list of indices of times to include or just a single time.
         default is None -> compute covariance for all times.
@@ -1489,6 +1515,12 @@ class PSpecData(object):
 
         model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
 
         time_index : integer, compute covariance at specific time-step in dset
                        only supported if mode == 'dsets'
@@ -2269,8 +2301,13 @@ class PSpecData(object):
             in the UVPSpec object.
 
         cov_model : string, optional
-            specifies how covariance are to be calculated. Currently supports
-            dsets and empirical
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances. 
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
@@ -3199,8 +3236,13 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         access when file may be locked temporarily by other processes).
 
     cov_model : string, optional
-        specifies how covariance are to be calculated. Currently supports
-        dsets and empirical
+        How the covariances of the input data should be estimated.
+        in 'dsets' mode, error bars are estimated from user-provided
+        per baseline and per channel standard deivations. If 'empirical' is
+        set, then error bars are estimated from the data by calculating the
+        channel-channel covariance of each baseline over time and
+        then applying the appropriate linear transformations to these
+        frequency-domain covariances.
 
     r_params: dict, optional
         Dictionary with parameters for weighting matrix. Required fields and
