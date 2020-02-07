@@ -2307,7 +2307,7 @@ class PSpecData(object):
             set, then error bars are estimated from the data by calculating the
             channel-channel covariance of each baseline over time and
             then applying the appropriate linear transformations to these
-            frequency-domain covariances. 
+            frequency-domain covariances.
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
