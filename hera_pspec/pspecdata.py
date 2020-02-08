@@ -745,14 +745,18 @@ class PSpecData(object):
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
             C = self.C_model(key, model=model)
-            U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
-
+            #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
+            if np.linalg.cond(C) >= 1e9:
+                raise Warning("Poorly conditioned covariance. Computing Psuedo-Inverse")
+                ic = np.linalg.pinv(C)
+            else:
+                ic = np.linalg.inv(C)
             # FIXME: Not sure what these are supposed to do
             #if self.lmin is not None: S += self.lmin # ensure invertibility
             #if self.lmode is not None: S += S[self.lmode-1]
 
             # FIXME: Is series of dot products quicker?
-            self.set_iC({Ckey:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
+            self.set_iC({Ckey:ic})
         return self._iC[Ckey]
 
     def Y(self, key):
@@ -2137,13 +2141,25 @@ class PSpecData(object):
         ratio[np.isnan(ratio)] = 1.0
         ratio[np.isinf(ratio)] = 1.0
 
-        # get mean ratio
-        mean_ratio = np.mean(ratio)
-        scatter = np.abs(ratio - mean_ratio)
-        if (scatter > 10**-4 * mean_ratio).any():
-            raise ValueError("The normalization scalar is band-dependent!")
 
-        adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
+        ## XXX: Adjustments like this are hacky and wouldn't be necessary
+        ## if we deprecate the incorrectly normalized
+        ## Q and M matrix definitions. 
+        #In the future, we need to do our normalizations properly and
+        #stop introducing arbitrary normalization factors.
+        #if the input identity weighting is diagonal, then the
+        #adjustment factor is independent of alpha.
+        # get mean ratio.
+        if self.input_data_weight == 'identity':
+            mean_ratio = np.mean(ratio)
+            scatter = np.abs(ratio - mean_ratio)
+            if (scatter > 10**-4 * mean_ratio).any():
+                raise ValueError("The normalization scalar is band-dependent!")
+
+                adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
+        #otherwise, the adjustment factor is dependent on alpha.
+        else:
+            adjustment = self.spw_Ndlys / (self.spw_Nfreqs * ratio)
 
         if self.taper != 'none':
             tapering_fct = dspec.gen_window(self.taper, self.spw_Nfreqs)
