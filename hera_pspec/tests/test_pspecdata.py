@@ -1026,6 +1026,10 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.spw_Ndlys = self.ds.spw_Nfreqs
         adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
         self.assertAlmostEqual(adjustment, 1.0)
+        self.ds.set_weighting('iC')
+        #if weighting is not identity, then the adjustment should be a vector.
+        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
+        self.assertTrue(len(adjustment) == self.ds.spw_Ndlys)
 
     def test_scalar(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, beam=self.bm)

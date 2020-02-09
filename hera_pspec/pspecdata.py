@@ -747,7 +747,7 @@ class PSpecData(object):
             C = self.C_model(key, model=model)
             #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if np.linalg.cond(C) >= 1e9:
-                raise Warning("Poorly conditioned covariance. Computing Psuedo-Inverse")
+                warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
                 ic = np.linalg.pinv(C)
             else:
                 ic = np.linalg.inv(C)
@@ -924,9 +924,9 @@ class PSpecData(object):
                isinstance(filter_extension[1], int), "filter extension must contain only integers"
         filter_extension=list(filter_extension)
         if filter_extension[0] > self.spw_range[0]:
-            raise Warning("filter_extension[0] exceeds data spw_range. Defaulting to spw_range[0]!")
+            warnings.warn("filter_extension[0] exceeds data spw_range. Defaulting to spw_range[0]!")
         if filter_extension[1] > self.Nfreqs - self.spw_range[1]:
-            raise Warning("filter_extension[1] exceeds channels between spw_range[1] and Nfreqs. Defaulting to Nfreqs-spw_range[1]!")
+            warnings.warn("filter_extension[1] exceeds channels between spw_range[1] and Nfreqs. Defaulting to Nfreqs-spw_range[1]!")
         filter_extension[0] = np.min([self.spw_range[0], filter_extension[0]])#clip extension to not extend beyond data range
         filter_extension[1] = np.min([self.Nfreqs - self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
         self.filter_extension = tuple(filter_extension)
@@ -2141,26 +2141,24 @@ class PSpecData(object):
         ratio[np.isnan(ratio)] = 1.0
         ratio[np.isinf(ratio)] = 1.0
 
-
         ## XXX: Adjustments like this are hacky and wouldn't be necessary
         ## if we deprecate the incorrectly normalized
-        ## Q and M matrix definitions. 
+        ## Q and M matrix definitions.
         #In the future, we need to do our normalizations properly and
         #stop introducing arbitrary normalization factors.
         #if the input identity weighting is diagonal, then the
         #adjustment factor is independent of alpha.
         # get mean ratio.
-        if self.input_data_weight == 'identity':
+        if self.data_weighting == 'identity':
             mean_ratio = np.mean(ratio)
             scatter = np.abs(ratio - mean_ratio)
+            print(scatter)
             if (scatter > 10**-4 * mean_ratio).any():
                 raise ValueError("The normalization scalar is band-dependent!")
-
-                adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
+            adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
         #otherwise, the adjustment factor is dependent on alpha.
         else:
             adjustment = self.spw_Ndlys / (self.spw_Nfreqs * ratio)
-
         if self.taper != 'none':
             tapering_fct = dspec.gen_window(self.taper, self.spw_Nfreqs)
             adjustment *= np.mean(tapering_fct**2)
@@ -2694,7 +2692,11 @@ class PSpecData(object):
                     # Wide bin adjustment of scalar, which is only needed for
                     # the diagonal norm matrix mode (i.e., norm = 'I')
                     if norm == 'I' and not(exact_norm):
-                        pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
+                        sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
+                        if isinstance(sa, (np.float, float)):
+                            pv *= sa
+                        else:
+                            pv = np.atleast_2d(sa).T * pv
 
                     # Generate the covariance matrix if error bars provided
                     if store_cov:
