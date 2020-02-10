@@ -906,7 +906,8 @@ class PSpecData(object):
             elif self.data_weighting == 'iC':
                 rmat = self.iC(key)
 
-            elif self.data_weighting in ['dayenu', 'dft_interp']:
+            elif self.data_weighting in ['dayenu', 'dayenu_dpss', 'dayenu_dft', 'dft_interp', 'dpss_interp']:
+                freqs = self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]]
                 r_param_key = (self.data_weighting,) + key
                 if not r_param_key in self.r_params:
                     raise ValueError("r_param not set for %s!"%str(r_param_key))
@@ -919,38 +920,57 @@ class PSpecData(object):
                 # matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 # to apply flagging weights before taking psuedo inverse.
-                if self.data_weighting == 'dayenu':
-                    rmat = np.asarray([dspec.dayenu_mat_inv(nchan=nfreq,
-                                        df=np.median(np.diff(self.freqs)),
+                if self.data_weighting.split('_')[0] == 'dayenu':
+                    rmat = np.asarray([dspec.dayenu_mat_inv(freqs,
                                         filter_centers=r_params['filter_centers'],
                                         filter_half_widths=r_params['filter_half_widths'],
                                         filter_factors=r_params['filter_factors'])\
                                          * wgt_sq[m] for m in range(self.Ntimes)])
                     for m in range(self.Ntimes):
                         rmat[m] = np.linalg.pinv(rmat[m])
-                elif self.data_weighting == 'dft_interp':
-                    if not 'fundamental_period' in r_params:
-                        raise ValueError("fundamental interpolation period needs to be specified!")
-                    if not 
+
+                    if 'restore_fg' in r_params:
+                        if isinstance(r_params['restore_half_width'], (float, int)) and r_params['restore_half_width']>0:
+                            if not 'restore_fundamental_period' in r_params:
+                                fundamental_period = 2 * self.spw_Nfreqs
+                            else:
+                                fundamental_period = r_params['restore_fundamental_period']
+                            ndlys_restore = int(r_params['restore_half_width'] * np.mean(np.diff(self.freqs)) * fundamental_period)
+                            for m in range(self.Ntimes):
+                                if np.sum((wgts[m]>0).astype(float)) >= ndlys_restore:
+                                    rmat[m] = rmat[m] + \
+                                    dspec.delay_interpolation_matrix(self.spw_Nfreqs, ndlys_restore,
+                                    wgts[m][self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
+                                    @ (tmat - rmat[m])
+                        else:
+                            raise ValueError("'restore_half_width' must be supplied as an integer or float >0.")
+
+                if self.data_weighting == 'dpss_interp' or self.data_weighting == 'dft_interp':
+                    if self.data_weighting == 'dft_interp':
+                        if not 'fundamental_period' in r_params:
+                            raise ValueError("fundamental interpolation period needs to be specified!")
+                        amat = dft_operator(x=freqs, filter_centers = r_params['filter_centers'],
+                                            filter_half_widths=r_params['filter_half_widths'],
+                                            fundamental_period=r_params['fundamental_period'])
+                        nterms = [2*int(np.ceil(fw * r_params['fundamental_period'])) for fw in r_params['filter_half_widths']]
+
+                    elif self.data_weighting == 'dpss_interp':
+                        if not 'eigenval_cutoff' in r_params:
+                            raise ValueError("eigenval_cutoff needs to be specified!")
+                        amat, info = dpss_operator(x=freqs, filter_centers = r_params['filter_centers'],
+                                            filter_half_widths=r_params['filter_half_widths'],
+                                            eigenval_cutoff=r_params['eigenval_cutoff'])
+                        nterms = info['nterms']
+                    suppression_mat = np.diag(np.hstack([1-sf * np.ones(nt)))\
+                                              for sf,nt in zip(r_params['filter_factors'], nterms)]))
+                    rmat = np.asarray([np.eye(nfreq, dtype=complex) - amat.T @ suppression_mat \
+                                       @ dspec.fit_solution_matrix(wgt_sq[m], amat, cache=cache)\
+                                       for m in range(self.Ntimes)])
+
+
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
             rmat =  np.transpose(np.dot(tmat, rmat), (1, 0, 2))
-
-            if self.data_weighting == 'dayenu' and 'restore_half_width' in r_params:
-                if isinstance(r_params['restore_half_width'], (float, int)) and r_params['restore_half_width']>0:
-                    if not 'restore_fundamental_period' in r_params:
-                        fundamental_period = 2 * self.spw_Nfreqs
-                    else:
-                        fundamental_period = r_params['restore_fundamental_period']
-                    ndlys_restore = int(r_params['restore_half_width'] * np.mean(np.diff(self.freqs)) * fundamental_period)
-                    for m in range(self.Ntimes):
-                        if np.sum((wgts[m]>0).astype(float)) >= ndlys_restore:
-                            rmat[m] = rmat[m] + \
-                            dspec.delay_interpolation_matrix(self.spw_Nfreqs, ndlys_restore,
-                            wgts[m][self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
-                            @ (tmat - rmat[m])
-                else:
-                    raise ValueError("'restore_half_width' must be supplied as an integer or float >0.")
 
             rmat = myT.T * rmat
 
