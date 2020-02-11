@@ -934,8 +934,8 @@ class PSpecData(object):
                                 raise ValueError("fundamental_period needs to be specified!")
                             amat = dspec.dft_operator(x=freqs, filter_centers = r_params['filter_centers'],
                                                 filter_half_widths=r_params['filter_half_widths'],
-                                                fundamental_period=fundamental_period, cache=self._R)
-                            nterms = [2*int(np.ceil(fw * fundamental_period)) for fw in r_params['filter_half_widths']]
+                                                fundamental_period=r_params['fundamental_period'], cache=self._R)
+                            nterms = [2*int(np.ceil(fw * r_params['fundamental_period'])) for fw in r_params['filter_half_widths']]
                         elif self.data_weighting.split('_')[1] == 'dpss':
                             if not 'eigenval_cutoff' in r_params:
                                 raise ValueError("eigenval_cutoff needs to be specified!")
@@ -985,7 +985,6 @@ class PSpecData(object):
             rmat =  np.transpose(np.dot(tmat, rmat), (1, 0, 2))
 
             rmat = myT.T * rmat
-
 
             self._R[Rkey] = rmat
 
