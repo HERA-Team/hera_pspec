@@ -924,64 +924,60 @@ class PSpecData(object):
                     rmat = np.asarray([dspec.dayenu_mat_inv(freqs,
                                         filter_centers=r_params['filter_centers'],
                                         filter_half_widths=r_params['filter_half_widths'],
-                                        filter_factors=r_params['filter_factors'])\
+                                        filter_factors=r_params['filter_factors'], cache=self._R)\
                                          * wgt_sq[m] for m in range(self.Ntimes)])
                     for m in range(self.Ntimes):
                         rmat[m] = np.linalg.pinv(rmat[m])
-                    if self.data_weighting.split('_')[1] == 'dft':
-                        if not 'fundamental_period' in r_params:
-                            fundamental_period = 2 * self.spw_Nfreqs
-                        else:
-                            fundamental_period = r_params['fundamental_period']
-                        amat = dft_operator(x=freqs, filter_centers = r_params['filter_centers'],
-                                            filter_half_widths=r_params['filter_half_widths'],
-                                            fundamental_period=r_params['fundamental_period'])
-                        nterms = [2*int(np.ceil(fw * fundamental_period)) for fw in r_params['filter_half_widths']]
-                    elif self.data_weighting.split('_')[1] == 'dpss':
-                        if not 'eigenval_cutoff' in r_params:
-                            raise ValueError("eigenval_cutoff needs to be specified!")
-                        amat, info = dpss_operator(x=freqs, filter_centers = r_params['filter_centers'],
-                                            filter_half_widths=r_params['filter_half_widths'],
-                                            eigenval_cutoff=r_params['eigenval_cutoff'])
-                        nterms = info['nterms']
+                    if len(self.data_weighting.split('_')) > 1:
+                        if self.data_weighting.split('_')[1] == 'dft':
+                            if not 'fundamental_period' in r_params:
+                                raise ValueError("fundamental_period needs to be specified!")
+                            amat = dspec.dft_operator(x=freqs, filter_centers = r_params['filter_centers'],
+                                                filter_half_widths=r_params['filter_half_widths'],
+                                                fundamental_period=fundamental_period, cache=self._R)
+                            nterms = [2*int(np.ceil(fw * fundamental_period)) for fw in r_params['filter_half_widths']]
+                        elif self.data_weighting.split('_')[1] == 'dpss':
+                            if not 'eigenval_cutoff' in r_params:
+                                raise ValueError("eigenval_cutoff needs to be specified!")
+                            amat, nterms = dspec.dpss_operator(x=freqs, filter_centers = r_params['filter_centers'],
+                                                filter_half_widths=r_params['filter_half_widths'],
+                                                eigenval_cutoff=[r_params['eigenval_cutoff']], cache=self._R)
+                        fitmat = np.asarray([amat @ dspec.fit_solution_matrix(np.diag(wgts[m] ** 2.), amat, cache=self._R)\
+                                            for m in range(self.Ntimes)])
 
-                    fitmat = np.asarray([amat @ dspec.fit_solution_matrix(wgt_sq[m], amat, cache=cache)\
-                                        for m in range(self.Ntimes)])
-
-                    rmat = np.asarray([fitmat @ (np.eye(nfreq, dtype=complex) - rmat[m]) + rmat[m] for m in range(self.Ntimes)])
+                        rmat = np.asarray([fitmat[m] @ (np.eye(nfreq, dtype=complex) - rmat[m]) + rmat[m] for m in range(self.Ntimes)])
 
                 if self.data_weighting.split('_')[0] == 'dpss' or self.data_weighting.split('_')[0] == 'dft':
                     if self.data_weighting.split('_')[0] == 'dft':
                         if not 'fundamental_period' in r_params:
                             raise ValueError("fundamental interpolation period needs to be specified!")
-                        amat = dft_operator(x=freqs, filter_centers = r_params['filter_centers'],
+                        amat = dspec.dft_operator(x=freqs, filter_centers = r_params['filter_centers'],
                                             filter_half_widths=r_params['filter_half_widths'],
-                                            fundamental_period=r_params['fundamental_period'])
+                                            fundamental_period=r_params['fundamental_period'], cache=self._R)
                         nterms = [2*int(np.ceil(fw * r_params['fundamental_period'])) for fw in r_params['filter_half_widths']]
 
                     elif self.data_weighting.split('_')[0] == 'dpss':
                         if not 'eigenval_cutoff' in r_params:
                             raise ValueError("eigenval_cutoff needs to be specified!")
-                        amat, info = dpss_operator(x=freqs, filter_centers = r_params['filter_centers'],
+                        amat, nterms = dspec.dpss_operator(x=freqs, filter_centers = r_params['filter_centers'],
                                             filter_half_widths=r_params['filter_half_widths'],
-                                            eigenval_cutoff=r_params['eigenval_cutoff'])
-                        nterms = info['nterms']
-                    suppression_vec = np.atleast_2d(np.hstack([1-sf * np.ones(nt)))\
-                                              for sf,nt in zip(r_params['filter_factors'], nterms)])).T
+                                            eigenval_cutoff=[r_params['eigenval_cutoff']], cache=self._R)
+                    suppression_vec = np.atleast_2d(np.hstack([1-sf * np.ones(nt)\
+                     for sf,nt in zip(r_params['filter_factors'], nterms)])).T
 
-                    fmat = dspec.fit_solution_matrix(wgt_sq[m], amat, cache=cache)
+                    fitmat = np.asarray([dspec.fit_solution_matrix(np.diag(wgts[m] ** 2.), amat, cache=self._R) for m in range(self.Ntimes)])
 
                     #For model subtraction, only subtract 1-suppression of each
-                    #fitted mode for regularization purposes. 
+                    #fitted mode for regularization purposes.
 
-                    if self.data_weight.split('_') == 'subtract':
-                        rmat = np.asarray([wgt_sq[m] * (np.eye(nfreq, dtype=comples) -  amat @ (suppression_vec * fmat)) \
+                    if self.data_weight.split('_')[1] == 'subtract':
+                        rmat = np.asarray([wgt_sq[m] * (np.eye(nfreq, dtype=comples) -  amat @ (suppression_vec * fitmat[m])) \
                                         for m in range(self.Ntimes)])
 
                     #If interpolation is desired, add in-painted model within flagged channels.
 
                     elif self.data_weighting.split('_')[1] == 'interp':
-                            rmat = np.asarray([ np.eye(nfreq, dtype=comples) + np.atleast_2d(1-wgts[m]).T * fmat for m in range(self.Ntimes)])
+                            rmat = np.asarray([ np.eye(nfreq, dtype=comples) + np.atleast_2d(1-wgts[m]).T * fitmat for m in range(self.Ntimes)])
 
 
                 # allow for restore_foregrounds option which introduces clean-interpolated
@@ -1046,7 +1042,7 @@ class PSpecData(object):
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
-                data_weighting == 'dayenu':
+                  data_weighting == 'dayenu':
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
@@ -1054,6 +1050,15 @@ class PSpecData(object):
                                                  filter window in (delay) channel numbers. Can specify fractional channel number.
                                 'filter_factors', list of floats (or float) specifying how much power within each filter window
                                                   is to be suppressed.
+                data_weighting == 'dayenu_dft':
+                                dictionary with fields
+                                'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+                                                  at which to center filtering windows. Can specify fractional channel number.
+                                'filter_half_widths', list of floats (or float) specifying the width of each
+                                                 filter window in (delay) channel numbers. Can specify fractional channel number.
+                                'filter_factors', list of floats (or float) specifying how much power within each filter window
+                                                  is to be suppressed.
+                                'fundamental_period', fundamental period for interpolation fourier modes.
                 Absence of r_params dictionary will result in an error!
         """
         key = self.parse_blkey(key)
@@ -3159,7 +3164,8 @@ class PSpecData(object):
                                   "and/or key2 < n_dlys\n which may lead to "
                                   "normalization instabilities.")
                     #if using inverse sinc weighting, set r_params
-                    if input_data_weight == 'dayenu':
+                    if input_data_weight in ['dayenu', 'dayenu_dft', 'dayenu_dpss',
+                    'dft_interp', 'dpss_interp', 'dft_subtract', 'dpss_subtract']:
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
                         if not key1 in r_params:
