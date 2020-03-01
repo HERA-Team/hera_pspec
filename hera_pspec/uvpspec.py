@@ -264,7 +264,7 @@ class UVPSpec(object):
         Returns
         -------
         wgts : float ndarray
-            Has shape (2, Ntimes, Ndlys), where the zeroth axis holds
+            Has shape (Ntimes, Ndlys, 2), where the last axis holds
             [wgt_1, wgt_2] in that order.
         """
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
