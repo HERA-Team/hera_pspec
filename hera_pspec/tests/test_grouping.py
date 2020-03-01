@@ -1,6 +1,3 @@
-import sys
-sys.path.insert(0, '/Users/jianrongtan/Documents/hera/hera_repo/hera_pspec')
-sys.path.insert(0, '/Users/jianrongtan/Documents/hera/hera_repo/hera_pspec/hera_pspec') 
 import unittest
 import nose.tools as nt
 import numpy as np
