@@ -120,9 +120,10 @@ class Test_grouping(unittest.TestCase):
         uvp_avg_ints_wgts = grouping.average_spectra(uvp, blpair_groups=blpair_groups,
                                                 error_field="noise", time_avg=True,inplace=False)
         uvp_avg_error_wgts = grouping.average_spectra(uvp, time_avg=True, blpair_groups=blpair_groups,
-                                                 error_field="noise", if_error_weighted=True, name_error_weights="noise",
+                                                 error_field="noise", error_weights="noise",
                                                  inplace=False)
-        np.testing.assert_array_almost_equal(uvp_avg_ints_wgts.stats_array["noise"][0][0,0,0], uvp_avg_error_wgts.stats_array["noise"][0][0,0,0])
+        assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
+        assert(abs(uvp_avg_error_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
     
     def test_sample_baselines(self):
         """

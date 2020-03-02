@@ -99,7 +99,7 @@ def sample_baselines(bls, seed=None):
 
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False, 
                     blpair_weights=None, error_field=None,
-                    if_error_weighted=False, name_error_weights=None,
+                    error_weights=None,
                     normalize_weights=True, inplace=True,
                     add_to_history=''):
     """
@@ -154,14 +154,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         does this for every specified key. Every stats_array key that is
         not specified is thrown out of the new averaged object.
 
-    if_error_weighted: bool, optional
-        If True, power spectra will be averaged in a way weighed by
-        error bars. Default: False
-
-    name_error_weights: string, optional
-         name_error_weights specify which kind of errors we use for weights 
-         during averaging power spectra. It should be a key of 
-         stats_array. Default: None
+    error_weights: string, optional
+         error_weights specify which kind of errors we use for weights 
+         during averaging power spectra.
+         The weights are defined as $w_i = 1/ sigma_i^2$, 
+         where $sigma_i$ is taken from the relevant field of stats_array.
+         If `error_weight' is set to None, which means we 
+         just use the integration time as weights. Default: None
 
     normalize_weights: bool, optional
         Whether to normalize the baseline-pair weights so that:
@@ -245,13 +244,15 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
 
     # pre-check for choos average weighted by error bars
-    if if_error_weighted:
-        if name_error_weights is None:
-            raise ValueError("Name of error bars must be specified to run the error weighted average.")
-        else: 
-            if hasattr(uvp, "stats_array"):
-                if name_error_weights not in uvp.stats_array.keys():
-                    raise KeyError("error_field \"%s\" not found in stats_array keys." % name_error_weights)
+    
+    if error_weights is None:
+        use_error_weights = False
+    else: 
+        if hasattr(uvp, "stats_array"):
+            if error_weights not in uvp.stats_array.keys():
+                raise KeyError("error_field \"%s\" not found in stats_array keys." % error_weights)
+
+        use_error_weights = True
 
     # For baseline pairs not in blpair_groups, add them as their own group
     extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
@@ -318,95 +319,58 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # shape of ints: (Ntimes, 1)
                     if store_cov:
                         cov = uvp.get_cov((spw, blp, p))
+                        # shape of cov: (Ntimes, Ndlys, Ndlys)
+                    # Get error bar
+                    errws = {}
+                    for stat in stat_l:
+                        errws[stat] = (uvp.get_stats(stat, (spw, blp, p)))**2
+                        # shape of errs: (Ntimes, Ndlys)
 
-                    if if_error_weighted:
-                    # If if_error_weighted==True, all arrays are weighted by a specified kind of errors.
+                    if use_error_weights:
+                    # If use_error_weights==True, all arrays are weighted by a specified kind of errors,
+                    # including the error_filed in stats_array and cov_array. 
                     # For each power spectrum P_i with error sigma_i, 
                     # P_avg = \sum{ P_i / (sigma_i)^2 } / \sum{ 1 / (sigma_i)^2 } 
                     # while for terms like variance or covariance,
                     # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
-                    # For reference: Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
-                    # or Dillon 2014, Physical Review D, 89, 023002 , Equation 34. 
-                        error_weights = uvp.get_stats(name_error_weights, (spw, blp, p)).copy()
-                        error_weights = 1./ error_weights**2
-                        # shape of error_weights: (Ntimes, Ndlys)
-                        
-                        # Get error bar
-                        errws = {}
-                        for stat in stat_l:
-                            errs = uvp.get_stats(stat, (spw, blp, p)).copy()
-                            # shape of errs: (Ntimes, Ndlys)
-                            errws[stat] = errs**2
-
-                        # Take time average if desired
-                        if time_avg:
-                            data = (np.sum(data * error_weights, axis=0) \
-                                / np.sum(error_weights, axis=0))[None]
-                            wgts = (np.sum(wgts * error_weights[:, :, None], axis=0) \
-                                / np.sum(error_weights, axis=0)[:, None])[None]
-                            ints = (np.sum(ints * error_weights, axis=0) \
-                                / np.sum(error_weights, axis=0))[None]
-                            nsmp = np.sum(nsmp, axis=0)[None]
-                            if store_cov:
-                                cov = (np.sum(cov * error_weights[:, :, None]**2, axis=0) \
-                                    / (np.sum(w,axis=0))[:, None]**2)[None]
-                            for stat in stat_l:
-                                errws[stat] = (np.sum(errws[stat]*error_weights**2, axis=0) \
-                                / (np.sum(error_weights, axis=0))**2)[None]
-                            error_weights = np.sum(error_weights, axis=0)[None]
-                        # Add multiple copies of data for each baseline according
-                        # to the weighting/multiplicity
-                        for m in range(int(blpg_wgts[k])):
-                            bpg_data.append(data * error_weights)
-                            bpg_wgts.append(wgts * error_weights[:, :, None])
-                            bpg_ints.append(ints * error_weights)
-                            bpg_nsmp.append(nsmp)
-                            for stat in stat_l:
-                                bpg_stats[stat].append(errws[stat]*error_weights**2)
-                            w_list.append(error_weights)
-                            if store_cov:
-                                bpg_cov.append(cov * error_weights[:, :, None]**2)
-
+                    # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
+                    # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34. 
+                        w = 1./(uvp.get_stats(error_weights, (spw, blp, p)))**2
+                        # shape of w: (Ntimes, Ndlys)
                     else:
-                    # Otherwise all arrays are averaged in a way weighted by the integration time
+                    # Otherwise all arrays are averaged in a way weighted by the integration time,
+                    # including the error_filed in stats_array and cov_array. 
                         w = (ints * np.sqrt(nsmp))
-                        # shaoe of w: (Ntimes, 1)
-                        # Get error bar weights and set invalid ones to zero.
-                        errws = {}
-                        for stat in stat_l:
-                            errs = uvp.get_stats(stat, (spw, blp, p)).copy()
-                            no_data = np.isnan(errs)
-                            errs[~no_data] = 1. / errs[~no_data] ** 2.
-                            errs[no_data] = 0.
-                            errws[stat] = errs
+                        # shape of w: (Ntimes, 1)
                     
-                        # Take time average if desired
-                        if time_avg:
-                          data = (np.sum(data * w, axis=0) \
-                               / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
-                          wgts = (np.sum(wgts * w[:, None], axis=0) \
-                               / np.sum(w, axis=0).clip(1e-10, np.inf)[:, None])[None]
-                          ints = (np.sum(ints * w, axis=0) \
-                               / np.sum(w, axis=0).clip(1e-10, np.inf))[None]
-                          nsmp = np.sum(nsmp, axis=0)[None]
-                          if store_cov:
-                              cov = (np.sum(cov * w[:, None]**2, axis=0) \
-                              / (np.sum(w,axis=0)**2).clip(1e-10, np.inf))[None]
-
-                          for stat in stat_l:
-                            errws[stat] = np.sum(errws[stat], axis=0)[None]
-                          w = np.sum(w, axis=0)[None]
-                        # Add multiple copies of data for each baseline according
-                        # to the weighting/multiplicity
-                        for m in range(int(blpg_wgts[k])):
-                            bpg_data.append(data * w)
-                            bpg_wgts.append(wgts * w[:, None])
-                            bpg_ints.append(ints * w)
-                            bpg_nsmp.append(nsmp)
-                            [bpg_stats[stat].append(errws[stat]) for stat in stat_l]
-                            w_list.append(w)
-                            if store_cov:
-                                bpg_cov.append(cov * w[:, None]**2)
+                    # Take time average if desired
+                    if time_avg:
+                        data = (np.sum(data * w, axis=0) \
+                            / np.sum(w, axis=0))[None]
+                        wgts = (np.sum(wgts * w[:, :, None], axis=0) \
+                            / np.sum(w, axis=0)[:, None])[None]
+                        ints = (np.sum(ints * w, axis=0) \
+                            / np.sum(w, axis=0))[None]
+                        nsmp = np.sum(nsmp, axis=0)[None]
+                        if store_cov:
+                            cov = (np.sum(cov * w[:, :, None]**2, axis=0) \
+                                / (np.sum(w,axis=0))[:, None]**2)[None]
+                        for stat in stat_l:
+                            errws[stat] = (np.sum(errws[stat]*w**2, axis=0) \
+                            / (np.sum(w, axis=0))**2)[None]
+                        w = np.sum(w, axis=0)[None]
+                    # Add multiple copies of data for each baseline according
+                    # to the weighting/multiplicity
+                    for m in range(int(blpg_wgts[k])):
+                        bpg_data.append(data * w)
+                        bpg_wgts.append(wgts * w[:, :, None])
+                        bpg_ints.append(ints * w)
+                        bpg_nsmp.append(nsmp)
+                        for stat in stat_l:
+                            bpg_stats[stat].append(errws[stat]*w**2)
+                        w_list.append(w)
+                        if store_cov:
+                            bpg_cov.append(cov * w[:, :, None]**2)
 
                 # Average over baseline-pairs
                 # Take integration-weighted averages, with clipping to deal
@@ -421,21 +385,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                          / np.sum(w_list, axis=0)
                 if store_cov:
                     bpg_cov = np.sum(bpg_cov, axis=0) \
-                            / np.sum(w_list, axis=0)[:,:,None]**2
-                if if_error_weighted:
-                    for stat in stat_l:
-                        arr = np.sum(bpg_stats[stat], axis=0) \
-                            / (np.sum(w_list, axis=0)**2)
-                        bpg_stats[stat] = np.sqrt(arr)
-                else:
-                    # For errors that are > 0, sum weights and take inverse square
-                    # root. Otherwise, set to invalid value nan
-                    for stat in stat_l:
-                        arr = np.sum(bpg_stats[stat], axis=0)
-                        not_valid = (arr < 0.0)
-                        arr[not_valid] *= np.nan
-                        arr[~not_valid] = arr[~not_valid] ** (-0.5)
-                        bpg_stats[stat] = arr
+                            / (np.sum(w_list, axis=0)[:,:,None]**2)
+                for stat in stat_l:
+                    arr = np.sum(bpg_stats[stat], axis=0) \
+                        / (np.sum(w_list, axis=0)**2)
+                    bpg_stats[stat] = np.sqrt(arr)
 
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
