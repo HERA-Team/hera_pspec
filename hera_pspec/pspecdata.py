@@ -73,7 +73,7 @@ class PSpecData(object):
         # and taper to none by default
         self.data_weighting = 'identity'
         self.taper = 'none'
-
+        self.symmetric_taper = False
         # Set all weights to None if wgts=None
         if wgts is None:
             wgts = [None for dset in dsets]
@@ -880,10 +880,16 @@ class PSpecData(object):
             tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
             # form R matrix
             if self.data_weighting == 'identity':
-                self._R[Rkey] =  sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.I(key) * sqrtY)
+                if self.symmetric_taper:
+                    self._R[Rkey] =  sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT
+                else:
+                    self._R[Rkey] =  sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.I(key) * sqrtY)
 
             elif self.data_weighting == 'iC':
-                self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.iC(key) * sqrtY )
+                if self.symmetric_taper:
+                    self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
+                else:
+                    self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.iC(key) * sqrtY )
 
             elif self.data_weighting == 'sinc_downweight':
                 r_param_key = (self.data_weighting,) + key
@@ -898,14 +904,44 @@ class PSpecData(object):
                 #matrix given by dspec.sinc_downweight_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 #to apply flagging weights before taking psuedo inverse.
-                self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, np.linalg.pinv(sqrtY.T * \
-                dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
-                                    df=np.median(np.diff(self.freqs)),
-                                    filter_centers=r_params['filter_centers'],
-                                    filter_half_widths=r_params['filter_half_widths'],
-                                    filter_factors=r_params['filter_factors']) * sqrtY))
+                if self.symmetric_taper:
+                    self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
+                    dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
+                                        df=np.median(np.diff(self.freqs)),
+                                        filter_centers=r_params['filter_centers'],
+                                        filter_half_widths=r_params['filter_half_widths'],
+                                        filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
+                else:
+                    self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, np.linalg.pinv(sqrtY.T * \
+                    dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
+                                        df=np.median(np.diff(self.freqs)),
+                                        filter_centers=r_params['filter_centers'],
+                                        filter_half_widths=r_params['filter_half_widths'],
+                                        filter_factors=r_params['filter_factors']) * sqrtY))
 
         return self._R[Rkey]
+
+    def set_symmetric_taper(self, use_symmetric_taper):
+        """
+        Set the symmetric taper parameter
+        If true, square R matrix will be computed as
+        R=sqrtT  K sqrt T
+        where sqrtT is a diagonal matrix with the square root of the taper.
+        This is only possible when K is a square-matrix (no filter extensions).
+
+        If set to false, then the R-matrix will implement the taper as
+        R = sqrtT ** 2 K
+        Parameters
+        ----------
+        use_taper : bool,
+            do you want to use a symmetric taper? True or False?
+        """
+        if use_symmetric_taper and (self.filter_extension[0] > 0 or self.filter_extension[1] > 0):
+            raise Warning("You cannot use a symmetric taper when there are nonzero filter extensions.")
+        else:
+            self.symmetric_taper = use_symmetric_taper
+
+
 
     def set_filter_extension(self, filter_extension):
         """
@@ -918,10 +954,15 @@ class PSpecData(object):
             filter will be applied to data.
             filter_extensions will be clipped to not extend beyond data range.
         """
+        if self.symmetric_taper and not filter_extension[0] == 0 and not filter_extension[1]==0:
+            raise Warning("You cannot set filter extensions greater then zero when symmetric_taper==True! Setting symmetric_taper==False!")
+            self.symmetric_taper = False
         assert isinstance(filter_extension, (list, tuple)), "filter_extension must a tuple or list"
         assert len(filter_extension) == 2, "filter extension must be length 2"
         assert isinstance(filter_extension[0], int) and\
-               isinstance(filter_extension[1], int), "filter extension must contain only integers"
+               isinstance(filter_extension[1], int) and \
+               filter_extension[0] >= 0 and\
+               filter_extension[1] >=0, "filter extension must contain only positive integers"
         filter_extension=list(filter_extension)
         if filter_extension[0] > self.spw_range[0]:
             warnings.warn("filter_extension[0] exceeds data spw_range. Defaulting to spw_range[0]!")
