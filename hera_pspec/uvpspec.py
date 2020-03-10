@@ -1,7 +1,7 @@
 import numpy as np
 from collections import OrderedDict as odict
 import os, copy, shutil, operator, ast, fnmatch
-from pyuvdata import utils as uvutils as uvutils
+from pyuvdata import utils as uvutils
 import h5py
 import warnings
 import json
