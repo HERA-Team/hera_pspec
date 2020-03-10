@@ -937,7 +937,7 @@ class PSpecData(object):
             do you want to use a symmetric taper? True or False?
         """
         if use_symmetric_taper and (self.filter_extension[0] > 0 or self.filter_extension[1] > 0):
-            raise Warning("You cannot use a symmetric taper when there are nonzero filter extensions.")
+            raise ValueError("You cannot use a symmetric taper when there are nonzero filter extensions.")
         else:
             self.symmetric_taper = use_symmetric_taper
 

@@ -209,6 +209,36 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(AssertionError, self.ds.add, [uv], None, cals=[None, None])
         nt.assert_raises(AssertionError, self.ds.add, [uv], None, labels=['foo', 'bar'])
 
+    def test_set_symmetric_taper(self):
+        """
+        Make sure that you can't set a symmtric taper with an truncated R matrix
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.spw_Nfreqs
+        Ntime = self.ds.Ntimes
+        Ndlys = Nfreq - 3
+        self.ds.spw_Ndlys = Ndlys
+
+
+        # Set baselines to use for tests
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        key3 = [(0, 24, 38), (0, 24, 38)]
+        key4 = [(1, 25, 38), (1, 25, 38)]
+
+        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
+        rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
+        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_r_param(key1,rpk1)
+        self.ds.set_r_param(key2,rpk2)
+        ds1 = copy.deepcopy(self.ds)
+        ds1.set_spw((10,Nfreq-10))
+        ds1.set_filter_extension([10,10])
+        ds1.set_filter_extension((10,10))
+        rm1 = self.ds.R(key1)
+        self.ds.set_symmetric_taper(True)
+        nt.assert_raises(ValueError, ds1.set_symmetric_taper, True)
+
     def test_labels(self):
         """
         Test that dataset labels work.
