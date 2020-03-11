@@ -619,6 +619,44 @@ class UVPSpec(object):
 
         self.stats_array[stat][spw][blpairts, :, polpair] = statistic
 
+    def set_stats_slice(self, stat, m, b, above=True, val=1e20):
+        """
+        For each baseline, set all delay bins in stats_array that fall
+        above or below y = bl_len * m + b equal to val.
+        Useful for downweighting foregrounds in spherical average.
+
+        Parameters
+        ----------
+        stat : str, name of stat in stat_array to set
+
+        m : float, coefficient of bl_len [meters]
+
+        b : float, offset in sec
+
+        above : bool, if True, set stats above line, else set below line
+
+        val : float, value to replace in stats_array
+        """
+        assert stat in self.stats_array, "{} not found in stats_array".format(stat)
+        blpairs = self.get_blpairs()
+        bllens = self.get_blpair_seps()
+        # iterate over spws
+        for i in range(self.Nspws):
+            # get this spw dlys
+            dlys = self.get_dlys(i) * 1e9
+            # iterate over blpairs
+            for blp in blpairs:
+                # get time-blpair inds
+                tinds = self.blpair_to_indices(blp)
+                # get dly indices
+                if above:
+                    dinds = np.abs(dlys) > (bllens[tinds].mean() * m + b)
+                else:
+                    dinds = np.abs(dlys) < (bllens[tinds].mean() * m + b)
+                # set stat_array
+                for tind in tinds:
+                    self.stats_array[stat][i][tind, dinds, :] = val
+
 
     def convert_to_deltasq(self, little_h=True, inplace=True):
         """
