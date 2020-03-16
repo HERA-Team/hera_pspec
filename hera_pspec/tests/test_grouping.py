@@ -124,7 +124,7 @@ class Test_grouping(unittest.TestCase):
                                                  inplace=False)
         assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
         assert(abs(uvp_avg_error_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
-    
+        # The error bar on the average power spectra should be smaller than one on single sample.
     def test_sample_baselines(self):
         """
         Test baseline sampling (with replacement) behavior.

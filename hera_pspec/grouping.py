@@ -159,8 +159,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
          during averaging power spectra.
          The weights are defined as $w_i = 1/ sigma_i^2$, 
          where $sigma_i$ is taken from the relevant field of stats_array.
-         If `error_weight' is set to None, which means we 
-         just use the integration time as weights. Default: None
+         If `error_weight' is set to None, which means we just use the 
+         integration time as weights. If error_weights is specified,
+         then it also gets assigned as error_field. And if one specified both,
+         then error_weights supercedes as error_field. 
+         Default: None
 
     normalize_weights: bool, optional
         Whether to normalize the baseline-pair weights so that:
@@ -230,6 +233,15 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 raise IndexError("blpair_weights must have the same shape as "
                                  "blpair_groups")
 
+    # pre-check for error_weights
+    if error_weights is None:
+        use_error_weights = False
+    else: 
+        if hasattr(uvp, "stats_array"):
+            if error_weights not in uvp.stats_array.keys():
+                raise KeyError("error_field \"%s\" not found in stats_array keys." % error_weights)
+        use_error_weights = True
+
     # stat_l is a list of supplied error_fields, to sum over.
     if isinstance(error_field, (list, tuple, np.ndarray)):
         stat_l = list(error_field)
@@ -237,22 +249,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         stat_l = [error_field]
     else:
         stat_l = []
-
+    if use_error_weights:
+        if error_weights not in stat_l:
+            stat_l.append(error_weights)
     for stat in stat_l:
         if hasattr(uvp, "stats_array"):
             if stat not in uvp.stats_array.keys():
                 raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
-
-    # pre-check for choos average weighted by error bars
-    
-    if error_weights is None:
-        use_error_weights = False
-    else: 
-        if hasattr(uvp, "stats_array"):
-            if error_weights not in uvp.stats_array.keys():
-                raise KeyError("error_field \"%s\" not found in stats_array keys." % error_weights)
-
-        use_error_weights = True
 
     # For baseline pairs not in blpair_groups, add them as their own group
     extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
@@ -329,9 +332,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     if use_error_weights:
                     # If use_error_weights==True, all arrays are weighted by a specified kind of errors,
                     # including the error_filed in stats_array and cov_array. 
-                    # For each power spectrum P_i with error sigma_i, 
+                    # For each power spectrum P_i with error_weights sigma_i, 
                     # P_avg = \sum{ P_i / (sigma_i)^2 } / \sum{ 1 / (sigma_i)^2 } 
-                    # while for terms like variance or covariance,
+                    # while for other variance or covariance terms epsilon_i stored in stats_array and cov_array, 
                     # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
                     # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
                     # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34. 
@@ -340,27 +343,33 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     else:
                     # Otherwise all arrays are averaged in a way weighted by the integration time,
                     # including the error_filed in stats_array and cov_array. 
-                        w = (ints * np.sqrt(nsmp))
+                    # Since P_N ~ Tsys^2 / sqrt{N_incoherent} t_int (see N. Kern, The Astrophysical Journal 888.2 (2020): 70, Equation 7),
+                    # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
+                        w = (ints * np.sqrt(nsmp))**2
                         # shape of w: (Ntimes, 1)
                     
                     # Take time average if desired
                     if time_avg:
                         data = (np.sum(data * w, axis=0) \
-                            / np.sum(w, axis=0))[None]
+                            / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
                         wgts = (np.sum(wgts * w[:, :, None], axis=0) \
-                            / np.sum(w, axis=0)[:, None])[None]
+                            / np.sum(w, axis=0).clip(1e-40, np.inf)[:, None])[None]
                         ints = (np.sum(ints * w, axis=0) \
-                            / np.sum(w, axis=0))[None]
+                            / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
                         nsmp = np.sum(nsmp, axis=0)[None]
                         if store_cov:
                             cov = (np.sum(cov * w[:, :, None]**2, axis=0) \
-                                / (np.sum(w,axis=0))[:, None]**2)[None]
+                                / (np.sum(w,axis=0).clip(1e-40, np.inf))[:, None]**2)[None]
                         for stat in stat_l:
                             errws[stat] = (np.sum(errws[stat]*w**2, axis=0) \
-                            / (np.sum(w, axis=0))**2)[None]
+                            / (np.sum(w, axis=0).clip(1e-40, np.inf))**2)[None]
                         w = np.sum(w, axis=0)[None]
+                        # Here we use clip method for zero weights. A tolerance 
+                        # as low as 1e-40 works when using inverse square of noise power 
+                        # as weights.  
                     # Add multiple copies of data for each baseline according
-                    # to the weighting/multiplicity
+                    # to the weighting/multiplicity;
+                    # while multiple copies are only added when bootstrap resampling
                     for m in range(int(blpg_wgts[k])):
                         bpg_data.append(data * w)
                         bpg_wgts.append(wgts * w[:, :, None])
@@ -377,18 +386,18 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 # with zeros
                 # Or take error_weighted averages
                 bpg_data = np.sum(bpg_data, axis=0) \
-                         / np.sum(w_list, axis=0)
+                         / np.sum(w_list, axis=0).clip(1e-40, np.inf)
                 bpg_wgts = np.sum(bpg_wgts, axis=0) \
-                         / np.sum(w_list, axis=0)[:,:, None]
+                         / np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:, None]
                 bpg_nsmp = np.sum(bpg_nsmp, axis=0)
                 bpg_ints = np.sum(bpg_ints, axis=0) \
-                         / np.sum(w_list, axis=0)
+                         / np.sum(w_list, axis=0).clip(1e-40, np.inf)
                 if store_cov:
                     bpg_cov = np.sum(bpg_cov, axis=0) \
-                            / (np.sum(w_list, axis=0)[:,:,None]**2)
+                            / (np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:,None]**2)
                 for stat in stat_l:
                     arr = np.sum(bpg_stats[stat], axis=0) \
-                        / (np.sum(w_list, axis=0)**2)
+                        / (np.sum(w_list, axis=0).clip(1e-40, np.inf)**2)
                     bpg_stats[stat] = np.sqrt(arr)
 
                 # Append to lists (polarization)
@@ -477,7 +486,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     uvp.nsample_array = nsmp_array
     if store_cov:
         uvp.cov_array = cov_array
-    if error_field is not None:
+    if len(stat_l) >=1 :
         uvp.stats_array = stats_array
     elif hasattr(uvp, "stats_array"):
         delattr(uvp, "stats_array")
