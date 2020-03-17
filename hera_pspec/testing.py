@@ -2,11 +2,11 @@
 import numpy as np
 import copy, operator, itertools
 from collections import OrderedDict as odict
-from hera_pspec import uvpspec, pspecdata, conversions, pspecbeam, utils
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
 from scipy import stats
-import hera_pspec.uvpspec_utils as uvputils
+
+from . import uvpspec, pspecdata, conversions, pspecbeam, utils, uvpspec_utils as uvputils
 
 
 def build_vanilla_uvpspec(beam=None):
@@ -137,7 +137,7 @@ def build_vanilla_uvpspec(beam=None):
 
 def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
                       beam=None, taper='none', cosmo=None, n_dlys=None,
-                      r_params = None, verbose=False):
+                      r_params=None, verbose=False):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -180,7 +180,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
                             dictionary with fields
                             'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                               at which to center filtering windows. Can specify fractional channel number.
-                            'filter_widths', list of floats (or float) specifying the width of each
+                            'filter_half_widths', list of floats (or float) specifying the width of each
                                              filter window in (delay) channel numbers. Can specify fractional channel number.
                             'filter_factors', list of floats (or float) specifying how much power within each filter window
                                               is to be suppressed.
@@ -238,9 +238,9 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         bls2.extend(_bls2)
 
     # run pspec
-    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
+    uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
-                   store_cov=store_cov, n_dlys=n_dlys, r_params = r_params)
+                   store_cov=True, cov_models=["time_average"], n_dlys=n_dlys, r_params=r_params)
     return uvp
 
 

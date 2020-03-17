@@ -1,9 +1,10 @@
 import numpy as np
 import copy, operator
-from . import utils
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 import json
+
+from . import utils
 
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     """
@@ -127,7 +128,7 @@ def compress_r_params(r_params_dict):
                             dictionary with fields
                             'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                               at which to center filtering windows. Can specify fractional channel number.
-                            'filter_widths', list of floats (or float) specifying the width of each
+                            'filter_half_widths', list of floats (or float) specifying the width of each
                                              filter window in (delay) channel numbers. Can specify fractional channel number.
                             'filter_factors', list of floats (or float) specifying how much power within each filter window
                                               is to be suppressed.
@@ -176,7 +177,7 @@ def decompress_r_params(r_params_str):
                       dictionary with fields
                       'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                         at which to center filtering windows. Can specify fractional channel number.
-                      'filter_widths', list of floats (or float) specifying the width of each
+                      'filter_half_widths', list of floats (or float) specifying the width of each
                                        filter window in (delay) channel numbers. Can specify fractional channel number.
                       'filter_factors', list of floats (or float) specifying how much power within each filter window
                                         is to be suppressed.
@@ -341,7 +342,7 @@ def polpair_int2tuple(polpair, pol_strings=False):
 
     pol_strings : bool, optional
         If True, return polarization pair tuples with polarization strings.
-        Otherwise, use polarization integers. Default: True.
+        Otherwise, use polarization integers. Default: False.
 
     Returns
     -------
@@ -373,7 +374,7 @@ def polpair_int2tuple(polpair, pol_strings=False):
         return (pol1, pol2)
 
 
-def polpair_tuple2int(polpair):
+def polpair_tuple2int(polpair, x_orientation=None):
     """
     Convert a tuple pair of polarization strings/integers into
     an pol-pair integer.
@@ -388,6 +389,10 @@ def polpair_tuple2int(polpair):
     polpair : tuple, length 2
         A length-2 tuple containing a pair of polarization strings
         or integers, e.g. ('XX', 'YY') or (-5, -5).
+
+    x_orientation: str, optional
+        Orientation in cardinal direction east or north of X dipole.
+        Default keeps polarization in X and Y basis.
 
     Returns
     -------
@@ -404,8 +409,8 @@ def polpair_tuple2int(polpair):
 
     # Convert strings to ints if necessary
     pol1, pol2 = polpair
-    if type(pol1) in (str, np.str): pol1 = polstr2num(pol1)
-    if type(pol2) in (str, np.str): pol2 = polstr2num(pol2)
+    if type(pol1) in (str, np.str): pol1 = polstr2num(pol1, x_orientation=x_orientation)
+    if type(pol2) in (str, np.str): pol2 = polstr2num(pol2, x_orientation=x_orientation)
 
     # Convert to polpair integer
     ppint = (20 + pol1)*100 + (20 + pol2)
@@ -781,7 +786,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         if len(cov_real) > 0:
             uvp.cov_array_real = cov_real
             uvp.cov_array_imag = cov_imag
-        #select r_params based on new bl_array
+
+        # select r_params based on new bl_array
         blp_keys = uvp.get_all_keys()
         blkeys = []
         for blpkey in blp_keys:
@@ -792,7 +798,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
             if not key2 in blkeys:
                 blkeys += [key2,]
         new_r_params = {}
-        if not uvp.r_params == '':
+        if hasattr(uvp, 'r_params') and uvp.r_params != '':
             r_params = uvp.get_r_params()
             for rpkey in r_params:
                 if rpkey in blkeys:

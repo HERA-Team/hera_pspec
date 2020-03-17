@@ -8,7 +8,6 @@ from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils, grouping
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 import glob
-from hera_cal import redcal
 
 # Data files to use in tests
 dfiles = [
@@ -382,27 +381,6 @@ class Test_Plot(unittest.TestCase):
         # test exceptions
         nt.assert_raises(ValueError, plot.delay_wedge, uvp, 0, ('xx','xx'), 
                          component='foo')
-        plt.close()
-    
-    
-    def test_plot_uvdata_hist(self):
-
-        dfile = os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA')
-        uvd = UVData()
-        uvd.read(dfile)
-
-        cosmo = conversions.Cosmo_Conversions()
-        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
-        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-
-        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
-        uvd.data_array *= Jy_to_mK[None, None, :, None]
-
-        plot.plot_uvdata_vis_hist(uvd, 'frequencies', 0, plot_mode='normal', show_robust=True)
-        plot.plot_uvdata_vis_hist(uvd, 'frequencies', 0, fit_curve='Exponential', plot_mode='density', show_robust=True)
-        plot.plot_uvdata_vis_hist(uvd, 'baseline-times', 0, plot_mode='normal', show_robust=True)
-        plot.plot_uvdata_vis_hist(uvd, 'baseline-times', 0, fit_curve='Gaussian', plot_mode='density', show_robust=True)
-        
         plt.close()
         
 if __name__ == "__main__":

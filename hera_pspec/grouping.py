@@ -1,13 +1,13 @@
 import numpy as np
 from collections import OrderedDict as odict
-from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec import utils, version
 import random
 import copy
 import argparse
 from astropy import stats as astats
 import os
-import scipy
+
+from . import utils, version, uvpspec_utils as uvputils
+from .uvpspec import _ordered_unique
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
                     seed=None):
@@ -197,10 +197,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             blpair_groups = new_blpair_grps
     else:
         # If not, each baseline pair is its own group
-        blpair_groups = [[blp] for blp in np.unique(uvp.blpair_array)]
+        blpair_groups = [[blp] for blp in _ordered_unique(uvp.blpair_array)]
         assert blpair_weights is None, "Cannot specify blpair_weights if "\
                                        "blpair_groups is None."
-        blpair_weights = [[1.,] for blp in np.unique(uvp.blpair_array)]
+        blpair_weights = [[1.,] for blp in _ordered_unique(uvp.blpair_array)]
 
     # Print warning if a blpair appears more than once in all of blpair_groups
     all_blpairs = [item for sublist in blpair_groups for item in sublist]
@@ -362,8 +362,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         bpg_cov_real[cov_model] = np.sum(bpg_cov_real[cov_model], axis=0)\
                         / np.sum(w_list, axis=0)[:,None].clip(1e-10, np.inf)
                         bpg_cov_imag[cov_model] = np.sum(bpg_cov_imag[cov_model], axis=0)\
-                        / np.sum(w_list, axis=0)[:,None].clip(1e-10, np.inf)
-                   
+                        / np.sum(w_list, axis=0)[:,None].clip(1e-10, np.inf)               
                 w_list = np.sum(w_list, axis=0)
 
                 # For errors that are > 0, sum weights and take inverse square
@@ -501,8 +500,7 @@ def fold_spectra(uvp):
     """
     # assert folded is False
     assert uvp.folded == False, "cannot fold power spectra if uvp.folded == True"
-    store_cov = hasattr(uvp, "cov_array_real")
-    
+    store_cov = hasattr(uvp, "cov_array_real")  
     # Iterate over spw
     for spw in range(uvp.Nspws):
 
@@ -690,12 +688,12 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
                                                pols=True, inplace=False)
 
     # Loop over UVPSpec objects, looking for available blpairs in each
-    avail_blpairs = [np.unique(uvp.blpair_array) for uvp in uvp_list]
-    all_avail_blpairs = np.unique([blp for blplist in avail_blpairs
+    avail_blpairs = [_ordered_unique(uvp.blpair_array) for uvp in uvp_list]
+    all_avail_blpairs = _ordered_unique([blp for blplist in avail_blpairs
                                        for blp in blplist])
 
     # Check that all requested blpairs exist in at least one UVPSpec object
-    all_req_blpairs = np.unique([blp for grp in blpair_groups for blp in grp])
+    all_req_blpairs = _ordered_unique([blp for grp in blpair_groups for blp in grp])
     missing = []
     for blp in all_req_blpairs:
         if blp not in all_avail_blpairs: missing.append(blp)
@@ -717,7 +715,13 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
     for grp in blpair_groups:
 
         # Find which blpairs in this group are available in each UVPSpec object
-        avail = [np.intersect1d(grp, blp_list) for blp_list in avail_blpairs]
+        avail = []
+        for blp_list in avail_blpairs:
+            # np.intersect1d inherently sorts the output array, which can mess up blpair ordering
+            indices = np.intersect1d(grp, blp_list, return_indices=True)[1]
+            # this keeps inherent ordering of input blpair_groups
+            avail.append(np.array(grp)[np.unique(indices)])
+
         avail_flat = [blp for lst in avail for blp in lst]
         num_avail = len(avail_flat)
 

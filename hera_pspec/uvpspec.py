@@ -1,15 +1,13 @@
 import numpy as np
 from collections import OrderedDict as odict
 import os, copy, shutil, operator, ast, fnmatch
-from hera_pspec import conversions, noise, version, pspecbeam, grouping, utils
-from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec.parameter import PSpecParam
-from pyuvdata import uvutils as uvutils
+from pyuvdata import utils as uvutils
 import h5py
-import operator
 import warnings
 import json
 
+from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_utils as uvputils
+from .parameter import PSpecParam
 
 class UVPSpec(object):
     """
@@ -81,7 +79,7 @@ class UVPSpec(object):
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.float64)
         self._weighting = PSpecParam("weighting", description="Form of data weighting used when forming power spectra.", expected_type=str)
         self._norm = PSpecParam("norm", description="Normalization method adopted in OQE (M matrix).", expected_type=str)
-        self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT."', expected_type=str)
+        self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT. See uvtools.dspec.gen_window for options."', expected_type=str)
         self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
         self._norm_units = PSpecParam("norm_units", description="Power spectra normalization units, i.e. telescope units [Hz str] or cosmological [(h^-3) Mpc^3].", expected_type=str)
         self._labels = PSpecParam("labels", description="Array of dataset string labels.", expected_type=np.str)
@@ -336,7 +334,7 @@ class UVPSpec(object):
             dictionary with fields
             'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                               at which to center filtering windows. Can specify fractional channel number.
-            'filter_widths', list of floats (or float) specifying the width of each
+            'filter_half_widths', list of floats (or float) specifying the width of each
                              filter window in (delay) channel numbers. Can specify fractional channel number.
             'filter_factors', list of floats (or float) specifying how much power within each filter window
                               is to be suppressed.
@@ -394,7 +392,8 @@ class UVPSpec(object):
     def get_blpair_seps(self):
         """
         For each baseline-pair, get the average baseline separation in ENU
-        frame in meters.
+        frame in meters between its bl1 and bl2. Ordering matches
+        self.get_blpairs()
 
         Returns
         -------
@@ -411,7 +410,7 @@ class UVPSpec(object):
         blp_avg_sep = np.empty(self.Nblpairts, np.float)
 
         # construct blpair_bls
-        blpairs = np.unique(self.blpair_array)
+        blpairs = _ordered_unique(self.blpair_array)
         bl1 = np.floor(blpairs / 1e6)
         blpair_bls = np.vstack([bl1, blpairs - bl1*1e6]).astype(np.int32).T
 
@@ -493,7 +492,15 @@ class UVPSpec(object):
         Returns a list of all blpair tuples in the data_array.
         """
         return [self.blpair_to_antnums(blp)
-                for blp in np.unique(self.blpair_array)]
+                for blp in _ordered_unique(self.blpair_array)]
+
+    def get_polpairs(self):
+        """
+        Returns a list of all unique polarization pairs in the data_array.
+        """
+        polpairs = [uvputils.polpair_int2tuple(pp, pol_strings=True)
+                    for pp in self.polpair_array]
+        return sorted(set(polpairs))
 
     def get_all_keys(self):
         """
@@ -1035,7 +1042,7 @@ class UVPSpec(object):
         assert spw_ind in self.spw_freq_array and spw_ind in self.spw_dly_array, \
             "spw {} not found in data".format(spw_ind)
         assert blpair in self.blpair_array, \
-            "blpair {} not found in data, blpairs are: {}".format(blpair, self.blpair_array)
+            "blpair {} not found in data".format(blpair)
         assert polpair in self.polpair_array, \
             "polpair {} not found in data".format(polpair)
 
@@ -1717,7 +1724,7 @@ class UVPSpec(object):
 
         # get blpairs
         if blpairs is None:
-            blpairs = np.unique(self.blpair_array)
+            blpairs = _ordered_unique(self.blpair_array)
         elif isinstance(blpairs[0], tuple):
             blpairs = [self.antnums_to_blpair(blp) for blp in blpairs]
 
@@ -1956,7 +1963,7 @@ class UVPSpec(object):
         return scalar
 
 
-def combine_uvpspec(uvps, verbose=True):
+def combine_uvpspec(uvps, merge_history=True, verbose=True):
     """
     Combine (concatenate) multiple UVPSpec objects into a single object,
     combining along one of either spectral window [spw], baseline-pair-times
@@ -1970,6 +1977,8 @@ def combine_uvpspec(uvps, verbose=True):
     ----------
     uvps : list
         A list of UVPSpec objects to combine.
+    merge_history : bool
+        If True, merge all histories. Else use zeroth object's history.
 
     Returns
     -------
@@ -2261,7 +2270,10 @@ def combine_uvpspec(uvps, verbose=True):
         u.bl_vecs.append(uvps[l].bl_vecs[h])
     u.bl_vecs = np.array(u.bl_vecs)
     u.Ntimes = len(np.unique(u.time_avg_array))
-    u.history = "".join([uvp.history for uvp in uvps])
+    if merge_history:
+        u.history = "".join([uvp.history for uvp in uvps])
+    else:
+        u.history = uvps[0].history
     u.labels = np.array(u.labels, np.str)
 
     u.r_params = uvputils.compress_r_params(r_params)
@@ -2435,3 +2447,12 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 
     return uvps, concat_ax, unique_spws, unique_blpts, \
            unique_polpairs, static_meta
+
+
+def _ordered_unique(arr):
+    """
+    Get the unique elements of an array while preserving order.
+    """
+    arr = np.asarray(arr)
+    _, idx = np.unique(arr, return_index=True)
+    return arr[np.sort(idx)]

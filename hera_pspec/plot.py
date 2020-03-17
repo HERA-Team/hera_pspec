@@ -1,16 +1,14 @@
 import numpy as np
 import pyuvdata
-from hera_pspec import conversions, uvpspec, utils, grouping
-import matplotlib
-import matplotlib.pyplot as plt
 import copy
 from collections import OrderedDict as odict
 import astropy.units as u
 import astropy.constants as c
 from pyuvdata import UVData
-from scipy import stats
 import uvtools
-import astropy.stats as astats
+
+from . import conversions, uvpspec, utils
+
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
                    average_times=False, fold=False, plot_noise=False, 
@@ -108,6 +106,9 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance.
     """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
     # Create new Axes if none specified
     new_plot = False
     if ax is None:
@@ -295,12 +296,12 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         return fig
 
 
-def delay_waterfall(uvp, blpairs, spw, pol, component='real', 
+def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real', 
                     average_blpairs=False, fold=False, delay=True, 
                     deltasq=False, log=True, lst_in_hrs=True,
                     vmin=None, vmax=None, cmap='YlGnBu', axes=None, 
                     figsize=(14, 6), force_plot=False, times=None, 
-                    title_type='blpair'):
+                    title_type='blpair', colorbar=True):
     """
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
@@ -317,8 +318,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real',
         Which spectral window and polarization to plot.
     
     component : str
-        Component of complex spectra to plot, options=['abs', 'real', 'imag'].
-        Default: 'real'.
+        Component of complex spectra to plot, options=['abs', 'real', 'imag', 'abs-real', 'abs-imag'].
+        abs-real is abs(real(data)), whereas 'real' is real(data)
+        Default: 'abs-real'. 
 
     average_blpairs : bool, optional
         If True, average over the baseline pairs within each group.
@@ -369,13 +371,20 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real',
         blpair : "bls: {bl1} x {bl2}"
         blvec : "bl len {len} m & ang {ang} deg" 
 
+    colorbar : bool, optional
+        Whether to make a colorbar. Default: True
+
     Returns
     -------
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance if input ax is None.
     """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
     # assert component
-    assert component in ['real', 'abs', 'imag'], "Can't parse specified component {}".format(component)
+    assert component in ['real', 'abs', 'imag', 'abs-real', 'abs-imag'], "Can't parse specified component {}".format(component)
+    fix_negval = component in ['real', 'imag'] and log
 
     # Add ungrouped baseline-pairs into a group of their own (expected by the
     # averaging routines)
@@ -440,13 +449,26 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real',
             # set flagged power data to nan
             flags = np.isclose(uvp_plt.get_integrations(key), 0.0)
             power[flags, :] = np.nan
+
             # get component
             if component == 'abs':
-                waterfall[key] = np.abs(power)
+                power = np.abs(power)
             elif component == 'real':
-                waterfall[key] = np.real(power)
+                power = np.real(power)
+            elif component == 'abs-real':
+                power = np.abs(np.real(power))
             elif component == 'imag':
-                waterfall[key] = np.imag(power)
+                power = np.imag(power)
+            elif component == 'abs-imag':
+                power = np.abs(np.real(power))
+
+            # if real or imag and log is True, set negative values to near zero
+            # this is done so that one can use cmap.set_under() and cmap.set_bad() separately
+            if fix_negval:
+                power[power < 0] = np.abs(power).min() * 1e-6 + 1e-10
+
+            # assign to waterfall
+            waterfall[key] = power
 
             # If blpairs were averaged, only the first blpair in the group 
             # exists any more (so skip the rest)
@@ -489,18 +511,15 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real',
     # Get LST range: setting y-ticks is tricky due to LST wrapping...
     y = uvp_plt.lst_avg_array[
             uvp_plt.key_to_indices(list(waterfall.keys())[0])[1] ]
+    y = np.unwrap(y)
+    if y[0] > np.pi:
+        # if start is closer to 2pi than 0, lower axis by an octave
+        y -= 2 * np.pi
     if lst_in_hrs:
         lst_units = "Hr"
-        y = np.around(y * 24 / (2*np.pi), 2)
+        y *= 24 / (2 * np.pi)
     else:
         lst_units = "rad"
-        y = np.around(y, 3)
-    Ny = len(y)
-    if Ny <= 10:
-        Ny_thin = 1
-    else:
-        Ny_thin = int(round(Ny / 10.0))
-    Nx = len(x)
 
     # get baseline vectors
     blvecs = dict(zip([uvp_plt.bl_to_antnums(bl) for bl in uvp_plt.bl_array], uvp_plt.get_ENU_bl_vecs()))
@@ -539,7 +558,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real',
             # plot waterfall
             cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', 
                              vmin=vmin, vmax=vmax, 
-                             extent=[np.min(x), np.max(x), Ny, 0])
+                             extent=[x[0], x[-1], y[-1], y[0]])
 
             # ax config
             ax.xaxis.set_ticks_position('bottom')
@@ -553,14 +572,19 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real',
                     ax.set_title("bl len {len:0.2f} m & {ang:0.0f} deg".format(len=lens[0], ang=angs[0]), y=1)
 
             # set colorbar
-            cbar = ax.get_figure().colorbar(cax, ax=ax)
-            cbar.ax.tick_params(labelsize=14)
+            if colorbar:
+                if fix_negval:
+                    cb_extend = 'min'
+                else:
+                    cb_extend = 'neither'
+                cbar = ax.get_figure().colorbar(cax, ax=ax, extend=cb_extend)
+                cbar.ax.tick_params(labelsize=14)
+                if fix_negval:
+                    cbar.ax.set_title("$< 0$",y=-0.05, fontsize=16)
 
             # configure left-column plots
             if j == 0:
                 # set yticks
-                ax.set_yticks(np.arange(Ny)[::Ny_thin])
-                ax.set_yticklabels(y[::Ny_thin])
                 ax.set_ylabel(r"LST [{}]".format(lst_units), fontsize=16)
             else:
                 ax.set_yticklabels([])
@@ -594,7 +618,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='real',
 
 
 def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
-                rotate=False, component='real', log10=True, loglog=False,
+                rotate=False, component='abs-real', log10=True, loglog=False,
                 red_tol=1.0, center_line=False, horizon_lines=False,
                 title=None, ax=None, cmap='viridis', figsize=(8, 6),
                 deltasq=False, colorbar=False, cbax=None, vmin=None, vmax=None,
@@ -606,6 +630,8 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     Plot a 2D delay spectrum (or spectra) from a UVPSpec object. Note that
     all integrations and redundant baselines are averaged (unless specifying 
     times) before plotting.
+
+    Note: this deepcopies input uvp before averaging.
     
     Parameters
     ----------
@@ -640,8 +666,9 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         Default: False
 
     component : str, optional
-        Component of complex spectra to plot. Options=['real', 'imag', 'abs']
-        Default: 'real'.
+        Component of complex spectra to plot. Options=['real', 'imag', 'abs', 'abs-real', 'abs-imag']
+        abs-real is abs(real(data)), whereas 'real' is real(data)
+        Default: 'abs-real'.
 
     log10 : bool, optional
         If True, take log10 of data before plotting. Default: True
@@ -716,11 +743,15 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance if ax is None.
     """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
     # type checking
     uvp = copy.deepcopy(uvp)
     assert isinstance(uvp, uvpspec.UVPSpec), "input uvp must be a UVPSpec object"
     assert isinstance(spw, (int, np.integer))
     assert isinstance(pol, (int, np.integer, tuple))
+    fix_negval = component in ['real', 'imag'] and log10
 
     # check pspec units for little h
     little_h = 'h^-3' in uvp.norm_units
@@ -733,15 +764,20 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     else:
         fig = ax.get_figure()
 
-    # Select out times if provided
+    # Select out times and blpairs if provided
     if times is not None:
-        uvp.select(times=times, inplace=True)
+        uvp.select(blpairs=blpairs, times=times, inplace=True)
 
     # Average across redundant groups and time
     # this also ensures blpairs are ordered from short_bl --> long_bl
     blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol, 
                                                       match_bl_lens=True)
     uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, inplace=True)
+
+    # get blpairs and order by len and enforce bl len ordering anyways
+    blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps()
+    osort = np.argsort(blpair_seps)
+    blpairs, blpair_seps = [blpairs[oi] for oi in osort], blpair_seps[osort]
 
     # Convert to DeltaSq
     if deltasq and not delay:
@@ -754,7 +790,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     # Format ticks
     if delay:
         x_axis = uvp.get_dlys(spw) * 1e9
-        y_axis = uvp.get_blpair_seps()
+        y_axis = blpair_seps
     else:
         x_axis = uvp.get_kparas(spw, little_h=little_h)
         y_axis = uvp.get_kperps(spw, little_h=little_h)
@@ -777,22 +813,31 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         psunits = psunits.replace("beam normalization not specified", 
                                  r"{\rm unnormed}")
 
-    # get data casting
+    # get data with shape (Nblpairs, Ndlys)
+    data = [uvp.get_data((spw, blp, pol)).squeeze() for blp in blpairs]
+
+    # get component
     if component == 'real':
-        cast = np.real
+        data = np.real(data)
+    elif component == 'abs-real':
+        data = np.abs(np.real(data))
     elif component == 'imag':
-        cast = np.imag
+        data = np.imag(data)
+    elif component == 'abs-imag':
+        data = np.abs(np.imag(data))
     elif component == 'abs':
-        cast = np.abs
+        data = np.abs(data)
     else:
         raise ValueError("Did not understand component {}".format(component))
 
-    # get data with shape (Nblpairs, Ndlys)
-    data = cast([uvp.get_data((spw, blp, pol)).squeeze() for blp in uvp.get_blpairs()])
+    # if real or imag and log is True, set negative values to near zero
+    # this is done so that one can use cmap.set_under() and cmap.set_bad() separately
+    if fix_negval:
+        data[data < 0] = np.abs(data).min() * 1e-6 + 1e-10
 
     # take log10
     if log10:
-        data = np.log10(np.abs(data))
+        data = np.log10(data)
 
     # loglog
     if loglog:
@@ -834,9 +879,13 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
 
     # Add colorbar
     if colorbar:
+        if fix_negval:
+            cb_extend = 'min'
+        else:
+            cb_extend = 'neither'
         if cbax is None:
             cbax = ax
-        cbar = fig.colorbar(cax, ax=cbax)
+        cbar = fig.colorbar(cax, ax=cbax, extend=cb_extend)
         if deltasq:
             p = "\Delta^2"
         else:
@@ -850,6 +899,8 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
         else:
             psunits = r"${}\ [{}]$".format(p, psunits)
         cbar.set_label(psunits, fontsize=14)
+        if fix_negval:
+            cbar.ax.set_title("$< 0$",y=-0.05, fontsize=16)
 
     # Configure tick labels
     if delay:
@@ -877,7 +928,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     # Plot horizons
     if horizon_lines:
         # get horizon in ns
-        horizons = uvp.get_blpair_seps() / conversions.units.c * 1e9
+        horizons = blpair_seps / conversions.units.c * 1e9
 
         # convert to cosmological wave vector
         if not delay:
@@ -965,6 +1016,9 @@ def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
         Keyword arguments passed to uvtools.plot.waterfall, which passes them 
         on to matplotlib.imshow.
     """
+    import matplotlib
+    import matplotlib.pyplot as plt
+
     assert isinstance(uvd, UVData), "'uvd' must be a UVData object."
     assert data in ['data', 'flags', 'nsamples'], \
             "'%s' not a valid data array; use 'data', 'flags', or 'nsamples'" \
@@ -1016,112 +1070,3 @@ def _round_sigfig(x, up=True):
         return np.ceil(10**sigfigs * x) / 10**sigfigs
     else:
         return np.floor(10**sigfigs * x) / 10**sigfigs
-
-
-def plot_uvdata_hist(uvd, axis, index, fit_curve='Gaussian', plot_mode='normal', show_robust=False,
-                           **kwargs):
-    """
-    Plot histograms for visibilities. 
-    
-    Parameters
-    ----------
-    uvd : UVData object
-        Input data object. 
-
-    axis : str
-        Along which axis to plot the histogram.
-        Choices: ['frequencies', 'baseline-times'].
-
-    index : int 
-        The index for selecting data from uvd.data_array. 
-        If axis is 'frequencies', index is to specify the blpt. 
-        If axis is 'baseline-times', index is to specify the frequency channel.
-
-    fit_curve : str
-        Types of fuctions to fit the distribution, only called when plot_mode == 'density'.
-        Chocies: ['Gaussian', 'Exponential']
-        Default: 'Gaussian'.
-
-    plot_mode : str
-        Plot mode. 
-        If choose 'normal', just plot histograms of numbers. 
-        If choose 'density', plot histograms of normalized density.
-        Choices: ['normal', 'density'].
-        Default: 'normal'.
-    
-    show_robust : bool
-        Whether or not to show the robust mean and std for the histogram.
-        Default: False
-
-    **kwargs : 
-    """
-    assert isinstance(uvd, UVData), "'uvd' must be a UVData object."
-    assert axis in ['frequencies', 'baseline-times'], \
-            "'%s' not a valid axis; use 'frequencies' or 'baseline-times'" \
-            % axis
-    assert plot_mode in ['normal', 'density'], \
-            "'%s' not a valid mode; use 'normal' or 'density' " \
-            % plot_mode
-    assert isinstance(index, int), "'index' must be a integer."        
-    if axis == 'frequencies':
-        assert index >=0 and index < uvd.Nblts, "The index is not valid."
-    if axis == 'baseline-times':
-        assert index >=0 and index < uvd.Nfreqs, "The index is not valid."
-        
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    # Choose axis
-    if axis == 'frequencies':
-        fig.suptitle('Distribution of the visibility at time {}, baseline {} across frequency axis'.format(uvd.time_array[index], uvd.baseline_array[index]), fontsize=14)
-        d = uvd.data_array[index][0, :, 0]
-    if axis == 'baseline-times':
-        fig.suptitle('Distribution of the visibility at frequency {} across baseline-time axis'.format(uvd.freq_array[0,index]), fontsize=14)
-        d = uvd.data_array[:, 0, index, 0]
-
-    # Make plots
-    ax_list = [axes[0], axes[1]]
-    data_list = [d.real,d.imag]
-    for (ax, data) in zip(ax_list, data_list):
-        # Normal mode
-        if plot_mode == 'normal':
-            # Whether or not to show robust statiscics
-            if show_robust == True:
-                n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
-                    range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
-                    ,label='real\n(mean:{:.2f}, \nmean(r):{:.2f}, \nstd:{:.2f},\nstd(r):{:.2f})'.format(np.mean(data), astats.biweight_location(data),np.std(data), np.sqrt(astats.biweight_midvariance(data)))
-                    ,color = 'blue' )
-            else:
-                n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
-                    range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
-                    ,label='real\n(mean:{:.2f}, \nstd:{:.2f})'.format(np.mean(data),np.std(data))
-                    ,color = 'blue' )
-            # Only plot error bars from Poission Distribution in normal mode
-            bincenters = 0.5*(bins[1:]+bins[:-1])
-            menStd     = np.sqrt(n)
-            ax.bar(bincenters, n, width=0., ecolor='red', yerr=menStd)
-        # Density mode
-        if plot_mode == 'density':
-            # Whether or not to show robust statiscics
-            if show_robust == True:
-                n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
-                    range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
-                    ,label='real\n(mean:{:.2f}, \nmean(r):{:.2f}, \nstd:{:.2f},\nstd(r):{:.2f})'.format(np.mean(data), astats.biweight_location(data),np.std(data), np.sqrt(astats.biweight_midvariance(data)))
-                    ,color = 'blue', density=True)
-            else:
-                n, bins, patches = ax.hist(data, bins=11,  histtype='step', lw=3, 
-                    range=((np.mean(data)-4.*np.std(data)), (np.mean(data)+4.*np.std(data)))
-                    ,label='real\n(mean:{:.2f}, \nstd:{:.2f})'.format(np.mean(data),np.std(data))
-                    ,color = 'blue', density=True)
-            # Choose type of the fit curve
-            assert fit_curve in ['Gaussian', 'Exponential'],\
-            "'%s' not a valid axis; use 'Gaussian' or 'Exponential'" % fit_curve
-            if fit_curve == 'Gaussian':
-                y = stats.norm.pdf(bins, np.mean(data), np.std(data))
-                ax.plot(bins, y, lw=2, ls='--', label='Gaussian', color='blue')
-            if fit_curve == 'Exponential':
-                y = stats.laplace.pdf(bins, np.mean(data), np.std(data)/np.sqrt(2.))
-                ax.plot(bins, y, lw=2, ls='--', label='Exponential', color='blue')
-        
-        ax.legend(fontsize=12, loc='lower center',framealpha=0)
-        ax.set_yscale('log')
-        ax.grid()
-   

@@ -270,7 +270,7 @@ def test_r_param_compression():
     baselines = [(24,25), (37,38), (38,39)]
 
     rp = {'filter_centers':[0.],
-          'filter_widths':[250e-9],
+          'filter_half_widths':[250e-9],
           'filter_factors':[1e-9]}
 
     r_params = {}

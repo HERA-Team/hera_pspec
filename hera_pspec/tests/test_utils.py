@@ -147,7 +147,6 @@ class Test_Utils(unittest.TestCase):
         nt.ok_( isinstance(spw5, tuple) )
         nt.ok_( spw5[0] is not None )
 
-
     def test_calc_blpair_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
@@ -194,10 +193,17 @@ class Test_Utils(unittest.TestCase):
                                    bl_len_range=(10.0, 20.0))
         nt.assert_equal(blps, [((24, 25), (37, 38))])
 
+        # test exclude_cross_bls
+        (bls1, bls2, blps, xants1,
+         xants2) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, exclude_cross_bls=True)
+        for bl1, bl2 in blps:
+            assert bl1 == bl2
+
         # test exceptions
         uvd2 = copy.deepcopy(uvd)
         uvd2.antenna_positions[0] += 2
         nt.assert_raises(AssertionError, utils.calc_blpair_reds, uvd, uvd2)
+        nt.assert_raises(AssertionError, utils.calc_blpair_reds, uvd, uvd, exclude_auto_bls=True, exclude_cross_bls=True)
 
     def test_get_delays(self):
         utils.get_delays(np.linspace(100., 200., 50)*1e6)
