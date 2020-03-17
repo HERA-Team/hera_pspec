@@ -749,6 +749,38 @@ class Test_PSpecData(unittest.TestCase):
                 else:
                     self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
 
+
+    def test_set_symmetric_taper(self):
+        """
+        A unit test that checks that the non-symmetric taper is used when
+        symmetric_taper is True.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreqs = self.ds.spw_Nfreqs
+        Ntime = self.ds.Ntimes
+        Ndlys = Nfreq - 3
+        self.ds.spw_Ndlys = Ndlys
+        key1 = (0, 24, 38)
+        key2 = (1,25, 38)
+
+        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
+        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_r_param(key1,rpk1)
+        #get the symmetric tapering
+        rmat_symmetric = self.ds.R(key1)
+        #now set taper to be asymmetric
+        self.ds.set_symmetric_taper(False)
+        rmat_assymetric = self.ds.R(key1)
+        #check against analytic solution
+        bh_taper = dspec.gen_window('bh7', Nfreq)
+        rmat = dspec.sinc_downweight_mat_inv(nchan=Nfreq, df=np.mean(np.diff(self.ds.freqs)),
+        filter_centers=[0.], filter_half_widths=[100e-9], filter_factors=[1e-9])
+        self.assertTrue(np.all(np.isclose(rmat_symmetric, np.atleast_2d(bh_taper)**.5\
+        * bh_taper * np.atleast_2d(bh_taper)**.5)))
+        self.assertTrue(np.all(np.isclose(rmat_symmetric, np.atleast_2d(bh_taper)* rmat)))
+        self.assertTrue(not np.all(np.isclose(rmat_symmetric, rmat_assymetric)))
+
+
     def test_R_truncation(self):
         """
         Test truncation of R-matrices. These should give a q_hat that is all
