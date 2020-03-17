@@ -584,13 +584,16 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
             try:
                 # merge
                 uvps = [psc.get_pspec(grp, uvp) for uvp in to_merge]
-                merged_uvp = uvpspec.combine_uvpspec(uvps, merge_history=merge_history, verbose=verbose)
+                if len(uvps) > 1:
+                    merged_uvp = uvpspec.combine_uvpspec(uvps, merge_history=merge_history, verbose=verbose)
+                else:
+                    merged_uvp = uvps[0]
                 # write to file
                 psc.set_pspec(grp, spc, merged_uvp, overwrite=True)
                 # if successful merge, remove uvps
-                for uvp in to_merge:
-                    if uvp != spc:
-                        del psc.data[grp][uvp]
+                for uvp_name in to_merge:
+                    if uvp_name != spc:
+                        del psc.data[grp][uvp_name]
             except Exception as exc:
                 # merge failed, so continue
                 if verbose:
