@@ -13,7 +13,7 @@ from scipy.interpolate import interp1d
 from astropy.time import Time
 import warnings
 import glob
-
+from uvtools import dspec
 # Data files to use in tests
 dfiles = [
     'zen.2458042.12552.xx.HH.uvXAA',
@@ -209,6 +209,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(AssertionError, self.ds.add, [uv], None, cals=[None, None])
         nt.assert_raises(AssertionError, self.ds.add, [uv], None, labels=['foo', 'bar'])
 
+
     def test_set_symmetric_taper(self):
         """
         Make sure that you can't set a symmtric taper with an truncated R matrix
@@ -233,11 +234,49 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.set_r_param(key2,rpk2)
         ds1 = copy.deepcopy(self.ds)
         ds1.set_spw((10,Nfreq-10))
+        ds1.set_symmetric_taper(False)
         ds1.set_filter_extension([10,10])
         ds1.set_filter_extension((10,10))
         rm1 = self.ds.R(key1)
         self.ds.set_symmetric_taper(True)
         nt.assert_raises(ValueError, ds1.set_symmetric_taper, True)
+        #now make sure warnings are raised when we extend filter with
+        #symmetric tapering and that symmetric taper is set to false.
+        with warnings.catch_warnings(record=True) as w:
+            self.ds.set_filter_extension((10,10))
+        assert len(w) > 0
+        self.assertTrue(not(self.ds.symmetric_taper))
+
+        """
+        Now directly compare results to expectations.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.spw_Nfreqs
+        Ntime = self.ds.Ntimes
+        Ndlys = Nfreq - 3
+        self.ds.spw_Ndlys = Ndlys
+        key1 = (0, 24, 38)
+        key2 = (1,25, 38)
+
+        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
+        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_taper('bh7')
+        self.ds.set_r_param(key1,rpk1)
+        #get the symmetric tapering
+        rmat_symmetric = self.ds.R(key1)
+        #now set taper to be asymmetric
+        self.ds.set_symmetric_taper(False)
+        rmat_a = self.ds.R(key1)
+        #check against independent solution
+        bh_taper = np.sqrt(dspec.gen_window('bh7', Nfreq).reshape(1,-1))
+        rmat = dspec.sinc_downweight_mat_inv(nchan=Nfreq, df=np.mean(np.diff(self.ds.freqs)),
+        filter_centers=[0.], filter_half_widths=[100e-9], filter_factors=[1e-9])
+        wmat = np.outer(np.diag(np.sqrt(self.ds.Y(key1))), np.diag(np.sqrt(self.ds.Y(key1))))
+        rmat = np.linalg.pinv(wmat * rmat)
+        self.assertTrue(np.all(np.isclose(rmat_symmetric, bh_taper.T * rmat * bh_taper,atol=1e-6)))
+        self.assertTrue(np.all(np.isclose(rmat_a, bh_taper.T ** 2. * rmat,atol=1e-6)))
+        self.assertTrue(not np.all(np.isclose(rmat_symmetric, rmat_a,atol=1e-6)))
+
 
     def test_labels(self):
         """
@@ -748,37 +787,6 @@ class Test_PSpecData(unittest.TestCase):
                     self.assertTrue(np.isclose(30., cov_p[0, p, q], atol=1e-6))
                 else:
                     self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
-
-
-    def test_set_symmetric_taper(self):
-        """
-        A unit test that checks that the non-symmetric taper is used when
-        symmetric_taper is True.
-        """
-        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
-        Nfreqs = self.ds.spw_Nfreqs
-        Ntime = self.ds.Ntimes
-        Ndlys = Nfreq - 3
-        self.ds.spw_Ndlys = Ndlys
-        key1 = (0, 24, 38)
-        key2 = (1,25, 38)
-
-        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
-        self.ds.set_weighting('sinc_downweight')
-        self.ds.set_r_param(key1,rpk1)
-        #get the symmetric tapering
-        rmat_symmetric = self.ds.R(key1)
-        #now set taper to be asymmetric
-        self.ds.set_symmetric_taper(False)
-        rmat_assymetric = self.ds.R(key1)
-        #check against analytic solution
-        bh_taper = dspec.gen_window('bh7', Nfreq)
-        rmat = dspec.sinc_downweight_mat_inv(nchan=Nfreq, df=np.mean(np.diff(self.ds.freqs)),
-        filter_centers=[0.], filter_half_widths=[100e-9], filter_factors=[1e-9])
-        self.assertTrue(np.all(np.isclose(rmat_symmetric, np.atleast_2d(bh_taper)**.5\
-        * bh_taper * np.atleast_2d(bh_taper)**.5)))
-        self.assertTrue(np.all(np.isclose(rmat_symmetric, np.atleast_2d(bh_taper)* rmat)))
-        self.assertTrue(not np.all(np.isclose(rmat_symmetric, rmat_assymetric)))
 
 
     def test_R_truncation(self):

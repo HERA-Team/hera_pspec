@@ -73,7 +73,7 @@ class PSpecData(object):
         # and taper to none by default
         self.data_weighting = 'identity'
         self.taper = 'none'
-        self.symmetric_taper = False
+        self.symmetric_taper = True
         # Set all weights to None if wgts=None
         if wgts is None:
             wgts = [None for dset in dsets]
@@ -857,7 +857,7 @@ class PSpecData(object):
         key = (dset,) + (bl,)
         # parse key
         Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.filter_extension,)\
-                   + (self.spw_Nfreqs,)
+                   + (self.spw_Nfreqs,) + (self.symmetric_taper,)
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -955,7 +955,7 @@ class PSpecData(object):
             filter_extensions will be clipped to not extend beyond data range.
         """
         if self.symmetric_taper and not filter_extension[0] == 0 and not filter_extension[1]==0:
-            raise Warning("You cannot set filter extensions greater then zero when symmetric_taper==True! Setting symmetric_taper==False!")
+            raise_warning("You cannot set filter extensions greater then zero when symmetric_taper==True! Setting symmetric_taper==False!")
             self.symmetric_taper = False
         assert isinstance(filter_extension, (list, tuple)), "filter_extension must a tuple or list"
         assert len(filter_extension) == 2, "filter extension must be length 2"
