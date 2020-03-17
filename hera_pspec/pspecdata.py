@@ -572,7 +572,7 @@ class PSpecData(object):
         model : string, optional
             Type of covariance model to calculate, if not cached. 
             Options=['time_average', 'empirical', 'time_average_diag', 'time_average_mean',
-            'time_average_min', 'time_average_max', ...]
+            'time_average_min', 'time_average_max', 'autos',...]
 
         subtracted : boolean, default: True
             Whether or not to subtract the mean value when calculating the covariance.
@@ -591,7 +591,7 @@ class PSpecData(object):
 
         internal_models = ['time_average', 'empirical', 'time_average_diag', 
                         'time_average_mean', 'time_average_min', 
-                        'time_average_max']
+                        'time_average_max', 'autos']
         # internal_models refer to the covariance can be calculated intrinsically. 
 
         if known_cov == None:
@@ -649,7 +649,7 @@ class PSpecData(object):
                 
                 covariance = np.repeat(covariance[np.newaxis,:,:], 
                                        time_indices, axis=0)
-                #(Ntimes, spw_Nfreqs, spw_Nfreqs)
+                # (Ntimes, spw_Nfreqs, spw_Nfreqs)
                 self.set_C({Ckey: covariance})
                 
             if model == 'empirical':
@@ -661,6 +661,37 @@ class PSpecData(object):
                 # Get Ntimes
                 covariance = np.repeat(utils.cov(data, weights, subtracted=subtracted)[np.newaxis,:,:], time_indices, axis=0)
                 # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+                self.set_C({Ckey: covariance})
+
+            if model == 'autos':
+                """
+                Pick a baseline $b=(alpha,beta)$ where $alpha$ and $beta$ are antennas,
+                One way to estimate the covariance matrix $C$ by auto-visibility is:
+                $C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t}, 
+                where $b_alpha = (alpha,alpha)$ and $b_beta = (beta,beta)$.
+                With LST binned over days, we have $C_{ii}(b, LST) = |V(b_alpha,nu_i,t) V(b_beta, nu_i,t)| / {N_{samples} B Delta_t}$.
+                """
+                dt = np.mean(self.dsets[dset].integration_time)
+                # Delta_t
+                df = self.dsets[dset].channel_width
+                # B
+                bl1 = (bl[0],bl[0], bl[2]) 
+                # baseline b_alpha
+                bl2 = (bl[1], bl[1], bl[2])
+                # baseline b_beta
+                spw = slice(self.spw_range[0], self.spw_range[1])
+                x_bl1 = self.dsets[dset].get_data(bl1).T[spw].T
+                # (Ntimes, spw_Nfreqs)
+                x_bl2 = self.dsets[dset].get_data(bl2).T[spw].T 
+                # (Ntimes, spw_Nfreqs)
+                nsample_bl = self.dsets[dset].get_nsamples(bl).T[spw].T.clip(1e-40, np.inf)
+                # (Ntimes, spw_Nfreqs)
+                var = np.abs(x_bl1.conj()*x_bl2) / dt / df / nsample_bl
+                # (Ntimes, spw_Nfreqs)
+                covariance = np.zeros((var.shape[0],var.shape[1], var.shape[1]))
+                # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+                for freq_idx in range(var.shape[1]):
+                    covariance[:,freq_idx,freq_idx] = var[:,freq_idx]
                 self.set_C({Ckey: covariance})
             
             return self._C[Ckey]
@@ -690,7 +721,7 @@ class PSpecData(object):
             Type of covariance model to calculate, if not cached. 
             Options: 'time_average', 'empirical', 'time_average_diag', 
                      'time_average_mean', 'time_average_min', 
-                     'time_average_max', ...
+                     'time_average_max', 'autos', ...
 
         conj_1 : boolean, optional
             Whether to conjugate first copy of data in covar or not.
@@ -719,7 +750,7 @@ class PSpecData(object):
 
         internal_models = ['time_average', 'empirical', 'time_average_diag', 
                         'time_average_mean', 'time_average_min', 
-                        'time_average_max']
+                        'time_average_max','autos']
         # internal_models refer to the covariance can be calculated intrinsically. 
         if known_cov == None:
             assert model in internal_models, "didn't recognize model {}".format(model)
@@ -801,7 +832,15 @@ class PSpecData(object):
                 
                 covar = np.repeat(covar[np.newaxis,:,:], time_indices, axis=0)
                 # (Ntimes, spw_Nfreqs, spw_Nfreqs)
-                self.set_C({Ckey: covar})           
+                self.set_C({Ckey: covar})  
+
+            if model == 'autos':
+                x1 = self.x(key1)
+                # (spw_Nfreqs, Ntimes)
+                covar = np.zeros((x1.shape[1], x1.shape[0], x1.shape[0]))
+                # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+                self.set_C({Ckey: covar})  
+
             return self._C[Ckey]
 
         else:
@@ -2645,7 +2684,7 @@ class PSpecData(object):
         cov_models : list of strs, optional
             A list of the models on how to calculate the input covariance 
             matrix (the covariance matrix for data stored in UVData objects). 
-            Options: ['time_average', 'time_average_diag', ...]
+            Options: ['time_average', 'autos', time_average_diag', ...]
             Default: [].
 
         known_cov : dicts of input covariance matrices
@@ -2839,7 +2878,7 @@ class PSpecData(object):
 
         # Check keys in known_cov 
         for cov_model in cov_models:
-            if cov_model not in ['time_average', 'empirical', 'time_average_diag', 'time_average_mean', 'time_average_min', 'time_average_max']:
+            if cov_model not in ['time_average', 'empirical', 'time_average_diag', 'time_average_mean', 'time_average_min', 'time_average_max', 'autos']:
                 assert known_cov is not None, "didn't recognize {}".format(cov_model)
                 bl1 = []
                 bl2 = []

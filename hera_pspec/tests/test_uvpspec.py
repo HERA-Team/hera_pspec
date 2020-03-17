@@ -119,20 +119,20 @@ class Test_UVPSpec(unittest.TestCase):
         bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 
         uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = True, cov_models=['time_average'], verbose=False)
+         norm='I', taper='blackman-harris', store_cov = True, cov_models=['time_average', 'autos'], verbose=False)
 
         key = (0,blpairs[0],"xx")
 
         cov_real = uvp.get_cov(key, component='real', cov_model='time_average')
         nt.assert_equal(cov_real[0].shape, (50, 50))
-        cov_imag = uvp.get_cov(key, component='imag', cov_model='time_average')
+        cov_imag = uvp.get_cov(key, component='imag', cov_model='autos')
         nt.assert_equal(cov_imag[0].shape, (50, 50))
 
         uvp.fold_spectra()
 
         cov_real = uvp.get_cov(key, component='real', cov_model='time_average')
         nt.assert_equal(cov_real[0].shape, (24, 24))
-        cov_imag = uvp.get_cov(key, component='imag', cov_model='time_average')
+        cov_imag = uvp.get_cov(key, component='imag', cov_model='autos')
         nt.assert_equal(cov_imag[0].shape, (24, 24))
 
 
