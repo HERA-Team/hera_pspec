@@ -41,6 +41,8 @@ class UVPSpec(object):
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
         self._cov_array = PSpecParam("cov_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
+        self._window_function_array = PSpecParam("window_function_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        desc = "window function in delay modes."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
                "This is not necessarily equal to the integration time of the visibility data: If data have been coherently averaged " \
@@ -102,7 +104,7 @@ class UVPSpec(object):
                             "Nspwdlys", "Nspwfreqs", "r_params",
                             "data_array", "wgt_array", "integration_array",
                             "spw_array", "freq_array", "dly_array",
-                            "polpair_array",
+                            "polpair_array", "window_function_array",
                             "lst_1_array", "lst_2_array", "time_1_array",
                             "time_2_array", "blpair_array", "Nbls",
                             "bl_vecs", "bl_array", "channel_width",
@@ -128,7 +130,7 @@ class UVPSpec(object):
                           "bl_vecs", "bl_array", "telescope_location",
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
-        self._dicts = ["data_array", "wgt_array", "integration_array",
+        self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array", 
                        "nsample_array", "cov_array"]
         self._dicts_of_dicts = ["stats_array"]
 
@@ -197,6 +199,44 @@ class UVPSpec(object):
                 return self.cov_array[spw][blpairts, :, :, polpair]
         else:
             raise AttributeError("No covariance array has been calculated.")
+
+    def get_window_function(self, key, omit_flags=False):
+        """
+        Slice into window_function array with a specified data key in the format
+        (spw, ((ant1, ant2),(ant3, ant4)), (pol1, pol2))
+
+        or
+
+        (spw, blpair-integer, pol-integer)
+
+        where spw is the spectral window integer, ant1 etc. are integers,
+        and pol is either a tuple of polarization strings (ex. ('XX', 'YY'))
+        or integers (ex. (-5,-5)).
+
+        Parameters
+        ----------
+        key: tuple
+            Contains the baseline-pair, spw, polpair keys
+
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
+        Returns
+        -------
+        data : complex ndarray
+            Shape (Ntimes, Ndlys, Ndlys)
+        """
+        spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
+
+        # Need to deal with folded data!
+        # if data has been folded, return only positive delays
+        if self.folded:
+            Ndlys = self.data_array[spw].shape[1]
+            return self.window_function_array[spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, polpair]
+        else:
+            return self.window_function_array[spw][blpairts, :, :, polpair]
 
     def get_data(self, key, omit_flags=False):
         """

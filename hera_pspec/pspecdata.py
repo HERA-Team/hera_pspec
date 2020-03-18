@@ -2362,6 +2362,7 @@ class PSpecData(object):
         wgt_array = odict()
         integration_array = odict()
         cov_array = odict()
+        window_function_array = odict()
         time1 = []
         time2 = []
         lst1 = []
@@ -2394,6 +2395,7 @@ class PSpecData(object):
             spw_scalar = []
             spw_polpair = []
             spw_cov = []
+            spw_window_function = [] 
 
             d = self.delays() * 1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
@@ -2420,6 +2422,7 @@ class PSpecData(object):
                 pol_wgts = []
                 pol_ints = []
                 pol_cov=[]
+                pol_window_function = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
@@ -2558,6 +2561,9 @@ class PSpecData(object):
                                        self.scalar_delay_adjustment(key1, key2,
                                                          sampling=sampling))**2.
                         pol_cov.extend(cov_pv)
+                    
+                    # store the window_function
+                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0))
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2619,14 +2625,17 @@ class PSpecData(object):
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
                 spw_cov.append(pol_cov)
+                spw_window_function.append(pol_window_function)
 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
             spw_cov = np.moveaxis(np.array(spw_cov), 0, -1)
+            spw_window_function = np.moveaxis(np.array(spw_window_function), 0, -1)
             data_array[i] = spw_data
             cov_array[i] = spw_cov
+            window_function_array[i] = spw_window_function
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
@@ -2710,6 +2719,7 @@ class PSpecData(object):
         uvp.data_array = data_array
         if store_cov:
             uvp.cov_array = cov_array
+        uvp.window_function_array = window_function_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(
