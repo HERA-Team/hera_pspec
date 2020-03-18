@@ -1310,6 +1310,15 @@ class PSpecData(object):
         else:
             qnorm = 1.
         for ch in range(self.spw_Ndlys):
+            #G is given by Tr[E^\alpha C,\beta]
+            #where E^\alpha = R_1^\dagger Q^\apha R_2
+            #C,\beta = Q2 and Q^\alpha = Q1
+            #Note that we conjugate transpose R
+            #because we want to E^\alpha to
+            #give the absolute value squared of z = m_\alpha \dot R @ x
+            #where m_alpha takes the FT from frequency to the \alpha fourier mode.
+            #Q is essentially m_\alpha^\dagger m
+            # so we need to sandwhich it between R_1^\dagger and R_2
             Q1 = self.get_Q_alt(ch) * qnorm
             Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
             iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q
@@ -1419,7 +1428,15 @@ class PSpecData(object):
             Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
             if not sampling:
                 Q2 *= sinc_matrix
-
+            #H is given by Tr([E^\alpha C,\beta])
+            #where E^\alpha = R_1^\dagger Q^\apha R_2
+            #C,\beta = Q2 and Q^\alpha = Q1
+            #Note that we conjugate transpose R
+            #because we want to E^\alpha to
+            #give the absolute value squared of z = m_\alpha \dot R @ x
+            #where m_alpha takes the FT from frequency to the \alpha fourier mode.
+            #Q is essentially m_\alpha^\dagger m
+            # so we need to sandwhich it between R_1^\dagger and R_2
             iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q_alt
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
 
@@ -2193,7 +2210,6 @@ class PSpecData(object):
         if self.data_weighting == 'identity':
             mean_ratio = np.mean(ratio)
             scatter = np.abs(ratio - mean_ratio)
-            print(scatter)
             if (scatter > 10**-4 * mean_ratio).any():
                 raise ValueError("The normalization scalar is band-dependent!")
             adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
@@ -2265,7 +2281,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
               input_data_weight='identity', norm='I', taper='none',
-              sampling=False, little_h=True, spw_ranges=None,
+              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
               baseline_tol=1.0, store_cov=False, verbose=True, filter_extensions=None,
               exact_norm=False, history='', r_params=None, cov_model='empirical'):
         """
@@ -2345,6 +2361,10 @@ class PSpecData(object):
             Each tuple should contain a start (inclusive) and stop (exclusive)
             channel used to index the `freq_array` of each dataset. The default
             (None) is to use the entire band provided in each dataset.
+
+        symmetric_taper : bool, optional
+            speicfy if taper should be applied symmetrically to K-matrix (if true)
+            or on the left (if False). default is True
 
         baseline_tol : float, optional
             Distance tolerance for notion of baseline "redundancy" in meters.
@@ -2437,6 +2457,7 @@ class PSpecData(object):
         """
         # set taper and data weighting
         self.set_taper(taper)
+        self.set_symmetric_taper(symmetric_taper)
         self.set_weighting(input_data_weight)
 
         # Validate the input data to make sure it's sensible
@@ -2831,7 +2852,7 @@ class PSpecData(object):
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
-
+        uvp.symmetric_taper=symmetric_taper
         # fill meta-data
         uvp.time_1_array = np.array(time1)
         uvp.time_2_array = np.array(time2)
@@ -3115,7 +3136,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
-              time_thresh=0.2, Jy2mK=False, overwrite=True,
+              time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
               file_type='miriad', verbose=True, store_cov=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, cov_model='empirical'):
     """
@@ -3276,6 +3297,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     overwrite : boolean
         If True, overwrite outputs if they exist on disk.
+
+    symmetric_taper : bool, optional
+        speicfy if taper should be applied symmetrically to K-matrix (if true)
+        or on the left (if False). default is True
 
     file_type : str, optional
         If dsets passed as a list of filenames, specify which file format
@@ -3552,7 +3577,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             continue
 
         # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
                        norm=norm, taper=taper, history=history, verbose=verbose,
@@ -3619,6 +3644,7 @@ def get_pspec_run_argparser():
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
     a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20 20, 40 40' ->> [(20, 20), (40, 40), ...]")
+    a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
     return a
 
 

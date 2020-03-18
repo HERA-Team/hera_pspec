@@ -79,6 +79,7 @@ class UVPSpec(object):
         self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", expected_type=float)
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.float64)
         self._weighting = PSpecParam("weighting", description="Form of data weighting used when forming power spectra.", expected_type=str)
+        self.set_symmetric_taper = PSpecParam("symmetric_taper", description="Specify whether Taper was applied symmetrically (True) or to the left(False).", expected_type=str)
         self._norm = PSpecParam("norm", description="Normalization method adopted in OQE (M matrix).", expected_type=str)
         self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT. See uvtools.dspec.gen_window for options."', expected_type=str)
         self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
@@ -112,7 +113,8 @@ class UVPSpec(object):
                             "norm_units", "taper", "norm", "nsample_array",
                             "lst_avg_array", "time_avg_array", "folded",
                             "scalar_array", "labels", "label_1_array",
-                            "label_2_array", "spw_dly_array", "spw_freq_array"]
+                            "label_2_array", "spw_dly_array", "spw_freq_array",
+                            "symmetric_taper"]
 
         # All parameters must fall into one and only one of the following
         # groups, which are used in __eq__
