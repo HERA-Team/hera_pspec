@@ -161,8 +161,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
          where $sigma_i$ is taken from the relevant field of stats_array.
          If `error_weight' is set to None, which means we just use the 
          integration time as weights. If error_weights is specified,
-         then it also gets assigned as error_field. And if one specified both,
-         then error_weights supercedes as error_field. 
+         then it also gets appended to error_field as a list.
          Default: None
 
     normalize_weights: bool, optional
@@ -317,7 +316,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     data = uvp.get_data((spw, blp, p))
                     # shape of data: (Ntimes, Ndlys)
                     wgts = uvp.get_wgts((spw, blp, p))
-                    # shape of wgts: (Ntimes, Ndlys, 2)
+                    # shape of wgts: (Ntimes, Nfreqs, 2)
                     ints = uvp.get_integrations((spw, blp, p))[:, None]
                     # shape of ints: (Ntimes, 1)
                     if store_cov:
@@ -352,8 +351,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     if time_avg:
                         data = (np.sum(data * w, axis=0) \
                             / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
-                        wgts = (np.sum(wgts * w[:, :, None], axis=0) \
-                            / np.sum(w, axis=0).clip(1e-40, np.inf)[:, None])[None]
+                        wgts = (np.sum(wgts * w[:, :1, None], axis=0) \
+                            / np.sum(w, axis=0).clip(1e-40, np.inf)[:1, None])[None]
+                        # wgts has a shape of (Ntimes, Nfreqs, 2), while 
+                        # w has a shape of (Ntimes, Ndlys) or (Ntimes, 1)
+                        # To handle with the case  when Nfreqs != Ntimes,
+                        # we choose to multiply wgts with w[:,:1,None]. 
                         ints = (np.sum(ints * w, axis=0) \
                             / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
                         nsmp = np.sum(nsmp, axis=0)[None]
@@ -372,7 +375,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # while multiple copies are only added when bootstrap resampling
                     for m in range(int(blpg_wgts[k])):
                         bpg_data.append(data * w)
-                        bpg_wgts.append(wgts * w[:, :, None])
+                        bpg_wgts.append(wgts * w[:, :1, None])
                         bpg_ints.append(ints * w)
                         bpg_nsmp.append(nsmp)
                         for stat in stat_l:
@@ -388,7 +391,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 bpg_data = np.sum(bpg_data, axis=0) \
                          / np.sum(w_list, axis=0).clip(1e-40, np.inf)
                 bpg_wgts = np.sum(bpg_wgts, axis=0) \
-                         / np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:, None]
+                         / np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:1, None]
                 bpg_nsmp = np.sum(bpg_nsmp, axis=0)
                 bpg_ints = np.sum(bpg_ints, axis=0) \
                          / np.sum(w_list, axis=0).clip(1e-40, np.inf)

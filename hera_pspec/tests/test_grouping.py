@@ -111,20 +111,27 @@ class Test_grouping(unittest.TestCase):
         uvp = ds.pspec(baselines1, baselines2, (0, 1), [('xx', 'xx')], spw_ranges=[(300, 400)], input_data_weight='identity',
                norm='I', taper='blackman-harris', verbose=False)
         keys = uvp.get_all_keys()
+        # Add the analytic noise to stat_array
         Pn = uvp.generate_noise_spectra(0, 'xx', 220)
         for key in keys:
             blp = uvp.antnums_to_blpair(key[1])
             error = Pn[blp]
             uvp.set_stats("noise", key, error)
+        # Add the simple error bar (all are set to be one) to stat_array
+        errs = np.ones((uvp.Ntimes, uvp.Ndlys))
+        for key in keys:
+            uvp.set_stats("simple", key, errs)
         blpair_groups = [[((24, 25), (37, 38)),((24, 25), (38, 39)), ((37, 38), (38, 39))]]
         uvp_avg_ints_wgts = grouping.average_spectra(uvp, blpair_groups=blpair_groups,
                                                 error_field="noise", time_avg=True,inplace=False)
-        uvp_avg_error_wgts = grouping.average_spectra(uvp, time_avg=True, blpair_groups=blpair_groups,
-                                                 error_field="noise", error_weights="noise",
-                                                 inplace=False)
+        uvp_avg_noise_wgts = grouping.average_spectra(uvp, time_avg=True, blpair_groups=blpair_groups,
+                                                 error_weights="noise", inplace=False)
+        uvp_avg_simple_wgts = grouping.average_spectra(uvp, blpair_groups=blpair_groups, time_avg=True, error_weights="simple", inplace=False)
+        nt.assert_true(np.all(np.isclose(uvp_avg_simple_wgts.stats_array["simple"][0][0,0,0], uvp.stats_array["simple"][0][0,0,0]/np.sqrt(uvp.Ntimes)/np.sqrt(len(blpairs)))))
+        # For using uniform error bars as weights, the error bar on the average is 1/sqrt{N} times the error bar on one single sample. 
         assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
-        assert(abs(uvp_avg_error_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
-        # The error bar on the average power spectra should be smaller than one on single sample.
+        assert(abs(uvp_avg_noise_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
+        # For non-uniform weights, we test the error bar on the average power spectra should be smaller than one on single sample.
     def test_sample_baselines(self):
         """
         Test baseline sampling (with replacement) behavior.

@@ -264,7 +264,7 @@ class UVPSpec(object):
         Returns
         -------
         wgts : float ndarray
-            Has shape (Ntimes, Ndlys, 2), where the last axis holds
+            Has shape (Ntimes, Nfreqs, 2), where the last axis holds
             [wgt_1, wgt_2] in that order.
         """
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
@@ -1793,7 +1793,8 @@ class UVPSpec(object):
 
 
     def average_spectra(self, blpair_groups=None, time_avg=False,
-                        blpair_weights=None, error_field=None, inplace=True):
+                        blpair_weights=None, error_field=None, error_weights=None,
+                        inplace=True):
         """
         Average power spectra across the baseline-pair-time axis, weighted by
         each spectrum's integration time.
@@ -1847,6 +1848,16 @@ class UVPSpec(object):
             does this for every specified key. Every stats_array key that is
             not specified is thrown out of the new averaged object.
 
+        error_weights: string, optional
+            error_weights specify which kind of errors we use for weights 
+            during averaging power spectra.
+            The weights are defined as $w_i = 1/ sigma_i^2$, 
+            where $sigma_i$ is taken from the relevant field of stats_array.
+            If `error_weight' is set to None, which means we just use the 
+            integration time as weights. If error_weights is specified,
+            then it also gets appended to error_field as a list.
+            Default: None
+
         inplace : bool, optional
             If True, edit data in self, else make a copy and return. Default:
             True.
@@ -1863,12 +1874,14 @@ class UVPSpec(object):
             grouping.average_spectra(self, blpair_groups=blpair_groups,
                                      time_avg=time_avg,
                                      error_field=error_field,
+                                     error_weights=error_weights,
                                      blpair_weights=blpair_weights,
                                      inplace=True)
         else:
             return grouping.average_spectra(self, blpair_groups=blpair_groups,
                                             time_avg=time_avg,
                                             error_field=error_field,
+                                            error_weights=error_weights,
                                             blpair_weights=blpair_weights,
                                             inplace=False)
 

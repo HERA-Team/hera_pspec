@@ -107,7 +107,7 @@ class Test_UVPSpec(unittest.TestCase):
 
         # self.uvp.set_stats("errors", keys[0], -99.)
         blpairs = uvp.get_blpairs()
-        u = uvp.average_spectra([blpairs], time_avg=False, error_field="errors", inplace=False)
+        u = uvp.average_spectra([blpairs], time_avg=False, error_weights="errors", inplace=False)
         nt.assert_true(np.all(np.isclose(u.get_stats("errors", keys[0])[0], np.ones(u.Ndlys)/np.sqrt(len(blpairs)))))
         for key in keys:
             uvp.set_stats("who?", key, errs)
