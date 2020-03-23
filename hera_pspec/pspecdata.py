@@ -2159,8 +2159,13 @@ class PSpecData(object):
         \sum_gamma tr[Q^alt_alpha Q^alt_gamma] = N_freq**2
         is something that is true only when N_freqs = N_dlys.
 
-        In general, the result is still independent of alpha, but is
+        If the data weighting is equal to "identity",
+        then the result is independent of alpha, but is
         no longer given by N_freq**2. (Nor is it just N_dlys**2!)
+
+        If the data weighting is not equal to "identity" then
+        we generally need a separate scalar adjustment for each
+        alpha. 
 
         This function uses the state of self.taper in constructing adjustment.
         See PSpecData.pspec for details.
@@ -2184,8 +2189,8 @@ class PSpecData(object):
 
         Returns
         -------
-        adjustment : float
-
+        adjustment : float if the data_weighting is 'identity'
+                     1d array of floats with length spw_Ndlys otherwise.
         """
         if Gv is None: Gv = self.get_G(key1, key2)
         if Hv is None: Hv = self.get_H(key1, key2, sampling)
