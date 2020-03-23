@@ -240,7 +240,8 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         to keep in baseline selection
 
     extra_info : bool, optional
-        If True, return extra info on redundant group length and angle
+        If True, return three extra arrays containing
+        redundant baseline group indices, lengths and angles
 
     Returns
     -------
@@ -254,15 +255,14 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     xants1, xants2 : lists
         List of bad antenna integers for uvd1 and uvd2
 
-    if extra_info:
-        red_groups : list of integers
-            Lists index of redundant groups, indexing red_lens and red_angs
+    red_groups : list of integers, returned as extra_info
+        Lists index of redundant groups, indexing red_lens and red_angs
 
-        red_lens : list
-            List of baseline lengths [meters] with len of unique redundant groups
+    red_lens : list, returned as extra_info
+        List of baseline lengths [meters] with len of unique redundant groups
 
-        red_angs : list
-            List of baseline angles [degrees] (North of East in ENU)
+    red_angs : list, returned as extra_info
+        List of baseline angles [degrees] (North of East in ENU)
     """
     # get antenna positions
     antpos1, ants1 = uvd1.get_ENU_antpos(pick_data_ants=False)
@@ -349,6 +349,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
             bls1, bls2 = _bls1, _bls2
             blps = list(zip(bls1, bls2))
 
+        # populate redundant group indices
         rinds = [j] * len(blps)
 
         # group if desired
