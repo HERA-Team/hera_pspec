@@ -76,7 +76,65 @@ class Test_grouping(unittest.TestCase):
         for i in range(len(g1)):
             for j in range(len(g1[i])):
                 self.assertEqual(g1[i][j], g3[i][j])
-    
+
+    def test_average_spectra(self):
+        """
+        Test average spectra behavior.
+        """
+        dfile = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
+        # Load into UVData objects
+        uvd = UVData()
+        uvd.read_miriad(dfile)
+        cosmo = conversions.Cosmo_Conversions()
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+        # find conversion factor from Jy to mK
+        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
+
+        # reshape to appropriately match a UVData.data_array object and multiply in!
+        uvd.data_array *= Jy_to_mK[None, None, :, None]
+        # slide the time axis of uvd by one integration
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
+
+        # Create a new PSpecData object, and don't forget to feed the beam object
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+        ds.rephase_to_dset(0)
+        # change units of UVData objects
+        ds.dsets[0].vis_units = 'mK'
+        ds.dsets[1].vis_units = 'mK'
+        
+        baselines = [(24,25), (37,38), (38,39)]
+        # calculate all baseline pairs from group
+        baselines1, baselines2, blpairs = utils.construct_blpairs(baselines, exclude_auto_bls=True, 
+                                                                 exclude_permutations=True)
+        uvp, uvp_q = ds.pspec(baselines1, baselines2, (0, 1), [('xx', 'xx')], spw_ranges=[(300, 350)], input_data_weight='identity',
+               norm='I', taper='blackman-harris', store_cov=True, cov_models=["autos"], verbose=False)
+        keys = uvp.get_all_keys()
+        # Add the analytic noise to stat_array
+        Pn = uvp.generate_noise_spectra(0, 'xx', 220)
+        for key in keys:
+            blp = uvp.antnums_to_blpair(key[1])
+            error = Pn[blp]
+            uvp.set_stats("noise", key, error)
+        # Add the simple error bar (all are set to be one) to stat_array
+        errs = np.ones((uvp.Ntimes, uvp.Ndlys))
+        for key in keys:
+            uvp.set_stats("simple", key, errs)
+        blpair_groups = [[((24, 25), (37, 38)),((24, 25), (38, 39)), ((37, 38), (38, 39))]]
+        uvp_avg_ints_wgts = grouping.average_spectra(uvp, blpair_groups=blpair_groups,
+                                                error_field="noise", time_avg=True,inplace=False)
+        uvp_avg_noise_wgts = grouping.average_spectra(uvp, time_avg=True, blpair_groups=blpair_groups,
+                                                 error_weights="noise", inplace=False)
+        uvp_avg_simple_wgts = grouping.average_spectra(uvp, blpair_groups=blpair_groups, time_avg=True, error_weights="simple", inplace=False)
+        nt.assert_true(np.all(np.isclose(uvp_avg_simple_wgts.stats_array["simple"][0][0,0,0], uvp.stats_array["simple"][0][0,0,0]/np.sqrt(uvp.Ntimes)/np.sqrt(len(blpairs)))))
+        # For using uniform error bars as weights, the error bar on the average is 1/sqrt{N} times the error bar on one single sample. 
+        assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
+        assert(abs(uvp_avg_noise_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
+        assert(abs(uvp_avg_ints_wgts.cov_array_real["autos"][0][0,1,1,0]) < abs(uvp.cov_array_real["autos"][0][0,1,1,0]))
+        assert(abs(uvp_avg_noise_wgts.cov_array_real["autos"][0][0,1,1,0]) < abs(uvp.cov_array_real["autos"][0][0,1,1,0]))
+
+        # For non-uniform weights, we test the error bar on the average power spectra should be smaller than one on single sample.
     def test_sample_baselines(self):
         """
         Test baseline sampling (with replacement) behavior.

@@ -153,12 +153,15 @@ class Test_Utils(unittest.TestCase):
         uvd.read_miriad(fname)
 
         # basic execution
-        (bls1, bls2, blps, xants1,
-         xants2) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, exclude_auto_bls=False, exclude_permutations=True)
+        (bls1, bls2, blps, xants1, xants2, rgrps, lens,
+         angs) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, extra_info=True,
+                                        exclude_auto_bls=False, exclude_permutations=True)
         nt.assert_equal(len(bls1), len(bls2), 15)
         nt.assert_equal(blps, list(zip(bls1, bls2)))
         nt.assert_equal(xants1, xants2)
         nt.assert_equal(len(xants1), 42)
+        nt.assert_equal(len(rgrps), len(bls1))  # assert rgrps matches bls1 shape
+        nt.assert_equal(np.max(rgrps), len(lens)-1)  # assert rgrps indexes lens / angs
 
         # test xant_flag_thresh
         (bls1, bls2, blps, xants1,

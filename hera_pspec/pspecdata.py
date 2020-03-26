@@ -3934,7 +3934,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       exclude_permutations=exclude_permutations,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
-                                      bl_deg_range=bl_deg_range )
+                                      bl_deg_range=bl_deg_range)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
 

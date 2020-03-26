@@ -189,7 +189,8 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                      xant_flag_thresh=0.95, exclude_auto_bls=False,
                      exclude_cross_bls=False,
                      exclude_permutations=True, Nblps_per_group=None,
-                     bl_len_range=(0, 1e10), bl_deg_range=(0, 180)):
+                     bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
+                     xants=None, extra_info=False):
     """
     Use hera_cal.redcal to get matching, redundant baseline-pair groups from
     uvd1 and uvd2 within the specified baseline tolerance, not including
@@ -205,12 +206,15 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         Baseline-vector redundancy tolerance in meters
 
     filter_blpairs : bool, optional
-        if True, calculate xants and filters-out baseline pairs based on
-        xant lists and actual baselines in the data.
+        if True, calculate xants (based on data flags) and filter-out baseline pairs
+        based on actual baselines in the data.
 
     xant_flag_thresh : float, optional
         Fraction of 2D visibility (per-waterfall) needed to be flagged to
         consider the entire visibility flagged.
+
+    xants : list, optional
+        Additional lilst of xants to hand flag, regardless of flags in the data.
 
     exclude_auto_bls: boolean, optional
         If True, exclude all bls crossed with itself from the blpairs list
@@ -228,7 +232,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         exclude_permutations = True, then blpairs = [11, 12, 13, 22, 23, 33].
         Furthermore, if exclude_auto_bls = True then 11, 22, and 33 are excluded.
 
-    Nblps_per_group : integer
+    Nblps_per_group : integer, optional
         Number of baseline-pairs to put into each sub-group. No grouping if None.
         Default: None
 
@@ -239,6 +243,10 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     bl_deg_range : tuple, optional
         len-2 tuple containing (minimum, maximum) baseline angle in degrees
         to keep in baseline selection
+
+    extra_info : bool, optional
+        If True, return three extra arrays containing
+        redundant baseline group indices, lengths and angles
 
     Returns
     -------
@@ -251,6 +259,15 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     xants1, xants2 : lists
         List of bad antenna integers for uvd1 and uvd2
+
+    red_groups : list of integers, returned as extra_info
+        Lists index of redundant groups, indexing red_lens and red_angs
+
+    red_lens : list, returned as extra_info
+        List of baseline lengths [meters] with len of unique redundant groups
+
+    red_angs : list, returned as extra_info
+        List of baseline angles [degrees] (North of East in ENU)
     """
     # get antenna positions
     antpos1, ants1 = uvd1.get_ENU_antpos(pick_data_ants=False)
@@ -301,13 +318,19 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                         xants2.remove(antnums[1])
 
         xants1 = sorted(xants1)
-        xants2 = sorted(xants2) 
+        xants2 = sorted(xants2)
+
+    # add hand-flagged xants if fed
+    if xants is not None:
+        xants1 += xants
+        xants2 += xants
+
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
                                 bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)    
     # construct baseline pairs
-    baselines1, baselines2, blpairs = [], [], []
-    for r in reds:
+    baselines1, baselines2, blpairs, red_groups = [], [], [], []
+    for j, r in enumerate(reds):
         (bls1, bls2,
          blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls,
                                    exclude_cross_bls=exclude_cross_bls, group=False,
@@ -330,6 +353,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
             bls1, bls2 = _bls1, _bls2
             blps = list(zip(bls1, bls2))
 
+        # populate redundant group indices
+        rinds = [j] * len(blps)
+
         # group if desired
         if Nblps_per_group is not None:
             Ngrps = int(np.ceil(float(len(blps)) / Nblps_per_group))
@@ -339,12 +365,18 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                     for i in range(Ngrps)]
             blps = [blps[Nblps_per_group*i:Nblps_per_group*(i+1)]
                     for i in range(Ngrps)]
+            rinds = [rinds[Nblps_per_group*i:Nblps_per_group*(i+1)]
+                    for i in range(Ngrps)]
 
         baselines1.extend(bls1)
         baselines2.extend(bls2)
         blpairs.extend(blps)
+        red_groups.extend(rinds)
 
-    return baselines1, baselines2, blpairs, xants1, xants2
+    if extra_info:
+        return baselines1, baselines2, blpairs, xants1, xants2, red_groups, lens, angs
+    else:
+        return baselines1, baselines2, blpairs, xants1, xants2
 
 
 def get_delays(freqs, n_dlys=None):
@@ -944,6 +976,7 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
             f=lf, verbose=verbose)
 
     return failures
+
 
 def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
     """
