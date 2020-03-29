@@ -100,16 +100,17 @@ class Test_UVPSpec(unittest.TestCase):
         nt.assert_raises(ValueError, uvp.set_stats, "errors", keys[0], np.linspace(0, 1, 2))
         nt.assert_raises(AttributeError, uvp.get_stats, "__", keys[0])
         errs = np.ones((uvp.Ntimes, uvp.Ndlys))
-        uvp.set_stats("errors", keys[0], errs)
+        for key in keys:
+            uvp.set_stats("errors", key, errs)
         e = uvp.get_stats("errors", keys[0])
         nt.assert_true(np.all(uvp.get_stats("errors", keys[0]) == errs))
-        nt.assert_true(np.all(np.isnan(uvp.get_stats("errors", keys[1]))))
 
         # self.uvp.set_stats("errors", keys[0], -99.)
         blpairs = uvp.get_blpairs()
-        u = uvp.average_spectra([blpairs], time_avg=False, error_field="errors", inplace=False)
-        nt.assert_true(np.all(u.get_stats("errors", keys[0])[0] == np.ones(u.Ndlys)))
-        uvp.set_stats("who?", keys[0], errs)
+        u = uvp.average_spectra([blpairs], time_avg=False, error_weights="errors", inplace=False)
+        nt.assert_true(np.all(np.isclose(u.get_stats("errors", keys[0])[0], np.ones(u.Ndlys)/np.sqrt(len(blpairs)))))
+        for key in keys:
+            uvp.set_stats("who?", key, errs)
         u = uvp.average_spectra([blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False)
         u2 = uvp.average_spectra([blpairs], time_avg=True, error_field=["errors", "who?"], inplace=False)
         nt.assert_true(np.all( u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0])))
@@ -131,6 +132,15 @@ class Test_UVPSpec(unittest.TestCase):
         # fold by summing in inverse quadrature
         folded_errs = np.sum([1/errs[:, 1:15][:, ::-1]**2.0, 1/errs[:, 16:]**2.0], axis=0)**(-0.5)
         np.testing.assert_array_almost_equal(uvp.get_stats("test", keys[0]), folded_errs)
+
+        # test set_stats_slice
+        uvp = copy.deepcopy(self.uvp)
+        key = (0, ((1, 2), (1, 2)), ('xx', 'xx'))
+        uvp.set_stats('err', key, np.ones((uvp.Ntimes, uvp.Ndlys)))
+        uvp.set_stats_slice('err', 50, 0, above=True, val=10)
+        # ensure all dlys above 50 * 15 ns are set to 10 and all others set to 1
+        assert np.isclose(uvp.get_stats('err', key)[:, np.abs(uvp.get_dlys(0)*1e9) > 15 * 50], 10).all()
+        assert np.isclose(uvp.get_stats('err', key)[:, np.abs(uvp.get_dlys(0)*1e9) < 15 * 50], 1).all()
 
     def test_convert_deltasq(self):
         uvp = copy.deepcopy(self.uvp)

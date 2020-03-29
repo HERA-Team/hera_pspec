@@ -304,7 +304,7 @@ class UVPSpec(object):
         Returns
         -------
         wgts : float ndarray
-            Has shape (2, Ntimes, Ndlys), where the zeroth axis holds
+            Has shape (Ntimes, Nfreqs, 2), where the last axis holds
             [wgt_1, wgt_2] in that order.
         """
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
@@ -658,6 +658,44 @@ class UVPSpec(object):
                                              for i in range(self.Nspws)])
 
         self.stats_array[stat][spw][blpairts, :, polpair] = statistic
+
+    def set_stats_slice(self, stat, m, b, above=True, val=1e20):
+        """
+        For each baseline, set all delay bins in stats_array that fall
+        above or below y = bl_len * m + b equal to val.
+        Useful for downweighting foregrounds in spherical average.
+
+        Parameters
+        ----------
+        stat : str, name of stat in stat_array to set
+
+        m : float, coefficient of bl_len [meters]
+
+        b : float, offset in sec
+
+        above : bool, if True, set stats above line, else set below line
+
+        val : float, value to replace in stats_array
+        """
+        assert stat in self.stats_array, "{} not found in stats_array".format(stat)
+        blpairs = self.get_blpairs()
+        bllens = self.get_blpair_seps()
+        # iterate over spws
+        for i in range(self.Nspws):
+            # get this spw dlys
+            dlys = self.get_dlys(i) * 1e9
+            # iterate over blpairs
+            for blp in blpairs:
+                # get time-blpair inds
+                tinds = self.blpair_to_indices(blp)
+                # get dly indices
+                if above:
+                    dinds = np.abs(dlys) > (bllens[tinds].mean() * m + b)
+                else:
+                    dinds = np.abs(dlys) < (bllens[tinds].mean() * m + b)
+                # set stat_array
+                for tind in tinds:
+                    self.stats_array[stat][i][tind, dinds, :] = val
 
 
     def convert_to_deltasq(self, little_h=True, inplace=True):
@@ -1795,7 +1833,8 @@ class UVPSpec(object):
 
 
     def average_spectra(self, blpair_groups=None, time_avg=False,
-                        blpair_weights=None, error_field=None, inplace=True):
+                        blpair_weights=None, error_field=None, error_weights=None,
+                        inplace=True):
         """
         Average power spectra across the baseline-pair-time axis, weighted by
         each spectrum's integration time.
@@ -1849,6 +1888,16 @@ class UVPSpec(object):
             does this for every specified key. Every stats_array key that is
             not specified is thrown out of the new averaged object.
 
+        error_weights: string, optional
+            error_weights specify which kind of errors we use for weights 
+            during averaging power spectra.
+            The weights are defined as $w_i = 1/ sigma_i^2$, 
+            where $sigma_i$ is taken from the relevant field of stats_array.
+            If `error_weight' is set to None, which means we just use the 
+            integration time as weights. If error_weights is specified,
+            then it also gets appended to error_field as a list.
+            Default: None
+
         inplace : bool, optional
             If True, edit data in self, else make a copy and return. Default:
             True.
@@ -1865,12 +1914,14 @@ class UVPSpec(object):
             grouping.average_spectra(self, blpair_groups=blpair_groups,
                                      time_avg=time_avg,
                                      error_field=error_field,
+                                     error_weights=error_weights,
                                      blpair_weights=blpair_weights,
                                      inplace=True)
         else:
             return grouping.average_spectra(self, blpair_groups=blpair_groups,
                                             time_avg=time_avg,
                                             error_field=error_field,
+                                            error_weights=error_weights,
                                             blpair_weights=blpair_weights,
                                             inplace=False)
 
