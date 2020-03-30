@@ -81,6 +81,12 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                 uvp1.wgt_array[i][blp1_inds, :, :, j] /= \
                     uvp1.wgt_array[i][blp1_inds, :, :, j].max()
 
+                window1 = uvp1.get_window_function(key1)
+                window2 = uvp2.get_window_function(key2)
+                uvp1.window_function_array[i][blp1_inds, :, :, j] \
+                    = np.sqrt(window1.real**2 + window2.real**2) \
+                    + 1j*np.sqrt(window1.imag**2 + window2.imag**2)
+
                 # add stats in quadrature: real imag separately
                 if hasattr(uvp1, "stats_array") and hasattr(uvp2, "stats_array"):
                     for s in uvp1.stats_array.keys():
@@ -662,6 +668,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         nsmp = odict()
         cov = odict()
         stats = odict()
+        window_function = odict()
 
         # determine if cov_array is stored
         if h5file is not None:
@@ -690,6 +697,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 _wgts = h5file['wgt_spw{}'.format(s_old)]
                 _ints = h5file['integration_spw{}'.format(s_old)]
                 _nsmp = h5file['nsample_spw{}'.format(s_old)]
+                _window_function = h5file['window_function_spw{}'.format(s_old)]
                 # assign cov array
                 if store_cov:
                     _covs = h5file['cov_spw{}'.format(s_old)]
@@ -707,6 +715,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 _wgts = uvp.wgt_array[s_old]
                 _ints = uvp.integration_array[s_old]
                 _nsmp = uvp.nsample_array[s_old]
+                _window_function = uvp.window_function_array[s_old]
                 # assign cov
                 if store_cov:
                     _covs = uvp.cov_array[s_old]
@@ -724,6 +733,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 wgts[s] = _wgts[blp_select, :, :, polpair_select]
                 ints[s] = _ints[blp_select, polpair_select]
                 nsmp[s] = _nsmp[blp_select, polpair_select]
+                window_function[s] = _window_function[blp_select, :, :, polpair_select]
                 if store_cov:
                     cov[s] = _covs[blp_select, :, :, polpair_select]
                 for statname in statnames:
@@ -734,6 +744,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 wgts[s] = _wgts[blp_select, :, :, :][:, :, :, polpair_select]
                 ints[s] = _ints[blp_select, :][:, polpair_select]
                 nsmp[s] = _nsmp[blp_select, :][:, polpair_select]
+                window_function[s] = _window_function[blp_select, :, :, :][:, :, :, polpair_select]
                 if store_cov:
                     cov[s] = _covs[blp_select, :, :, :][:, :, :, polpair_select]
                 for statname in statnames:
@@ -744,6 +755,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
+        uvp.window_function_array = window_function
         if len(stats) > 0:
             uvp.stats_array = stats
         if store_cov:

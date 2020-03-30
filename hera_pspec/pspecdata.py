@@ -2563,7 +2563,7 @@ class PSpecData(object):
                         pol_cov.extend(cov_pv)
                     
                     # store the window_function
-                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0))
+                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.complex128))
 
                     # Get baseline keys
                     if isinstance(blp, list):

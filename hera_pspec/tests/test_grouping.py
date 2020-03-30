@@ -132,6 +132,51 @@ class Test_grouping(unittest.TestCase):
         assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
         assert(abs(uvp_avg_noise_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
         # For non-uniform weights, we test the error bar on the average power spectra should be smaller than one on single sample.
+
+    def test_cylindrical_and_spherical_average_spectra(self):
+        """
+        Test cylindrical and spherical average spectra behavior
+        """    
+        dfile = os.path.join(DATA_PATH, 'eorsky_3.00hours_Nside128_sigma0.03_fwhm12.13_uv.uvh5')
+        # Use simulation for EoR signal
+        # Load into UVData objects
+        uvd = UVData()
+        uvd.read_uvh5(dfile)
+
+        cosmo = conversions.Cosmo_Conversions()
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+        # find conversion factor from Jy to mK
+        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
+
+        # reshape to appropriately match a UVData.data_array object and multiply in!
+        uvd.data_array *= Jy_to_mK[None, None, :, None]
+        uvd.polarization_array = np.array([-5])
+
+        # slide the time axis of uvd by one integration
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
+
+        # Create a new PSpecData object, and don't forget to feed the beam object
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+        ds.rephase_to_dset(0)
+        # change units of UVData objects
+        ds.dsets[0].vis_units = 'mK'
+        ds.dsets[1].vis_units = 'mK'
+        bls1, bls2 = [(0, 11),(0, 12),(11, 12)], [(0, 11),(0, 12),(11, 12)]
+        uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=[(100, 200)], input_data_weight='identity',
+               norm='I', taper='blackman-harris', verbose=False)
+        keys = uvp.get_all_keys()
+        errs = np.ones((uvp.Ntimes, uvp.Ndlys))
+        for key in keys:
+            blp = uvp.antnums_to_blpair(key[1])
+            uvp.set_stats("noise", key, errs)
+        cyl_avg_products, sph_avg_products = grouping.cylindrical_and_spherical_average_spectra(uvp, 0, ("xx","xx"), error_weights="noise")
+        nt.assert_true(np.isclose(uvp.Nblpairts, (1/np.mean(cyl_avg_products['stats']['noise']))**2))
+        # Show the error bar on the average is correctly reduced by the number of  samples
+        nt.assert_true(np.real(np.std(sph_avg_products["data"])) / np.real(np.mean(sph_avg_products["data"])) < 0.5)
+        # Show the 1D power spectra is enough flat
+
     def test_sample_baselines(self):
         """
         Test baseline sampling (with replacement) behavior.

@@ -617,7 +617,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
         return fig
 
 
-def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
+def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fold=False, delay=True,
                 rotate=False, component='abs-real', log10=True, loglog=False,
                 red_tol=1.0, center_line=False, horizon_lines=False,
                 title=None, ax=None, cmap='viridis', figsize=(8, 6),
@@ -650,6 +650,10 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     times : list, optional
         An ndarray or list of times from uvp.time_avg_array to
         select on before plotting. Default: None.
+
+    error_weights : string, optional
+         error_weights specify which kind of errors we use for weights 
+         during averaging power spectra.
 
     fold : bool, optional
         Whether to fold the power spectrum in k_parallel. 
@@ -772,7 +776,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, fold=False, delay=True,
     # this also ensures blpairs are ordered from short_bl --> long_bl
     blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol, 
                                                       match_bl_lens=True)
-    uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, inplace=True)
+    uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, error_weights=error_weights, inplace=True)
 
     # get blpairs and order by len and enforce bl len ordering anyways
     blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps()

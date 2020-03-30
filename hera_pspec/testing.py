@@ -92,6 +92,7 @@ def build_vanilla_uvpspec(beam=None):
 
     data_array, wgt_array = {}, {}
     integration_array, nsample_array, cov_array = {}, {}, {}
+    window_function_array = {}
     for s in spw_array:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
@@ -100,6 +101,7 @@ def build_vanilla_uvpspec(beam=None):
         # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
+        window_function_array[s] = np.ones((Nblpairts, Ndlys, Ndlys, Npols), dtype=np.complex)
         cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
                                              for m in range(Nblpairts)]
                                              for n in range(Npols)]), 0, -1)
@@ -109,7 +111,7 @@ def build_vanilla_uvpspec(beam=None):
               'blpair_array', 'time_1_array', 'time_2_array',
               'lst_1_array', 'lst_2_array', 'spw_array',
               'dly_array', 'freq_array', 'polpair_array', 'data_array',
-              'wgt_array', 'r_params',
+              'wgt_array', 'r_params', 'window_function_array',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
               'vis_units', 'channel_width', 'weighting', 'history', 'taper',
               'norm', 'git_hash', 'nsample_array', 'time_avg_array',
