@@ -838,7 +838,7 @@ class PSpecData(object):
 
         where T is a diagonal matrix holding the taper and Y is a diagonal
         matrix holding flag weights. The K matrix comes from either `I` or `iC`
-        or a `sinc_downweight`
+        or a `dayenu`
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
 
@@ -906,15 +906,13 @@ class PSpecData(object):
                 #to apply flagging weights before taking psuedo inverse.
                 if self.symmetric_taper:
                     self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                    dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
-                                        df=np.median(np.diff(self.freqs)),
+                    dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]:self.spw_range[1]],
                                         filter_centers=r_params['filter_centers'],
                                         filter_half_widths=r_params['filter_half_widths'],
                                         filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
                 else:
                     self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, np.linalg.pinv(sqrtY.T * \
-                    dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
-                                        df=np.median(np.diff(self.freqs)),
+                    dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]:self.spw_range[1]],
                                         filter_centers=r_params['filter_centers'],
                                         filter_half_widths=r_params['filter_half_widths'],
                                         filter_factors=r_params['filter_factors']) * sqrtY))
@@ -2165,7 +2163,7 @@ class PSpecData(object):
 
         If the data weighting is not equal to "identity" then
         we generally need a separate scalar adjustment for each
-        alpha. 
+        alpha.
 
         This function uses the state of self.taper in constructing adjustment.
         See PSpecData.pspec for details.
