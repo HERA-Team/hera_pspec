@@ -141,6 +141,8 @@ def compress_r_params(r_params_dict):
                 r_params_index += 1
                 r_params_unique[r_params_index] = copy.copy(r_params_dict[rp])
                 r_params_unique_bls[r_params_index] = [rp,]
+
+
         for rpi in r_params_unique:
             r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
         r_params_str = json.dumps(r_params_unique)

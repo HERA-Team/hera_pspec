@@ -36,6 +36,8 @@ class UVPSpec(object):
                 'corresponding to that weighting.')
         self._r_params = PSpecParam("r_params", description = desc, expected_type = str)
         # Data attributes
+        desc = ("A string indicating what covariance model was used for calculating cov array. Only required if covariance is stored.")
+        self._cov_model = PSpecParam("cov_model", description=desc, expected_type=str)
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
@@ -77,6 +79,7 @@ class UVPSpec(object):
         self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", expected_type=float)
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.float64)
         self._weighting = PSpecParam("weighting", description="Form of data weighting used when forming power spectra.", expected_type=str)
+        self.set_symmetric_taper = PSpecParam("symmetric_taper", description="Specify whether Taper was applied symmetrically (True) or to the left(False).", expected_type=str)
         self._norm = PSpecParam("norm", description="Normalization method adopted in OQE (M matrix).", expected_type=str)
         self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT. See uvtools.dspec.gen_window for options."', expected_type=str)
         self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
@@ -110,13 +113,14 @@ class UVPSpec(object):
                             "norm_units", "taper", "norm", "nsample_array",
                             "lst_avg_array", "time_avg_array", "folded",
                             "scalar_array", "labels", "label_1_array",
-                            "label_2_array", "spw_dly_array", "spw_freq_array"]
+                            "label_2_array", "spw_dly_array", "spw_freq_array",
+                            "symmetric_taper"]
 
         # All parameters must fall into one and only one of the following
         # groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys",
                             "Nspwfreqs", "Nspws", "Ndlys", "Npols", "Nfreqs",
-                            "history", "r_params",
+                            "history", "r_params", "cov_model",
                             "Nbls", "channel_width", "weighting", "vis_units",
                             "norm", "norm_units", "taper", "cosmo", "beamfile",
                             'folded']
@@ -2032,7 +2036,6 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
 
     # Store covariance only if all uvps have stored covariance.
     store_cov = np.all([hasattr(uvp, 'cov_array') for uvp in uvps])
-
     # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
@@ -2040,6 +2043,8 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.nsample_array = odict()
     if store_cov:
         u.cov_array = odict()
+        #cov_model will track whether error bars are from cmobination of techniques
+        u.cov_model = ','.join([uvp.cov_model for uvp in uvps])
     u.scalar_array = np.empty((Nspws, Npols), np.float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     u.spw_dly_array, u.spw_freq_array = [], []
