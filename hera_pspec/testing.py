@@ -171,7 +171,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     r_params: dictionary with parameters for weighting matrix.
               Proper fields
               and formats depend on the mode of data_weighting.
-            data_weighting == dayenu:
+            data_weighting == 'dayenu':
                             dictionary with fields
                             'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                               at which to center filtering windows. Can specify fractional channel number.
