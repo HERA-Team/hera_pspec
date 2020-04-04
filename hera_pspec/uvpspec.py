@@ -1895,11 +1895,11 @@ class UVPSpec(object):
             not specified is thrown out of the new averaged object.
 
         error_weights: string, optional
-            error_weights specify which kind of errors we use for weights 
+            error_weights specify which kind of errors we use for weights
             during averaging power spectra.
-            The weights are defined as $w_i = 1/ sigma_i^2$, 
+            The weights are defined as $w_i = 1/ sigma_i^2$,
             where $sigma_i$ is taken from the relevant field of stats_array.
-            If `error_weight' is set to None, which means we just use the 
+            If `error_weight' is set to None, which means we just use the
             integration time as weights. If error_weights is specified,
             then it also gets appended to error_field as a list.
             Default: None
