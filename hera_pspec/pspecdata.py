@@ -838,12 +838,12 @@ class PSpecData(object):
 
         where T is a diagonal matrix holding the taper and Y is a diagonal
         matrix holding flag weights. The K matrix comes from either `I` or `iC`
-        or a `sinc_downweight`
+        or a `dayenu`
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
 
         Right now, the data covariance can be identity ('I'), C^-1 ('iC'), or
-        dayenu weighting 'sinc_downweight'.
+        dayenu weighting 'dayenu'.
 
         Parameters
         ----------
@@ -891,7 +891,7 @@ class PSpecData(object):
                 else:
                     self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.iC(key) * sqrtY )
 
-            elif self.data_weighting == 'sinc_downweight':
+            elif self.data_weighting == 'dayenu':
                 r_param_key = (self.data_weighting,) + key
                 if not r_param_key in self.r_params:
                     raise ValueError("r_param not set for %s!"%str(r_param_key))
@@ -901,20 +901,18 @@ class PSpecData(object):
                    not  'filter_factors' in r_params:
                        raise ValueError("filtering parameters not specified!")
                 #This line retrieves a the psuedo-inverse of a lazy covariance
-                #matrix given by dspec.sinc_downweight_mat_inv.
+                #matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 #to apply flagging weights before taking psuedo inverse.
                 if self.symmetric_taper:
                     self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                    dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
-                                        df=np.median(np.diff(self.freqs)),
+                    dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]],
                                         filter_centers=r_params['filter_centers'],
                                         filter_half_widths=r_params['filter_half_widths'],
                                         filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
                 else:
                     self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, np.linalg.pinv(sqrtY.T * \
-                    dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs + int(np.sum(fext)),
-                                        df=np.median(np.diff(self.freqs)),
+                    dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]],
                                         filter_centers=r_params['filter_centers'],
                                         filter_half_widths=r_params['filter_half_widths'],
                                         filter_factors=r_params['filter_factors']) * sqrtY))
@@ -979,7 +977,7 @@ class PSpecData(object):
         Parameters
         ----------
         data_weighting : str
-            Type of data weightings. Options=['identity', 'iC', 'sinc_downweight']
+            Type of data weightings. Options=['identity', 'iC', dayenu]
         """
         self.data_weighting = data_weighting
 
@@ -996,7 +994,7 @@ class PSpecData(object):
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
-                data_weighting == 'sinc_downweight':
+                data_weighting == 'dayenu':
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
@@ -2165,7 +2163,7 @@ class PSpecData(object):
 
         If the data weighting is not equal to "identity" then
         we generally need a separate scalar adjustment for each
-        alpha. 
+        alpha.
 
         This function uses the state of self.taper in constructing adjustment.
         See PSpecData.pspec for details.
@@ -2407,7 +2405,7 @@ class PSpecData(object):
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
-                data_weighting == 'sinc_downweight':
+                data_weighting == 'dayenu':
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
@@ -2695,7 +2693,7 @@ class PSpecData(object):
                                   "and/or key2 < n_dlys\n which may lead to "
                                   "normalization instabilities.")
                     #if using inverse sinc weighting, set r_params
-                    if input_data_weight == 'sinc_downweight':
+                    if input_data_weight == 'dayenu':
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
                         if not key1 in r_params:

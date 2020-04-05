@@ -229,7 +229,7 @@ class Test_PSpecData(unittest.TestCase):
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
         rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
-        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_weighting('dayenu')
         self.ds.set_r_param(key1,rpk1)
         self.ds.set_r_param(key2,rpk2)
         ds1 = copy.deepcopy(self.ds)
@@ -259,7 +259,7 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1,25, 38)
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
-        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_weighting('dayenu')
         self.ds.set_taper('bh7')
         self.ds.set_r_param(key1,rpk1)
         #get the symmetric tapering
@@ -269,7 +269,7 @@ class Test_PSpecData(unittest.TestCase):
         rmat_a = self.ds.R(key1)
         #check against independent solution
         bh_taper = np.sqrt(dspec.gen_window('bh7', Nfreq).reshape(1,-1))
-        rmat = dspec.sinc_downweight_mat_inv(nchan=Nfreq, df=np.mean(np.diff(self.ds.freqs)),
+        rmat = dspec.dayenu_mat_inv(x=self.ds.freqs[self.ds.spw_range[0]:self.ds.spw_range[1]],
         filter_centers=[0.], filter_half_widths=[100e-9], filter_factors=[1e-9])
         wmat = np.outer(np.diag(np.sqrt(self.ds.Y(key1))), np.diag(np.sqrt(self.ds.Y(key1))))
         rmat = np.linalg.pinv(wmat * rmat)
@@ -741,10 +741,10 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
         #print(cov_analytic)
 
-        for input_data_weight in ['identity','iC','sinc_downweight']:
+        for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             #check error raised
-            if input_data_weight == 'sinc_downweight':
+            if input_data_weight == 'dayenu':
                 nt.assert_raises(ValueError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
@@ -809,11 +809,12 @@ class Test_PSpecData(unittest.TestCase):
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
         rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
-        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_weighting('dayenu')
         self.ds.set_r_param(key1,rpk1)
         self.ds.set_r_param(key2,rpk2)
         ds1 = copy.deepcopy(self.ds)
         ds1.set_spw((10,Nfreq-10))
+        ds1.set_symmetric_taper(False)
         ds1.set_filter_extension([10,10])
         ds1.set_filter_extension((10,10))
         rm1 = self.ds.R(key1)
@@ -833,6 +834,7 @@ class Test_PSpecData(unittest.TestCase):
         ds1 = copy.deepcopy(self.ds)
         ds1.set_spw((10,Nfreq-10))
         ds1.set_weighting('identity')
+        ds1.set_symmetric_taper(False)
         ds1.set_filter_extension([10,10])
         rm1 = ds1.R(key1)
 
@@ -856,9 +858,9 @@ class Test_PSpecData(unittest.TestCase):
         key3 = [(0, 24, 38), (0, 24, 38)]
         key4 = [(1, 25, 38), (1, 25, 38)]
 
-        for input_data_weight in ['identity', 'iC','sinc_downweight']:
+        for input_data_weight in ['identity', 'iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
-            if input_data_weight == 'sinc_downweight':
+            if input_data_weight == 'dayenu':
                 nt.assert_raises(ValueError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
@@ -899,7 +901,7 @@ class Test_PSpecData(unittest.TestCase):
 
         self.ds.spw_Ndlys = Nfreq
         # Check that the slow method is the same as the FFT method
-        for input_data_weight in ['identity', 'iC','sinc_downweight']:
+        for input_data_weight in ['identity', 'iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             # Loop over list of taper functions
             for taper in taper_selection:
@@ -923,9 +925,9 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        for input_data_weight in ['identity','iC','sinc_downweight']:
+        for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
-            if input_data_weight == 'sinc_downweight':
+            if input_data_weight == 'dayenu':
                 nt.assert_raises(ValueError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
@@ -951,9 +953,9 @@ class Test_PSpecData(unittest.TestCase):
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
-        for input_data_weight in ['identity','iC','sinc_downweight']:
+        for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
-            if input_data_weight == 'sinc_downweight':
+            if input_data_weight == 'dayenu':
                 nt.assert_raises(ValueError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
@@ -1324,14 +1326,14 @@ class Test_PSpecData(unittest.TestCase):
             my_r_params[key2] = rp
         #test inverse sinc weighting.
         ds.pspec(bls,bls,(0, 1), ('xx','xx'),
-        spw_ranges = (10,20), input_data_weight = 'sinc_downweight',
+        spw_ranges = (10,20), input_data_weight  = 'dayenu',
         r_params = my_r_params)
         #test value error
         nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
-        spw_ranges = (10,20), input_data_weight = 'sinc_downweight', r_params = {})
+        spw_ranges = (10,20), input_data_weight  = 'dayenu', r_params = {})
         #test value error no dset1 keys
         nt.assert_raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
-        spw_ranges = (10,20), input_data_weight = 'sinc_downweight',
+        spw_ranges = (10,20), input_data_weight  = 'dayenu',
         r_params = my_r_params_dset0_only)
 
         #assert error if baselines are not provided in the right format
