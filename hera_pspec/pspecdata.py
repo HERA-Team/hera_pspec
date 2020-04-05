@@ -900,10 +900,9 @@ class PSpecData(object):
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
-                myT = np.ones(self.spw_Nfreqs).reshape(1, -1)
+                myT = np.ones(self.spw_Nfreqs)
             else:
-                myT = dspec.gen_window(self.taper, self.spw_Nfreqs, normalization='rms').reshape(1, -1)
-            sqrtT = np.sqrt(myT)
+                myT = dspec.gen_window(self.taper, self.spw_Nfreqs, normalization='rms')
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
 
@@ -939,8 +938,7 @@ class PSpecData(object):
                 #matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 # to apply flagging weights before taking psuedo inverse.
-                rmat = np.asarray([dspec.sinc_downweight_mat_inv(nchan=nfreq,
-                                    df=np.median(np.diff(self.freqs)),
+                rmat = np.asarray([dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]],
                                     filter_centers=r_params['filter_centers'],
                                     filter_half_widths=r_params['filter_half_widths'],
                                     filter_factors=r_params['filter_factors'])\
@@ -949,9 +947,8 @@ class PSpecData(object):
                     rmat[m] = np.linalg.pinv(rmat[m])
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
-            rmat =  np.transpose(np.dot(tmat, rmat), (1, 0, 2))
-
-            if self.data_weighting == 'sinc_downweight' and 'restore_half_width' in r_params:
+            rmat = tmat @ rmat
+            if self.data_weighting == 'dayenu' and 'restore_half_width' in r_params:
                 if isinstance(r_params['restore_half_width'], (float, int)) and r_params['restore_half_width']>0:
                     if not 'restore_fundamental_period' in r_params:
                         fundamental_period = 2 * self.spw_Nfreqs
@@ -967,13 +964,12 @@ class PSpecData(object):
                 else:
                     raise ValueError("'restore_half_width' must be supplied as an integer or float >0.")
 
-            rmat = myT.T * rmat
-
-
-            if self.symmetric_taper
-                rmat = np.transpose(sqrtT.T * np.transpose(rmat, (1,0,2)) * sqrtT, (1,0,2))
+            rmat =  np.transpose(rmat, (1, 0, 2))
+            if self.symmetric_taper:
+                sqrtT = np.sqrt(myT)
+                rmat = np.transpose(sqrtT[:,None,None] * rmat * sqrtT[None,None,:], (1,0,2))
             else:
-                rmat = np.transpose(myT.T * tmat @ np.transpose(rmat, (1,0,2)), (1,0,2))
+                rmat = np.transpose(myT[:,None,None] * rmat, (1,0,2))
             #move time-axis to the back. This is helpful for future broadcasting
             #exploitation
             #self._R[Rkey] = np.swap_axes(np.swap_axes(rmat, 1, 2), 0, 1)
@@ -2728,8 +2724,8 @@ class PSpecData(object):
         """
         if Gv is None or Hv is None:
             assert isinstance(time_index,(int,np.int64, np.int32)),"Must provide valid time index! None supplied!"
-        if Gv is None: Gv = self.get_G(key1, key2)
-        if Hv is None: Hv = self.get_H(key1, key2)
+        if Gv is None: Gv = self.get_G(key1, key2, time_indices=[time_index])[0]
+        if Hv is None: Hv = self.get_H(key1, key2, time_indices=[time_index])[0]
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)

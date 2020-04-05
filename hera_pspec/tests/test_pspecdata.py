@@ -269,15 +269,17 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.set_symmetric_taper(False)
         rmat_a = self.ds.R(key1)
         #check against independent solution
-        bh_taper = np.sqrt(dspec.gen_window('bh7', Nfreq).reshape(1,-1))
+        bh_taper = np.sqrt(dspec.gen_window('bh7', Nfreq, normalization='rms'))
         rmat = dspec.dayenu_mat_inv(x=self.ds.freqs[self.ds.spw_range[0]:self.ds.spw_range[1]],
         filter_centers=[0.], filter_half_widths=[100e-9], filter_factors=[1e-9])
-        wmat = np.outer(np.diag(np.sqrt(self.ds.Y(key1))), np.diag(np.sqrt(self.ds.Y(key1))))
-        rmat = np.linalg.pinv(wmat * rmat)
-        self.assertTrue(np.all(np.isclose(rmat_symmetric, bh_taper.T * rmat * bh_taper,atol=1e-6)))
-        self.assertTrue(np.all(np.isclose(rmat_a, bh_taper.T ** 2. * rmat,atol=1e-6)))
-        self.assertTrue(not np.all(np.isclose(rmat_symmetric, rmat_a,atol=1e-6)))
+        wmat = np.asarray([np.outer(self.ds.Y(key1)[:,m], self.ds.Y(key1)[:,m])\
+                            for m in range(Ntime)])
 
+        rmat = np.asarray([np.linalg.pinv(wmat[m] * rmat) for m in range(Ntime)])
+
+        self.assertTrue(np.all(np.isclose(rmat_a, bh_taper[None,:,None] ** 2. * rmat,atol=1e-6)))
+        self.assertTrue(np.all(np.isclose(rmat_symmetric, bh_taper[None,:,None] * rmat * bh_taper[None,None,:],atol=1e-6)))
+        self.assertTrue(not np.all(np.isclose(rmat_symmetric, rmat_a,atol=1e-6)))
 
     def test_labels(self):
         """
@@ -803,13 +805,13 @@ class Test_PSpecData(unittest.TestCase):
         key2 = (1, 25, 38)
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9], 'restore_half_width':100e-9}
-        self.ds.set_weighting('sinc_downweight')
+        self.ds.set_weighting('dayenu')
         self.ds.set_r_param(key1,rpk1)
         df = np.mean(np.diff(self.ds.freqs))
         nd = int(df * 100e-9 * Nfreq * 2)
         wgt = self.ds.w(key1)[:,0].squeeze()
         imat=dspec.delay_interpolation_matrix(Nfreq, nd, wgts=wgt, fundamental_period=2*Nfreq)
-        fmati=dspec.sinc_downweight_mat_inv(nchan=Nfreq, df=df, filter_centers=[0.],
+        fmati=dspec.dayenu_mat_inv(x=self.ds.freqs, filter_centers=[0.],
                                             filter_half_widths=[100e-9], filter_factors=[1e-9])
         fmat = np.linalg.pinv(fmati * np.outer(wgt, wgt))
         rmat = self.ds.R(key1)[0].squeeze()
