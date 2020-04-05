@@ -843,7 +843,7 @@ class PSpecData(object):
         is taken from self.Y().
 
         Right now, the data covariance can be identity ('I'), C^-1 ('iC'), or
-        dayenu weighting dayenu.
+        dayenu weighting 'dayenu'.
 
         Parameters
         ----------
