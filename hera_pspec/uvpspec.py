@@ -40,9 +40,9 @@ class UVPSpec(object):
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
         self._cov_array = PSpecParam("cov_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
-        desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
+        desc = "Window function dictionary of bandpowers."
         self._window_function_array = PSpecParam("window_function_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
-        desc = "window function in delay modes."
+        desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
                "This is not necessarily equal to the integration time of the visibility data: If data have been coherently averaged " \
@@ -659,19 +659,19 @@ class UVPSpec(object):
 
         self.stats_array[stat][spw][blpairts, :, polpair] = statistic
 
-    def set_stats_slice(self, stat, m, b, above=True, val=1e20):
+    def set_stats_slice(self, stat, m, b, above=False, val=1e20):
         """
         For each baseline, set all delay bins in stats_array that fall
-        above or below y = bl_len * m + b equal to val.
+        above or below y = bl_len * m + b [nanosec] equal to val.
         Useful for downweighting foregrounds in spherical average.
 
         Parameters
         ----------
         stat : str, name of stat in stat_array to set
 
-        m : float, coefficient of bl_len [meters]
+        m : float, coefficient of bl_len [nanosec / meter]
 
-        b : float, offset in sec
+        b : float, offset [nanosec]
 
         above : bool, if True, set stats above line, else set below line
 

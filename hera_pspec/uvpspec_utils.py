@@ -6,6 +6,7 @@ import json
 
 from . import utils
 
+
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     """
     Subtract uvp2.data_array from uvp1.data_array. Subtract matching
@@ -105,8 +106,11 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                         + 1j*np.sqrt(cov1.imag**2 + cov2.imag**2)
 
     # run check
-    if run_check: uvp1.check()
+    if run_check:
+        uvp1.check()
+
     return uvp1
+
 
 def compress_r_params(r_params_dict):
     """
@@ -151,6 +155,7 @@ def compress_r_params(r_params_dict):
             r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
         r_params_str = json.dumps(r_params_unique)
         return r_params_str
+
 
 def decompress_r_params(r_params_str):
     """
