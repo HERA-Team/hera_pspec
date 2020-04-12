@@ -133,50 +133,6 @@ class Test_grouping(unittest.TestCase):
         assert(abs(uvp_avg_noise_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
         # For non-uniform weights, we test the error bar on the average power spectra should be smaller than one on single sample.
 
-    def test_cylindrical_and_spherical_average_spectra(self):
-        """
-        Test cylindrical and spherical average spectra behavior
-        """    
-        dfile = os.path.join(DATA_PATH, 'eorsky_3.00hours_Nside128_sigma0.03_fwhm12.13_uv.uvh5')
-        # Use simulation for EoR signal
-        # Load into UVData objects
-        uvd = UVData()
-        uvd.read_uvh5(dfile)
-
-        cosmo = conversions.Cosmo_Conversions()
-        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
-        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-        # find conversion factor from Jy to mK
-        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
-
-        # reshape to appropriately match a UVData.data_array object and multiply in!
-        uvd.data_array *= Jy_to_mK[None, None, :, None]
-        uvd.polarization_array = np.array([-5])
-
-        # slide the time axis of uvd by one integration
-        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
-
-        # Create a new PSpecData object, and don't forget to feed the beam object
-        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
-        ds.rephase_to_dset(0)
-        # change units of UVData objects
-        ds.dsets[0].vis_units = 'mK'
-        ds.dsets[1].vis_units = 'mK'
-        bls1, bls2 = [(0, 11),(0, 12),(11, 12)], [(0, 11),(0, 12),(11, 12)]
-        uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=[(100, 200)], input_data_weight='identity',
-               norm='I', taper='blackman-harris', verbose=False)
-        keys = uvp.get_all_keys()
-        errs = np.ones((uvp.Ntimes, uvp.Ndlys))
-        for key in keys:
-            blp = uvp.antnums_to_blpair(key[1])
-            uvp.set_stats("noise", key, errs)
-        cyl_avg_products, sph_avg_products = grouping.cylindrical_and_spherical_average_spectra(uvp, 0, ("xx","xx"), error_weights="noise")
-        nt.assert_true(np.isclose(uvp.Nblpairts, (1/np.mean(cyl_avg_products['stats']['noise']))**2))
-        # Show the error bar on the average is correctly reduced by the number of  samples
-        nt.assert_true(np.real(np.std(sph_avg_products["data"])) / np.real(np.mean(sph_avg_products["data"])) < 0.5)
-        # Show the 1D power spectra is enough flat
-
     def test_sample_baselines(self):
         """
         Test baseline sampling (with replacement) behavior.
@@ -412,21 +368,32 @@ def test_spherical_average():
     uvd.polarization_array[0] = -6
     uvp += testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo)
     # insert cov_array and stats_array
-    uvp.cov_array = {s: np.ones((uvp.Nblpairts, uvp.Ndlys, uvp.Ndlys, uvp.Npols), dtype=np.complex128)
+    uvp.cov_array = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.complex128)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
                         for s in range(uvp.Nspws)}
     uvp.stats_array = {'err': {s: np.ones((uvp.Nblpairts, uvp.Ndlys, uvp.Npols), dtype=np.complex128)
                                   for s in range(uvp.Nspws)}}
 
     # try a spherical average
     kbins = np.arange(0, 2.9, 0.25)
+    Nk = len(kbins)
     bin_widths = 0.25
-    sph = grouping.spherical_average(uvp, kbins, bin_widths, add_to_history='checking 1 2 3')
+    A = {}
+    sph = grouping.spherical_average(uvp, kbins, bin_widths, add_to_history='checking 1 2 3', A=A)
+    # metadata
     assert sph.Nblpairs == 1
     assert 'checking 1 2 3' in sph.history
     assert np.isclose(sph.get_blpair_seps(), 0).all()  # assert kperp has no magnitude
+    assert 'err' in sph.stats_array
     for spw in sph.spw_array:
+        # binning and normalization
         assert np.isclose(sph.get_kparas(spw), kbins).all()  # assert kbins are input kbins
         assert np.isclose(sph.window_function_array[spw].sum(axis=2), 1).all()  # assert window func is normalized
+        # check low k modes are greater than high k modes
+        # this ia a basic "averaged data smell test" in lieu of a known pspec to compare to
+        assert np.all(sph.data_array[spw][:, 0, :].real / sph.data_array[spw][:, 10, :] > 1e3)
+        # assert errorbars are 1/sqrt(N) what they used to be
+        assert np.isclose(np.sqrt(sph.cov_array[spw])[:, range(Nk), range(Nk)], 1/np.sqrt(A[spw].sum(axis=1))).all()
+        assert np.isclose(sph.stats_array['err'][spw], 1/np.sqrt(A[spw].sum(axis=1))).all()
 
     # try without little h
     sph2 = grouping.spherical_average(uvp, kbins * cosmo.h, bin_widths * cosmo.h, little_h=False)
@@ -440,16 +407,23 @@ def test_spherical_average():
     # try weighting by stats_array
     sph = grouping.spherical_average(uvp, kbins, bin_widths, error_weights='err')
     for spw in sph.spw_array:
-        assert np.isclose(sph.window_function_array[spw].sum(axis=2), 1).all()  # assert window func is normalized
+        assert np.isclose(sph.window_function_array[spw].sum(axis=2), 1).all()
+
+    # weight by covariance (should be same result as stats given predefined values!)
+    sph2 = grouping.spherical_average(uvp, kbins, bin_widths, weight_by_cov=True)
+    for spw in sph2.spw_array:
+        assert np.isclose(sph2.window_function_array[spw].sum(axis=2), 1).all()
+        assert np.isclose(sph.data_array[spw], sph2.data_array[spw]).all()
 
     # slice into stats array and set region of k_perp k_para to infinte variance
     uvp2 = copy.deepcopy(uvp)
     uvp2.set_stats_slice('err', 0, 1000, above=False, val=np.inf)
     sph2 = grouping.spherical_average(uvp2, kbins, bin_widths, error_weights='err')
-    assert np.isclose(sph2.data_array[0][:, :3, :], 0).all()  # assert low k modes are zeroed!
-    # in this case, sum(window, axis=2) does not == 1, but it does equal window func from before
-    for spw in sph.spw_array:
-        assert np.isclose(sph.window_function_array[spw][:, 3:, 3:], sph2.window_function_array[spw][:, 3:, 3:]).all()
+    # assert low k modes are zeroed!
+    assert np.isclose(sph2.data_array[0][:, :3, :], 0).all()  
+    # assert bins that weren't nulled still have proper window normalization
+    for spw in sph2.spw_array:
+        assert np.isclose(sph2.window_function_array[spw].sum(axis=2)[:, 3:, :], 1).all()
 
     # exceptions
     nt.assert_raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)

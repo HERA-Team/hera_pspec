@@ -520,7 +520,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         
 
 def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
-                      error_weights=None, add_to_history='', little_h=True, run_check=True):
+                      weight_by_cov=False, error_weights=None, add_to_history='', little_h=True, A={},
+                      run_check=True):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
     Use UVPSpec.set_stats_slice to downweight regions of k_perp and k_para grid before averaging.
@@ -546,10 +547,17 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     blpair_weights : list, optional
         relative weights of blpairs in blpair averaging (used for bootstrapping)
 
+    weight_by_cov : bool, optional
+        If True, weight spherical average by stored bandpower covariance. Supersedes
+        error_weights if provided.
+    
     error_weights : str, optional
-        Error field to use as weights in averaging. This is the only error field that will
-        be propagated to the final object. If not specified perform a uniform
-        average.
+        Error field to use as weights in averaging. Weight is 1/err^2.
+        This is the only error field that will be propagated to the final object.
+        If not specified perform a uniform average.
+
+    weight_by_cov : str, optional
+        If True, use stored covariance as weights. Supersedes error_weights if fed.
 
     add_to_history : str, optional
         String to append to object history
@@ -557,6 +565,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     little_h : bool, optional
         If True, kgrid is in h Mpc^-1 units, otherwise just Mpc^-1 units.
         If False, user must ensure adopted h is consistent with uvp_in.cosmo
+
+    A : dict, optional
+        Empty dict to populate with A matrix
 
     Returns
     --------
@@ -568,16 +579,18 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     1. The full kgrid (magnitude) is represented as kparas in the averaged object, and can be accessed
     via uvp_avg.get_kparas().
 
-    2. If p^ = A p, where p are the unbinned or cylindrically binned pspectra, and p^ are
-    the spherically binned pspectra, then the binned window function W^ and the bandpower
-    covariance C^ are defined as
-        C^ = A C A.T
-        W^ = A W A^-1
-    where A^-1 is a pseudoinverse, given that A is in general rectangular.
+    2. If p_cyl = A p_sph, then the binned data, window function, and bandpower covariance are
+        p_sph = H.T p_cyl
+        C_sph = [H.T E H]^-1
+        W_sph = H.T W_cyl A
+        where H = E.T A [A.T E A]^-1, and E is the bandpower weight matrix, generally E = C_cyl^-1.
 
     3. For speed, it helps to perform cylindrical binning upfront by suppyling blpair_groups.
     """
-    # check for bin_widths array
+    # input checks
+    if weight_by_cov:
+        assert hasattr(uvp_in, 'cov_array'), "cannot weight by cov with no cov_array"
+
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
 
@@ -599,7 +612,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     Nk = len(kbins)
     dlys_array, spw_dlys_array = [], []
     (data_array, window_function_array, wgt_array, integration_array,
-     nsample_array) = odict(), odict(), odict(), odict(), odict()    
+     nsample_array) = odict(), odict(), odict(), odict(), odict()  
     store_stats = hasattr(uvp, 'stats_array')
     store_cov = hasattr(uvp, "cov_array")
     store_window = hasattr(uvp, 'window_function_array')
@@ -634,12 +647,11 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         if store_window:
             window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.complex128)
  
-        # setup the design matrix and its inverse
-        A = np.zeros((uvp.Ntimes, Nk, Ndlyblps, uvp.Npols), dtype=np.float64)
-        Ainv = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
+        # setup the design matrix: P_cyl = A P_sph
+        A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
 
-        # store the cumulative weights, used to normalize the metadata
-        blp_weights = np.zeros((uvp.Ntimes, uvp.Npols), dtype=np.float64)
+        # setup weighting matrix: block diagonal for each Ndly x Ndly
+        E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
 
         # get kperps for this spw: shape (Nblpairts,)
         kperps = uvp.get_kperps(spw, little_h=True)
@@ -658,7 +670,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
         # iterate over blpairs
         for b, blp in enumerate(uvp.get_blpairs()):
+            # get blpair time indices
             blpt_inds = uvp.blpair_to_indices(blp)
+
             # get k magnitude of data: (Ndlys,)
             kmags = np.sqrt(kperps[blpt_inds][0]**2 + kparas**2)
 
@@ -671,36 +685,43 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # shape of ints: (Ntimes, Npols)
             ints = uvp.integration_array[spw][blpt_inds]
 
-            # w has shape (Ntimes, Ndlys, Npols)
-            if error_weights is not None:
-                # weight by 1/stats_array^2
-                w = 1. / uvp.stats_array[error_weights][spw][blpt_inds].real.clip(1e-40, np.inf)**2
-            else:
-                # uniform weighting, except for flagged data
-                w = np.ones((uvp.Ntimes, Ndlys, uvp.Npols), dtype=np.float64)
-                f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
-                w[np.repeat(f[:, None, :], Ndlys, axis=1)] = 0.0
+            # get Ndlyblps slice
+            dstart, dstop = Ndlys * b, Ndlys * (b + 1)
+            dslice = slice(dstart, dstop)
 
-            # stack non-dly arrays and add to kbin_weights
-            wmean = np.mean(w, axis=1)  # mean of w across delay are weights for non-dly arrays
-            wgt_array[spw] += wgts * wmean[:, None, None, :]
-            integration_array[spw] += ints * wmean
-            nsample_array[spw] += nsmp
-            blp_weights += wmean
-
-            # insert into delay arrays
-            dslice = slice(Ndlys * b, Ndlys * (b + 1))
-            data_array[spw][:, dslice, :] = uvp.data_array[spw][blpt_inds]
+            # store data
+            data_array[spw][:, dslice] = uvp.data_array[spw][blpt_inds]
             if store_window:
                 window_function_array[spw][:, dslice, dslice] = uvp.window_function_array[spw][blpt_inds]
             if store_stats:
-                # store as a squared property for now
                 for stat in stats_array:
-                    stats_array[stat][spw][:, dslice] = uvp.stats_array[stat][spw][blpt_inds]**2
+                    stats_array[stat][spw][:, dslice] = uvp.stats_array[stat][spw][blpt_inds]
             if store_cov:
                 cov_array[spw][:, dslice, dslice] = uvp.cov_array[spw][blpt_inds]
 
-            # get kmag -> kbin mapping and insert into A matrix
+            # fill weighting matrix E
+            if weight_by_cov:
+                # weight by inverse (real) covariance
+                for p in range(uvp.Npols):
+                    E[:, dslice, dslice, p] = np.linalg.pinv(cov_array[spw][:, dslice, dslice, p].real)
+
+            elif error_weights is not None:
+                # fill diagonal with by 1/stats_array^2 as weight
+                E[:, range(dstart, dstop), range(dstart, dstop)] = 1 / stats_array[error_weights][spw][:, dslice].real.clip(1e-40, np.inf)**2
+
+            else:
+                # uniform weighting along diagonal, except for flagged data
+                E[:, range(dstart, dstop), range(dstart, dstop)] = 1.0
+                f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
+                E[:, range(dstart, dstop), range(dstart, dstop)] *= (~f[:, None, :])
+
+            # append to non-dly arrays
+            Emean = np.trace(E[:, dslice, dslice], axis1=1, axis2=2)  # use mean of E across delay as weight
+            wgt_array[spw] += wgts * Emean[:, None, None, :]
+            integration_array[spw] += ints * Emean
+            nsample_array[spw] += nsmp
+
+            # get k_sph -> k_cyl mapping
             for i, kmag in enumerate(kmags):
                 kind = (kbin_left < kmag) & (kbin_right >= kmag)
                 if not np.any(kind):
@@ -709,54 +730,53 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 else:
                     # convert kind into an integer for indexing
                     kind = np.where(kind)[0][0]
-                # insert w along Nk and Ndlyblps axis (normalize rows later)
-                A[:, kind, i + Ndlys * b] = w[:, i]
+                # populate A matrix
+                A[spw][:, i + Ndlys * b, kind, :] = 1.0
 
-        # normalize sums
-        wgt_array[spw] /= wgt_array[spw].max()
-        integration_array[spw] /= blp_weights
+        # normalize metadata sums
+        wgt_array[spw] /= np.max(wgt_array[spw], axis=(2, 3), keepdims=True)
+        integration_array[spw] /= np.trace(E.real, axis1=1, axis2=2).clip(1e-40, np.inf)
 
-        # normalize A matrix
-        A /= np.sum(A, axis=2, keepdims=True).clip(1e-40, np.inf)
-        for p in range(uvp.Npols):
-            Ainv[:, :, :, p] = np.linalg.pinv(A[:, :, :, p])
-
-        # project into binned space
+        # project onto spherically binned space
         # t indexes time, p indexes polarization
         # i,j indexes Ndlyblps, Ndlyblps
         # k,l indexes Nk, Nk
+        # note: matmul (@) is generally as fast or many times faster than einsum here
 
-        # p^ = A p, where p is unbinned bandpowers and p is binned
-        # Ntimes, Ndlyblps, Npols (tip) -> Ntimes, Nk, Npols (tkp)
-        data_array[spw] = np.einsum("tkdp,tdp->tkp", A, data_array[spw])
+        # first compute: H = E A [A.T E A]^-1
+        # move axes to enable matmul and inv over Ndlyblps and Nk axes
+        # Am shape (Npols, Ntimes, Ndlyblps, Nk)
+        # Em shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
+        # Ht shape (Npols, Ntimes, Nk, Ndlyblps)
+        Am = np.moveaxis(A[spw], -1, 0)
+        Em = np.moveaxis(E, -1, 0)
+        invAEA = np.linalg.pinv(Am.transpose(0, 1, 3, 2) @ Em @ Am)
+        H = Em @ Am @ invAEA
+        Ht = H.transpose(0, 1, 3, 2)
+
+        # bin data: p_sph = H.T p_cyl
+        # dm shape (Npols, Ntimes, Ndlyblps)
+        dm = np.moveaxis(data_array[spw], -1, 0)
+        dm = (Ht @ dm[:, :, :, None])[:, :, :, 0]
+        data_array[spw] = np.moveaxis(dm, 0, -1)
 
         if store_window:
-            # W^ = A W A^-1 (A^-1 is pseudoinverse)
-            # Ntimes, Ndlyblps, Ndlyblps, Npols -> Ntimes, Nk, Nk, Npols
-            # matmul in a FOR loop is 10 times faster than einsum here
-            wfa = []
-            for p in range(uvp.Npols):
-                wfa.append(A[:, :, :, p] @ window_function_array[spw][:, :, :, p] @ Ainv[:, :, :, p])
-            window_function_array[spw] = np.moveaxis(wfa, 0, -1)
+            # bin window function: W_sph = H.T W_cyl A
+            wm = np.moveaxis(window_function_array[spw], -1, 0)
+            wm = Ht @ wm @ Am
+            window_function_array[spw] = np.moveaxis(wm, 0, -1)
 
         if store_stats:
-            # stats treated as sqrt(variance)
-            # C^ = A C A.T, then stats = sqrt(C^.diagonal)
-            # Ntimes, Ndlyblps, Npols -> Ntimes, Nk, Npols
+            # bin stats: C_sph = H.T C_cyl H
             for stat in stats_array:
-                # einsum is fast enough for this, and is more succinct than matmul in this case
-                stats_array[stat][spw] = np.einsum("tkip,tip,pikt->tkp", A, stats_array[stat][spw], A.T)
-                # take sqrt to account for square from before
-                stats_array[stat][spw] = np.sqrt(stats_array[stat][spw])
+                # einsum is fast enough for this, and is more succinct than matmul b/c only diagonal is stored
+                stats_array[stat][spw] = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, stats_array[stat][spw]**2, H))
 
         if store_cov:
-            # C^ = A C A.T
-            # Ntimes, Ndlyblps, Ndlyblps, Npols -> Ntimes, Nk, Nk, Npols
-            # matmul in a FOR loop is 10 times faster than einsum here
-            ca = []
-            for p in range(uvp.Npols):
-                ca.append(A[:, :, :, p] @ cov_array[spw][:, :, :, p] @ np.moveaxis(A[:, :, :, p], -1, -2))
-            cov_array[spw] = np.moveaxis(ca, 0, -1)
+            # bin covariance: C_sph = H.T C_cyl H
+            cm = np.moveaxis(cov_array[spw], -1, 0)
+            cm = Ht @ cm @ H
+            cov_array[spw] = np.moveaxis(cm, 0, -1)
 
     # handle data arrays
     uvp.data_array = data_array
@@ -785,184 +805,19 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.bl_vecs = np.asarray([uvp.bl_vecs[np.argmin(uvp.bl_array - bl)] for bl in bl_array])
     uvp.bl_array = bl_array
     uvp.Nbls = len(bl_array)
+
     # set bl_vecs mag to zero (k_mag comes purely from k_paras for spherically averaged uvp)
     uvp.bl_vecs[:] = 0.0
 
     # Add to history
     uvp.history += version.history_string(notes=add_to_history)
 
-    # Validity check
+    # validity check
     if run_check:
         uvp.check()
 
     return uvp
 
-
-def cylindrical_and_spherical_average_spectra(uvp_in, spw, pol, blpairs=None, times=None, error_field=None, error_weights=None):
-    """
-    Run power spectra average across all baseline-pairs and integrations by calling uvpspec.average_spectra.
-    To get a 2D P(k_para, k_perp), redundant baseline-pairs are mapped to the same k_perp mode 
-    (uvpspec.get_kperps) and delay modes are mapped accordingly to k_para modes (uvpspec.get_kparas).
-    To get a 1D P(k), we divide the whole k-space into a series of k-bins, then
-    (k_papra, k_perp) modes in the same k bin are mapped together to a single k mode. 
-    
-    All the average here is done with using the inverse square of the specified error bar as weights (error_weights). 
-    In this way the final 1D P(k) is independent on the order we carry on average on samples.
-    A simple proof is below:
-    For three samples A, B and C with errors a, b and c,
-    (AB) (average on A and B) = (A/a^2 + B/b^2) / (1/a^2 + 1/b^2),
-    (ab)^2 (updated error_weighs on (AB)) = (a^2/a^4 + b^2/b^4) / (1/a^2 + 1/b^2)^2 = 1 / (1/a^2 + 1/b^2);
-    (ABC) = ((AB)/(ab)^2 + C/C^2) / (1/(ab)^2 + 1/c^2) = (A/a^2 + B/b^2 + C/c^2) / (1/a^2 + 1/b^2 + 1/c^2)
-    and (abc)^2 = ((ab)^2/(ab)^4 + c^2/c^4) / (1/(ab)^2 + 1/c^2)^4 = 1 / (1/a^2 + 1/b^2 + 1/c^2).
-    Thus 1D P(k) from binning 2D P(k_papra, k_perp) is equal to direcly binning from the original 
-    delay spectra on different baseline-pairs and integrations.  
-
-    Parameters
-    ----------
-    uvp_in : UVPSpec
-        Input power spectrum (to average over).
-
-    spw : integer
-        Which spectral window to average.
-
-    pol : int or tuple
-        Polarization-pair integer or tuple, e.g. ('pI', 'pI')
-
-    blpairs : list of tuples, optional
-        List of baseline-pair tuples to use in averaging.
-
-    times : list, optional
-        An ndarray or list of times from uvp.time_avg_array to
-        select on before plotting. Default: None.
-
-    error_field : string or list, optional
-        If errorbars have been entered into stats_array, will do a weighted
-        sum to shrink the error bars down to the size of the averaged
-        data_array. Error_field strings be keys of stats_array. If list,
-        does this for every specified key. Every stats_array key that is
-        not specified is thrown out of the new averaged object.
-
-    error_weights : string, optional
-         error_weights specify which kind of errors we use for weights 
-         during averaging power spectra.
-         The weights are defined as $w_i = 1/ sigma_i^2$, 
-         where $sigma_i$ is taken from the relevant field of stats_array.
-         If `error_weight' is set to None, which means we just use the 
-         integration time as weights. If error_weights is specified,
-         then it also gets appended to error_field as a list.
-         Default: None
-
-    Returns
-    -------
-    cyl_avg_products : odict 
-        A synthesis of profucts.
-    sph_avg_products : odict
-         A synthesis of profucts.
-    """
-    uvp = uvp_in.select(blpairs=blpairs, times=times, inplace=False)
-
-    # Average across redundant groups and integrations
-    # this also ensures blpairs are ordered from short_bl --> long_bl
-    blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=1.0, 
-                                                      match_bl_lens=True)
-    uvp = uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, error_weights=error_weights,
-        error_field=error_field, inplace=False)
-
-    # get blpairs and order by len and enforce bl len ordering anyways
-    blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps()
-    osort = np.argsort(blpair_seps)
-    blpairs, blpair_seps = [blpairs[oi] for oi in osort], blpair_seps[osort]
-
-    # get 2D P(k_para, k_perp) and related arrays
-    # get spectra with shape (Nblpairs, Ndlys)
-    data_2D = np.array([uvp.get_data((spw, blp, pol)).squeeze() for blp in blpairs])
-    # get k_para and k_perp with shape (Nblpairs, Ndlys)
-    kpara_2D = np.repeat(uvp.get_kparas(spw)[None], uvp.Nblpairs, axis=0)
-    kperp_2D = np.repeat(uvp.get_kperps(spw)[:,None], kpara_2D.shape[1], axis=1)
-    # get window_function_array with shape (Nblpairs, Ndlys, Ndlys)
-    window_function_2D = np.array([uvp.get_window_function((spw, blp, pol)).squeeze() for blp in blpairs])
-    # get cov_array with shape (Nblpairs, Ndlys, Ndlys)
-    if hasattr(uvp, "cov_array"):
-        cov_2D = np.array([uvp.get_cov((spw, blp, pol)).squeeze() for blp in blpairs])
-    # get stats_array 
-    stats_2D = odict()
-    for stat in uvp.stats_array.keys():
-        stats_2D[stat] = np.array([uvp.get_stats(stat, (spw, blp, pol)).squeeze() for blp in blpairs])
-
-    # get 1D P(k) and related arrays
-    # get k-bins
-    k = np.sqrt(kperp_2D**2+kpara_2D**2)
-    k_min, k_max = np.min(k), np.max(k)
-    k_bin_width = np.mean(np.diff(np.unique(kpara_2D)))
-    k_1D = np.arange(0, k_max+k_min, k_bin_width)
-    # get spectra with shape (len(k_1D))
-    data_1D = np.zeros_like(k_1D).astype(np.complex128) 
-
-    # get stats_array 
-    stats_1D = odict()
-    for stat in uvp.stats_array.keys():
-        stats_1D[stat] = np.zeros_like(k_1D).astype(np.complex128) 
-    
-    w_list = np.zeros_like(k_1D).astype(np.complex128) 
-    for i in range(uvp.Nblpairs):
-        for j in range(kpara_2D.shape[1]): 
-            w = 1./stats_2D[error_weights][i,j].clip(1e-40, np.inf)**2
-            k_sph = np.sqrt(kperp_2D[i,j]**2+kpara_2D[i,j]**2)
-            k_bin_index = np.int(k_sph / k_bin_width)
-            data_1D[k_bin_index] += w*data_2D[i,j]
-            for stat in uvp.stats_array.keys():
-                stats_1D[stat][k_bin_index] += w**2*stats_2D[stat][i,j]**2
-            w_list[k_bin_index] += w
-    data_1D = data_1D / w_list.clip(1e-50, np.inf) 
-    for stat in uvp.stats_array.keys():
-        stats_1D[stat] = stats_1D[stat] / w_list.clip(1e-40, np.inf)**2
-        stats_1D[stat] = np.sqrt(stats_1D[stat])
-    
-    # get window_function_array with shape (len(k_1D))
-    window_function_1D = np.zeros((len(k_1D), len(k_1D))).astype(np.complex128)
-    weights = np.zeros((len(k_1D))).astype(np.complex128)
-    for i in range(uvp.Nblpairs):
-        # the (k_para,k_para) window function is attched to per redundant baseline-pair group 
-        for j in range(kpara_2D.shape[1]): 
-            k_bin_index_j = np.int(np.sqrt(kperp_2D[i,j]**2+kpara_2D[i,j]**2) / k_bin_width)
-            for k in range(kpara_2D.shape[1]):
-                k_bin_index_k = np.int(np.sqrt(kperp_2D[i,k]**2+kpara_2D[i,k]**2) / k_bin_width)
-                window_function_1D[k_bin_index_j, k_bin_index_k] += window_function_2D[i,j,k] / stats_2D[error_weights][i,j].clip(1e-40, np.inf)**2
-                weights[k_bin_index_j] += 1 / stats_2D[error_weights][i,j].clip(1e-40, np.inf)**2
-    window_function_1D = window_function_1D / weights[:,None].clip(1e-40, np.inf) 
-
-    # get cov_array with shape (len(k_1D), len(k_1D))
-    if hasattr(uvp, "cov_array"):
-        cov_1D = np.zeros((len(k_1D), len(k_1D))).astype(np.complex128)
-        weights_1, weights_2 = np.zeros((len(k_1D))).astype(np.complex128), np.zeros((len(k_1D))).astype(np.complex128)
-        for i in range(uvp.Nblpairs):
-            # There are covariance only between the delay modes from the same redundant baseline group
-            for j in range(kpara_2D.shape[1]): 
-                k_bin_index_j = np.int(np.sqrt(kperp_2D[i,j]**2+kpara_2D[i,j]**2) / k_bin_width)
-                for k in range(kpara_2D.shape[1]):
-                    k_bin_index_k = np.int(np.sqrt(kperp_2D[i,k]**2+kpara_2D[i,k]**2) / k_bin_width)
-                    cov_1D[k_bin_index_j, k_bin_index_k] += cov_2D[i,j,k] / stats_2D[error_weights][i,j].clip(1e-40, np.inf)**2 / stats_2D[error_weights][i,k].clip(1e-40, np.inf)**2
-                    weights_1[k_bin_index_j] += 1 / stats_2D[error_weights][i,j].clip(1e-40, np.inf)**2
-                    weights_2[k_bin_index_k] += 1 / stats_2D[error_weights][i,k].clip(1e-40, np.inf)**2
-        cov_1D = cov_1D / weights_1[:,None].clip(1e-40, np.inf) / weights_2[None,:].clip(1e-40, np.inf)
-
-    cyl_avg_products, sph_avg_products = odict(), odict()
-    cyl_avg_products['data'] = data_2D
-    cyl_avg_products['kpara'] = kpara_2D
-    cyl_avg_products['kperp'] = kperp_2D
-    cyl_avg_products['window_function'] = window_function_2D
-    if hasattr(uvp, "cov_array"):
-        cyl_avg_products['cov'] = cov_2D
-    cyl_avg_products['stats'] = stats_2D
-
-    sph_avg_products['data'] = data_1D
-    sph_avg_products['k'] = k_1D
-    sph_avg_products['window_function'] = window_function_1D
-    if hasattr(uvp, "cov_array"):
-        sph_avg_products['cov'] = cov_1D
-    sph_avg_products['stats'] = stats_1D
-
-    return cyl_avg_products, sph_avg_products
 
 def fold_spectra(uvp):
     """
