@@ -121,7 +121,7 @@ def compress_r_params(r_params_dict):
     r_params_dict: Dictionary
               dictionary with parameters for weighting matrix. Proper fields
               and formats depend on the mode of data_weighting.
-              data_weighting == 'sinc_downweight':
+              data_weighting == 'dayenu':
                             dictionary with fields
                             'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                               at which to center filtering windows. Can specify fractional channel number.
@@ -151,6 +151,8 @@ def compress_r_params(r_params_dict):
                 r_params_index += 1
                 r_params_unique[r_params_index] = copy.copy(r_params_dict[rp])
                 r_params_unique_bls[r_params_index] = [rp,]
+
+
         for rpi in r_params_unique:
             r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
         r_params_str = json.dumps(r_params_unique)
@@ -171,7 +173,7 @@ def decompress_r_params(r_params_str):
     r_params: dict
         Dictionary with parameters for weighting matrix. Proper fields
         and formats depend on the mode of data_weighting.
-        data_weighting == 'sinc_downweight':
+        data_weighting == 'dayenu':
                       dictionary with fields
                       'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                         at which to center filtering windows. Can specify fractional channel number.

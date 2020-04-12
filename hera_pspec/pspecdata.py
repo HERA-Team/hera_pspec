@@ -67,12 +67,13 @@ class PSpecData(object):
         # r_params is a dictionary that stores parameters for
         # parametric R matrices.
         self.r_params = {}
+        self.filter_extension = (0, 0)
         self.cov_regularization = 0.
         # set data weighting to identity by default
         # and taper to none by default
         self.data_weighting = 'identity'
         self.taper = 'none'
-
+        self.symmetric_taper = True
         # Set all weights to None if wgts=None
         if wgts is None:
             wgts = [None for dset in dsets]
@@ -460,7 +461,7 @@ class PSpecData(object):
 
         return dset_idx, bl
 
-    def x(self, key):
+    def x(self, key, filter_extension=False):
         """
         Get data for a given dataset and baseline, as specified in a standard
         key format.
@@ -472,16 +473,25 @@ class PSpecData(object):
             of the tuple is the dataset index (or label), and the subsequent
             elements are the baseline ID.
 
+        filter_extension : bool (optional)
+            default=False
+            If True, extend spw to include filtering window extensions.
+
         Returns
         -------
         x : array_like
             Array of data from the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0], self.spw_range[1])
+        if filter_extension:
+            spw = slice(self.spw_range[0]-self.filter_extension[0],
+                        self.spw_range[1]+self.filter_extension[1])
+        else:
+            spw = slice(self.spw_range[0],
+                        self.spw_range[1])
         return self.dsets[dset].get_data(bl).T[spw]
 
-    def dx(self, key):
+    def dx(self, key, filter_extension=False):
         """
         Get standard deviation of data for given dataset and baseline as
         pecified in standard key format.
@@ -493,6 +503,10 @@ class PSpecData(object):
             of the tuple is the dataset index (or label), and the subsequent
             elements are the baseline ID.
 
+        filter_extension : bool (optional)
+            default=False
+            If True, extend spw to include filtering window extensions.
+
         Returns
         -------
         dx : array_like
@@ -500,11 +514,15 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0], self.spw_range[1])
-
+        if filter_extension:
+            spw = slice(self.spw_range[0]-self.filter_extension[0],
+                        self.spw_range[1]+self.filter_extension[1])
+        else:
+            spw = slice(self.spw_range[0],
+                        self.spw_range[1])
         return self.dsets_std[dset].get_data(bl).T[spw]
 
-    def w(self, key):
+    def w(self, key, filter_extension=False):
         """
         Get weights for a given dataset and baseline, as specified in a
         standard key format.
@@ -516,14 +534,22 @@ class PSpecData(object):
             of the tuple is the dataset index, and the subsequent elements are
             the baseline ID.
 
+        filter_extension : bool (optional)
+            default=False
+            If True, extend spw to include filtering window extensions.
+
         Returns
         -------
         w : array_like
             Array of weights for the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        spw = slice(self.spw_range[0], self.spw_range[1])
-
+        if filter_extension:
+            spw = slice(self.spw_range[0]-self.filter_extension[0],
+                        self.spw_range[1]+self.filter_extension[1])
+        else:
+            spw = slice(self.spw_range[0],
+                        self.spw_range[1])
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T[spw]
         else:
@@ -547,7 +573,7 @@ class PSpecData(object):
         self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
 
-    def C_model(self, key, model='empirical'):
+    def C_model(self, key, model='empirical', time_index=None):
         """
         Return a covariance model having specified a key and model type.
 
@@ -559,8 +585,17 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. options=['empirical']
+            Type of covariance model to calculate, if not cached. options=['empirical', 'dsets']
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
 
+        time_index : integer, compute covariance at specific time-step in dset
+                       only supported if mode == 'dsets'
 
         Returns
         -------
@@ -570,24 +605,32 @@ class PSpecData(object):
         # type check
         assert isinstance(key, tuple), "key must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
-        assert model in ['empirical'], "didn't recognize model {}".format(model)
+        assert model in ['empirical', 'dsets'], "didn't recognize model {}".format(model)
         # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
+        if model == 'dsets':
+            assert isinstance(time_index, int), "time_index must be integer if cov-model=dsets"
+            Ckey = key + (model, time_index)
 
-        # add model to key
-        Ckey = key + (model,)
+        elif model == 'empirical':
+            assert time_index is None, "time_indexing not supported in empirical covariances"
+            # add model to key
+            Ckey = key + (model,)
 
         # check cache
         if Ckey not in self._C:
             # calculate covariance model
             if model == 'empirical':
-                self.set_C({Ckey: utils.cov(self.x(key), self.w(key))})
+                self.set_C({Ckey: utils.cov(self.x(key, filter_extension=True), self.w(key, filter_extension=True))})
+            elif model == 'dsets':
+                self.set_C({Ckey: np.diag( np.abs(self.w(key, filter_extension=True)[:,time_index] * self.dx(key, filter_extension=True)[:,time_index]) ** 2. )})
+
 
         return self._C[Ckey]
 
     def cross_covar_model(self, key1, key2, model='empirical',
-                          conj_1=False, conj_2=True):
+                          time_index=None, conj_1=False, conj_2=True):
         """
         Return a covariance model having specified a key and model type.
 
@@ -599,8 +642,13 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached.
-            options=['empirical']
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
 
         conj_1 : boolean, optional
             Whether to conjugate first copy of data in covar or not.
@@ -609,7 +657,6 @@ class PSpecData(object):
         conj_2 : boolean, optional
             Whether to conjugate second copy of data in covar or not.
             Default: True
-
 
         Returns
         -------
@@ -620,18 +667,22 @@ class PSpecData(object):
         assert isinstance(key1, tuple), "key1 must be fed as a tuple"
         assert isinstance(key2, tuple), "key2 must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
-        assert model in ['empirical'], "didn't recognize model {}".format(model)
-
-        # parse key
-        dset, bl = self.parse_blkey(key1)
-        key1 = (dset,) + (bl,)
-        dset, bl = self.parse_blkey(key2)
-        key2 = (dset,) + (bl,)
-
+        assert model in ['empirical', 'dsets'], "didn't recognize model {}".format(model)
         if model == 'empirical':
-            covar = utils.cov(self.x(key1), self.w(key1),
-                              self.x(key2), self.w(key2),
+            # parse key
+            dset, bl = self.parse_blkey(key1)
+            key1 = (dset,) + (bl,)
+            dset, bl = self.parse_blkey(key2)
+            key2 = (dset,) + (bl,)
+
+            covar = utils.cov(self.x(key1, filter_extension=True), self.w(key1, filter_extension=True),
+                              self.x(key2, filter_extension=True), self.w(key2, filter_extension=True),
                               conj_1=conj_1, conj_2=conj_2)
+        elif model == 'dsets':
+            covar = np.zeros((self.spw_Nfreqs,
+                              self.spw_Nfreqs),
+                              dtype=complex)
+        #for dsets, we assume no baseline-baseline covariances.
         return covar
 
     def I(self, key):
@@ -656,7 +707,7 @@ class PSpecData(object):
         key = (dset,) + (bl,)
 
         if key not in self._I:
-            self._I[key] = np.identity(self.spw_Nfreqs)
+            self._I[key] = np.identity(self.spw_Nfreqs + np.sum(self.filter_extension))
         return self._I[key]
 
     def iC(self, key, model='empirical'):
@@ -671,8 +722,13 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string
-            Type of covariance model to calculate, if not cached.
-            options=['empirical']
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
 
         Returns
         -------
@@ -689,14 +745,18 @@ class PSpecData(object):
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
             C = self.C_model(key, model=model)
-            U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
-
+            #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
+            if np.linalg.cond(C) >= 1e9:
+                warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
+                ic = np.linalg.pinv(C)
+            else:
+                ic = np.linalg.inv(C)
             # FIXME: Not sure what these are supposed to do
             #if self.lmin is not None: S += self.lmin # ensure invertibility
             #if self.lmode is not None: S += S[self.lmode-1]
 
             # FIXME: Is series of dot products quicker?
-            self.set_iC({Ckey:np.einsum('ij,j,jk', V.T, 1./S, U.T)})
+            self.set_iC({Ckey:ic})
         return self._iC[Ckey]
 
     def Y(self, key):
@@ -733,7 +793,7 @@ class PSpecData(object):
         key = (dset,) + (bl,)
 
         if key not in self._Y:
-            self._Y[key] = np.diag(np.max(self.w(key), axis=1))
+            self._Y[key] = np.diag(np.max(self.w(key, filter_extension=True), axis=1))
             if not np.all(np.isclose(self._Y[key], 0.0) \
                         + np.isclose(self._Y[key], 1.0)):
                 raise NotImplementedError("Non-binary weights not currently implmented")
@@ -778,9 +838,12 @@ class PSpecData(object):
 
         where T is a diagonal matrix holding the taper and Y is a diagonal
         matrix holding flag weights. The K matrix comes from either `I` or `iC`
-        or a `sinc_downweight`
+        or a `dayenu`
         depending on self.data_weighting, T is informed by self.taper and Y
         is taken from self.Y().
+
+        Right now, the data covariance can be identity ('I'), C^-1 ('iC'), or
+        dayenu weighting 'dayenu'.
 
         Parameters
         ----------
@@ -790,11 +853,11 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
         """
         assert isinstance(key, tuple)
-        # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-        Rkey = key + (self.data_weighting,) + (self.taper,)
-
+        # parse key
+        Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.filter_extension,)\
+                   + (self.spw_Nfreqs,) + (self.symmetric_taper,)
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -810,34 +873,102 @@ class PSpecData(object):
             # in sqrt for some reason)
             sqrtT[np.isnan(sqrtT)] = 0.0
             sqrtY[np.isnan(sqrtY)] = 0.0
-
+            fext = self.filter_extension
+            #if we want to use a full-band filter, set the R-matrix to filter and then truncate.
+            tmat = np.zeros((self.spw_Nfreqs,
+                             self.spw_Nfreqs+np.sum(fext)),dtype=complex)
+            tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
             # form R matrix
             if self.data_weighting == 'identity':
-                self._R[Rkey] = sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT
+                if self.symmetric_taper:
+                    self._R[Rkey] =  sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT
+                else:
+                    self._R[Rkey] =  sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.I(key) * sqrtY)
 
             elif self.data_weighting == 'iC':
-                self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
+                if self.symmetric_taper:
+                    self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
+                else:
+                    self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.iC(key) * sqrtY )
 
-            elif self.data_weighting == 'sinc_downweight':
+            elif self.data_weighting == 'dayenu':
                 r_param_key = (self.data_weighting,) + key
                 if not r_param_key in self.r_params:
-                    raise ValueError("Error: no filter params specified for "
-                                    "sinc weights! ")
-                else:
-                    r_params = self.r_params[r_param_key]
-
+                    raise ValueError("r_param not set for %s!"%str(r_param_key))
+                r_params = self.r_params[r_param_key]
+                if not 'filter_centers' in r_params or\
+                   not 'filter_half_widths' in r_params or\
+                   not  'filter_factors' in r_params:
+                       raise ValueError("filtering parameters not specified!")
                 #This line retrieves a the psuedo-inverse of a lazy covariance
-                #matrix given by dspec.sinc_downweight_mat_inv.
+                #matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 #to apply flagging weights before taking psuedo inverse.
-                self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                dspec.sinc_downweight_mat_inv(nchan=self.spw_Nfreqs,
-                                    df=np.median(np.diff(self.freqs)),
-                                    filter_centers=r_params['filter_centers'],
-                                    filter_half_widths=r_params['filter_half_widths'],
-                                    filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
+                if self.symmetric_taper:
+                    self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
+                    dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]],
+                                        filter_centers=r_params['filter_centers'],
+                                        filter_half_widths=r_params['filter_half_widths'],
+                                        filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
+                else:
+                    self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, np.linalg.pinv(sqrtY.T * \
+                    dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]],
+                                        filter_centers=r_params['filter_centers'],
+                                        filter_half_widths=r_params['filter_half_widths'],
+                                        filter_factors=r_params['filter_factors']) * sqrtY))
 
         return self._R[Rkey]
+
+    def set_symmetric_taper(self, use_symmetric_taper):
+        """
+        Set the symmetric taper parameter
+        If true, square R matrix will be computed as
+        R=sqrtT  K sqrt T
+        where sqrtT is a diagonal matrix with the square root of the taper.
+        This is only possible when K is a square-matrix (no filter extensions).
+
+        If set to false, then the R-matrix will implement the taper as
+        R = sqrtT ** 2 K
+        Parameters
+        ----------
+        use_taper : bool,
+            do you want to use a symmetric taper? True or False?
+        """
+        if use_symmetric_taper and (self.filter_extension[0] > 0 or self.filter_extension[1] > 0):
+            raise ValueError("You cannot use a symmetric taper when there are nonzero filter extensions.")
+        else:
+            self.symmetric_taper = use_symmetric_taper
+
+
+
+    def set_filter_extension(self, filter_extension):
+        """
+        Set extensions to filtering matrix
+
+        Parameters
+        ----------
+        filter_extension: 2-tuple or 2-list
+            must be integers. Specify how many channels below spw_min/max
+            filter will be applied to data.
+            filter_extensions will be clipped to not extend beyond data range.
+        """
+        if self.symmetric_taper and not filter_extension[0] == 0 and not filter_extension[1]==0:
+            raise_warning("You cannot set filter extensions greater then zero when symmetric_taper==True! Setting symmetric_taper==False!")
+            self.symmetric_taper = False
+        assert isinstance(filter_extension, (list, tuple)), "filter_extension must a tuple or list"
+        assert len(filter_extension) == 2, "filter extension must be length 2"
+        assert isinstance(filter_extension[0], int) and\
+               isinstance(filter_extension[1], int) and \
+               filter_extension[0] >= 0 and\
+               filter_extension[1] >=0, "filter extension must contain only positive integers"
+        filter_extension=list(filter_extension)
+        if filter_extension[0] > self.spw_range[0]:
+            warnings.warn("filter_extension[0] exceeds data spw_range. Defaulting to spw_range[0]!")
+        if filter_extension[1] > self.Nfreqs - self.spw_range[1]:
+            warnings.warn("filter_extension[1] exceeds channels between spw_range[1] and Nfreqs. Defaulting to Nfreqs-spw_range[1]!")
+        filter_extension[0] = np.min([self.spw_range[0], filter_extension[0]])#clip extension to not extend beyond data range
+        filter_extension[1] = np.min([self.Nfreqs - self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
+        self.filter_extension = tuple(filter_extension)
 
     def set_weighting(self, data_weighting):
         """
@@ -846,7 +977,7 @@ class PSpecData(object):
         Parameters
         ----------
         data_weighting : str
-            Type of data weightings. Options=['identity', 'iC', 'sinc_downweight']
+            Type of data weightings. Options=['identity', 'iC', dayenu]
         """
         self.data_weighting = data_weighting
 
@@ -863,7 +994,7 @@ class PSpecData(object):
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
-                data_weighting == 'sinc_downweight':
+                data_weighting == 'dayenu':
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
@@ -923,7 +1054,9 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
-    def cov_q_hat(self, key1, key2, time_indices=None):
+
+    def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol = False,
+                  time_indices=None):
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
@@ -935,12 +1068,31 @@ class PSpecData(object):
         !!!Assumes that both baselines used in power-spectrum estimate
         !!!have independent noise relizations!!!
 
+        #updated to be a multi-time wrapper to get_unnormed_V
+
         Parameters
         ----------
-        key1, key2: tuples or lists of tuples
-            Tuples containing the indices of the dataset and baselines for the
-            two input datavectors. If a list of tuples is provided, the baselines
+        key1, key2 : tuples or lists of tuples
+            Tuples containing indices of dataset and baselines for the two
+            input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details).
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+
+        model : str, default: 'empirical'
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+             frequency-domain covariances.
 
         time_indices: list of indices of times to include or just a single time.
         default is None -> compute covariance for all times.
@@ -957,55 +1109,34 @@ class PSpecData(object):
             time_indices = [time_indices]
         if not isinstance(time_indices, list):
             raise ValueError("time_indices must be an integer or list of integers.")
-
+        if isinstance(key1,list):
+            assert isinstance(key2, list), "key1 is a list, key2 must be a list"
+            assert len(key2) == len(key1), "key1 length must equal key2 length"
+        if isinstance(key2,list):
+            assert isinstance(key1, list), "key2 is a list, key1 must be a list"
         #check time_indices
         for tind in time_indices:
             if not (tind >= 0 and tind <= self.Ntimes):
                 raise ValueError("Invalid time index provided.")
 
-        qc = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex128)
-        R1, R2 = 0.0, 0.0
-        n1a, n2a, n1b, n2b=0.0, 0.0, 0.0, 0.0
-        # compute noise covariance matrices. Assume diagonal!
-        # compute E^alpha and E^beta
-        if isinstance(key1, list):
-            for _key in key1:
-                R1 += self.R(_key)
-                n1a += np.real(self.dx(_key))**2.
-                n1b += np.imag(self.dx(_key))**2.
-        else:
-            R1 = self.R(key1)
-            n1a = np.real(self.dx(key1))**2.
-            n1b = np.imag(self.dx(key1))**2.
+        if not isinstance(key1,list):
+            key1 = [key1]
+        if not isinstance(key2,list):
+            key2 = [key2]
 
-        if isinstance(key2, list):
-            for _key in key2:
-                R2 += self.R(_key)
-                n2a += np.real(self.dx(_key))**2.
-                n2b += np.imag(self.dx(_key))**2.
-        else:
-            R2 = self.R(key2)
-            n2a = np.real(self.dx(key2)**2.)
-            n2b = np.imag(self.dx(key2)**2.)
+        output = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
+        for k1, k2 in zip(key1, key2):
+            if model == 'dsets':
+                output+=1./np.asarray([self.get_unnormed_V(k1, k2, model=model,
+                                  exact_norm=exact_norm, pol=pol, time_index=t)\
+                                  for t in time_indices])
 
-        N1 = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs), dtype=np.complex128)
-        N2 = np.zeros_like(N1)
-        Qalphas = np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[np.newaxis, :, :, :], self.spw_Ndlys, axis=0)
-        Qbetas = np.repeat(np.array([self.get_Q_alt(dly) for dly in range(self.spw_Ndlys)])[:, np.newaxis, :, :], self.spw_Ndlys, axis=1)
+            elif model == 'empirical':
+                cm = self.get_unnormed_V(k1, k2, model=model,
+                                  exact_norm=exact_norm, pol=pol)
+                output+=1./np.asarray([cm for m in range(len(time_indices))])
 
-        # Q_alpha/Q_beta are N_dlys x N_dlys x N_freq x N_freq
-        # taking advantage of broadcast rules!
-        # matmul only applies to the last two dimensions
-        # and stacks everything else!
-        Ealphas = np.matmul(R1.T.conj(), np.matmul(Qalphas, R2))
-        Ebetas = np.matmul(R1.T.conj(), np.matmul(Qbetas, R2))
-        #E_alpha/E_beta ar N_dlys x N_dlys x N_freq x N_freq
-        for indnum, tind in enumerate(time_indices):
-            N1[:, :] = np.diag(n1a[:, tind] + n1b[:, tind])
-            N2[:, :] = np.diag(n2a[:, tind] + n2b[:, tind])
-            # total covariance is sum of real and imaginary covariances
-            qc[indnum] = np.trace(np.matmul(Ealphas, np.matmul(N1, np.matmul(Ebetas, N2))), axis1=2, axis2=3)
-        return qc/4.
+        return float(len(key1)) / output
 
     def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
         """
@@ -1069,19 +1200,19 @@ class PSpecData(object):
         # Calculate R x_1
         if isinstance(key1, list):
             for _key in key1:
-                Rx1 += np.dot(self.R(_key), self.x(_key))
+                Rx1 += np.dot(self.R(_key), self.x(_key, filter_extension=True))
                 R1 += self.R(_key)
         else:
-            Rx1 = np.dot(self.R(key1), self.x(key1))
+            Rx1 = np.dot(self.R(key1), self.x(key1, filter_extension=True))
             R1  = self.R(key1)
 
         # Calculate R x_2
         if isinstance(key2, list):
             for _key in key2:
-                Rx2 += np.dot(self.R(_key), self.x(_key))
+                Rx2 += np.dot(self.R(_key), self.x(_key, filter_extension=True))
                 R2 += self.R(_key)
         else:
-            Rx2 = np.dot(self.R(key2), self.x(key2))
+            Rx2 = np.dot(self.R(key2), self.x(key2, filter_extension=True))
             R2  = self.R(key2)
 
         # The set of operations for exact_norm == True are drawn from Equations
@@ -1172,11 +1303,23 @@ class PSpecData(object):
         if (exact_norm):
             integral_beam = self.get_integral_beam(pol)
             del_tau = np.median(np.diff(self.delays()))*1e-9
+        if exact_norm:
+            qnorm =  del_tau * integral_beam
+        else:
+            qnorm = 1.
         for ch in range(self.spw_Ndlys):
-            if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
-            else: Q1 = self.get_Q_alt(ch)
-            Q2 = Q1
-            iR1Q1[ch] = np.dot(R1, Q1) # R_1 Q
+            #G is given by Tr[E^\alpha C,\beta]
+            #where E^\alpha = R_1^\dagger Q^\apha R_2
+            #C,\beta = Q2 and Q^\alpha = Q1
+            #Note that we conjugate transpose R
+            #because we want to E^\alpha to
+            #give the absolute value squared of z = m_\alpha \dot R @ x
+            #where m_alpha takes the FT from frequency to the \alpha fourier mode.
+            #Q is essentially m_\alpha^\dagger m
+            # so we need to sandwhich it between R_1^\dagger and R_2
+            Q1 = self.get_Q_alt(ch) * qnorm
+            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
+            iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
         for i in range(self.spw_Ndlys):
             for j in range(self.spw_Ndlys):
@@ -1263,24 +1406,36 @@ class PSpecData(object):
         R1 = self.R(key1)
         R2 = self.R(key2)
         if not sampling:
-            sinc_matrix = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs))
-            for i in range(self.spw_Nfreqs):
-                for j in range(self.spw_Nfreqs):
+            nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
+            sinc_matrix = np.zeros((nfreq, nfreq))
+            for i in range(nfreq):
+                for j in range(nfreq):
                     sinc_matrix[i,j] = np.float(i - j)
-            sinc_matrix = np.sinc(sinc_matrix / np.float(self.spw_Ndlys))
+            sinc_matrix = np.sinc(sinc_matrix / np.float(nfreq))
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
             integral_beam = self.get_integral_beam(pol)
             del_tau = np.median(np.diff(self.delays()))*1e-9
+        if exact_norm:
+            qnorm = del_tau * integral_beam
+        else:
+            qnorm = 1.
         for ch in range(self.spw_Ndlys):
-            if exact_norm: Q1 = self.get_Q_alt(ch) * del_tau * integral_beam
-            else: Q1 = self.get_Q_alt(ch)
-            Q2 = copy.deepcopy(Q1)
+            Q1 = self.get_Q_alt(ch) * qnorm
+            Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
             if not sampling:
                 Q2 *= sinc_matrix
-
-            iR1Q1[ch] = np.dot(R1, Q1) # R_1 Q_alt
+            #H is given by Tr([E^\alpha C,\beta])
+            #where E^\alpha = R_1^\dagger Q^\apha R_2
+            #C,\beta = Q2 and Q^\alpha = Q1
+            #Note that we conjugate transpose R
+            #because we want to E^\alpha to
+            #give the absolute value squared of z = m_\alpha \dot R @ x
+            #where m_alpha takes the FT from frequency to the \alpha fourier mode.
+            #Q is essentially m_\alpha^\dagger m
+            # so we need to sandwhich it between R_1^\dagger and R_2
+            iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q_alt
             iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
 
         for i in range(self.spw_Ndlys): # this loop goes as nchan^4
@@ -1338,8 +1493,8 @@ class PSpecData(object):
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None")
-
-        E_matrices = np.zeros((self.spw_Ndlys, self.spw_Nfreqs, self.spw_Nfreqs),
+        nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
+        E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
                                dtype=np.complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
@@ -1349,11 +1504,12 @@ class PSpecData(object):
         for dly_idx in range(self.spw_Ndlys):
             if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
             else: QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
-            E_matrices[dly_idx] = np.dot(R1, QR2)
+            E_matrices[dly_idx] = np.dot(np.conj(R1).T, QR2)
 
         return 0.5 * E_matrices
 
-    def get_unnormed_V(self, key1, key2, model='empirical', exact_norm=False, pol = False):
+    def get_unnormed_V(self, key1, key2, model='empirical', exact_norm=False, pol = False,
+                       time_index=None):
         """
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
@@ -1419,6 +1575,15 @@ class PSpecData(object):
 
         model : str, default: 'empirical'
             How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
+
+        time_index : integer, compute covariance at specific time-step in dset
+                       only supported if mode == 'dsets'
 
         Returns
         -------
@@ -1427,8 +1592,8 @@ class PSpecData(object):
         """
         # Collect all the relevant pieces
         E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm, pol = pol)
-        C1 = self.C_model(key1)
-        C2 = self.C_model(key2)
+        C1 = self.C_model(key1, model=model, time_index=time_index)
+        C2 = self.C_model(key2, model=model, time_index=time_index)
         P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
         S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
 
@@ -1580,7 +1745,7 @@ class PSpecData(object):
 
         return M, W
 
-    def get_Q_alt(self, mode, allow_fft=True):
+    def get_Q_alt(self, mode, allow_fft=True, include_extension=False):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha,
         EXCEPT without the primary beam factors. This is Q_alt as defined
@@ -1610,6 +1775,10 @@ class PSpecData(object):
             the number of delay bins equals the number of delay channels.
             Default: True
 
+        include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
+        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
+        (spw_Nfreq x spw_Nfreq).
+
         Return
         -------
         Q : array_like
@@ -1621,9 +1790,14 @@ class PSpecData(object):
         if mode >= self.spw_Ndlys:
             raise IndexError("Cannot compute Q matrix for a mode outside"
                              "of allowed range of delay modes.")
-
-        if (self.spw_Ndlys == self.spw_Nfreqs) and (allow_fft == True):
-            _m = np.zeros((self.spw_Nfreqs,), dtype=np.complex)
+        nfreq = self.spw_Nfreqs
+        if include_extension:
+            nfreq = nfreq + np.sum(self.filter_extension)
+            phase_correction = self.filter_extension[0]
+        else:
+            phase_correction = 0.
+        if (self.spw_Ndlys == nfreq) and (allow_fft == True):
+            _m = np.zeros((nfreq,), dtype=np.complex)
             _m[mode] = 1. # delta function at specific delay mode
             # FFT to transform to frequency space
             m = np.fft.fft(np.fft.ifftshift(_m))
@@ -1632,7 +1806,7 @@ class PSpecData(object):
                 start_idx = -self.spw_Ndlys/2
             else:
                 start_idx = -(self.spw_Ndlys - 1)/2
-            m = (start_idx + mode) * np.arange(self.spw_Nfreqs)
+            m = (start_idx + mode) * (np.arange(nfreq) - phase_correction)
             m = np.exp(-2j * np.pi * m / self.spw_Ndlys)
 
         Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
@@ -1983,8 +2157,13 @@ class PSpecData(object):
         \sum_gamma tr[Q^alt_alpha Q^alt_gamma] = N_freq**2
         is something that is true only when N_freqs = N_dlys.
 
-        In general, the result is still independent of alpha, but is
+        If the data weighting is equal to "identity",
+        then the result is independent of alpha, but is
         no longer given by N_freq**2. (Nor is it just N_dlys**2!)
+
+        If the data weighting is not equal to "identity" then
+        we generally need a separate scalar adjustment for each
+        alpha.
 
         This function uses the state of self.taper in constructing adjustment.
         See PSpecData.pspec for details.
@@ -2008,8 +2187,8 @@ class PSpecData(object):
 
         Returns
         -------
-        adjustment : float
-
+        adjustment : float if the data_weighting is 'identity'
+                     1d array of floats with length spw_Ndlys otherwise.
         """
         if Gv is None: Gv = self.get_G(key1, key2)
         if Hv is None: Hv = self.get_H(key1, key2, sampling)
@@ -2023,14 +2202,23 @@ class PSpecData(object):
         ratio[np.isnan(ratio)] = 1.0
         ratio[np.isinf(ratio)] = 1.0
 
-        # get mean ratio
-        mean_ratio = np.mean(ratio)
-        scatter = np.abs(ratio - mean_ratio)
-        if (scatter > 10**-4 * mean_ratio).any():
-            raise ValueError("The normalization scalar is band-dependent!")
-
-        adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
-
+        ## XXX: Adjustments like this are hacky and wouldn't be necessary
+        ## if we deprecate the incorrectly normalized
+        ## Q and M matrix definitions.
+        #In the future, we need to do our normalizations properly and
+        #stop introducing arbitrary normalization factors.
+        #if the input identity weighting is diagonal, then the
+        #adjustment factor is independent of alpha.
+        # get mean ratio.
+        if self.data_weighting == 'identity':
+            mean_ratio = np.mean(ratio)
+            scatter = np.abs(ratio - mean_ratio)
+            if (scatter > 10**-4 * mean_ratio).any():
+                raise ValueError("The normalization scalar is band-dependent!")
+            adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
+        #otherwise, the adjustment factor is dependent on alpha.
+        else:
+            adjustment = self.spw_Ndlys / (self.spw_Nfreqs * ratio)
         if self.taper != 'none':
             tapering_fct = dspec.gen_window(self.taper, self.spw_Nfreqs)
             adjustment *= np.mean(tapering_fct**2)
@@ -2096,9 +2284,9 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
               input_data_weight='identity', norm='I', taper='none',
-              sampling=False, little_h=True, spw_ranges=None,
-              baseline_tol=1.0, store_cov=False, verbose=True,
-              exact_norm=False, history='', r_params=None):
+              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
+              baseline_tol=1.0, store_cov=False, verbose=True, filter_extensions=None,
+              exact_norm=False, history='', r_params=None, cov_model='empirical'):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2177,6 +2365,10 @@ class PSpecData(object):
             channel used to index the `freq_array` of each dataset. The default
             (None) is to use the entire band provided in each dataset.
 
+        symmetric_taper : bool, optional
+            speicfy if taper should be applied symmetrically to K-matrix (if true)
+            or on the left (if False). default is True
+
         baseline_tol : float, optional
             Distance tolerance for notion of baseline "redundancy" in meters.
             Default: 1.0.
@@ -2186,8 +2378,20 @@ class PSpecData(object):
             given an input visibility noise model, and store the output
             in the UVPSpec object.
 
+        cov_model : string, optional
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances.
+
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
+
+        filter_extensions : list of 2-tuple or 2-list, optional
+            Set number of channels to extend filtering width.
 
         exact_norm : bool, optional
             If True, estimates power spectrum using Q instead of Q_alt
@@ -2201,7 +2405,7 @@ class PSpecData(object):
         r_params: dictionary with parameters for weighting matrix.
                   Proper fields
                   and formats depend on the mode of data_weighting.
-                data_weighting == 'sinc_downweight':
+                data_weighting == 'dayenu':
                                 dictionary with fields
                                 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                                   at which to center filtering windows. Can specify fractional channel number.
@@ -2256,6 +2460,7 @@ class PSpecData(object):
         """
         # set taper and data weighting
         self.set_taper(taper)
+        self.set_symmetric_taper(symmetric_taper)
         self.set_weighting(input_data_weight)
 
         # Validate the input data to make sure it's sensible
@@ -2313,10 +2518,16 @@ class PSpecData(object):
         # configure spectral window selections
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
-
-        # convert to list if only a tuple was given
         if isinstance(spw_ranges, tuple):
             spw_ranges = [spw_ranges,]
+
+        if filter_extensions is None:
+            filter_extensions = [(0, 0) for m in range(len(spw_ranges))]
+        # convert to list if only a tuple was given
+        if isinstance(filter_extensions, tuple):
+            filter_extensions = [filter_extensions,]
+
+        assert len(spw_ranges) == len(filter_extensions), "must provide same number of spw_ranges as filter_extensions"
 
         # Check that spw_ranges is list of len-2 tuples
         assert np.isclose([len(t) for t in spw_ranges], 2).all(), \
@@ -2374,14 +2585,13 @@ class PSpecData(object):
         sclr_arr = []
         blp_arr = []
         bls_arr = []
-
         # Loop over spectral windows
         for i in range(len(spw_ranges)):
             # set spectral range
             if verbose:
                 print( "\nSetting spectral range: {}".format(spw_ranges[i]))
             self.set_spw(spw_ranges[i])
-
+            self.set_filter_extension(filter_extensions[i])
             # set number of delay bins
             self.set_Ndlys(n_dlys[i])
 
@@ -2479,13 +2689,14 @@ class PSpecData(object):
                     # Check that number of non-zero weight chans >= n_dlys
                     key1_dof = np.sum(~np.isclose(self.Y(key1).diagonal(), 0.0))
                     key2_dof = np.sum(~np.isclose(self.Y(key2).diagonal(), 0.0))
-                    if key1_dof < self.spw_Ndlys or key2_dof < self.spw_Ndlys:
+                    if key1_dof - np.sum(self.filter_extension) < self.spw_Ndlys\
+                     or key2_dof - np.sum(self.filter_extension) < self.spw_Ndlys:
                         if verbose:
                             print("WARNING: Number of unflagged chans for key1 "
                                   "and/or key2 < n_dlys\n which may lead to "
                                   "normalization instabilities.")
                     #if using inverse sinc weighting, set r_params
-                    if input_data_weight == 'sinc_downweight':
+                    if input_data_weight == 'dayenu':
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
                         if not key1 in r_params:
@@ -2549,12 +2760,18 @@ class PSpecData(object):
                     # Wide bin adjustment of scalar, which is only needed for
                     # the diagonal norm matrix mode (i.e., norm = 'I')
                     if norm == 'I' and not(exact_norm):
-                        pv *= self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
+                        sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
+                        if isinstance(sa, (np.float, float)):
+                            pv *= sa
+                        else:
+                            pv = np.atleast_2d(sa).T * pv
 
                     # Generate the covariance matrix if error bars provided
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
-                        cov_qv = self.cov_q_hat(key1, key2)
+                        #cov_qv = self.cov_q_hat(key1, key2)
+                        cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
+                                            exact_norm=exact_norm, pol=pol)
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
                             cov_pv *= (scalar * \
@@ -2647,7 +2864,7 @@ class PSpecData(object):
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
-
+        uvp.symmetric_taper=symmetric_taper
         # fill meta-data
         uvp.time_1_array = np.array(time1)
         uvp.time_2_array = np.array(time2)
@@ -2719,6 +2936,8 @@ class PSpecData(object):
         uvp.data_array = data_array
         if store_cov:
             uvp.cov_array = cov_array
+            uvp.cov_model = cov_model
+
         uvp.window_function_array = window_function_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
@@ -2931,9 +3150,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               bl_deg_range=(0, 180), bl_error_tol=1.0,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
-              time_thresh=0.2, Jy2mK=False, overwrite=True,
-              file_type='miriad', verbose=True, store_cov=False,
-              history='', r_params=None, tsleep=0.1, maxiter=1):
+              time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
+              file_type='miriad', verbose=True, store_cov=False, filter_extensions=None,
+              history='', r_params=None, tsleep=0.1, maxiter=1, cov_model='empirical'):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -3087,8 +3306,15 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         If True, solve for covariance between bandpowers and store in
         output UVPSpec object.
 
+    filter_extensions : list of 2-tuple or 2-list, optional
+        Set number of channels to extend filtering width.
+
     overwrite : boolean
         If True, overwrite outputs if they exist on disk.
+
+    symmetric_taper : bool, optional
+        speicfy if taper should be applied symmetrically to K-matrix (if true)
+        or on the left (if False). default is True
 
     file_type : str, optional
         If dsets passed as a list of filenames, specify which file format
@@ -3106,6 +3332,15 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     maxiter : int, optional
         Maximum number of attempts to open container file (useful for concurrent
         access when file may be locked temporarily by other processes).
+
+    cov_model : string, optional
+        How the covariances of the input data should be estimated.
+        in 'dsets' mode, error bars are estimated from user-provided
+        per baseline and per channel standard deivations. If 'empirical' is
+        set, then error bars are estimated from the data by calculating the
+        channel-channel covariance of each baseline over time and
+        then applying the appropriate linear transformations to these
+        frequency-domain covariances.
 
     r_params: dict, optional
         Dictionary with parameters for weighting matrix. Required fields and
@@ -3356,10 +3591,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             continue
 
         # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs,
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
-                       norm=norm, taper=taper, history=history, verbose=verbose)
+                       norm=norm, taper=taper, history=history, verbose=verbose,
+                       cov_model=cov_model, filter_extensions=filter_extensions)
 
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
@@ -3416,10 +3652,13 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_len_range", default=(0, 1e10), nargs='+', type=float, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
     a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
-    a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files.")
+    a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files or empirical covarianc.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
+    a.add_argument("--cov_model", default='empirical', type=str, help="Model for computing covariance, currently supports empirical or dsets")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
+    a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20 20, 40 40' ->> [(20, 20), (40, 40), ...]")
+    a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
     return a
 
 
