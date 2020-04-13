@@ -556,9 +556,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         This is the only error field that will be propagated to the final object.
         If not specified perform a uniform average.
 
-    weight_by_cov : str, optional
-        If True, use stored covariance as weights. Supersedes error_weights if fed.
-
     add_to_history : str, optional
         String to append to object history
 
