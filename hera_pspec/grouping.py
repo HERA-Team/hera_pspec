@@ -615,7 +615,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     # initialize blank arrays and dicts
     Nk = len(kbins)
     dlys_array, spw_dlys_array = [], []
-    data_array, wgt_array, integration_array nsample_array = odict(), odict(), odict(), odict()  
+    data_array, wgt_array, integration_array, nsample_array = odict(), odict(), odict(), odict()  
     store_stats = hasattr(uvp, 'stats_array')
     store_cov = hasattr(uvp, "cov_array")
     store_window = hasattr(uvp, 'window_function_array')
