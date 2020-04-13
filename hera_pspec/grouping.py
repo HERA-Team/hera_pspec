@@ -569,6 +569,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     A : dict, optional
         Empty dict to populate with A matrix
 
+    run_check : bool, optional
+        If True, run UVPSpec.check() on resultant object
+
     Returns
     --------
     UVPSpec object
@@ -581,9 +584,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     2. If p_cyl = A p_sph, then the binned data, window function, and bandpower covariance are
         p_sph = H.T p_cyl
-        C_sph = [H.T E H]^-1
+        C_sph = H.T C_cyl H
         W_sph = H.T W_cyl A
-        where H = E.T A [A.T E A]^-1, and E is the bandpower weight matrix, generally E = C_cyl^-1.
+        where H = E.T A [A.T E A]^-1, and E is the bandpower weight matrix.
 
     3. For speed, it helps to perform cylindrical binning upfront by suppyling blpair_groups.
     """
@@ -602,6 +605,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     # copy input
     uvp = copy.deepcopy(uvp_in)
+
     # perform time and cylindrical averaging upfront if requested
     if blpair_groups is not None or time_avg:
         uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg,
@@ -611,8 +615,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     # initialize blank arrays and dicts
     Nk = len(kbins)
     dlys_array, spw_dlys_array = [], []
-    (data_array, window_function_array, wgt_array, integration_array,
-     nsample_array) = odict(), odict(), odict(), odict(), odict()  
+    data_array, wgt_array, integration_array nsample_array = odict(), odict(), odict(), odict()  
     store_stats = hasattr(uvp, 'stats_array')
     store_cov = hasattr(uvp, "cov_array")
     store_window = hasattr(uvp, 'window_function_array')
@@ -620,6 +623,8 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         cov_array = odict()
     if store_stats:
         stats_array = odict([[stat, odict()] for stat in uvp.stats_array.keys()])
+    if store_window:
+        window_function_array = odict()
 
     # transform kgrid to little_h units
     if not little_h:
@@ -691,11 +696,14 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
             # store data
             data_array[spw][:, dslice] = uvp.data_array[spw][blpt_inds]
+
             if store_window:
                 window_function_array[spw][:, dslice, dslice] = uvp.window_function_array[spw][blpt_inds]
+
             if store_stats:
                 for stat in stats_array:
                     stats_array[stat][spw][:, dslice] = uvp.stats_array[stat][spw][blpt_inds]
+
             if store_cov:
                 cov_array[spw][:, dslice, dslice] = uvp.cov_array[spw][blpt_inds]
 
@@ -703,6 +711,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             if weight_by_cov:
                 # weight by inverse (real) covariance
                 for p in range(uvp.Npols):
+                    # the covariance is block diagonal assuming no correlations between baseline-pairs
                     E[:, dslice, dslice, p] = np.linalg.pinv(cov_array[spw][:, dslice, dslice, p].real)
 
             elif error_weights is not None:
@@ -716,7 +725,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 E[:, range(dstart, dstop), range(dstart, dstop)] *= (~f[:, None, :])
 
             # append to non-dly arrays
-            Emean = np.trace(E[:, dslice, dslice], axis1=1, axis2=2)  # use mean of E across delay as weight
+            Emean = np.trace(E[:, dslice, dslice], axis1=1, axis2=2)  # use sum of E across delay as weight
             wgt_array[spw] += wgts * Emean[:, None, None, :]
             integration_array[spw] += ints * Emean
             nsample_array[spw] += nsmp
@@ -724,12 +733,14 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # get k_sph -> k_cyl mapping
             for i, kmag in enumerate(kmags):
                 kind = (kbin_left < kmag) & (kbin_right >= kmag)
+
                 if not np.any(kind):
                     # skip if not in any kbins
                     continue
                 else:
                     # convert kind into an integer for indexing
                     kind = np.where(kind)[0][0]
+
                 # populate A matrix
                 A[spw][:, i + Ndlys * b, kind, :] = 1.0
 
@@ -738,11 +749,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         integration_array[spw] /= np.trace(E.real, axis1=1, axis2=2).clip(1e-40, np.inf)
 
         # project onto spherically binned space
-        # t indexes time, p indexes polarization
-        # i,j indexes Ndlyblps, Ndlyblps
-        # k,l indexes Nk, Nk
         # note: matmul (@) is generally as fast or many times faster than einsum here
-
         # first compute: H = E A [A.T E A]^-1
         # move axes to enable matmul and inv over Ndlyblps and Nk axes
         # Am shape (Npols, Ntimes, Ndlyblps, Nk)
@@ -762,6 +769,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
         if store_window:
             # bin window function: W_sph = H.T W_cyl A
+            # wm shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
             wm = np.moveaxis(window_function_array[spw], -1, 0)
             wm = Ht @ wm @ Am
             window_function_array[spw] = np.moveaxis(wm, 0, -1)
@@ -774,6 +782,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
         if store_cov:
             # bin covariance: C_sph = H.T C_cyl H
+            # cm shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
             cm = np.moveaxis(cov_array[spw], -1, 0)
             cm = Ht @ cm @ H
             cov_array[spw] = np.moveaxis(cm, 0, -1)
