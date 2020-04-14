@@ -132,6 +132,7 @@ class Test_grouping(unittest.TestCase):
         assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
         assert(abs(uvp_avg_noise_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
         # For non-uniform weights, we test the error bar on the average power spectra should be smaller than one on single sample.
+
     def test_sample_baselines(self):
         """
         Test baseline sampling (with replacement) behavior.
@@ -351,6 +352,81 @@ def test_get_bootstrap_run_argparser():
     nt.assert_equal(a.blpair_groups, [[101102103104, 101102102103], [102103104105]])
     nt.assert_equal(a.cintervals, [16.0, 84.0])
 
+
+def test_spherical_average():
+    # create two polarization data
+    uvd = UVData()
+    uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+    # load other data, get reds and make UVPSpec
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    cosmo = conversions.Cosmo_Conversions()
+    beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+    ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
+    reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)
+    reds = [r[:2] for r in reds]
+    uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo)
+    uvd.polarization_array[0] = -6
+    uvp += testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo)
+    # insert cov_array and stats_array
+    uvp.cov_array = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.complex128)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
+                        for s in range(uvp.Nspws)}
+    uvp.stats_array = {'err': {s: np.ones((uvp.Nblpairts, uvp.Ndlys, uvp.Npols), dtype=np.complex128)
+                                  for s in range(uvp.Nspws)}}
+
+    # try a spherical average
+    kbins = np.arange(0, 2.9, 0.25)
+    Nk = len(kbins)
+    bin_widths = 0.25
+    A = {}
+    sph = grouping.spherical_average(uvp, kbins, bin_widths, add_to_history='checking 1 2 3', A=A)
+    # metadata
+    assert sph.Nblpairs == 1
+    assert 'checking 1 2 3' in sph.history
+    assert np.isclose(sph.get_blpair_seps(), 0).all()  # assert kperp has no magnitude
+    assert 'err' in sph.stats_array
+    for spw in sph.spw_array:
+        # binning and normalization
+        assert np.isclose(sph.get_kparas(spw), kbins).all()  # assert kbins are input kbins
+        assert np.isclose(sph.window_function_array[spw].sum(axis=2), 1).all()  # assert window func is normalized
+        # check low k modes are greater than high k modes
+        # this ia a basic "averaged data smell test" in lieu of a known pspec to compare to
+        assert np.all(sph.data_array[spw][:, 0, :].real / sph.data_array[spw][:, 10, :] > 1e3)
+        # assert errorbars are 1/sqrt(N) what they used to be
+        assert np.isclose(np.sqrt(sph.cov_array[spw])[:, range(Nk), range(Nk)], 1/np.sqrt(A[spw].sum(axis=1))).all()
+        assert np.isclose(sph.stats_array['err'][spw], 1/np.sqrt(A[spw].sum(axis=1))).all()
+
+    # try without little h
+    sph2 = grouping.spherical_average(uvp, kbins * cosmo.h, bin_widths * cosmo.h, little_h=False)
+    for spw in sph.spw_array:
+        assert np.isclose(sph.get_kparas(spw), sph2.get_kparas(spw)).all()
+
+    # try time average
+    sph = grouping.spherical_average(uvp, kbins, bin_widths, time_avg=True)
+    assert sph.Ntimes == 1
+
+    # try weighting by stats_array
+    sph = grouping.spherical_average(uvp, kbins, bin_widths, error_weights='err')
+    for spw in sph.spw_array:
+        assert np.isclose(sph.window_function_array[spw].sum(axis=2), 1).all()
+
+    # weight by covariance (should be same result as stats given predefined values!)
+    sph2 = grouping.spherical_average(uvp, kbins, bin_widths, weight_by_cov=True)
+    for spw in sph2.spw_array:
+        assert np.isclose(sph2.window_function_array[spw].sum(axis=2), 1).all()
+        assert np.isclose(sph.data_array[spw], sph2.data_array[spw]).all()
+
+    # slice into stats array and set region of k_perp k_para to infinte variance
+    uvp2 = copy.deepcopy(uvp)
+    uvp2.set_stats_slice('err', 0, 1000, above=False, val=np.inf)
+    sph2 = grouping.spherical_average(uvp2, kbins, bin_widths, error_weights='err')
+    # assert low k modes are zeroed!
+    assert np.isclose(sph2.data_array[0][:, :3, :], 0).all()  
+    # assert bins that weren't nulled still have proper window normalization
+    for spw in sph2.spw_array:
+        assert np.isclose(sph2.window_function_array[spw].sum(axis=2)[:, 3:, :], 1).all()
+
+    # exceptions
+    nt.assert_raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)
 
 if __name__ == "__main__":
     unittest.main()

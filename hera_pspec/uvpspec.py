@@ -42,6 +42,8 @@ class UVPSpec(object):
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays. "
         self._cov_array = PSpecParam("cov_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        desc = "Window function dictionary of bandpowers."
+        self._window_function_array = PSpecParam("window_function_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
@@ -105,7 +107,7 @@ class UVPSpec(object):
                             "Nspwdlys", "Nspwfreqs", "r_params",
                             "data_array", "wgt_array", "integration_array",
                             "spw_array", "freq_array", "dly_array",
-                            "polpair_array",
+                            "polpair_array", "window_function_array",
                             "lst_1_array", "lst_2_array", "time_1_array",
                             "time_2_array", "blpair_array", "Nbls",
                             "bl_vecs", "bl_array", "channel_width",
@@ -132,7 +134,7 @@ class UVPSpec(object):
                           "bl_vecs", "bl_array", "telescope_location",
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
-        self._dicts = ["data_array", "wgt_array", "integration_array",
+        self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array", 
                        "nsample_array", "cov_array"]
         self._dicts_of_dicts = ["stats_array"]
 
@@ -201,6 +203,44 @@ class UVPSpec(object):
                 return self.cov_array[spw][blpairts, :, :, polpair]
         else:
             raise AttributeError("No covariance array has been calculated.")
+
+    def get_window_function(self, key, omit_flags=False):
+        """
+        Slice into window_function array with a specified data key in the format
+        (spw, ((ant1, ant2),(ant3, ant4)), (pol1, pol2))
+
+        or
+
+        (spw, blpair-integer, pol-integer)
+
+        where spw is the spectral window integer, ant1 etc. are integers,
+        and pol is either a tuple of polarization strings (ex. ('XX', 'YY'))
+        or integers (ex. (-5,-5)).
+
+        Parameters
+        ----------
+        key: tuple
+            Contains the baseline-pair, spw, polpair keys
+
+        omit_flags : bool, optional
+            If True, remove time integrations (or spectra) that
+            came from visibility data that were completely flagged
+            across the spectral window (i.e. integration == 0).
+
+        Returns
+        -------
+        data : complex ndarray
+            Shape (Ntimes, Ndlys, Ndlys)
+        """
+        spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
+
+        # Need to deal with folded data!
+        # if data has been folded, return only positive delays
+        if self.folded:
+            Ndlys = self.data_array[spw].shape[1]
+            return self.window_function_array[spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, polpair]
+        else:
+            return self.window_function_array[spw][blpairts, :, :, polpair]
 
     def get_data(self, key, omit_flags=False):
         """
@@ -623,19 +663,19 @@ class UVPSpec(object):
 
         self.stats_array[stat][spw][blpairts, :, polpair] = statistic
 
-    def set_stats_slice(self, stat, m, b, above=True, val=1e20):
+    def set_stats_slice(self, stat, m, b, above=False, val=1e20):
         """
         For each baseline, set all delay bins in stats_array that fall
-        above or below y = bl_len * m + b equal to val.
+        above or below y = bl_len * m + b [nanosec] equal to val.
         Useful for downweighting foregrounds in spherical average.
 
         Parameters
         ----------
         stat : str, name of stat in stat_array to set
 
-        m : float, coefficient of bl_len [meters]
+        m : float, coefficient of bl_len [nanosec / meter]
 
-        b : float, offset in sec
+        b : float, offset [nanosec]
 
         above : bool, if True, set stats above line, else set below line
 
@@ -1363,7 +1403,6 @@ class UVPSpec(object):
                 group.create_dataset(k, data=getattr(self, k))
 
         # Iterate over spectral windows and create datasets
-        store_cov = hasattr(self, 'cov_array')
         for i in np.unique(self.spw_array):
             group.create_dataset("data_spw{}".format(i),
                                  data=self.data_array[i],
@@ -1377,6 +1416,9 @@ class UVPSpec(object):
             group.create_dataset("nsample_spw{}".format(i),
                                  data=self.nsample_array[i],
                                  dtype=np.float)
+            group.create_dataset("window_function_spw{}".format(i),
+                                 data=self.window_function_array[i],
+                                 dtype=np.complex128)
             if hasattr(self, "cov_array"):
                 group.create_dataset("cov_spw{}".format(i),
                                      data=self.cov_array[i],
@@ -2041,6 +2083,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.integration_array = odict()
     u.wgt_array = odict()
     u.nsample_array = odict()
+    u.window_function_array = odict()
     if store_cov:
         u.cov_array = odict()
         #cov_model will track whether error bars are from cmobination of techniques
@@ -2058,6 +2101,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         # spw[2] == Nfreqs (wgt_array is not resampled if Ndlys != Nfreqs,
         # so needs to keep this shape)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
+        u.window_function_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.complex128)
         if store_cov:
             u.cov_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols),
                                       np.complex128)
@@ -2162,7 +2206,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
-
+                    u.window_function_array[i][j,:,:,k] = uvps[l].window_function_array[m][n, :, :, q]
                     # Labels
                     lbl1 = uvps[l].label_1_array[m, n, q]
                     lbl2 = uvps[l].label_2_array[m, n, q]
@@ -2206,7 +2250,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
-
+                    u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
                     # Labels
                     lbl1 = uvps[l].label_1_array[m, n, q]
                     lbl2 = uvps[l].label_2_array[m, n, q]
@@ -2247,6 +2291,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                 for j, blpt in enumerate(new_blpts):
                     n = blpts_idxs[j]
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
+                    u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
                     if store_cov:
                       u.cov_array[i][j, :, :, k] = uvps[l].cov_array[m][n, :, :, q]
                     u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
