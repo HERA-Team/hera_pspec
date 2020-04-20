@@ -2033,7 +2033,8 @@ class PSpecData(object):
             M = np.mean(M, axis=0)
         return M
 
-    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, average_times=False):
+    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False,
+              time_indices=None, average_times=False, norm_options=None):
         """
         Construct the Window function matrix W. This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2164,8 +2165,8 @@ class PSpecData(object):
         #     return M, W
 
         # Check that mode is supported
-        modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
-        assert mode in modes, "Support for ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']. Provided %s"%(mode)
+        modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2', 'DH^-1']
+        assert mode in modes, "Support for ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2', DH^-1]. Provided %s"%(mode)
 
         if mode!='I' and exact_norm==True:
             raise NotImplementedError("Exact norm is not supported for non-I modes")
@@ -2221,6 +2222,13 @@ class PSpecData(object):
                 M = np.dot(W_norm, H_minus_half)
                 W = np.dot(M, H[tind])
 
+            elif mode == 'DH^-1':
+                #divide by the diagonal of the H-matrix.
+                M = np.diag(1. / np.diag(H[tind]))
+                W_norm = np.diag(1. / np.sum(M @ H[tind], axis=1))
+                M = W_norm @ M
+                W = M @ H[tind]
+
             elif mode == 'I':
                 # This is not the M matrix as is rigorously defined in the
                 # OQE formalism, because the power spectrum scalar is excluded
@@ -2230,27 +2238,38 @@ class PSpecData(object):
                 W_norm = np.diag(1. / np.sum(H[tind], axis=1))
                 W = np.dot(W_norm, H[tind])
 
-            else:
-                raise NotImplementedError("Cholesky decomposition mode not currently supported.")
+            #elif mode == 'LU':
+                # Use this mode if we want to perform LU decomposition of
+                # the H-matrix where we define two different blocks that we
+                # want to be decouples.
+                #this norm option will not fully work with hera_pspec
+                #as implemented unless we
+            #    if norm_options is None or 'NTEMPLATES' not in norm_options \
+            #    or 'NBANDPOWERS' not in norm_options:
+            #        raise ValueError("")
+            #        ntemplates = norm_options['']
+
+            elif mode == 'L^-1':
+                #raise NotImplementedError("Cholesky decomposition mode not currently supported.")
                 # # Cholesky decomposition
-                # order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
-                # order[order < 0] = order[order < 0] - 0.1
+                order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
+                order[order < 0] = order[order < 0] - 0.1
 
                 # # Negative integers have larger absolute value so they are sorted
                 # # after positive integers.
-                # order = (np.abs(order)).argsort()
-                # if np.mod(G.shape[0], 2) == 1:
-                #     endindex = -2
-                # else:
-                #     endindex = -1
-                # order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
-                # iorder = np.argsort(order)
+                 order = (np.abs(order)).argsort()
+                 if np.mod(G.shape[0], 2) == 1:
+                     endindex = -2
+                 else:
+                     endindex = -1
+                 order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
+                 iorder = np.argsort(order)
 
-                # G_o = np.take(np.take(G, order, axis=0), order, axis=1)
-                # L_o = np.linalg.cholesky(G_o)
-                # U,S,V = np.linalg.svd(L_o.conj())
-                # M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
-                # M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
+                 G_o = np.take(np.take(G, order, axis=0), order, axis=1)
+                 L_o = np.linalg.cholesky(G_o)
+                 U,S,V = np.linalg.svd(L_o.conj())
+                 M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
+                 M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
             Ws[tind] = W
             Ms[tind] = M
         Ms[np.isnan(Ms)] = 0.
