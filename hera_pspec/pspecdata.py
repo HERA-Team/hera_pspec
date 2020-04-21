@@ -2048,7 +2048,7 @@ class PSpecData(object):
             M = np.mean(M, axis=0)
         return M
 
-    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, average_times=False):
+    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, average_times=False, pol=False):
         """
         Construct the Window function matrix W. This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2102,7 +2102,7 @@ class PSpecData(object):
             time_indices = np.arange(self.Ntimes).astype(int)
         W = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         for tind, time_index in enumerate(time_indices):
-            W[tind] = self._get_W(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm)
+            W[tind] = self._get_W(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol)
         if average_times:
             W = np.mean(W, axis=0)
         return W
@@ -3311,7 +3311,7 @@ class PSpecData(object):
                     #    Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
                     Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol)
                     pv = self.p_hat(Mv, qv)
-
+                    Wv = self.get_W(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol)
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
