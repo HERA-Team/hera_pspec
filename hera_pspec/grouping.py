@@ -422,8 +422,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         / (np.sum(w_list, axis=0).clip(1e-40, np.inf)**2)
                     bpg_stats[stat] = np.sqrt(arr)
                     if store_window:
-                    bpg_window_function = np.sum(bpg_window_function, axis=0) \
-                                / (np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:,None])
+                        bpg_window_function = np.sum(bpg_window_function, axis=0) \
+                                    / (np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:,None])
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
