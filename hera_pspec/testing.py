@@ -102,7 +102,7 @@ def build_vanilla_uvpspec(beam=None):
         # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
-        window_function_array[s] = np.ones((Nblpairts, Ndlys, Ndlys, Npols), dtype=np.complex)
+        window_function_array[s] = np.ones((Nblpairts, Ndlys, Ndlys, Npols), dtype=np.float64)
         cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
                                              for m in range(Nblpairts)]
                                              for n in range(Npols)]), 0, -1)
@@ -134,7 +134,7 @@ def build_vanilla_uvpspec(beam=None):
 
 def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
                       beam=None, taper='none', cosmo=None, n_dlys=None,
-                      r_params=None, verbose=False):
+                      r_params=None, verbose=False, **kwargs):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -184,6 +184,9 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     verbose : bool, optional
         if True, report feedback to standard output. Default: False.
 
+    kwargs : dict, optional
+        Additional kwargs to pass to PSpecData.pspec()
+    
     Returns
     -------
     uvp : UVPSpec object
@@ -240,7 +243,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
                    store_cov=store_cov, n_dlys=n_dlys, r_params=r_params,
-                   cov_model=cov_model)
+                   cov_model=cov_model, **kwargs)
 
     return uvp
 

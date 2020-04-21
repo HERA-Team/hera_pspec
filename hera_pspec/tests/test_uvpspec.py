@@ -763,7 +763,13 @@ def test_conj_blpair():
     nt.assert_equal(blpair, 102101104103)
     nt.assert_raises(ValueError, uvputils._conj_blpair, 102101103104, which='foo')
 
-def test_compatibility_read():
+def test_backwards_compatibility_read():
+    """This is a backwards compatibility test.
+    If it fails, your edits must be changed to make this test pass.
+    If the hera_pspec team decides to move forward and break
+    compatibility, this file can be overwritten
+    and the date of the file changed in the comment below.
+    """
     # test read in of a static test file dated 8/2019
     uvp = uvpspec.UVPSpec()
     uvp.read_hdf5(os.path.join(DATA_PATH, 'test_uvp.h5'))

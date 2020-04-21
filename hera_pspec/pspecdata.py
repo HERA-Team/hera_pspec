@@ -2283,9 +2283,9 @@ class PSpecData(object):
         return valid
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
-              input_data_weight='identity', norm='I', taper='none',
-              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
-              baseline_tol=1.0, store_cov=False, verbose=True, filter_extensions=None,
+              input_data_weight='identity', norm='I', taper='none', sampling=False,
+              little_h=True, spw_ranges=None, symmetric_taper=True, baseline_tol=1.0,
+              store_cov=False, store_window=True, verbose=True, filter_extensions=None,
               exact_norm=False, history='', r_params=None, cov_model='empirical'):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
@@ -2366,17 +2366,21 @@ class PSpecData(object):
             (None) is to use the entire band provided in each dataset.
 
         symmetric_taper : bool, optional
-            speicfy if taper should be applied symmetrically to K-matrix (if true)
-            or on the left (if False). default is True
+            Specify if taper should be applied symmetrically to K-matrix (if true)
+            or on the left (if False). Default: True
 
         baseline_tol : float, optional
             Distance tolerance for notion of baseline "redundancy" in meters.
             Default: 1.0.
 
-        store_cov : boolean, optional
+        store_cov : bool, optional
             If True, calculate an analytic covariance between bandpowers
             given an input visibility noise model, and store the output
             in the UVPSpec object.
+
+        store_window : bool, optional
+            If True, store the window function of the bandpowers.
+            Default: True
 
         cov_model : string, optional
             How the covariances of the input data should be estimated.
@@ -2780,7 +2784,7 @@ class PSpecData(object):
                         pol_cov.extend(cov_pv)
                     
                     # store the window_function
-                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.complex128))
+                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2934,16 +2938,17 @@ class PSpecData(object):
 
         # fill data arrays
         uvp.data_array = data_array
-        if store_cov:
-            uvp.cov_array = cov_array
-            uvp.cov_model = cov_model
-
-        uvp.window_function_array = window_function_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(
                         [ (k, np.ones_like(uvp.integration_array[k], np.float))
                          for k in uvp.integration_array.keys() ] )
+        if store_cov:
+            uvp.cov_array = cov_array
+            uvp.cov_model = cov_model
+
+        if store_window:
+            uvp.window_function_array = window_function_array
 
         # run check
         uvp.check()
