@@ -5,9 +5,8 @@ from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
 import uvtools.dspec as dspec
 from collections import OrderedDict as odict
-import units
-
-from . import conversions as conversions, uvpspec_utils as uvputils
+import scipy.special as sp
+from . import conversions as conversions, uvpspec_utils as uvputils 
 
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
@@ -396,20 +395,28 @@ class PSpecBeamAiry(PSpecBeamBase):
         hera_pspec's general utility since people
         often do sandbox analyses without detailed beam simulations. 
         """
-        def __init__(self, diameter, cosmo=None):
-            if not isinstance(diameter, (float,np.float, int, np.int)):
-                raise ValueError("provide a real number for diameter.")
-            if not isinstance(freqs, (list, np.ndarray)):
-                raise ValueError("provide a list or numpy array of floats for freqs")
+        if not isinstance(diameter, (float,np.float, int, np.int)):
+            raise ValueError("provide a real number for diameter.")
+        if not isinstance(freqs, (list, np.ndarray)):
+            raise ValueError("provide a list or numpy array of floats for freqs")
         #precompute omega_p and Omega_pp
-            self.omega_p = np.zeros_like(freqs)
-            self.Omega_pp = np.zeros_like(freqs)
-            #self.freqs = freqs
-            for chan,freq in enumerate(freqs):
-                self.omega_p[chan] = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(0, x * 2 * np.pi * units.c / freq / diameter)) ** 2. , 0, np.pi/2.)
-                self.omega_pp[chan] = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(0, x * 2 * np.pi * units.c / freq / diameter)) ** 4. , 0, np.pi/2.)
-            #self.omega_p = interp1d(freqs, self.omega_p)
-            #self.omega_pp = interp1d(freqs, self.omega_pp)
+        self.omega_p = np.zeros_like(freqs)
+        self.omega_pp = np.zeros_like(freqs)
+        self.beam_freqs = freqs
+        if cosmo is not None:
+            self.cosmo = cosmo
+        else:
+            self.cosmo = conversions.Cosmo_Conversions()
+
+        #self.freqs = freqs
+        for chan,freq in enumerate(freqs):
+            k = np.pi *  diameter / conversions.units.c * freq
+            self.omega_p[chan] = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(1, np.sin(x) * k) / (np.sin(x) * k)) ** 2. * np.sin(x),
+                                                            0, np.pi/2.)[0]
+            self.omega_pp[chan] = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(1, np.sin(x) * k) / (np.sin(x) * k)) ** 4. * np.sin(x),
+                                                             0, np.pi/2.)[0]
+        #self.omega_p = interp1d(freqs, self.omega_p)
+        #self.omega_pp = interp1d(freqs, self.omega_pp)
     def power_beam_int(self, pol='pI'):
         return self.omega_p
     def power_beam_sq_int(self, pol='pI'):
