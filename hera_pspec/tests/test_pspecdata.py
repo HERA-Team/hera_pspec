@@ -1942,6 +1942,45 @@ def test_input_calibration():
     nt.assert_raises(TypeError, pd.add, dfiles, [None], cals=['foo'])
 
 
+def test_window_funcs():
+    """
+    Test window function computation in ds.pspec()
+    This is complementary to test_get_MW above.
+    """
+    # get a PSpecData
+    uvd = UVData()
+    uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+    beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd)], beam=beam)
+    ds.set_spw((0, 20))
+    bl = (37, 38)
+    key = (0, bl, 'xx')
+    band_covar = np.eye(uvd.Nfreqs).astype(np.complex)  # for V^-1/2 norm
+    iC = np.linalg.pinv(np.cov(uvd.get_data(bl)[:, :20].T))
+    # iterate over various R and M matrices and ensure
+    # normalization and dtype is consistent
+    for data_weight in ['identity', 'iC']:
+        ds.set_weighting(data_weight)
+        for norm in ['H^-1', 'I', 'V^-1/2']:
+            for exact_norm in [True, False]:
+                if exact_norm and norm != 'I':
+                    # exact_norm only supported for norm == 'I'
+                    continue
+                ds.clear_cache()
+                if data_weight == 'iC':
+                    # fill R with iC
+                    ds._R[(0, (37, 38, 'xx'), 'iC', 'none', 0, 0, 20, True)] = iC
+                # compute G and H
+                Gv = ds.get_G(key, key, exact_norm=exact_norm, pol='xx')
+                Hv = ds.get_H(key, key, exact_norm=exact_norm, pol='xx')
+                Mv, Wv = ds.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm,
+                                   band_covar=band_covar)
+                # assert row-sum is normalized to 1
+                assert np.isclose(Wv.sum(axis=1).real, 1).all()
+                # assert this is a real matrix, even though imag is populated
+                assert np.isclose(Wv.imag, 0).all()
+
+
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()
     a = args.parse_args([['foo'], 'bar', '--dset_pairs', '0 0, 1 1', '--pol_pairs', 'xx xx, yy yy',

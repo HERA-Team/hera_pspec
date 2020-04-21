@@ -1681,18 +1681,11 @@ class PSpecData(object):
 
         # Build M matrix according to specified mode
         if mode == 'H^-1':
-
             try:
-                M = np.linalg.inv(H)
+                M = np.linalg.pinv(H)
             except np.linalg.LinAlgError as err:
-                if 'Singular matrix' in str(err):
-                    M = np.linalg.pinv(H)
-                    raise_warning("Warning: Window function matrix is singular "
-                                  "and cannot be inverted, so using "
-                                  " pseudoinverse instead.")
-                else:
-                    raise np.linalg.LinAlgError("Linear algebra error with H matrix "
-                                                "during MW computation.")
+                raise np.linalg.LinAlgError("Linear algebra error with H matrix "
+                                            "during MW computation.")
 
             W = np.dot(M, H)
             W_norm = np.sum(W, axis=1)
