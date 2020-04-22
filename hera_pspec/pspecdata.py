@@ -2222,14 +2222,8 @@ class PSpecData(object):
                 M = np.dot(W_norm, H_minus_half)
                 W = np.dot(M, H[tind])
 
-            elif mode == 'DH^-1':
-                #divide by the diagonal of the H-matrix.
-                M = np.diag(1. / np.diag(H[tind]))
-                W_norm = np.diag(1. / np.sum(M @ H[tind], axis=1))
-                M = W_norm @ M
-                W = M @ H[tind]
 
-            elif mode == 'I':
+            elif mode == 'I' or mode == 'DH^-1':
                 # This is not the M matrix as is rigorously defined in the
                 # OQE formalism, because the power spectrum scalar is excluded
                 # in this matrix normalization (i.e., M doesn't do the full
