@@ -2257,19 +2257,24 @@ class PSpecData(object):
 
                 # # Negative integers have larger absolute value so they are sorted
                 # # after positive integers.
-                 order = (np.abs(order)).argsort()
-                 if np.mod(G.shape[0], 2) == 1:
-                     endindex = -2
-                 else:
-                     endindex = -1
-                 order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
-                 iorder = np.argsort(order)
-
-                 G_o = np.take(np.take(G, order, axis=0), order, axis=1)
-                 L_o = np.linalg.cholesky(G_o)
-                 U,S,V = np.linalg.svd(L_o.conj())
-                 M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
-                 M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
+                order = (np.abs(order)).argsort()
+                if np.mod(G.shape[0], 2) == 1:
+                    endindex = -2
+                else:
+                    endindex = -1
+                order = np.hstack([order[:5], order[endindex:], order[5:endindex]])
+                iorder = np.argsort(order)
+                G_o = np.take(np.take(G, order, axis=0), order, axis=1)
+                if np.any(np.linalg.eigh(G_o)[0] <= 0.):
+                    raise_warning("G_o is not positive definite")
+                    M = np.ones_like(G_o) * np.nan
+                    W = np.ones_like(G_o) * np.nan
+                else:
+                    L_o = np.linalg.cholesky(G_o)
+                    U,S,V = np.linalg.svd(L_o.conj())
+                    M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
+                    M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
+                    W = M @ H
             Ws[tind] = W
             Ms[tind] = M
         Ms[np.isnan(Ms)] = 0.
