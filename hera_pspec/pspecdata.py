@@ -812,7 +812,8 @@ class PSpecData(object):
             cache. Keys are tuples, following the same format as the input to
             self.iC().
         """
-        for k in d: self._iC[k] = d[k]
+        for k in d:
+            self._iC[k] = d[k]
 
     def set_R(self, d):
         """
@@ -823,10 +824,14 @@ class PSpecData(object):
         ----------
         d : dict
             Dictionary containing data to insert into data-weighting R matrix
-            cache. Keys are tuples, following the same format as the input to
-            self.R().
+            cache. Keys are tuples with the following form
+            key = (dset_index, bl_ant_pair_pol_tuple, data_weighting, taper)
+            Ex: (0, (37, 38, 'xx'), 'bh')
+            If data_weight == 'dayenu' then additional elements are appended
+                key + (filter_extension, spw_Nfreqs, symmetric_taper)
         """
-        for k in d: self._R[k] = d[k]
+        for k in d:
+            self._R[k] = d[k]
 
     def R(self, key):
         """
@@ -852,12 +857,19 @@ class PSpecData(object):
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
         """
+        # type checks
         assert isinstance(key, tuple)
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-        # parse key
-        Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.filter_extension,)\
-                   + (self.spw_Nfreqs,) + (self.symmetric_taper,)
+
+        # Only add to Rkey if a particular mode is enabled
+        # If you do add to this, you need to specify this in self.set_R docstring!
+        Rkey = key + (self.data_weighting,) + (self.taper,)
+        if self.data_weighting == 'dayenu':
+            # add extra dayenu params
+            Rkey = Rkey + tuple(self.filter_extension,) + (self.spw_Nfreqs,) \
+                   + (self.symmetric_taper,)
+
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -1697,9 +1709,13 @@ class PSpecData(object):
             # First find the eigenvectors and eigenvalues of the unnormalizd covariance
             # Then use it to compute V^-1/2
             eigvals, eigvects = np.linalg.eigh(band_covar)
-            if (eigvals <= 0.).any():
+            nonpos_eigvals = eigvals <= 1e-20
+            if (nonpos_eigvals).any():
                 raise_warning("At least one non-positive eigenvalue for the "
                               "unnormed bandpower covariance matrix.")
+                # truncate them
+                eigvals = eigvals[~nonpos_eigvals]
+                eigvects = eigvects[:, ~nonpos_eigvals]
             V_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
 
             W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H), axis=1))

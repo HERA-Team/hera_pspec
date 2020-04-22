@@ -686,7 +686,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
             store_window = 'window_function_spw0' in h5file
         else:
             store_cov = hasattr(uvp, 'cov_array')
-            store_window = hasattr(uvp, window_function_array)
+            store_window = hasattr(uvp, 'window_function_array')
 
         # get stats_array keys if h5file
         if h5file is not None:
