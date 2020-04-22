@@ -3161,7 +3161,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
-              bl_deg_range=(0, 180), bl_error_tol=1.0,
+              bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
@@ -3278,6 +3278,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     bl_error_tol : float
         Baseline vector error tolerance when constructing redundant groups.
+
+    store_window : bool
+        If True, store computed window functions (warning, these can be large!)
+        in UVPSpec objects.
 
     beam : PSpecBeam object, UVBeam object or string
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
@@ -3609,7 +3613,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
                        norm=norm, taper=taper, history=history, verbose=verbose,
-                       cov_model=cov_model, filter_extensions=filter_extensions)
+                       cov_model=cov_model, filter_extensions=filter_extensions,
+                       store_window=store_window)
 
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
