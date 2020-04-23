@@ -1944,7 +1944,6 @@ def test_window_funcs():
     This is complementary to test_get_MW above.
     """
     # get a PSpecData
-    from scipy.signal import medfilt2d
     uvd = UVData()
     uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
     beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
@@ -1953,7 +1952,6 @@ def test_window_funcs():
     ds.set_taper('bh')
     bl = (37, 38)
     key = (0, bl, 'xx')
-    # get covariance model by median filtering
     d = medfilt2d(uvd.get_data(bl).real, (1, 11)) \
         + 1j * medfilt2d(uvd.get_data(bl).imag, (1, 11))
     C = np.cov(d[:, :20].T).real

@@ -1700,11 +1700,6 @@ class PSpecData(object):
         # Build M matrix according to specified mode
         if mode == 'H^-1':
             try:
-                # if condition number if above 1e17 take pinv
-                if np.linalg.cond(H) < 1e17:
-                    raise np.linalg.LinAlgError('cond(H) > 1e17 (Singular matrix), taking pinv')
-
-                # else take direct inverse
                 M = np.linalg.inv(H)
 
             except np.linalg.LinAlgError as err:
