@@ -1956,8 +1956,8 @@ def test_window_funcs():
     # get covariance model by median filtering
     d = medfilt2d(uvd.get_data(bl).real, (1, 11)) \
         + 1j * medfilt2d(uvd.get_data(bl).imag, (1, 11))
-    C = np.cov(d.T).real
-    iC = np.linalg.pinv(C[:20, :20])
+    C = np.cov(d[:, :20].T).real
+    iC = np.linalg.pinv(C)
     # iterate over various R and M matrices and ensure
     # normalization and dtype is consistent
     for data_weight in ['identity', 'iC']:

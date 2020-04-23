@@ -1031,7 +1031,7 @@ class PSpecData(object):
         """
         self.taper = taper
 
-    def set_spw(self, spw_range):
+    def set_spw(self, spw_range, ndlys=None):
         """
         Set the spectral window range.
 
@@ -1039,6 +1039,9 @@ class PSpecData(object):
         ----------
         spw_range : tuple, contains start and end of spw in channel indices
             used to slice the frequency array
+        ndlys : integer
+            Number of delay bins. Default: None, sets number of delay
+            bins equal to the number of frequency channels in the spw.
         """
         assert isinstance(spw_range, tuple), \
             "spw_range must be fed as a len-2 integer tuple"
@@ -1046,6 +1049,7 @@ class PSpecData(object):
             "spw_range must be fed as len-2 integer tuple"
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
+        self.set_Ndlys(ndlys=ndlys)
 
     def set_Ndlys(self, ndlys=None):
         """
@@ -1055,7 +1059,7 @@ class PSpecData(object):
         ----------
         ndlys : integer
             Number of delay bins. Default: None, sets number of delay
-            bins equal to the number of frequency channels
+            bins equal to the number of frequency channels in the current spw
         """
 
         if ndlys == None:
@@ -1065,7 +1069,6 @@ class PSpecData(object):
             if self.spw_Nfreqs < ndlys:
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
-
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol = False,
                   time_indices=None):
@@ -1618,7 +1621,7 @@ class PSpecData(object):
 
         return auto_term + cross_term
 
-    def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False):
+    def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15):
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -1666,6 +1669,9 @@ class PSpecData(object):
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
             of q_hat for details). Currently, this is supported only for mode I
 
+        rcond : float, optional
+            rcond parameter of np.linalg.pinv for truncating near-zero eigenvalues
+
         Returns
         -------
         M : array_like
@@ -1686,18 +1692,31 @@ class PSpecData(object):
 
         # Check that mode is supported
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1']
-        assert(mode in modes)
+        assert (mode in modes)
 
-        if mode!='I' and exact_norm==True:
+        if mode != 'I' and exact_norm is True:
             raise NotImplementedError("Exact norm is not supported for non-I modes")
 
         # Build M matrix according to specified mode
         if mode == 'H^-1':
             try:
-                M = np.linalg.pinv(H)
+                # if condition number if above 1e17 take pinv
+                if np.linalg.cond(H) < 1e17:
+                    raise np.linalg.LinAlgError('cond(H) > 1e17 (Singular matrix), taking pinv')
+
+                # else take direct inverse
+                M = np.linalg.inv(H)
+
             except np.linalg.LinAlgError as err:
-                raise np.linalg.LinAlgError("Linear algebra error with H matrix "
-                                            "during MW computation.")
+                if 'Singular matrix' in str(err):
+                    M = np.linalg.pinv(H, rcond=rcond)
+                    raise_warning("Warning: Window function matrix is singular "
+                                  "and cannot be inverted, so using "
+                                  " pseudoinverse instead.")
+
+                else:
+                    raise np.linalg.LinAlgError("Linear algebra error with H matrix "
+                                                "during MW computation.")
 
             W = np.dot(M, H)
             W_norm = np.sum(W, axis=1)
@@ -2603,10 +2622,8 @@ class PSpecData(object):
             # set spectral range
             if verbose:
                 print( "\nSetting spectral range: {}".format(spw_ranges[i]))
-            self.set_spw(spw_ranges[i])
+            self.set_spw(spw_ranges[i], ndlys=n_dlys[i])
             self.set_filter_extension(filter_extensions[i])
-            # set number of delay bins
-            self.set_Ndlys(n_dlys[i])
 
             # clear covariance cache
             self.clear_cache()
