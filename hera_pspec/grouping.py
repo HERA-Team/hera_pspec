@@ -372,17 +372,18 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         # To handle with the case  when Nfreqs != Ntimes,
                         # we choose to multiply wgts with w[:,:1,None]. 
                         ints = (np.sum(ints * w, axis=0) \
-                            / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
+                             / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
                         nsmp = np.sum(nsmp, axis=0)[None]
                         if store_window:
                             window_function = (np.sum(window_function * w[:, :, None], axis=0) \
-                                    / (np.sum(w,axis=0).clip(1e-40, np.inf))[:, None])[None]
+                                            / (np.sum(w,axis=0).clip(1e-40, np.inf))[:, None])[None]
                         if store_cov:
                             cov = (np.sum(cov * w[:, :, None] * w[:, None, :], axis=0) \
-                                / (np.sum(w,axis=0).clip(1e-40, np.inf))[:, None] / (np.sum(w,axis=0).clip(1e-40, np.inf))[None,:])[None]
+                                / (np.sum(w, axis=0).clip(1e-40, np.inf))[:, None] / (np.sum(w, axis=0).clip(1e-40, np.inf))[None, :])[None]
                         for stat in stat_l:
-                            errws[stat] = (np.sum(errws[stat]*w**2, axis=0) \
-                            / (np.sum(w, axis=0).clip(1e-40, np.inf))**2)[None]
+                            # clip errws because it may be inf, and inf * 0 is nan
+                            errws[stat] = (np.sum(errws[stat].clip(0, 1e40) * w**2, axis=0) \
+                                        / (np.sum(w, axis=0).clip(1e-40, np.inf))**2)[None]
                         w = np.sum(w, axis=0)[None]
                         # Here we use clip method for zero weights. A tolerance 
                         # as low as 1e-40 works when using inverse square of noise power 
@@ -396,7 +397,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         bpg_ints.append(ints * w)
                         bpg_nsmp.append(nsmp)
                         for stat in stat_l:
-                            bpg_stats[stat].append(errws[stat]*w**2)
+                            # clip errws for same reason above
+                            bpg_stats[stat].append(errws[stat].clip(0, 1e40) * w**2)
                         if store_window:
                             bpg_window_function.append(window_function * w[:, :, None])
                         if store_cov:
@@ -427,7 +429,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
-                [pol_stats[stat].extend(bpg_stats[stat]) for stat in stat_l]
+                for stat in stat_l:
+                    pol_stats[stat].extend(bpg_stats[stat])
                 if store_window:
                     pol_window_function.extend(bpg_window_function)
                 if store_cov:
@@ -436,7 +439,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             # Append to lists (spectral window)
             spw_data.append(pol_data); spw_wgts.append(pol_wgts)
             spw_ints.append(pol_ints); spw_nsmp.append(pol_nsmp)
-            [spw_stats[stat].append(pol_stats[stat]) for stat in stat_l]
+            for stat in stat_l:
+                spw_stats[stat].append(pol_stats[stat])
             if store_window:
                 spw_window_function.append(pol_window_function)
             if store_cov:
