@@ -1952,8 +1952,7 @@ def test_window_funcs():
     ds.set_taper('bh')
     bl = (37, 38)
     key = (0, bl, 'xx')
-    d = medfilt2d(uvd.get_data(bl).real, (1, 11)) \
-        + 1j * medfilt2d(uvd.get_data(bl).imag, (1, 11))
+    d = uvd.get_data(bl)
     C = np.cov(d[:, :20].T).real
     iC = np.linalg.pinv(C)
     # iterate over various R and M matrices and ensure
