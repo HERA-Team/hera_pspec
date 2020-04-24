@@ -287,7 +287,7 @@ def test_validate_bootstrap_errorbar():
                    taper='none', sampling=False, little_h=False, spw_ranges=[(0, 50)], verbose=False)
 
     # bootstrap resample
-    Nsamples = 1000
+    Nsamples = 100
     seed = 0
     uvp_avg, uvp_boots, uvp_wgts = grouping.bootstrap_resampled_error(uvp, time_avg=False, Nsamples=Nsamples,
                                                                       seed=seed, normal_std=True,
