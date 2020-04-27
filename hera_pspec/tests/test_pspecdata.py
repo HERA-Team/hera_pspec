@@ -652,6 +652,27 @@ class Test_PSpecData(unittest.TestCase):
             for j in range(self.ds.spw_Ndlys):
                 self.assertLessEqual(frac_non_herm[i,j], tol)
 
+    def test_get_unnormed_V_fft(self):
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
+        key1 = ('red', (24, 25), 'xx')
+        key2 = ('blue', (25, 38), 'xx')
+        #self.ds.spw_Ndlys = 5
+
+        self.ds.set_weighting('dayenu')
+        rpk = {'filter_centers':[0.],'filter_half_widths':[200e-9],'filter_factors':[1e-9]}
+        self.ds.set_r_param(key1,rpk)
+        self.ds.set_r_param(key2,rpk)
+
+
+        V = self.ds.get_unnormed_V(key1, key2, time_index=0)
+        V_fft = self.ds.get_unnormed_V(key1, key2, time_index=0, allow_fft=True)
+        nt.assert_true(np.all(np.abs(V-V_fft)/np.mean(np.abs(np.diag(V))) <= 1e-10))
+        self.ds.set_Ndlys(5)
+        nt.assert_raises(ValueError, self.ds.get_unnormed_V, key1, key2, time_index=0, allow_fft=True)
+
+
+
+
     def test_get_MW(self):
         n = 17
         random_G = generate_pos_def_all_pos(n)
@@ -938,9 +959,6 @@ class Test_PSpecData(unittest.TestCase):
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
-        #Test if error is raised when one tried FFT approach on exact_norm
-        nt.assert_raises(NotImplementedError, self.ds.q_hat, key1, key2, exact_norm=True, allow_fft = True)
-
     def test_get_H(self):
         """
         Test Fisher/weight matrix calculation.
@@ -967,7 +985,36 @@ class Test_PSpecData(unittest.TestCase):
 
                 self.ds.set_Ndlys()
                 H = self.ds.get_H(key1, key2, average_times=True)
-                self.assertEqual(H.shape, (Nfreq, Nfreq)) # Test shape
+
+    def test_get_H_fft(self):
+        """
+        Test Fisher matrix calculation with FFT.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+
+        for input_data_weight in ['identity','iC', 'dayenu']:
+            self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'dayenu':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_half_widths':[200e-9],'filter_factors':[1e-9]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
+            for taper in taper_selection:
+                self.ds.set_taper(taper)
+
+                self.ds.set_Ndlys(Nfreq)
+                H1 = self.ds.get_H(key1, key2, average_times=True, sampling=True)
+                H2 = self.ds.get_H(key1, key2, average_times=True, allow_fft=True, sampling=True)
+                nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=False)
+                self.ds.set_Ndlys(Nfreq//3)
+                nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=True)
+                #check if H1 and H2 are close to one part in 10e-10
+                nt.assert_true(np.all(np.abs(H1-H2)/np.mean(np.diag(np.abs(H1))) <= 1e-10))
+
 
     def test_get_G(self):
         """
@@ -1039,6 +1086,34 @@ class Test_PSpecData(unittest.TestCase):
                         G_diff_norm = np.linalg.norm(G - G_swapped.T)
                         self.assertLessEqual(G_diff_norm,
                                              matrix_scale * multiplicative_tolerance)
+
+    def test_get_G_fft(self):
+        """
+        Test G matrix calculation with FFT.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+
+        for input_data_weight in ['identity','iC', 'dayenu']:
+            self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'dayenu':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_half_widths':[200e-9],'filter_factors':[1e-9]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
+            for taper in taper_selection:
+                self.ds.set_taper(taper)
+
+                self.ds.set_Ndlys(Nfreq)
+                G1 = self.ds.get_G(key1, key2, average_times=True)
+                G2 = self.ds.get_G(key1, key2, average_times=True, allow_fft=True)
+                self.ds.set_Ndlys(Nfreq//3)
+                nt.assert_raises(ValueError, self.ds.get_G, key1, key2, allow_fft=True)
+                #check if H1 and H2 are close to one part in 10e-10
+                nt.assert_true(np.all(np.abs(G1-G2)/np.mean(np.diag(np.abs(G1))) <= 1e-10))
 
 
     '''

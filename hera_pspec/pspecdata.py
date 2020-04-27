@@ -958,18 +958,18 @@ class PSpecData(object):
                 # Note that we multiply sqrtY inside of the pinv
                 # to apply flagging weights before taking psuedo inverse.
                 rmat = np.zeros((self.Ntimes, nfreq, nfreq))
-                df = np.mean(np.diff(self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]]))
+                _freqs = self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]]
+                df = np.abs(_freqs[1]-_freqs[0])
                 for m in range(self.Ntimes):
-                    rdkey = tuple(wgts[m]) + tuple(np.round(r_params['filter_centers'] * df, 8))\
-                     + tuple(np.round(df * r_params['filter_half_widths'], 8))\
-                     + tuple(np.round(df * r_params['filter_factors'] * 1e8, 8))\
-                     + ('dayenu',)
-                     if not rdkey in self.r_cache:
-                        rm = dspec.dayenu_mat_inv(x=s,
-                                            filter_centers=r_params['filter_centers'],
-                                            filter_half_widths=r_params['filter_half_widths'],
-                                            filter_factors=r_params['filter_factors'])\
-                                             * wgt_sq[m])
+                    rdkey = tuple(wgts[m]) + tuple(np.round(np.array(r_params['filter_centers']) * df, 8))\
+                    + tuple(np.round(df * np.array(r_params['filter_half_widths']), 8))\
+                    + tuple(np.round(df * np.array(r_params['filter_factors']) * 1e8, 8))\
+                    + ('dayenu',)
+                    if not rdkey in self.r_cache:
+                        rm = dspec.dayenu_mat_inv(x=_freqs,
+                                        filter_centers=r_params['filter_centers'],
+                                        filter_half_widths=r_params['filter_half_widths'],
+                                        filter_factors=r_params['filter_factors']) * wgt_sq[m]
                         self.r_cache[rdkey] = np.linalg.pinv(rm)
                     rmat[m] = self.r_cache[rdkey]
                 # allow for restore_foregrounds option which introduces clean-interpolated
@@ -1355,14 +1355,14 @@ class PSpecData(object):
             return q
 
         # use FFT if possible and allowed
-        elif allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
+        elif allow_fft and (self.spw_Nfreqs  == self.spw_Ndlys - np.sum(self.filter_extension)):
             _Rx1 = np.fft.fft(Rx1, axis=1)
             _Rx2 = np.fft.fft(Rx2, axis=1)
             return qnorm * (0.5 * np.fft.fftshift(_Rx1, axes=1).conj() \
                        * np.fft.fftshift(_Rx2, axes=1)).T
 
         else:
-            raise ValueError("spw_Nfreqs must equal spw_Ndlys if using fft.")
+            raise ValueError("spw_Nfreqs + extensions must equal spw_Ndlys if using fft.")
 
     def _get_G(self, key1, key2, time_index, exact_norm=False, pol=False,
                allow_fft=False):
@@ -1408,10 +1408,8 @@ class PSpecData(object):
             R1 = self.R(key1)[time_index].squeeze()
             R2 = self.R(key2)[time_index].squeeze()
             if allow_fft:
-                if not (self.spw_Nfreqs == self.spw_Ndlys):
-                    raise ValueError("Nfreqs must equal Nspw for allow_fft")
-                if not self.filter_extension[0] == 0 and self.filter_extension[1] == 0:
-                    raise ValueError("Filter extensions must equal zero for allow_fft")
+                if not (self.spw_Nfreqs + np.sum(self.filter_extension) == self.spw_Ndlys):
+                    raise ValueError("Nfreqs with extensions must equal Nspw for allow_fft")
                 #We can calculate H much faster with an fft if we
                 #don't have sampling
                 r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(R1[:,::-1])))
@@ -1564,12 +1562,10 @@ class PSpecData(object):
             R1 = self.R(key1)[time_index].squeeze()
             R2 = self.R(key2)[time_index].squeeze()
             if allow_fft:
-                if not (self.spw_Nfreqs == self.spw_Ndlys):
+                if not (self.spw_Nfreqs + np.sum(self.filter_extension) == self.spw_Ndlys):
                     raise ValueError("Nfreqs must equal Nspw for allow_fft")
                 if not sampling:
                     raise ValueError("sampling must equal True for allow_fft")
-                if not self.filter_extension[0] == 0 and self.filter_extension[1] == 0:
-                    raise ValueError("Filter extensions must equal zero for allow_fft")
                 #We can calculate H much faster with an fft if we
                 #don't have sampling
                 r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(R1[:,::-1])))
@@ -1585,8 +1581,8 @@ class PSpecData(object):
                     sinc_matrix = np.sinc(sinc_matrix / np.float(nfreq))
                 iR1Q1, iR2Q2 = {}, {}
                 for ch in range(self.spw_Ndlys):
-                    Q1 = self.get_Q_alt(ch) * qnorm1
-                    Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
+                    Q1 = self.get_Q_alt(ch)
+                    Q2 = self.get_Q_alt(ch, include_extension=True)
                     if not sampling:
                         Q2 *= sinc_matrix
                     #H is given by Tr[E^\alpha C,\beta]
@@ -1609,7 +1605,6 @@ class PSpecData(object):
                 integral_beam1 = self.get_integral_beam(pol)
                 integral_beam2 = self.get_integral_beam(pol, include_extension=True)
                 del_tau = np.median(np.diff(self.delays()))*1e-9
-            if exact_norm:
                 qnorm1 = del_tau * integral_beam1
                 qnorm2 = del_tau * integral_beam2
             else:
@@ -1905,7 +1900,7 @@ class PSpecData(object):
                     cross_term = np.einsum('aij,bji', E12P21, E12starS21)
                     output = auto_term + cross_term
                 else:
-                    if self.spw_Nfreqs != self.spw_Ndlys:
+                    if self.spw_Nfreqs + np.sum(self.filter_extension) != self.spw_Ndlys:
                         raise ValueError("allow_fft requires spw_Nfreqs == spw_Ndlys")
                     R1 = self.R(key1)[time_index]
                     R2 = self.R(key2)[time_index]
@@ -2950,7 +2945,7 @@ class PSpecData(object):
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
               baseline_tol=1.0, store_cov=False, store_window=True, verbose=True,
-              filter_extensions=None, exact_norm=False, history='', r_params=None, 
+              filter_extensions=None, exact_norm=False, history='', r_params=None,
               cov_model='empirical', allow_fft=False):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
@@ -3232,8 +3227,8 @@ class PSpecData(object):
         #check that the number of frequencies in each spectral window
         #equals the number of delays
         if allow_fft:
-            for spw, ndly in zip(spw_ranges, n_dlys):
-                nf_spw = spw[1]-spw[0]
+            for spw, ndly, fext in zip(spw_ranges, n_dlys ,filter_extensions):
+                nf_spw = spw[1]-spw[0] + np.sum(filter_extensions)
                 if not nf_spw == ndly:
                     raise ValueError("allow_fft is True! Number of delays in each spw must equal the number of frequencies in each spw.")
             if not sampling:
@@ -3869,6 +3864,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
+              allow_fft=False, sampling=False,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
@@ -3989,6 +3985,19 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     store_window : bool
         If True, store computed window functions (warning, these can be large!)
         in UVPSpec objects.
+
+    allow_fft : bool, optional
+        Whether to use a fast FFT summation trick to construct q_hat
+        along with H, M, W, G, and V matrices. If False,
+        use (significantly slower) brute-force matrix multiplication.
+        The FFT method assumes
+        a delta-fn bin in delay space. It also only works if the number
+        of delay bins is equal to the number of frequencies. Default: False.
+
+    sampling : boolean, optional
+        Whether output pspec values are samples at various delay bins
+        or are integrated bandpowers over delay bins. Default: False
+
 
     beam : PSpecBeam object, UVBeam object or string
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
@@ -4317,8 +4326,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
-                       spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params,
-                       store_cov=store_cov, input_data_weight=input_data_weight,
+                       spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params, allow_fft=allow_fft,
+                       store_cov=store_cov, input_data_weight=input_data_weight, sampling=sampling,
                        norm=norm, taper=taper, history=history, verbose=verbose,
                        cov_model=cov_model, filter_extensions=filter_extensions,
                        store_window=store_window)
@@ -4385,6 +4394,9 @@ def get_pspec_run_argparser():
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
     a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20 20, 40 40' ->> [(20, 20), (40, 40), ...]")
     a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
+    a.add_argument("--allow_fft", default=False, type=bool, help="If True, speed computations up with ffts. Requires all spw_Nfreqs = spw_Ndelays and --sampling=True")
+    a.add_argument("--sampling", default=False, type=bool, help="If True, bandpowers are delta functions at k-bin centers rather then piecewise constant.")
+
     return a
 
 
