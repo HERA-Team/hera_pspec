@@ -1599,8 +1599,6 @@ class PSpecData(object):
                 for i in range(self.spw_Ndlys): # this loop goes as nchan^4
                     for j in range(self.spw_Ndlys):
                         H[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
-                self._H[Hkey] = H / 2.
-
             if (exact_norm):
                 integral_beam1 = self.get_integral_beam(pol)
                 integral_beam2 = self.get_integral_beam(pol, include_extension=True)
@@ -1611,6 +1609,7 @@ class PSpecData(object):
                 qnorm1 = 1.
                 qnorm2 = 1.
             H *= (qnorm1 * qnorm2)
+            self._H[Hkey] = H / 2.
         return self._H[Hkey]
 
     def get_H(self, key1, key2, sampling=False, exact_norm = False, pol=False,
