@@ -3209,7 +3209,7 @@ class PSpecData(object):
         # if using default setting of number of delay bins equal to number
         # of frequency channels
         if n_dlys is None:
-            n_dlys = [None for i in range(len(spw_ranges))]
+            n_dlys = [ int(np.abs(spw_ranges[i][1] - spw_ranges[i][0])) for i in range(len(spw_ranges))]
         elif isinstance(n_dlys, (int, np.integer)):
             n_dlys = [n_dlys]
 
