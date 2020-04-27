@@ -1147,7 +1147,7 @@ class PSpecData(object):
             self.spw_Ndlys = ndlys
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol = False,
-                  time_indices=None):
+                  time_indices=None, allow_fft=False):
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
@@ -1185,6 +1185,11 @@ class PSpecData(object):
             then applying the appropriate linear transformations to these
              frequency-domain covariances.
 
+
+        allow_fft : bool, optional
+            If True, speed things up with ffts. Requires spw_Ndlys == spw_Nfreqs.
+            Default: False.
+
         time_indices: list of indices of times to include or just a single time.
         default is None -> compute covariance for all times.
 
@@ -1219,7 +1224,7 @@ class PSpecData(object):
         for k1, k2 in zip(key1, key2):
             if model in ['dsets']:
                 output+=1./np.asarray([self.get_unnormed_V(k1, k2, model=model,
-                                  exact_norm=exact_norm, pol=pol, time_index=t)\
+                                  exact_norm=exact_norm, pol=pol, time_index=t, allow_fft=allow_fft)\
                                   for t in time_indices])
 
             elif model in ['empirical', 'empirical_pspec']:
@@ -1227,7 +1232,7 @@ class PSpecData(object):
                 if model == 'empirical':
                     flag_backup=self.broadcast_dset_flags(spw_ranges = [self.spw_range])
                 vm = self.get_unnormed_V(k1, k2, model=model,
-                                  exact_norm=exact_norm, time_index = 0, pol=pol)
+                                  exact_norm=exact_norm, time_index = 0, pol=pol, allow_fft=allow_fft)
                 if model == 'empirical':
                     for dset,flag in zip(self.dsets, flag_backup):
                         dset.flag_array = flag
@@ -1386,7 +1391,10 @@ class PSpecData(object):
             List of time indices to compute G. Default, compute for all times.
 
         allow_fft : bool, optional
-            If true, calculate H matrix using fft.
+            If True, speed things up with ffts. Requires spw_Ndlys == spw_Nfreqs.
+            and sampling False
+            Default: False.
+
 
         Returns
         -------
@@ -1479,7 +1487,9 @@ class PSpecData(object):
             List of time indices to compute G. Default, compute for all times.
 
         allow_fft : bool, optional
-            If true, calculate H matrix using fft.
+            If True, speed things up with ffts. Requires spw_Ndlys == spw_Nfreqs.
+            Default: False.
+
 
         Returns
         -------
@@ -1535,7 +1545,9 @@ class PSpecData(object):
             Used only if exact_norm is True.
 
         allow_fft : bool, optional
-            If true, calculate H matrix using fft.
+            If True, speed things up with ffts. Requires spw_Ndlys == spw_Nfreqs.
+            and sampling False
+            Default: False.
 
         Returns
         -------
@@ -1672,7 +1684,10 @@ class PSpecData(object):
             If true, average G over all times so that output is (Ndlys x Ndlys)
 
         allow_fft : bool, optional
-            If true, calculate H matrix using fft.
+            If True, speed things up with ffts. Requires spw_Ndlys == spw_Nfreqs.
+            Requires sampling False
+            Default: False.
+
 
         Returns
         -------
@@ -1858,10 +1873,11 @@ class PSpecData(object):
         time_index : integer, compute covariance at specific time-step in dset
                        only supported if mode == 'dsets'
 
-        allow_fft : boolean, optional
-            If set to True, allows a shortcut FFT method when
-            the number of delay bins equals the number of delay channels.
-            Default: False
+        allow_fft : bool, optional
+            If True, speed things up with ffts. Requires spw_Ndlys == spw_Nfreqs.
+            Default: False.
+
+
 
         Returns
         -------
@@ -1874,13 +1890,13 @@ class PSpecData(object):
 
         if not Vkey in self._V:
             if model in ['dsets', 'empirical']:
+                C1 = self.C_model(key1, model=model, time_index=time_index)
+                C2 = self.C_model(key2, model=model, time_index=time_index)
+                P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
+                S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
                 if not allow_fft:
                     E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm,
                                                      time_index = time_index, pol = pol)
-                    C1 = self.C_model(key1, model=model, time_index=time_index)
-                    C2 = self.C_model(key2, model=model, time_index=time_index)
-                    P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
-                    S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True)
                     E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
                     E12C2 = np.dot(E_matrices, C2)
                     auto_term = np.einsum('aij,bji', E12C2, E21C1)
@@ -1889,7 +1905,20 @@ class PSpecData(object):
                     cross_term = np.einsum('aij,bji', E12P21, E12starS21)
                     output = auto_term + cross_term
                 else:
-                    #TODO: Finish this code!
+                    if self.spw_Nfreqs != self.spw_Ndlys:
+                        raise ValueError("allow_fft requires spw_Nfreqs == spw_Ndlys")
+                    R1 = self.R(key1)[time_index]
+                    R2 = self.R(key2)[time_index]
+                    C1_filtered = R1 @ C1 @ np.conj(R1).T
+                    C2_filtered = R2 @ C2 @ np.conj(R2).T
+                    S21_filtered = R1 @ S21 @ np.conj(R1).T
+                    P21_filtered = R2 @ P21 @ np.conj(R2).T
+                    c1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(C_1_filtered[:,::-1])))
+                    c2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(C_2_filtered[:,::-1])))
+                    s21_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(S21_filtered[:,::-1])))
+                    p21_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(P21_filtered[:,::-1])))
+                    auto_term = c1_fft * np.conj(c2_fft)
+                    cross_term = p21_fft @ np.conj(s21_fft)
             elif model in ['empirical_pspec']:
                 output = utils.cov(self.q_hat(key1, key2),
                         np.ones((self.spw_Ndlys, self.Ntimes)))
@@ -3056,8 +3085,10 @@ class PSpecData(object):
                 Absence of r_params dictionary will result in an error!
 
         allow_fft : bool, optional
-                Whether to use a fast FFT summation trick to construct q_hat, or
-                a simpler brute-force matrix multiplication. The FFT method assumes
+                Whether to use a fast FFT summation trick to construct q_hat
+                along with H, M, W, G, and V matrices. If False,
+                use (significantly slower) brute-force matrix multiplication.
+                The FFT method assumes
                 a delta-fn bin in delay space. It also only works if the number
                 of delay bins is equal to the number of frequencies. Default: False.
 
@@ -3147,6 +3178,7 @@ class PSpecData(object):
                 assert len(bls1[i]) == len(bls2[i]), \
                     "len(bls1[{}]) must match len(bls2[{}])".format(i, i)
 
+
         # construct list of baseline pairs
         bl_pairs = []
         for i in range(len(bls1)):
@@ -3196,6 +3228,16 @@ class PSpecData(object):
         # number of spws
         assert len(spw_ranges) == len(n_dlys), \
             "Need to specify number of delay bins for each spw"
+
+        #check that the number of frequencies in each spectral window
+        #equals the number of delays
+        if allow_fft:
+            for spw, ndly in zip(spw_ranges, n_dlys):
+                nf_spw = spw[1]-spw[0]
+                if not nf_spw == ndly:
+                    raise ValueError("allow_fft is True! Number of delays in each spw must equal the number of frequencies in each spw.")
+            if not sampling:
+                raise ValueError("allow_fft is True! Sampling must also be set to True for allow_fft!")
 
         # setup polarization selection
         if isinstance(pols, (tuple, str)): pols = [pols]
@@ -3395,9 +3437,9 @@ class PSpecData(object):
                         #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)                                    #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
                     #else:
                     #    Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
-                    Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol)
+                    Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
                     pv = self.p_hat(Mv, qv)
-                    Wv = self.get_W(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol)
+                    Wv = self.get_W(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
@@ -3416,7 +3458,7 @@ class PSpecData(object):
                         if verbose: print(" Building q_hat covariance...")
                         #cov_qv = self.cov_q_hat(key1, key2)
                         cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
-                                            exact_norm=exact_norm, pol=pol)
+                                            exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
                         cov_pv = self.cov_p_hat(Mv, cov_qv)
                         if self.primary_beam != None:
                             cov_pv *= (scalar)**2.

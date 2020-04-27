@@ -6,7 +6,7 @@ from pyuvdata import UVBeam, utils as uvutils
 import uvtools.dspec as dspec
 from collections import OrderedDict as odict
 import scipy.special as sp
-from . import conversions as conversions, uvpspec_utils as uvputils 
+from . import conversions as conversions, uvpspec_utils as uvputils
 
 
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
@@ -389,11 +389,23 @@ class PSpecBeamAiry(PSpecBeamBase):
 
     def __init__(self, diameter, freqs, cosmo=None):
         """
-        Power spectrum normalization can be done just fine with an Airy-Beam.
-        Here is an airy beam.
-        These sorts of simple beam models are extremely important for
-        hera_pspec's general utility since people
-        often do sandbox analyses without detailed beam simulations. 
+        Here is an airy beam for 10% accurate power spectrum
+        normalizations.
+        The airy beam is given by
+
+        A(\theta) = (2 * J_1(r k \sin(\theta)) / (r k \sin(\theta)))
+
+        where \theta is the angle from bore center. r is the diameter / 2
+        and k = 2 * \pi  / \lambda
+        where \lambda is the wavelength of the observed radio waves.
+
+        Parameters
+        ----------
+            diameter : float
+                the diameter of the aperture.
+            freqs : array-like
+                array of floats giving the frequencies of our observations.
+
         """
         if not isinstance(diameter, (float,np.float, int, np.int)):
             raise ValueError("provide a real number for diameter.")
@@ -408,18 +420,53 @@ class PSpecBeamAiry(PSpecBeamBase):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-        #self.freqs = freqs
         for chan,freq in enumerate(freqs):
             k = np.pi *  diameter / conversions.units.c * freq
             self.omega_p[chan] = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(1, np.sin(x) * k) / (np.sin(x) * k)) ** 2. * np.sin(x),
                                                             0, np.pi/2.)[0]
             self.omega_pp[chan] = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(1, np.sin(x) * k) / (np.sin(x) * k)) ** 4. * np.sin(x),
                                                              0, np.pi/2.)[0]
-        #self.omega_p = interp1d(freqs, self.omega_p)
-        #self.omega_pp = interp1d(freqs, self.omega_pp)
+
     def power_beam_int(self, pol='pI'):
+        """
+        returns the integrated beam over solid angle for the observed frequencies
+        given in the initialization of the AiryBeam object.
+
+        omega_p = \int d \Omega A(\hat{s})
+
+        Parameters
+        ----------
+        pol : sting optional
+            exist for compatibility purposes.
+            no matter what is provided,
+            this method gives the pI beam.
+        Returns
+        -------
+        omega_p : array-like
+            array of integrated beam values at each frequence specified in
+            the __init__ freqs argument.
+        """
         return self.omega_p
     def power_beam_sq_int(self, pol='pI'):
+        """
+        returns the integrated squared beam over solid angle for the observed frequencies
+        specified in the initialization of the AiryBeam object.
+
+        omega_pp = \int d \Omega |A(\hat{s})|^2
+
+        Parameters
+        ----------
+        pol : sting optional
+            exist for compatibility purposes.
+            no matter what is provided,
+            this method gives the pI beam.
+
+        Returns
+        -------
+        omega_pp : array-like
+            array of integrated squared beam values at each frequency specified in
+            the __init__ freqs argument.
+        """
         return self.omega_pp
 
 
