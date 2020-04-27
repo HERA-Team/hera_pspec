@@ -1977,7 +1977,7 @@ class PSpecData(object):
             if mode != 'I' and exact_norm==True:
                 raise NotImplementedError("Exact norm is not supported for non-I modes")
             if mode == 'H^-1':
-                H = self._get_H(key1, key2, time_index, sampling=False, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+                H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
                 try:
                     M = np.linalg.inv(H)
                 except np.linalg.LinAlgError as err:
