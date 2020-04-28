@@ -102,8 +102,8 @@ def build_vanilla_uvpspec(beam=None):
         # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
-        window_function_array[s] = np.ones((Nblpairts, Ndlys, Ndlys, Npols), dtype=np.complex)
-        cov_array[s] =np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+        window_function_array[s] = np.ones((Nblpairts, Ndlys, Ndlys, Npols), dtype=np.float64)
+        cov_array[s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex) \
                                              for m in range(Nblpairts)]
                                              for n in range(Npols)]), 0, -1)
 
@@ -133,8 +133,8 @@ def build_vanilla_uvpspec(beam=None):
 
 
 def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
-                      beam=None, taper='none', cosmo=None, n_dlys=None,
-                      r_params=None, verbose=False):
+                      data_weighting='identity', beam=None, taper='none', cosmo=None,
+                      n_dlys=None, r_params=None, verbose=False, **kwargs):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -155,6 +155,10 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     spw_ranges : list, optional
         List of spectral window tuples. See PSpecData.pspec docstring for
         details. Default: None.
+
+    data_weighting : str, optional
+        R matrix specification in QE formalism. See PSpecData.pspec for details.
+        Default: 'identity'
 
     beam : PSpecBeamBase subclass or str, optional
         This can be a subclass of PSpecBeamBase of a string filepath to a
@@ -184,6 +188,9 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     verbose : bool, optional
         if True, report feedback to standard output. Default: False.
 
+    kwargs : dict, optional
+        Additional kwargs to pass to PSpecData.pspec()
+    
     Returns
     -------
     uvp : UVPSpec object
@@ -237,10 +244,10 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         bls2.extend(_bls2)
 
     # run pspec
-    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
+    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight=data_weighting,
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
                    store_cov=store_cov, n_dlys=n_dlys, r_params=r_params,
-                   cov_model=cov_model)
+                   cov_model=cov_model, **kwargs)
 
     return uvp
 

@@ -266,18 +266,22 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     data_array, wgts_array = odict(), odict()
     ints_array, nsmp_array = odict(), odict()
     stats_array = odict([[stat, odict()] for stat in stat_l])
-    window_function_array = odict()
 
     # will average covariance array if present
     store_cov = hasattr(uvp, "cov_array")
     if store_cov:
         cov_array = odict()
+    # same for window function
+    store_window = hasattr(uvp, 'window_function_array')
+    if store_window:
+        window_function_array = odict()
 
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
         spw_data, spw_wgts, spw_ints, spw_nsmp = [], [], [], []
         spw_stats = odict([[stat, []] for stat in stat_l])
-        spw_window_function = []
+        if store_window:
+            spw_window_function = []
         if store_cov:
             spw_cov = []
         
@@ -285,7 +289,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         for i, p in enumerate(uvp.polpair_array):
             pol_data, pol_wgts, pol_ints, pol_nsmp = [], [], [], []
             pol_stats = odict([[stat, []] for stat in stat_l])
-            pol_window_function = []
+            if store_window:
+                pol_window_function = []
             if store_cov:
                 pol_cov = []
 
@@ -293,7 +298,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             for j, blpg in enumerate(blpair_groups):
                 bpg_data, bpg_wgts, bpg_ints, bpg_nsmp = [], [], [], []
                 bpg_stats = odict([[stat, []] for stat in stat_l])
-                bpg_window_function = []
+                if store_window:
+                    bpg_window_function = []
                 if store_cov:
                     bpg_cov = []
                 w_list = []
@@ -324,8 +330,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # shape of wgts: (Ntimes, Nfreqs, 2)
                     ints = uvp.get_integrations((spw, blp, p))[:, None]
                     # shape of ints: (Ntimes, 1)
-                    window_function = uvp.get_window_function((spw, blp, p))
-                    # shape of window_function: (Ntimes, Ndlys, Ndlys)
+                    if store_window:
+                        window_function = uvp.get_window_function((spw, blp, p))
+                        # shape of window_function: (Ntimes, Ndlys, Ndlys)
                     if store_cov:
                         cov = uvp.get_cov((spw, blp, p))
                         # shape of cov: (Ntimes, Ndlys, Ndlys)
@@ -365,16 +372,18 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         # To handle with the case  when Nfreqs != Ntimes,
                         # we choose to multiply wgts with w[:,:1,None]. 
                         ints = (np.sum(ints * w, axis=0) \
-                            / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
+                             / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
                         nsmp = np.sum(nsmp, axis=0)[None]
-                        window_function = (np.sum(window_function * w[:, :, None], axis=0) \
-                                / (np.sum(w,axis=0).clip(1e-40, np.inf))[:, None])[None]
+                        if store_window:
+                            window_function = (np.sum(window_function * w[:, :, None], axis=0) \
+                                            / (np.sum(w,axis=0).clip(1e-40, np.inf))[:, None])[None]
                         if store_cov:
                             cov = (np.sum(cov * w[:, :, None] * w[:, None, :], axis=0) \
-                                / (np.sum(w,axis=0).clip(1e-40, np.inf))[:, None] / (np.sum(w,axis=0).clip(1e-40, np.inf))[None,:])[None]
+                                / (np.sum(w, axis=0).clip(1e-40, np.inf))[:, None] / (np.sum(w, axis=0).clip(1e-40, np.inf))[None, :])[None]
                         for stat in stat_l:
-                            errws[stat] = (np.sum(errws[stat]*w**2, axis=0) \
-                            / (np.sum(w, axis=0).clip(1e-40, np.inf))**2)[None]
+                            # clip errws because it may be inf, and inf * 0 is nan
+                            errws[stat] = (np.sum(errws[stat].clip(0, 1e40) * w**2, axis=0) \
+                                        / (np.sum(w, axis=0).clip(1e-40, np.inf))**2)[None]
                         w = np.sum(w, axis=0)[None]
                         # Here we use clip method for zero weights. A tolerance 
                         # as low as 1e-40 works when using inverse square of noise power 
@@ -388,11 +397,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         bpg_ints.append(ints * w)
                         bpg_nsmp.append(nsmp)
                         for stat in stat_l:
-                            bpg_stats[stat].append(errws[stat]*w**2)
-                        bpg_window_function.append(window_function * w[:, :, None])
-                        w_list.append(w)
+                            # clip errws for same reason above
+                            bpg_stats[stat].append(errws[stat].clip(0, 1e40) * w**2)
+                        if store_window:
+                            bpg_window_function.append(window_function * w[:, :, None])
                         if store_cov:
                             bpg_cov.append(cov * w[:, :, None] * w[:, None, :])
+                        w_list.append(w)
 
                 # Average over baseline-pairs
                 # Take integration-weighted averages, with clipping to deal
@@ -412,21 +423,26 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     arr = np.sum(bpg_stats[stat], axis=0) \
                         / (np.sum(w_list, axis=0).clip(1e-40, np.inf)**2)
                     bpg_stats[stat] = np.sqrt(arr)
-                bpg_window_function = np.sum(bpg_window_function, axis=0) \
-                            / (np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:,None])
+                if store_window:
+                    bpg_window_function = np.sum(bpg_window_function, axis=0) \
+                                / (np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:,None])
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
-                [pol_stats[stat].extend(bpg_stats[stat]) for stat in stat_l]
-                pol_window_function.extend(bpg_window_function)
+                for stat in stat_l:
+                    pol_stats[stat].extend(bpg_stats[stat])
+                if store_window:
+                    pol_window_function.extend(bpg_window_function)
                 if store_cov:
                     pol_cov.extend(bpg_cov)
 
             # Append to lists (spectral window)
             spw_data.append(pol_data); spw_wgts.append(pol_wgts)
             spw_ints.append(pol_ints); spw_nsmp.append(pol_nsmp)
-            [spw_stats[stat].append(pol_stats[stat]) for stat in stat_l]
-            spw_window_function.append(pol_window_function)
+            for stat in stat_l:
+                spw_stats[stat].append(pol_stats[stat])
+            if store_window:
+                spw_window_function.append(pol_window_function)
             if store_cov:
                 spw_cov.append(pol_cov)
 
@@ -437,7 +453,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         nsmp_array[spw] = np.moveaxis(spw_nsmp, 0, -1)[:, 0, :]
         for stat in stat_l:
             stats_array[stat][spw] = np.moveaxis(spw_stats[stat], 0, -1)
-        window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
+        if store_window:
+            window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
         if store_cov:
             cov_array[spw] = np.moveaxis(np.array(spw_cov), 0, -1)
 
@@ -501,7 +518,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     uvp.integration_array = ints_array
     uvp.wgt_array = wgts_array
     uvp.nsample_array = nsmp_array
-    uvp.window_function_array = window_function_array
+    if store_window:
+        uvp.window_function_array = window_function_array
     if store_cov:
         uvp.cov_array = cov_array
     if len(stat_l) >=1 :
@@ -647,7 +665,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             for stat in uvp.stats_array.keys():
                 stats_array[stat][spw] = np.zeros((uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128)
         if store_window:
-            window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.complex128)
+            window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
  
         # setup the design matrix: P_cyl = A P_sph
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
@@ -861,16 +879,17 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, Ndlys//2+1:, :] = np.mean([left, right], axis=0)
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
-            leftleft = uvp.window_function_array[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
-            leftright = uvp.window_function_array[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-            rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
-            rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-            uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-            uvp.window_function_array[spw][:, :Ndlys//2, :, :] = 0.0
-            uvp.window_function_array[spw][:, :, :Ndlys//2, : :] = 0.0
+            if hasattr(uvp, 'window_function_array'):
+                leftleft = uvp.window_function_array[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
+                leftright = uvp.window_function_array[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
+                rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                             +leftright\
+                                                                             +rightleft\
+                                                                             +rightright)
+                uvp.window_function_array[spw][:, :Ndlys//2, :, :] = 0.0
+                uvp.window_function_array[spw][:, :, :Ndlys//2, : :] = 0.0
 
             # fold covariance array if it exists.
             if hasattr(uvp,'cov_array'):
@@ -900,16 +919,17 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, Ndlys//2+1:, :] = np.mean([left, right], axis=0)
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
-            leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-            leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-            rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-            rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-            uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-            uvp.window_function_array[spw][:, :Ndlys//2, :, :] = 0.0
-            uvp.window_function_array[spw][:, :, :Ndlys//2, : :] = 0.0
+            if hasattr(uvp, 'window_function_array'):
+                leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
+                leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                             +leftright\
+                                                                             +rightleft\
+                                                                             +rightright)
+                uvp.window_function_array[spw][:, :Ndlys//2, :, :] = 0.0
+                uvp.window_function_array[spw][:, :, :Ndlys//2, : :] = 0.0
 
             # fold covariance array if it exists.
             if hasattr(uvp,'cov_array'):

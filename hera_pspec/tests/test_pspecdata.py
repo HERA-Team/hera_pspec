@@ -677,10 +677,6 @@ class Test_PSpecData(unittest.TestCase):
                 for i in range(3):
                     self.assertAlmostEqual(norm[i], 1.)
 
-                # Check that a warning is raised when H matrix is not square
-                rectangle_H = np.ones((4,3))
-                nt.assert_raises(np.linalg.LinAlgError, self.ds.get_MW, random_G, rectangle_H, mode=mode)
-
                 # Check that the method ignores G
                 M, W = self.ds.get_MW(random_G, random_H, mode=mode)
                 M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode)
@@ -1940,6 +1936,47 @@ def test_input_calibration():
                      cals='foo', cal_flag=False)
     nt.assert_raises(AssertionError, pd.add, dfiles, [None], cals=[None, None])
     nt.assert_raises(TypeError, pd.add, dfiles, [None], cals=['foo'])
+
+
+def test_window_funcs():
+    """
+    Test window function computation in ds.pspec()
+    This is complementary to test_get_MW above.
+    """
+    # get a PSpecData
+    uvd = UVData()
+    uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+    beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd)], beam=beam)
+    ds.set_spw((0, 20))
+    ds.set_taper('bh')
+    bl = (37, 38)
+    key = (0, bl, 'xx')
+    d = uvd.get_data(bl)
+    C = np.cov(d[:, :20].T).real
+    iC = np.linalg.pinv(C)
+    # iterate over various R and M matrices and ensure
+    # normalization and dtype is consistent
+    for data_weight in ['identity', 'iC']:
+        ds.set_weighting(data_weight)
+        for norm in ['H^-1', 'I', 'V^-1/2']:
+            for exact_norm in [True, False]:
+                if exact_norm and norm != 'I':
+                    # exact_norm only supported for norm == 'I'
+                    continue
+                ds.clear_cache()
+                if data_weight == 'iC':
+                    # fill R with iC
+                    ds._R[(0, (37, 38, 'xx'), 'iC', 'bh')] = iC
+                # compute G and H
+                Gv = ds.get_G(key, key, exact_norm=exact_norm, pol='xx')
+                Hv = ds.get_H(key, key, exact_norm=exact_norm, pol='xx')
+                Mv, Wv = ds.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm,
+                                   band_covar=C)
+                # assert row-sum is normalized to 1
+                assert np.isclose(Wv.sum(axis=1).real, 1).all()
+                # assert this is a real matrix, even though imag is populated
+                assert np.isclose(Wv.imag, 0, atol=1e-6).all()
 
 
 def test_get_argparser():

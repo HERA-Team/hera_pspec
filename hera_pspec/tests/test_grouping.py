@@ -81,6 +81,7 @@ class Test_grouping(unittest.TestCase):
         """
         Test average spectra behavior.
         """
+        ## Start file prep ##
         dfile = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         # Load into UVData objects
         uvd = UVData()
@@ -121,17 +122,32 @@ class Test_grouping(unittest.TestCase):
         errs = np.ones((uvp.Ntimes, uvp.Ndlys))
         for key in keys:
             uvp.set_stats("simple", key, errs)
-        blpair_groups = [[((24, 25), (37, 38)),((24, 25), (38, 39)), ((37, 38), (38, 39))]]
+        ## End file prep ##
+
+        # begin tests
+        blpair_groups = [blpairs]
         uvp_avg_ints_wgts = grouping.average_spectra(uvp, blpair_groups=blpair_groups,
                                                 error_field="noise", time_avg=True,inplace=False)
         uvp_avg_noise_wgts = grouping.average_spectra(uvp, time_avg=True, blpair_groups=blpair_groups,
                                                  error_weights="noise", inplace=False)
         uvp_avg_simple_wgts = grouping.average_spectra(uvp, blpair_groups=blpair_groups, time_avg=True, error_weights="simple", inplace=False)
-        nt.assert_true(np.all(np.isclose(uvp_avg_simple_wgts.stats_array["simple"][0][0,0,0], uvp.stats_array["simple"][0][0,0,0]/np.sqrt(uvp.Ntimes)/np.sqrt(len(blpairs)))))
-        # For using uniform error bars as weights, the error bar on the average is 1/sqrt{N} times the error bar on one single sample. 
-        assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
-        assert(abs(uvp_avg_noise_wgts.stats_array["noise"][0][0,0,0]) < abs(uvp.stats_array["noise"][0][0,0,0]))
+        # For using uniform error bars as weights, the error bar on the average is 1/sqrt{N} times the error bar on one single sample.
+        averaged_stat = uvp_avg_simple_wgts.stats_array["simple"][0][0, 0, 0]
+        initial_stat = uvp.stats_array["simple"][0][0, 0, 0] / np.sqrt(uvp.Ntimes) / np.sqrt(len(blpairs))
+        nt.assert_true(np.all(np.isclose(initial_stat, averaged_stat)))
         # For non-uniform weights, we test the error bar on the average power spectra should be smaller than one on single sample.
+        assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0, 0, 0]) < abs(uvp.stats_array["noise"][0][0, 0, 0]))
+        assert(abs(uvp_avg_noise_wgts.stats_array["noise"][0][0, 0, 0]) < abs(uvp.stats_array["noise"][0][0, 0, 0]))
+
+        # test infinite variance on stats_array average: test it doesn't result in stats_array nans
+        # and that the avg effectively ignores its presence: e.g. check it matches initial over sqrt(Nblpairs - 1)
+        uvp_inf_var = copy.deepcopy(uvp)
+        initial_stat = uvp.get_stats('simple', (0, blpairs[0], 'xx'))
+        inf_var_stat = np.ones((uvp_inf_var.Ntimes, uvp_inf_var.Ndlys)) * np.inf
+        uvp_inf_var.set_stats('simple', (0, blpairs[1], 'xx'), inf_var_stat)
+        uvp_inf_var_avg = uvp_inf_var.average_spectra(blpair_groups=blpair_groups, error_weights='simple', inplace=False)
+        final_stat = uvp_inf_var_avg.get_stats('simple', (0, blpairs[0], 'xx'))
+        assert np.isclose(final_stat, initial_stat / np.sqrt(len(blpairs) - 1)).all()
 
     def test_sample_baselines(self):
         """
@@ -271,7 +287,7 @@ def test_validate_bootstrap_errorbar():
                    taper='none', sampling=False, little_h=False, spw_ranges=[(0, 50)], verbose=False)
 
     # bootstrap resample
-    Nsamples = 1000
+    Nsamples = 100
     seed = 0
     uvp_avg, uvp_boots, uvp_wgts = grouping.bootstrap_resampled_error(uvp, time_avg=False, Nsamples=Nsamples,
                                                                       seed=seed, normal_std=True,

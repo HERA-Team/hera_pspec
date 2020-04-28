@@ -812,7 +812,8 @@ class PSpecData(object):
             cache. Keys are tuples, following the same format as the input to
             self.iC().
         """
-        for k in d: self._iC[k] = d[k]
+        for k in d:
+            self._iC[k] = d[k]
 
     def set_R(self, d):
         """
@@ -823,10 +824,14 @@ class PSpecData(object):
         ----------
         d : dict
             Dictionary containing data to insert into data-weighting R matrix
-            cache. Keys are tuples, following the same format as the input to
-            self.R().
+            cache. Keys are tuples with the following form
+            key = (dset_index, bl_ant_pair_pol_tuple, data_weighting, taper)
+            Ex: (0, (37, 38, 'xx'), 'bh')
+            If data_weight == 'dayenu' then additional elements are appended
+                key + (filter_extension, spw_Nfreqs, symmetric_taper)
         """
-        for k in d: self._R[k] = d[k]
+        for k in d:
+            self._R[k] = d[k]
 
     def R(self, key):
         """
@@ -852,12 +857,19 @@ class PSpecData(object):
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
         """
+        # type checks
         assert isinstance(key, tuple)
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-        # parse key
-        Rkey = key + (self.data_weighting,) + (self.taper,) + tuple(self.filter_extension,)\
-                   + (self.spw_Nfreqs,) + (self.symmetric_taper,)
+
+        # Only add to Rkey if a particular mode is enabled
+        # If you do add to this, you need to specify this in self.set_R docstring!
+        Rkey = key + (self.data_weighting,) + (self.taper,)
+        if self.data_weighting == 'dayenu':
+            # add extra dayenu params
+            Rkey = Rkey + tuple(self.filter_extension,) + (self.spw_Nfreqs,) \
+                   + (self.symmetric_taper,)
+
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -1019,7 +1031,7 @@ class PSpecData(object):
         """
         self.taper = taper
 
-    def set_spw(self, spw_range):
+    def set_spw(self, spw_range, ndlys=None):
         """
         Set the spectral window range.
 
@@ -1027,6 +1039,9 @@ class PSpecData(object):
         ----------
         spw_range : tuple, contains start and end of spw in channel indices
             used to slice the frequency array
+        ndlys : integer
+            Number of delay bins. Default: None, sets number of delay
+            bins equal to the number of frequency channels in the spw.
         """
         assert isinstance(spw_range, tuple), \
             "spw_range must be fed as a len-2 integer tuple"
@@ -1034,6 +1049,7 @@ class PSpecData(object):
             "spw_range must be fed as len-2 integer tuple"
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
+        self.set_Ndlys(ndlys=ndlys)
 
     def set_Ndlys(self, ndlys=None):
         """
@@ -1043,7 +1059,7 @@ class PSpecData(object):
         ----------
         ndlys : integer
             Number of delay bins. Default: None, sets number of delay
-            bins equal to the number of frequency channels
+            bins equal to the number of frequency channels in the current spw
         """
 
         if ndlys == None:
@@ -1053,7 +1069,6 @@ class PSpecData(object):
             if self.spw_Nfreqs < ndlys:
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
-
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol = False,
                   time_indices=None):
@@ -1606,7 +1621,7 @@ class PSpecData(object):
 
         return auto_term + cross_term
 
-    def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False):
+    def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15):
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -1654,6 +1669,9 @@ class PSpecData(object):
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
             of q_hat for details). Currently, this is supported only for mode I
 
+        rcond : float, optional
+            rcond parameter of np.linalg.pinv for truncating near-zero eigenvalues
+
         Returns
         -------
         M : array_like
@@ -1674,22 +1692,23 @@ class PSpecData(object):
 
         # Check that mode is supported
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1']
-        assert(mode in modes)
+        assert (mode in modes)
 
-        if mode!='I' and exact_norm==True:
+        if mode != 'I' and exact_norm is True:
             raise NotImplementedError("Exact norm is not supported for non-I modes")
 
         # Build M matrix according to specified mode
         if mode == 'H^-1':
-
             try:
                 M = np.linalg.inv(H)
+
             except np.linalg.LinAlgError as err:
                 if 'Singular matrix' in str(err):
-                    M = np.linalg.pinv(H)
+                    M = np.linalg.pinv(H, rcond=rcond)
                     raise_warning("Warning: Window function matrix is singular "
                                   "and cannot be inverted, so using "
                                   " pseudoinverse instead.")
+
                 else:
                     raise np.linalg.LinAlgError("Linear algebra error with H matrix "
                                                 "during MW computation.")
@@ -1704,9 +1723,13 @@ class PSpecData(object):
             # First find the eigenvectors and eigenvalues of the unnormalizd covariance
             # Then use it to compute V^-1/2
             eigvals, eigvects = np.linalg.eigh(band_covar)
-            if (eigvals <= 0.).any():
+            nonpos_eigvals = eigvals <= 1e-20
+            if (nonpos_eigvals).any():
                 raise_warning("At least one non-positive eigenvalue for the "
                               "unnormed bandpower covariance matrix.")
+                # truncate them
+                eigvals = eigvals[~nonpos_eigvals]
+                eigvects = eigvects[:, ~nonpos_eigvals]
             V_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
 
             W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H), axis=1))
@@ -2283,9 +2306,9 @@ class PSpecData(object):
         return valid
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
-              input_data_weight='identity', norm='I', taper='none',
-              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
-              baseline_tol=1.0, store_cov=False, verbose=True, filter_extensions=None,
+              input_data_weight='identity', norm='I', taper='none', sampling=False,
+              little_h=True, spw_ranges=None, symmetric_taper=True, baseline_tol=1.0,
+              store_cov=False, store_window=True, verbose=True, filter_extensions=None,
               exact_norm=False, history='', r_params=None, cov_model='empirical'):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
@@ -2366,17 +2389,21 @@ class PSpecData(object):
             (None) is to use the entire band provided in each dataset.
 
         symmetric_taper : bool, optional
-            speicfy if taper should be applied symmetrically to K-matrix (if true)
-            or on the left (if False). default is True
+            Specify if taper should be applied symmetrically to K-matrix (if true)
+            or on the left (if False). Default: True
 
         baseline_tol : float, optional
             Distance tolerance for notion of baseline "redundancy" in meters.
             Default: 1.0.
 
-        store_cov : boolean, optional
+        store_cov : bool, optional
             If True, calculate an analytic covariance between bandpowers
             given an input visibility noise model, and store the output
             in the UVPSpec object.
+
+        store_window : bool, optional
+            If True, store the window function of the bandpowers.
+            Default: True
 
         cov_model : string, optional
             How the covariances of the input data should be estimated.
@@ -2590,10 +2617,8 @@ class PSpecData(object):
             # set spectral range
             if verbose:
                 print( "\nSetting spectral range: {}".format(spw_ranges[i]))
-            self.set_spw(spw_ranges[i])
+            self.set_spw(spw_ranges[i], ndlys=n_dlys[i])
             self.set_filter_extension(filter_extensions[i])
-            # set number of delay bins
-            self.set_Ndlys(n_dlys[i])
 
             # clear covariance cache
             self.clear_cache()
@@ -2780,7 +2805,7 @@ class PSpecData(object):
                         pol_cov.extend(cov_pv)
                     
                     # store the window_function
-                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.complex128))
+                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -2934,16 +2959,17 @@ class PSpecData(object):
 
         # fill data arrays
         uvp.data_array = data_array
-        if store_cov:
-            uvp.cov_array = cov_array
-            uvp.cov_model = cov_model
-
-        uvp.window_function_array = window_function_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(
                         [ (k, np.ones_like(uvp.integration_array[k], np.float))
                          for k in uvp.integration_array.keys() ] )
+        if store_cov:
+            uvp.cov_array = cov_array
+            uvp.cov_model = cov_model
+
+        if store_window:
+            uvp.window_function_array = window_function_array
 
         # run check
         uvp.check()
@@ -3147,7 +3173,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               input_data_weight='identity', norm='I', taper='none',
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
-              bl_deg_range=(0, 180), bl_error_tol=1.0,
+              bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
@@ -3264,6 +3290,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     bl_error_tol : float
         Baseline vector error tolerance when constructing redundant groups.
+
+    store_window : bool
+        If True, store computed window functions (warning, these can be large!)
+        in UVPSpec objects.
 
     beam : PSpecBeam object, UVBeam object or string
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
@@ -3595,7 +3625,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params = r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
                        norm=norm, taper=taper, history=history, verbose=verbose,
-                       cov_model=cov_model, filter_extensions=filter_extensions)
+                       cov_model=cov_model, filter_extensions=filter_extensions,
+                       store_window=store_window)
 
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
