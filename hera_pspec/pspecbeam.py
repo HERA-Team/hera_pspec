@@ -399,6 +399,8 @@ class PSpecBeamAiry(PSpecBeamBase):
         and k = 2 * \pi  / \lambda
         where \lambda is the wavelength of the observed radio waves.
 
+        The airy beam ignores polarization.
+
         Parameters
         ----------
             diameter : float
@@ -434,6 +436,8 @@ class PSpecBeamAiry(PSpecBeamBase):
 
         omega_p = \int d \Omega A(\hat{s})
 
+        The airy beam ignores polarization.
+
         Parameters
         ----------
         pol : sting optional
@@ -447,12 +451,15 @@ class PSpecBeamAiry(PSpecBeamBase):
             the __init__ freqs argument.
         """
         return self.omega_p
+
     def power_beam_sq_int(self, pol='pI'):
         """
         returns the integrated squared beam over solid angle for the observed frequencies
         specified in the initialization of the AiryBeam object.
 
         omega_pp = \int d \Omega |A(\hat{s})|^2
+
+        The airy beam ignores polarization.
 
         Parameters
         ----------
@@ -468,8 +475,6 @@ class PSpecBeamAiry(PSpecBeamBase):
             the __init__ freqs argument.
         """
         return self.omega_pp
-
-
 
 class PSpecBeamUV(PSpecBeamBase):
 

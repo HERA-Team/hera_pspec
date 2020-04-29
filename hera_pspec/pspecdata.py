@@ -377,6 +377,9 @@ class PSpecData(object):
 
         Parameters
         ----------
+        clear_r_params : bool, optional
+            If True, clear r_parameters in cache. If False, don't clear them.
+
         keys : list of tuples, optional
             List of keys to remove from matrix cache. If None, all
             keys will be removed. Default: None.
@@ -385,7 +388,6 @@ class PSpecData(object):
             self.r_params = {}
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
-            #self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
             self._H, self._G = {}, {}
             self._W, self._M = {}, {}
             self._E, self._V = {}, {}
@@ -489,7 +491,7 @@ class PSpecData(object):
             of the tuple is the dataset index (or label), and the subsequent
             elements are the baseline ID.
 
-        filter_extension : bool (optional)
+        include_extension : bool (optional)
             default=False
             If True, extend spw to include filtering window extensions.
 
@@ -574,33 +576,12 @@ class PSpecData(object):
             wgts = (~self.dsets[dset].get_flags(bl)).astype(float).T[spw]
             return wgts
 
-    def z(self, key, include_taper=True):
-        """
-        Data-inspection utility function for
-        getting data after the application of the R-matrix.
-        Usful for inspecting the qualitative impact of various input
-        data weightings.
-
-        Parameters
-        ----------
-        key : tuple
-            Tuple containing dataset ID and baseline index. The first element
-            of the tuple is the dataset index (or label), and the subsequent
-            elements are the baseline ID.
-        include_taper : bool (optional)
-            If False, do not include multiplicative tapering function.
-        """
-        tr = self.R(key)
-        tx = self.x(key,include_extension=True)
-        output = np.asarray([ tr[m] @ tx[:,m] for m in range(self.Ntimes)])
-        if not include_taper:
-            output = output / dspec.gen_window(self.taper, self.spw_Nfreqs, normalization='rms')
-        return output
-
-
     def set_C(self, cov):
         """
         Set the cached covariance matrix to a set of user-provided values.
+
+        This method also resets cached values that depend on the covariances
+        being reset.
 
         Parameters
         ----------
@@ -608,13 +589,64 @@ class PSpecData(object):
             Dictionary containing new covariance values for given datasets and
             baselines. Keys of the dictionary are tuples, with the first item
             being the ID (index) of the dataset, and subsequent items being the
-            baseline indices.
+            baseline indices/pol and the last item being the covariance modeling
+            method.
         """
-        # self.clear_cache(cov.keys()) This line is problematic.
-        # because it clears all cached quantities associated with
-        # this key value when really we just want to reset the
-        # covariance -- which is done below anyways... AEW
-        for key in cov: self._C[key] = cov[key]
+        for key in cov:
+
+            self._C[key] = cov[key]
+            #reset iC since it depends explicitly on C.
+            try: del self._iC[key]
+            except(KeyError): pass
+            #reset elements of V that involve the baseline specified in cov
+            #see get_unnormed_V for V key format.
+            ds, bl = parse_blkey(key[:-1])
+            bl = bl[:2]
+            pol = bl
+            model = key[-1]
+            #for all elements of cached _V matrices (q covariances)
+            for k in self._V:
+                k1 = k[:3]#key 1
+                k2 = k[3:6]#key 2
+                m  = k[10] #model
+                #check if model is in k (we don't need to delete a diff cov model)
+                #and also check if either k1 or k2 involve the baseline we are
+                #resetting. If the model is the same and the baseline is involved
+                #delete the cached q covariance.
+                if model == m and \
+                ((ds, bl[0], bl[1], pol) == k1 or (ds, bl[0], bl[1], pol) == k2):
+                    del self._V[k]
+
+            #if the data_weighting is equal to iC,
+            #and we are resetting the empirical covariance
+            #which is used for inverse cov weighting, then we also need to reset
+            #R, E, M, W, H, and G.
+            if self.data_weighting == 'iC' and key[-1] == 'empirical':
+                #for each k in _R cache. (see R() definition for key format)
+                for k in self._R:
+                    #if the key is an inverse variance weight.
+                    if k[-1] == 'iC':
+                    #and baseline/pol of the set
+                    #cov correspond to this key, then reset the weight for this
+                    #baseline/pol.
+                    k = (k[0], k[1][0], k[1][1], k[1][2])
+                    if (ds, bl[0], bl[1], pol) == k:
+                        del self._R[k]
+                #for each k in _E
+                for k in self._E:
+                    k1 = k[:3]#key 1
+                    k2 = k[3:6]#key 2
+                    #with a baseline corresponding to cov.
+                    if (ds, bl[0], bl[1], pol) == k1 or (ds, bl[0], bl[1], pol) == k2):
+                        #reset that E entry
+                        del self._E[k]
+                for k in self._M:
+                    ##I am here!
+                try: del self._M[key]
+                except(KeyError): pass
+                del self._W[key]
+                del self._H[key]
+                del self._G[key]
 
     def C_model(self, key, model='empirical', time_index=None):
         """
@@ -903,6 +935,8 @@ class PSpecData(object):
         average_times : bool, optional
             If true, average over all times so that output is (spw_Nfreqs x spw_Nfreqs)
 
+        iC_model: string, optional
+            Specifies the type of covariance model to use in iC weights.
 
         Returns
         """
@@ -913,12 +947,13 @@ class PSpecData(object):
 
         # Only add to Rkey if a particular mode is enabled
         # If you do add to this, you need to specify this in self.set_R docstring!
-        Rkey = key + (self.data_weighting,) + (self.taper,)
+        Rkey = key + (self.taper,)
         if self.data_weighting == 'dayenu':
             # add extra dayenu params
             Rkey = Rkey + tuple(self.filter_extension,) + (self.spw_Nfreqs,) \
                    + (self.symmetric_taper,)
 
+        Rkey = Rkey + (self.data_weighting,)
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
@@ -945,7 +980,7 @@ class PSpecData(object):
                 rmat =  np.asarray([self.I(key) * wgt_sq[m] for m in range(self.Ntimes)])
 
             elif self.data_weighting == 'iC':
-                rmat = self.iC(key)
+                rmat = self.iC(key, model=iC_model)
 
             elif self.data_weighting == 'dayenu':
                 r_param_key = (self.data_weighting,) + key
@@ -1746,7 +1781,7 @@ class PSpecData(object):
 
         Parameters
         ----------
-        key1, key2 : tuples or lists of tuples
+        key1, key2 : tuples
             Tuples containing indices of dataset and baselines for the two
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights.
