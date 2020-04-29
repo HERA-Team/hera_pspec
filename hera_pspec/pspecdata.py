@@ -2319,6 +2319,8 @@ class PSpecData(object):
         if not band_covar is None:
             if band_covar.ndim == 2:
                 band_covar=np.asarray([band_covar])
+        #if there is a single band covar for all times, ensure
+        #that flags are broadcast.
         Ms = np.zeros_like(H)
         Ws = np.zeros_like(G)
         for tind in range(H.shape[0]):
@@ -2344,7 +2346,19 @@ class PSpecData(object):
                     raise ValueError("Covariance not supplied for V^-1/2 normalization")
                     # First find the eigenvectors and eigenvalues of the unnormalizd covariance
                     # Then use it to compute V^-1/2
-                eigvals, eigvects = np.linalg.eigh(band_covar[tind])
+                if  band_covar.shape[0] < H.shape[0]:
+                    if band_covar.shape[0] == 1:
+                        #check that zero rows and columns [flags] are broadcasted.
+                        h_zeros = np.logical_or(np.abs(H) <= 1e-15,  np.isnan(H))
+                        if not np.all(np.logical_or(np.all(h_zeros, axis=0), ~np.any(h_zeros, axis=0))):
+                            raise ValueError("Only provide single time band covar if flags are broadcasted!")
+                        else:
+                            bcind = 0
+                    else:
+                        raise ValueError("band_covar must be provided for all times in H or for one time.")
+                else:
+                    bcind = tind
+                eigvals, eigvects = np.linalg.eigh(band_covar[bcind])
                 nonpos_eigvals = eigvals <= 1e-20
                 if (nonpos_eigvals).any():
                     raise_warning("At least one non-positive eigenvalue for the "

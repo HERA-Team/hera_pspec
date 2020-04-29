@@ -2072,14 +2072,14 @@ def test_window_funcs():
                 ds.clear_cache()
                 if data_weight == 'iC':
                     # fill R with iC
-                    ds._R[(0, (37, 38, 'xx'), 'iC', 'bh')] = iC
+                    ds._R[(0, (37, 38, 'xx'), 'iC', 'bh')] = np.asarray([iC for m in range(ds.Ntimes)])
                 # compute G and H
                 Gv = ds.get_G(key, key, exact_norm=exact_norm, pol='xx')
                 Hv = ds.get_H(key, key, exact_norm=exact_norm, pol='xx')
                 Mv, Wv = ds.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm,
                                    band_covar=C)
                 # assert row-sum is normalized to 1
-                assert np.isclose(Wv.sum(axis=1).real, 1).all()
+                assert np.isclose(Wv.sum(axis=2).real, 1).all()
                 # assert this is a real matrix, even though imag is populated
                 assert np.isclose(Wv.imag, 0, atol=1e-6).all()
 
