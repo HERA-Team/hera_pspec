@@ -599,7 +599,7 @@ class PSpecData(object):
             #However, if we expand the use of set_C outside of
             #get_unnormed_V and allow for arbitrary covariances to
             #be set, then we could run into trouble
-            #since _V, _iC and other pre-cached quanties depend on _C. 
+            #since _V, _iC and other pre-cached quanties depend on _C.
             self._C[key] = cov[key]
 
     def C_model(self, key, model='empirical', time_index=None):
@@ -3471,8 +3471,9 @@ class PSpecData(object):
                             sd = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
                             pv[:,t] = pv[:,t] * sd
 
-                     #Generate the covariance matrix if error bars provided
-                    pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
+                    #extend window function. 
+                    pol_window_function.extend(Wv.astype(np.float64))
+                    #Generate the covariance matrix if error bars provided
                     if store_cov:
                         if verbose: print(" Building q_hat covariance...")
                         #cov_qv = self.cov_q_hat(key1, key2)
