@@ -389,6 +389,7 @@ class PSpecData(object):
             self._H, self._G = {}, {}
             self._W, self._M = {}, {}
             self._E, self._V = {}, {}
+            self.r_cache = {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -402,6 +403,8 @@ class PSpecData(object):
                 try: del(self._Y[k])
                 except(KeyError): pass
                 try: del(self._R[k])
+                except(KeyError): pass
+                try: del(self.r_cache[k])
                 except(KeyError): pass
 
     def dset_idx(self, dset):
@@ -964,7 +967,7 @@ class PSpecData(object):
                     rdkey = tuple(wgts[m]) + tuple(np.round(np.array(r_params['filter_centers']) * df, 8))\
                     + tuple(np.round(df * np.array(r_params['filter_half_widths']), 8))\
                     + tuple(np.round(df * np.array(r_params['filter_factors']) * 1e8, 8))\
-                    + ('dayenu',)
+                    + ('dayenu',) + (self.spw_Nfreqs,) + self.filter_extension
                     if not rdkey in self.r_cache:
                         rm = dspec.dayenu_mat_inv(x=_freqs,
                                         filter_centers=r_params['filter_centers'],
@@ -1107,7 +1110,7 @@ class PSpecData(object):
         """
         self.taper = taper
 
-    def set_spw(self, spw_range, ndlys=None):
+    def set_spw(self, spw_range, ndlys=None, set_Ndlys=True):
         """
         Set the spectral window range.
 
@@ -1118,6 +1121,9 @@ class PSpecData(object):
         ndlys : integer
             Number of delay bins. Default: None, sets number of delay
             bins equal to the number of frequency channels in the spw.
+        set_Ndlys : bool, optional
+            If True, set the number of delays equal to ndlys.
+            If False, don't modify the number of delays.
         """
         assert isinstance(spw_range, tuple), \
             "spw_range must be fed as a len-2 integer tuple"
@@ -1125,7 +1131,8 @@ class PSpecData(object):
             "spw_range must be fed as len-2 integer tuple"
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
-        self.set_Ndlys(ndlys=ndlys)
+        if set_Ndlys:
+            self.set_Ndlys(ndlys=ndlys)
 
     def set_Ndlys(self, ndlys=None):
         """
@@ -1219,7 +1226,6 @@ class PSpecData(object):
             key1 = [key1]
         if not isinstance(key2,list):
             key2 = [key2]
-
         output = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
         for k1, k2 in zip(key1, key2):
             if model in ['dsets']:
@@ -1230,7 +1236,7 @@ class PSpecData(object):
             elif model in ['empirical', 'empirical_pspec']:
                 #empirical error bars require broadcasting flags
                 if model == 'empirical':
-                    flag_backup=self.broadcast_dset_flags(spw_ranges = [self.spw_range])
+                    flag_backup=self.broadcast_dset_flags(spw_ranges=[self.spw_range])
                 vm = self.get_unnormed_V(k1, k2, model=model,
                                   exact_norm=exact_norm, time_index = 0, pol=pol, allow_fft=allow_fft)
                 if model == 'empirical':
@@ -1343,12 +1349,12 @@ class PSpecData(object):
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau and integral_beam should be part of get_Q. We use them here to
                 # avoid their repeated computation for each delay mode.
-                Q =  self.get_Q_alt(i)
+                Q =  self.get_Q_alt(i) * qnorm
                 QRx2 = np.dot(Q, Rx2.T).T
 
                 # Square and sum over columns
                 #qi = 0.5 * np.einsum('i...,i...->...', Rx1.conj(), QRx2)
-                qi = qnorm * 0.5 * np.sum(Rx1.conj() * QRx2, axis=1)
+                qi =  0.5 * np.sum(Rx1.conj() * QRx2, axis=1)
                 q.append(qi)
 
             q = np.asarray(q) #(Ndlys X Ntime)
@@ -1358,8 +1364,13 @@ class PSpecData(object):
         elif allow_fft and (self.spw_Nfreqs  == self.spw_Ndlys - np.sum(self.filter_extension)):
             _Rx1 = np.fft.fft(Rx1, axis=1)
             _Rx2 = np.fft.fft(Rx2, axis=1)
-            return qnorm * (0.5 * np.fft.fftshift(_Rx1, axes=1).conj() \
-                       * np.fft.fftshift(_Rx2, axes=1)).T
+            if exact_norm:
+                qnorm = np.diag(np.sqrt(qnorm))
+            #We are applying the exact norm after the R matrix consistent with above.
+            #We may want to think if the order should be reversed but I doubt it
+            #matters much.
+            return np.mean(qnorm) * (0.5 * np.fft.fftshift(_Rx1 * qnorm, axes=1).conj() \
+                       * np.fft.fftshift(_Rx2 * qnorm, axes=1)).T
 
         else:
             raise ValueError("spw_Nfreqs + extensions must equal spw_Ndlys if using fft.")
@@ -1407,27 +1418,27 @@ class PSpecData(object):
         if not Gkey in self._G:
             R1 = self.R(key1)[time_index].squeeze()
             R2 = self.R(key2)[time_index].squeeze()
+            if (exact_norm):
+                integral_beam1 = self.get_integral_beam(pol)
+                integral_beam2 = self.get_integral_beam(pol, include_extension=True)
+                del_tau = np.median(np.diff(self.delays()))*1e-9
+                qnorm1 = del_tau * integral_beam1
+                qnorm2 = del_tau * integral_beam2
+            else:
+                qnorm1 = 1.
+                qnorm2 = 1.
             if allow_fft:
                 if not (self.spw_Nfreqs + np.sum(self.filter_extension) == self.spw_Ndlys):
                     raise ValueError("Nfreqs with extensions must equal Nspw for allow_fft")
                 #We can calculate H much faster with an fft if we
                 #don't have sampling
-                r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(R1[:,::-1])))
-                r2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(R2[:,::-1])))
-                G = r1_fft * np.conj(r2_fft)
+                r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R1 * qnorm1)[:,::-1])))
+                r2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R2 * qnorm2)[:,::-1])))
+                G = np.conj(r1_fft) * r2_fft
             else:
                 G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
                 iR1Q1, iR2Q2 = {}, {}
-                if (exact_norm):
-                    integral_beam1 = self.get_integral_beam(pol)
-                    integral_beam2 = self.get_integral_beam(pol, include_extension=True)
-                    del_tau = np.median(np.diff(self.delays()))*1e-9
-                if exact_norm:
-                    qnorm1 = del_tau * integral_beam1
-                    qnorm2 = del_tau * integral_beam2
-                else:
-                    qnorm1 = 1.
-                    qnorm2 = 1.
+
                 for ch in range(self.spw_Ndlys):
                     Q1 = self.get_Q_alt(ch) * qnorm1
                     Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
@@ -1561,6 +1572,15 @@ class PSpecData(object):
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1)[time_index].squeeze()
             R2 = self.R(key2)[time_index].squeeze()
+            if (exact_norm):
+                integral_beam1 = self.get_integral_beam(pol)
+                integral_beam2 = self.get_integral_beam(pol, include_extension=True)
+                del_tau = np.median(np.diff(self.delays()))*1e-9
+                qnorm1 = del_tau * integral_beam1
+                qnorm2 = del_tau * integral_beam2
+            else:
+                qnorm1 = 1.
+                qnorm2 = 1.
             if allow_fft:
                 if not (self.spw_Nfreqs + np.sum(self.filter_extension) == self.spw_Ndlys):
                     raise ValueError("Nfreqs must equal Nspw for allow_fft")
@@ -1568,8 +1588,8 @@ class PSpecData(object):
                     raise ValueError("sampling must equal True for allow_fft")
                 #We can calculate H much faster with an fft if we
                 #don't have sampling
-                r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(R1[:,::-1])))
-                r2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(R2[:,::-1])))
+                r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R1 * qnorm1)[:,::-1])))
+                r2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R2 * qnorm2)[:,::-1])))
                 H = r1_fft * np.conj(r2_fft)
             else:
                 if not sampling:
@@ -1581,8 +1601,8 @@ class PSpecData(object):
                     sinc_matrix = np.sinc(sinc_matrix / np.float(nfreq))
                 iR1Q1, iR2Q2 = {}, {}
                 for ch in range(self.spw_Ndlys):
-                    Q1 = self.get_Q_alt(ch)
-                    Q2 = self.get_Q_alt(ch, include_extension=True)
+                    Q1 = self.get_Q_alt(ch) * qnorm1
+                    Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm2
                     if not sampling:
                         Q2 *= sinc_matrix
                     #H is given by Tr[E^\alpha C,\beta]
@@ -1599,16 +1619,7 @@ class PSpecData(object):
                 for i in range(self.spw_Ndlys): # this loop goes as nchan^4
                     for j in range(self.spw_Ndlys):
                         H[i,j] = np.trace(np.dot(iR1Q1[i], iR2Q2[j]))
-            if (exact_norm):
-                integral_beam1 = self.get_integral_beam(pol)
-                integral_beam2 = self.get_integral_beam(pol, include_extension=True)
-                del_tau = np.median(np.diff(self.delays()))*1e-9
-                qnorm1 = del_tau * integral_beam1
-                qnorm2 = del_tau * integral_beam2
-            else:
-                qnorm1 = 1.
-                qnorm2 = 1.
-            H *= (qnorm1 * qnorm2)
+
             self._H[Hkey] = H / 2.
         return self._H[Hkey]
 
@@ -1766,7 +1777,6 @@ class PSpecData(object):
                              "by now! Cannot be equal to None")
         Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.spw_Ndlys, self.data_weighting)\
         + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
-
         if not Ekey in self._E:
             assert time_index >= 0 and time_index < self.Ntimes, "time_index must be between 0 and Ntimes"
             nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
@@ -1899,14 +1909,18 @@ class PSpecData(object):
                     cross_term = np.einsum('aij,bji', E12P21, E12starS21)
                     output = auto_term + cross_term
                 else:
+                    if exact_norm:
+                        qnorm = self.get_integral_beam(pol) * np.median(np.diff(self.delays()))*1e-9
+                    else:
+                        qnorm = 1.
                     if self.spw_Nfreqs + np.sum(self.filter_extension) != self.spw_Ndlys:
                         raise ValueError("allow_fft requires spw_Nfreqs == spw_Ndlys")
                     R1 = self.R(key1)[time_index]
                     R2 = self.R(key2)[time_index]
-                    C1_filtered = R1 @ C1 @ np.conj(R1).T
-                    C2_filtered = R2 @ C2 @ np.conj(R2).T
-                    S21_filtered = R1 @ S21 @ np.conj(R1).T
-                    P21_filtered = R2 @ P21 @ np.conj(R2).T
+                    C1_filtered = R1 @ C1 @ np.conj(R1).T * qnorm
+                    C2_filtered = R2 @ C2 @ np.conj(R2).T * qnorm
+                    S21_filtered = R1 @ S21 @ np.conj(R1).T * qnorm
+                    P21_filtered = R2 @ P21 @ np.conj(R2).T * qnorm
                     c1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(C_1_filtered[:,::-1])))
                     c2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(C_2_filtered[:,::-1])))
                     s21_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(S21_filtered[:,::-1])))
@@ -1920,7 +1934,8 @@ class PSpecData(object):
 
         return self._V[Vkey]
 
-    def _get_M(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False, pol=False, allow_fft=False):
+    def _get_M(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False,
+               pol=False, allow_fft=False, rcond=1e-15):
         """
         Helper function that returns M-matrix for a single time step.
         Several choices for M are supported:
@@ -1982,7 +1997,7 @@ class PSpecData(object):
                     M = np.linalg.inv(H)
                 except np.linalg.LinAlgError as err:
                     if 'Singular matrix' in str(err):
-                        M = np.linalg.pinv(H)
+                        M = np.linalg.pinv(H, rcond=rcond)
                         raise_warning("Warning: Window function matrix is singular "
                                       "and cannot be inverted, so using "
                                       " pseudoinverse instead.")
@@ -1996,9 +2011,13 @@ class PSpecData(object):
                 band_covar = self.get_unnormed_V(key1, key2, time_index, model=self.cov_model, exact_norm=exact_norm,
                                                  pol = pol)
                 eigvals, eigvects = np.linalg.eig(band_covar)
-                if (eigvals <= 0.).any():
+                nonpos_eigvals = eigvals <= 1e-20
+                if (nonpos_eigvals).any():
                     raise_warning("At least one non-positive eigenvalue for the "
                                   "unnormed bandpower covariance matrix.")
+                    # truncate them
+                    eigvals = eigvals[~nonpos_eigvals]
+                    eigvects = eigvects[:, ~nonpos_eigvals]
                 V_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
 
                 W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H), axis=1))
@@ -2007,10 +2026,14 @@ class PSpecData(object):
             elif mode == 'H^-1/2':
                 H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
                 eigvals, eigvects = np.linalg.eig(H)
-                if (eigvals <= 0.).any():
+                nonpos_eigvals = eigvals <= 1e-20
+                if (nonpos_eigvals).any():
                     raise_warning("At least one non-positive eigenvalue for the "
                                   "unnormed bandpower covariance matrix.")
-                H_minus_half =  np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
+                    # truncate them
+                    eigvals = eigvals[~nonpos_eigvals]
+                    eigvects = eigvects[:, ~nonpos_eigvals]
+                H_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
                 W_norm = np.diag(1. / np.sum(np.dot(H_minus_half, H), axis=1))
                 M = np.dot(W_norm, H_minus_half)
 
@@ -2612,7 +2635,6 @@ class PSpecData(object):
 
         # clear matrix cache (which may be holding weight matrices Y)
         self.clear_cache()
-
         # spw type check
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
@@ -2624,7 +2646,7 @@ class PSpecData(object):
             # iterate over spw ranges
             backup_flags.append(copy.deepcopy(dset.flag_array))
             for spw in spw_ranges:
-                self.set_spw(spw)
+                self.set_spw(spw, set_Ndlys=False)
                 # unflag
                 if unflag:
                     # unflag for all times

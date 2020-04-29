@@ -109,7 +109,7 @@ class Test_DataSet(unittest.TestCase):
         """
         lower_freq = 120e6
         upper_freq = 140e6
-        airy = pspecbeam.PSpecBeamAiry(14., np.linspace(lower_freq, uppwer_freq, 200, endpoint=True))
+        airy = pspecbeam.PSpecBeamAiry(14., np.linspace(lower_freq, upper_freq, 200, endpoint=True))
         Om_p = airy.power_beam_int()
         Om_pp = airy.power_beam_sq_int()
 
