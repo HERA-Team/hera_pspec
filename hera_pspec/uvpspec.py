@@ -134,7 +134,7 @@ class UVPSpec(object):
                           "bl_vecs", "bl_array", "telescope_location",
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
-        self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array", 
+        self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array",
                        "nsample_array", "cov_array"]
         self._dicts_of_dicts = ["stats_array"]
 
@@ -1667,11 +1667,12 @@ class UVPSpec(object):
                     if issubclass(getattr(self, p).dtype.type, np.str):
                         assert np.all(getattr(self, p) == getattr(other, p))
                     else:
-                        assert np.isclose(getattr(self, p), getattr(other, p)).all()
+                        nans_both = np.logical_and(np.isnan(getattr(self,p)), np.isnan(getattr(other,p)))
+                        assert np.isclose(getattr(self, p)[~nans_both], getattr(other, p)[~nans_both]).all()
                 elif p in self._dicts:
                     for i in getattr(self, p):
-                        assert np.isclose(getattr(self, p)[i], \
-                               getattr(other, p)[i]).all()
+                        nans_both = np.logical_and(np.isnan(getattr(self,p)[i]), np.isnan(getattr(other,p)[i]))
+                        assert np.isclose(getattr(self, p)[i][~nans_both], getattr(other, p)[i][~nans_both]).all()
         except AssertionError:
             if verbose:
                 print("UVPSpec parameter '{}' not equivalent between {} and {}" \

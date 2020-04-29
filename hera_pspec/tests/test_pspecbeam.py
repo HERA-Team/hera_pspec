@@ -4,7 +4,8 @@ import numpy as np
 import pyuvdata as uv
 from hera_pspec import pspecbeam, conversions
 from hera_pspec.data import DATA_PATH
-
+import scipy.integrate as integrate
+import scipy.special as sp
 
 class Test_DataSet(unittest.TestCase):
 
@@ -109,7 +110,8 @@ class Test_DataSet(unittest.TestCase):
         """
         lower_freq = 120e6
         upper_freq = 140e6
-        airy = pspecbeam.PSpecBeamAiry(14., np.linspace(lower_freq, upper_freq, 200, endpoint=True))
+        num_freqs = 200
+        airy = pspecbeam.PSpecBeamAiry(14., np.linspace(lower_freq, upper_freq, num_freqs, endpoint=True))
         Om_p = airy.power_beam_int()
         Om_pp = airy.power_beam_sq_int()
 
@@ -119,11 +121,11 @@ class Test_DataSet(unittest.TestCase):
 
         # Check values for lower value
         k_l = 14. * np.pi / conversions.units.c * lower_freq
-        tvall = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(1, np.sin(x) * kl) / (np.sin(x) * kl)) ** 2. * np.sin(x),
+        tval_l = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(1, np.sin(x) * k_l) / (np.sin(x) * k_l)) ** 2. * np.sin(x),
                                                         0, np.pi/2.)[0]
 
         k_u = 14. * np.pi / conversions.units.c * upper_freq
-        tval_u = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(1, np.sin(x) * ku) / (np.sin(x) * ku)) ** 2. * np.sin(x),
+        tval_u = 2 * np.pi * integrate.quad(lambda x: (2 * sp.jn(1, np.sin(x) * k_u) / (np.sin(x) * k_u)) ** 2. * np.sin(x),
                                                         0, np.pi/2.)[0]
 
         nt.assert_true(np.isclose(tval_u, Om_p[-1]))
@@ -137,7 +139,7 @@ class Test_DataSet(unittest.TestCase):
 
         #make sure errors happen
         nt.assert_raises(ValueError, pspecbeam.PSpecBeamAiry, 14.+2j, np.linspace(100e6,200e6,10))
-        nt.assert_raises(ValueError, PSpecBeam.PSpecBeamAiry, 14., 'whaaaaaattttttt????!!!!')
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamAiry, 14., 'whaaaaaattttttt????!!!!')
 
     def test_Gaussbeam(self):
         gauss = pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))

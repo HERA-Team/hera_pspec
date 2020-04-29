@@ -1692,8 +1692,6 @@ class Test_PSpecData(unittest.TestCase):
                         spw_ranges=[(400, 450)], verbose=False)
         avg_uvp2 = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # assert average before and after are the same!
-        print(avg_uvp.data_array)
-        print(avg_uvp2.data_array)
         nt.assert_equal(avg_uvp, avg_uvp2)
 
     def test_RFI_flag_propagation(self):
