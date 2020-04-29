@@ -593,60 +593,14 @@ class PSpecData(object):
             method.
         """
         for key in cov:
-
+            #clear_cache() was originally being called here
+            #this was deleting the _V cache and since get_unnormed_V
+            #calls this function, this was causing caching to fail.
+            #However, if we expand the use of set_C outside of
+            #get_unnormed_V and allow for arbitrary covariances to
+            #be set, then we could run into trouble
+            #since _V, _iC and other pre-cached quanties depend on _C. 
             self._C[key] = cov[key]
-            #reset iC since it depends explicitly on C.
-            try: del self._iC[key]
-            except(KeyError): pass
-            #reset elements of V that involve the baseline specified in cov
-            #see get_unnormed_V for V key format.
-            ds, bl = parse_blkey(key[:-1])
-            bl = bl[:2]
-            pol = bl
-            model = key[-1]
-            #for all elements of cached _V matrices (q covariances)
-            for k in self._V:
-                k1 = k[:3]#key 1
-                k2 = k[3:6]#key 2
-                m  = k[10] #model
-                #check if model is in k (we don't need to delete a diff cov model)
-                #and also check if either k1 or k2 involve the baseline we are
-                #resetting. If the model is the same and the baseline is involved
-                #delete the cached q covariance.
-                if model == m and \
-                ((ds, bl[0], bl[1], pol) == k1 or (ds, bl[0], bl[1], pol) == k2):
-                    del self._V[k]
-
-            #if the data_weighting is equal to iC,
-            #and we are resetting the empirical covariance
-            #which is used for inverse cov weighting, then we also need to reset
-            #R, E, M, W, H, and G.
-            if self.data_weighting == 'iC' and key[-1] == 'empirical':
-                #for each k in _R cache. (see R() definition for key format)
-                for k in self._R:
-                    #if the key is an inverse variance weight.
-                    if k[-1] == 'iC':
-                    #and baseline/pol of the set
-                    #cov correspond to this key, then reset the weight for this
-                    #baseline/pol.
-                    k = (k[0], k[1][0], k[1][1], k[1][2])
-                    if (ds, bl[0], bl[1], pol) == k:
-                        del self._R[k]
-                #for each k in _E
-                for k in self._E:
-                    k1 = k[:3]#key 1
-                    k2 = k[3:6]#key 2
-                    #with a baseline corresponding to cov.
-                    if (ds, bl[0], bl[1], pol) == k1 or (ds, bl[0], bl[1], pol) == k2):
-                        #reset that E entry
-                        del self._E[k]
-                for k in self._M:
-                    ##I am here!
-                try: del self._M[key]
-                except(KeyError): pass
-                del self._W[key]
-                del self._H[key]
-                del self._G[key]
 
     def C_model(self, key, model='empirical', time_index=None):
         """
