@@ -643,7 +643,7 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
         if model == 'dsets':
-            assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
+            assert isinstance(time_index, (int, np.integer)), "time_index must be an integer. Supplied %s"%(time_index)
             Ckey = key + (model, time_index)
 
         elif model == 'empirical':
@@ -777,19 +777,28 @@ class PSpecData(object):
         nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
+            #Note that C by default gives us an Ndly x Ndly matrix (so it is per time)
             C = self.C_model(key, model=model)
-            #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
-            # FIXME: Not sure what these are supposed to do
-            #if self.lmin is not None: S += self.lmin # ensure invertibility
-            #if self.lmode is not None: S += S[self.lmode-1]
+            #In the following lines, we calculate the inverse or psuedo-inverse
+            #of C multiplied by weights.
+            #This is going to be the iC each time, ths Ntimes x nferq x nfreq
             _iC = np.zeros((self.Ntimes, nfreq, nfreq))
             wgts = self.Y(key)
+            #wgts_sq is a matrix equal to the outer product of weights.
+            #we want to multiply it by C before taking a psuedo inverse
+            #since our data is multiplied by these weights.
             wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
+            #Now, for each time we want to calculate the psuedo-inverse for.
             for m in range(self.Ntimes):
+                #multiply C --
+                #which is a single Ndlys x Ndlys matrix estimated from multiple times
                 _iC[m] = wgts_sq[m] * C
+                #by wgts_sq for that time
                 try:
                     _iC[m] = np.linalg.inv(_iC[m])
+                    #try inverting C multiplied by weights.
                 except np.linalg.LinAlgError as err:
+                    #That which will not invert will be psuedo-inverted!
                     if 'Singular matrix' in str(err):
                         _iC[m] = np.linalg.pinv(_iC[m])
             # FIXME: Is series of dot products quicker?
