@@ -889,9 +889,6 @@ class PSpecData(object):
         average_times : bool, optional
             If true, average over all times so that output is (spw_Nfreqs x spw_Nfreqs)
 
-        iC_model: string, optional
-            Specifies the type of covariance model to use in iC weights.
-
         Returns
         """
         # type checks
@@ -934,7 +931,7 @@ class PSpecData(object):
                 rmat =  np.asarray([self.I(key) * wgt_sq[m] for m in range(self.Ntimes)])
 
             elif self.data_weighting == 'iC':
-                rmat = self.iC(key, model=iC_model)
+                rmat = self.iC(key)
 
             elif self.data_weighting == 'dayenu':
                 r_param_key = (self.data_weighting,) + key
@@ -3471,7 +3468,7 @@ class PSpecData(object):
                             sd = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
                             pv[:,t] = pv[:,t] * sd
 
-                    #extend window function. 
+                    #extend window function.
                     pol_window_function.extend(Wv.astype(np.float64))
                     #Generate the covariance matrix if error bars provided
                     if store_cov:
