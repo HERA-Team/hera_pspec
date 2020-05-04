@@ -404,7 +404,7 @@ class PSpecBeamAiry(PSpecBeamBase):
         Parameters
         ----------
             diameter : float
-                the diameter of the aperture.
+                the diameter of the aperture in units of meters.
             freqs : array-like
                 array of floats giving the frequencies of our observations.
 
@@ -444,6 +444,7 @@ class PSpecBeamAiry(PSpecBeamBase):
             exist for compatibility purposes.
             no matter what is provided,
             this method gives the pI beam.
+            
         Returns
         -------
         omega_p : array-like

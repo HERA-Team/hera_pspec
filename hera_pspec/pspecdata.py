@@ -875,7 +875,10 @@ class PSpecData(object):
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and
         diagonal tapering matrix (T):
 
-        R = T K Y
+        If self.symmetric_taper == False:
+            R = T K Y
+        if self.symmetric_taper == True:
+            R = sqrt(T^t) sqrt(Y^t) K sqrt(Y) sqrt(T)
 
         where T is a diagonal matrix holding the taper and Y is a diagonal
         matrix holding flag weights. The K matrix comes from either `I` or `iC`
@@ -929,7 +932,7 @@ class PSpecData(object):
             #if we want to use a full-band filter, set the R-matrix to filter and then truncate.
             tmat = np.zeros((self.spw_Nfreqs,
                              nfreq), dtype=complex)
-            tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
+            tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=np.complex128)
             # form R matrix
             wgts = np.asarray([self.Y(key)[:,m].squeeze() for m in range(self.Ntimes)])
             wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
