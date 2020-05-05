@@ -834,7 +834,9 @@ class Test_PSpecData(unittest.TestCase):
         rmat = self.ds.R(key1)[0].squeeze()
         mymat = imat @ (np.identity(Nfreq, dtype=complex) - fmat) + fmat
         assert(np.all(np.isclose(mymat, rmat, atol=1e-3)))
-
+        #test that an invalid data weighting causes a value error. 
+        self.ds.set_weighting('arglebargle')
+        nt.assert_raises(ValueError, self.ds.R, key1)
 
 
     def test_R_truncation(self):
@@ -2080,7 +2082,7 @@ def test_window_funcs():
                 assert np.isclose(Wv.sum(axis=2).real, 1).all()
                 # assert this is a real matrix, even though imag is populated
                 # if the H matrix is poorly conditioned, this is not gaurunteed.
-                # so instead, test that the sum is normalized to unity. 
+                # so instead, test that the sum is normalized to unity.
                 assert np.isclose(Wv.sum(axis=2).imag, 0, atol=1e-6).all()
 
 

@@ -971,6 +971,8 @@ class PSpecData(object):
                                         filter_factors=r_params['filter_factors']) * wgt_sq[m]
                         self.r_cache[rdkey] = np.linalg.pinv(rm)
                     rmat[m] = self.r_cache[rdkey]
+            else:
+                raise ValueError("data_weighting must be in ['identity', 'iC', 'dayenu']")
                 # allow for restore_foregrounds option which introduces clean-interpolated
                 # foregrounds that are propagated to the power-spectrum.
             rmat = tmat @ rmat
