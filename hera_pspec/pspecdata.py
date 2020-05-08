@@ -920,7 +920,7 @@ class PSpecData(object):
             if self.taper == 'none':
                 myT = np.ones(self.spw_Nfreqs)
             else:
-                myT = dspec.gen_window(self.taper, self.spw_Nfreqs, normalization='rms')
+                myT = dspec.gen_window(self.taper, self.spw_Nfreqs)
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
 
