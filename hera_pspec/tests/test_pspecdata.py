@@ -269,7 +269,7 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.set_symmetric_taper(False)
         rmat_a = self.ds.R(key1)
         #check against independent solution
-        bh_taper = np.sqrt(dspec.gen_window('bh7', Nfreq, normalization='rms'))
+        bh_taper = np.sqrt(dspec.gen_window('bh7', Nfreq))
         rmat = dspec.dayenu_mat_inv(x=self.ds.freqs[self.ds.spw_range[0]:self.ds.spw_range[1]],
         filter_centers=[0.], filter_half_widths=[100e-9], filter_factors=[1e-9])
         wmat = np.asarray([np.outer(self.ds.Y(key1)[:,m], self.ds.Y(key1)[:,m])\
@@ -834,7 +834,7 @@ class Test_PSpecData(unittest.TestCase):
         rmat = self.ds.R(key1)[0].squeeze()
         mymat = imat @ (np.identity(Nfreq, dtype=complex) - fmat) + fmat
         assert(np.all(np.isclose(mymat, rmat, atol=1e-3)))
-        #test that an invalid data weighting causes a value error. 
+        #test that an invalid data weighting causes a value error.
         self.ds.set_weighting('arglebargle')
         nt.assert_raises(ValueError, self.ds.R, key1)
 
