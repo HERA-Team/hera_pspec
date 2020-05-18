@@ -548,6 +548,7 @@ class Test_UVPSpec(unittest.TestCase):
             assert out.cov_array[spw].shape == (30, ndlys, ndlys, 2)
             assert out.stats_array['noise_err'][spw].shape == (30, ndlys, 2)
             assert out.window_function_array[spw].shape == (30, ndlys, ndlys, 2)
+            assert out.cov_model == 'empirical'
 
         # test concat across spw
         uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)],

@@ -717,6 +717,13 @@ class UVPSpec(object):
         inplace : bool, optional
             If True edit and overwrite arrays in self, else make a copy of
             self and return. Default: True.
+
+        Notes
+        -----
+        window_function_array is not affected
+        stats_array is transformed as k^3 / (2pi^2) * stats_array
+        cov_array is transformed as F C F
+        where F = eye(Ndlys) * k^3 / (2pi^2)
         """
         # copy object
         if inplace:
@@ -730,9 +737,18 @@ class UVPSpec(object):
             k_perp = uvp.get_kperps(spw, little_h=little_h)
             k_para = uvp.get_kparas(spw, little_h=little_h)
             k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
+            # shape of (Nblpairts, spw_Ndlys, Npols)
+            coeff = k_mag**3 / (2 * np.pi**2)
+            F = np.eye()
 
             # multiply into data
-            uvp.data_array[spw] *= k_mag**3 / (2*np.pi**2)
+            uvp.data_array[spw] *= coeff
+
+            # multiply into optionals
+            if hasattr(uvp, 'stats_array'):
+                for stat in uvp.stats_array:
+                    uvp.stats_array[stat][spw] *= coeff
+            if hasattr(uvp, 'cov_array'):
 
         # edit units
         uvp.norm_units = "k^3 / (2pi^2)"
@@ -2104,7 +2120,8 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         # if nothing in common, set to False
         if len(stored_stats) == 0:
             store_stats = False
-        u.stats_array = odict([(stat, odict()) for stat in stored_stats])
+        else:
+            u.stats_array = odict([(stat, odict()) for stat in stored_stats])
 
     u.scalar_array = np.empty((Nspws, Npols), np.float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
