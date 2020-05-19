@@ -338,7 +338,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # Get squared statistic
                     errws = {}
                     for stat in stat_l:
-                        errws[stat] = (uvp.get_stats(stat, (spw, blp, p)))**2
+                        errws[stat] = uvp.get_stats(error_weights, (spw, blp, p))
+                        np.square(errws[stat], out=errws[stat], where=np.isfinite(errws[stat]))
                         # shape of errs: (Ntimes, Ndlys)
 
                     if use_error_weights:
