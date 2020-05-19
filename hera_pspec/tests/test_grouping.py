@@ -453,6 +453,8 @@ def test_spherical_average():
     # assert bins that weren't nulled still have proper window normalization
     for spw in sph2.spw_array:
         assert np.isclose(sph2.window_function_array[spw].sum(axis=2)[:, 3:, :], 1).all()
+    # assert resultant stats are not nan
+    assert (~np.isnan(sph2.stats_array['err'][0])).all()
 
     # exceptions
     nt.assert_raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)

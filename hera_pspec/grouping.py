@@ -338,7 +338,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # Get squared statistic
                     errws = {}
                     for stat in stat_l:
-                        errws[stat] = uvp.get_stats(error_weights, (spw, blp, p))
+                        errws[stat] = uvp.get_stats(stat, (spw, blp, p))
                         np.square(errws[stat], out=errws[stat], where=np.isfinite(errws[stat]))
                         # shape of errs: (Ntimes, Ndlys)
 
@@ -732,7 +732,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
             elif error_weights is not None:
                 # fill diagonal with by 1/stats_array^2 as weight
-                E[:, range(dstart, dstop), range(dstart, dstop)] = 1 / stats_array[error_weights][spw][:, dslice].real.clip(1e-40, np.inf)**2
+                stat_weight = stats_array[error_weights][spw][:, dslice].real
+                np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
+                E[:, range(dstart, dstop), range(dstart, dstop)] = 1 / stat_weight.clip(1e-40, np.inf)
 
             else:
                 # uniform weighting along diagonal, except for flagged data
@@ -761,7 +763,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 A[spw][:, i + Ndlys * b, kind, :] = 1.0
 
         # normalize metadata sums
-        wgt_array[spw] /= np.max(wgt_array[spw], axis=(2, 3), keepdims=True)
+        wgt_array[spw] /= np.max(wgt_array[spw], axis=(2, 3), keepdims=True).clip(1e-40, np.inf)
         integration_array[spw] /= np.trace(E.real, axis1=1, axis2=2).clip(1e-40, np.inf)
 
         # project onto spherically binned space
@@ -793,8 +795,15 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         if store_stats:
             # bin stats: C_sph = H.T C_cyl H
             for stat in stats_array:
-                # einsum is fast enough for this, and is more succinct than matmul b/c only diagonal is stored
-                stats_array[stat][spw] = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, stats_array[stat][spw]**2, H))
+                # get squared stat and clip infs b/c linalg doesn't like them
+                sq_stat = stats_array[stat][spw]
+                np.square(sq_stat, out=sq_stat, where=np.isfinite(sq_stat))
+                # einsum is fast enough for this, and is more succinct than matmul
+                avg_stat = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, sq_stat.clip(0, 1e40), H))
+                # set zeroed stats to large number
+                avg_stat[np.isclose(avg_stat, 0)] = 1e40
+                # update stats_array
+                stats_array[stat][spw] = avg_stat
 
         if store_cov:
             # bin covariance: C_sph = H.T C_cyl H
