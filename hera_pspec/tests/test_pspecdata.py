@@ -1474,6 +1474,18 @@ class Test_PSpecData(unittest.TestCase):
         diff = np.median((power_real_new-power_real_ext)/power_real_ext)
         nt.assert_true((diff <= 0.05))
 
+        #test whether we can compute a power spectrum with exact_norm-True and allow_fft=True
+        #and get the same answer as exact_norm=True and allow_fft = False (not previously supported).
+        for norm in ['I']:
+            uvp_nofft = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                           norm=norm, taper='none', verbose=True, exact_norm=True, sampling=True)
+            uvp_fft = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                           norm=norm, taper='none', verbose=True, exact_norm=True, allow_fft=True, sampling=True)
+            power_fft = uvp_fft.get_data(key)
+            power_nofft = uvp_nofft.get_data(key)
+
+            nt.assert_true(np.all(np.isclose(power_fft, power_nofft)))
+
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))

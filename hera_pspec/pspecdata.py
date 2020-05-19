@@ -776,10 +776,10 @@ class PSpecData(object):
             #Note that C by default gives us an Ndly x Ndly matrix (so it is per time)
             C = self.C_model(key, model=model)
             #In the following lines, we calculate the inverse or psuedo-inverse
-            # FIXME: Not sure what these are supposed to do
             #of C multiplied by weights.
-            #if self.lmin is not None: S += self.lmin # ensure invertibility
-            #This is going to be the iC each time, ths Ntimes x nferq x nfreq
+            #empirically determined C is not per-time but weights are.
+            #Thus, we need to loop through each set of per-time weights and take
+            #a psuedo-inverse at each time.
             _iC = np.zeros((self.Ntimes, nfreq, nfreq))
             wgts = self.Y(key)
             wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
@@ -788,7 +788,8 @@ class PSpecData(object):
                 #multiply C --
                 #which is a single Ndlys x Ndlys matrix estimated from multiple times
                 _iC[m] = wgts_sq[m] * C
-                #by wgts_sq for that time
+                #by wgts_sq at that time
+                #next...
                 try:
                     _iC[m] = np.linalg.inv(_iC[m])
                     #try inverting C multiplied by weights.
@@ -796,7 +797,6 @@ class PSpecData(object):
                     #That which will not invert will be psuedo-inverted!
                     if 'Singular matrix' in str(err):
                         _iC[m] = np.linalg.pinv(_iC[m])
-            # FIXME: Is series of dot products quicker?
             self.set_iC({Ckey:_iC})
         return self._iC[Ckey]
     def Y(self, key):
@@ -918,15 +918,15 @@ class PSpecData(object):
         if Rkey not in self._R:
             # form sqrt(taper) matrix
             if self.taper == 'none':
-                myT = np.ones(self.spw_Nfreqs)
+                myTaper = np.ones(self.spw_Nfreqs)
             else:
-                myT = dspec.gen_window(self.taper, self.spw_Nfreqs)
+                myTaper = dspec.gen_window(self.taper, self.spw_Nfreqs)
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
 
             # replace possible nans with zero (when something dips negative
             # in sqrt for some reason)
-            myT[np.isnan(myT)] = 0.0
+            myTaper[np.isnan(myTaper)] = 0.0
             fext = self.filter_extension
             nfreq = np.sum(fext) + self.spw_Nfreqs
             #if we want to use a full-band filter, set the R-matrix to filter and then truncate.
@@ -994,10 +994,10 @@ class PSpecData(object):
 
             rmat =  np.transpose(rmat, (1, 0, 2))
             if self.symmetric_taper:
-                sqrtT = np.sqrt(myT)
+                sqrtT = np.sqrt(myTaper)
                 rmat = np.transpose(sqrtT[:,None,None] * rmat * sqrtT[None,None,:], (1,0,2))
             else:
-                rmat = np.transpose(myT[:,None,None] * rmat, (1,0,2))
+                rmat = np.transpose(myTaper[:,None,None] * rmat, (1,0,2))
             #move time-axis to the back. This is helpful for future broadcasting
             #exploitation
             #self._R[Rkey] = np.swap_axes(np.swap_axes(rmat, 1, 2), 0, 1)
@@ -1120,6 +1120,13 @@ class PSpecData(object):
             Number of delay bins. Default: None, sets number of delay
             bins equal to the number of frequency channels in the spw.
         set_Ndlys : bool, optional
+            This argument exists so that we can change the spw
+            while continuing to hold the number of delays constant.
+            One place we need to do this is broadcasting data set flags
+            temporarily to compute empirical covariance estimates
+            so that error bar estimates are not contaminated by foregrounds.
+            If we do this and the Ndlys are set, then our covariance matrix
+            is computed for the wrong number of delays. (see cov_q_hat)
             If True, set the number of delays equal to ndlys.
             If False, don't modify the number of delays.
         """
@@ -1193,6 +1200,8 @@ class PSpecData(object):
 
         allow_fft : bool, optional
             If True, speed things up with ffts. Requires spw_Ndlys == spw_Nfreqs.
+            The H, G, V and by extension M matrices can be computed with 2d ffts replacing the majority of
+            matrix products provided that spw_Ndlys == spw_Nfreqs.
             Default: False.
 
         time_indices: list of indices of times to include or just a single time.
@@ -1332,10 +1341,7 @@ class PSpecData(object):
         # multiplicatives to the exponentials, and sticking to quantities in
         # their physical units.
 
-        #if exact_norm and allow_fft:
-            #exact_norm approach is meant to enable non-uniform binnning as well, where FFT is not
-            #applicable. As of now, we are using uniform binning.
-        #    raise NotImplementedError("Exact normalization does not support FFT approach at present")
+        # exact norm can be used with use_fft.
         if exact_norm:
             del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             integral_beam = self.get_integral_beam(pol) #Integral of beam in Eq.11(a) (HERA memo #44)
@@ -1367,7 +1373,7 @@ class PSpecData(object):
             #We are applying the exact norm after the R matrix consistent with above.
             #We may want to think if the order should be reversed but I doubt it
             #matters much.
-            return np.mean(qnorm) * (0.5 * np.fft.fftshift(_Rx1 * qnorm, axes=1).conj() \
+            return (0.5 * np.fft.fftshift(_Rx1 * qnorm, axes=1).conj() \
                        * np.fft.fftshift(_Rx2 * qnorm, axes=1)).T
 
         else:
