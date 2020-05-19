@@ -318,8 +318,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 else:
                     blpg_wgts = np.ones(len(blpg))
 
-                # Iterate within a baseline-pair group and get integration-
-                # weighted data
+                # Iterate within a baseline-pair group and get weighted data
                 for k, blp in enumerate(blpg):
                     # Get no. samples and construct integration weight
                     nsmp = uvp.get_nsamples((spw, blp, p))[:, None]
@@ -336,7 +335,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     if store_cov:
                         cov = uvp.get_cov((spw, blp, p))
                         # shape of cov: (Ntimes, Ndlys, Ndlys)
-                    # Get error bar
+                    # Get squared statistic
                     errws = {}
                     for stat in stat_l:
                         errws[stat] = (uvp.get_stats(stat, (spw, blp, p)))**2
@@ -350,8 +349,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # while for other variance or covariance terms epsilon_i stored in stats_array and cov_array, 
                     # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
                     # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
-                    # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34. 
-                        w = np.real(1./(uvp.get_stats(error_weights, (spw, blp, p))).clip(1e-40, np.inf)**2)
+                    # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
+                        stat_val = uvp.get_stats(error_weights, (spw, blp, p))
+                        np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
+                        w = np.real(1. / stat_val)
                         # shape of w: (Ntimes, Ndlys)
                     else:
                     # Otherwise all arrays are averaged in a way weighted by the integration time,
@@ -363,29 +364,33 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     
                     # Take time average if desired
                     if time_avg:
+                        wsum = np.sum(w, axis=0).clip(1e-40, np.inf)
                         data = (np.sum(data * w, axis=0) \
-                            / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
+                                / wsum)[None]
                         wgts = (np.sum(wgts * w[:, :1, None], axis=0) \
-                            / np.sum(w, axis=0).clip(1e-40, np.inf)[:1, None])[None]
+                                / wsum[:1, None])[None]
                         # wgts has a shape of (Ntimes, Nfreqs, 2), while 
                         # w has a shape of (Ntimes, Ndlys) or (Ntimes, 1)
                         # To handle with the case  when Nfreqs != Ntimes,
                         # we choose to multiply wgts with w[:,:1,None]. 
                         ints = (np.sum(ints * w, axis=0) \
-                             / np.sum(w, axis=0).clip(1e-40, np.inf))[None]
+                                / wsum)[None]
                         nsmp = np.sum(nsmp, axis=0)[None]
                         if store_window:
                             window_function = (np.sum(window_function * w[:, :, None], axis=0) \
-                                            / (np.sum(w,axis=0).clip(1e-40, np.inf))[:, None])[None]
+                                               / (wsum)[:, None])[None]
                         if store_cov:
                             cov = (np.sum(cov * w[:, :, None] * w[:, None, :], axis=0) \
-                                / (np.sum(w, axis=0).clip(1e-40, np.inf))[:, None] / (np.sum(w, axis=0).clip(1e-40, np.inf))[None, :])[None]
+                                   / wsum[:, None] / wsum[None, :])[None]
                         for stat in stat_l:
-                            # clip errws because it may be inf, and inf * 0 is nan
-                            errws[stat] = (np.sum(errws[stat].clip(0, 1e40) * w**2, axis=0) \
-                                        / (np.sum(w, axis=0).clip(1e-40, np.inf))**2)[None]
+                            # clip errws to eliminate nan: inf * 0 yields nans
+                            weighted_errws = errws[stat].clip(0, 1e40) * w**2
+                            errws[stat] = (np.sum(weighted_errws, axis=0) \
+                                           / wsum**2)[None]
+                            # set near-zero errws to inf, as they should be
+                            errws[stat][np.isclose(errws[stat], 0)] = np.inf
                         w = np.sum(w, axis=0)[None]
-                        # Here we use clip method for zero weights. A tolerance 
+                        # Above we use the clip method for zero weights. A tolerance 
                         # as low as 1e-40 works when using inverse square of noise power 
                         # as weights.  
                     # Add multiple copies of data for each baseline according
@@ -405,27 +410,22 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                             bpg_cov.append(cov * w[:, :, None] * w[:, None, :])
                         w_list.append(w)
 
-                # Average over baseline-pairs
-                # Take integration-weighted averages, with clipping to deal
-                # with zeros
-                # Or take error_weighted averages
-                bpg_data = np.sum(bpg_data, axis=0) \
-                         / np.sum(w_list, axis=0).clip(1e-40, np.inf)
-                bpg_wgts = np.sum(bpg_wgts, axis=0) \
-                         / np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:1, None]
+                # normalize sum: clip to deal with w_list_sum == 0
+                w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
+                bpg_data = np.sum(bpg_data, axis=0) / w_list_sum
+                bpg_wgts = np.sum(bpg_wgts, axis=0) / w_list_sum[:,:1, None]
                 bpg_nsmp = np.sum(bpg_nsmp, axis=0)
-                bpg_ints = np.sum(bpg_ints, axis=0) \
-                         / np.sum(w_list, axis=0).clip(1e-40, np.inf)
+                bpg_ints = np.sum(bpg_ints, axis=0) / w_list_sum
                 if store_cov:
-                    bpg_cov = np.sum(bpg_cov, axis=0) \
-                            / ( np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:,None] / np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,None,:])
+                    bpg_cov = np.sum(bpg_cov, axis=0) / w_list_sum[:, :, None] / w_list_sum[:, None, :]
                 for stat in stat_l:
-                    arr = np.sum(bpg_stats[stat], axis=0) \
-                        / (np.sum(w_list, axis=0).clip(1e-40, np.inf)**2)
-                    bpg_stats[stat] = np.sqrt(arr)
+                    stat_avg = np.sum(bpg_stats[stat], axis=0) / w_list_sum**2
+                    # set near-zero stats to inf, as they should be
+                    stat_avg[np.isclose(stat_avg, 0)] = np.inf
+                    # take sqrt to get back to stat units
+                    bpg_stats[stat] = np.sqrt(stat_avg)
                 if store_window:
-                    bpg_window_function = np.sum(bpg_window_function, axis=0) \
-                                / (np.sum(w_list, axis=0).clip(1e-40, np.inf)[:,:,None])
+                    bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None]
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
