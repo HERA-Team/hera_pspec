@@ -621,6 +621,14 @@ class Test_UVPSpec(unittest.TestCase):
         out = uvpspec.combine_uvpspec([uvp_a, uvp_b], merge_history=False, verbose=False)
         assert 'batwing' in out.history and not 'foobar' in out.history
 
+        # test no cov_array if cov_model is not consistent
+        uvp_a = copy.deepcopy(uvp1)
+        uvp_b = copy.deepcopy(uvp1)
+        uvp_b.cov_model = 'foo'
+        uvp_b.polpair_array = np.array([1414])
+        out = uvpspec.combine_uvpspec([uvp_a, uvp_b], verbose=False)
+        assert hasattr(out, 'cov_array') is False
+
     def test_combine_uvpspec_errors(self):
         # setup uvp build
         uvd = UVData()
