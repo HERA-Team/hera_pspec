@@ -997,9 +997,89 @@ class Test_PSpecData(unittest.TestCase):
                 # assert that number of keys in H equals the number of flagging patterns
                 # times the number of tapering and weighting configurations that have been
                 # cycled through.
-                # second H computation made to check that no extra items are added to _H cache. 
+                # second H computation made to check that no extra items are added to _H cache.
                 H = self.ds.get_H(key1, key2, average_times=True)
                 nt.assert_true(len(self.ds._H) == npatterns * nconfigs)
+
+    def test_get_M(self):
+        """
+        Test M caching and M computation.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        #get number of unique flagging patterns
+        w1, w2 = self.ds.w(key1), self.ds.w(key2)
+        w = np.hstack([w1.T, w2.T])
+        # get binary number for each row and use this to compute the number
+        # of unique flagging patterns. Number of keys should equal number of patterns
+        npatterns = len(np.unique([np.sum([value * 2 ** bit for bit, value in enumerate(row)]) for row in w]))
+        nconfigs = 0
+        for input_data_weight in ['identity','iC', 'dayenu']:
+            self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'dayenu':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
+            for taper in taper_selection:
+                self.ds.set_taper(taper)
+                self.ds.set_Ndlys(Nfreq//3)
+                M = self.ds.get_M(key1, key2, average_times=True)
+                nconfigs += 1
+                self.assertEqual(M.shape, (Nfreq//3, Nfreq//3)) # Test shape
+                self.ds.set_Ndlys()
+                M = self.ds.get_M(key1, key2, average_times=True)
+                self.assertEqual(M.shape, (Nfreq, Nfreq))
+                nconfigs += 1
+                # assert that number of keys in _M equals the number of flagging patterns
+                # times the number of tapering and weighting configurations that have been
+                # cycled through.
+                # second M computation made to check that no extra items are added to _M cache.
+                M = self.ds.get_M(key1, key2, average_times=True)
+                nt.assert_true(len(self.ds._M) == npatterns * nconfigs)
+
+    def test_get_W(self):
+        """
+        Test M caching and M computation.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        #get number of unique flagging patterns
+        w1, w2 = self.ds.w(key1), self.ds.w(key2)
+        w = np.hstack([w1.T, w2.T])
+        # get binary number for each row and use this to compute the number
+        # of unique flagging patterns. Number of keys should equal number of patterns
+        npatterns = len(np.unique([np.sum([value * 2 ** bit for bit, value in enumerate(row)]) for row in w]))
+        nconfigs = 0
+        for input_data_weight in ['identity','iC', 'dayenu']:
+            self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'dayenu':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
+            for taper in taper_selection:
+                self.ds.set_taper(taper)
+                self.ds.set_Ndlys(Nfreq//3)
+                W = self.ds.get_W(key1, key2, average_times=True)
+                nconfigs += 1
+                self.assertEqual(W.shape, (Nfreq//3, Nfreq//3)) # Test shape
+                self.ds.set_Ndlys()
+                W = self.ds.get_W(key1, key2, average_times=True)
+                self.assertEqual(W.shape, (Nfreq, Nfreq))
+                nconfigs += 1
+                # assert that number of keys in H equals the number of flagging patterns
+                # times the number of tapering and weighting configurations that have been
+                # cycled through.
+                # second W computation made to check that no extra items are added to _W cache.
+                W = self.ds.get_W(key1, key2, average_times=True)
+                nt.assert_true(len(self.ds._W) == npatterns * nconfigs)
 
     def test_get_H_fft(self):
         """
