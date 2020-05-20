@@ -338,7 +338,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # Get squared statistic
                     errws = {}
                     for stat in stat_l:
-                        errws[stat] = uvp.get_stats(stat, (spw, blp, p))
+                        errws[stat] = uvp.get_stats(stat, (spw, blp, p)).copy()
                         np.square(errws[stat], out=errws[stat], where=np.isfinite(errws[stat]))
                         # shape of errs: (Ntimes, Ndlys)
 
@@ -351,7 +351,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
                     # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
                     # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
-                        stat_val = uvp.get_stats(error_weights, (spw, blp, p))
+                        stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy()
                         np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
                         w = np.real(1. / stat_val.clip(1e-40, np.inf))
                         # shape of w: (Ntimes, Ndlys)
@@ -732,7 +732,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
             elif error_weights is not None:
                 # fill diagonal with by 1/stats_array^2 as weight
-                stat_weight = stats_array[error_weights][spw][:, dslice].real
+                stat_weight = stats_array[error_weights][spw][:, dslice].real.copy()
                 np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
                 E[:, range(dstart, dstop), range(dstart, dstop)] = 1 / stat_weight.clip(1e-40, np.inf)
 
@@ -796,7 +796,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # bin stats: C_sph = H.T C_cyl H
             for stat in stats_array:
                 # get squared stat and clip infs b/c linalg doesn't like them
-                sq_stat = stats_array[stat][spw]
+                sq_stat = stats_array[stat][spw].copy()
                 np.square(sq_stat, out=sq_stat, where=np.isfinite(sq_stat))
                 # einsum is fast enough for this, and is more succinct than matmul
                 avg_stat = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, sq_stat.clip(0, 1e40), H))
