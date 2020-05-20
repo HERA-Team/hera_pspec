@@ -970,7 +970,13 @@ class Test_PSpecData(unittest.TestCase):
         multiplicative_tolerance = 1.
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-
+        #get number of unique flagging patterns
+        w1, w2 = self.ds.w(key1), self.ds.w(key2)
+        w = np.hstack([w1.T, w2.T])
+        # get binary number for each row and use this to compute the number
+        # of unique flagging patterns. Number of keys should equal number of patterns
+        npatterns = len(np.unique([np.sum([value * 2 ** bit for bit, value in enumerate(row)]) for row in w]))
+        nconfigs = 0
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
@@ -980,13 +986,20 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
-
                 self.ds.set_Ndlys(Nfreq//3)
                 H = self.ds.get_H(key1, key2, average_times=True)
+                nconfigs += 1
                 self.assertEqual(H.shape, (Nfreq//3, Nfreq//3)) # Test shape
-
                 self.ds.set_Ndlys()
                 H = self.ds.get_H(key1, key2, average_times=True)
+                self.assertEqual(H.shape, (Nfreq, Nfreq))
+                nconfigs += 1
+                # assert that number of keys in H equals the number of flagging patterns
+                # times the number of tapering and weighting configurations that have been
+                # cycled through.
+                # second H computation made to check that no extra items are added to _H cache. 
+                H = self.ds.get_H(key1, key2, average_times=True)
+                nt.assert_true(len(self.ds._H) == npatterns * nconfigs)
 
     def test_get_H_fft(self):
         """
@@ -1009,13 +1022,15 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_taper(taper)
 
                 self.ds.set_Ndlys(Nfreq)
-                H1 = self.ds.get_H(key1, key2, average_times=True, sampling=True)
+                H1 = self.ds.get_H(key1, key2, average_times=True, sampling=True, allow_fft=False)
                 H2 = self.ds.get_H(key1, key2, average_times=True, allow_fft=True, sampling=True)
                 nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=False)
                 self.ds.set_Ndlys(Nfreq//3)
                 nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=True)
                 #check if H1 and H2 are close to one part in 10e-10
                 nt.assert_true(np.all(np.abs(H1-H2)/np.mean(np.diag(np.abs(H1))) <= 1e-10))
+
+
 
 
     def test_get_G(self):
@@ -1027,7 +1042,13 @@ class Test_PSpecData(unittest.TestCase):
         multiplicative_tolerance = 1.
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-
+        #get number of unique flagging patterns
+        w1, w2 = self.ds.w(key1), self.ds.w(key2)
+        w = np.hstack([w1.T, w2.T])
+        # get binary number for each row and use this to compute the number
+        # of unique flagging patterns. Number of keys should equal number of patterns
+        nconfigs = 0
+        npatterns = len(np.unique([np.sum([value * 2 ** bit for bit, value in enumerate(row)]) for row in w]))
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
@@ -1037,10 +1058,16 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.clear_cache()
+                nconfigs = 0
                 self.ds.set_taper(taper)
                 #print 'input_data_weight', input_data_weight
                 self.ds.set_Ndlys(Nfreq-2)
                 G = self.ds.get_G(key1, key2, average_times=True)
+                nconfigs += 1
+                #calculate G a second time and make sure the number of
+                #cache keys does not change.
+                G = self.ds.get_G(key1, key2, average_times=True)
+                nt.assert_true(len(self.ds._G) == npatterns * nconfigs)
                 self.assertEqual(G.shape, (Nfreq-2, Nfreq-2)) # Test shape
                 #print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
@@ -1064,6 +1091,11 @@ class Test_PSpecData(unittest.TestCase):
                     # creative ways to break the code to break one test but not
                     # the other.
                     G_swapped = self.ds.get_G(key2, key1, average_times=True)
+                    nconfigs += 1
+                    #calculate G a second time and make sure the number of
+                    #cache keys does not change.
+                    G_swapped = self.ds.get_G(key2, key1, average_times=True)
+                    nt.assert_true(len(self.ds._G) == npatterns * nconfigs)
                     G_diff_norm = np.linalg.norm(G - G_swapped)
                     self.assertLessEqual(G_diff_norm,
                                         matrix_scale * multiplicative_tolerance)
@@ -1088,6 +1120,13 @@ class Test_PSpecData(unittest.TestCase):
                         G_diff_norm = np.linalg.norm(G - G_swapped.T)
                         self.assertLessEqual(G_diff_norm,
                                              matrix_scale * multiplicative_tolerance)
+                        nconfigs += 1
+                        #calculate G a second time and make sure the number of
+                        #cache keys does not change.
+                        G_swapped = self.ds.get_G(key2, key1)
+                        nt.assert_true(len(self.ds._G) == npatterns * nconfigs)
+                # assert that the number of keys in _G is equal to the number
+                # of patterns x number of configurations of G computed.
 
     def test_get_G_fft(self):
         """
@@ -1347,6 +1386,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.trim_dset_lsts()
         nt.assert_true(ds.dsets[0].Ntimes, 52)
         nt.assert_true(ds.dsets[1].Ntimes, 52)
+        nt.assert_true(ds.Ntimes, 52)
         nt.assert_true(np.all( (2458042.178948477 < ds.dsets[0].time_array) \
                         + (ds.dsets[0].time_array < 2458042.1843023109)))
         # test exception
@@ -1355,6 +1395,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.trim_dset_lsts()
         nt.assert_true(ds.dsets[0].Ntimes, 60)
         nt.assert_true(ds.dsets[1].Ntimes, 60)
+        nt.assert_true(ds.Ntimes, 60)
 
     def test_units(self):
         ds = pspecdata.PSpecData()

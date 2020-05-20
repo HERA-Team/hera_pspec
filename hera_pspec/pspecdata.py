@@ -1417,7 +1417,7 @@ class PSpecData(object):
             Fisher matrix, with dimensions (spw_Nfreqs, spw_Nfreqs).
         """
         Gkey = key1 + key2 + (self.data_weighting, self.taper, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
-               + tuple(self.Y(key2)[:,time_index].flatten())
+               + tuple(self.Y(key2)[:,time_index].flatten()) + self.filter_extension + (self.spw_Nfreqs,)
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
         if not Gkey in self._G:
             R1 = self.R(key1)[time_index].squeeze()
@@ -1571,7 +1571,7 @@ class PSpecData(object):
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
         Hkey = key1 + key2 + (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
-               + tuple(self.Y(key2)[:,time_index].flatten())
+               + tuple(self.Y(key2)[:,time_index].flatten(),) + self.filter_extension + (self.spw_Nfreqs,)
         if not Hkey in self._H:
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1)[time_index].squeeze()
@@ -1990,8 +1990,9 @@ class PSpecData(object):
         """
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
         assert(mode in modes)
-        Mkey = (key1, key2, mode, exact_norm, self.spw_Ndlys) + (self.taper, self.data_weighting)\
-        + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
+        Mkey = key1 + key2 +(mode, exact_norm, self.spw_Ndlys) + (self.taper, self.data_weighting)\
+        + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())\
+        + self.filter_extension + (self.spw_Nfreqs,)
         if not Mkey in self._M:
             if mode != 'I' and exact_norm==True:
                 raise NotImplementedError("Exact norm is not supported for non-I modes")
@@ -2093,7 +2094,8 @@ class PSpecData(object):
             Dimensions (Ndlys, Ndlys).
         """
         Wkey = key1 + key2 + (mode, sampling, exact_norm, self.taper, self.data_weighting, self.spw_Ndlys) + \
-        tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
+        tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())\
+        + tuple(self.filter_extension) + (self.spw_Nfreqs,)
         if not Wkey in self._W:
             M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
             H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
@@ -2239,7 +2241,6 @@ class PSpecData(object):
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15,
                average_times=False):
         """
-        WARNING: ThIS FUNCTION IS GOING TO BE DEPRECATED!!!
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2455,7 +2456,7 @@ class PSpecData(object):
         allow_fft : boolean, optional
             If set to True, allows a shortcut FFT method when
             the number of delay bins equals the number of delay channels.
-            Default: False
+            Default: True
 
         include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
         (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
@@ -2668,9 +2669,9 @@ class PSpecData(object):
                 # unflag
                 if unflag:
                     # unflag for all times
-                    dset.flag_array[:,:,
-                    self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1],
-                    :] = False
+                    ext = (self.spw_range[0]-self.filter_extension[0],
+                           self.spw_range[1]+self.filter_extension[1])
+                    dset.flag_array[:, :, ext[0]:ext[1], :] = False
                     continue
                 # enact time threshold on flag waterfalls
                 # iterate over polarizations
@@ -2694,12 +2695,10 @@ class PSpecData(object):
                         # for pixels that have flags but didn't meet broadcasting limit
                         # flag the integration within the spw
                         flags[:, np.where(exceeds_thresh)[0]] = False
-                        flag_ints = np.max(flags[:,
-                        self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1]],
-                         axis=1)
-                        dset.flag_array[bl_inds[flag_ints], :,
-                        self.spw_range[0]-self.filter_extension[0]:self.spw_range[1]+self.filter_extension[1],
-                        i] = True
+                        ext = (self.spw_range[0]-self.filter_extension[0],
+                               self.spw_range[1]+self.filter_extension[1])
+                        flag_ints = np.max(flags[:,ext[0]:ext[1]], axis=1)
+                        dset.flag_array[bl_inds[flag_ints],: , ext[0]:ext[1], i] = True
         return backup_flags
 
 
@@ -2871,11 +2870,12 @@ class PSpecData(object):
             input datavectors. If a list of tuples is provided, the baselines
             in the list will be combined with inverse noise weights. If Gv and
             Hv are specified, these arguments will be ignored. Default: None.
-
+        time_index : int, optional
+            the index of the time to calculate scaler_delay_adjustment for
+            (it is flagging dependent).
         sampling : boolean, optional
             Whether to sample the power spectrum or to assume integrated
             bands over wide delay bins. Default: False
-
         Gv, Hv : array_like, optional
             If specified, use these arrays instead of calling self.get_G() and
             self.get_H(). Using precomputed Gv and Hv will speed up this
@@ -3582,40 +3582,6 @@ class PSpecData(object):
             if len(spw_polpair) == 0:
                 raise ValueError("None of the specified polarization pairs "
                                  "match that of the UVData objects")
-
-        '''
-        if store_cov:
-            if cov_model == 'empirical':
-                flag_backup=self.broadcast_dset_flags(spw_ranges = [spw_ranges[i]])
-            for i in range(len(spw_ranges)):
-                # Loop over polarizations
-                spw_cov=[]
-                for j, p in enumerate(pols):
-                    p_str = tuple([uvutils.polnum2str(_p) for _p in p])
-                    pol_cov = []
-                    #loop over baseline
-                    for k, blp in enumerate(bl_pairs):
-                        key1 = (dsets[0],) + blp[0] + (p_str[0],)
-                        key2 = (dsets[1],) + blp[1] + (p_str[1],)
-
-                        if verbose: print(" Building q_hat covariance...")
-                        #cov_qv = self.cov_q_hat(key1, key2)
-                        cov_qv = self.cov_q_hat(key1, key2, model=cov_model,
-                                            exact_norm=exact_norm, pol=pol)
-                        cov_pv = self.cov_p_hat(Mv, cov_qv)
-                        if self.primary_beam != None:
-                            cov_pv *= (sclr_arr[i][j])**2.
-                        if norm == 'I' and not(exact_norm):
-                            cov_pv *= self.scalar_delay_adjustment(key1, key2,
-                                                 sampling=sampling) ** 2.
-                        pol_cov.extend(cov_pv)
-                    spw_cov.append(pol_cov)
-                spw_cov = np.moveaxis(np.array(spw_cov), 0, -1)
-                cov_array[i] = spw_cov
-            for dset,flag in zip(self.dsets, flag_backup):
-                dset.flag_array = flag
-            '''
-
         # fill uvp object
         uvp = uvpspec.UVPSpec()
         uvp.symmetric_taper=symmetric_taper
@@ -3894,7 +3860,7 @@ class PSpecData(object):
             trim_inds = np.array([l not in common_lsts for l in lst_arrs[i]])
             if np.any(trim_inds):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
-        self.Ntimes = self.dsets[i].Ntimes#update Ntimes Dammnit!
+        self.Ntimes = self.dsets[i].Ntimes
 
 
 def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
