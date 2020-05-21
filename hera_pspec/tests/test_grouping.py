@@ -122,10 +122,10 @@ class Test_grouping(unittest.TestCase):
         errs = np.ones((uvp.Ntimes, uvp.Ndlys))
         for key in keys:
             uvp.set_stats("simple", key, errs)
+        blpair_groups = [blpairs]
         ## End file prep ##
 
         # begin tests
-        blpair_groups = [blpairs]
         uvp_avg_ints_wgts = grouping.average_spectra(uvp, blpair_groups=blpair_groups,
                                                 error_field="noise", time_avg=True,inplace=False)
         uvp_avg_noise_wgts = grouping.average_spectra(uvp, time_avg=True, blpair_groups=blpair_groups,
@@ -139,7 +139,7 @@ class Test_grouping(unittest.TestCase):
         assert(abs(uvp_avg_ints_wgts.stats_array["noise"][0][0, 0, 0]) < abs(uvp.stats_array["noise"][0][0, 0, 0]))
         assert(abs(uvp_avg_noise_wgts.stats_array["noise"][0][0, 0, 0]) < abs(uvp.stats_array["noise"][0][0, 0, 0]))
 
-        # test infinite variance on stats_array average: test it doesn't result in stats_array nans
+        # test stats inf variance for all times, single blpair doesn't result in nans
         # and that the avg effectively ignores its presence: e.g. check it matches initial over sqrt(Nblpairs - 1)
         uvp_inf_var = copy.deepcopy(uvp)
         initial_stat = uvp.get_stats('simple', (0, blpairs[0], 'xx'))
@@ -148,6 +148,19 @@ class Test_grouping(unittest.TestCase):
         uvp_inf_var_avg = uvp_inf_var.average_spectra(blpair_groups=blpair_groups, error_weights='simple', inplace=False)
         final_stat = uvp_inf_var_avg.get_stats('simple', (0, blpairs[0], 'xx'))
         assert np.isclose(final_stat, initial_stat / np.sqrt(len(blpairs) - 1)).all()
+
+        # test infinite variance for single time, all blpairs doesn't result in nans
+        # and check that averaged stat for that time is inf (not zero)
+        uvp_inf_var = copy.deepcopy(uvp)
+        initial_stat = uvp.get_stats('simple', (0, blpairs[0], 'xx'))
+        inf_var_stat = np.ones((uvp_inf_var.Ntimes, uvp_inf_var.Ndlys))
+        inf_var_stat[0] = np.inf
+        for blp in blpairs:
+            uvp_inf_var.set_stats('simple', (0, blp, 'xx'), inf_var_stat)
+        uvp_inf_var_avg = uvp_inf_var.average_spectra(blpair_groups=blpair_groups, error_weights='simple', inplace=False)
+        final_stat = uvp_inf_var_avg.get_stats('simple', (0, blpairs[0], 'xx'))
+        assert np.isclose(final_stat[1:], initial_stat[1:] / np.sqrt(len(blpairs))).all()
+        assert np.all(~np.isfinite(final_stat[0]))
 
     def test_sample_baselines(self):
         """
@@ -440,6 +453,8 @@ def test_spherical_average():
     # assert bins that weren't nulled still have proper window normalization
     for spw in sph2.spw_array:
         assert np.isclose(sph2.window_function_array[spw].sum(axis=2)[:, 3:, :], 1).all()
+    # assert resultant stats are not nan
+    assert (~np.isnan(sph2.stats_array['err'][0])).all()
 
     # exceptions
     nt.assert_raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)
