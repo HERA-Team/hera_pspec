@@ -355,11 +355,12 @@ class PSpecContainer(object):
 
         Parameters
         ----------
-        group : str, optional
+        group : str
             Which group the power spectrum belongs to.
 
         psname : str, optional
-            The name of the power spectrum to return.
+            The name of the power spectrum to return. If None, extract all
+            available power spectra.
         
         kwargs : dict
             UVPSpec.read_from_group partial IO keyword arguments
