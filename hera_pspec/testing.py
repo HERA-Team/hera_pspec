@@ -74,6 +74,7 @@ def build_vanilla_uvpspec(beam=None):
     label1 = 'red'
     label2 = 'blue'
     r_params = ''
+    cov_model = 'dsets'
     labels = np.array([label1, label2])
     label_1_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 0
     label_2_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 1
@@ -105,9 +106,9 @@ def build_vanilla_uvpspec(beam=None):
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
 
         for cov_model in cov_models:
-        	cov_array_real[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+        	cov_array_real[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.float)\
         		for m in range(Nblpairts)] for n in range(Npols)]), 0, -1)
-        	cov_array_imag[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex)\
+        	cov_array_imag[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.float)\
         		for m in range(Nblpairts)] for n in range(Npols)]), 0, -1)
 
     params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws',
@@ -117,11 +118,11 @@ def build_vanilla_uvpspec(beam=None):
               'dly_array', 'freq_array', 'polpair_array', 'data_array',
               'wgt_array', 'r_params',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
-              'vis_units', 'channel_width', 'weighting', 'history', 'taper', 
-              'norm', 'git_hash', 'nsample_array', 'time_avg_array', 
-              'lst_avg_array', 'cosmo', 'scalar_array', 'labels', 'norm_units', 
-              'labels', 'label_1_array', 'label_2_array', 'store_cov', 
-              'cov_array_real', 'cov_array_imag', 'spw_dly_array', 'spw_freq_array']
+              'vis_units', 'channel_width', 'weighting', 'history', 'taper',
+              'norm', 'git_hash', 'nsample_array', 'time_avg_array',
+              'lst_avg_array', 'cosmo', 'scalar_array', 'labels', 'norm_units',
+              'labels', 'label_1_array', 'label_2_array', 'store_cov',
+              'cov_array_real', 'cov_array_imag', 'spw_dly_array', 'spw_freq_array', 'cov_model']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
@@ -176,7 +177,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     r_params: dictionary with parameters for weighting matrix.
               Proper fields
               and formats depend on the mode of data_weighting.
-            data_weighting == 'sinc_downweight':
+            data_weighting == 'dayenu':
                             dictionary with fields
                             'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                                               at which to center filtering windows. Can specify fractional channel number.
@@ -207,8 +208,10 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         uvd_std = None
     if uvd_std is not None:
         store_cov = True
+        cov_model = "dsets"
     else:
         store_cov = False
+        cov_model = "empirical"
 
     # get pol
     pol = uvd.polarization_array[0]
@@ -240,7 +243,13 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     # run pspec
     uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
+<<<<<<< HEAD
                    store_cov=True, cov_models=["time_average"], n_dlys=n_dlys, r_params=r_params)
+=======
+                   store_cov=store_cov, n_dlys=n_dlys, r_params=r_params,
+                   cov_model=cov_model)
+
+>>>>>>> 5af79327d3626f5767da13ac95ddb63116205257
     return uvp
 
 

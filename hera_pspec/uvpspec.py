@@ -36,11 +36,13 @@ class UVPSpec(object):
                 'corresponding to that weighting.')
         self._r_params = PSpecParam("r_params", description = desc, expected_type = str)
         # Data attributes
+        desc = ("A string indicating what covariance model was used for calculating cov array. Only required if covariance is stored.")
+        self._cov_model = PSpecParam("cov_model", description=desc, expected_type=str)
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as complex ndarrays, stored separately for real and imaginary parts."
-        self._cov_array_real = PSpecParam("cov_array_real", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
-        self._cov_array_imag = PSpecParam("cov_array_imag", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        self._cov_array_real = PSpecParam("cov_array_real", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        self._cov_array_imag = PSpecParam("cov_array_imag", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
@@ -78,6 +80,7 @@ class UVPSpec(object):
         self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", expected_type=float)
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.float64)
         self._weighting = PSpecParam("weighting", description="Form of data weighting used when forming power spectra.", expected_type=str)
+        self.set_symmetric_taper = PSpecParam("symmetric_taper", description="Specify whether Taper was applied symmetrically (True) or to the left(False).", expected_type=str)
         self._norm = PSpecParam("norm", description="Normalization method adopted in OQE (M matrix).", expected_type=str)
         self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT. See uvtools.dspec.gen_window for options."', expected_type=str)
         self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
@@ -111,13 +114,14 @@ class UVPSpec(object):
                             "norm_units", "taper", "norm", "nsample_array",
                             "lst_avg_array", "time_avg_array", "folded",
                             "scalar_array", "labels", "label_1_array",
-                            "label_2_array", "spw_dly_array", "spw_freq_array"]
+                            "label_2_array", "spw_dly_array", "spw_freq_array",
+                            "symmetric_taper"]
 
         # All parameters must fall into one and only one of the following
         # groups, which are used in __eq__
         self._immutables = ["Ntimes", "Nblpairts", "Nblpairs", "Nspwdlys",
                             "Nspwfreqs", "Nspws", "Ndlys", "Npols", "Nfreqs",
-                            "history", "r_params",
+                            "history", "r_params", "cov_model",
                             "Nbls", "channel_width", "weighting", "vis_units",
                             "norm", "norm_units", "taper", "cosmo", "beamfile",
                             'folded']
@@ -330,7 +334,7 @@ class UVPSpec(object):
         r_params: dictionary with parameters for weighting matrix.
           Proper fields
           and formats depend on the mode of data_weighting.
-          data_weighting == 'sinc_downweight':
+          data_weighting == 'dayenu':
             dictionary with fields
             'filter_centers', list of floats (or float) specifying the (delay) channel numbers
                               at which to center filtering windows. Can specify fractional channel number.
@@ -2054,7 +2058,6 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
 
     # Store covariance only if all uvps have stored covariance.
     store_cov = np.all([hasattr(uvp,'cov_array_real') for uvp in uvps])
-
     # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
@@ -2062,16 +2065,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.nsample_array = odict()
     cov_models = []
     if store_cov:
-        for uvp1 in uvps:
-            for cov_model in uvp1.cov_array_real.keys():
-                if cov_model not in cov_models:
-                    cov_models.append(cov_model)
-        for cov_model in cov_models:
-            for uvp1 in uvps:
-                if cov_model not in uvp1.cov_array_real.keys():
-                    cov_models.remove(cov_model)
-        u.cov_array_real = odict([[cov_model, odict()] for cov_model in cov_models])
-        u.cov_array_imag = odict([[cov_model, odict()] for cov_model in cov_models])
+        u.cov_array_real = odict()
+        u.cov_array_imag = odict()
+        #cov_model will track whether error bars are from cmobination of techniques
+        u.cov_model = ','.join([uvp.cov_model for uvp in uvps])
     u.scalar_array = np.empty((Nspws, Npols), np.float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     u.spw_dly_array, u.spw_freq_array = [], []
@@ -2088,9 +2085,9 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         if store_cov:
             for cov_model in cov_models:
                 u.cov_array_real[cov_model][i] = np.empty((Nblpairts, spw[3], spw[3], Npols),
-                                      np.complex128)
+                                      np.float64)
                 u.cov_array_imag[cov_model][i] = np.empty((Nblpairts, spw[3], spw[3], Npols),
-                                      np.complex128)
+                                      np.float64)
         # Set frequencies and delays
         spw_Nfreqs = spw[2]
         spw_Ndlys = spw[3]

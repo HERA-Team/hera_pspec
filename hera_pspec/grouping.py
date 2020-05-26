@@ -268,32 +268,31 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     # will average covariance array if present
     store_cov = hasattr(uvp, "cov_array_real")
     if store_cov:
-        cov_models = uvp.cov_array_real.keys()
-        cov_array_real = odict([[cov_model, odict()] for cov_model in cov_models])
-        cov_array_imag = odict([[cov_model, odict()] for cov_model in cov_models])
+        cov_array_real = odict()
+        cov_array_imag = odict()
     
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
         spw_data, spw_wgts, spw_ints, spw_nsmp = [], [], [], []
         spw_stats = odict([[stat, []] for stat in stat_l])
         if store_cov:
-            spw_cov_real = odict([[cov_model, []] for cov_model in cov_models])
-            spw_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
+            spw_cov_real = []
+            spw_cov_imag = []
         # Iterate over polarizations
         for i, p in enumerate(uvp.polpair_array):
             pol_data, pol_wgts, pol_ints, pol_nsmp = [], [], [], []
             pol_stats = odict([[stat, []] for stat in stat_l])
             if store_cov:
-                pol_cov_real = odict([[cov_model, []] for cov_model in cov_models])
-                pol_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
+                pol_cov_real = []
+                pol_cov_imag = []
 
             # Iterate over baseline-pair groups
             for j, blpg in enumerate(blpair_groups):
                 bpg_data, bpg_wgts, bpg_ints, bpg_nsmp = [], [], [], []
                 bpg_stats = odict([[stat, []] for stat in stat_l])
                 if store_cov:
-                    bpg_cov_real = odict([[cov_model, []] for cov_model in cov_models])
-                    bpg_cov_imag = odict([[cov_model, []] for cov_model in cov_models])
+                    bpg_cov_real = []
+                    bpg_cov_imag = []
                 w_list = []
 
                 # Sum over all weights within this baseline group to get

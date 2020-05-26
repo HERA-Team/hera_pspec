@@ -4,7 +4,7 @@ channels:
   - defaults
 dependencies:
   - aipy>=3.0.0rc2
-  - astropy>=2.0
+  - astropy>=2.0.16
   - h5py
   - matplotlib>=2.0
   - nose
