@@ -278,7 +278,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     assert req_pol2 in uvd2.polarization_array, \
         "Polarization {} not found in dset2 object".format(req_pol2)
     if uvd2.Npols > 1:
-        uvd2 = uvd2.select(polarizations=req_pol1, inplace=False)
+        uvd2 = uvd2.select(polarizations=req_pol2, inplace=False)
 
     # combining visibilities to form the desired Stokes visibilties
     uvdS = _combine_pol(uvd1=uvd1, uvd2=uvd2, pol1=req_pol1, pol2=req_pol2, 

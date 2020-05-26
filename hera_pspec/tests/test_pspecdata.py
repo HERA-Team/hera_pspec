@@ -601,18 +601,17 @@ class Test_PSpecData(unittest.TestCase):
 
         # Check matrix sizes
         for matrix in [conj1_conj1, conj1_real1, real1_conj1, real1_real1]:
-            self.assertEqual(matrix.shape, (ds.Ntimes, ds.spw_Nfreqs, ds.spw_Nfreqs))
-        for i in range(1):
-            for j in range(ds.spw_Nfreqs):
-                for k in range(ds.spw_Nfreqs):
-                    # Check that the matrices that ought to be Hermitian are indeed Hermitian
-                    self.assertAlmostEqual(conj1_real1.conj()[i,k,j], conj1_real1[i,j,k])
-                    self.assertAlmostEqual(real1_conj1.conj()[i,k,j], real1_conj1[i,j,k])
-                    # Check that real_real and conj_conj are complex conjugates of each other
-                    # Also check that they are symmetric
-                    self.assertAlmostEqual(real1_real1.conj()[i,j,k], conj1_conj1[i,j,k])
-                    self.assertAlmostEqual(real1_real1[i,k,j], real1_real1[i,j,k])
-                    self.assertAlmostEqual(conj1_conj1[i,k,j], conj1_conj1[i,j,k])
+            self.assertEqual(matrix.shape, (ds.spw_Nfreqs, ds.spw_Nfreqs))
+        for j in range(ds.spw_Nfreqs):
+            for k in range(ds.spw_Nfreqs):
+                # Check that the matrices that ought to be Hermitian are indeed Hermitian
+                self.assertAlmostEqual(conj1_real1.conj()[k,j], conj1_real1[j,k])
+                self.assertAlmostEqual(real1_conj1.conj()[k,j], real1_conj1[j,k])
+                # Check that real_real and conj_conj are complex conjugates of each other
+                # Also check that they are symmetric
+                self.assertAlmostEqual(real1_real1.conj()[j,k], conj1_conj1[j,k])
+                self.assertAlmostEqual(real1_real1[k,j], real1_real1[j,k])
+                self.assertAlmostEqual(conj1_conj1[k,j], conj1_conj1[j,k])
 
 
         real1_real2 = ds.cross_covar_model(key1, key2, conj_1=False, conj_2=False)
@@ -625,13 +624,12 @@ class Test_PSpecData(unittest.TestCase):
         real2_conj1 = ds.cross_covar_model(key2, key1, conj_1=False, conj_2=True)
 
         # And some similar tests for cross covariances
-        for i in range(1):
-            for j in range(ds.spw_Nfreqs):
-                for k in range(ds.spw_Nfreqs):
-                    self.assertAlmostEqual(real1_real2[i,k,j], real2_real1[i,j,k])
-                    self.assertAlmostEqual(conj1_conj2[i,k,j], conj2_conj1[i,j,k])
-                    self.assertAlmostEqual(conj1_real2.conj()[i,k,j], conj2_real1[i,j,k])
-                    self.assertAlmostEqual(real1_conj2.conj()[i,k,j], real2_conj1[i,j,k])
+        for j in range(ds.spw_Nfreqs):
+            for k in range(ds.spw_Nfreqs):
+                self.assertAlmostEqual(real1_real2[k,j], real2_real1[j,k])
+                self.assertAlmostEqual(conj1_conj2[k,j], conj2_conj1[j,k])
+                self.assertAlmostEqual(conj1_real2.conj()[k,j], conj2_real1[j,k])
+                self.assertAlmostEqual(real1_conj2.conj()[k,j], real2_conj1[j,k])
 
     def test_get_unnormed_V(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
@@ -677,10 +675,6 @@ class Test_PSpecData(unittest.TestCase):
                 norm = np.sum(W, axis=1)
                 for i in range(3):
                     self.assertAlmostEqual(norm[i], 1.)
-
-                # Check that a warning is raised when H matrix is not square
-                rectangle_H = np.ones((4,3))
-                nt.assert_raises(np.linalg.LinAlgError, self.ds.get_MW, random_G, rectangle_H, mode=mode)
 
                 # Check that the method ignores G
                 M, W = self.ds.get_MW(random_G, random_H, mode=mode)
@@ -1468,11 +1462,11 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
                                  dsets_std=[uvd_std, uvd_std], beam=self.bm)
         uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True, cov_models=['time_average'])
+                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True, cov_model='empirical')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
         uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,14)], exact_norm=True, store_cov=True, cov_models=['time_average'])
+                                little_h=True, verbose=True, spw_ranges=[(10,14)], exact_norm=True, store_cov=True, cov_model='empirical')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
     
         # test identity_Y caching works
@@ -1725,7 +1719,7 @@ def test_pspec_run():
                              cosmo=cosmo,
                              trim_dset_lsts=False,
                              broadcast_dset_flags=False,
-                             cov_models = ['time_average'],
+                             cov_model='empirical',
                              store_cov=True)
 
     # assert groupname is dset1_dset2
@@ -1944,6 +1938,47 @@ def test_input_calibration():
     nt.assert_raises(TypeError, pd.add, dfiles, [None], cals=['foo'])
 
 
+def test_window_funcs():
+    """
+    Test window function computation in ds.pspec()
+    This is complementary to test_get_MW above.
+    """
+    # get a PSpecData
+    uvd = UVData()
+    uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+    beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd)], beam=beam)
+    ds.set_spw((0, 20))
+    ds.set_taper('bh')
+    bl = (37, 38)
+    key = (0, bl, 'xx')
+    d = uvd.get_data(bl)
+    C = np.cov(d[:, :20].T).real
+    iC = np.linalg.pinv(C)
+    # iterate over various R and M matrices and ensure
+    # normalization and dtype is consistent
+    for data_weight in ['identity', 'iC']:
+        ds.set_weighting(data_weight)
+        for norm in ['H^-1', 'I', 'V^-1/2']:
+            for exact_norm in [True, False]:
+                if exact_norm and norm != 'I':
+                    # exact_norm only supported for norm == 'I'
+                    continue
+                ds.clear_cache()
+                if data_weight == 'iC':
+                    # fill R with iC
+                    ds._R[(0, (37, 38, 'xx'), 'iC', 'bh')] = iC
+                # compute G and H
+                Gv = ds.get_G(key, key, exact_norm=exact_norm, pol='xx')
+                Hv = ds.get_H(key, key, exact_norm=exact_norm, pol='xx')
+                Mv, Wv = ds.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm,
+                                   band_covar=C)
+                # assert row-sum is normalized to 1
+                assert np.isclose(Wv.sum(axis=1).real, 1).all()
+                # assert this is a real matrix, even though imag is populated
+                assert np.isclose(Wv.imag, 0, atol=1e-6).all()
+
+
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()
     a = args.parse_args([['foo'], 'bar', '--dset_pairs', '0 0, 1 1', '--pol_pairs', 'xx xx, yy yy',
@@ -1977,13 +2012,13 @@ def test_real_covariance():
     bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 
     uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = True, cov_models=['time_average'], verbose=False)
+         norm='I', taper='blackman-harris', store_cov = True, cov_model='empirical', verbose=False)
 
     for spw in range(uvp.Nspws):
-        nt.assert_true((abs(uvp.cov_array_real['time_average'][spw].real) / abs\
-            (uvp.cov_array_real['time_average'][spw].imag) > 1e8).all())
-        nt.assert_true((abs(uvp.cov_array_imag['time_average'][spw].real) / abs\
-            (uvp.cov_array_imag['time_average'][spw].imag) > 1e8).all())
+        nt.assert_true((abs(uvp.cov_array_real[spw].real) / abs\
+            (uvp.cov_array_real[spw].imag) > 1e8).all())
+        nt.assert_true((abs(uvp.cov_array_imag[spw].real) / abs\
+            (uvp.cov_array_imag[spw].imag) > 1e8).all())
                       
 """
 # LEGACY MONTE CARLO TESTS

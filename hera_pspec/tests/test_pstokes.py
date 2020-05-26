@@ -1,15 +1,18 @@
 import unittest
 import nose.tools as nt
 import os, sys
-import pyuvdata as uv
 from hera_pspec.data import DATA_PATH
 from hera_pspec import pstokes 
 import pyuvdata
+import pyuvdata.utils as uvutils
 import copy
 import numpy as np
 
 dset1 = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
 dset2 = os.path.join(DATA_PATH, 'zen.all.yy.LST.1.06964.uvA')
+multipol_dset = os.path.join(DATA_PATH, 'zen.2458116.31193.HH.uvh5')
+multipol_dset_cal = os.path.join(DATA_PATH, 'zen.2458116.31193.HH.flagged_abs.calfits')
+
 
 class Test_pstokes:
 
@@ -74,6 +77,23 @@ class Test_pstokes:
 
         # check except for same polarizations
         nt.assert_raises(AssertionError, pstokes.construct_pstokes, dset1=uvd1, dset2=uvd1, pstokes='pI')
+
+    def test_construct_pstokes_multipol(self):
+        """test construct_pstokes on multi-polarization files"""
+        uvd = pyuvdata.UVData()
+        uvd.read(multipol_dset)
+        uvc = pyuvdata.UVCal()
+        uvc.read_calfits(multipol_dset_cal)
+        uvutils.uvcalibrate(uvd, uvc)
+        wgts = [(0.5, 0.5), (0.5, -0.5)]
+
+        for i, ps in enumerate(['pI', 'pQ']):
+            uvp = pstokes.construct_pstokes(dset1=uvd, dset2=uvd, pstokes=ps)
+            # assert polarization array is correct
+            nt.assert_equal(uvp.polarization_array, np.array([i + 1]))
+            # assert data are properly summmed
+            pstokes_vis = uvd.get_data(23, 24, 'xx') * wgts[i][0] + uvd.get_data(23, 24, 'yy') * wgts[i][1]
+            nt.assert_true(np.isclose(pstokes_vis, uvp.get_data(23, 24, ps)).all())
 
     def test_filter_dset_on_stokes_pol(self):
         dsets = [self.uvd1, self.uvd2]

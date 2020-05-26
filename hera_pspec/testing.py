@@ -92,10 +92,8 @@ def build_vanilla_uvpspec(beam=None):
     cosmo = conversions.Cosmo_Conversions()
 
     data_array, wgt_array = {}, {}
-    integration_array, nsample_array = {}, {}
-    cov_models = ['time_average', 'time_average_diag']
-    cov_array_real, cov_array_imag = odict([[cov_model, odict()] for cov_model in cov_models]), odict([[cov_model, odict()] for cov_model in cov_models])
-    
+    integration_array, nsample_array, cov_array_real, cov_array_imag = {}, {}, {}, {}
+    window_function_array = {}
     for s in spw_array:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
                       * blpair_array[:, None, None] / 1e9
@@ -104,19 +102,20 @@ def build_vanilla_uvpspec(beam=None):
         # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
-
-        for cov_model in cov_models:
-        	cov_array_real[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.float)\
-        		for m in range(Nblpairts)] for n in range(Npols)]), 0, -1)
-        	cov_array_imag[cov_model][s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.float)\
-        		for m in range(Nblpairts)] for n in range(Npols)]), 0, -1)
+        window_function_array[s] = np.ones((Nblpairts, Ndlys, Ndlys, Npols), dtype=np.float64)
+        cov_array_real[s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.float) \
+                                             for m in range(Nblpairts)]
+                                             for n in range(Npols)]), 0, -1)
+        cov_array_imag[s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.float) \
+                                             for m in range(Nblpairts)]
+                                             for n in range(Npols)]), 0, -1)
 
     params = ['Ntimes', 'Nfreqs', 'Nspws', 'Nspwdlys', 'Nspwfreqs', 'Nspws',
               'Nblpairs', 'Nblpairts', 'Npols', 'Ndlys', 'Nbls',
               'blpair_array', 'time_1_array', 'time_2_array',
               'lst_1_array', 'lst_2_array', 'spw_array',
               'dly_array', 'freq_array', 'polpair_array', 'data_array',
-              'wgt_array', 'r_params',
+              'wgt_array', 'r_params', 'window_function_array',
               'integration_array', 'bl_array', 'bl_vecs', 'telescope_location',
               'vis_units', 'channel_width', 'weighting', 'history', 'taper',
               'norm', 'git_hash', 'nsample_array', 'time_avg_array',
@@ -137,8 +136,8 @@ def build_vanilla_uvpspec(beam=None):
 
 
 def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
-                      beam=None, taper='none', cosmo=None, n_dlys=None,
-                      r_params=None, verbose=False):
+                      data_weighting='identity', beam=None, taper='none', cosmo=None,
+                      n_dlys=None, r_params=None, verbose=False, **kwargs):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
 
@@ -159,6 +158,10 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     spw_ranges : list, optional
         List of spectral window tuples. See PSpecData.pspec docstring for
         details. Default: None.
+
+    data_weighting : str, optional
+        R matrix specification in QE formalism. See PSpecData.pspec for details.
+        Default: 'identity'
 
     beam : PSpecBeamBase subclass or str, optional
         This can be a subclass of PSpecBeamBase of a string filepath to a
@@ -188,6 +191,9 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
     verbose : bool, optional
         if True, report feedback to standard output. Default: False.
 
+    kwargs : dict, optional
+        Additional kwargs to pass to PSpecData.pspec()
+    
     Returns
     -------
     uvp : UVPSpec object
@@ -241,15 +247,10 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         bls2.extend(_bls2)
 
     # run pspec
-    uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight='identity',
+    uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight=data_weighting,
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
-<<<<<<< HEAD
-                   store_cov=True, cov_models=["time_average"], n_dlys=n_dlys, r_params=r_params)
-=======
                    store_cov=store_cov, n_dlys=n_dlys, r_params=r_params,
-                   cov_model=cov_model)
-
->>>>>>> 5af79327d3626f5767da13ac95ddb63116205257
+                   cov_model=cov_model, **kwargs)
     return uvp
 
 

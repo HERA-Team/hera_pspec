@@ -6,6 +6,7 @@ import json
 
 from . import utils
 
+
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     """
     Subtract uvp2.data_array from uvp1.data_array. Subtract matching
@@ -93,27 +94,34 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                 # add cov in quadrature: real and imag separately                
                 if hasattr(uvp1, "cov_array_real") \
                   and hasattr(uvp2, "cov_array_real"):
-                    for cov_model in uvp1.cov_array_real.keys():
-                        if cov_model in uvp2.cov_array_real.keys():
-                            cov1r = uvp1.get_cov(key1, component='real', 
-                                                 cov_model=cov_model)
-                            cov2r = uvp2.get_cov(key2, component='real', 
-                                                 cov_model=cov_model)
-                            uvp1.cov_array_real[cov_model][i][blp1_inds, :, :, j] \
-                                = np.sqrt(cov1r.real**2 + cov2r.real**2) \
-                                  + 1j*np.sqrt(cov1r.imag**2 + cov2r.imag**2)
-                            
-                            cov1i = uvp1.get_cov(key1, component='imag', 
-                                                 cov_model=cov_model)
-                            cov2i = uvp2.get_cov(key2, component='imag', 
-                                                 cov_model=cov_model)
-                            uvp1.cov_array_imag[cov_model][i][blp1_inds, :, :, j] \
-                                = np.sqrt(cov1i.real**2 + cov2i.real**2) \
-                                  + 1j*np.sqrt(cov1i.imag**2 + cov2i.imag**2)
+                    if uvp1.cov_model == uvp2.cov_model:
+                        cov1r = uvp1.get_cov(key1, component='real')
+                        cov2r = uvp2.get_cov(key2, component='real')
+                        uvp1.cov_array_real[i][blp1_inds, :, :, j] \
+                            = np.sqrt(cov1r.real**2 + cov2r.real**2) \
+                              + 1j*np.sqrt(cov1r.imag**2 + cov2r.imag**2)
+                        
+                        cov1i = uvp1.get_cov(key1, component='imag')
+                        cov2i = uvp2.get_cov(key2, component='imag')
+                        uvp1.cov_array_imag[i][blp1_inds, :, :, j] \
+                            = np.sqrt(cov1i.real**2 + cov2i.real**2) \
+                              + 1j*np.sqrt(cov1i.imag**2 + cov2i.imag**2)
+
+                # same for window function
+                if (hasattr(uvp1, 'window_function_array') 
+                    and hasattr(uvp2, 'window_function_array')):
+                    window1 = uvp1.get_window_function(key1)
+                    window2 = uvp2.get_window_function(key2)
+                    uvp1.window_function_array[i][blp1_inds, :, :, j] \
+                        = np.sqrt(window1.real**2 + window2.real**2) \
+                        + 1j*np.sqrt(window1.imag**2 + window2.imag**2)
 
     # run check
-    if run_check: uvp1.check()
+    if run_check:
+        uvp1.check()
+
     return uvp1
+
 
 def compress_r_params(r_params_dict):
     """
@@ -160,6 +168,7 @@ def compress_r_params(r_params_dict):
             r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
         r_params_str = json.dumps(r_params_unique)
         return r_params_str
+
 
 def decompress_r_params(r_params_str):
     """
@@ -678,16 +687,15 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         cov_real = odict()
         cov_imag = odict()
         stats = odict()
+        window_function = odict()
 
-        # get cov_array keys if h5file
+        # determine if certain arrays are stored
         if h5file is not None:
-            covnames = np.unique([f[f.find("real_")+5: f.rfind("_")] for f in h5file.keys() 
-                                    if f.startswith("cov_real")])
+            store_cov = 'cov_real_spw0' in h5file
+            store_window = 'window_function_spw0' in h5file
         else:
-            if hasattr(uvp, "cov_array_real"):
-                covnames = uvp.cov_array_real.keys()
-            else:
-                covnames = []
+            store_cov = hasattr(uvp, 'cov_array_real')
+            store_window = hasattr(uvp, 'window_function_array')
 
         # get stats_array keys if h5file
         if h5file is not None:
@@ -710,16 +718,12 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 _wgts = h5file['wgt_spw{}'.format(s_old)]
                 _ints = h5file['integration_spw{}'.format(s_old)]
                 _nsmp = h5file['nsample_spw{}'.format(s_old)]
-                # assign cov array
-                _cov_real = odict()
-                _cov_imag = odict()
-                for covname in covnames:
-                    if covname not in cov_real:
-                        cov_real[covname] = odict()
-                        cov_imag[covname] = odict()
-                    _cov_real[covname] = h5file["cov_real_{}_{}".format(covname, s_old)]
-                    _cov_imag[covname] = h5file["cov_imag_{}_{}".format(covname, s_old)]
-                # assign stats array
+                # assign non-required arrays
+                if store_window:
+                    _window_function = h5file['window_function_spw{}'.format(s_old)]
+                if store_cov:
+                     _cov_real = h5file["cov_real_spw{}".format(s_old)]
+                     _cov_imag = h5file["cov_imag_spw{}".format(s_old)]
                 _stat = odict()
                 for statname in statnames:
                     if statname not in stats:
@@ -733,15 +737,12 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 _wgts = uvp.wgt_array[s_old]
                 _ints = uvp.integration_array[s_old]
                 _nsmp = uvp.nsample_array[s_old]
-                # assign cov
-                _cov_real = odict()
-                _cov_imag = odict()
-                for covname in covnames:
-                    if covname not in cov_real:
-                        cov_real[covname] = odict()
-                        cov_imag[covname] = odict()
-                    _cov_real[covname] = uvp.cov_array_real[covname][s_old]
-                    _cov_imag[covname] = uvp.cov_array_imag[covname][s_old]
+                # assign non-required arrays
+                if store_window:
+                    _window_function = uvp.window_function_array[s_old]
+                if store_cov:
+                    _cov_real = uvp.cov_array_real[s_old]
+                    _cov_imag = uvp.cov_array_imag[s_old]
                 # assign stats array
                 _stat = odict()
                 for statname in statnames:
@@ -756,12 +757,11 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 wgts[s] = _wgts[blp_select, :, :, polpair_select]
                 ints[s] = _ints[blp_select, polpair_select]
                 nsmp[s] = _nsmp[blp_select, polpair_select]
-                for covname in covnames:
-                    cov_real[covname][s] \
-                        = _cov_real[covname][blp_select, :, :, polpair_select]
-                    cov_imag[covname][s] \
-                        = _cov_imag[covname][blp_select, :, :, polpair_select]
-                        
+                if store_window:
+                    window_function[s] = _window_function[blp_select, :, :, polpair_select]
+                if store_cov:
+                    cov_real[s] = _cov_real[blp_select, :, :, polpair_select]
+                    cov_imag[s] = _cov_imag[blp_select, :, :, polpair_select]
                 for statname in statnames:
                     stats[statname][s] = _stat[statname][blp_select, :, polpair_select]
             else:
@@ -770,11 +770,11 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 wgts[s] = _wgts[blp_select, :, :, :][:, :, :, polpair_select]
                 ints[s] = _ints[blp_select, :][:, polpair_select]
                 nsmp[s] = _nsmp[blp_select, :][:, polpair_select]
-                for covname in covnames:
-                    cov_real[covname][s] \
-                        = _cov_real[covname][blp_select, :, :, :][:, :, :, polpair_select]
-                    cov_imag[covname][s] \
-                        = _cov_imag[covname][blp_select, :, :, :][:, :, :, polpair_select]
+                if store_window:
+                    window_function[s] = _window_function[blp_select, :, :, :][:, :, :, polpair_select]
+                if store_cov:
+                    cov_real[s] = _cov_real[blp_select, :, :, :][:, :, :, polpair_select]
+                    cov_imag[s] = _cov_imag[blp_select, :, :, :][:, :, :, polpair_select]
                 for statname in statnames:
                     stats[statname][s] = _stat[statname][blp_select, :, :][:, :, polpair_select]
 
@@ -783,6 +783,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
+        if store_window:
+            uvp.window_function_array = window_function
         if len(stats) > 0:
             uvp.stats_array = stats
         if len(cov_real) > 0:
