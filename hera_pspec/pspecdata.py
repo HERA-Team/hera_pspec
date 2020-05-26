@@ -608,14 +608,14 @@ class PSpecData(object):
             and integration time. 
 
         time_index : integer, compute covariance at specific time-step in dset
-                       supported if mode == 'dsets' or 'autos'
+            supported if mode == 'dsets' or 'autos'
 
         known_cov : dicts of covariance matrices
             Covariance matrices that are not calculated internally.
         
         Returns
         -------
-        C : array-like, (Ntimes x spw_Nfreqs x spw_Nfreqs)
+        C : ndarray, (spw_Nfreqs, spw_Nfreqs)
             Covariance model for the specified key.
         """
         # type check
@@ -624,7 +624,6 @@ class PSpecData(object):
 
         # parse key
         dset, bl = self.parse_blkey(key)
-        key = (dset,) + (bl,)
         if model == 'dsets':
             assert isinstance(time_index, int), "time_index must be integer if cov-model==dsets"
             # add model to key
@@ -640,7 +639,7 @@ class PSpecData(object):
             Ckey = key + (model, time_index)
 
         else:
-            if known_cov == None:
+            if known_cov is None:
                 raise ValueError("didn't recognize model {}".format(model))
             else:
                 assert isinstance(time_index, int), "time_index must be integer if cov-model=autos"
@@ -655,30 +654,8 @@ class PSpecData(object):
             elif model == 'dsets':
                 self.set_C({Ckey: np.diag( np.abs(self.w(key, filter_extension=True)[:,time_index] * self.dx(key, filter_extension=True)[:,time_index]) ** 2. )})
             elif model == 'autos':
-                """
-                Pick a baseline $b=(alpha,beta)$ where $alpha$ and $beta$ are antennas,
-                One way to estimate the covariance matrix $C$ by auto-visibility is:
-                $C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t}, 
-                where $b_alpha = (alpha,alpha)$ and $b_beta = (beta,beta)$.
-                With LST binned over days, we have $C_{ii}(b, LST) = |V(b_alpha,nu_i,t) V(b_beta, nu_i,t)| / {N_{samples} B Delta_t}$.
-                """
-                dt = np.median(self.dsets[dset].integration_time)
-                # Delta_t
-                df = self.dsets[dset].channel_width
-                # B
-                bl1 = (bl[0],bl[0], bl[2]) 
-                # baseline b_alpha
-                bl2 = (bl[1], bl[1], bl[2])
-                # baseline b_beta
-                spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
-                x_bl1 = self.dsets[dset].get_data(bl1)[time_index, spw]
-                x_bl2 = self.dsets[dset].get_data(bl2)[time_index, spw]
-                nsample_bl = self.dsets[dset].get_nsamples(bl)[time_index, spw]
-                nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(self.dsets[dset].nsample_array[:,:,spw,:]))
-                # some impainted data have zero nsample while is not flagged, and they will be assigned the median nsample within the spectral window.
-                var = np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl
-                covariance = np.diag(var)
-                self.set_C({Ckey: covariance})
+                spw_range= (self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+                self.set_C({Ckey: np.diag(utils.variance_from_auto_correlations(self.dsets[dset], bl, spw_range, time_index))})
 
             else:
                 assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
@@ -730,7 +707,7 @@ class PSpecData(object):
 
         Returns
         -------
-        cross_covar : array-like, (spw_Nfreqs x spw_Nfreqs)
+        cross_covar : ndarray, (spw_Nfreqs, spw_Nfreqs)
             Cross covariance model for the specified key.
         """
         # type check
@@ -740,7 +717,7 @@ class PSpecData(object):
 
         internal_models = ['empirical', 'dsets', 'autos']
         # internal_models refer to the covariance can be calculated intrinsically. 
-        if known_cov == None:
+        if known_cov is None:
             assert model in internal_models, "didn't recognize model {}".format(model)
 
         # parse key
@@ -757,13 +734,13 @@ class PSpecData(object):
         elif model == 'dsets':
             covar = np.zeros((self.spw_Nfreqs,
                               self.spw_Nfreqs),
-                              dtype=float)
+                              dtype=np.float64)
         #for dsets, we assume no baseline-baseline covariances.
 
         elif model == 'autos':
             covar = np.zeros((self.spw_Nfreqs,
                               self.spw_Nfreqs),
-                              dtype=float)
+                              dtype=np.float64)
         #for autos, we assume no baseline-baseline covariances.
 
         else:

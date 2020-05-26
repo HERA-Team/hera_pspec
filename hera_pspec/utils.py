@@ -74,6 +74,51 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     C -= np.outer(x1, x2)
     return C
 
+def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
+    """
+    Predict noise variance on a baseline from autocorrelation amplitudes on antennas.
+    Pick a baseline $b=(alpha,beta)$ where $alpha$ and $beta$ are antennas,
+    The way to estimate the covariance matrix $C$ from auto-visibility is:
+    $C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t}, 
+    where $b_alpha = (alpha,alpha)$ and $b_beta = (beta,beta)$.
+    With LST binned over days, we have $C_{ii}(b, LST) = |V(b_alpha,nu_i,t) V(b_beta, nu_i,t)| / {N_{samples} B Delta_t}$.
+
+    Parameters
+    ----------
+    uvd : UVData
+
+    bl : tuple
+        baseline (pol) key, in the format of (ant1, ant2, pol)
+        
+    spw_range : tuple
+        Length-2 tuple of the spectral window 
+
+    time_index : int
+
+    Returns
+    -------
+    var : ndarray, (spw_Nfreqs,)
+
+    """
+    assert isinstance(bl, tuple) and len(bl)==3, "bl must be fed as Length-3 tuple"
+    assert isinstance(spw_range, tuple) and len(spw_range)==2, "spw_range must be fed as Length-2 tuple"  
+    dt = np.median(uvd.integration_time)
+    # Delta_t
+    df = uvd.channel_width
+    # B
+    bl1 = (bl[0],bl[0], bl[2]) 
+    # baseline b_alpha
+    bl2 = (bl[1], bl[1], bl[2])
+    # baseline b_beta
+    spw = slice(spw_range[0], spw_range[1])    
+    x_bl1 = uvd.get_data(bl1)[time_index, spw]
+    x_bl2 = uvd.get_data(bl2)[time_index, spw]
+    nsample_bl = uvd.get_nsamples(bl)[time_index, spw]
+    nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(uvd.nsample_array[:,:,spw,:]))
+    # some impainted data have zero nsample while is not flagged, and they will be assigned the median nsample within the spectral window.
+    var = np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl
+
+    return var
 
 def construct_blpairs(bls, exclude_auto_bls=False, exclude_cross_bls=False,
                       exclude_permutations=False, group=False, Nblps_per_group=1):
