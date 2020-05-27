@@ -118,7 +118,7 @@ class Test_UVPSpec(unittest.TestCase):
         red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
         bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 
-        uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
+        uvp = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
          norm='I', taper='blackman-harris', store_cov = True, cov_model='autos', verbose=False)
 
         key = (0,blpairs[0],"xx")

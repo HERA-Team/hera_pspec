@@ -247,7 +247,7 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
         bls2.extend(_bls2)
 
     # run pspec
-    uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight=data_weighting,
+    uvp = ds.pspec(bls1, bls2, (0, 1), (pol, pol), input_data_weight=data_weighting,
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
                    store_cov=store_cov, n_dlys=n_dlys, r_params=r_params,
                    cov_model=cov_model, **kwargs)

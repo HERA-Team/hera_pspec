@@ -109,7 +109,7 @@ class Test_grouping(unittest.TestCase):
         # calculate all baseline pairs from group
         baselines1, baselines2, blpairs = utils.construct_blpairs(baselines, exclude_auto_bls=True, 
                                                                  exclude_permutations=True)
-        uvp, uvp_q = ds.pspec(baselines1, baselines2, (0, 1), [('xx', 'xx')], spw_ranges=[(300, 350)], input_data_weight='identity',
+        uvp = ds.pspec(baselines1, baselines2, (0, 1), [('xx', 'xx')], spw_ranges=[(300, 350)], input_data_weight='identity',
                norm='I', taper='blackman-harris', store_cov=True, cov_model="autos", verbose=False)
         keys = uvp.get_all_keys()
         # Add the analytic noise to stat_array
@@ -296,7 +296,7 @@ def test_validate_bootstrap_errorbar():
 
     # setup PSpecData and form power psectra
     ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
-    uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
+    uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
                    taper='none', sampling=False, little_h=False, spw_ranges=[(0, 50)], verbose=False)
 
     # bootstrap resample

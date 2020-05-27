@@ -1192,10 +1192,10 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd1)], wgts=[None, None])
         # get normal pspec
         bls = [(37, 39)]
-        uvp1, uvp1_q = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
+        uvp1 = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
         # rephase and get pspec
         ds.rephase_to_dset(0)
-        uvp2, uvp2_q = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
+        uvp2 = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
         blp = (0, ((37,39),(37,39)), ('xx','xx'))
         nt.assert_true(np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min())
 
@@ -1296,7 +1296,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
-        uvp, uvp_q = ds.pspec(bls, bls, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls, bls, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         nt.assert_equal(len(uvp.bl_array), len(bls))
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
@@ -1353,9 +1353,9 @@ class Test_PSpecData(unittest.TestCase):
         #Test if the two pipelines match
 
         ds_t    = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm_Q)
-        uvp_new, uvp_new_q = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+        uvp_new = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
                                        norm='I', taper='none', verbose=True, exact_norm=True)
-        uvp_ext, uvp_ext_q = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+        uvp_ext = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
                                        norm='I', taper='none', verbose=True, exact_norm=False)
         spw         = 0
         blp         = (bls_Q[0], bls_Q[0])
@@ -1371,11 +1371,11 @@ class Test_PSpecData(unittest.TestCase):
         antpos = dict(zip(ants, antpos))
         red_bls = [sorted(blg) for blg in redcal.get_pos_reds(antpos)][2]
         bls1, bls2, blps = utils.construct_blpairs(red_bls, exclude_permutations=True)
-        uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array)
         nt.assert_equal(uvp.Nblpairs, 10)
-        uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         nt.assert_true(uvp.antnums_to_blpair(((24, 25), (52, 53))) in uvp.blpair_array)
         nt.assert_true(uvp.antnums_to_blpair(((52, 53), (24, 25))) not in uvp.blpair_array)
@@ -1384,14 +1384,14 @@ class Test_PSpecData(unittest.TestCase):
         # test mixed bl group and non blgroup, currently bl grouping of more than 1 blpair doesn't work
         bls1 = [[(24, 25)], (52, 53)]
         bls2 = [[(24, 25)], (52, 53)]
-        uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         # test select
         red_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
         bls1, bls2, blp = utils.construct_blpairs(red_bls, exclude_permutations=False, exclude_auto_bls=False)
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=[(20,30), (30,40)], verbose=False)
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=[(20,30), (30,40)], verbose=False)
         nt.assert_equal(uvp.Nblpairs, 16)
         nt.assert_equal(uvp.Nspws, 2)
         uvp2 = uvp.select(spws=0, bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
@@ -1404,7 +1404,7 @@ class Test_PSpecData(unittest.TestCase):
         # check w/ multiple spectral ranges
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp, uvp_q = ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
+        uvp = ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
         nt.assert_equal(uvp.Nspws, 3)
         nt.assert_equal(uvp.Nspwdlys, 43)
         nt.assert_equal(uvp.data_array[0].shape, (240, 14, 1))
@@ -1418,15 +1418,15 @@ class Test_PSpecData(unittest.TestCase):
         # test polarization pairs
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp, uvp_q = ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=[(10, 24)], verbose=False)
+        uvp = ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=[(10, 24)], verbose=False)
         #nt.assert_raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pols=[('xx','yy')])
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp, uvp_q = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('yy','yy')], spw_ranges=[(10, 24)], verbose=False)
+        uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('yy','yy')], spw_ranges=[(10, 24)], verbose=False)
 
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp, uvp_q = ds.pspec(bls, bls, (0, 1), (-5, -5), spw_ranges=[(10, 24)], verbose=False)
+        uvp = ds.pspec(bls, bls, (0, 1), (-5, -5), spw_ranges=[(10, 24)], verbose=False)
 
         # test exceptions
         nt.assert_raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1), ('xx','xx'))
@@ -1441,19 +1441,19 @@ class Test_PSpecData(unittest.TestCase):
         uvd1.polarization_array = np.array([-6])
         uvd2 = self.uvd + uvd1
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
-        uvp, uvp_q = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('yy','yy')], spw_ranges=[(10, 24)], verbose=False)
+        uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('yy','yy')], spw_ranges=[(10, 24)], verbose=False)
 
         uvd1 = copy.deepcopy(self.uvd)
         uvd1.polarization_array = np.array([-6])
         uvd2 = self.uvd + uvd1
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
-        uvp, uvp_q = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('xy','xy')], spw_ranges=[(10, 24)], verbose=False)
+        uvp = ds.pspec(bls, bls, (0, 1), [('xx','xx'), ('xy','xy')], spw_ranges=[(10, 24)], verbose=False)
 
         # test with nsamp set to zero
         uvd = copy.deepcopy(self.uvd)
         uvd.nsample_array[uvd.antpair2ind(24, 25, ordered=False)] = 0.0
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp, uvp_q = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [('xx', 'xx')])
+        uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [('xx', 'xx')])
         nt.assert_true(np.all(np.isclose(uvp.integration_array[0], 0.0)))
 
         # test covariance calculation runs with small number of delays
@@ -1461,11 +1461,11 @@ class Test_PSpecData(unittest.TestCase):
         uvd_std = copy.deepcopy(self.uvd_std)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
                                  dsets_std=[uvd_std, uvd_std], beam=self.bm)
-        uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True, cov_model='empirical')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
-        uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,14)], exact_norm=True, store_cov=True, cov_model='empirical')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
     
@@ -1473,7 +1473,7 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
                                  beam=self.bm)
         # assert caching is used when appropriate
-        uvp, uvp_q = ds.pspec([(24, 25), (24, 25)], [(24, 25), (24, 25)], (0, 1), ('xx', 'xx'),
+        uvp = ds.pspec([(24, 25), (24, 25)], [(24, 25), (24, 25)], (0, 1), ('xx', 'xx'),
                        input_data_weight='identity', norm='I', taper='none', verbose=False,
                        spw_ranges=[(20, 30)])
         nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
@@ -1481,7 +1481,7 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(list(ds._identity_Y.keys())[0], ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')))
         # assert caching is not used when inappropriate
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), :, 25, :] = True
-        uvp, uvp_q = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
+        uvp = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
                        input_data_weight='identity', norm='I', taper='none', verbose=False,
                        spw_ranges=[(20, 30)])
         nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
@@ -1522,7 +1522,7 @@ class Test_PSpecData(unittest.TestCase):
         legacy = np.fft.fftshift(np.conj(np.fft.fft(data1, axis=1)) * np.fft.fft(data2, axis=1) * scalar / len(freqs)**2, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-        uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), pols=('xx','xx'), taper='none', input_data_weight='identity', norm='I', sampling=True)
+        uvp = ds.pspec(bls1, bls2, (0, 1), pols=('xx','xx'), taper='none', input_data_weight='identity', norm='I', sampling=True)
         oqe = uvp.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
@@ -1535,7 +1535,7 @@ class Test_PSpecData(unittest.TestCase):
         legacy = np.fft.fftshift(np.conj(np.fft.fft(data1*window[None, :], axis=1)) * np.fft.fft(data2*window[None, :], axis=1) * scalar / len(freqs)**2, axes=1)[0]
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
-        uvp, uvp_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), taper='blackman-harris', input_data_weight='identity', norm='I')
+        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), taper='blackman-harris', input_data_weight='identity', norm='I')
         oqe = uvp.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
         # assert answers are same to within 3%
         nt.assert_true(np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all())
@@ -1573,7 +1573,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd.flag_array[uvd.antpair2ind(24, 25, ordered=False)[3], 0, 400, :] = True
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
         ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=0.25)
-        uvp, uvp_q = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
+        uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
                         spw_ranges=[(400, 450)], verbose=False)
         # assert flag broadcast above hits weight arrays in uvp
         nt.assert_true(np.all(np.isclose(uvp.get_wgts((0, ((24, 25), (24, 25)), ('xx','xx')))[3], 0.0)))
@@ -1583,7 +1583,7 @@ class Test_PSpecData(unittest.TestCase):
         avg_uvp = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # repeat but change data in flagged portion
         ds.dsets[0].data_array[uvd.antpair2ind(24, 25, ordered=False)[3], 0, 400:450, :] *= 100
-        uvp2, uvp2_q = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
+        uvp2 = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
                         spw_ranges=[(400, 450)], verbose=False)
         avg_uvp2 = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # assert average before and after are the same!
@@ -1603,10 +1603,10 @@ class Test_PSpecData(unittest.TestCase):
         bls1 = [(24, 25)]
         bls2 = [(37, 38)]
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm, labels=['red', 'blue'])
-        uvp_flagged, uvp_flagged_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
         ds.broadcast_dset_flags(unflag=True)
-        uvp_unflagged, uvp_unflagged_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp_unflagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
         qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
@@ -1619,12 +1619,12 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = copy.deepcopy(uvd)
         uvd2.flag_array[uvd.antpair2ind(24, 25, ordered=False)] = True
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
-        uvp_flagged, uvp_flagged_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
         uvd2.data_array[uvd.antpair2ind(24, 25, ordered=False)] *= 9234.913
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
-        uvp_flagged_mod, uvp_flagged_mod_q = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+        uvp_flagged_mod = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=False)
 
         qe_flagged_mod = uvp_flagged_mod.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
@@ -2011,7 +2011,7 @@ def test_real_covariance():
     red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
     bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
 
-    uvp, uvp_q = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
+    uvp  = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
          norm='I', taper='blackman-harris', store_cov = True, cov_model='empirical', verbose=False)
 
     for spw in range(uvp.Nspws):

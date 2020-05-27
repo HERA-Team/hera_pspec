@@ -2577,7 +2577,7 @@ class PSpecData(object):
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
-              baseline_tol=1.0, store_cov=False, store_window=True, save_q=False, verbose=True, filter_extensions=None,
+              baseline_tol=1.0, store_cov=False, store_window=True, return_q=False, verbose=True, filter_extensions=None,
               exact_norm=False, history='', r_params=None, known_cov=None, cov_model='empirical'):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
@@ -2670,10 +2670,9 @@ class PSpecData(object):
             given an input visibility noise model, and store the output
             in the UVPSpec object.
 
-        save_q : bool, optional
-            If True, store and return the results (delay spectra and covariance 
-            matrices) for the unnormalized bandpowers in a separate UVPSpec 
-            object.
+        return_q : bool, optional
+            If True, return the results (delay spectra and covariance 
+            matrices) for the unnormalized bandpowers in the UVPSpec object.  
 
         store_window : bool, optional
             If True, store the window function of the bandpowers.
@@ -2734,10 +2733,6 @@ class PSpecData(object):
         uvp : UVPSpec object
             Instance of UVPSpec that holds the normalized output power spectrum 
             data.
-
-        uvp_q : UVPspec object
-            If save_q == True, instance of UVPSpec that holds the unnormalized 
-            power spectrum data. Otherwise returned as None.
 
         Examples
         --------
@@ -2889,13 +2884,10 @@ class PSpecData(object):
 
         # initialize empty lists
         data_array = odict()
-        data_array_q = odict()
         wgt_array = odict()
         integration_array = odict()
         cov_array_real = odict()
         cov_array_imag = odict()
-        cov_array_q_real = odict()
-        cov_array_q_imag = odict()
         window_function_array = odict()
         time1 = []
         time2 = []
@@ -2921,15 +2913,12 @@ class PSpecData(object):
 
             # setup empty data arrays
             spw_data = []
-            spw_data_q = []
             spw_wgts = []
             spw_ints = []
             spw_scalar = []
             spw_polpair = []
             spw_cov_real = []
             spw_cov_imag = []
-            spw_cov_q_real = []
-            spw_cov_q_imag = []
             spw_window_function = [] 
 
             d = self.delays() * 1e-9
@@ -2954,13 +2943,10 @@ class PSpecData(object):
 
                 spw_polpair.append( uvputils.polpair_tuple2int(p) )
                 pol_data = []
-                pol_data_q = []
                 pol_wgts = []
                 pol_ints = []
                 pol_cov_real = []
                 pol_cov_imag = []
-                pol_cov_q_real = []
-                pol_cov_q_imag = []
                 pol_window_function = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
@@ -3114,12 +3100,13 @@ class PSpecData(object):
                                 cov_real = cov_real * (delay_adj)**2.
                                 cov_imag = cov_imag * (delay_adj)**2.
 
-                        pol_cov_real.extend(cov_real) 
-                        pol_cov_imag.extend(cov_imag)
+                        if not return_q: 
+                            pol_cov_real.extend(cov_real) 
+                            pol_cov_imag.extend(cov_imag)
+                        else:
+                            pol_cov_real.extend(cov_q_real)
+                            pol_cov_imag.extend(cov_q_imag) 
 
-                        if save_q:      
-                            pol_cov_q_real.extend(cov_q_real)
-                            pol_cov_q_imag.extend(cov_q_imag) 
                     
                     # store the window_function
                     pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
@@ -3136,9 +3123,10 @@ class PSpecData(object):
                     bls_arr.extend([bl1, bl2])
 
                     # insert pspectra
-                    pol_data.extend(pv.T)
-                    if save_q:
-                        pol_data_q.extend(qv.T)
+                    if not return_q:
+                        pol_data.extend(pv.T)
+                    else:
+                        pol_data.extend(qv.T)
 
                     # get weights
                     wgts1 = self.w(key1).T
@@ -3183,32 +3171,23 @@ class PSpecData(object):
 
                 # insert into data and wgts integrations dictionaries
                 spw_data.append(pol_data)
-                spw_data_q.append(pol_data_q)
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
                 spw_cov_real.append(pol_cov_real) 
                 spw_cov_imag.append(pol_cov_imag) 
-                spw_cov_q_real.append(pol_cov_q_real) 
-                spw_cov_q_imag.append(pol_cov_q_imag) 
                 spw_window_function.append(pol_window_function)
 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
-            spw_data_q = np.moveaxis(np.array(spw_data_q), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
             spw_cov_real = np.moveaxis(np.array(spw_cov_real), 0, -1)
             spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
-            spw_cov_q_real = np.moveaxis(np.array(spw_cov_q_real), 0, -1)
-            spw_cov_q_imag = np.moveaxis(np.array(spw_cov_q_imag), 0, -1)
             spw_window_function = np.moveaxis(np.array(spw_window_function), 0, -1)
 
             data_array[i] = spw_data
-            data_array_q[i] = spw_data_q  
             cov_array_real[i] = spw_cov_real
             cov_array_imag[i] = spw_cov_imag
-            cov_array_q_real[i] = spw_cov_q_real
-            cov_array_q_imag[i] = spw_cov_q_imag
             window_function_array[i] = spw_window_function
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
@@ -3277,7 +3256,10 @@ class PSpecData(object):
                                 filename2, label2, cal2, dset2.history, '-'*20)
         uvp.r_params = uvputils.compress_r_params(r_params)
         uvp.taper = taper
-        uvp.norm = norm
+        if not return_q:
+            uvp.norm = norm
+        else:
+            uvp.norm = 'Unnormalized'
 
         if self.primary_beam is not None:
             # attach cosmology
@@ -3296,17 +3278,6 @@ class PSpecData(object):
         uvp.nsample_array = dict(
                         [ (k, np.ones_like(uvp.integration_array[k], np.float))
                          for k in uvp.integration_array.keys() ] )
-        if save_q:
-            uvp_q = copy.deepcopy(uvp)
-            uvp_q.data_array = data_array_q
-            uvp_q.norm = 'Unnormalized'
-            if store_cov:
-                uvp_q.cov_array_real = cov_array_q_real
-                uvp_q.cov_array_imag = cov_array_q_imag
-                uvp_q.cov_model = cov_model
-            uvp_q.check()
-        else:
-            uvp_q = None
         
         if store_cov:
             uvp.cov_array_real = cov_array_real
@@ -3318,7 +3289,7 @@ class PSpecData(object):
 
         # run check
         uvp.check()
-        return uvp, uvp_q
+        return uvp 
 
     def rephase_to_dset(self, dset_index=0, inplace=True):
         """
@@ -3521,7 +3492,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, filter_extensions=None,
-              history='', r_params=None, tsleep=0.1, maxiter=1, save_q=False, known_cov=None, cov_model='empirical'):
+              history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical'):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -3686,9 +3657,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         If True, solve for covariance between bandpowers and store in
         output UVPSpec object.
     
-    save_q : bool, optional
-        If True, store and return the results (delay spectra and covariance matrices) 
-        for the unnormalized bandpowers in a separate UVPSpec object.
+    return_q : bool, optional
+        If True, return the results (delay spectra and covariance matrices) 
+        for the unnormalized bandpowers in the separate UVPSpec object.
 
     known_cov : dicts of input covariance matrices
         known_cov has the type {Ckey:covariance}, which is the same with ds._C. The matrices
@@ -3980,11 +3951,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             continue
 
         # Run OQE
-        uvp, uvp_q = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
+        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
                        exact_norm=exact_norm, 
-                       save_q=save_q, cov_model=cov_model,
+                       return_q=return_q, cov_model=cov_model,
                        norm=norm, taper=taper, history=history, verbose=verbose,
                        filter_extensions=filter_extensions, store_window=store_window)
 
@@ -3996,12 +3967,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         if verbose: print("Storing {}".format(psname))
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
                       overwrite=overwrite)
-        if save_q:
-            psname = '{}_x_unnormalized_{}{}'.format(dset_labels[dset_idxs[0]],
-                                    dset_labels[dset_idxs[1]], psname_ext)
-            psc.set_pspec(group=groupname, psname=psname, pspec=uvp_q, 
-                      overwrite=overwrite)
-
+       
     return ds
 
 
@@ -4049,7 +4015,7 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files or empirical covariance.")
-    a.add_argument("--save_q", default=False, action='store_true', help="Store unnormalized bandpowers given dsets_std files.")
+    a.add_argument("--return_q", default=False, action='store_true', help="Return unnormalized bandpowers given dsets files.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--cov_model", default='empirical', type=str, help="Model for computing covariance, currently supports empirical or dsets")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
