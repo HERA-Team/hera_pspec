@@ -3599,7 +3599,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             _bls2 = []
             for _bl1, _bl2 in zip(bls1, bls2):
                 if (_bl1 in dset1_bls or _bl1[::-1] in dset1_bls) \
-                    and (_bl2 in dset2_bls or _bls2[::-1] in dset2_bls):
+                    and (_bl2 in dset2_bls or _bl2[::-1] in dset2_bls):
                     _bls1.append(_bl1)
                     _bls2.append(_bl2)
 

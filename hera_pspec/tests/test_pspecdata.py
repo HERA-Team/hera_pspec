@@ -1875,6 +1875,16 @@ def test_pspec_run():
     assert ds.dsets[0].extra_keywords['calibration'] is not '""'
     assert 'cal: /' in uvp.history
 
+    # test w/ conjugated blpairs
+    dfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.uvh5")
+    ds = pspecdata.pspec_run([dfile, dfile], "./out.h5", cals=cfile, dsets_std=[dfile, dfile],
+                             verbose=False, overwrite=True, blpairs=[((24, 23), (25, 24))],
+                             pol_pairs=[('xx', 'xx')], interleave_times=False,
+                             file_type='uvh5', spw_ranges=[(100, 150)], cal_flag=True)
+    psc = container.PSpecContainer('./out.h5', 'rw')
+    uvp = psc.get_pspec('dset0_dset1', 'dset0_x_dset1')
+    assert uvp.Nblpairs == 1
+
     # test exceptions
     nt.assert_raises(AssertionError, pspecdata.pspec_run, 'foo', "./out.h5")
     nt.assert_raises(AssertionError, pspecdata.pspec_run, fnames, "./out.h5", blpairs=(1, 2), verbose=False)
