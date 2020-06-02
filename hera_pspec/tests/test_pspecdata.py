@@ -1289,6 +1289,75 @@ class Test_PSpecData(unittest.TestCase):
         # test dset_idx
         nt.assert_raises(TypeError, ds.dset_idx, (1,2))
 
+    def test_C_model(self):
+        # test the key format in ds._C and the shape of stored covariance
+        uvd = UVData()
+        uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        cosmo = conversions.Cosmo_Conversions()
+        uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
+
+        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos = dict(zip(ants, antpos))
+        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
+        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
+
+        ds.set_spw(spws[0])
+        key = (0,bls1[0],"xx")
+        ds.C_model(key, model='empirical', time_index=0)
+        nt.assert_true( ((0, 0), ((bls1[0][0],bls1[0][1] ,"xx"),(bls1[0][0],bls1[0][1] ,"xx")), 'empirical', None, False, True,) in ds._C.keys())
+        ds.C_model(key, model='autos', time_index=0)
+        nt.assert_true( ((0, 0), ((bls1[0][0],bls1[0][1] ,"xx"), (bls1[0][0],bls1[0][1] ,"xx")), 'autos', 0, False, True,) in ds._C.keys())
+        for Ckey in ds._C.keys():
+            nt.assert_equal(ds._C[Ckey].shape, (spws[0][1]-spws[0][0], spws[0][1]-spws[0][0]))
+
+        ds.set_spw(spws[1])
+        key = (0,bls1[0],"xx")
+        known_cov = {}
+        model = 'known'
+        Ckey = ((0, 0), ((bls1[0][0],bls1[0][1] ,"xx"),(bls1[0][0],bls1[0][1] ,"xx")), 'known', 0, False, True,)
+        known_cov[Ckey] = np.diag(np.ones(uvd.Nfreqs))
+        ds.C_model(key, model='known', time_index=0, known_cov=known_cov)
+        nt.assert_true( Ckey in ds._C.keys())
+        nt.assert_equal(ds._C[Ckey].shape, (spws[1][1]-spws[1][0], spws[1][1]-spws[1][0]))
+
+    def test_get_analytic_covariance(self):
+        # test get_analytic_covariance return almost real values
+        uvd = UVData()
+        uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        cosmo = conversions.Cosmo_Conversions()
+        uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
+        
+        # slide the time axis of uvd by one integration
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+        ds.rephase_to_dset(0)
+
+        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos = dict(zip(ants, antpos))
+        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
+        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
+
+        key1 = (0, bls1[0], "xx")
+        key2 = (1, bls2[0], "xx")
+        ds.set_spw(spws[1])
+        M_ = np.diag(np.ones(ds.spw_Ndlys))
+        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False, model='empirical', known_cov=None)
+        for time_index in range(ds.Ntimes):
+            nt.assert_true((abs(cov_q_real[time_index].real) / abs\
+                (cov_q_real[time_index].imag) > 1e8).all())
+            nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
+                (cov_q_imag[time_index].imag) > 1e8).all())
+        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False, model='autos', known_cov=None)
+        for time_index in range(ds.Ntimes):
+            nt.assert_true((abs(cov_q_real[time_index].real) / abs\
+                (cov_q_real[time_index].imag) > 1e8).all())
+            nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
+                (cov_q_imag[time_index].imag) > 1e8).all())
+
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
@@ -1987,38 +2056,6 @@ def test_get_argparser():
     nt.assert_equal(a.dset_pairs, [(0, 0), (1, 1)])
     nt.assert_equal(a.spw_ranges, [(300, 400), (600, 800)])
     nt.assert_equal(a.blpairs, [((24, 25), (24, 25)), ((37, 38), (37, 38))])
-
-def test_real_covariance():
-    uvd = UVData()
-    uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
-    cosmo = conversions.Cosmo_Conversions()
-    uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
-    
-    Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
-    #data_array = np.random.normal(0,100,uvd.data_array.size).reshape(uvd.data_array.shape) +\
-    #1.j*np.random.normal(0,100,uvd.data_array.size).reshape(uvd.data_array.shape)
-    #uvd.data_array = data_array
-
-    # slide the time axis of uvd by one integration
-    uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
-    uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
-    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
-    ds.rephase_to_dset(0)
-
-    spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
-    antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-    antpos = dict(zip(ants, antpos))
-    red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
-    bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
-
-    uvp  = ds.pspec( bls1, bls2, (0, 1), [('xx', 'xx')], spw_ranges=spws, input_data_weight='identity', 
-         norm='I', taper='blackman-harris', store_cov = True, cov_model='empirical', verbose=False)
-
-    for spw in range(uvp.Nspws):
-        nt.assert_true((abs(uvp.cov_array_real[spw].real) / abs\
-            (uvp.cov_array_real[spw].imag) > 1e8).all())
-        nt.assert_true((abs(uvp.cov_array_imag[spw].real) / abs\
-            (uvp.cov_array_imag[spw].imag) > 1e8).all())
                       
 """
 # LEGACY MONTE CARLO TESTS

@@ -565,18 +565,11 @@ class PSpecData(object):
         Parameters
         ----------
         cov : dict
-            Dictionary containing new covariance values for given datasets and
-            baselines. Keys of the dictionary are tuples. 
-            The format of a key is like: (dset_idx1, bl1, dset_idx2, bl2, model, conj_1, conj_2, subtracted), 
-            dset_idx1 and bl1 has the same form as the returns of parse_blkey. 
-            `model' should be a str, refers to the name of covariance model. 
-            `conj_1', `conj_2' and `subtracted' should all be boolean.
-            The covariance term is like <x1 x2>, 
-            conj_1 and conj_2 specify if x1 and x2 are conjugated. If they are conjugated,
-            then set conj_1 or conj_2 to be True. 
-            `subtracted' specifies if we subtract the mean when calculating covariance. 
-            If the mean is subtracted, then set `subtracted' to be True. 
-            The shape of cov(key) should be like (Ntimes, Nfreqs, Nfreqs).    
+            Covariance keys and ndarrays.
+            The key should conform to 
+            (dset_pair_index, blpair_int, model, time_index, conj_1, conj_2).
+            e.g. ((0, 1), ((25,37,"xx"), (25, 37, "xx")), 'empirical', False, True)
+            while the ndarrays should have shape (spw_Nfreqs, spw_Nfreqs)  
         """
         self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
@@ -611,7 +604,10 @@ class PSpecData(object):
             supported if mode == 'dsets' or 'autos'
 
         known_cov : dicts of covariance matrices
-            Covariance matrices that are not calculated internally.
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
         
         Returns
         -------
@@ -627,24 +623,24 @@ class PSpecData(object):
         if model == 'dsets':
             assert isinstance(time_index, int), "time_index must be integer if cov-model==dsets"
             # add model to key
-            Ckey = key + (model, time_index)
+            Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
         elif model == 'empirical':
             # add model to key
-            Ckey = key + (model,)
+            Ckey = ((dset, dset), (bl,bl), ) + (model, None, False, True,)
 
         elif model == 'autos':
             assert isinstance(time_index, int), "time_index must be integer if cov-model==autos"
             # add model to key
-            Ckey = key + (model, time_index)
+            Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
         else:
             if known_cov is None:
                 raise ValueError("didn't recognize model {}".format(model))
             else:
-                assert isinstance(time_index, int), "time_index must be integer if cov-model=autos"
+                assert isinstance(time_index, int), "time_index must be integer if using a outer known_cov"
                 # add model to key
-                Ckey = key + key + (model, time_index, ) + (False,) + (True,) 
+                Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
         # check cache
         if Ckey not in self._C:
@@ -703,7 +699,10 @@ class PSpecData(object):
             Default: True
 
         known_cov : dicts of covariance matrices
-            Covariance matrices that are not calculated internally from data.
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
 
         Returns
         -------
@@ -721,10 +720,8 @@ class PSpecData(object):
             assert model in internal_models, "didn't recognize model {}".format(model)
 
         # parse key
-        dset, bl = self.parse_blkey(key1)
-        key1 = (dset,) + (bl,)
-        dset, bl = self.parse_blkey(key2)
-        key2 = (dset,) + (bl,)        
+        dset1, bl1 = self.parse_blkey(key1)
+        dset2, bl2 = self.parse_blkey(key2)
 
         if model == 'empirical':
             covar = utils.cov(self.x(key1, filter_extension=True), self.w(key1, filter_extension=True),
@@ -745,7 +742,7 @@ class PSpecData(object):
 
         else:
             # add model to key
-            Ckey = key1 + key2 + (model, time_index) + (conj_1,) + (conj_2,) 
+            Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
             assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
             spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
             covar = known_cov[Ckey][spw, spw]
@@ -777,7 +774,7 @@ class PSpecData(object):
             self._I[key] = np.identity(self.spw_Nfreqs + np.sum(self.filter_extension))
         return self._I[key]
 
-    def iC(self, key, model='empirical'):
+    def iC(self, key, model='empirical', time_index=None):
         """
         Return the inverse covariance matrix, C^-1.
 
@@ -797,6 +794,8 @@ class PSpecData(object):
             then applying the appropriate linear transformations to these
             frequency-domain covariances.
 
+        time_index : integer, compute covariance at specific time-step
+
         Returns
         -------
         iC : array_like
@@ -807,11 +806,11 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
 
-        Ckey = key + (model,)
+        Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
-            C = self.C_model(key, model=model)
+            C = self.C_model(key, model=model, time_index=time_index)
             #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if np.linalg.cond(C) >= 1e9:
                 warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
@@ -1664,8 +1663,7 @@ class PSpecData(object):
             then applying the appropriate linear transformations to these
             frequency-domain covariances.
 
-        time_index : integer, compute covariance at specific time-step in dset
-                       only supported if mode == 'dsets'
+        time_index : integer, compute covariance at specific time-step 
 
         Returns
         -------
@@ -1888,7 +1886,7 @@ class PSpecData(object):
                 np.einsum('ab,cd,ibd->iac', M, M, q_q) -
                 np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
             # (Ntimes, spw_Ndlys, spw_Ndlys)
-        return np.abs(cov_q_real), np.abs(cov_q_imag), np.abs(cov_p_real), np.abs(cov_p_imag)
+        return cov_q_real, cov_q_imag, cov_p_real, cov_p_imag
 
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15):
         """
@@ -2688,17 +2686,15 @@ class PSpecData(object):
             frequency-domain covariances.
 
         known_cov : dicts of input covariance matrices
-            known_cov has the type {Ckey:covariance}, which is the same with 
-            ds._C. The matrices stored in known_cov must be constructed 
-            externally, different from those in ds._C which are constructed 
-            internally. A typical Ckey is like:
-            
-                key1 + key2 + (model,) + (conj_1,) + (conj_2,) 
-            
-            where 'key1' and 'key2' specifies the dset and baseline index,
-            'model' is the type of covariance, 'conj_1' and 'conj_2' 
-            are boolean values. 'covariance' has shape 
-            (Ntimes, Nfreqs, Nfreqs).
+            known_cov has a type {Ckey:covariance}, which is the same with 
+            ds._C. The matrices stored in known_cov are constructed 
+            outside the PSpecData object, different from those in ds._C which are constructed 
+            internally. 
+            The Ckey should conform to 
+            (dset_pair_index, blpair_int, model, time_index, conj_1, conj_2),
+            e.g. ((0, 1), ((25,37,"xx"), (25, 37, "xx")), 'empirical', False, True),
+            while covariance are ndarrays with shape (Nfreqs, Nfreqs).
+            Also see PSpecData.set_C() for more details. 
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
@@ -3101,11 +3097,11 @@ class PSpecData(object):
                                 cov_imag = cov_imag * (delay_adj)**2.
 
                         if not return_q: 
-                            pol_cov_real.extend(cov_real) 
-                            pol_cov_imag.extend(cov_imag)
+                            pol_cov_real.extend(np.real(cov_real.astype(np.float64)))
+                            pol_cov_imag.extend(np.real(cov_imag).astype(np.float64))
                         else:
-                            pol_cov_real.extend(cov_q_real)
-                            pol_cov_imag.extend(cov_q_imag) 
+                            pol_cov_real.extend(np.real(cov_q_real).astype(np.float64))
+                            pol_cov_imag.extend(np.real(cov_q_imag).astype(np.float64)) 
 
                     
                     # store the window_function
@@ -3955,7 +3951,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
                        store_cov=store_cov, input_data_weight=input_data_weight,
                        exact_norm=exact_norm, 
-                       return_q=return_q, cov_model=cov_model,
+                       return_q=return_q, cov_model=cov_model, known_cov=known_cov,
                        norm=norm, taper=taper, history=history, verbose=verbose,
                        filter_extensions=filter_extensions, store_window=store_window)
 
