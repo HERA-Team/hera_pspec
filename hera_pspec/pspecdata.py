@@ -1816,8 +1816,8 @@ class PSpecData(object):
             S21.append(self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
         # (Ntimes, 1, spw_Nfreqs, spw_Nfreqs)
         
-        if (C11[0] == C11[-1]).all():
-        # if the covariance matrix is uniform along the time axis
+        if np.isclose(C11[0], C11[-1]).all():
+            # if the covariance matrix is uniform along the time axis
             E12C21 = np.matmul(E_matrices, C21[0]) 
             E12P22 = np.matmul(E_matrices, P22[0]) 
             E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11[0])

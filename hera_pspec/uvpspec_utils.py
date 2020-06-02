@@ -3,6 +3,7 @@ import copy, operator
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 import json
+import warnings
 
 from . import utils
 
@@ -692,6 +693,9 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         # determine if certain arrays are stored
         if h5file is not None:
             store_cov = 'cov_real_spw0' in h5file
+            if 'cov_array_spw0' in h5file:
+                store_cov = False
+                warnings.warn("uvp.cov_array is no longer supported and will not be loaded. Please update this to be uvp.cov_array_real and uvp.cov_array_imag. See hera_pspec PR #181 for details.")
             store_window = 'window_function_spw0' in h5file
         else:
             store_cov = hasattr(uvp, 'cov_array_real')
