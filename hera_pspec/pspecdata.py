@@ -3097,7 +3097,7 @@ class PSpecData(object):
                                 cov_imag = cov_imag * (delay_adj)**2.
 
                         if not return_q: 
-                            pol_cov_real.extend(np.real(cov_real.astype(np.float64)))
+                            pol_cov_real.extend(np.real(cov_real).astype(np.float64))
                             pol_cov_imag.extend(np.real(cov_imag).astype(np.float64))
                         else:
                             pol_cov_real.extend(np.real(cov_q_real).astype(np.float64))
