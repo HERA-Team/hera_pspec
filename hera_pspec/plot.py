@@ -1074,5 +1074,3 @@ def _round_sigfig(x, up=True):
         return np.ceil(10**sigfigs * x) / 10**sigfigs
     else:
         return np.floor(10**sigfigs * x) / 10**sigfigs
-
-

@@ -92,7 +92,7 @@ def build_vanilla_uvpspec(beam=None):
     cosmo = conversions.Cosmo_Conversions()
 
     data_array, wgt_array = {}, {}
-    integration_array, nsample_array, cov_array = {}, {}, {}
+    integration_array, nsample_array, cov_array_real, cov_array_imag = {}, {}, {}, {}
     window_function_array = {}
     for s in spw_array:
         data_array[s] = np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex) \
@@ -103,7 +103,10 @@ def build_vanilla_uvpspec(beam=None):
         integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
         window_function_array[s] = np.ones((Nblpairts, Ndlys, Ndlys, Npols), dtype=np.float64)
-        cov_array[s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.complex) \
+        cov_array_real[s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.float) \
+                                             for m in range(Nblpairts)]
+                                             for n in range(Npols)]), 0, -1)
+        cov_array_imag[s] = np.moveaxis(np.array([[np.identity(Ndlys,dtype=np.float) \
                                              for m in range(Nblpairts)]
                                              for n in range(Npols)]), 0, -1)
 
@@ -118,7 +121,7 @@ def build_vanilla_uvpspec(beam=None):
               'norm', 'git_hash', 'nsample_array', 'time_avg_array',
               'lst_avg_array', 'cosmo', 'scalar_array', 'labels', 'norm_units',
               'labels', 'label_1_array', 'label_2_array', 'store_cov',
-              'cov_array', 'spw_dly_array', 'spw_freq_array', 'cov_model']
+              'cov_array_real', 'cov_array_imag', 'spw_dly_array', 'spw_freq_array', 'cov_model']
 
     if beam is not None:
         params += ['OmegaP', 'OmegaPP', 'beam_freqs']
@@ -248,7 +251,6 @@ def uvpspec_from_data(data, bl_grps, data_std=None, spw_ranges=None,
                    spw_ranges=spw_ranges, taper=taper, verbose=verbose,
                    store_cov=store_cov, n_dlys=n_dlys, r_params=r_params,
                    cov_model=cov_model, **kwargs)
-
     return uvp
 
 

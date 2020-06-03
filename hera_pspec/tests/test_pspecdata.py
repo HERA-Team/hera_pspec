@@ -602,17 +602,16 @@ class Test_PSpecData(unittest.TestCase):
         # Check matrix sizes
         for matrix in [conj1_conj1, conj1_real1, real1_conj1, real1_real1]:
             self.assertEqual(matrix.shape, (ds.spw_Nfreqs, ds.spw_Nfreqs))
-
-        for i in range(ds.spw_Nfreqs):
-            for j in range(ds.spw_Nfreqs):
+        for j in range(ds.spw_Nfreqs):
+            for k in range(ds.spw_Nfreqs):
                 # Check that the matrices that ought to be Hermitian are indeed Hermitian
-                self.assertAlmostEqual(conj1_real1.conj().T[i,j], conj1_real1[i,j])
-                self.assertAlmostEqual(real1_conj1.conj().T[i,j], real1_conj1[i,j])
+                self.assertAlmostEqual(conj1_real1.conj()[k,j], conj1_real1[j,k])
+                self.assertAlmostEqual(real1_conj1.conj()[k,j], real1_conj1[j,k])
                 # Check that real_real and conj_conj are complex conjugates of each other
                 # Also check that they are symmetric
-                self.assertAlmostEqual(real1_real1.conj()[i,j], conj1_conj1[i,j])
-                self.assertAlmostEqual(real1_real1[j,i], real1_real1[i,j])
-                self.assertAlmostEqual(conj1_conj1[j,i], conj1_conj1[i,j])
+                self.assertAlmostEqual(real1_real1.conj()[j,k], conj1_conj1[j,k])
+                self.assertAlmostEqual(real1_real1[k,j], real1_real1[j,k])
+                self.assertAlmostEqual(conj1_conj1[k,j], conj1_conj1[j,k])
 
 
         real1_real2 = ds.cross_covar_model(key1, key2, conj_1=False, conj_2=False)
@@ -625,12 +624,12 @@ class Test_PSpecData(unittest.TestCase):
         real2_conj1 = ds.cross_covar_model(key2, key1, conj_1=False, conj_2=True)
 
         # And some similar tests for cross covariances
-        for i in range(ds.spw_Nfreqs):
-            for j in range(ds.spw_Nfreqs):
-                self.assertAlmostEqual(real1_real2.T[i,j], real2_real1[i,j])
-                self.assertAlmostEqual(conj1_conj2.T[i,j], conj2_conj1[i,j])
-                self.assertAlmostEqual(conj1_real2.conj()[j,i], conj2_real1[i,j])
-                self.assertAlmostEqual(real1_conj2.conj()[j,i], real2_conj1[i,j])
+        for j in range(ds.spw_Nfreqs):
+            for k in range(ds.spw_Nfreqs):
+                self.assertAlmostEqual(real1_real2[k,j], real2_real1[j,k])
+                self.assertAlmostEqual(conj1_conj2[k,j], conj2_conj1[j,k])
+                self.assertAlmostEqual(conj1_real2.conj()[k,j], conj2_real1[j,k])
+                self.assertAlmostEqual(real1_conj2.conj()[k,j], real2_conj1[j,k])
 
     def test_get_unnormed_V(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
@@ -1290,6 +1289,75 @@ class Test_PSpecData(unittest.TestCase):
         # test dset_idx
         nt.assert_raises(TypeError, ds.dset_idx, (1,2))
 
+    def test_C_model(self):
+        # test the key format in ds._C and the shape of stored covariance
+        uvd = UVData()
+        uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        cosmo = conversions.Cosmo_Conversions()
+        uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
+
+        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos = dict(zip(ants, antpos))
+        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
+        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
+
+        ds.set_spw(spws[0])
+        key = (0,bls1[0],"xx")
+        ds.C_model(key, model='empirical', time_index=0)
+        nt.assert_true( ((0, 0), ((bls1[0][0],bls1[0][1] ,"xx"),(bls1[0][0],bls1[0][1] ,"xx")), 'empirical', None, False, True,) in ds._C.keys())
+        ds.C_model(key, model='autos', time_index=0)
+        nt.assert_true( ((0, 0), ((bls1[0][0],bls1[0][1] ,"xx"), (bls1[0][0],bls1[0][1] ,"xx")), 'autos', 0, False, True,) in ds._C.keys())
+        for Ckey in ds._C.keys():
+            nt.assert_equal(ds._C[Ckey].shape, (spws[0][1]-spws[0][0], spws[0][1]-spws[0][0]))
+
+        ds.set_spw(spws[1])
+        key = (0,bls1[0],"xx")
+        known_cov = {}
+        model = 'known'
+        Ckey = ((0, 0), ((bls1[0][0],bls1[0][1] ,"xx"),(bls1[0][0],bls1[0][1] ,"xx")), 'known', 0, False, True,)
+        known_cov[Ckey] = np.diag(np.ones(uvd.Nfreqs))
+        ds.C_model(key, model='known', time_index=0, known_cov=known_cov)
+        nt.assert_true( Ckey in ds._C.keys())
+        nt.assert_equal(ds._C[Ckey].shape, (spws[1][1]-spws[1][0], spws[1][1]-spws[1][0]))
+
+    def test_get_analytic_covariance(self):
+        # test get_analytic_covariance return almost real values
+        uvd = UVData()
+        uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        cosmo = conversions.Cosmo_Conversions()
+        uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
+        
+        # slide the time axis of uvd by one integration
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+        ds.rephase_to_dset(0)
+
+        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
+        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos = dict(zip(ants, antpos))
+        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
+        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
+
+        key1 = (0, bls1[0], "xx")
+        key2 = (1, bls2[0], "xx")
+        ds.set_spw(spws[1])
+        M_ = np.diag(np.ones(ds.spw_Ndlys))
+        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False, model='empirical', known_cov=None)
+        for time_index in range(ds.Ntimes):
+            nt.assert_true((abs(cov_q_real[time_index].real) / abs\
+                (cov_q_real[time_index].imag) > 1e8).all())
+            nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
+                (cov_q_imag[time_index].imag) > 1e8).all())
+        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False, model='autos', known_cov=None)
+        for time_index in range(ds.Ntimes):
+            nt.assert_true((abs(cov_q_real[time_index].real) / abs\
+                (cov_q_real[time_index].imag) > 1e8).all())
+            nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
+                (cov_q_imag[time_index].imag) > 1e8).all())
+
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
@@ -1463,12 +1531,13 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
                                  dsets_std=[uvd_std, uvd_std], beam=self.bm)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
-        nt.assert_true(hasattr(uvp, 'cov_array'))
+                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True, cov_model='empirical')
+        nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True)
-        nt.assert_true(hasattr(uvp, 'cov_array'))
+                                little_h=True, verbose=True, spw_ranges=[(10,14)], exact_norm=True, store_cov=True, cov_model='empirical')
+        nt.assert_true(hasattr(uvp, 'cov_array_real'))
+    
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
                                  beam=self.bm)
@@ -1719,6 +1788,7 @@ def test_pspec_run():
                              cosmo=cosmo,
                              trim_dset_lsts=False,
                              broadcast_dset_flags=False,
+                             cov_model='empirical',
                              store_cov=True)
 
     # assert groupname is dset1_dset2
@@ -1743,8 +1813,7 @@ def test_pspec_run():
     nt.assert_equal(uvp.cosmo, cosmo)
 
     # assert cov_array was calculated b/c std files were passed and store_cov
-    nt.assert_true(hasattr(uvp, 'cov_array'))
-
+    nt.assert_true(hasattr(uvp, 'cov_array_real'))
     # assert dset labeling propagated
     nt.assert_equal(set(uvp.labels), set(['bar', 'foo']))
 
@@ -1997,7 +2066,7 @@ def test_get_argparser():
     nt.assert_equal(a.dset_pairs, [(0, 0), (1, 1)])
     nt.assert_equal(a.spw_ranges, [(300, 400), (600, 800)])
     nt.assert_equal(a.blpairs, [((24, 25), (24, 25)), ((37, 38), (37, 38))])
-
+                      
 """
 # LEGACY MONTE CARLO TESTS
     def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):

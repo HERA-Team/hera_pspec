@@ -109,8 +109,8 @@ class Test_grouping(unittest.TestCase):
         # calculate all baseline pairs from group
         baselines1, baselines2, blpairs = utils.construct_blpairs(baselines, exclude_auto_bls=True, 
                                                                  exclude_permutations=True)
-        uvp = ds.pspec(baselines1, baselines2, (0, 1), [('xx', 'xx')], spw_ranges=[(300, 400)], input_data_weight='identity',
-               norm='I', taper='blackman-harris', verbose=False)
+        uvp = ds.pspec(baselines1, baselines2, (0, 1), [('xx', 'xx')], spw_ranges=[(300, 350)], input_data_weight='identity',
+               norm='I', taper='blackman-harris', store_cov=True, cov_model="autos", verbose=False)
         keys = uvp.get_all_keys()
         # Add the analytic noise to stat_array
         Pn = uvp.generate_noise_spectra(0, 'xx', 220)
@@ -397,7 +397,9 @@ def test_spherical_average():
     uvd.polarization_array[0] = -6
     uvp += testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo)
     # insert cov_array and stats_array
-    uvp.cov_array = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.complex128)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
+    uvp.cov_array_real = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.float64)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
+                        for s in range(uvp.Nspws)}
+    uvp.cov_array_imag = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.float64)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
                         for s in range(uvp.Nspws)}
     uvp.stats_array = {'err': {s: np.ones((uvp.Nblpairts, uvp.Ndlys, uvp.Npols), dtype=np.complex128)
                                   for s in range(uvp.Nspws)}}
@@ -421,7 +423,7 @@ def test_spherical_average():
         # this ia a basic "averaged data smell test" in lieu of a known pspec to compare to
         assert np.all(sph.data_array[spw][:, 0, :].real / sph.data_array[spw][:, 10, :] > 1e3)
         # assert errorbars are 1/sqrt(N) what they used to be
-        assert np.isclose(np.sqrt(sph.cov_array[spw])[:, range(Nk), range(Nk)], 1/np.sqrt(A[spw].sum(axis=1))).all()
+        assert np.isclose(np.sqrt(sph.cov_array_real[spw])[:, range(Nk), range(Nk)], 1/np.sqrt(A[spw].sum(axis=1))).all()
         assert np.isclose(sph.stats_array['err'][spw], 1/np.sqrt(A[spw].sum(axis=1))).all()
 
     # try without little h
