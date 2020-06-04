@@ -591,7 +591,7 @@ class Test_PSpecData(unittest.TestCase):
         key1 = ('red', (24, 25), 'xx')
         key2 = ('blue', (25, 38), 'xx')
 
-        nt.assert_raises(AssertionError, ds.cross_covar_model, key1, key2, model='other_string')
+        nt.assert_raises(ValueError, ds.cross_covar_model, key1, key2, model='other_string')
         nt.assert_raises(AssertionError, ds.cross_covar_model, key1, 'a_string')
 
         conj1_conj1 = ds.cross_covar_model(key1, key1, conj_1=True, conj_2=True)
@@ -1357,6 +1357,15 @@ class Test_PSpecData(unittest.TestCase):
                 (cov_q_real[time_index].imag) > 1e8).all())
             nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
                 (cov_q_imag[time_index].imag) > 1e8).all())
+        # test foreground_dependent error bar estimation
+        uvp_autos = ds.pspec(bls1[:2], bls2[:2], (0, 1), ('xx','xx'), spw_ranges=(100,120), store_cov=True, cov_model='autos', verbose=False)
+        uvp_foreground_dependent = ds.pspec(bls1[:2], bls2[:2], (0, 1), ('xx','xx'), spw_ranges=(100,120), store_cov=True, cov_model='foreground_dependent', verbose=False)
+        key = (0, blpairs[0], "xx")
+        var_foreground_dependent = np.abs(np.diagonal(uvp_foreground_dependent.get_cov(key), axis1=1, axis2=2))
+        ps_products = 2*uvp_autos.get_data(key)*np.sqrt(np.abs(np.diagonal(uvp_autos.get_cov(key), axis1=1, axis2=2))) - np.abs(np.diagonal(uvp_autos.get_cov(key), axis1=1, axis2=2))
+        print(var_foreground_dependent[0])
+        print(np.abs(ps_products)[0])
+        nt.assert_true(np.isclose(var_foreground_dependent, np.abs(ps_products), rtol=5).all())
 
     def test_pspec(self):
         # generate ds

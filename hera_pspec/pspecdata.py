@@ -634,6 +634,16 @@ class PSpecData(object):
             # add model to key
             Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
+        elif model == 'outer_product':
+            assert isinstance(time_index, int), "time_index must be integer if cov-model==outer_product"
+            # add model to key
+            Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
+
+        elif model == 'foreground_dependent':
+            assert isinstance(time_index, int), "time_index must be integer if cov-model==outer_product"
+            # add model to key
+            Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
+
         else:
             if known_cov is None:
                 raise ValueError("didn't recognize model {}".format(model))
@@ -649,10 +659,14 @@ class PSpecData(object):
                 self.set_C({Ckey: utils.cov(self.x(key, filter_extension=True), self.w(key, filter_extension=True))})
             elif model == 'dsets':
                 self.set_C({Ckey: np.diag( np.abs(self.w(key, filter_extension=True)[:,time_index] * self.dx(key, filter_extension=True)[:,time_index]) ** 2. )})
+            elif model == 'outer_product':
+                self.set_C({Ckey: np.outer(self.w(key, filter_extension=True)[:,time_index] * self.x(key, filter_extension=True)[:,time_index], 
+                    np.conj(self.w(key, filter_extension=True)[:,time_index] * self.x(key, filter_extension=True)[:,time_index]))})
             elif model == 'autos':
                 spw_range= (self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
                 self.set_C({Ckey: np.diag(utils.variance_from_auto_correlations(self.dsets[dset], bl, spw_range, time_index))})
-
+            elif model == 'foreground_dependent':
+                self.set_C({Ckey: self.C_model(key, model='autos', time_index=time_index) + self.C_model(key, model='outer_product', time_index=time_index)})
             else:
                 assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
                 spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
@@ -714,11 +728,6 @@ class PSpecData(object):
         assert isinstance(key2, tuple), "key2 must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
 
-        internal_models = ['empirical', 'dsets', 'autos']
-        # internal_models refer to the covariance can be calculated intrinsically. 
-        if known_cov is None:
-            assert model in internal_models, "didn't recognize model {}".format(model)
-
         # parse key
         dset1, bl1 = self.parse_blkey(key1)
         dset2, bl2 = self.parse_blkey(key2)
@@ -740,12 +749,25 @@ class PSpecData(object):
                               dtype=np.float64)
         #for autos, we assume no baseline-baseline covariances.
 
+        elif model == 'outer_product':
+            covar = np.zeros((self.spw_Nfreqs,
+                              self.spw_Nfreqs),
+                              dtype=np.float64)
+        
+        elif model == 'foreground_dependent':
+            covar = np.zeros((self.spw_Nfreqs,
+                              self.spw_Nfreqs),
+                              dtype=np.float64)
+
         else:
-            # add model to key
-            Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
-            assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
-            spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
-            covar = known_cov[Ckey][spw, spw]
+            if known_cov is None:
+                raise ValueError("didn't recognize model {}".format(model))
+            else:
+                # add model to key
+                Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
+                assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
+                spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+                covar = known_cov[Ckey][spw, spw]
 
         return covar
 
@@ -1803,6 +1825,8 @@ class PSpecData(object):
         # (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
         C11, C22, C21, C12, P11, S11, P22, S22, P21, S21 = [], [], [], [], [], [], [], [], [], []
+        if model == 'foreground_dependent':
+            C11_outer_product, C22_outer_product, C11_autos, C22_autos = [], [], [], []
         for time_index in range(self.dsets[0].Ntimes):
             C11.append(self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
             C22.append(self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
@@ -1814,6 +1838,11 @@ class PSpecData(object):
             S22.append(self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
             P21.append(self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
             S21.append(self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
+            if model == 'foreground_dependent':
+                C11_outer_product.append(self.C_model(key1, model='outer_product', time_index=time_index)[np.newaxis,:,:])
+                C22_outer_product.append(self.C_model(key2, model='outer_product', time_index=time_index)[np.newaxis,:,:])
+                C11_autos.append(self.C_model(key1, model='autos', time_index=time_index)[np.newaxis,:,:])
+                C22_autos.append(self.C_model(key2, model='autos', time_index=time_index)[np.newaxis,:,:])
         # (Ntimes, 1, spw_Nfreqs, spw_Nfreqs)
         
         if np.isclose(C11[0], C11[-1]).all():
@@ -1833,6 +1862,10 @@ class PSpecData(object):
             # Get q_q, q_qdagger, qdagger_qdagger
             q_q = np.einsum('bij, cji->bc', E12P22, E21starS11) + np.einsum('bij, cji->bc', E12C21, E12C21)
             q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11) + np.einsum('bij, cji->bc', E12P21, E12starS21)
+            if model == 'foreground_dependent':
+                q_qdagger -= 2*np.einsum('bij, cji->bc', np.matmul(E_matrices, C22_autos[0]), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_autos[0]))
+                q_qdagger -= np.einsum('bij, cji->bc', np.matmul(E_matrices, C22_outer_product[0]), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_outer_product[0]))
+
             qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12) + np.einsum('bij, cji->bc', E21P11, E12starS22)
             # (spw_Ndlys, spw_Ndlys)
 
@@ -1871,6 +1904,9 @@ class PSpecData(object):
             # Get q_q, q_qdagger, qdagger_qdagger
             q_q = np.einsum('abij, acji->abc', E12P22, E21starS11) + np.einsum('abij, acji->abc', E12C21, E12C21)
             q_qdagger = np.einsum('abij, acji->abc', E12C22, E21C11) + np.einsum('abij, acji->abc', E12P21, E12starS21)
+            if model == 'foreground_dependent':
+                q_qdagger -= 2*np.einsum('abij, acji->abc', np.matmul(E_matrices, C22_autos), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_autos))
+                q_qdagger -= np.einsum('abij, acji->abc', np.matmul(E_matrices, C22_outer_product), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_outer_product))
             qdagger_qdagger = np.einsum('abij, acji->abc', E21C12, E21C12) + np.einsum('abij, acji->abc', E21P11, E12starS22)
             # (Ntimes, spw_Ndlys, spw_Ndlys)
 
