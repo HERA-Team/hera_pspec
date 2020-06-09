@@ -79,8 +79,8 @@ class Test_Plot(unittest.TestCase):
                         bls, exclude_permutations=False, exclude_auto_bls=True)
 
         # Calculate the power spectrum
-        self.uvp = self.ds.pspec(self.bls1, self.bls2, (0, 1), ('xx','xx'),
-                                 spw_ranges=[(300, 400), (600,721)],
+        self.uvp = self.ds.pspec(self.bls1, self.bls2, (0, 1), 
+                                 ('xx','xx'), spw_ranges=[(300, 400), (600,721)],
                                  input_data_weight='identity', norm='I',
                                  taper='blackman-harris', verbose=False)
 
@@ -382,7 +382,6 @@ class Test_Plot(unittest.TestCase):
         nt.assert_raises(ValueError, plot.delay_wedge, uvp, 0, ('xx','xx'), 
                          component='foo')
         plt.close()
-
-
+        
 if __name__ == "__main__":
     unittest.main()

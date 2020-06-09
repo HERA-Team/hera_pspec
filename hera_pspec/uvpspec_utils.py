@@ -3,6 +3,7 @@ import copy, operator
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 import json
+import warnings
 
 from . import utils
 
@@ -91,13 +92,21 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                             = np.sqrt(stat1.real**2 + stat2.real**2) \
                             + 1j*np.sqrt(stat1.imag**2 + stat2.imag**2)
 
-                # add cov in quadrature: real and imag separately
-                if hasattr(uvp1, "cov_array") and hasattr(uvp2, "cov_array"):
-                    cov1 = uvp1.get_cov(key1)
-                    cov2 = uvp2.get_cov(key2)
-                    uvp1.cov_array[i][blp1_inds, :, :, j] \
-                        = np.sqrt(cov1.real**2 + cov2.real**2) \
-                        + 1j*np.sqrt(cov1.imag**2 + cov2.imag**2)
+                # add cov in quadrature: real and imag separately                
+                if hasattr(uvp1, "cov_array_real") \
+                  and hasattr(uvp2, "cov_array_real"):
+                    if uvp1.cov_model == uvp2.cov_model:
+                        cov1r = uvp1.get_cov(key1, component='real')
+                        cov2r = uvp2.get_cov(key2, component='real')
+                        uvp1.cov_array_real[i][blp1_inds, :, :, j] \
+                            = np.sqrt(cov1r.real**2 + cov2r.real**2) \
+                              + 1j*np.sqrt(cov1r.imag**2 + cov2r.imag**2)
+                        
+                        cov1i = uvp1.get_cov(key1, component='imag')
+                        cov2i = uvp2.get_cov(key2, component='imag')
+                        uvp1.cov_array_imag[i][blp1_inds, :, :, j] \
+                            = np.sqrt(cov1i.real**2 + cov2i.real**2) \
+                              + 1j*np.sqrt(cov1i.imag**2 + cov2i.imag**2)
 
                 # same for window function
                 if (hasattr(uvp1, 'window_function_array') 
@@ -676,16 +685,20 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         wgts = odict()
         ints = odict()
         nsmp = odict()
-        cov = odict()
+        cov_real = odict()
+        cov_imag = odict()
         stats = odict()
         window_function = odict()
 
         # determine if certain arrays are stored
         if h5file is not None:
-            store_cov = 'cov_spw0' in h5file
+            store_cov = 'cov_real_spw0' in h5file
+            if 'cov_array_spw0' in h5file:
+                store_cov = False
+                warnings.warn("uvp.cov_array is no longer supported and will not be loaded. Please update this to be uvp.cov_array_real and uvp.cov_array_imag. See hera_pspec PR #181 for details.")
             store_window = 'window_function_spw0' in h5file
         else:
-            store_cov = hasattr(uvp, 'cov_array')
+            store_cov = hasattr(uvp, 'cov_array_real')
             store_window = hasattr(uvp, 'window_function_array')
 
         # get stats_array keys if h5file
@@ -713,7 +726,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 if store_window:
                     _window_function = h5file['window_function_spw{}'.format(s_old)]
                 if store_cov:
-                    _covs = h5file['cov_spw{}'.format(s_old)]
+                     _cov_real = h5file["cov_real_spw{}".format(s_old)]
+                     _cov_imag = h5file["cov_imag_spw{}".format(s_old)]
                 _stat = odict()
                 for statname in statnames:
                     if statname not in stats:
@@ -731,7 +745,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 if store_window:
                     _window_function = uvp.window_function_array[s_old]
                 if store_cov:
-                    _covs = uvp.cov_array[s_old]
+                    _cov_real = uvp.cov_array_real[s_old]
+                    _cov_imag = uvp.cov_array_imag[s_old]
                 # assign stats array
                 _stat = odict()
                 for statname in statnames:
@@ -749,7 +764,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 if store_window:
                     window_function[s] = _window_function[blp_select, :, :, polpair_select]
                 if store_cov:
-                    cov[s] = _covs[blp_select, :, :, polpair_select]
+                    cov_real[s] = _cov_real[blp_select, :, :, polpair_select]
+                    cov_imag[s] = _cov_imag[blp_select, :, :, polpair_select]
                 for statname in statnames:
                     stats[statname][s] = _stat[statname][blp_select, :, polpair_select]
             else:
@@ -761,7 +777,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 if store_window:
                     window_function[s] = _window_function[blp_select, :, :, :][:, :, :, polpair_select]
                 if store_cov:
-                    cov[s] = _covs[blp_select, :, :, :][:, :, :, polpair_select]
+                    cov_real[s] = _cov_real[blp_select, :, :, :][:, :, :, polpair_select]
+                    cov_imag[s] = _cov_imag[blp_select, :, :, :][:, :, :, polpair_select]
                 for statname in statnames:
                     stats[statname][s] = _stat[statname][blp_select, :, :][:, :, polpair_select]
 
@@ -774,8 +791,9 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
             uvp.window_function_array = window_function
         if len(stats) > 0:
             uvp.stats_array = stats
-        if store_cov:
-            uvp.cov_array = cov
+        if len(cov_real) > 0:
+            uvp.cov_array_real = cov_real
+            uvp.cov_array_imag = cov_imag
 
         # select r_params based on new bl_array
         blp_keys = uvp.get_all_keys()
@@ -796,7 +814,6 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         else:
             new_r_params = {}
         uvp.r_params = compress_r_params(new_r_params)
-
 
 def _blpair_to_antnums(blpair):
     """
