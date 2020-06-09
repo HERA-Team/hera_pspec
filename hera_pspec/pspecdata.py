@@ -4354,6 +4354,15 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         stored in known_cov must be constructed externally, different from those in ds._C which
         are constructed internally.
 
+    return_q : bool, optional
+        If True, return the results (delay spectra and covariance matrices)
+        for the unnormalized bandpowers in the separate UVPSpec object.
+
+    known_cov : dicts of input covariance matrices
+        known_cov has the type {Ckey:covariance}, which is the same with ds._C. The matrices
+        stored in known_cov must be constructed externally, different from those in ds._C which
+        are constructed internally.
+
     filter_extensions : list of 2-tuple or 2-list, optional
         Set number of channels to extend filtering width.
 
