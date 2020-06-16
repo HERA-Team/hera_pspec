@@ -135,7 +135,7 @@ class UVPSpec(object):
                           "bl_vecs", "bl_array", "telescope_location",
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
-        self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array", 
+        self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array",
                        "nsample_array", "cov_array_real", "cov_array_imag"]
         self._dicts_of_dicts = ["stats_array"]
 
@@ -181,7 +181,7 @@ class UVPSpec(object):
         key: tuple
             Contains the baseline-pair, spw, polpair keys
         component : str
-            "real" or "imag". Indicating which cov_array the function calls.   
+            "real" or "imag". Indicating which cov_array the function calls.
         omit_flags : bool, optional
             If True, remove time integrations (or spectra) that
             came from visibility data that were completely flagged
@@ -215,7 +215,7 @@ class UVPSpec(object):
             else:
                 raise AttributeError("No covariance array has been calculated.")
         else:
-            raise ValueError("No types besides real and imag.") 
+            raise ValueError("No types besides real and imag.")
 
     def get_window_function(self, key, omit_flags=False):
         """
@@ -1686,12 +1686,12 @@ class UVPSpec(object):
                     if issubclass(getattr(self, p).dtype.type, np.str):
                         assert np.all(getattr(self, p) == getattr(other, p))
                     else:
-                        assert np.isclose(getattr(self, p), getattr(other, p)).all()
+                        nans_both = np.logical_and(np.isnan(getattr(self,p)), np.isnan(getattr(other,p)))
+                        assert np.isclose(getattr(self, p)[~nans_both], getattr(other, p)[~nans_both]).all()
                 elif p in self._dicts:
                     for i in getattr(self, p):
-                        assert np.isclose(getattr(self, p)[i],\
-                            getattr(other, p)[i]).all()
-                            
+                        nans_both = np.logical_and(np.isnan(getattr(self,p)[i]), np.isnan(getattr(other,p)[i]))
+                        assert np.isclose(getattr(self, p)[i][~nans_both], getattr(other, p)[i][~nans_both]).all()
         except AssertionError:
             if verbose:
                 print("UVPSpec parameter '{}' not equivalent between {} and {}" \
@@ -1915,11 +1915,11 @@ class UVPSpec(object):
             not specified is thrown out of the new averaged object.
 
         error_weights: string, optional
-            error_weights specify which kind of errors we use for weights 
+            error_weights specify which kind of errors we use for weights
             during averaging power spectra.
-            The weights are defined as $w_i = 1/ sigma_i^2$, 
+            The weights are defined as $w_i = 1/ sigma_i^2$,
             where $sigma_i$ is taken from the relevant field of stats_array.
-            If `error_weight' is set to None, which means we just use the 
+            If `error_weight' is set to None, which means we just use the
             integration time as weights. If error_weights is specified,
             then it also gets appended to error_field as a list.
             Default: None

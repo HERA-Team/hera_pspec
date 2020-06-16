@@ -14,6 +14,7 @@ from astropy.time import Time
 import warnings
 import glob
 from uvtools import dspec
+
 # Data files to use in tests
 dfiles = [
     'zen.2458042.12552.xx.HH.uvXAA',
@@ -268,15 +269,17 @@ class Test_PSpecData(unittest.TestCase):
         self.ds.set_symmetric_taper(False)
         rmat_a = self.ds.R(key1)
         #check against independent solution
-        bh_taper = np.sqrt(dspec.gen_window('bh7', Nfreq).reshape(1,-1))
+        bh_taper = np.sqrt(dspec.gen_window('bh7', Nfreq))
         rmat = dspec.dayenu_mat_inv(x=self.ds.freqs[self.ds.spw_range[0]:self.ds.spw_range[1]],
         filter_centers=[0.], filter_half_widths=[100e-9], filter_factors=[1e-9])
-        wmat = np.outer(np.diag(np.sqrt(self.ds.Y(key1))), np.diag(np.sqrt(self.ds.Y(key1))))
-        rmat = np.linalg.pinv(wmat * rmat)
-        self.assertTrue(np.all(np.isclose(rmat_symmetric, bh_taper.T * rmat * bh_taper,atol=1e-6)))
-        self.assertTrue(np.all(np.isclose(rmat_a, bh_taper.T ** 2. * rmat,atol=1e-6)))
-        self.assertTrue(not np.all(np.isclose(rmat_symmetric, rmat_a,atol=1e-6)))
+        wmat = np.asarray([np.outer(self.ds.Y(key1)[:,m], self.ds.Y(key1)[:,m])\
+                            for m in range(Ntime)])
 
+        rmat = np.asarray([np.linalg.pinv(wmat[m] * rmat) for m in range(Ntime)])
+
+        self.assertTrue(np.all(np.isclose(rmat_a, bh_taper[None,:,None] ** 2. * rmat,atol=1e-6)))
+        self.assertTrue(np.all(np.isclose(rmat_symmetric, bh_taper[None,:,None] * rmat * bh_taper[None,None,:],atol=1e-6)))
+        self.assertTrue(not np.all(np.isclose(rmat_symmetric, rmat_a,atol=1e-6)))
 
     def test_labels(self):
         """
@@ -527,7 +530,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], labels=['red', 'blue'])
         ds.spw_Ndlys = None
-        nt.assert_raises(ValueError, ds.get_unnormed_E, 'placeholder', 'placeholder')
+        nt.assert_raises(ValueError, ds.get_unnormed_E, 'placeholder', 'placeholder',0 )
 
         # Test that if R1 = R2, then the result is Hermitian
         ds.spw_Ndlys = 7
@@ -536,7 +539,7 @@ class Test_PSpecData(unittest.TestCase):
         wgt_matrix_dict[('red', (24, 25))] = random_R
         wgt_matrix_dict[('blue', (24, 25))] = random_R
         ds.set_R(wgt_matrix_dict)
-        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), time_index=0)
         multiplicative_tolerance = 0.0000001
         for matrix in E_matrices:
             diff_norm = np.linalg.norm(matrix.T.conj() - matrix)
@@ -550,7 +553,7 @@ class Test_PSpecData(unittest.TestCase):
         wgt_matrix_dict[('red', (24, 25))] = random_R
         wgt_matrix_dict[('blue', (24, 25))] = random_R
         ds_c.set_R(wgt_matrix_dict)
-        E_matrices = ds_c.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), exact_norm=True, pol='xx')
+        E_matrices = ds_c.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), exact_norm=True, pol='xx', time_index=0)
         self.assertEqual(E_matrices.shape, (ds_c.spw_Ndlys, ds_c.spw_Nfreqs, ds_c.spw_Nfreqs))
 
         # Test that if R1 != R2, then i) E^{12,dagger} = E^{21}
@@ -559,8 +562,8 @@ class Test_PSpecData(unittest.TestCase):
         wgt_matrix_dict[('red', (24, 25))] = random_R
         wgt_matrix_dict[('blue', (24, 25))] = random_R2
         ds.set_R(wgt_matrix_dict)
-        E12_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
-        E21_matrices = ds.get_unnormed_E(('blue', (24, 25)), ('red', (24, 25)))
+        E12_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), time_index=0)
+        E21_matrices = ds.get_unnormed_E(('blue', (24, 25)), ('red', (24, 25)), time_index=0)
         multiplicative_tolerance = 0.0000001
         for mat12,mat21 in zip(E12_matrices,E21_matrices):
             diff_norm = np.linalg.norm(mat12.T.conj() - mat21)
@@ -572,10 +575,10 @@ class Test_PSpecData(unittest.TestCase):
         wgt_matrix_dict = {}
         wgt_matrix_dict[('red', (24, 25))] = np.eye(ds.spw_Nfreqs)
         wgt_matrix_dict[('blue', (24, 25))] = np.eye(ds.spw_Nfreqs)
-        flags1 = np.diag(ds.Y(('red', (24, 25))))
-        flags2 = np.diag(ds.Y(('blue', (24, 25))))
+        flags1 = ds.Y(('red', (24, 25)))[:,0]
+        flags2 = ds.Y(('blue', (24, 25)))[:,0]
         ds.set_R(wgt_matrix_dict)
-        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)))
+        E_matrices = ds.get_unnormed_E(('red', (24, 25)), ('blue', (24, 25)), time_index=0)
         multiplicative_tolerance = 0.0000001
         for matrix in E_matrices:
             for i in range(ds.spw_Nfreqs):
@@ -637,7 +640,7 @@ class Test_PSpecData(unittest.TestCase):
         key2 = ('blue', (25, 38), 'xx')
         self.ds.spw_Ndlys = 5
 
-        V = self.ds.get_unnormed_V(key1, key2)
+        V = self.ds.get_unnormed_V(key1, key2, time_index=0)
         # Check size
         self.assertEqual(V.shape, (self.ds.spw_Ndlys,self.ds.spw_Ndlys))
         # Test hermiticity. Generally this is only good to about 1 part in 10^15.
@@ -647,6 +650,27 @@ class Test_PSpecData(unittest.TestCase):
         for i in range(self.ds.spw_Ndlys):
             for j in range(self.ds.spw_Ndlys):
                 self.assertLessEqual(frac_non_herm[i,j], tol)
+
+    def test_get_unnormed_V_fft(self):
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
+        key1 = ('red', (24, 25), 'xx')
+        key2 = ('blue', (25, 38), 'xx')
+        #self.ds.spw_Ndlys = 5
+
+        self.ds.set_weighting('dayenu')
+        rpk = {'filter_centers':[0.],'filter_half_widths':[200e-9],'filter_factors':[1e-9]}
+        self.ds.set_r_param(key1,rpk)
+        self.ds.set_r_param(key2,rpk)
+
+
+        V = self.ds.get_unnormed_V(key1, key2, time_index=0)
+        V_fft = self.ds.get_unnormed_V(key1, key2, time_index=0, allow_fft=True)
+        nt.assert_true(np.all(np.abs(V-V_fft)/np.mean(np.abs(np.diag(V))) <= 1e-10))
+        self.ds.set_Ndlys(5)
+        nt.assert_raises(ValueError, self.ds.get_unnormed_V, key1, key2, time_index=0, allow_fft=True)
+
+
+
 
     def test_get_MW(self):
         n = 17
@@ -661,7 +685,7 @@ class Test_PSpecData(unittest.TestCase):
             if mode == 'H^-1':
                 # Test that if we have full-rank matrices, the resulting window functions
                 # are indeed delta functions
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
                 Hinv = np.linalg.inv(random_H)
                 for i in range(n):
                     self.assertAlmostEqual(W[i,i], 1.)
@@ -671,14 +695,14 @@ class Test_PSpecData(unittest.TestCase):
                 # When the matrices are not full rank, test that the window functions
                 # are at least properly normalized.
                 deficient_H = np.ones((3,3))
-                M, W = self.ds.get_MW(deficient_H, deficient_H, mode=mode)
+                M, W = self.ds.get_MW(deficient_H, deficient_H, mode=mode, average_times=True)
                 norm = np.sum(W, axis=1)
                 for i in range(3):
                     self.assertAlmostEqual(norm[i], 1.)
 
                 # Check that the method ignores G
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
-                M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
+                M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode, average_times=True)
                 for i in range(n):
                     for j in range(n):
                         self.assertAlmostEqual(M[i,j], M_other[i,j])
@@ -686,20 +710,20 @@ class Test_PSpecData(unittest.TestCase):
 
             elif mode == 'V^-1/2':
                 # Test that we are checking for the presence of a covariance matrix
-                nt.assert_raises(ValueError, self.ds.get_MW, random_G, random_H, mode=mode)
+                nt.assert_raises(ValueError, self.ds.get_MW, random_G, random_H, mode=mode, average_times=True)
                 # Test that the error covariance is diagonal
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V, average_times=True)
                 band_covar = np.dot(M, np.dot(random_V, M.T))
                 self.assertEqual(diagonal_or_not(band_covar), True)
 
             elif mode == 'I':
                 # Test that the norm matrix is diagonal
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
                 self.assertEqual(diagonal_or_not(M), True)
             elif mode == 'L^-1':
                 # Test that Cholesky mode is disabled
                 nt.assert_raises(NotImplementedError,
-                                 self.ds.get_MW, random_G, random_H, mode=mode)
+                                 self.ds.get_MW, random_G, random_H, mode=mode, average_times=True)
 
             # Test sizes for everyone
             self.assertEqual(M.shape, (n,n))
@@ -775,13 +799,43 @@ class Test_PSpecData(unittest.TestCase):
         Test cov_p_hat, verify on identity.
         """
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, dsets_std=self.d_std)
-        cov_p = self.ds.cov_p_hat(np.sqrt(6.)*np.identity(10),np.array([5.*np.identity(10)]))
+        cov_p = self.ds.cov_p_hat(np.asarray([np.sqrt(6.)*np.identity(10)]),
+                                  np.array([5.*np.identity(10)]))
         for p in range(10):
             for q in range(10):
                 if p == q:
                     self.assertTrue(np.isclose(30., cov_p[0, p, q], atol=1e-6))
                 else:
                     self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
+
+    def test_R_interpolation(self):
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.spw_Nfreqs
+        Ntime = self.ds.Ntimes
+        Ndlys = Nfreq - 20
+        self.ds.spw_Ndlys = Ndlys
+
+
+        # Set baselines to use for tests
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+
+        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9], 'restore_half_width':100e-9}
+        self.ds.set_weighting('dayenu')
+        self.ds.set_r_param(key1,rpk1)
+        df = np.mean(np.diff(self.ds.freqs))
+        nd = int(df * 100e-9 * Nfreq * 2)
+        wgt = self.ds.w(key1)[:,0].squeeze()
+        imat=dspec.delay_interpolation_matrix(Nfreq, nd, wgts=wgt, fundamental_period=2*Nfreq)
+        fmati=dspec.dayenu_mat_inv(x=self.ds.freqs, filter_centers=[0.],
+                                            filter_half_widths=[100e-9], filter_factors=[1e-9])
+        fmat = np.linalg.pinv(fmati * np.outer(wgt, wgt))
+        rmat = self.ds.R(key1)[0].squeeze()
+        mymat = imat @ (np.identity(Nfreq, dtype=complex) - fmat) + fmat
+        assert(np.all(np.isclose(mymat, rmat, atol=1e-3)))
+        #test that an invalid data weighting causes a value error.
+        self.ds.set_weighting('arglebargle')
+        nt.assert_raises(ValueError, self.ds.R, key1)
 
 
     def test_R_truncation(self):
@@ -792,15 +846,13 @@ class Test_PSpecData(unittest.TestCase):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.spw_Nfreqs
         Ntime = self.ds.Ntimes
-        Ndlys = Nfreq - 3
+        Ndlys = Nfreq - 20
         self.ds.spw_Ndlys = Ndlys
 
 
         # Set baselines to use for tests
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-        key3 = [(0, 24, 38), (0, 24, 38)]
-        key4 = [(1, 25, 38), (1, 25, 38)]
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
         rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
@@ -815,12 +867,13 @@ class Test_PSpecData(unittest.TestCase):
         rm1 = self.ds.R(key1)
         rm2 = ds1.R(key2)
         rm3 = ds1.R(key1)
-        self.assertTrue(np.shape(rm2) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
-        #check that all values that are not truncated match values of untrancated matrix.
-        self.assertTrue(np.all(np.isclose(rm1[10:-10], rm2, atol=1e-6)))
-        #make sure no errors are thrown by get_V, get_E, etc...
-        ds1.get_unnormed_E(key1, key2)
-        ds1.get_unnormed_V(key1, key2)
+        for m in range(self.ds.Ntimes):
+            self.assertTrue(np.shape(rm2[m]) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
+            #check that all values that are not truncated match values of untrancated matrix.
+            self.assertTrue(np.all(np.isclose(rm1[m][10:-10], rm2[m], atol=1e-6)))
+            #make sure no errors are thrown by get_V, get_E, etc...
+        ds1.get_unnormed_E(key1, key2, time_index=0)
+        ds1.get_unnormed_V(key1, key2, time_index=0)
         h=ds1.get_H(key1, key2)
         g=ds1.get_G(key1, key2)
         ds1.get_MW(g, h)
@@ -907,12 +960,129 @@ class Test_PSpecData(unittest.TestCase):
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
-        #Test if error is raised when one tried FFT approach on exact_norm
-        nt.assert_raises(NotImplementedError, self.ds.q_hat, key1, key2, exact_norm=True, allow_fft = True)
-
     def test_get_H(self):
         """
         Test Fisher/weight matrix calculation.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        #get number of unique flagging patterns
+        w1, w2 = self.ds.w(key1), self.ds.w(key2)
+        w = np.hstack([w1.T, w2.T])
+        # get binary number for each row and use this to compute the number
+        # of unique flagging patterns. Number of keys should equal number of patterns
+        npatterns = len(np.unique([np.sum([value * 2 ** bit for bit, value in enumerate(row)]) for row in w]))
+        nconfigs = 0
+        for input_data_weight in ['identity','iC', 'dayenu']:
+            self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'dayenu':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
+            for taper in taper_selection:
+                self.ds.set_taper(taper)
+                self.ds.set_Ndlys(Nfreq//3)
+                H = self.ds.get_H(key1, key2, average_times=True)
+                nconfigs += 1
+                self.assertEqual(H.shape, (Nfreq//3, Nfreq//3)) # Test shape
+                self.ds.set_Ndlys()
+                H = self.ds.get_H(key1, key2, average_times=True)
+                self.assertEqual(H.shape, (Nfreq, Nfreq))
+                nconfigs += 1
+                # assert that number of keys in H equals the number of flagging patterns
+                # times the number of tapering and weighting configurations that have been
+                # cycled through.
+                # second H computation made to check that no extra items are added to _H cache.
+                H = self.ds.get_H(key1, key2, average_times=True)
+                nt.assert_true(len(self.ds._H) == npatterns * nconfigs)
+
+    def test_get_M(self):
+        """
+        Test M caching and M computation.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        #get number of unique flagging patterns
+        w1, w2 = self.ds.w(key1), self.ds.w(key2)
+        w = np.hstack([w1.T, w2.T])
+        # get binary number for each row and use this to compute the number
+        # of unique flagging patterns. Number of keys should equal number of patterns
+        npatterns = len(np.unique([np.sum([value * 2 ** bit for bit, value in enumerate(row)]) for row in w]))
+        nconfigs = 0
+        for input_data_weight in ['identity','iC', 'dayenu']:
+            self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'dayenu':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
+            for taper in taper_selection:
+                self.ds.set_taper(taper)
+                self.ds.set_Ndlys(Nfreq//3)
+                M = self.ds.get_M(key1, key2, average_times=True)
+                nconfigs += 1
+                self.assertEqual(M.shape, (Nfreq//3, Nfreq//3)) # Test shape
+                self.ds.set_Ndlys()
+                M = self.ds.get_M(key1, key2, average_times=True)
+                self.assertEqual(M.shape, (Nfreq, Nfreq))
+                nconfigs += 1
+                # assert that number of keys in _M equals the number of flagging patterns
+                # times the number of tapering and weighting configurations that have been
+                # cycled through.
+                # second M computation made to check that no extra items are added to _M cache.
+                M = self.ds.get_M(key1, key2, average_times=True)
+                nt.assert_true(len(self.ds._M) == npatterns * nconfigs)
+
+    def test_get_W(self):
+        """
+        Test M caching and M computation.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        #get number of unique flagging patterns
+        w1, w2 = self.ds.w(key1), self.ds.w(key2)
+        w = np.hstack([w1.T, w2.T])
+        # get binary number for each row and use this to compute the number
+        # of unique flagging patterns. Number of keys should equal number of patterns
+        npatterns = len(np.unique([np.sum([value * 2 ** bit for bit, value in enumerate(row)]) for row in w]))
+        nconfigs = 0
+        for input_data_weight in ['identity','iC', 'dayenu']:
+            self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'dayenu':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
+            for taper in taper_selection:
+                self.ds.set_taper(taper)
+                self.ds.set_Ndlys(Nfreq//3)
+                W = self.ds.get_W(key1, key2, average_times=True)
+                nconfigs += 1
+                self.assertEqual(W.shape, (Nfreq//3, Nfreq//3)) # Test shape
+                self.ds.set_Ndlys()
+                W = self.ds.get_W(key1, key2, average_times=True)
+                self.assertEqual(W.shape, (Nfreq, Nfreq))
+                nconfigs += 1
+                # assert that number of keys in H equals the number of flagging patterns
+                # times the number of tapering and weighting configurations that have been
+                # cycled through.
+                # second W computation made to check that no extra items are added to _W cache.
+                W = self.ds.get_W(key1, key2, average_times=True)
+                nt.assert_true(len(self.ds._W) == npatterns * nconfigs)
+
+    def test_get_H_fft(self):
+        """
+        Test Fisher matrix calculation with FFT.
         """
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.Nfreqs
@@ -924,19 +1094,23 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
                 nt.assert_raises(ValueError,self.ds.R, key1)
-                rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
+                rpk = {'filter_centers':[0.],'filter_half_widths':[200e-9],'filter_factors':[1e-9]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
 
+                self.ds.set_Ndlys(Nfreq)
+                H1 = self.ds.get_H(key1, key2, average_times=True, sampling=True, allow_fft=False)
+                H2 = self.ds.get_H(key1, key2, average_times=True, allow_fft=True, sampling=True)
+                nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=False)
                 self.ds.set_Ndlys(Nfreq//3)
-                H = self.ds.get_H(key1, key2)
-                self.assertEqual(H.shape, (Nfreq//3, Nfreq//3)) # Test shape
+                nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=True)
+                #check if H1 and H2 are close to one part in 10e-10
+                nt.assert_true(np.all(np.abs(H1-H2)/np.mean(np.diag(np.abs(H1))) <= 1e-10))
 
-                self.ds.set_Ndlys()
-                H = self.ds.get_H(key1, key2)
-                self.assertEqual(H.shape, (Nfreq, Nfreq)) # Test shape
+
+
 
     def test_get_G(self):
         """
@@ -947,7 +1121,13 @@ class Test_PSpecData(unittest.TestCase):
         multiplicative_tolerance = 1.
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-
+        #get number of unique flagging patterns
+        w1, w2 = self.ds.w(key1), self.ds.w(key2)
+        w = np.hstack([w1.T, w2.T])
+        # get binary number for each row and use this to compute the number
+        # of unique flagging patterns. Number of keys should equal number of patterns
+        nconfigs = 0
+        npatterns = len(np.unique([np.sum([value * 2 ** bit for bit, value in enumerate(row)]) for row in w]))
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
@@ -957,10 +1137,16 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.clear_cache()
+                nconfigs = 0
                 self.ds.set_taper(taper)
                 #print 'input_data_weight', input_data_weight
                 self.ds.set_Ndlys(Nfreq-2)
-                G = self.ds.get_G(key1, key2)
+                G = self.ds.get_G(key1, key2, average_times=True)
+                nconfigs += 1
+                #calculate G a second time and make sure the number of
+                #cache keys does not change.
+                G = self.ds.get_G(key1, key2, average_times=True)
+                nt.assert_true(len(self.ds._G) == npatterns * nconfigs)
                 self.assertEqual(G.shape, (Nfreq-2, Nfreq-2)) # Test shape
                 #print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
@@ -983,7 +1169,12 @@ class Test_PSpecData(unittest.TestCase):
                     # same test as the symmetry test, but perhaps there are
                     # creative ways to break the code to break one test but not
                     # the other.
-                    G_swapped = self.ds.get_G(key2, key1)
+                    G_swapped = self.ds.get_G(key2, key1, average_times=True)
+                    nconfigs += 1
+                    #calculate G a second time and make sure the number of
+                    #cache keys does not change.
+                    G_swapped = self.ds.get_G(key2, key1, average_times=True)
+                    nt.assert_true(len(self.ds._G) == npatterns * nconfigs)
                     G_diff_norm = np.linalg.norm(G - G_swapped)
                     self.assertLessEqual(G_diff_norm,
                                         matrix_scale * multiplicative_tolerance)
@@ -1008,6 +1199,41 @@ class Test_PSpecData(unittest.TestCase):
                         G_diff_norm = np.linalg.norm(G - G_swapped.T)
                         self.assertLessEqual(G_diff_norm,
                                              matrix_scale * multiplicative_tolerance)
+                        nconfigs += 1
+                        #calculate G a second time and make sure the number of
+                        #cache keys does not change.
+                        G_swapped = self.ds.get_G(key2, key1)
+                        nt.assert_true(len(self.ds._G) == npatterns * nconfigs)
+                # assert that the number of keys in _G is equal to the number
+                # of patterns x number of configurations of G computed.
+
+    def test_get_G_fft(self):
+        """
+        Test G matrix calculation with FFT.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.Nfreqs
+        multiplicative_tolerance = 1.
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+
+        for input_data_weight in ['identity','iC', 'dayenu']:
+            self.ds.set_weighting(input_data_weight)
+            if input_data_weight == 'dayenu':
+                nt.assert_raises(ValueError,self.ds.R, key1)
+                rpk = {'filter_centers':[0.],'filter_half_widths':[200e-9],'filter_factors':[1e-9]}
+                self.ds.set_r_param(key1,rpk)
+                self.ds.set_r_param(key2,rpk)
+            for taper in taper_selection:
+                self.ds.set_taper(taper)
+
+                self.ds.set_Ndlys(Nfreq)
+                G1 = self.ds.get_G(key1, key2, average_times=True)
+                G2 = self.ds.get_G(key1, key2, average_times=True, allow_fft=True)
+                self.ds.set_Ndlys(Nfreq//3)
+                nt.assert_raises(ValueError, self.ds.get_G, key1, key2, allow_fft=True)
+                #check if H1 and H2 are close to one part in 10e-10
+                nt.assert_true(np.all(np.abs(G1-G2)/np.mean(np.diag(np.abs(G1))) <= 1e-10))
 
 
     '''
@@ -1091,11 +1317,11 @@ class Test_PSpecData(unittest.TestCase):
         # are all satisfied, the scalar adjustment factor is unity
         self.ds.set_weighting('identity')
         self.ds.spw_Ndlys = self.ds.spw_Nfreqs
-        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
+        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True, time_index=0)
         self.assertAlmostEqual(adjustment, 1.0)
         self.ds.set_weighting('iC')
         #if weighting is not identity, then the adjustment should be a vector.
-        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
+        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True, time_index=0)
         self.assertTrue(len(adjustment) == self.ds.spw_Ndlys)
 
     def test_scalar(self):
@@ -1239,6 +1465,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.trim_dset_lsts()
         nt.assert_true(ds.dsets[0].Ntimes, 52)
         nt.assert_true(ds.dsets[1].Ntimes, 52)
+        nt.assert_true(ds.Ntimes, 52)
         nt.assert_true(np.all( (2458042.178948477 < ds.dsets[0].time_array) \
                         + (ds.dsets[0].time_array < 2458042.1843023109)))
         # test exception
@@ -1247,6 +1474,7 @@ class Test_PSpecData(unittest.TestCase):
         ds.trim_dset_lsts()
         nt.assert_true(ds.dsets[0].Ntimes, 60)
         nt.assert_true(ds.dsets[1].Ntimes, 60)
+        nt.assert_true(ds.Ntimes, 60)
 
     def test_units(self):
         ds = pspecdata.PSpecData()
@@ -1435,6 +1663,18 @@ class Test_PSpecData(unittest.TestCase):
         diff = np.median((power_real_new-power_real_ext)/power_real_ext)
         nt.assert_true((diff <= 0.05))
 
+        #test whether we can compute a power spectrum with exact_norm-True and allow_fft=True
+        #and get the same answer as exact_norm=True and allow_fft = False (not previously supported).
+        for norm in ['I']:
+            uvp_nofft = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                           norm=norm, taper='none', verbose=True, exact_norm=True, sampling=True)
+            uvp_fft = ds_t.pspec(bls_Q, bls_Q, (0, 1), [('xx', 'xx')], input_data_weight='identity',
+                                           norm=norm, taper='none', verbose=True, exact_norm=True, allow_fft=True, sampling=True)
+            power_fft = uvp_fft.get_data(key)
+            power_nofft = uvp_nofft.get_data(key)
+
+            nt.assert_true(np.all(np.isclose(power_fft, power_nofft)))
+
         # check with redundant baseline group list
         antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
         antpos = dict(zip(ants, antpos))
@@ -1545,18 +1785,18 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec([(24, 25), (24, 25)], [(24, 25), (24, 25)], (0, 1), ('xx', 'xx'),
                        input_data_weight='identity', norm='I', taper='none', verbose=False,
                        spw_ranges=[(20, 30)])
-        nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
-        nt.assert_equal(len(ds._identity_Y), 1)
-        nt.assert_equal(list(ds._identity_Y.keys())[0], ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')))
+        #nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
+        #nt.assert_equal(len(ds._identity_Y), 1)
+        #nt.assert_equal(list(ds._identity_Y.keys())[0], ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')))
         # assert caching is not used when inappropriate
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), :, 25, :] = True
         uvp = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
                        input_data_weight='identity', norm='I', taper='none', verbose=False,
                        spw_ranges=[(20, 30)])
-        nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
-        nt.assert_equal(len(ds._identity_Y), 2)
-        nt.assert_true(((0, 24, 25, 'xx'), (1, 24, 25, 'xx')) in ds._identity_Y.keys())
-        nt.assert_true(((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys())
+        #nt.assert_equal(len(ds._identity_Y), len(ds._identity_G), len(ds._identity_H))
+        #nt.assert_equal(len(ds._identity_Y), 2)
+        #nt.assert_true(((0, 24, 25, 'xx'), (1, 24, 25, 'xx')) in ds._identity_Y.keys())
+        #nt.assert_true(((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys())
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -1641,7 +1881,7 @@ class Test_PSpecData(unittest.TestCase):
         # test pspec run sets flagged integration to have zero weight
         uvd.flag_array[uvd.antpair2ind(24, 25, ordered=False)[3], 0, 400, :] = True
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
-        ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=0.25)
+        ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=.25)
         uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
                         spw_ranges=[(400, 450)], verbose=False)
         # assert flag broadcast above hits weight arrays in uvp
@@ -1665,9 +1905,8 @@ class Test_PSpecData(unittest.TestCase):
         Nfreq = uvd.data_array.shape[2]
         # Basic test of shape
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        test_R = ds.R((1, 37, 38, 'XX'))
+        test_R = ds.R((1, 37, 38, 'XX'), average_times=True)
         nt.assert_equal(test_R.shape, (Nfreq, Nfreq))
-
         # First test that turning-off flagging does nothing if there are no flags in the data
         bls1 = [(24, 25)]
         bls2 = [(37, 38)]
@@ -1680,7 +1919,6 @@ class Test_PSpecData(unittest.TestCase):
 
         qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
         qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
-
         # assert answers are same to within 0.1%
         nt.assert_true(np.isclose(np.real(qe_unflagged)/np.real(qe_flagged), 1, atol=0.001, rtol=0.001).all())
 
@@ -2046,16 +2284,18 @@ def test_window_funcs():
                 ds.clear_cache()
                 if data_weight == 'iC':
                     # fill R with iC
-                    ds._R[(0, (37, 38, 'xx'), 'iC', 'bh')] = iC
+                    ds._R[(0, (37, 38, 'xx'), 'iC', 'bh')] = np.asarray([iC for m in range(ds.Ntimes)])
                 # compute G and H
                 Gv = ds.get_G(key, key, exact_norm=exact_norm, pol='xx')
                 Hv = ds.get_H(key, key, exact_norm=exact_norm, pol='xx')
                 Mv, Wv = ds.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm,
                                    band_covar=C)
                 # assert row-sum is normalized to 1
-                assert np.isclose(Wv.sum(axis=1).real, 1).all()
+                assert np.isclose(Wv.sum(axis=2).real, 1).all()
                 # assert this is a real matrix, even though imag is populated
-                assert np.isclose(Wv.imag, 0, atol=1e-6).all()
+                # if the H matrix is poorly conditioned, this is not gaurunteed.
+                # so instead, test that the sum is normalized to unity.
+                assert np.isclose(Wv.sum(axis=2).imag, 0, atol=1e-6).all()
 
 
 def test_get_argparser():

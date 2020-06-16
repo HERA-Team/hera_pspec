@@ -26,7 +26,7 @@ def miriad2pyuvdata(dset, antenna_nums=None, bls=None, polarizations=None,
     Parameters
     ----------
     dset : str
-        Miriad file to convert to UVData object containing visibilities and 
+        Miriad file to convert to UVData object containing visibilities and
         corresponding metadata
 
     antenna_nums: integer list
@@ -57,7 +57,7 @@ def miriad2pyuvdata(dset, antenna_nums=None, bls=None, polarizations=None,
     """
     uvd = pyuvdata.UVData()
     uvd.read_miriad(dset, antenna_nums=antenna_nums, bls=bls,
-                    polarizations=polarizations, ant_str=ant_str, 
+                    polarizations=polarizations, ant_str=ant_str,
                     time_range=time_range)
     return uvd
 
@@ -206,7 +206,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
         Ex: ['xx', 'yy', ...]
 
     time_range: float list
-        len-2 list containing min and max range of times (Julian Date) to 
+        len-2 list containing min and max range of times (Julian Date) to
         read-in. Ex: [2458115.20, 2458115.40]
 
     history : str
@@ -221,7 +221,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
         assert isinstance(dset1, (str, np.str)), \
             "dset1 must be fed as a string or UVData object"
         uvd1 = miriad2pyuvdata(dset1, antenna_nums=antenna_nums, bls=bls,
-                               polarizations=polarizations, ant_str=ant_str, 
+                               polarizations=polarizations, ant_str=ant_str,
                                time_range=time_range)
     else:
         uvd1 = dset1
@@ -229,7 +229,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
         assert isinstance(dset2, (str, np.str)), \
             "dset2 must be fed as a string or UVData object"
         uvd2 = miriad2pyuvdata(dset2, antenna_nums=antenna_nums, bls=bls,
-                               polarizations=polarizations, ant_str=ant_str, 
+                               polarizations=polarizations, ant_str=ant_str,
                                time_range=time_range)
     else:
         uvd2 = dset2
@@ -261,14 +261,14 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     if np.array_equal(bls1, bls2) == False:
         raise ValueError("dset1 and dset2 must have the same baselines")
 
-    # makes the Npol length==1 so that the UVData carries data for the 
+    # makes the Npol length==1 so that the UVData carries data for the
     # required polarization only
     st_keys = list(pol_weights[pstokes].keys())
     req_pol1 = st_keys[0]
     req_pol2 = st_keys[1]
 
-    # check polarizations of UVData objects are consistent with the required 
-    # polarization to form the desired pseudo Stokes visibilities. If multiple 
+    # check polarizations of UVData objects are consistent with the required
+    # polarization to form the desired pseudo Stokes visibilities. If multiple
     # exist, downselect on polarization.
     assert req_pol1 in uvd1.polarization_array, \
         "Polarization {} not found in dset1 object".format(req_pol1)
@@ -281,7 +281,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
         uvd2 = uvd2.select(polarizations=req_pol2, inplace=False)
 
     # combining visibilities to form the desired Stokes visibilties
-    uvdS = _combine_pol(uvd1=uvd1, uvd2=uvd2, pol1=req_pol1, pol2=req_pol2, 
+    uvdS = _combine_pol(uvd1=uvd1, uvd2=uvd2, pol1=req_pol1, pol2=req_pol2,
                         pstokes=pstokes)
     uvdS.history += history
 
@@ -334,7 +334,7 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
     assert desired_pols[0] in pols and desired_pols[1] in pols, \
         "necessary input pols {} and {} not found in dsets".format(*desired_pols)
 
-    inp_dsets = [dsets[pols.index(desired_pols[0])], 
+    inp_dsets = [dsets[pols.index(desired_pols[0])],
                  dsets[pols.index(desired_pols[1])]]
 
     return inp_dsets
