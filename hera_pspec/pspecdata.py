@@ -659,9 +659,9 @@ class PSpecData(object):
         # Update self._C with known_cov
         if known_cov is not None:
             spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
-            for key in known_cov.keys():
-                covariance = known_cov[key][spw, spw]
-                self.set_C({key: covariance})
+            for known_cov_key in known_cov.keys():
+                covariance = known_cov[known_cov_key][spw, spw]
+                self.set_C({known_cov_key: covariance})
 
         # check cache
         if Ckey not in self._C:
@@ -679,7 +679,7 @@ class PSpecData(object):
             elif model == 'foreground_dependent':
                 self.set_C({Ckey: self.C_model(key, model='autos', time_index=time_index) + self.C_model(key, model='outer_product', time_index=time_index)})
             else:
-                assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
+                raise ValueError("didn't recognize Ckey {}".format(Ckey))
                 
         return self._C[Ckey]
 
