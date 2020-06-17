@@ -622,9 +622,6 @@ class PSpecData(object):
         assert isinstance(key, tuple), "key must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
 
-        if known_cov is not None:
-            ds.set_C(known_cov)
-        
         # parse key
         dset, bl = self.parse_blkey(key)
         if model == 'dsets':
@@ -659,6 +656,13 @@ class PSpecData(object):
                 # add model to key
                 Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
+        # Update self._C with known_cov
+        if known_cov is not None:
+            spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+            for key in known_cov.keys():
+                covariance = known_cov[key][spw, spw]
+                self.set_C({key: covariance})
+
         # check cache
         if Ckey not in self._C:
             # calculate covariance model
@@ -676,10 +680,7 @@ class PSpecData(object):
                 self.set_C({Ckey: self.C_model(key, model='autos', time_index=time_index) + self.C_model(key, model='outer_product', time_index=time_index)})
             else:
                 assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
-                spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
-                covariance = known_cov[Ckey][spw, spw]
-                self.set_C({Ckey: covariance})
- 
+                
         return self._C[Ckey]
 
     def cross_covar_model(self, key1, key2, model='empirical',
