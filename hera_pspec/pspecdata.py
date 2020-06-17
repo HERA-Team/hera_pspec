@@ -622,6 +622,9 @@ class PSpecData(object):
         assert isinstance(key, tuple), "key must be fed as a tuple"
         assert isinstance(model, (str, np.str)), "model must be a string"
 
+        if known_cov is not None:
+            ds.set_C(known_cov)
+        
         # parse key
         dset, bl = self.parse_blkey(key)
         if model == 'dsets':
