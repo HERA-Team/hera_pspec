@@ -3170,14 +3170,17 @@ class PSpecData(object):
                                                            known_cov=known_cov, )
                    
                         if self.primary_beam != None:
-                            delay_adj = self.scalar_delay_adjustment(
-                                             key1, key2, sampling=sampling)
                             cov_real = cov_real * (scalar)**2.
                             cov_imag = cov_imag * (scalar)**2.
-                            if norm == 'I' and not(exact_norm):
-                                cov_real = cov_real * (delay_adj)**2.
-                                cov_imag = cov_imag * (delay_adj)**2.
 
+                        if norm == 'I' and not(exact_norm):
+                            if isinstance(sa, (np.float, float)):
+                                cov_real = cov_real * (sa)**2.
+                                cov_imag = cov_imag * (sa)**2.
+                            else:
+                                cov_real = cov_real * np.outer(sa, sa)[None]
+                                cov_imag = cov_imag * np.outer(sa, sa)[None]
+                               
                         if not return_q: 
                             pol_cov_real.extend(np.real(cov_real).astype(np.float64))
                             pol_cov_imag.extend(np.real(cov_imag).astype(np.float64))
