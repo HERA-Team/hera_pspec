@@ -199,8 +199,8 @@ class UVPSpec(object):
         if component == 'real':
             if hasattr(self,'cov_array_real'):
                 if self.folded:
-                    Ndlys = self.data_array[spw].shape[1]
-                    return self.cov_array_real[spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, polpair]
+                    Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+                    return self.cov_array_real[spw][blpairts, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
                 else:
                     return self.cov_array_real[spw][blpairts, :, :, polpair]
             else:
@@ -208,8 +208,8 @@ class UVPSpec(object):
         elif component == 'imag':
             if hasattr(self,'cov_array_imag'):
                 if self.folded:
-                    Ndlys = self.data_array[spw].shape[1]
-                    return self.cov_array_imag[spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, polpair]
+                    Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+                    return self.cov_array_imag[spw][blpairts, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
                 else:
                     return self.cov_array_imag[spw][blpairts, :, :, polpair]
             else:
@@ -250,8 +250,8 @@ class UVPSpec(object):
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
         if self.folded:
-            Ndlys = self.data_array[spw].shape[1]
-            return self.window_function_array[spw][blpairts, Ndlys//2+1:, Ndlys//2+1:, polpair]
+            Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+            return self.window_function_array[spw][blpairts, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
         else:
             return self.window_function_array[spw][blpairts, :, :, polpair]
 
@@ -288,8 +288,8 @@ class UVPSpec(object):
 
         # if data has been folded, return only positive delays
         if self.folded:
-            Ndlys = self.data_array[spw].shape[1]
-            return self.data_array[spw][blpairts, Ndlys//2+1:, polpair]
+            Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+            return self.data_array[spw][blpairts, -(Ndlys-Ndlys//2-1):, polpair]
 
         # else return all delays
         else:
@@ -632,8 +632,8 @@ class UVPSpec(object):
 
         # if bandpowers have been folded, return only positive delays
         if self.folded:
-            Ndlys = statistic[spw].shape[1]
-            return statistic[spw][blpairts, Ndlys//2+1:, polpair]
+            Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+            return statistic[spw][blpairts, -(Ndlys-Ndlys//2-1):, polpair]
         else:
             return statistic[spw][blpairts, :, polpair]
 
