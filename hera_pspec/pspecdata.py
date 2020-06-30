@@ -624,29 +624,14 @@ class PSpecData(object):
 
         # parse key
         dset, bl = self.parse_blkey(key)
-        if model == 'dsets':
-            assert isinstance(time_index, int), "time_index must be integer if cov-model==dsets"
+        if model in ['dsets', 'autos', 'outer_product', 'foreground_dependent']:
+            assert isinstance(time_index, int), "time_index must be integer if cov-model=={}".format(model)
             # add model to key
             Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
         elif model == 'empirical':
             # add model to key
             Ckey = ((dset, dset), (bl,bl), ) + (model, None, False, True,)
-
-        elif model == 'autos':
-            assert isinstance(time_index, int), "time_index must be integer if cov-model==autos"
-            # add model to key
-            Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
-
-        elif model == 'outer_product':
-            assert isinstance(time_index, int), "time_index must be integer if cov-model==outer_product"
-            # add model to key
-            Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
-
-        elif model == 'foreground_dependent':
-            assert isinstance(time_index, int), "time_index must be integer if cov-model==outer_product"
-            # add model to key
-            Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
         else:
             if known_cov is None:
@@ -748,28 +733,11 @@ class PSpecData(object):
             covar = utils.cov(self.x(key1, filter_extension=True), self.w(key1, filter_extension=True),
                               self.x(key2, filter_extension=True), self.w(key2, filter_extension=True),
                               conj_1=conj_1, conj_2=conj_2)
-        
-        elif model == 'dsets':
-            covar = np.zeros((self.spw_Nfreqs,
-                              self.spw_Nfreqs),
+        elif model in ['dsets','autos', 'outer_product', 'foreground_dependent']:
+            covar = np.zeros((np.sum(self.filter_extension) + self.spw_Nfreqs,
+                              np.sum(self.filter_extension) + self.spw_Nfreqs),
                               dtype=np.float64)
-        #for dsets, we assume no baseline-baseline covariances.
-
-        elif model == 'autos':
-            covar = np.zeros((self.spw_Nfreqs,
-                              self.spw_Nfreqs),
-                              dtype=np.float64)
-        #for autos, we assume no baseline-baseline covariances.
-
-        elif model == 'outer_product':
-            covar = np.zeros((self.spw_Nfreqs,
-                              self.spw_Nfreqs),
-                              dtype=np.float64)
-        
-        elif model == 'foreground_dependent':
-            covar = np.zeros((self.spw_Nfreqs,
-                              self.spw_Nfreqs),
-                              dtype=np.float64)
+        # we assume no baseline-baseline covariances.
 
         else:
             if known_cov is None:
@@ -2743,6 +2711,13 @@ class PSpecData(object):
             given an input visibility noise model, and store the output
             in the UVPSpec object.
 
+        store_QE_error : bool, optional
+            If True, store the square root of the diagonal of the output covariance matrix 
+            calculated by using get_analytic_covariance(). The error bars will 
+            be stored in the form of: sqrt(diag(cov_array_real)) + 1.j*sqrt(diag(cov_array_imag)).
+            It's a way to save the disk space since the whole cov_array data with a size of Ndlys x Ndlys x Ntimes x Nblpairs x Nspws
+            is too large. 
+
         return_q : bool, optional
             If True, return the results (delay spectra and covariance 
             matrices) for the unnormalized bandpowers in the UVPSpec object.  
@@ -2966,6 +2941,7 @@ class PSpecData(object):
         integration_array = odict()
         cov_array_real = odict()
         cov_array_imag = odict()
+        stats_array_cov_model = odict()
         window_function_array = odict()
         time1 = []
         time2 = []
@@ -2997,7 +2973,8 @@ class PSpecData(object):
             spw_polpair = []
             spw_cov_real = []
             spw_cov_imag = []
-            spw_window_function = [] 
+            spw_stats_array_cov_model = []
+            spw_window_function = []
 
             d = self.delays() * 1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
@@ -3025,6 +3002,7 @@ class PSpecData(object):
                 pol_ints = []
                 pol_cov_real = []
                 pol_cov_imag = []
+                pol_stats_array_cov_model = []
                 pol_window_function = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
@@ -3159,9 +3137,9 @@ class PSpecData(object):
                         else:
                             pv = np.atleast_2d(sa).T * pv
 
-                    # Generate the covariance matrix if error bars provided
-                    if store_cov:
-                        if verbose: print(" Building q_hat covariance...")                        
+                    #Generate the covariance matrix if error bars provided
+                    if store_cov or store_QE_error:
+                        if verbose: print(" Building q_hat covariance...")
                         cov_q_real, cov_q_imag, cov_real, cov_imag \
                             = self.get_analytic_covariance(key1, key2, Mv, 
                                                            exact_norm=exact_norm,
@@ -3182,12 +3160,19 @@ class PSpecData(object):
                                 cov_imag = cov_imag * np.outer(sa, sa)[None]
                                
                         if not return_q: 
-                            pol_cov_real.extend(np.real(cov_real).astype(np.float64))
-                            pol_cov_imag.extend(np.real(cov_imag).astype(np.float64))
+                            if store_cov:
+                                pol_cov_real.extend(np.real(cov_real).astype(np.float64))
+                                pol_cov_imag.extend(np.real(cov_imag).astype(np.float64))
+                            if store_QE_error:
+                                stats = np.sqrt(np.diagonal(np.real(cov_real), axis1=1, axis2=2)) + 1.j*np.sqrt(np.diagonal(np.real(cov_imag), axis1=1, axis2=2))
+                                pol_stats_array_cov_model.extend(stats)
                         else:
-                            pol_cov_real.extend(np.real(cov_q_real).astype(np.float64))
-                            pol_cov_imag.extend(np.real(cov_q_imag).astype(np.float64)) 
-
+                            if store_cov:
+                                pol_cov_real.extend(np.real(cov_q_real).astype(np.float64))
+                                pol_cov_imag.extend(np.real(cov_q_imag).astype(np.float64))
+                            if store_QE_error:
+                                stats = np.sqrt(np.diagonal(np.real(cov_q_real), axis1=1, axis2=2)) + 1.j*np.sqrt(np.diagonal(np.real(cov_q_imag), axis1=1, axis2=2))
+                                pol_stats_array_cov_model.extend(stats)
                     
                     # store the window_function
                     pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
@@ -3254,19 +3239,22 @@ class PSpecData(object):
                 spw_data.append(pol_data)
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
-                spw_cov_real.append(pol_cov_real) 
-                spw_cov_imag.append(pol_cov_imag) 
+                spw_stats_array_cov_model.append(pol_stats_array_cov_model)
+                spw_cov_real.append(pol_cov_real)
+                spw_cov_imag.append(pol_cov_imag)
                 spw_window_function.append(pol_window_function)
 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
+            spw_stats_array_cov_model = np.moveaxis(np.array(spw_stats_array_cov_model), 0, -1)
             spw_cov_real = np.moveaxis(np.array(spw_cov_real), 0, -1)
             spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
             spw_window_function = np.moveaxis(np.array(spw_window_function), 0, -1)
 
             data_array[i] = spw_data
+            stats_array_cov_model[i] = spw_stats_array_cov_model
             cov_array_real[i] = spw_cov_real
             cov_array_imag[i] = spw_cov_imag
             window_function_array[i] = spw_window_function
@@ -3364,7 +3352,9 @@ class PSpecData(object):
             uvp.cov_array_real = cov_array_real
             uvp.cov_array_imag = cov_array_imag
             uvp.cov_model = cov_model
-
+        if store_QE_error:
+            uvp.stats_array = odict()
+            uvp.stats_array["QE_"+cov_model] = stats_array_cov_model
         if store_window:
             uvp.window_function_array = window_function_array
 
@@ -3572,7 +3562,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
-              file_type='miriad', verbose=True, exact_norm=False, store_cov=False, filter_extensions=None,
+              file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_QE_error=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical'):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -3737,7 +3727,23 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     store_cov : boolean, optional
         If True, solve for covariance between bandpowers and store in
         output UVPSpec object.
-    
+
+    store_QE_error : bool, optional
+            If True, store the square root of the diagonal of the output covariance matrix 
+            calculated by using get_analytic_covariance(). The error bars will 
+            be stored in the form of: sqrt(diag(cov_array_real)) + 1.j*sqrt(diag(cov_array_imag)).
+            It's a way to save the disk space since the whole cov_array data with a size of Ndlys x Ndlys x Ntimes x Nblpairs x Nspws
+            is too large. 
+
+    return_q : bool, optional
+        If True, return the results (delay spectra and covariance matrices)
+        for the unnormalized bandpowers in the separate UVPSpec object.
+
+    known_cov : dicts of input covariance matrices
+        known_cov has the type {Ckey:covariance}, which is the same with ds._C. The matrices
+        stored in known_cov must be constructed externally, different from those in ds._C which
+        are constructed internally.
+
     return_q : bool, optional
         If True, return the results (delay spectra and covariance matrices) 
         for the unnormalized bandpowers in the separate UVPSpec object.
@@ -4103,6 +4109,7 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files or empirical covariance.")
+    a.add_argument("--store_QE_error", default=False, action='store_QE_error', help="Compute and store the error bars calculated by QE formalism.")
     a.add_argument("--return_q", default=False, action='store_true', help="Return unnormalized bandpowers given dsets files.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--cov_model", default='empirical', type=str, help="Model for computing covariance, currently supports empirical or dsets")

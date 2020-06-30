@@ -1538,13 +1538,19 @@ class Test_PSpecData(unittest.TestCase):
         uvd_std = copy.deepcopy(self.uvd_std)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
                                  dsets_std=[uvd_std, uvd_std], beam=self.bm)
-        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True, cov_model='empirical')
+        uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], store_cov=True, cov_model='empirical')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
-        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,14)], exact_norm=True, store_cov=True, cov_model='empirical')
+        uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='dsets')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
+
+        # test the results of stats_array[cov_model] 
+        uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, store_QE_error=True, cov_model='autos')
+        key = (0, (bls1[0],bls2[0]), "xx")
+        nt.assert_true(np.isclose(np.diagonal(uvp.get_cov(key), axis1=1, axis2=2), (np.real(uvp.get_stats('QE_autos', key)))**2).all())
     
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
