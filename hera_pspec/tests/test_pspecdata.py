@@ -1538,8 +1538,9 @@ class Test_PSpecData(unittest.TestCase):
         uvd_std = copy.deepcopy(self.uvd_std)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
                                  dsets_std=[uvd_std, uvd_std], beam=self.bm)
+        # test covariance methods with non-zero filter_extension
         uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,20)], store_cov=True, cov_model='empirical')
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], filter_extensions=[(2,2)], symmetric_taper=False, store_cov=True, cov_model='empirical')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
         uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',

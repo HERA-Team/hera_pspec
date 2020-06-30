@@ -574,7 +574,7 @@ class PSpecData(object):
         self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
 
-    def C_model(self, key, model='empirical', time_index=None, known_cov=None):
+    def C_model(self, key, model='empirical', time_index=None, known_cov=None, include_extension=False):
         """
         Return a covariance model having specified a key and model type.
         Note: Time-dependent flags that differ from frequency channel-to-channel
@@ -608,11 +608,15 @@ class PSpecData(object):
             supported if mode == 'dsets' or 'autos'
 
         known_cov : dicts of covariance matrices
-            Covariance matrices that are imported from a outer dict instead of 
-            using data stored or calculated inside the PSpecData object. 
-            known_cov could be initialized when using PSpecData.pspec() method. 
-            See PSpecData.pspec() for more details. 
-        
+            Covariance matrices that are imported from a outer dict instead of
+            using data stored or calculated inside the PSpecData object.
+            known_cov could be initialized when using PSpecData.pspec() method.
+            See PSpecData.pspec() for more details.
+
+        include_extension : bool (optional)
+            default=False
+            If True, extend spw to include filtering window extensions.
+
         Returns
         -------
         C : ndarray, (spw_Nfreqs, spw_Nfreqs)
@@ -643,7 +647,10 @@ class PSpecData(object):
 
         # Update self._C with known_cov
         if known_cov is not None:
-            spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+            if include_extension:
+                spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+            else:
+                spw = slice(self.spw_range[0], self.spw_range[1])
             for known_cov_key in known_cov.keys():
                 covariance = known_cov[known_cov_key][spw, spw]
                 self.set_C({known_cov_key: covariance})
@@ -652,24 +659,28 @@ class PSpecData(object):
         if Ckey not in self._C:
             # calculate covariance model
             if model == 'empirical':
-                self.set_C({Ckey: utils.cov(self.x(key, filter_extension=True), self.w(key, filter_extension=True))})
+                self.set_C({Ckey: utils.cov(self.x(key, include_extension=include_extension), self.w(key, include_extension=include_extension))})
             elif model == 'dsets':
-                self.set_C({Ckey: np.diag( np.abs(self.w(key, filter_extension=True)[:,time_index] * self.dx(key, filter_extension=True)[:,time_index]) ** 2. )})
+                self.set_C({Ckey: np.diag( np.abs(self.w(key, include_extension=include_extension)[:,time_index] * self.dx(key, include_extension=include_extension)[:,time_index]) ** 2. )})
             elif model == 'outer_product':
-                self.set_C({Ckey: np.outer(self.w(key, filter_extension=True)[:,time_index] * self.x(key, filter_extension=True)[:,time_index], 
-                    np.conj(self.w(key, filter_extension=True)[:,time_index] * self.x(key, filter_extension=True)[:,time_index]))})
+                self.set_C({Ckey: np.outer(self.w(key, include_extension=include_extension)[:,time_index] * self.x(key, include_extension=include_extension)[:,time_index], 
+                    np.conj(self.w(key, include_extension=include_extension)[:,time_index] * self.x(key, include_extension=include_extension)[:,time_index]))})
             elif model == 'autos':
-                spw_range= (self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+                if include_extension:
+                    spw_range = (self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+                else:
+                    spw_range = (self.spw_range[0], self.spw_range[1])
                 self.set_C({Ckey: np.diag(utils.variance_from_auto_correlations(self.dsets[dset], bl, spw_range, time_index))})
             elif model == 'foreground_dependent':
-                self.set_C({Ckey: self.C_model(key, model='autos', time_index=time_index) + self.C_model(key, model='outer_product', time_index=time_index)})
+                self.set_C({Ckey: self.C_model(key, model='autos', time_index=time_index, include_extension=include_extension) 
+                    + self.C_model(key, model='outer_product', time_index=time_index, include_extension=include_extension)})
             else:
                 raise ValueError("didn't recognize Ckey {}".format(Ckey))
                 
         return self._C[Ckey]
 
     def cross_covar_model(self, key1, key2, model='empirical',
-                          time_index=None, conj_1=False, conj_2=True, known_cov=None):
+                          time_index=None, conj_1=False, conj_2=True, known_cov=None, include_extension=False):
         """
         Return a covariance model having specified a key and model type.
         Note: Time-dependent flags that differ from frequency channel-to-channel
@@ -715,6 +726,10 @@ class PSpecData(object):
             known_cov could be initialized when using PSpecData.pspec() method. 
             See PSpecData.pspec() for more details. 
 
+        include_extension : bool (optional)
+            default=False
+            If True, extend spw to include filtering window extensions.
+
         Returns
         -------
         cross_covar : ndarray, (spw_Nfreqs, spw_Nfreqs)
@@ -730,15 +745,18 @@ class PSpecData(object):
         dset2, bl2 = self.parse_blkey(key2)
 
         if model == 'empirical':
-            covar = utils.cov(self.x(key1, filter_extension=True), self.w(key1, filter_extension=True),
-                              self.x(key2, filter_extension=True), self.w(key2, filter_extension=True),
+            covar = utils.cov(self.x(key1, include_extension=include_extension), self.w(key1, include_extension=include_extension),
+                              self.x(key2, include_extension=include_extension), self.w(key2, include_extension=include_extension),
                               conj_1=conj_1, conj_2=conj_2)
         elif model in ['dsets','autos', 'outer_product', 'foreground_dependent']:
-            covar = np.zeros((np.sum(self.filter_extension) + self.spw_Nfreqs,
-                              np.sum(self.filter_extension) + self.spw_Nfreqs),
-                              dtype=np.float64)
+            if include_extension:
+                covar = np.zeros((np.sum(self.filter_extension) + self.spw_Nfreqs,
+                                  np.sum(self.filter_extension) + self.spw_Nfreqs),
+                                  dtype=np.float64)
+            else:
+                covar = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs),
+                                  dtype=np.float64)
         # we assume no baseline-baseline covariances.
-
         else:
             if known_cov is None:
                 raise ValueError("didn't recognize model {}".format(model))
@@ -746,7 +764,10 @@ class PSpecData(object):
                 # add model to key
                 Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
                 assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
-                spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+                if include_extension:
+                    spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
+                else:
+                    spw = slice(self.spw_range[0], self.spw_range[1])
                 covar = known_cov[Ckey][spw, spw]
 
         return covar
@@ -3266,7 +3287,9 @@ class PSpecData(object):
             if len(spw_polpair) == 0:
                 raise ValueError("None of the specified polarization pairs "
                                  "match that of the UVData objects")
-
+            self.set_filter_extension((0,0))
+            # set filter_extension to be zero when ending the loop
+            
         # fill uvp object
         uvp = uvpspec.UVPSpec()
         uvp.symmetric_taper=symmetric_taper
