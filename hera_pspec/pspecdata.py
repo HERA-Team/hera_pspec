@@ -2639,8 +2639,9 @@ class PSpecData(object):
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
-              baseline_tol=1.0, store_cov=False, store_window=True, return_q=False, verbose=True, filter_extensions=None,
-              exact_norm=False, history='', r_params=None, known_cov=None, cov_model='empirical'):
+              baseline_tol=1.0, store_cov=False, store_cov_diag=False, return_q=False, store_window=True, verbose=True,
+              filter_extensions=None, exact_norm=False, history='', r_params=None,
+              cov_model='empirical', known_cov=None):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2732,7 +2733,7 @@ class PSpecData(object):
             given an input visibility noise model, and store the output
             in the UVPSpec object.
 
-        store_QE_error : bool, optional
+        store_cov_diag : bool, optional
             If True, store the square root of the diagonal of the output covariance matrix 
             calculated by using get_analytic_covariance(). The error bars will 
             be stored in the form of: sqrt(diag(cov_array_real)) + 1.j*sqrt(diag(cov_array_imag)).
@@ -3159,7 +3160,7 @@ class PSpecData(object):
                             pv = np.atleast_2d(sa).T * pv
 
                     #Generate the covariance matrix if error bars provided
-                    if store_cov or store_QE_error:
+                    if store_cov or store_cov_diag:
                         if verbose: print(" Building q_hat covariance...")
                         cov_q_real, cov_q_imag, cov_real, cov_imag \
                             = self.get_analytic_covariance(key1, key2, Mv, 
@@ -3184,14 +3185,14 @@ class PSpecData(object):
                             if store_cov:
                                 pol_cov_real.extend(np.real(cov_real).astype(np.float64))
                                 pol_cov_imag.extend(np.real(cov_imag).astype(np.float64))
-                            if store_QE_error:
+                            if store_cov_diag:
                                 stats = np.sqrt(np.diagonal(np.real(cov_real), axis1=1, axis2=2)) + 1.j*np.sqrt(np.diagonal(np.real(cov_imag), axis1=1, axis2=2))
                                 pol_stats_array_cov_model.extend(stats)
                         else:
                             if store_cov:
                                 pol_cov_real.extend(np.real(cov_q_real).astype(np.float64))
                                 pol_cov_imag.extend(np.real(cov_q_imag).astype(np.float64))
-                            if store_QE_error:
+                            if store_cov_diag:
                                 stats = np.sqrt(np.diagonal(np.real(cov_q_real), axis1=1, axis2=2)) + 1.j*np.sqrt(np.diagonal(np.real(cov_q_imag), axis1=1, axis2=2))
                                 pol_stats_array_cov_model.extend(stats)
                     
@@ -3375,9 +3376,9 @@ class PSpecData(object):
             uvp.cov_array_real = cov_array_real
             uvp.cov_array_imag = cov_array_imag
             uvp.cov_model = cov_model
-        if store_QE_error:
+        if store_cov_diag:
             uvp.stats_array = odict()
-            uvp.stats_array["QE_"+cov_model] = stats_array_cov_model
+            uvp.stats_array[cov_model+"_diag"] = stats_array_cov_model
         if store_window:
             uvp.window_function_array = window_function_array
 
@@ -3585,7 +3586,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
-              file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_QE_error=False, filter_extensions=None,
+              file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical'):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -3751,7 +3752,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         If True, solve for covariance between bandpowers and store in
         output UVPSpec object.
 
-    store_QE_error : bool, optional
+    store_cov_diag : bool, optional
             If True, store the square root of the diagonal of the output covariance matrix 
             calculated by using get_analytic_covariance(). The error bars will 
             be stored in the form of: sqrt(diag(cov_array_real)) + 1.j*sqrt(diag(cov_array_imag)).
@@ -4070,8 +4071,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
-                       store_cov=store_cov, input_data_weight=input_data_weight,
-                       exact_norm=exact_norm, 
+                       store_cov=store_cov, store_cov_diag=store_cov_diag, input_data_weight=input_data_weight,
+                       exact_norm=exact_norm, sampling=sampling,
                        return_q=return_q, cov_model=cov_model, known_cov=known_cov,
                        norm=norm, taper=taper, history=history, verbose=verbose,
                        filter_extensions=filter_extensions, store_window=store_window)
@@ -4132,7 +4133,7 @@ def get_pspec_run_argparser():
     a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
     a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
     a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files or empirical covariance.")
-    a.add_argument("--store_QE_error", default=False, action='store_true', help="Compute and store the error bars calculated by QE formalism.")
+    a.add_argument("--store_cov_diag", default=False, action='store_true', help="Compute and store the error bars calculated by QE formalism.")
     a.add_argument("--return_q", default=False, action='store_true', help="Return unnormalized bandpowers given dsets files.")
     a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
     a.add_argument("--cov_model", default='empirical', type=str, help="Model for computing covariance, currently supports empirical or dsets")
