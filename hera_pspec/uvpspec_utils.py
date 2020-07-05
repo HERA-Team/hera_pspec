@@ -787,6 +787,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.wgt_array = wgts
         uvp.integration_array = ints
         uvp.nsample_array = nsmp
+
         if store_window:
             uvp.window_function_array = window_function
         if len(stats) > 0:
@@ -794,6 +795,11 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         if len(cov_real) > 0:
             uvp.cov_array_real = cov_real
             uvp.cov_array_imag = cov_imag
+
+        # downselect on other attrs
+        if hasattr(uvp, 'OmegaP'):
+            uvp.OmegaP = uvp.OmegaP[:, polpair_select]
+            uvp.OmegaPP = uvp.OmegaPP[:, polpair_select]
 
         # select r_params based on new bl_array
         blp_keys = uvp.get_all_keys()

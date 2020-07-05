@@ -4,10 +4,11 @@ import itertools, glob
 import traceback
 from hera_cal import redcal
 from collections import OrderedDict as odict
-from pyuvdata import UVData
+from pyuvdata import UVData, utils as uvutils
 from datetime import datetime
-import hera_pspec as hp
 import copy
+from scipy.interpolate import interp1d
+import uvtools as uvt
 
 from .conversions import Cosmo_Conversions
 
@@ -1165,6 +1166,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
 
     return reds, lens, angs
 
+
 def pspecdata_time_difference(ds, time_diff):
     """
     Given a PSpecData object and a time difference, give the time difference PSpecData object.  
@@ -1180,13 +1182,15 @@ def pspecdata_time_difference(ds, time_diff):
     -------
     ds_td : PSpecData object
     """
+    from hera_pspec.pspecdata import PSpecData
     uvd1 = ds.dsets[0]
     uvd2 = ds.dsets[1]
     uvd10 = uvd_time_difference(uvd1, time_diff)
     uvd20 = uvd_time_difference(uvd2, time_diff)
 
-    ds_td = hp.PSpecData(dsets=[uvd10, uvd20], wgts=ds.wgts, beam=ds.primary_beam)
+    ds_td = PSpecData(dsets=[uvd10, uvd20], wgts=ds.wgts, beam=ds.primary_beam)
     return ds_td
+
 
 def uvd_time_difference(uvd, time_diff):
     """
@@ -1216,3 +1220,177 @@ def uvd_time_difference(uvd, time_diff):
     uvd0.data_array = data0 / np.sqrt(2)
 
     return uvd0
+
+
+AUTOVISPOLS = ['XX', 'YY', 'EE', 'NN']
+STOKPOLS = ['PI', 'PQ', 'PU', 'PV']
+AUTOPOLS = AUTOVISPOLS + STOKPOLS
+
+
+def uvd_to_Tsys(uvd, beam, Tsys_outfile):
+    """
+    Convert auto-correlations in Jy to an estimate of Tsys in Kelvin.
+
+    A visibility Tsys is given by the geometric mean of each auto-correlation.
+
+    Parameters
+    ----------
+    uvd : UVData object
+        Should contain visibility auto-correlations
+
+    beam : str or PSpecBeamBase subclass or UVPSpec object
+        beam object for converting Jy <-> Kelvin. Should match
+        polarizations in uvd. If str, should be a path to a FITS
+        file in UVBeam format. If fed as a UVPSpec object, will
+        use its OmegaP and OmegaPP attributes to make a beam.
+
+    Tsys_outfile : str
+        If fed, write UVH5 file of Tsys estimate [Kelvin] for auto-correlations
+
+    Returns
+    -------
+    UVData object
+        Estimate of Tsys in Kelvin for each auto-correlation
+    """
+    uvd = copy.deepcopy(uvd)
+    # get uvd metadata
+    pols = [pol for pol in uvd.get_pols() if pol.upper() in AUTOPOLS]
+    # if pseudo Stokes pol in pols, substitute for pI
+    pols = sorted(set([pol if pol.upper() in AUTOVISPOLS else 'pI' for pol in pols]))
+    autobls = [bl for bl in uvd.get_antpairs() if bl[0] == bl[1]]
+    uvd.select(bls=autobls, polarizations=pols)
+
+    # construct beam
+    from hera_pspec import pspecbeam
+    from hera_pspec import uvpspec
+    if isinstance(beam, str):
+        beam = pspecbeam.PSpecBeamUV(beam)
+    elif isinstance(beam, pspecbeam.PSpecBeamBase):
+        pass
+    elif isinstance(beam, uvpspec.UVPSpec):
+        uvp = beam
+        if hasattr(uvp, 'OmegaP'):
+            # use first pol in each polpair
+            uvp_pols = [pp[0] if pp[0].upper() not in STOKPOLS else 'pI' for pp in uvp.get_polpairs()]
+            Op = {uvp_pol: uvp.OmegaP[:, ii] for ii, uvp_pol in enumerate(uvp_pols)}
+            Opp = {uvp_pol: uvp.OmegaPP[:, ii] for ii, uvp_pol in enumerate(uvp_pols)}
+            beam = pspecbeam.PSpecBeamFromArray(Op, Opp, uvp.beam_freqs, cosmo=uvp.cosmo)
+        else:
+            raise ValueError("UVPSpec must have OmegaP and OmegaPP to make a beam")
+    else:
+        raise ValueError("beam must be a string, PSpecBeamBase subclass or UVPSpec object")
+
+    # convert autos in Jy to Tsys in Kelvin
+    J2K = {pol: beam.Jy_to_mK(uvd.freq_array[0], pol=pol)/1e3 for pol in pols}
+    for blpol in uvd.get_antpairpols():
+        bl, pol = blpol[:2], blpol[2]
+        tinds = uvd.antpair2ind(bl)
+        if pol.upper() in STOKPOLS:
+            pol = 'pI'
+        pind = pols.index(pol)
+        uvd.data_array[tinds, 0, :, pind] *= J2K[pol]
+
+    if Tsys_outfile is not None:
+        uvd.write_uvh5(Tsys_outfile, clobber=True)
+
+    return uvd
+
+
+def uvp_noise_error(uvp, uvd, beam=None, Tsys_outfile=None, err_type='P_N'):
+    """
+    Calculate analytic thermal noise error for a UVPSpec object.
+    Adds to uvp.stats_array inplace.
+
+    Parameters
+    ----------
+    uvp : UVPSpec object
+        Power spectra to calculate thermal noise errors.
+        If err_type == 'P_SN', uvp should not have any
+        incoherent averaging applied.
+
+    uvd : UVData object
+        Should contain visibility auto-correlations
+
+    beam : str or PSpecBeamBase subclass or UVPSpec object
+        beam object for converting Jy <-> Kelvin. Should match
+        polarizations in uvd. If str, should be a path to a FITS
+        file in UVBeam format. If fed as a UVPSpec object, will
+        use its OmegaP and OmegaPP attributes to make a beam.
+
+    Tsys_outfile : str
+        If fed, write UVH5 file of Tsys estimate [Kelvin] for auto-correlations
+
+    err_type : str, options = ['P_N', 'P_SN']
+        Type of thermal noise error to compute. P_N is the standard
+        noise-dominated analytic error (e.g. Pober+2013, Cheng+2018)
+        P_SN = sqrt[ sqrt[2] P_S * P_N + P_N^2]
+        is the signal + noise analytic error for the real or imag
+        component of the power spectra (e.g. Kolpanis+2019, Tan+2020),
+        which uses uses Re[P(tau)] as a proxy for P_S
+
+    Returns
+    -------
+    UVPSpec object
+        input uvp with 'P_N' or 'P_SN' error in stats_array
+    """
+    from hera_pspec import uvpspec_utils
+    # get Tsys estimate
+    if beam is None:
+        beam = uvp
+    uvd = uvd_to_Tsys(uvd, beam=beam, Tsys_outfile=Tsys_outfile)
+
+    # get metadata
+    lsts = np.unique(uvd.lst_array)
+    freqs = uvd.freq_array[0]
+
+    # iterate over spectral window
+    for spw in uvp.spw_array:
+        # get spw properties
+        spw_range = uvp.get_spw_ranges(spw)[0]
+        spw_start = np.argmin(np.abs(uvd.freq_array[0] - spw_range[0]))
+        spw_stop = spw_start + spw_range[2]
+        taper = uvt.dspec.gen_window(uvp.taper, spw_range[2])
+        # iterate over blpairs
+        for blp in uvp.get_blpairs():
+            blp_int = uvp.antnums_to_blpair(blp)
+            lst_avg = uvp.lst_avg_array[uvp.blpair_to_indices(blp)]
+            # iterate over polarization
+            for polpair in uvp.polpair_array:
+                pol = uvpspec_utils.polpair_int2tuple(polpair)[0]  # integer
+                polstr = uvutils.polnum2str(pol) # TODO: use uvp.x_orientation when attr is added
+                if polstr.upper() in STOKPOLS:
+                    pol = 'pI'
+                key = (spw, blp, polpair)
+                # take geometric mean of four antenna autocorrs and get OR'd flags
+                Tsys = (uvd.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
+                        uvd.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
+                        uvd.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
+                        uvd.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
+                Tflag = uvd.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
+                        uvd.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
+                        uvd.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
+                        uvd.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
+                # average over frequency
+                if np.all(Tflag):
+                    # fully flagged
+                    Tsys = np.inf
+                else:
+                    # get weights
+                    Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
+                    Tflag = np.all(Tflag, axis=-1)
+                    # interpolate to appropriate LST grid
+                    Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+
+                # calculate P_N
+                P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real')[blp_int]
+                if err_type == 'P_SN':
+                    # calculate P_SN: see Tan+2020 and
+                    # H1C_IDR2/notebooks/validation/errorbars_with_systematics_and_noise.ipynb
+                    P_SN = np.sqrt(np.sqrt(2) * uvp.get_data(key).real * P_N + P_N**2)
+                    # set stats
+                    uvp.set_stats('P_SN', key, P_SN)
+                elif err_type == 'P_N':
+                    # set stats
+                    uvp.set_stats('P_N', key, P_N)
+                else:
+                    raise NameError("error type {} not recognized".format(err_type))
