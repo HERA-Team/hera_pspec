@@ -27,7 +27,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     and conj_2 = False, then <d1 d2^t> is computed, whereas if conj_1 = True
     and conj_2 = True, then <d1^* d2^t*> is computed. (Minus the mean terms).
 
-    Parameters
+    Parameters_
     ----------
     d1 : array_like
         Data vector of size (M,N), where N is the length of the "averaging axis"
@@ -1374,7 +1374,8 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N'):
                 if err_type == 'P_SN':
                     # calculate P_SN: see Tan+2020 and
                     # H1C_IDR2/notebooks/validation/errorbars_with_systematics_and_noise.ipynb
-                    P_SN = np.sqrt(np.sqrt(2) * uvp.get_data(key).real * P_N + P_N**2)
+                    P_S = np.abs(uvp.get_data(key).real)
+                    P_SN = np.sqrt(np.sqrt(2) * P_S * P_N + P_N**2)
                     # set stats
                     uvp.set_stats('P_SN', key, P_SN)
                 elif err_type == 'P_N':
