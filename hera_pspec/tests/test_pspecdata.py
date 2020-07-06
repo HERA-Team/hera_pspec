@@ -1548,10 +1548,13 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
         # test the results of stats_array[cov_model] 
-        uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, store_cov_diag=True, cov_model='autos')
+        uvp_cov = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='autos')
+        uvp_cov_diag = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov_diag=True, cov_model='autos')
+
         key = (0, (bls1[0],bls2[0]), "xx")
-        nt.assert_true(np.isclose(np.diagonal(uvp.get_cov(key), axis1=1, axis2=2), (np.real(uvp.get_stats('autos_diag', key)))**2).all())
+        nt.assert_true(np.isclose(np.diagonal(uvp_cov.get_cov(key), axis1=1, axis2=2), (np.real(uvp_cov_diag.get_stats('autos_diag', key)))**2).all())
     
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],

@@ -2940,6 +2940,11 @@ class PSpecData(object):
         assert len(spw_ranges) == len(n_dlys), \
             "Need to specify number of delay bins for each spw"
 
+        if store_cov_diag and store_cov:
+            store_cov = False
+            # Only store diagnonal parts of the cov_array to save the disk space if store_cov_diag==True,
+            # no matter what the initial choice for store_cov. 
+
         # setup polarization selection
         if isinstance(pols, (tuple, str)): pols = [pols]
 
