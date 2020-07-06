@@ -1296,7 +1296,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile):
     return uvd
 
 
-def uvp_noise_error(uvp, auto_Tsys, err_type='P_N'):
+def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
     Adds to uvp.stats_array inplace.
@@ -1319,6 +1319,10 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N'):
         is the signal + noise analytic error for the real or imag
         component of the power spectra (e.g. Kolpanis+2019, Tan+2020),
         which uses uses Re[P(tau)] as a proxy for P_S
+
+    precomp_P_N : str
+        If computing P_SN and P_N is already computed, use this key
+        to index stats_array for P_N rather than computing it from auto_Tsys.
 
     Returns
     -------
@@ -1349,28 +1353,34 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N'):
                 if polstr.upper() in STOKPOLS:
                     pol = 'pI'
                 key = (spw, blp, polpair)
-                # take geometric mean of four antenna autocorrs and get OR'd flags
-                Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
-                        auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
-                        auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
-                        auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
-                Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
-                        auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
-                        auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
-                        auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
-                # average over frequency
-                if np.all(Tflag):
-                    # fully flagged
-                    Tsys = np.inf
-                else:
-                    # get weights
-                    Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
-                    Tflag = np.all(Tflag, axis=-1)
-                    # interpolate to appropriate LST grid
-                    Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
 
-                # calculate P_N
-                P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real')[blp_int]
+                if precomp_P_N is None:
+                    # take geometric mean of four antenna autocorrs and get OR'd flags
+                    Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
+                    Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
+                    # average over frequency
+                    if np.all(Tflag):
+                        # fully flagged
+                        Tsys = np.inf
+                    else:
+                        # get weights
+                        Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
+                        Tflag = np.all(Tflag, axis=-1)
+                        # interpolate to appropriate LST grid
+                        Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+
+                    # calculate P_N
+                    P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real')[blp_int]
+
+                else:
+                    P_N = uvp.get_stats(precomp_P_N, key)
+
                 if err_type == 'P_SN':
                     # calculate P_SN: see Tan+2020 and
                     # H1C_IDR2/notebooks/validation/errorbars_with_systematics_and_noise.ipynb
