@@ -1296,7 +1296,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile):
     return uvd
 
 
-def uvp_noise_error(uvp, uvd, beam=None, Tsys_outfile=None, err_type='P_N'):
+def uvp_noise_error(uvp, auto_Tsys, err_type='P_N'):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
     Adds to uvp.stats_array inplace.
@@ -1308,17 +1308,9 @@ def uvp_noise_error(uvp, uvd, beam=None, Tsys_outfile=None, err_type='P_N'):
         If err_type == 'P_SN', uvp should not have any
         incoherent averaging applied.
 
-    uvd : UVData object
-        Should contain visibility auto-correlations
-
-    beam : str or PSpecBeamBase subclass or UVPSpec object
-        beam object for converting Jy <-> Kelvin. Should match
-        polarizations in uvd. If str, should be a path to a FITS
-        file in UVBeam format. If fed as a UVPSpec object, will
-        use its OmegaP and OmegaPP attributes to make a beam.
-
-    Tsys_outfile : str
-        If fed, write UVH5 file of Tsys estimate [Kelvin] for auto-correlations
+    auto_Tsys : UVData object
+        Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
+        for all antennas and polarizations involved in uvp power spectra.
 
     err_type : str, options = ['P_N', 'P_SN']
         Type of thermal noise error to compute. P_N is the standard
@@ -1334,20 +1326,16 @@ def uvp_noise_error(uvp, uvd, beam=None, Tsys_outfile=None, err_type='P_N'):
         input uvp with 'P_N' or 'P_SN' error in stats_array
     """
     from hera_pspec import uvpspec_utils
-    # get Tsys estimate
-    if beam is None:
-        beam = uvp
-    uvd = uvd_to_Tsys(uvd, beam=beam, Tsys_outfile=Tsys_outfile)
 
     # get metadata
-    lsts = np.unique(uvd.lst_array)
-    freqs = uvd.freq_array[0]
+    lsts = np.unique(auto_Tsys.lst_array)
+    freqs = auto_Tsys.freq_array[0]
 
     # iterate over spectral window
     for spw in uvp.spw_array:
         # get spw properties
         spw_range = uvp.get_spw_ranges(spw)[0]
-        spw_start = np.argmin(np.abs(uvd.freq_array[0] - spw_range[0]))
+        spw_start = np.argmin(np.abs(auto_Tsys.freq_array[0] - spw_range[0]))
         spw_stop = spw_start + spw_range[2]
         taper = uvt.dspec.gen_window(uvp.taper, spw_range[2])
         # iterate over blpairs
@@ -1362,14 +1350,14 @@ def uvp_noise_error(uvp, uvd, beam=None, Tsys_outfile=None, err_type='P_N'):
                     pol = 'pI'
                 key = (spw, blp, polpair)
                 # take geometric mean of four antenna autocorrs and get OR'd flags
-                Tsys = (uvd.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
-                        uvd.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
-                        uvd.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
-                        uvd.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
-                Tflag = uvd.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
-                        uvd.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
-                        uvd.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
-                        uvd.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
+                Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
+                        auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
+                        auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
+                        auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
+                Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
+                        auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
+                        auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
+                        auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
                 # average over frequency
                 if np.all(Tflag):
                     # fully flagged

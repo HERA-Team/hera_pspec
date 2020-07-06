@@ -154,7 +154,9 @@ def test_analytic_noise():
                    cov_model='autos', store_cov=True)
 
     # get P_N estimate
-    utils.uvp_noise_error(uvp, uvd, beam=beam, Tsys_outfile=os.path.join(DATA_PATH, "test_uvd.uvh5"), err_type='P_N')
+    auto_Tsys = utils.uvd_to_Tsys(uvd, beam, os.path.join(DATA_PATH, "test_uvd.uvh5"))
+    assert os.path.exists(os.path.join(DATA_PATH, "test_uvd.uvh5"))
+    utils.uvp_noise_error(uvp, auto_Tsys, err_type='P_N')
 
     # check consistency of 1-sigma standard dev. to 1%
     cov_diag = uvp.cov_array_real[0][:, range(Nchan), range(Nchan)]
