@@ -1384,7 +1384,8 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
                 if err_type == 'P_SN':
                     # calculate P_SN: see Tan+2020 and
                     # H1C_IDR2/notebooks/validation/errorbars_with_systematics_and_noise.ipynb
-                    P_S = np.abs(uvp.get_data(key).real)
+                    P_S = uvp.get_data(key).real
+                    P_S[P_S < 0] = 0
                     P_SN = np.sqrt(np.sqrt(2) * P_S * P_N + P_N**2)
                     # set stats
                     uvp.set_stats('P_SN', key, P_SN)
