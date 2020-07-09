@@ -3877,6 +3877,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # get redundant baseline groups
         bls = None
 
+    # check cov_model
+    if cov_model == "autos" and bls is not None:
+        # include autos if cov_model is autos
+        bls += [(ant, ant) for ant in np.unique(utils.flatten(bls))]
+
     # Construct dataset pairs to operate on
     Ndsets = len(dsets)
     if dset_pairs is None:
