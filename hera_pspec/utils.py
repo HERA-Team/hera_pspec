@@ -1227,7 +1227,7 @@ STOKPOLS = ['PI', 'PQ', 'PU', 'PV']
 AUTOPOLS = AUTOVISPOLS + STOKPOLS
 
 
-def uvd_to_Tsys(uvd, beam, Tsys_outfile):
+def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
     """
     Convert auto-correlations in Jy to an estimate of Tsys in Kelvin.
 
