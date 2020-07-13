@@ -1312,13 +1312,14 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.
 
-    err_type : str, options = ['P_N', 'P_SN']
+    err_type : str or list of str, options = ['P_N', 'P_SN']
         Type of thermal noise error to compute. P_N is the standard
         noise-dominated analytic error (e.g. Pober+2013, Cheng+2018)
         P_SN = sqrt[ sqrt[2] P_S * P_N + P_N^2]
         is the signal + noise analytic error for the real or imag
         component of the power spectra (e.g. Kolpanis+2019, Tan+2020),
-        which uses uses Re[P(tau)] as a proxy for P_S
+        which uses uses Re[P(tau)] as a proxy for P_S.
+        To store both, feed as err_type = ['P_N', 'P_SN']
 
     precomp_P_N : str
         If computing P_SN and P_N is already computed, use this key
@@ -1330,6 +1331,10 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
         input uvp with 'P_N' or 'P_SN' error in stats_array
     """
     from hera_pspec import uvpspec_utils
+
+    # type checks
+    if isinstance(err_type, str):
+        err_type = [err_type]
 
     # get metadata
     lsts = np.unique(auto_Tsys.lst_array)
@@ -1381,7 +1386,7 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
                 else:
                     P_N = uvp.get_stats(precomp_P_N, key)
 
-                if err_type == 'P_SN':
+                if 'P_SN' in err_type:
                     # calculate P_SN: see Tan+2020 and
                     # H1C_IDR2/notebooks/validation/errorbars_with_systematics_and_noise.ipynb
                     P_S = uvp.get_data(key).real
@@ -1389,7 +1394,7 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
                     P_SN = np.sqrt(np.sqrt(2) * P_S * P_N + P_N**2)
                     # set stats
                     uvp.set_stats('P_SN', key, P_SN)
-                elif err_type == 'P_N':
+                elif 'P_N' in err_type:
                     # set stats
                     uvp.set_stats('P_N', key, P_N)
                 else:
