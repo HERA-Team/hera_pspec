@@ -1392,6 +1392,9 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
                     P_S = uvp.get_data(key).real
                     P_S[P_S < 0] = 0
                     P_SN = np.sqrt(np.sqrt(2) * P_S * P_N + P_N**2)
+                    P_SN
+                    # catch nans, set to inf
+                    P_SN[np.isnan(P_SN)] = np.inf
                     # set stats
                     uvp.set_stats('P_SN', key, P_SN)
                 elif 'P_N' in err_type:
