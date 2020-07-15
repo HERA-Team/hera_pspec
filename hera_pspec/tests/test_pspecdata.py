@@ -1358,13 +1358,13 @@ class Test_PSpecData(unittest.TestCase):
             nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
                 (cov_q_imag[time_index].imag) > 1e8).all())
         # test foreground_dependent error bar estimation
-        uvp_autos = ds.pspec(bls1[:2], bls2[:2], (0, 1), ('xx','xx'), spw_ranges=(100,120), store_cov=True, cov_model='autos', verbose=False)
+        uvp_autos = ds.pspec(bls1[:2], bls2[:2], (0, 1), ('xx','xx'), spw_ranges=(100,120), store_cov_diag=True, cov_model='autos', verbose=False)
         uvp_foreground_dependent = ds.pspec(bls1[:2], bls2[:2], (0, 1), ('xx','xx'), spw_ranges=(100,120), store_cov=True, cov_model='foreground_dependent', verbose=False)
         key = (0, blpairs[0], "xx")
-        var_foreground_dependent = np.abs(np.diagonal(uvp_foreground_dependent.get_cov(key), axis1=1, axis2=2))
-        ps_products = np.sqrt(2)*np.real(uvp_autos.get_data(key))*np.sqrt(np.abs(np.diagonal(uvp_autos.get_cov(key), axis1=1, axis2=2))) - np.abs(np.diagonal(uvp_autos.get_cov(key), axis1=1, axis2=2))
+        var_foreground_dependent = np.diagonal(uvp_foreground_dependent.get_cov(key), axis1=1, axis2=2)
+        ps_products = np.sqrt(2)*uvp_autos.get_data(key).real*uvp_autos.get_stats("autos_diag", key).real + (uvp_autos.get_stats("autos_diag", key).real)**2
         # Compare the analytic variance from QE formalism with rough estimation from power spectrum products
-        nt.assert_true(np.isclose(var_foreground_dependent[:,2:-2], np.abs(ps_products)[:,2:-2], rtol=0.4).all())
+        nt.assert_true(np.isclose(var_foreground_dependent[:,2:-2], ps_products[:,2:-2], rtol=0.4).all())
 
     def test_pspec(self):
         # generate ds
