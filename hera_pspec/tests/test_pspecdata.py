@@ -4,9 +4,9 @@ import numpy as np
 import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps, trapz
-from hera_pspec import pspecdata, pspecbeam, conversions, container, utils
+from hera_pspec import pspecdata, pspecbeam, conversions, container, utils, testing
 from hera_pspec.data import DATA_PATH
-from pyuvdata import UVData, UVCal
+from pyuvdata import UVData, UVCal, utils as uvutils
 from hera_cal import redcal
 from scipy.signal import windows
 from scipy.interpolate import interp1d
@@ -1323,48 +1323,99 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(ds._C[Ckey].shape, (spws[1][1]-spws[1][0], spws[1][1]-spws[1][0]))
 
     def test_get_analytic_covariance(self):
-        # test get_analytic_covariance return almost real values
         uvd = UVData()
         uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        uvd.nsample_array[:] = 1.0
+        uvd.flag_array[:] = False
         cosmo = conversions.Cosmo_Conversions()
         uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
-        
-        # slide the time axis of uvd by one integration
-        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
-        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
-        ds.rephase_to_dset(0)
 
-        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
-        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-        antpos = dict(zip(ants, antpos))
-        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
-        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
+        # extend time axis by factor of 4
+        for i in range(2):
+            new = copy.deepcopy(uvd)
+            new.time_array += new.Ntimes * np.diff(np.unique(new.time_array))[0]
+            new.lst_array = uvutils.get_lst_for_time(new.time_array, *new.telescope_location_lat_lon_alt_degrees)
+            uvd += new
 
+        # get redundant baselines
+        reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True)
+
+        # append roughly 20 blpairs to a list
+        bls1, bls2 = [], []
+        for red in reds[:3]:
+            _bls1, _bls2, _ = utils.construct_blpairs(red, exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=False)
+            bls1.extend(_bls1)
+            bls2.extend(_bls2)
+        # keep only 20 blpairs for speed (each with 40 independent time samples)
+        bls1, bls2 = bls1[:20], bls2[:20]
+        Nblpairs = len(bls1)
+
+        # generate a sky and noise simulation
+        np.random.seed(0)
+        sim1 = testing.sky_noise_sim(uvd, uvb, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
+                                     constant_in_time=True, bl_loop_seed=0, divide_by_nsamp=False)
+        np.random.seed(0)
+        sim2 = testing.sky_noise_sim(uvd, uvb, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
+                                     constant_in_time=True, bl_loop_seed=1, divide_by_nsamp=False)
+ 
+        # setup ds
+        ds = pspecdata.PSpecData(dsets=[sim1, sim2], wgts=[None, None], beam=uvb)
+        ds.Jy_to_mK()
+
+        # assert that imag component of covariance is near zero
         key1 = (0, bls1[0], "xx")
         key2 = (1, bls2[0], "xx")
-        ds.set_spw(spws[1])
+        ds.set_spw((60, 80))
         M_ = np.diag(np.ones(ds.spw_Ndlys))
-        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False, model='empirical', known_cov=None)
-        for time_index in range(ds.Ntimes):
-            nt.assert_true((abs(cov_q_real[time_index].real) / abs\
-                (cov_q_real[time_index].imag) > 1e8).all())
-            nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
-                (cov_q_imag[time_index].imag) > 1e8).all())
-        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False, model='autos', known_cov=None)
-        for time_index in range(ds.Ntimes):
-            nt.assert_true((abs(cov_q_real[time_index].real) / abs\
-                (cov_q_real[time_index].imag) > 1e8).all())
-            nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
-                (cov_q_imag[time_index].imag) > 1e8).all())
+        for model in ['autos', 'empirical']:
+            (cov_q_real, cov_q_imag, cov_p_real,
+             cov_p_imag) = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False,
+                                                      model=model, known_cov=None)
+            # assert these arrays are effectively real-valued, even though they are complex type.
+            # some numerical noise can leak-in, so check to within a dynamic range of peak real power.
+            for cov in [cov_q_real, cov_q_imag, cov_p_real, cov_p_imag]:
+                assert np.isclose(cov.imag, 0, atol=abs(cov.real).max() / 1e10).all()
+
+        # check noise floor computation from auto correlations
+        uvp_auto_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 80), store_cov=True,
+                                cov_model='autos', verbose=False, taper='bh')
+        # get RMS of noise-dominated bandpowers for uvp_auto_cov
+        noise_dlys = np.abs(uvp_auto_cov.get_dlys(0) * 1e9) > 2000
+        rms = []
+        for key in uvp_auto_cov.get_all_keys():
+            rms.append(np.std(uvp_auto_cov.get_data(key).real \
+                / np.sqrt(np.diagonal(uvp_auto_cov.get_cov(key).real, axis1=1, axis2=2)), axis=0))
+        rms = np.mean(rms, axis=0)
+        # assert this is close to 1.0
+        assert np.isclose(np.mean(rms[noise_dlys]), 1.0, atol=0.1)
+
+        # check signal + noise floor computation
+        uvp_fgdep_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 80), store_cov=True,
+                                 cov_model='foreground_dependent', verbose=False, taper='bh')
+        # get RMS of data
+        rms = []
+        for key in uvp_fgdep_cov.get_all_keys():
+            rms.append(np.std(uvp_fgdep_cov.get_data(key).real \
+                / np.sqrt(np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2)), axis=0))
+        rms = np.mean(rms, axis=0)
+
+        # assert this is close to 1.0
+        assert np.isclose(np.mean(rms), 1.0, atol=0.1)
+
+        """
         # test foreground_dependent error bar estimation
-        uvp_autos = ds.pspec(bls1[:2], bls2[:2], (0, 1), ('xx','xx'), spw_ranges=(100,120), store_cov_diag=True, cov_model='autos', verbose=False)
-        uvp_foreground_dependent = ds.pspec(bls1[:2], bls2[:2], (0, 1), ('xx','xx'), spw_ranges=(100,120), store_cov=True, cov_model='foreground_dependent', verbose=False)
+        uvp_autos = ds.pspec(bls1[:], bls2[:], (0, 1), ('xx','xx'), spw_ranges=(100, 120), store_cov=True, cov_model='autos', verbose=False)
+        uvp_foreground_dependent = ds.pspec(bls1[:], bls2[:], (0, 1), ('xx','xx'), spw_ranges=(100, 120), store_cov=True, cov_model='foreground_dependent', verbose=False)
+
+        var_fg_dependent = np.mean([np.abs(np.diagonal(uvp_foreground_dependent.get_cov((0, blp, 'xx')), axis1=1, axis2=2)) for blp in blpairs], axis=0)
+        ps_products = np.sqrt(2) * np.real(uvp_autos.get_data(key)) *  np.sqrt(np.abs(np.diagonal(uvp_autos.get_cov(key), axis1=1, axis2=2))) + np.abs(np.diagonal(uvp_autos.get_cov(key), axis1=1, axis2=2))
+
         key = (0, blpairs[0], "xx")
         var_foreground_dependent = np.diagonal(uvp_foreground_dependent.get_cov(key), axis1=1, axis2=2)
         ps_products = np.sqrt(2)*uvp_autos.get_data(key).real*uvp_autos.get_stats("autos_diag", key).real + (uvp_autos.get_stats("autos_diag", key).real)**2
         # Compare the analytic variance from QE formalism with rough estimation from power spectrum products
-        nt.assert_true(np.isclose(var_foreground_dependent[:,2:-2], ps_products[:,2:-2], rtol=0.4).all())
+        nt.assert_true(np.isclose(var_foreground_dependent[:,2:-2], np.abs(ps_products)[:,2:-2], rtol=0.4).all())
+        """
 
     def test_pspec(self):
         # generate ds
