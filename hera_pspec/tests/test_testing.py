@@ -120,7 +120,7 @@ def test_sky_noise_sim():
     uvd2.polarization_array[0] = 1
     uvd2b.polarization_array[0] = 2
     uvd2 += uvd2b
-    sim2 = testing.sky_noise_sim(sim2, beam_ps, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
+    sim2 = testing.sky_noise_sim(uvd2, beam_ps, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
                                  divide_by_nsamp=False)
     # assert something was inserted
     for bl in sim2.get_antpairpols():
