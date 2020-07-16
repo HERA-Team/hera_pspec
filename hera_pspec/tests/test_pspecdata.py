@@ -1350,7 +1350,8 @@ class Test_PSpecData(unittest.TestCase):
         bls1, bls2 = bls1[:20], bls2[:20]
         Nblpairs = len(bls1)
 
-        # generate a sky and noise simulation
+        # generate a sky and noise simulation: each bl has the same FG signal, constant in time
+        # but has a different noise realization
         np.random.seed(0)
         sim1 = testing.sky_noise_sim(uvd, uvb, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
                                      constant_in_time=True, bl_loop_seed=0, divide_by_nsamp=False)
@@ -1392,30 +1393,15 @@ class Test_PSpecData(unittest.TestCase):
         # check signal + noise floor computation
         uvp_fgdep_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 80), store_cov=True,
                                  cov_model='foreground_dependent', verbose=False, taper='bh')
-        # get RMS of data
+        # get RMS of data: divisor is time-averaged covariance this time
+        # b/c noise in empirically estimated fg-dep cov yields biased errorbar (tavg is not unbiased, but less-biased)
         rms = []
         for key in uvp_fgdep_cov.get_all_keys():
             rms.append(np.std(uvp_fgdep_cov.get_data(key).real \
-                / np.sqrt(np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2)), axis=0))
+                / np.sqrt(np.mean(np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2), axis=0)), axis=0))
         rms = np.mean(rms, axis=0)
-
         # assert this is close to 1.0
         assert np.isclose(np.mean(rms), 1.0, atol=0.1)
-
-        """
-        # test foreground_dependent error bar estimation
-        uvp_autos = ds.pspec(bls1[:], bls2[:], (0, 1), ('xx','xx'), spw_ranges=(100, 120), store_cov=True, cov_model='autos', verbose=False)
-        uvp_foreground_dependent = ds.pspec(bls1[:], bls2[:], (0, 1), ('xx','xx'), spw_ranges=(100, 120), store_cov=True, cov_model='foreground_dependent', verbose=False)
-
-        var_fg_dependent = np.mean([np.abs(np.diagonal(uvp_foreground_dependent.get_cov((0, blp, 'xx')), axis1=1, axis2=2)) for blp in blpairs], axis=0)
-        ps_products = np.sqrt(2) * np.real(uvp_autos.get_data(key)) *  np.sqrt(np.abs(np.diagonal(uvp_autos.get_cov(key), axis1=1, axis2=2))) + np.abs(np.diagonal(uvp_autos.get_cov(key), axis1=1, axis2=2))
-
-        key = (0, blpairs[0], "xx")
-        var_foreground_dependent = np.diagonal(uvp_foreground_dependent.get_cov(key), axis1=1, axis2=2)
-        ps_products = np.sqrt(2)*uvp_autos.get_data(key).real*uvp_autos.get_stats("autos_diag", key).real + (uvp_autos.get_stats("autos_diag", key).real)**2
-        # Compare the analytic variance from QE formalism with rough estimation from power spectrum products
-        nt.assert_true(np.isclose(var_foreground_dependent[:,2:-2], np.abs(ps_products)[:,2:-2], rtol=0.4).all())
-        """
 
     def test_pspec(self):
         # generate ds
