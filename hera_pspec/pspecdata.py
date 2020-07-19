@@ -1733,13 +1733,13 @@ class PSpecData(object):
     def get_analytic_covariance(self, key1, key2, M=None, exact_norm=False, pol=False, model='empirical', known_cov=None):
         """
         Calculates the auto-covariance matrix for both the real and imaginary
-        parts of bandpowers (i.e., the q vectors and the p vectors). 
+        parts of bandpowers (i.e., the q vectors and the p vectors).
 
         Define
-        
+
         .. math ::
             Real part of q_a = (1/2) (q_a + q_a^*)
-            Imaginary part of q_a = (1/2i) (q_a - q_a^dagger) 
+            Imaginary part of q_a = (1/2i) (q_a - q_a^dagger)
             Real part of p_a = (1/2) (p_a + p_a^dagger)
             Imaginary part of p_a = (1/2i) (p_a - p_a^dagger)
 
@@ -1750,51 +1750,51 @@ class PSpecData(object):
             p_a = M_{ab} q_b
 
         Then
-        
+
         .. math ::
         The variance of (1/2) (q_a + q_a^dagger):
-        (1/4){ (<q_a q_a> - <q_a><q_a>) + 2(<q_a q_a^dagger> - <q_a><q_a^dagger>) 
+        (1/4){ (<q_a q_a> - <q_a><q_a>) + 2(<q_a q_a^dagger> - <q_a><q_a^dagger>)
         + (<q_a^dagger q_a^dagger> - <q_a^dagger><q_a^dagger>) }
 
         The variance of (1/2i) (q_a - q_a^dagger) :
-        (-1/4){ (<q_a q_a> - <q_a><q_a>) - 2(<q_a q_a^dagger> - <q_a><q_a^dagger>) 
+        (-1/4){ (<q_a q_a> - <q_a><q_a>) - 2(<q_a q_a^dagger> - <q_a><q_a^dagger>)
         + (<q_a^dagger q_a^dagger> - <q_a^dagger><q_a^dagger>) }
 
         The variance of (1/2) (p_a + p_a^dagger):
-        (1/4) { M_{ab} M_{ac} (<q_b q_c> - <q_b><q_c>) + 
-        M_{ab} M_{ac}^* (<q_b q_c^dagger> - <q_b><q_c^dagger>) + 
-        M_{ab}^* M_{ac} (<q_b^dagger q_c> - <q_b^dagger><q_c>) + 
+        (1/4) { M_{ab} M_{ac} (<q_b q_c> - <q_b><q_c>) +
+        M_{ab} M_{ac}^* (<q_b q_c^dagger> - <q_b><q_c^dagger>) +
+        M_{ab}^* M_{ac} (<q_b^dagger q_c> - <q_b^dagger><q_c>) +
         M_{ab}^* M_{ac}^* (<q_b^dagger q_c^dagger> - <q_b^dagger><q_c^dagger>) }
 
         The variance of (1/2i) (p_a - p_a^dagger):
-        (-1/4) { M_{ab} M_{ac} (<q_b q_c> - <q_b><q_c>) - 
-        M_{ab} M_{ac}^* (<q_b q_c^dagger> - <q_b><q_c^dagger>) - 
-        M_{ab}^* M_{ac} (<q_b^dagger q_c> - <q_b^dagger><q_c>) + 
+        (-1/4) { M_{ab} M_{ac} (<q_b q_c> - <q_b><q_c>) -
+        M_{ab} M_{ac}^* (<q_b q_c^dagger> - <q_b><q_c^dagger>) -
+        M_{ab}^* M_{ac} (<q_b^dagger q_c> - <q_b^dagger><q_c>) +
         M_{ab}^* M_{ac}^* (<q_b^dagger q_c^dagger> - <q_b^dagger><q_c^dagger>) }
 
         where
-        <q_a q_b> - <q_a><q_b> = 
+        <q_a q_b> - <q_a><q_b> =
                     tr(E^{12,a} C^{21} E^{12,b} C^{21})
                     + tr(E^{12,a} P^{22} E^{21,b*} S^{11})
-        <q_a q_b^dagger> - <q_a><q_b^dagger> =          
+        <q_a q_b^dagger> - <q_a><q_b^dagger> =
                     tr(E^{12,a} C^{22} E^{21,b} C^{11})
                     + tr(E^{12,a} P^{21} E^{12,b *} S^{21})
-        <q_a^dagger q_b^dagger> - <q_a^dagger><q_b^dagger> =            
+        <q_a^dagger q_b^dagger> - <q_a^dagger><q_b^dagger> =
                     tr(E^{21,a} C^{12} E^{21,b} C^{12})
                     + tr(E^{21,a} P^{11} E^{12,b *} S^{22})
 
         Note that
-        
+
         .. math ::
             E^{12,a}_{ij}.conj = E^{21,a}_{ji}
 
-        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by 
-        default. (So while the pointy brackets <...> should in principle be 
+        This function estimates C^1, C^2, P^{12}, and S^{12} empirically by
+        default. (So while the pointy brackets <...> should in principle be
         ensemble averages, in practice the code performs averages in time.)
 
         Note: Time-dependent flags that differ from frequency channel-to-channel
-        can create spurious spectral structure. Consider factorizing the flags with 
-        self.broadcast_dset_flags() before using model='empirical'
+        can create spurious spectral structure. Consider factorizing the flags with
+        self.broadcast_dset_flags() before using model='time_average'
 
         Parameters
         ----------
@@ -1804,7 +1804,7 @@ class PSpecData(object):
             in the list will be combined with inverse noise weights.
 
         M : array_like
-            Normalization matrix, M.
+            Normalization matrix, M. Ntimes x Ndlys x Ndlys
 
         exact_norm : boolean
             If True, beam and spectral window factors are taken
@@ -1824,19 +1824,26 @@ class PSpecData(object):
             Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos',...]
             How the covariances of the input data should be estimated.
             in 'dsets' mode, error bars are estimated from user-provided
-            per baseline and per channel standard deivations. 
-            If 'empirical' is
+            per baseline and per channel standard deivations. If 'empirical' is
             set, then error bars are estimated from the data by calculating the
             channel-channel covariance of each baseline over time and
             then applying the appropriate linear transformations to these
-            frequency-domain covariances. 
-            If 'autos' is set, the covariances of the input data
-            over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
-            and integration time. 
-            'outer_product' will only be called when calculating the 'foreground_dependent' covariance, 
-            when the output covariance between delays include both the noise covariance (nn) and 
-            the signal-noise (sn). In this case, cov_q_real (or cov_q_imag) takes the form
-            (1/2) [ tr(E^{12,a} C_{outer_product}^{22} E^{21,b} C_{autos}^{11}) + tr(E^{12,a} C_{autos}^{22} E^{21,b} C_{outer_product}^{11}) - tr(E^{12,a} C_{autos}^{22} E^{21,b} C_{autos}^{11})].
+            frequency-domain covariances. If 'autos' is set, the covariances of the input data
+            over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth
+            and integration time.
+            
+            ############
+            When model is chosen as 'foreground_dependent', we include the signal-noise coupling term
+            besides the noise in the output covariance. It takes a form of 
+            (1/2) sum_{b,c}  M_{ab} M_{ac}^* [ - E^{12,b} Cn^{22} E^{21,c} Cn^{11} +  
+            E^{12,b} Couter^{22} E^{21,c} Cn^{11} + 
+            E^{12,b} Cn^{22} E^{21,c} Couter^{11} ],
+            where Cn is the input noise covariance estimated by the auto-correlation amplitudes (calculated by C_model(model='autos')), and 
+            Couter is the outer product of input visibilities (calculated by C_model(model='outer_product')).
+            Initially, C_model(model='foreground_dependent') = C_model(model='autos') + C_model(model='outer_product'),
+            thus we need to subtract extra terms, E^{12,b} Couter^{22} E^{21,c} Couter^{11} + 2 E^{12,b} Cn^{22} E^{21,c} Cn^{11},  
+            from the matrix products of get_analytic_covariance(model=''foreground_dependent'').
+            #############
 
         known_cov : dicts of covariance matrices
             Covariance matrices that are not calculated internally from data.
@@ -1847,109 +1854,131 @@ class PSpecData(object):
             Bandpower covariance, with dimension (Ntimes, spw_Ndlys, spw_Ndlys).
         """
         # Collect all the relevant pieces
-        
-        # Get E matrices and input covariance matrices
-        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)       
-        # (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
         C11, C22, C21, C12, P11, S11, P22, S22, P21, S21 = [], [], [], [], [], [], [], [], [], []
         if model == 'foreground_dependent':
             C11_outer_product, C22_outer_product, C11_autos, C22_autos = [], [], [], []
         for time_index in range(self.dsets[0].Ntimes):
-            C11.append(self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            C22.append(self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            C21.append(self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            C12.append(self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            P11.append(self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            S11.append(self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            P22.append(self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            S22.append(self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            P21.append(self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            S21.append(self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)[np.newaxis,:,:])
-            if model == 'foreground_dependent':
-                C11_outer_product.append(self.C_model(key1, model='outer_product', time_index=time_index)[np.newaxis,:,:])
-                C22_outer_product.append(self.C_model(key2, model='outer_product', time_index=time_index)[np.newaxis,:,:])
-                C11_autos.append(self.C_model(key1, model='autos', time_index=time_index)[np.newaxis,:,:])
-                C22_autos.append(self.C_model(key2, model='autos', time_index=time_index)[np.newaxis,:,:])
-        # (Ntimes, 1, spw_Nfreqs, spw_Nfreqs)
-        
-        if np.isclose(C11[0], C11[-1]).all():
-            # if the covariance matrix is uniform along the time axis
-            E12C21 = np.matmul(E_matrices, C21[0]) 
-            E12P22 = np.matmul(E_matrices, P22[0]) 
-            E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11[0])
-            E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11[0])
-            E12C22 = np.matmul(E_matrices, C22[0])
-            E12starS21 = np.matmul(E_matrices.conj(), S21[0])
-            E12P21 = np.matmul(E_matrices, P21[0])
-            E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12[0])
-            E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11[0])
-            E12starS22 = np.matmul(E_matrices.conj(), S22[0]) 
+            C11.append(self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index, include_extension=True))
+            C22.append(self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index, include_extension=True))
+            C21.append(self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True))
+            C12.append(self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True))
+            P11.append(self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index, include_extension=True))
+            S11.append(self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True))
+            P22.append(self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index, include_extension=True))
+            S22.append(self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True))
+            P21.append(self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index, include_extension=True))
+            S21.append(self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True))
+            if model == 'foreground_dependent':  
+                C11_outer_product.append(self.C_model(key1, model='outer_product', time_index=time_index, include_extension=True))
+                C22_outer_product.append(self.C_model(key2, model='outer_product', time_index=time_index, include_extension=True))
+                C11_autos.append(self.C_model(key1, model='autos', time_index=time_index, include_extension=True))
+                C22_autos.append(self.C_model(key2, model='autos', time_index=time_index, include_extension=True))
+        # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+
+        if M.ndim == 2:
+            M = np.asarray([M for time in range(self.Ntimes)])
+        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = [], [], [], []
+        for time_index in range(self.dsets[0].Ntimes):
+            E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol, time_index=time_index)
+            # Get E matrices and input covariance matrices
+            if model in ['dsets','autos']:
+                E12C21, E12P22, E21starS11, E12starS21, E12P21, E21C12, E21P11, E12starS22 = [0],  [0],  [0],  [0],  [0],  [0],  [0],  [0]
+                E21C11 = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11[time_index]))
+                E12C22 = np.multiply(E_matrices, np.diag(C22[time_index]))
+            else:
+                E12C21 = np.matmul(E_matrices, C21[time_index])
+                E12P22 = np.matmul(E_matrices, P22[time_index])
+                E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11[time_index])
+                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11[time_index])
+                E12C22 = np.matmul(E_matrices, C22[time_index])
+                E12starS21 = np.matmul(E_matrices.conj(), S21[time_index])
+                E12P21 = np.matmul(E_matrices, P21[time_index])
+                E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12[time_index])
+                E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11[time_index])
+                E12starS22 = np.matmul(E_matrices.conj(), S22[time_index]) 
             # (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
             # Get q_q, q_qdagger, qdagger_qdagger
-            q_q = np.einsum('bij, cji->bc', E12P22, E21starS11) + np.einsum('bij, cji->bc', E12C21, E12C21)
-            q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11) + np.einsum('bij, cji->bc', E12P21, E12starS21)
-            if model == 'foreground_dependent':
-                q_qdagger -= 2*np.einsum('bij, cji->bc', np.matmul(E_matrices, C22_autos[0]), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_autos[0]))
-                q_qdagger -= np.einsum('bij, cji->bc', np.matmul(E_matrices, C22_outer_product[0]), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_outer_product[0]))
+            einstein_path =  np.einsum_path('bij, cji->bc', E12C22, E21C11, optimize='optimal')[0]
+            if np.isclose(E12P22, 0).all() or np.isclose(E21starS11,0).all():
+                q_q = np.zeros((E_matrices.shape[0],E_matrices.shape[0])).astype(np.complex128)
+            else:
+                q_q = np.einsum('bij, cji->bc', E12P22, E21starS11, optimize=einstein_path)
+            if np.isclose(E12C21, 0).all(): 
+                q_q += 0.+1.j*0
+            else:
+                q_q += np.einsum('bij, cji->bc', E12C21, E12C21, optimize=einstein_path)
 
-            qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12) + np.einsum('bij, cji->bc', E21P11, E12starS22)
+            q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path) 
+            if np.isclose(E12P21, 0).all() or np.isclose(E12starS21,0).all():
+                q_qdagger += 0.+1.j*0
+            else:
+                q_qdagger += np.einsum('bij, cji->bc', E12P21, E12starS21, optimize=einstein_path)
+            if model == 'foreground_dependent':
+                q_qdagger -= 2*np.einsum('bij, cji->bc', np.multiply(E_matrices, np.diag(C22_autos[time_index])), np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11_autos[time_index])), optimize=einstein_path)
+                q_qdagger -= np.einsum('bij, cji->bc', np.matmul(E_matrices, C22_outer_product[time_index]), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_outer_product[time_index]), optimize=einstein_path)
+
+            if np.isclose(E21C12, 0).all(): 
+                qdagger_qdagger = np.zeros((E_matrices.shape[0],E_matrices.shape[0])).astype(np.complex128)
+            else:
+                qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12, optimize=einstein_path) 
+            if np.isclose(E21P11, 0).all() or np.isclose(E12starS22,0).all():
+                qdagger_qdagger += 0.+1.j*0
+            else:
+                qdagger_qdagger += np.einsum('bij, cji->bc', E21P11, E12starS22, optimize=einstein_path)
             # (spw_Ndlys, spw_Ndlys)
 
-            # Get bandpower covariance 
-            cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
-            cov_q_imag = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
-            cov_p_real = ( np.einsum('ab,cd,bd->ac', M, M, q_q) +
-                np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) +
-                np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
-                np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-            cov_p_imag = -( np.einsum('ab,cd,bd->ac', M, M, q_q) -
-                np.einsum('ab,cd,bd->ac', M, M.conj(), q_qdagger) -
-                np.einsum('ab,cd,bd->ac', M.conj(), M, q_qdagger.conj()) + 
-                np.einsum('ab,cd,bd->ac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
+            cov_q_real_temp = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
+            cov_q_imag_temp = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
+            
+            m = M[time_index]
+            einstein_path =  np.einsum_path('ab,cd,bd->ac', m, m, m, optimize='optimal')[0]
+            if np.isclose([q_q], 0).all():
+                MMq_q = np.zeros((E_matrices.shape[0],E_matrices.shape[0])).astype(np.complex128)
+            else:
+                assert np.shape(q_q) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
+                MMq_q = np.einsum('ab,cd,bd->ac', m, m, q_q, optimize=einstein_path)
+            if np.isclose([q_qdagger], 0).all():
+                MM_q_qdagger = 0.+1.j*0
+            else:
+                assert np.shape(q_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
+                MM_q_qdagger = np.einsum('ab,cd,bd->ac', m, m.conj(), q_qdagger, optimize=einstein_path)
+            if np.isclose([q_qdagger], 0).all():
+                M_Mq_qdagger_ = 0.+1.j*0
+            else:
+                assert np.shape(q_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
+                M_Mq_qdagger_ = np.einsum('ab,cd,bd->ac', m.conj(), m, q_qdagger.conj(), optimize=einstein_path)
+            if np.isclose([qdagger_qdagger], 0).all():
+                M_M_qdagger_qdagger = 0.+1.j*0
+            else:
+                assert np.shape(qdagger_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
+                M_M_qdagger_qdagger = np.einsum('ab,cd,bd->ac', m.conj(), m.conj(), qdagger_qdagger, optimize=einstein_path)
+
+            cov_p_real_temp = ( MMq_q + MM_q_qdagger + M_Mq_qdagger_ + M_M_qdagger_qdagger)/ 4.
+            cov_p_imag_temp = -( MMq_q - MM_q_qdagger - M_Mq_qdagger_ + M_M_qdagger_qdagger)/ 4.
             # (spw_Ndlys, spw_Ndlys)
 
-            cov_q_real = np.repeat(cov_q_real[np.newaxis, :,:], self.dsets[0].Ntimes, axis=0)
-            cov_q_imag = np.repeat(cov_q_imag[np.newaxis, :,:], self.dsets[0].Ntimes, axis=0)
-            cov_p_real = np.repeat(cov_p_real[np.newaxis, :,:], self.dsets[0].Ntimes, axis=0)
-            cov_p_imag = np.repeat(cov_p_imag[np.newaxis, :,:], self.dsets[0].Ntimes, axis=0)
-            # (Ntimes, spw_Ndlys, spw_Ndlys)
+            if np.isclose(C11[0], C11[-1]).all() and np.all(np.isclose(self.Y(key1)[0], self.Y(key1)[-1])) and np.all(np.isclose(self.Y(key2)[0], self.Y(key2)[-1])):
+            # if the covariance matrix is uniform along the time axis, we just calculate the result for one timestamp and make its copies
+            # Get E matrices and input covariance matrices
+                cov_q_real.extend([cov_q_real_temp]*self.dsets[0].Ntimes)
+                cov_q_imag.extend([cov_q_imag_temp]*self.dsets[0].Ntimes)
+                cov_p_real.extend([cov_p_real_temp]*self.dsets[0].Ntimes)
+                cov_p_imag.extend([cov_p_imag_temp]*self.dsets[0].Ntimes)
+                break
+            else:
+                cov_q_real.append(cov_q_real_temp)
+                cov_q_imag.append(cov_q_imag_temp)
+                cov_p_real.append(cov_p_real_temp)
+                cov_p_imag.append(cov_p_imag_temp)
 
-        else :
-            E12C21 = np.matmul(E_matrices, C21) 
-            E12P22 = np.matmul(E_matrices, P22) 
-            E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
-            E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
-            E12C22 = np.matmul(E_matrices, C22)
-            E12starS21 = np.matmul(E_matrices.conj(), S21)
-            E12P21 = np.matmul(E_matrices, P21)
-            E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
-            E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
-            E12starS22 = np.matmul(E_matrices.conj(), S22) 
-            # (Ntimes, spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
+        cov_q_real = np.asarray(cov_q_real)
+        cov_q_imag = np.asarray(cov_q_imag)
+        cov_p_real = np.asarray(cov_p_real)
+        cov_p_imag = np.asarray(cov_p_imag)
+        # (Ntimes, spw_Ndlys, spw_Ndlys)
 
-            # Get q_q, q_qdagger, qdagger_qdagger
-            q_q = np.einsum('abij, acji->abc', E12P22, E21starS11) + np.einsum('abij, acji->abc', E12C21, E12C21)
-            q_qdagger = np.einsum('abij, acji->abc', E12C22, E21C11) + np.einsum('abij, acji->abc', E12P21, E12starS21)
-            if model == 'foreground_dependent':
-                q_qdagger -= 2*np.einsum('abij, acji->abc', np.matmul(E_matrices, C22_autos), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_autos))
-                q_qdagger -= np.einsum('abij, acji->abc', np.matmul(E_matrices, C22_outer_product), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_outer_product))
-            qdagger_qdagger = np.einsum('abij, acji->abc', E21C12, E21C12) + np.einsum('abij, acji->abc', E21P11, E12starS22)
-            # (Ntimes, spw_Ndlys, spw_Ndlys)
-
-            # Get bandpower covariance 
-            cov_q_real = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
-            cov_q_imag = ( q_qdagger + q_qdagger.conj() - q_q - qdagger_qdagger) / 4.
-            cov_p_real = ( np.einsum('ab,cd,ibd->iac', M, M, q_q) +
-                np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) +
-                np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) + 
-                np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-            cov_p_imag = ( np.einsum('ab,cd,ibd->iac', M, M.conj(), q_qdagger) +
-                np.einsum('ab,cd,ibd->iac', M.conj(), M, q_qdagger.conj()) - 
-                np.einsum('ab,cd,ibd->iac', M, M, q_q) -
-                np.einsum('ab,cd,ibd->iac', M.conj(), M.conj(), qdagger_qdagger) )/ 4. 
-            # (Ntimes, spw_Ndlys, spw_Ndlys)
         return cov_q_real, cov_q_imag, cov_p_real, cov_p_imag
 
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15):
