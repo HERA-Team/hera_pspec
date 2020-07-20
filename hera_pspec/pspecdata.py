@@ -1874,18 +1874,21 @@ class PSpecData(object):
                 C22_outer_product.append(self.C_model(key2, model='outer_product', time_index=time_index, include_extension=True))
                 C11_autos.append(self.C_model(key1, model='autos', time_index=time_index, include_extension=True))
                 C22_autos.append(self.C_model(key2, model='autos', time_index=time_index, include_extension=True))
-        # (Ntimes, spw_Nfreqs, spw_Nfreqs)
+        # covariance matrices have a shape of (Ntimes, spw_Nfreqs, spw_Nfreqs)
 
         if M.ndim == 2:
             M = np.asarray([M for time in range(self.Ntimes)])
         cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = [], [], [], []
+        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
         for time_index in range(self.dsets[0].Ntimes):
-            E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
-            # Get E matrices and input covariance matrices
             if model in ['dsets','autos']:
                 E12C21, E12P22, E21starS11, E12starS21, E12P21, E21C12, E21P11, E12starS22 = [0],  [0],  [0],  [0],  [0],  [0],  [0],  [0]
                 E21C11 = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11[time_index]))
                 E12C22 = np.multiply(E_matrices, np.diag(C22[time_index]))
+            elif model in ['foreground_dependent','outer_product']:
+                E12C21, E12P22, E21starS11, E12starS21, E12P21, E21C12, E21P11, E12starS22 = [0],  [0],  [0],  [0],  [0],  [0],  [0],  [0]
+                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11[time_index])
+                E12C22 = np.matmul(E_matrices, C22[time_index])
             else:
                 E12C21 = np.matmul(E_matrices, C21[time_index])
                 E12P22 = np.matmul(E_matrices, P22[time_index])
@@ -1902,7 +1905,7 @@ class PSpecData(object):
             # Get q_q, q_qdagger, qdagger_qdagger
             einstein_path =  np.einsum_path('bij, cji->bc', E12C22, E21C11, optimize='optimal')[0]
             if np.isclose(E12P22, 0).all() or np.isclose(E21starS11,0).all():
-                q_q = np.zeros((E_matrices.shape[0],E_matrices.shape[0])).astype(np.complex128)
+                q_q = 0.+1.j*0
             else:
                 q_q = np.einsum('bij, cji->bc', E12P22, E21starS11, optimize=einstein_path)
             if np.isclose(E12C21, 0).all(): 
@@ -1920,7 +1923,7 @@ class PSpecData(object):
                 q_qdagger -= np.einsum('bij, cji->bc', np.matmul(E_matrices, C22_outer_product[time_index]), np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11_outer_product[time_index]), optimize=einstein_path)
 
             if np.isclose(E21C12, 0).all(): 
-                qdagger_qdagger = np.zeros((E_matrices.shape[0],E_matrices.shape[0])).astype(np.complex128)
+                qdagger_qdagger = 0.+1.j*0
             else:
                 qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12, optimize=einstein_path) 
             if np.isclose(E21P11, 0).all() or np.isclose(E12starS22,0).all():
