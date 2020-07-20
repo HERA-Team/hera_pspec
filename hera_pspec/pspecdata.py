@@ -12,6 +12,10 @@ import glob
 import warnings
 import json
 import uvtools.dspec as dspec
+# This is a list of weights that will depend on baseline.
+# If data_weighting is in this list, G and H will be hashed per
+# baseline pair.
+BASELINE_DEPENDENT_WEIGHTS = ['dayenu', 'iC']
 
 from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
 
@@ -895,7 +899,7 @@ class PSpecData(object):
                         _iC[m] = np.linalg.inv(_iC[m])
                 self.set_iC({Ckey:_iC})
         return self._iC[Ckey]
-    def Y(self, key):
+    def Y(self, key, time_index=None):
         """
         Return the weighting (diagonal) matrix, Y. This matrix
         is calculated by taking the logical AND of flags across all times
@@ -916,11 +920,15 @@ class PSpecData(object):
             Tuple containing indices of dataset and baselines. The first item
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
-
+        time_index : integer
+            time index to retrieve. If None, returns 2d array of all times.
         Returns
         -------
         Y : array_like
+        If time_index is None
             (spw_Nfreqs + sum(filter_extension)) x Ntimes matrix of weights.
+        Otherwise
+            spw_Nfreqs
         """
         assert isinstance(key, tuple)
         # parse key
@@ -932,7 +940,13 @@ class PSpecData(object):
             if not np.all(np.isclose(self._Y[key], 0.0) \
                         + np.isclose(self._Y[key], 1.0)):
                 raise NotImplementedError("Non-binary weights not currently implmented")
-        return self._Y[key]
+        if self._time_independent_weights[key]:
+            return self._Y[key]
+        else:
+            if time_index is None:
+                return self._Y[key]
+            else:
+                return self._Y[key][:, time_index].squeeze()
 
     def set_iC(self, d):
         """
@@ -1036,10 +1050,10 @@ class PSpecData(object):
             tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=np.complex128)
             # form R matrix
             if not tindep:
-                wgts = np.asarray([self.Y(key)[:,m].squeeze() for m in range(self.Ntimes)])
+                wgts = np.asarray([self.Y(key, m) for m in range(self.Ntimes)])
                 wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
             else:
-                wgts = self.Y(key).squeeze()
+                wgts = self.Y(key)
                 wgt_sq = np.outer(wgts, wgts)
             wgt_sq[np.isnan(wgt_sq)] = 0.
 
@@ -1560,14 +1574,18 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (spw_Nfreqs, spw_Nfreqs).
         """
-        Gkey = (self.data_weighting, self.taper, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
-               + tuple(self.Y(key2)[:,time_index].flatten()) + self.filter_extension + (self.spw_Nfreqs,)
-        if not self.data_weighting == 'identity':
+        Gkey = (self.data_weighting, self.taper, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1, time_index))\
+               + tuple(self.Y(key2, time_index)) + self.filter_extension + (self.spw_Nfreqs,)
+        if self.data_weighting in BASELINE_DEPENDENT_WEIGHTS:
             Gkey = Gkey + key1 + key2
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
         if not Gkey in self._G:
-            R1 = self.R(key1)[time_index].squeeze()
-            R2 = self.R(key2)[time_index].squeeze()
+            R1 = self.R(key1)
+            if not self._time_independent_weights[key1]:
+                R1 = R1[time_index].squeeze()
+            R2 = self.R(key2)
+            if not self._time_independent_weights[key2]:
+                R2 = R2[time_index].squeeze()
             if (exact_norm):
                 integral_beam1 = self.get_integral_beam(pol)
                 integral_beam2 = self.get_integral_beam(pol, include_extension=True)
@@ -1716,16 +1734,22 @@ class PSpecData(object):
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
+        tindep1 = self._time_independent_weights[key1]
+        tindep2 = self._time_independent_weights[key2]
 
-        Hkey = (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
-               + tuple(self.Y(key2)[:,time_index].flatten(),) + self.filter_extension + (self.spw_Nfreqs,)
+        Hkey = (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1, time_index))\
+               + tuple(self.Y(key2, time_index)) + self.filter_extension + (self.spw_Nfreqs,)
         # if we are using identity weighting, then do not hash by baseline pairs.
-        if not self.data_weighting == 'identity':
+        if self.data_weighting in BASELINE_DEPENDENT_WEIGHTS:
             Hkey = Hkey + key1 + key2
         if not Hkey in self._H:
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-            R1 = self.R(key1)[time_index].squeeze()
-            R2 = self.R(key2)[time_index].squeeze()
+            R1 = self.R(key1)
+            if not tindep1:
+                R1 = R1[time_index].squeeze()
+            R2 = self.R(key2)
+            if not tindep2:
+                R2 = R2[time_index].squeeze()
             if (exact_norm):
                 integral_beam1 = self.get_integral_beam(pol)
                 integral_beam2 = self.get_integral_beam(pol, include_extension=True)
@@ -1931,7 +1955,7 @@ class PSpecData(object):
                              "by now! Cannot be equal to None")
 
         Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.spw_Ndlys, self.data_weighting)\
-        + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
+        + tuple(self.Y(key1, time_index)) + tuple(self.Y(key2, time_index))
         if not Ekey in self._E:
             assert time_index >= 0 and time_index < self.Ntimes, "time_index must be between 0 and Ntimes"
             nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
@@ -2342,7 +2366,7 @@ class PSpecData(object):
         """
         # Collect all the relevant pieces
         Vkey = key1 + key2 + (pol, exact_norm, self.taper, self.spw_Ndlys, model, self.data_weighting)\
-        + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())
+        + tuple(self.Y(key1, time_index)) + tuple(self.Y(key2, time_index))
 
         if not Vkey in self._V:
             if model in ['dsets', 'empirical']:
@@ -2438,9 +2462,11 @@ class PSpecData(object):
         """
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
         assert(mode in modes)
-        Mkey = key1 + key2 +(mode, exact_norm, self.spw_Ndlys) + (self.taper, self.data_weighting)\
-        + tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())\
+        Mkey = (mode, exact_norm, self.spw_Ndlys) + (self.taper, self.data_weighting)\
+        + tuple(self.Y(key1, time_index)) + tuple(self.Y(key2, time_index))\
         + self.filter_extension + (self.spw_Nfreqs,)
+        if self.data_weight in BASELINE_DEPENDENT_WEIGHTS:
+            Mkey = Mkey + key1 + key2
         if not Mkey in self._M:
             if mode != 'I' and exact_norm==True:
                 raise NotImplementedError("Exact norm is not supported for non-I modes")
@@ -2541,9 +2567,11 @@ class PSpecData(object):
         W : array_like, complex
             Dimensions (Ndlys, Ndlys).
         """
-        Wkey = key1 + key2 + (mode, sampling, exact_norm, self.taper, self.data_weighting, self.spw_Ndlys) + \
-        tuple(self.Y(key1)[:,time_index].flatten()) + tuple(self.Y(key2)[:,time_index].flatten())\
+        Wkey = (mode, sampling, exact_norm, self.taper, self.data_weighting, self.spw_Ndlys) + \
+        tuple(self.Y(key1 ,time_index)) + tuple(self.Y(key2, time_index))\
         + tuple(self.filter_extension) + (self.spw_Nfreqs,)
+        if self.data_weighting in BASELINE_DEPENDENT_WEIGHTS:
+            Wkey = Wkey + key1 + key2
         if not Wkey in self._W:
             M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
             H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
