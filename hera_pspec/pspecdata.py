@@ -230,6 +230,7 @@ class PSpecData(object):
         self.dsets_std += dsets_std
         self.labels += labels
 
+        new_labels = []
         # Check for repeated labels, and make them unique
         for i, l in enumerate(self.labels):
             ext = 1
@@ -239,6 +240,7 @@ class PSpecData(object):
                     ext += 1
                 else:
                     self.labels[i] = l
+                    new_labels += [l]
                     break
 
         # Store no. frequencies and no. times
@@ -250,6 +252,17 @@ class PSpecData(object):
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
         self.spw_Ndlys = self.spw_Nfreqs
+
+        # Check weights. If they are time independent, then set _time_independent_weights = True.
+        for label in new_labels:
+            bls = self.dsets[label].get_antpairpols()
+            for bl in bls:
+                blkey = (label, bl[:2], bl[-1])
+                wwf = self.w(blkey)
+                self._time_independent_weights[blkey] = np.all([np.all(wrow == wrow[0]) for wrow in wwf]):
+
+
+
 
     def __str__(self):
         """
@@ -554,12 +567,15 @@ class PSpecData(object):
         dset, bl = self.parse_blkey(key)
         spw = slice(*self.get_spw(include_extension=include_extension))
         if self.wgts[dset] is not None:
-            return self.wgts[dset].get_data(bl).T[spw]
+            wgts = self.wgts[dset].get_data(bl).T[spw]
         else:
             # If weights were not specified, use the flags built in to the
             # UVData dataset object
             wgts = (~self.dsets[dset].get_flags(bl)).astype(float).T[spw]
-            return wgts
+        # only return the first time if time_time_independent_weights
+        if self._time_independent_weights[key]:
+            wgts = wgts[:, 0]
+        return wgts
 
     def set_C(self, cov):
         """
@@ -835,8 +851,8 @@ class PSpecData(object):
         # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-
-        Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
+        tindep = self._time_independent_weights(key)
+        Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True, tindep)
         nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
@@ -846,23 +862,38 @@ class PSpecData(object):
             #empirically determined C is not per-time but weights are.
             #Thus, we need to loop through each set of per-time weights and take
             #a psuedo-inverse at each time.
-            _iC = np.zeros((self.Ntimes, nfreq, nfreq))
             wgts = self.Y(key)
-            wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
-            #Now, for each time we want to calculate the psuedo-inverse for.
-            for m in range(self.Ntimes):
-                C = self.C_model(key, model=model, time_index=m)
-                #multiply C --
-                #which is a single Ndlys x Ndlys matrix estimated from multiple times
-                _iC[m] = wgts_sq[m] * C
-                #by wgts_sq at that time
-                #next...
-                if np.linalg.cond(_iC[m]) >= 1e9:
+            if tindep:
+                _iC = np.zeros(nfreq, nfreq):
+                wgts_sq = np.outer(wgts, wgts)
+            else:
+                _iC = np.zeros((self.Ntimes, nfreq, nfreq))
+                wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
+            # if the weights for this dset and baseline are time independent, then just
+            # compute C, take its inverse (or psuedoinverse if cond number is to great).
+            if tindep:
+                C = self.C_model(key, model=model, time_index=0)
+                _iC = wgts_sq * C
+                if np.linalg.cond(_iC) >= 1e9:
                     warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
-                    _iC[m] = np.linalg.pinv(_iC[m])
+                    _iC = np.linalg.pinv(_iC)
                 else:
-                    _iC[m] = np.linalg.inv(_iC[m])
-            self.set_iC({Ckey:_iC})
+                    _iC = np.linalg.inv(_iC)
+            else:
+                #Now, for each time we want to calculate the psuedo-inverse for.
+                for m in range(self.Ntimes):
+                    C = self.C_model(key, model=model, time_index=m)
+                    #multiply C --
+                    #which is a single Ndlys x Ndlys matrix estimated from multiple times
+                    _iC[m] = wgts_sq[m] * C
+                    #by wgts_sq at that time
+                    #next...
+                    if np.linalg.cond(_iC[m]) >= 1e9:
+                        warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
+                        _iC[m] = np.linalg.pinv(_iC[m])
+                    else:
+                        _iC[m] = np.linalg.inv(_iC[m])
+                self.set_iC({Ckey:_iC})
         return self._iC[Ckey]
     def Y(self, key):
         """
@@ -968,15 +999,17 @@ class PSpecData(object):
             If true, average over all times so that output is (spw_Nfreqs x spw_Nfreqs)
 
         Returns
+            If weights for key are time-independent, returns an spw_Nfreqs x spw_Nfreqs array.
+            Otherwise, return an Ntimes x spw_Nfreqs x spw_Nfreqs array.
         """
         # type checks
         assert isinstance(key, tuple)
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-
+        tindep = self._time_independent_weights[key]
         # Only add to Rkey if a particular mode is enabled
         # If you do add to this, you need to specify this in self.set_R docstring!
-        Rkey = key + (self.taper,)
+        Rkey = key + (self.taper, tindep)
         if self.data_weighting == 'dayenu':
             # add extra dayenu params
             Rkey = Rkey + tuple(self.filter_extension,) + (self.spw_Nfreqs,) \
@@ -1002,11 +1035,19 @@ class PSpecData(object):
                              nfreq), dtype=complex)
             tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=np.complex128)
             # form R matrix
-            wgts = np.asarray([self.Y(key)[:,m].squeeze() for m in range(self.Ntimes)])
-            wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
+            if not tindep:
+                wgts = np.asarray([self.Y(key)[:,m].squeeze() for m in range(self.Ntimes)])
+                wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
+            else:
+                wgts = self.Y(key).squeeze()
+                wgt_sq = np.outer(wgts, wgts)
             wgt_sq[np.isnan(wgt_sq)] = 0.
+
             if self.data_weighting == 'identity':
-                rmat =  np.asarray([self.I(key) * wgt_sq[m] for m in range(self.Ntimes)])
+                if tindep:
+                    rmat = self.I(key) * wgt_sq
+                else:
+                    rmat =  np.asarray([self.I(key) * wgt_sq[m] for m in range(self.Ntimes)])
 
             elif self.data_weighting == 'iC':
                 rmat = self.iC(key)
@@ -1024,9 +1065,24 @@ class PSpecData(object):
                 #matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
                 # to apply flagging weights before taking psuedo inverse.
-                rmat = np.zeros((self.Ntimes, nfreq, nfreq))
+                if tindep:
+                    rmat = np.zeros(nfreq, nfreq)
+                else:
+                    rmat = np.zeros((self.Ntimes, nfreq, nfreq))
                 _freqs = self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]]
                 df = np.abs(_freqs[1]-_freqs[0])
+                if tindep:
+                    rdkey = tuple(wgts) + tuple(np.round(np.array(r_params['filter_centers']) * df, 8))\
+                    + tuple(np.round(df * np.array(r_params['filter_half_widths']), 8))\
+                    + tuple(np.round(df * np.array(r_params['filter_factors']) * 1e8, 8))\
+                    + ('dayenu',) + (self.spw_Nfreqs,) + self.filter_extension
+                    if not rdkey in self.r_cache:
+                        rm = dspec.dayenu_mat_inv(x=_freqs,
+                                        filter_centers=r_params['filter_centers'],
+                                        filter_half_widths=r_params['filter_half_widths'],
+                                        filter_factors=r_params['filter_factors']) * wgt_sq
+                        self.r_cache[rdkey] = np.linalg.pinv(rm)
+                    rmat = self.r_cache[rdkey]
                 for m in range(self.Ntimes):
                     rdkey = tuple(wgts[m]) + tuple(np.round(np.array(r_params['filter_centers']) * df, 8))\
                     + tuple(np.round(df * np.array(r_params['filter_half_widths']), 8))\
@@ -1051,21 +1107,37 @@ class PSpecData(object):
                     else:
                         fundamental_period = r_params['restore_fundamental_period']
                     ndlys_restore = int(r_params['restore_half_width'] * np.mean(np.diff(self.freqs)) * fundamental_period)
-                    for m in range(self.Ntimes):
-                        if np.sum((wgts[m]>0).astype(float)) >= ndlys_restore:
-                            rmat[m] = rmat[m] + \
+                    if tindep:
+                        if np.sum((wgts>0).astype(float)) >= ndlys_restore:
+                            rmat = rmat + \
                             dspec.delay_interpolation_matrix(self.spw_Nfreqs, ndlys_restore,
                             wgts[m][self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
-                            @ (tmat - rmat[m])
+                            @ (tmat - rmat)
+                    else:
+                        for m in range(self.Ntimes):
+                            if np.sum((wgts[m]>0).astype(float)) >= ndlys_restore:
+                                rmat[m] = rmat[m] + \
+                                dspec.delay_interpolation_matrix(self.spw_Nfreqs, ndlys_restore,
+                                wgts[m][self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
+                                @ (tmat - rmat[m])
                 else:
                     raise ValueError("'restore_half_width' must be supplied as an integer or float >0.")
 
-            rmat =  np.transpose(rmat, (1, 0, 2))
-            if self.symmetric_taper:
-                sqrtT = np.sqrt(myTaper)
-                rmat = np.transpose(sqrtT[:,None,None] * rmat * sqrtT[None,None,:], (1,0,2))
+            # transpose rmat
+            if tindep:
+                rmat = rmat.T
+                if self.symmetric_taper:
+                    sqrtT = np.sqrt(myTaper)
+                    rmat = np.transpose(sqrtT[:, None] * rmat * sqrtT[None, :])
+                else:
+                    rmat = np.transpow(myTaper[:, None] * rmat)
             else:
-                rmat = np.transpose(myTaper[:,None,None] * rmat, (1,0,2))
+                rmat =  np.transpose(rmat, (1, 0, 2))
+                if self.symmetric_taper:
+                    sqrtT = np.sqrt(myTaper)
+                    rmat = np.transpose(sqrtT[:,None,None] * rmat * sqrtT[None,None,:], (1,0,2))
+                else:
+                    rmat = np.transpose(myTaper[:,None,None] * rmat, (1,0,2))
             #move time-axis to the back. This is helpful for future broadcasting
             #exploitation
             #self._R[Rkey] = np.swap_axes(np.swap_axes(rmat, 1, 2), 0, 1)
@@ -1488,8 +1560,10 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (spw_Nfreqs, spw_Nfreqs).
         """
-        Gkey = key1 + key2 + (self.data_weighting, self.taper, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
+        Gkey = (self.data_weighting, self.taper, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten()) + self.filter_extension + (self.spw_Nfreqs,)
+        if not self.data_weighting == 'identity':
+            Gkey = Gkey + key1 + key2
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
         if not Gkey in self._G:
             R1 = self.R(key1)[time_index].squeeze()
@@ -1642,8 +1716,12 @@ class PSpecData(object):
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
-        Hkey = key1 + key2 + (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
+
+        Hkey = (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1)[:,time_index].flatten())\
                + tuple(self.Y(key2)[:,time_index].flatten(),) + self.filter_extension + (self.spw_Nfreqs,)
+        # if we are using identity weighting, then do not hash by baseline pairs.
+        if not self.data_weighting == 'identity':
+            Hkey = Hkey + key1 + key2
         if not Hkey in self._H:
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1)[time_index].squeeze()
@@ -4730,7 +4808,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # broadcast flags
     if broadcast_dset_flags:
         ds.broadcast_dset_flags(time_thresh=time_thresh, spw_ranges=spw_ranges)
-
+        for key in ds._time_independent_weights:
+            ds._time_independent_weights[key] = True #all weights are time independent.
     # perform Jy to mK conversion if desired
     if Jy2mK:
         ds.Jy_to_mK()
