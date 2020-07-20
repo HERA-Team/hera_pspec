@@ -461,7 +461,7 @@ class PSpecData(object):
 
         return dset_idx, bl
 
-    def x(self, key, filter_extension=False):
+    def x(self, key, include_extension=False):
         """
         Get data for a given dataset and baseline, as specified in a standard
         key format.
@@ -473,7 +473,7 @@ class PSpecData(object):
             of the tuple is the dataset index (or label), and the subsequent
             elements are the baseline ID.
 
-        filter_extension : bool (optional)
+        include_extension : bool (optional)
             default=False
             If True, extend spw to include filtering window extensions.
 
@@ -483,7 +483,7 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        if filter_extension:
+        if include_extension:
             spw = slice(self.spw_range[0]-self.filter_extension[0],
                         self.spw_range[1]+self.filter_extension[1])
         else:
@@ -491,7 +491,7 @@ class PSpecData(object):
                         self.spw_range[1])
         return self.dsets[dset].get_data(bl).T[spw]
 
-    def dx(self, key, filter_extension=False):
+    def dx(self, key, include_extension=False):
         """
         Get standard deviation of data for given dataset and baseline as
         pecified in standard key format.
@@ -503,7 +503,7 @@ class PSpecData(object):
             of the tuple is the dataset index (or label), and the subsequent
             elements are the baseline ID.
 
-        filter_extension : bool (optional)
+        include_extension : bool (optional)
             default=False
             If True, extend spw to include filtering window extensions.
 
@@ -514,7 +514,7 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
-        if filter_extension:
+        if include_extension:
             spw = slice(self.spw_range[0]-self.filter_extension[0],
                         self.spw_range[1]+self.filter_extension[1])
         else:
@@ -522,7 +522,7 @@ class PSpecData(object):
                         self.spw_range[1])
         return self.dsets_std[dset].get_data(bl).T[spw]
 
-    def w(self, key, filter_extension=False):
+    def w(self, key, include_extension=False):
         """
         Get weights for a given dataset and baseline, as specified in a
         standard key format.
@@ -534,7 +534,7 @@ class PSpecData(object):
             of the tuple is the dataset index, and the subsequent elements are
             the baseline ID.
 
-        filter_extension : bool (optional)
+        include_extension : bool (optional)
             default=False
             If True, extend spw to include filtering window extensions.
 
@@ -544,7 +544,7 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        if filter_extension:
+        if include_extension:
             spw = slice(self.spw_range[0]-self.filter_extension[0],
                         self.spw_range[1]+self.filter_extension[1])
         else:
@@ -840,7 +840,7 @@ class PSpecData(object):
 
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
-            C = self.C_model(key, model=model, time_index=time_index)
+            C = self.C_model(key, model=model, time_index=time_index, include_extension=True)
             #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if np.linalg.cond(C) >= 1e9:
                 warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
@@ -889,7 +889,7 @@ class PSpecData(object):
         key = (dset,) + (bl,)
 
         if key not in self._Y:
-            self._Y[key] = np.diag(np.max(self.w(key, filter_extension=True), axis=1))
+            self._Y[key] = np.diag(np.max(self.w(key, include_extension=True), axis=1))
             if not np.all(np.isclose(self._Y[key], 0.0) \
                         + np.isclose(self._Y[key], 1.0)):
                 raise NotImplementedError("Non-binary weights not currently implmented")
@@ -1318,19 +1318,19 @@ class PSpecData(object):
         # Calculate R x_1
         if isinstance(key1, list):
             for _key in key1:
-                Rx1 += np.dot(self.R(_key), self.x(_key, filter_extension=True))
+                Rx1 += np.dot(self.R(_key), self.x(_key, include_extension=True))
                 R1 += self.R(_key)
         else:
-            Rx1 = np.dot(self.R(key1), self.x(key1, filter_extension=True))
+            Rx1 = np.dot(self.R(key1), self.x(key1, include_extension=True))
             R1  = self.R(key1)
 
         # Calculate R x_2
         if isinstance(key2, list):
             for _key in key2:
-                Rx2 += np.dot(self.R(_key), self.x(_key, filter_extension=True))
+                Rx2 += np.dot(self.R(_key), self.x(_key, include_extension=True))
                 R2 += self.R(_key)
         else:
-            Rx2 = np.dot(self.R(key2), self.x(key2, filter_extension=True))
+            Rx2 = np.dot(self.R(key2), self.x(key2, include_extension=True))
             R2  = self.R(key2)
 
         # The set of operations for exact_norm == True are drawn from Equations
@@ -1715,11 +1715,11 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Ndlys, Ndlys).
         """
         # Collect all the relevant pieces
-        E_matrices = self.get_unnormed_E(key1, key2, exact_norm = exact_norm, pol = pol)
-        C1 = self.C_model(key1, model=model, time_index=time_index)
-        C2 = self.C_model(key2, model=model, time_index=time_index)
-        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, time_index=time_index)
-        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, time_index=time_index)
+        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
+        C1 = self.C_model(key1, model=model, time_index=time_index, include_extension=True)
+        C2 = self.C_model(key2, model=model, time_index=time_index, include_extension=True)
+        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, time_index=time_index, include_extension=True)
+        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, time_index=time_index, include_extension=True)
 
         E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
         E12C2 = np.dot(E_matrices, C2)
@@ -1880,7 +1880,7 @@ class PSpecData(object):
             M = np.asarray([M for time in range(self.Ntimes)])
         cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = [], [], [], []
         for time_index in range(self.dsets[0].Ntimes):
-            E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol, time_index=time_index)
+            E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
             # Get E matrices and input covariance matrices
             if model in ['dsets','autos']:
                 E12C21, E12P22, E21starS11, E12starS21, E12P21, E21C12, E21P11, E12starS22 = [0],  [0],  [0],  [0],  [0],  [0],  [0],  [0]
@@ -3613,7 +3613,7 @@ class PSpecData(object):
 def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               groupname=None, dset_labels=None, dset_pairs=None, psname_ext=None,
               spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
-              input_data_weight='identity', norm='I', taper='none',
+              input_data_weight='identity', norm='I', taper='none', sampling=False,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
@@ -3700,6 +3700,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     taper : string
         Tapering to apply to data in OQE. See PSpecData.pspec for details.
         Default: 'none'
+
+    sampling : boolean, optional
+            Whether output pspec values are samples at various delay bins
+            or are integrated bandpowers over delay bins. Default: False
 
     exclude_auto_bls : boolean
         If blpairs is None, redundant baseline groups will be formed and
