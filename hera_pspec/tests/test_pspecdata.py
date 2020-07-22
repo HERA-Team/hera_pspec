@@ -756,8 +756,8 @@ class Test_PSpecData(unittest.TestCase):
         for alpha in range(self.ds.spw_Ndlys):
             for beta in range(self.ds.spw_Ndlys):
                 cov_analytic[alpha, beta] = np.exp(-2j*np.pi*(alpha-beta)*(chan_x-chan_y)/self.ds.spw_Ndlys).sum()
-        key1 = (0, 24, 38)
-        key2 = (1, 25, 38)
+        key1 = (0, 24, 38, 'xx')
+        key2 = (1, 25, 38, 'xx')
         #print(cov_analytic)
 
         for input_data_weight in ['identity','iC', 'dayenu']:
@@ -817,8 +817,8 @@ class Test_PSpecData(unittest.TestCase):
 
 
         # Set baselines to use for tests
-        key1 = (0, 24, 38)
-        key2 = (1, 25, 38)
+        key1 = (0, 24, 38, 'xx')
+        key2 = (1, 25, 38, 'xx')
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9], 'restore_half_width':100e-9}
         self.ds.set_weighting('dayenu')
@@ -830,7 +830,7 @@ class Test_PSpecData(unittest.TestCase):
         fmati=dspec.dayenu_mat_inv(x=self.ds.freqs, filter_centers=[0.],
                                             filter_half_widths=[100e-9], filter_factors=[1e-9])
         fmat = np.linalg.pinv(fmati * np.outer(wgt, wgt))
-        rmat = self.ds.R(key1)[0].squeeze()
+        rmat = self.ds.R(key1).squeeze()
         mymat = imat @ (np.identity(Nfreq, dtype=complex) - fmat) + fmat
         assert(np.all(np.isclose(mymat, rmat, atol=1e-3)))
         #test that an invalid data weighting causes a value error.
@@ -851,8 +851,8 @@ class Test_PSpecData(unittest.TestCase):
 
 
         # Set baselines to use for tests
-        key1 = (0, 24, 38)
-        key2 = (1, 25, 38)
+        key1 = (0, 24, 38, 'xx')
+        key2 = (1, 25, 38, 'xx')
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
         rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
@@ -867,10 +867,9 @@ class Test_PSpecData(unittest.TestCase):
         rm1 = self.ds.R(key1)
         rm2 = ds1.R(key2)
         rm3 = ds1.R(key1)
-        for m in range(self.ds.Ntimes):
-            self.assertTrue(np.shape(rm2[m]) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
+        self.assertTrue(np.shape(rm2) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
             #check that all values that are not truncated match values of untrancated matrix.
-            self.assertTrue(np.all(np.isclose(rm1[m][10:-10], rm2[m], atol=1e-6)))
+        self.assertTrue(np.all(np.isclose(rm1[10:-10], rm2, atol=1e-6)))
             #make sure no errors are thrown by get_V, get_E, etc...
         ds1.get_unnormed_E(key1, key2, time_index=0)
         ds1.get_unnormed_V(key1, key2, time_index=0)
@@ -1140,11 +1139,11 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_taper(taper)
                 #print 'input_data_weight', input_data_weight
                 self.ds.set_Ndlys(Nfreq-2)
-                G = self.ds.get_G(key1, key2, average_times=True)
+                G = self.ds.get_G(key1, key2, time_indices=[0]).squeeze()
                 nconfigs += 1
                 #calculate G a second time and make sure the number of
                 #cache keys does not change.
-                G = self.ds.get_G(key1, key2, average_times=True)
+                G = self.ds.get_G(key1, key2, time_indices=[0]).squeeze()
                 nt.assert_true(len(self.ds._G) == npatterns * nconfigs)
                 self.assertEqual(G.shape, (Nfreq-2, Nfreq-2)) # Test shape
                 #print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
@@ -1168,11 +1167,11 @@ class Test_PSpecData(unittest.TestCase):
                     # same test as the symmetry test, but perhaps there are
                     # creative ways to break the code to break one test but not
                     # the other.
-                    G_swapped = self.ds.get_G(key2, key1, average_times=True)
+                    G_swapped = self.ds.get_G(key2, key1, time_indices=[0]).squeeze()
                     nconfigs += 1
                     #calculate G a second time and make sure the number of
                     #cache keys does not change.
-                    G_swapped = self.ds.get_G(key2, key1, average_times=True)
+                    G_swapped = self.ds.get_G(key2, key1, time_indices=[0]).squeeze()
                     nt.assert_true(len(self.ds._G) == npatterns * nconfigs)
                     G_diff_norm = np.linalg.norm(G - G_swapped)
                     self.assertLessEqual(G_diff_norm,
@@ -1557,6 +1556,13 @@ class Test_PSpecData(unittest.TestCase):
         cosmo = conversions.Cosmo_Conversions()
         uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
 
+        # slide the time axis of uvd by one integration
+        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
+        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+        ds.rephase_to_dset(0)
+
+
         # extend time axis by factor of 4
         for i in range(2):
             new = copy.deepcopy(uvd)
@@ -1872,6 +1878,7 @@ class Test_PSpecData(unittest.TestCase):
                                 little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='dsets')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
+
         # test the results of stats_array[cov_model] 
         uvp_cov = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='foreground_dependent')
@@ -1881,6 +1888,7 @@ class Test_PSpecData(unittest.TestCase):
         key = (0, (bls1[0],bls2[0]), "xx")
         nt.assert_true(np.isclose(np.diagonal(uvp_cov.get_cov(key), axis1=1, axis2=2), (np.real(uvp_cov_diag.get_stats('foreground_dependent_diag', key)))**2).all())
     
+
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
                                  beam=self.bm)
@@ -2008,7 +2016,7 @@ class Test_PSpecData(unittest.TestCase):
         Nfreq = uvd.data_array.shape[2]
         # Basic test of shape
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        test_R = ds.R((1, 37, 38, 'XX'), average_times=True)
+        test_R = ds.R((1, 37, 38, 'xx'))
         nt.assert_equal(test_R.shape, (Nfreq, Nfreq))
         # First test that turning-off flagging does nothing if there are no flags in the data
         bls1 = [(24, 25)]
@@ -2418,7 +2426,7 @@ def test_get_argparser():
     nt.assert_equal(a.dset_pairs, [(0, 0), (1, 1)])
     nt.assert_equal(a.spw_ranges, [(300, 400), (600, 800)])
     nt.assert_equal(a.blpairs, [((24, 25), (24, 25)), ((37, 38), (37, 38))])
-                      
+
 """
 # LEGACY MONTE CARLO TESTS
     def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):
