@@ -483,12 +483,7 @@ class PSpecData(object):
             Array of data from the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        if include_extension:
-            spw = slice(self.spw_range[0]-self.filter_extension[0],
-                        self.spw_range[1]+self.filter_extension[1])
-        else:
-            spw = slice(self.spw_range[0],
-                        self.spw_range[1])
+        spw = slice(self.get_spw(include_extension=include_extension)[0], self.get_spw(include_extension=include_extension)[1])
         return self.dsets[dset].get_data(bl).T[spw]
 
     def dx(self, key, include_extension=False):
@@ -514,12 +509,7 @@ class PSpecData(object):
         """
         assert isinstance(key, tuple)
         dset,bl = self.parse_blkey(key)
-        if include_extension:
-            spw = slice(self.spw_range[0]-self.filter_extension[0],
-                        self.spw_range[1]+self.filter_extension[1])
-        else:
-            spw = slice(self.spw_range[0],
-                        self.spw_range[1])
+        spw = slice(self.get_spw(include_extension=include_extension)[0], self.get_spw(include_extension=include_extension)[1])
         return self.dsets_std[dset].get_data(bl).T[spw]
 
     def w(self, key, include_extension=False):
@@ -544,12 +534,7 @@ class PSpecData(object):
             Array of weights for the requested UVData dataset and baseline.
         """
         dset, bl = self.parse_blkey(key)
-        if include_extension:
-            spw = slice(self.spw_range[0]-self.filter_extension[0],
-                        self.spw_range[1]+self.filter_extension[1])
-        else:
-            spw = slice(self.spw_range[0],
-                        self.spw_range[1])
+        spw = slice(self.get_spw(include_extension=include_extension)[0], self.get_spw(include_extension=include_extension)[1])
         if self.wgts[dset] is not None:
             return self.wgts[dset].get_data(bl).T[spw]
         else:
@@ -573,6 +558,25 @@ class PSpecData(object):
         """
         self.clear_cache(cov.keys())
         for key in cov: self._C[key] = cov[key]
+
+    def get_spw(self, include_extension=False):
+        """
+        Get self.spw_range with or without spw extension (self.filter_extension)
+
+        Parameters
+        ----------
+        include_extension : bool
+            If True, include self.filter_extension in spw_range
+       
+        Returns
+        -------
+        spectral_window : tuple
+            In (start_chan, end_chan).
+        """
+        if include_extension:
+            return (self.spw_range[0] - self.filter_extension[0], self.spw_range[1] + self.filter_extension[1])
+        else:
+            return self.spw_range
 
     def C_model(self, key, model='empirical', time_index=None, known_cov=None, include_extension=False):
         """
@@ -647,10 +651,7 @@ class PSpecData(object):
 
         # Update self._C with known_cov
         if known_cov is not None:
-            if include_extension:
-                spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
-            else:
-                spw = slice(self.spw_range[0], self.spw_range[1])
+            spw = slice(self.get_spw(include_extension=include_extension)[0], self.get_spw(include_extension=include_extension)[1])
             for known_cov_key in known_cov.keys():
                 covariance = known_cov[known_cov_key][spw, spw]
                 self.set_C({known_cov_key: covariance})
@@ -666,10 +667,7 @@ class PSpecData(object):
                 self.set_C({Ckey: np.outer(self.w(key, include_extension=include_extension)[:,time_index] * self.x(key, include_extension=include_extension)[:,time_index], 
                     np.conj(self.w(key, include_extension=include_extension)[:,time_index] * self.x(key, include_extension=include_extension)[:,time_index]))})
             elif model == 'autos':
-                if include_extension:
-                    spw_range = (self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
-                else:
-                    spw_range = (self.spw_range[0], self.spw_range[1])
+                spw_range = self.get_spw(include_extension=include_extension)
                 self.set_C({Ckey: np.diag(utils.variance_from_auto_correlations(self.dsets[dset], bl, spw_range, time_index))})
             elif model == 'foreground_dependent':
                 self.set_C({Ckey: self.C_model(key, model='autos', time_index=time_index, include_extension=include_extension) 
@@ -764,10 +762,7 @@ class PSpecData(object):
                 # add model to key
                 Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
                 assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
-                if include_extension:
-                    spw = slice(self.spw_range[0]-self.filter_extension[0], self.spw_range[1]+self.filter_extension[1])
-                else:
-                    spw = slice(self.spw_range[0], self.spw_range[1])
+                spw = slice(self.get_spw(include_extension=include_extension)[0], self.get_spw(include_extension=include_extension)[1])
                 covar = known_cov[Ckey][spw, spw]
 
         return covar
