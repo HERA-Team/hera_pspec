@@ -982,7 +982,7 @@ class PSpecData(object):
         for k in d:
             self._R[k] = d[k]
 
-    def R(self, key, average_times=False):
+    def R(self, key, time_index=None):
         """
         Return the data-weighting matrix R, which is a product of
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and
@@ -1158,9 +1158,17 @@ class PSpecData(object):
             self._R[Rkey] = rmat
 
         rmat = self._R[Rkey]
-        if average_times:
-            rmat = np.mean(rmat, axis=0)
-        return rmat
+        if tindep: # if time independent, then return the spw_Ndlys x spw_Ndlys matrix.
+            return rmat
+        else:
+            # if not time independent,
+            # and time_index specified, then return spw_Ndlys x spw_Ndlys matrix at time_index.
+            if time_index is not None:
+                return rmat[time_index].squeeze()
+            else:
+                # otherwise return Ntimes x spw_Ndlys x spw_Ndlys R matrix.
+                return rmat
+
 
     def set_symmetric_taper(self, use_symmetric_taper):
         """
@@ -1470,29 +1478,31 @@ class PSpecData(object):
         Rx1 = np.zeros((self.Ntimes, self.spw_Nfreqs),
                             dtype=complex)
         Rx2 = np.zeros_like(Rx1)
-        R1, R2 = 0.0, 0.0
-
         # Calculate R x_1
-        if isinstance(key1, list):
-            for _key in key1:
-                Rx1 += np.asarray([np.dot(self.R(_key)[m], self.x(_key, include_extension=True)[:,m])\
+        if not isinstance(key1, list):
+            key1 = [key1]
+        if not isinstance(key2, list):
+            key2 = [key2]
+        for _key in key1:
+            tindep = self._time_independent_weights[_key]
+            rmat = self.R(_key)
+            x_wf = self.x(_key, include_extension=True)
+            if tindep
+                Rx1 += rmat @ x_wf
+            else:
+                Rx1 += np.asarray([np.dot(rmat[m], x_wf[:,m])\
                                    for m in range(self.Ntimes)])
-                R1 += self.R(_key)
-        else:
-            Rx1 = np.asarray([np.dot(self.R(key1)[m], self.x(key1, include_extension=True)[:,m])\
-                              for m in range(self.Ntimes)])
-            R1  = self.R(key1)
 
         # Calculate R x_2
-        if isinstance(key2, list):
-            for _key in key2:
-                Rx2 += np.asarray([np.dot(self.R(_key)[m], self.x(_key, include_extension=True)[:,m])\
+        for _key in key2:
+            tindep = self._time_independent_weights[_key]
+            rmat = self.R(_key)
+            x_wf = self.x(_key, include_extension=True)
+            if tindep:
+                Rx2 += rmat @ x_wf
+            else:
+                Rx2 += np.asarray([np.dot(rmat[m], x_wf[:, m])\
                                    for m in range(self.Ntimes)])
-                R2 += self.R(_key)
-        else:
-            Rx2 = np.asarray([np.dot(self.R(key2)[m], self.x(key2, include_extension=True)[:,m])\
-                              for m in range(self.Ntimes)])
-            R2  = self.R(key2)
 
         # The set of operations for exact_norm == True are drawn from Equations
         # 11(a) and 11(b) from HERA memo #44. We are incorporating the
@@ -1501,7 +1511,7 @@ class PSpecData(object):
 
         # exact norm can be used with use_fft.
         if exact_norm:
-            del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
+            del_tau = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             integral_beam = self.get_integral_beam(pol) #Integral of beam in Eq.11(a) (HERA memo #44)
             qnorm = del_tau * integral_beam
         else:
@@ -1557,9 +1567,6 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
-        average_times : bool, optional
-            If true, average G over all times so that output is (Ndlys x Ndlys)
-
         time_indices : list of integers or array like integer list
             List of time indices to compute G. Default, compute for all times.
 
@@ -1580,12 +1587,8 @@ class PSpecData(object):
             Gkey = Gkey + key1 + key2
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
         if not Gkey in self._G:
-            R1 = self.R(key1)
-            if not self._time_independent_weights[key1]:
-                R1 = R1[time_index].squeeze()
-            R2 = self.R(key2)
-            if not self._time_independent_weights[key2]:
-                R2 = R2[time_index].squeeze()
+            R1 = self.R(key1, time_index)
+            R2 = self.R(key2, time_index)
             if (exact_norm):
                 integral_beam1 = self.get_integral_beam(pol)
                 integral_beam2 = self.get_integral_beam(pol, include_extension=True)
@@ -1629,7 +1632,7 @@ class PSpecData(object):
         return self._G[Gkey]
 
     def get_G(self, key1, key2, exact_norm=False, pol=False,
-              average_times=False, time_indices=None, allow_fft=False):
+              time_indices=None, allow_fft=False):
         """
         Calculates
 
@@ -1656,9 +1659,6 @@ class PSpecData(object):
         pol : str/int/bool, optional
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
-
-        average_times : bool, optional
-            If true, average G over all times so that output is (Ndlys x Ndlys)
 
         time_indices : list of integers or array like integer list
             List of time indices to compute G. Default, compute for all times.
@@ -1689,8 +1689,6 @@ class PSpecData(object):
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(G) == 0:
             G = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
-        if average_times:
-            G = np.mean(G, axis=0)
         return G
 
     def _get_H(self, key1, key2, time_index, sampling=False, exact_norm=False, pol=False,
@@ -1734,9 +1732,6 @@ class PSpecData(object):
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
-        tindep1 = self._time_independent_weights[key1]
-        tindep2 = self._time_independent_weights[key2]
-
         Hkey = (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1, time_index))\
                + tuple(self.Y(key2, time_index)) + self.filter_extension + (self.spw_Nfreqs,)
         # if we are using identity weighting, then do not hash by baseline pairs.
@@ -1744,12 +1739,8 @@ class PSpecData(object):
             Hkey = Hkey + key1 + key2
         if not Hkey in self._H:
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-            R1 = self.R(key1)
-            if not tindep1:
-                R1 = R1[time_index].squeeze()
-            R2 = self.R(key2)
-            if not tindep2:
-                R2 = R2[time_index].squeeze()
+            R1 = self.R(key1, time_index)
+            R2 = self.R(key2, time_index)
             if (exact_norm):
                 integral_beam1 = self.get_integral_beam(pol)
                 integral_beam2 = self.get_integral_beam(pol, include_extension=True)
@@ -1802,7 +1793,7 @@ class PSpecData(object):
         return self._H[Hkey]
 
     def get_H(self, key1, key2, sampling=False, exact_norm = False, pol=False,
-              average_times=False, time_indices=None, allow_fft=False):
+              time_indices=None, allow_fft=False):
         """
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -1863,9 +1854,6 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
-        average_times : bool, optional
-            If true, average G over all times so that output is (Ndlys x Ndlys)
-
         allow_fft : bool, optional
             If True, speed things up with ffts. Requires spw_Ndlys == spw_Nfreqs.
             Requires sampling False
@@ -1898,8 +1886,6 @@ class PSpecData(object):
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(H) == 0:
             H = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
-        if average_times:
-            H = np.mean(H, axis=0)
         return H
 
     def get_unnormed_E(self, key1, key2, time_index, exact_norm=False, pol=False):
@@ -1961,8 +1947,8 @@ class PSpecData(object):
             nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
             E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
                                    dtype=np.complex)
-            R1 = self.R(key1)[time_index]
-            R2 = self.R(key2)[time_index]
+            R1 = self.R(key1, time_index)
+            R2 = self.R(key2, time_index)
             if (exact_norm):
                 integral_beam = self.get_integral_beam(pol)
                 del_tau = np.median(np.diff(self.delays()))*1e-9
@@ -2391,8 +2377,8 @@ class PSpecData(object):
                         qnorm = 1.
                     if self.spw_Nfreqs + np.sum(self.filter_extension) != self.spw_Ndlys:
                         raise ValueError("allow_fft requires spw_Nfreqs == spw_Ndlys")
-                    R1 = self.R(key1)[time_index]
-                    R2 = self.R(key2)[time_index]
+                    R1 = self.R(key1, time_index)
+                    R2 = self.R(key2, time_index)
                     C1_filtered = R1 @ C1 @ np.conj(R1).T * qnorm
                     C2_filtered = R2 @ C2 @ np.conj(R2).T * qnorm
                     S21_filtered = R1 @ S21 @ np.conj(R1).T * qnorm
@@ -2586,7 +2572,7 @@ class PSpecData(object):
         return self._W[Wkey]
 
     def get_M(self, key1, key2, mode='I', exact_norm=False,
-             average_times=False, sampling=False, time_indices=None, pol=False, allow_fft=False):
+              sampling=False, time_indices=None, pol=False, allow_fft=False):
         """
         Construct the normalization matrix M This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2625,9 +2611,6 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
-        average_times : bool, optional
-            If true, average M-matrices along time-axis.
-
         time_indices : list, optional
             List of time-indices to calculate M-matrices for. Default: All times.
 
@@ -2646,11 +2629,9 @@ class PSpecData(object):
         M = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         for tind, time_index in enumerate(time_indices):
             M[tind] = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
-        if average_times:
-            M = np.mean(M, axis=0)
         return M
 
-    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, average_times=False, pol=False, allow_fft=False):
+    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, pol=False, allow_fft=False):
         """
         Construct the Window function matrix W. This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2689,9 +2670,6 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
-        average_times : bool, optional
-            If true, average M-matrices along time-axis.
-
         time_indices : list, optional
             List of time-indices to calculate M-matrices for. Default: All times.
 
@@ -2703,19 +2681,16 @@ class PSpecData(object):
         Returns
         -------
         W : array_like, complex
-            Dimensions (Ntimes Ndlys, Ndlys) or (Ndlys, Ndlys) if average_times is True.
+            Dimensions (Ntimes Ndlys, Ndlys) where Ntimes is the length of time_indices.
         """
         if time_indices is None:
             time_indices = np.arange(self.Ntimes).astype(int)
         W = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         for tind, time_index in enumerate(time_indices):
             W[tind] = self._get_W(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol)
-        if average_times:
-            W = np.mean(W, axis=0)
         return W
 
-    def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15,
-               average_times=False):
+    def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15):
         """
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -2765,9 +2740,6 @@ class PSpecData(object):
 
         rcond : float, optional
             rcond parameter of np.linalg.pinv for truncating near-zero eigenvalues
-
-        average_times : bool, optional
-            If true, average G over all times so that output is (Ndlys x Ndlys)
 
         Returns
         -------
@@ -2899,9 +2871,6 @@ class PSpecData(object):
         Ws[np.isnan(Ws)] = 0.
         Ms[np.isinf(Ms)] = 0.
         Ws[np.isinf(Ws)] = 0.
-        if average_times:
-            Ms = np.mean(Ms, axis=0)
-            Ws = np.mean(Ws, axis=0)
         return Ms, Ws
 
     def get_Q_alt(self, mode, allow_fft=True, include_extension=False):
