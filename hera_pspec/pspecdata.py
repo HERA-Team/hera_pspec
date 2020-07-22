@@ -95,6 +95,7 @@ class PSpecData(object):
             dsets_std = None
 
         # Store the input UVData objects if specified
+        self._time_independent_weights = {}
         if len(dsets) > 0:
             self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag)
 
@@ -234,7 +235,6 @@ class PSpecData(object):
         self.dsets_std += dsets_std
         self.labels += labels
 
-        new_labels = []
         # Check for repeated labels, and make them unique
         for i, l in enumerate(self.labels):
             ext = 1
@@ -244,7 +244,6 @@ class PSpecData(object):
                     ext += 1
                 else:
                     self.labels[i] = l
-                    new_labels += [l]
                     break
 
         # Store no. frequencies and no. times
@@ -258,12 +257,12 @@ class PSpecData(object):
         self.spw_Ndlys = self.spw_Nfreqs
 
         # Check weights. If they are time independent, then set _time_independent_weights = True.
-        for label in new_labels:
-            bls = self.dsets[label].get_antpairpols()
+        for dind, dset in enumerate(self.dsets):
+            bls = dset.get_antpairpols()
             for bl in bls:
-                blkey = (label, bl[:2], bl[-1])
+                blkey = (dind, bl)
                 wwf = self.w(blkey)
-                self._time_independent_weights[blkey] = np.all([np.all(wrow == wrow[0]) for wrow in wwf]):
+                self._time_independent_weights[blkey] = np.all([np.all(wrow == wrow[0]) for wrow in wwf])
 
 
 
@@ -577,7 +576,7 @@ class PSpecData(object):
             # UVData dataset object
             wgts = (~self.dsets[dset].get_flags(bl)).astype(float).T[spw]
         # only return the first time if time_time_independent_weights
-        if self._time_independent_weights[key]:
+        if key in self._time_independent_weights and self._time_independent_weights[key]:
             wgts = wgts[:, 0]
         return wgts
 
@@ -868,7 +867,7 @@ class PSpecData(object):
             #a psuedo-inverse at each time.
             wgts = self.Y(key)
             if tindep:
-                _iC = np.zeros(nfreq, nfreq):
+                _iC = np.zeros(nfreq, nfreq)
                 wgts_sq = np.outer(wgts, wgts)
             else:
                 _iC = np.zeros((self.Ntimes, nfreq, nfreq))
@@ -1020,7 +1019,7 @@ class PSpecData(object):
         assert isinstance(key, tuple)
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-        tindep = self._time_independent_weights[key]
+        tindep = self._time_independent_weights[self.parse_blkey(key)]
         # Only add to Rkey if a particular mode is enabled
         # If you do add to this, you need to specify this in self.set_R docstring!
         Rkey = key + (self.taper, tindep)
@@ -1097,18 +1096,19 @@ class PSpecData(object):
                                         filter_factors=r_params['filter_factors']) * wgt_sq
                         self.r_cache[rdkey] = np.linalg.pinv(rm)
                     rmat = self.r_cache[rdkey]
-                for m in range(self.Ntimes):
-                    rdkey = tuple(wgts[m]) + tuple(np.round(np.array(r_params['filter_centers']) * df, 8))\
-                    + tuple(np.round(df * np.array(r_params['filter_half_widths']), 8))\
-                    + tuple(np.round(df * np.array(r_params['filter_factors']) * 1e8, 8))\
-                    + ('dayenu',) + (self.spw_Nfreqs,) + self.filter_extension
-                    if not rdkey in self.r_cache:
-                        rm = dspec.dayenu_mat_inv(x=_freqs,
-                                        filter_centers=r_params['filter_centers'],
-                                        filter_half_widths=r_params['filter_half_widths'],
-                                        filter_factors=r_params['filter_factors']) * wgt_sq[m]
-                        self.r_cache[rdkey] = np.linalg.pinv(rm)
-                    rmat[m] = self.r_cache[rdkey]
+                else:
+                    for m in range(self.Ntimes):
+                        rdkey = tuple(wgts[m]) + tuple(np.round(np.array(r_params['filter_centers']) * df, 8))\
+                        + tuple(np.round(df * np.array(r_params['filter_half_widths']), 8))\
+                        + tuple(np.round(df * np.array(r_params['filter_factors']) * 1e8, 8))\
+                        + ('dayenu',) + (self.spw_Nfreqs,) + self.filter_extension
+                        if not rdkey in self.r_cache:
+                            rm = dspec.dayenu_mat_inv(x=_freqs,
+                                            filter_centers=r_params['filter_centers'],
+                                            filter_half_widths=r_params['filter_half_widths'],
+                                            filter_factors=r_params['filter_factors']) * wgt_sq[m]
+                            self.r_cache[rdkey] = np.linalg.pinv(rm)
+                        rmat[m] = self.r_cache[rdkey]
             else:
                 raise ValueError("data_weighting must be in ['identity', 'iC', 'dayenu']")
                 # allow for restore_foregrounds option which introduces clean-interpolated
@@ -1125,7 +1125,7 @@ class PSpecData(object):
                         if np.sum((wgts>0).astype(float)) >= ndlys_restore:
                             rmat = rmat + \
                             dspec.delay_interpolation_matrix(self.spw_Nfreqs, ndlys_restore,
-                            wgts[m][self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
+                            wgts[self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
                             @ (tmat - rmat)
                     else:
                         for m in range(self.Ntimes):
@@ -1144,7 +1144,7 @@ class PSpecData(object):
                     sqrtT = np.sqrt(myTaper)
                     rmat = np.transpose(sqrtT[:, None] * rmat * sqrtT[None, :])
                 else:
-                    rmat = np.transpow(myTaper[:, None] * rmat)
+                    rmat = np.transpose(myTaper[None, :] * rmat)
             else:
                 rmat =  np.transpose(rmat, (1, 0, 2))
                 if self.symmetric_taper:
@@ -1409,7 +1409,7 @@ class PSpecData(object):
             elif model in ['empirical', 'empirical_pspec']:
                 #empirical error bars require broadcasting flags
                 if model == 'empirical':
-                    flag_backup=self.broadcast_dset_flags(spw_ranges=[self.spw_range])
+                    flag_backup=self.broadcast_dset_flags(spw_ranges=[self.spw_range], set_time_independent_weights=False)
                 vm = self.get_unnormed_V(k1, k2, model=model,
                                   exact_norm=exact_norm, time_index = 0, pol=pol, allow_fft=allow_fft)
                 if model == 'empirical':
@@ -1484,25 +1484,23 @@ class PSpecData(object):
         if not isinstance(key2, list):
             key2 = [key2]
         for _key in key1:
-            tindep = self._time_independent_weights[_key]
-            rmat = self.R(_key)
-            x_wf = self.x(_key, include_extension=True)
-            if tindep
-                Rx1 += rmat @ x_wf
-            else:
-                Rx1 += np.asarray([np.dot(rmat[m], x_wf[:,m])\
-                                   for m in range(self.Ntimes)])
-
-        # Calculate R x_2
-        for _key in key2:
-            tindep = self._time_independent_weights[_key]
+            tindep = self._time_independent_weights[self.parse_blkey(_key)]
             rmat = self.R(_key)
             x_wf = self.x(_key, include_extension=True)
             if tindep:
-                Rx2 += rmat @ x_wf
+                Rx1 += (rmat @ x_wf).T
             else:
-                Rx2 += np.asarray([np.dot(rmat[m], x_wf[:, m])\
-                                   for m in range(self.Ntimes)])
+                Rx1 += np.asarray([rmat[m] @ x_wf[:,m] for m in range(self.Ntimes)])
+
+        # Calculate R x_2
+        for _key in key2:
+            tindep = self._time_independent_weights[self.parse_blkey(_key)]
+            rmat = self.R(_key)
+            x_wf = self.x(_key, include_extension=True)
+            if tindep:
+                Rx2 += (rmat @ x_wf).T
+            else:
+                Rx2 += np.asarray([rmat[m] @ x_wf[:, m] for m in range(self.Ntimes)])
 
         # The set of operations for exact_norm == True are drawn from Equations
         # 11(a) and 11(b) from HERA memo #44. We are incorporating the
@@ -2451,7 +2449,7 @@ class PSpecData(object):
         Mkey = (mode, exact_norm, self.spw_Ndlys) + (self.taper, self.data_weighting)\
         + tuple(self.Y(key1, time_index)) + tuple(self.Y(key2, time_index))\
         + self.filter_extension + (self.spw_Nfreqs,)
-        if self.data_weight in BASELINE_DEPENDENT_WEIGHTS:
+        if self.data_weighting in BASELINE_DEPENDENT_WEIGHTS:
             Mkey = Mkey + key1 + key2
         if not Mkey in self._M:
             if mode != 'I' and exact_norm==True:
@@ -3059,7 +3057,7 @@ class PSpecData(object):
         return p_cov
 
     def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2,
-                             unflag=False):
+                             unflag=False, set_time_independent_weights=True):
         """
         For each dataset in self.dset, update the flag_array such that
         the flagging patterns are time-independent for each baseline given
@@ -3144,6 +3142,9 @@ class PSpecData(object):
                                self.spw_range[1]+self.filter_extension[1])
                         flag_ints = np.max(flags[:,ext[0]:ext[1]], axis=1)
                         dset.flag_array[bl_inds[flag_ints],: , ext[0]:ext[1], i] = True
+                if set_time_independent_weights:
+                    for key in self._time_independent_weights:
+                        self._time_independent_weights[key] = True #all weights are time independent.
         return backup_flags
 
 
@@ -4804,9 +4805,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # broadcast flags
     if broadcast_dset_flags:
-        ds.broadcast_dset_flags(time_thresh=time_thresh, spw_ranges=spw_ranges)
-        for key in ds._time_independent_weights:
-            ds._time_independent_weights[key] = True #all weights are time independent.
+        ds.broadcast_dset_flags(time_thresh=time_thresh, spw_ranges=spw_ranges,
+                                set_time_independent_weights=True)
+
     # perform Jy to mK conversion if desired
     if Jy2mK:
         ds.Jy_to_mK()
