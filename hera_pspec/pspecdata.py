@@ -2491,8 +2491,9 @@ class PSpecData(object):
                                                     "during MW computation.")
 
             elif mode == 'V^-1/2':
-                    # First find the eigenvectors and eigenvalues of the unnormalizd covariance
-                    # Then use it to compute V^-1/2
+                H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+                # First find the eigenvectors and eigenvalues of the unnormalizd covariance
+                # Then use it to compute V^-1/2
                 band_covar = self.get_unnormed_V(key1, key2, time_index, model=self.cov_model, exact_norm=exact_norm,
                                                  pol = pol)
                 eigvals, eigvects = np.linalg.eig(band_covar)

@@ -2324,27 +2324,19 @@ def test_window_funcs():
     ds.set_taper('bh')
     bl = (37, 38)
     key = (0, bl, 'xx')
-    d = uvd.get_data(bl)
-    C = np.cov(d[:, :20].T).real
-    iC = np.linalg.pinv(C)
     # iterate over various R and M matrices and ensure
     # normalization and dtype is consistent
     for data_weight in ['identity', 'iC']:
         ds.set_weighting(data_weight)
+        ds.cov_model = 'empirical'
         for norm in ['H^-1', 'I', 'V^-1/2']:
             for exact_norm in [True, False]:
                 if exact_norm and norm != 'I':
                     # exact_norm only supported for norm == 'I'
                     continue
                 ds.clear_cache()
-                if data_weight == 'iC':
-                    # fill R with iC
-                    ds._R[(0, (37, 38, 'xx'), 'iC', 'bh')] = np.asarray([iC for m in range(ds.Ntimes)])
-                # compute G and H
-                Gv = ds.get_G(key, key, exact_norm=exact_norm, pol='xx')
-                Hv = ds.get_H(key, key, exact_norm=exact_norm, pol='xx')
-                Mv, Wv = ds.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm,
-                                   band_covar=C)
+                Mv = ds.get_M(key, key, mode=norm, exact_norm=exact_norm, pol='xx')
+                Wv = ds.get_W(key, key, mode=norm, exact_norm=exact_norm, pol='xx')
                 # assert row-sum is normalized to 1
                 assert np.isclose(Wv.sum(axis=2).real, 1).all()
                 # assert this is a real matrix, even though imag is populated
