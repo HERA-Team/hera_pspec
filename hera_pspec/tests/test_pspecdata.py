@@ -636,8 +636,8 @@ class Test_PSpecData(unittest.TestCase):
 
     def test_get_unnormed_V(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
-        key1 = ('red', (24, 25), 'xx')
-        key2 = ('blue', (25, 38), 'xx')
+        key1 = ('red', (24, 25))
+        key2 = ('blue', (25, 38))
         self.ds.spw_Ndlys = 5
 
         V = self.ds.get_unnormed_V(key1, key2, time_index=0)
@@ -653,8 +653,8 @@ class Test_PSpecData(unittest.TestCase):
 
     def test_get_unnormed_V_fft(self):
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w, labels=['red', 'blue'])
-        key1 = ('red', (24, 25), 'xx')
-        key2 = ('blue', (25, 38), 'xx')
+        key1 = ('red', (24, 25))
+        key2 = ('blue', (25, 38))
         #self.ds.spw_Ndlys = 5
 
         self.ds.set_weighting('dayenu')
@@ -670,8 +670,6 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_raises(ValueError, self.ds.get_unnormed_V, key1, key2, time_index=0, allow_fft=True)
 
 
-
-
     def test_get_MW(self):
         n = 17
         random_G = generate_pos_def_all_pos(n)
@@ -685,7 +683,9 @@ class Test_PSpecData(unittest.TestCase):
             if mode == 'H^-1':
                 # Test that if we have full-rank matrices, the resulting window functions
                 # are indeed delta functions
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M = M.squeeze()
+                W = W.squeeze()
                 Hinv = np.linalg.inv(random_H)
                 for i in range(n):
                     self.assertAlmostEqual(W[i,i], 1.)
@@ -695,14 +695,17 @@ class Test_PSpecData(unittest.TestCase):
                 # When the matrices are not full rank, test that the window functions
                 # are at least properly normalized.
                 deficient_H = np.ones((3,3))
-                M, W = self.ds.get_MW(deficient_H, deficient_H, mode=mode, average_times=True)
+                M, W = self.ds.get_MW(deficient_H, deficient_H, mode=mode)
+                M = M.squeeze()
+                W = W.squeeze()
                 norm = np.sum(W, axis=1)
                 for i in range(3):
                     self.assertAlmostEqual(norm[i], 1.)
 
                 # Check that the method ignores G
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
-                M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode, average_times=True)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M_other, W_other = self.ds.get_MW(random_H, random_H, mode=mode)
+                M = M.squeeze(); W = W.squeeze(); M_other = M_other.squeeze(); W_other = W_other.squeeze()
                 for i in range(n):
                     for j in range(n):
                         self.assertAlmostEqual(M[i,j], M_other[i,j])
@@ -710,20 +713,24 @@ class Test_PSpecData(unittest.TestCase):
 
             elif mode == 'V^-1/2':
                 # Test that we are checking for the presence of a covariance matrix
-                nt.assert_raises(ValueError, self.ds.get_MW, random_G, random_H, mode=mode, average_times=True)
+                nt.assert_raises(ValueError, self.ds.get_MW, random_G, random_H, mode=mode)
                 # Test that the error covariance is diagonal
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V, average_times=True)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V)
+                M = M.squeeze()
+                W = W.squeeze()
                 band_covar = np.dot(M, np.dot(random_V, M.T))
                 self.assertEqual(diagonal_or_not(band_covar), True)
 
             elif mode == 'I':
                 # Test that the norm matrix is diagonal
-                M, W = self.ds.get_MW(random_G, random_H, mode=mode, average_times=True)
+                M, W = self.ds.get_MW(random_G, random_H, mode=mode)
+                M = M.squeeze()
+                W = W.squeeze()
                 self.assertEqual(diagonal_or_not(M), True)
             elif mode == 'L^-1':
                 # Test that Cholesky mode is disabled
                 nt.assert_raises(NotImplementedError,
-                                 self.ds.get_MW, random_G, random_H, mode=mode, average_times=True)
+                                 self.ds.get_MW, random_G, random_H, mode=mode)
 
             # Test sizes for everyone
             self.assertEqual(M.shape, (n,n))
@@ -817,8 +824,8 @@ class Test_PSpecData(unittest.TestCase):
 
 
         # Set baselines to use for tests
-        key1 = (0, 24, 38, 'xx')
-        key2 = (1, 25, 38, 'xx')
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9], 'restore_half_width':100e-9}
         self.ds.set_weighting('dayenu')
@@ -851,8 +858,8 @@ class Test_PSpecData(unittest.TestCase):
 
 
         # Set baselines to use for tests
-        key1 = (0, 24, 38, 'xx')
-        key2 = (1, 25, 38, 'xx')
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
 
         rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
         rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
@@ -984,18 +991,18 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.set_taper(taper)
                 self.ds.set_Ndlys(Nfreq//3)
-                H = self.ds.get_H(key1, key2, average_times=True)
+                H = self.ds.get_H(key1, key2)[0]
                 nconfigs += 1
                 self.assertEqual(H.shape, (Nfreq//3, Nfreq//3)) # Test shape
                 self.ds.set_Ndlys()
-                H = self.ds.get_H(key1, key2, average_times=True)
+                H = self.ds.get_H(key1, key2)[0]
                 self.assertEqual(H.shape, (Nfreq, Nfreq))
                 nconfigs += 1
                 # assert that number of keys in H equals the number of flagging patterns
                 # times the number of tapering and weighting configurations that have been
                 # cycled through.
                 # second H computation made to check that no extra items are added to _H cache.
-                H = self.ds.get_H(key1, key2, average_times=True)
+                H = self.ds.get_H(key1, key2)[0]
                 nt.assert_true(len(self.ds._H) == npatterns * nconfigs)
 
     def test_get_M(self):
@@ -1024,18 +1031,18 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.set_taper(taper)
                 self.ds.set_Ndlys(Nfreq//3)
-                M = self.ds.get_M(key1, key2, average_times=True)
+                M = self.ds.get_M(key1, key2)[0]
                 nconfigs += 1
                 self.assertEqual(M.shape, (Nfreq//3, Nfreq//3)) # Test shape
                 self.ds.set_Ndlys()
-                M = self.ds.get_M(key1, key2, average_times=True)
+                M = self.ds.get_M(key1, key2)[0]
                 self.assertEqual(M.shape, (Nfreq, Nfreq))
                 nconfigs += 1
                 # assert that number of keys in _M equals the number of flagging patterns
                 # times the number of tapering and weighting configurations that have been
                 # cycled through.
                 # second M computation made to check that no extra items are added to _M cache.
-                M = self.ds.get_M(key1, key2, average_times=True)
+                M = self.ds.get_M(key1, key2)[0]
                 nt.assert_true(len(self.ds._M) == npatterns * nconfigs)
 
     def test_get_W(self):
@@ -1064,18 +1071,18 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.set_taper(taper)
                 self.ds.set_Ndlys(Nfreq//3)
-                W = self.ds.get_W(key1, key2, average_times=True)
+                W = self.ds.get_W(key1, key2)
                 nconfigs += 1
-                self.assertEqual(W.shape, (Nfreq//3, Nfreq//3)) # Test shape
+                self.assertEqual(W.shape[1:], (Nfreq//3, Nfreq//3)) # Test shape
                 self.ds.set_Ndlys()
-                W = self.ds.get_W(key1, key2, average_times=True)
-                self.assertEqual(W.shape, (Nfreq, Nfreq))
+                W = self.ds.get_W(key1, key2)
+                self.assertEqual(W.shape[1:], (Nfreq, Nfreq))
                 nconfigs += 1
                 # assert that number of keys in H equals the number of flagging patterns
                 # times the number of tapering and weighting configurations that have been
                 # cycled through.
                 # second W computation made to check that no extra items are added to _W cache.
-                W = self.ds.get_W(key1, key2, average_times=True)
+                W = self.ds.get_W(key1, key2)
                 nt.assert_true(len(self.ds._W) == npatterns * nconfigs)
 
     def test_get_H_fft(self):
@@ -1099,13 +1106,14 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_taper(taper)
 
                 self.ds.set_Ndlys(Nfreq)
-                H1 = self.ds.get_H(key1, key2, average_times=True, sampling=True, allow_fft=False)
-                H2 = self.ds.get_H(key1, key2, average_times=True, allow_fft=True, sampling=True)
+                H1 = self.ds.get_H(key1, key2, sampling=True, allow_fft=False)
+                H2 = self.ds.get_H(key1, key2, allow_fft=True, sampling=True)
                 nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=False)
                 self.ds.set_Ndlys(Nfreq//3)
                 nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=True)
                 #check if H1 and H2 are close to one part in 10e-10
-                nt.assert_true(np.all(np.abs(H1-H2)/np.mean(np.diag(np.abs(H1))) <= 1e-10))
+                for m in range(H1.shape[0]):
+                    nt.assert_true(np.all(np.abs(H1[m]-H2[m])/np.mean(np.diag(np.abs(H1[m]))) <= 1e-10))
 
 
 
@@ -1168,7 +1176,8 @@ class Test_PSpecData(unittest.TestCase):
                     # creative ways to break the code to break one test but not
                     # the other.
                     G_swapped = self.ds.get_G(key2, key1, time_indices=[0]).squeeze()
-                    nconfigs += 1
+                    # swapping key1 and key2 should not change number of keys
+                    # when we have identity weights.
                     #calculate G a second time and make sure the number of
                     #cache keys does not change.
                     G_swapped = self.ds.get_G(key2, key1, time_indices=[0]).squeeze()
@@ -1224,14 +1233,14 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_r_param(key2,rpk)
             for taper in taper_selection:
                 self.ds.set_taper(taper)
-
                 self.ds.set_Ndlys(Nfreq)
-                G1 = self.ds.get_G(key1, key2, average_times=True)
-                G2 = self.ds.get_G(key1, key2, average_times=True, allow_fft=True)
+                G1 = self.ds.get_G(key1, key2)
+                G2 = self.ds.get_G(key1, key2, allow_fft=True)
                 self.ds.set_Ndlys(Nfreq//3)
                 nt.assert_raises(ValueError, self.ds.get_G, key1, key2, allow_fft=True)
-                #check if H1 and H2 are close to one part in 10e-10
-                nt.assert_true(np.all(np.abs(G1-G2)/np.mean(np.diag(np.abs(G1))) <= 1e-10))
+                # check if H1 and H2 are close to one part in 10e-10 (vs trace)
+                for m in range(G1.shape[0]):
+                    nt.assert_true(np.all(np.abs(G1[m]-G2[m])/np.mean(np.diag(np.abs(G1[m]))) <= 1e-10))
 
 
     '''
