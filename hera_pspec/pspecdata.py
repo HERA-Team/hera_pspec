@@ -256,14 +256,22 @@ class PSpecData(object):
         self.spw_Nfreqs = self.Nfreqs
         self.spw_Ndlys = self.spw_Nfreqs
 
+        # clear time independent weights.
+        self._time_independent_weights = {}
         # Check weights. If they are time independent, then set _time_independent_weights = True.
         for dind, dset in enumerate(self.dsets):
-            bls = dset.get_antpairpols()
+            if len(dset.get_pols()) > 1:
+                # hash antpairpol if there is more then one polarization
+                bls = dset.get_antpairpols()
+            else:
+                # otherwise, hash antpair and antpairpol
+                bls = dset.get_antpairs()
             for bl in bls:
                 blkey = (dind, bl)
                 wwf = self.w(blkey)
                 self._time_independent_weights[blkey] = np.all([np.all(wrow == wrow[0]) for wrow in wwf])
-
+                if len(blkey) == 2:
+                    self._time_independent_weights[(dind, bl + tuple(dset.get_pols()))] = self._time_independent_weights[blkey]
 
 
 
@@ -575,9 +583,6 @@ class PSpecData(object):
             # If weights were not specified, use the flags built in to the
             # UVData dataset object
             wgts = (~self.dsets[dset].get_flags(bl)).astype(float).T[spw]
-        # only return the first time if time_time_independent_weights
-        if key in self._time_independent_weights and self._time_independent_weights[key]:
-            wgts = wgts[:, 0]
         return wgts
 
     def set_C(self, cov):
@@ -854,7 +859,7 @@ class PSpecData(object):
         # parse key
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
-        tindep = self._time_independent_weights(key)
+        tindep = self._time_independent_weights[key]
         Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True, tindep)
         nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
         # Calculate inverse covariance if not in cache
@@ -865,11 +870,12 @@ class PSpecData(object):
             #empirically determined C is not per-time but weights are.
             #Thus, we need to loop through each set of per-time weights and take
             #a psuedo-inverse at each time.
-            wgts = self.Y(key)
             if tindep:
+                wgts = self.Y(key, 0)
                 _iC = np.zeros(nfreq, nfreq)
                 wgts_sq = np.outer(wgts, wgts)
             else:
+                wgts = self.Y(key)
                 _iC = np.zeros((self.Ntimes, nfreq, nfreq))
                 wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
             # if the weights for this dset and baseline are time independent, then just
@@ -896,7 +902,7 @@ class PSpecData(object):
                         _iC[m] = np.linalg.pinv(_iC[m])
                     else:
                         _iC[m] = np.linalg.inv(_iC[m])
-                self.set_iC({Ckey:_iC})
+            self.set_iC({Ckey:_iC})
         return self._iC[Ckey]
     def Y(self, key, time_index=None):
         """
@@ -939,13 +945,11 @@ class PSpecData(object):
             if not np.all(np.isclose(self._Y[key], 0.0) \
                         + np.isclose(self._Y[key], 1.0)):
                 raise NotImplementedError("Non-binary weights not currently implmented")
-        if self._time_independent_weights[key]:
+
+        if time_index is None:
             return self._Y[key]
         else:
-            if time_index is None:
-                return self._Y[key]
-            else:
-                return self._Y[key][:, time_index].squeeze()
+            return self._Y[key][:, time_index].squeeze()
 
     def set_iC(self, d):
         """
@@ -1052,7 +1056,7 @@ class PSpecData(object):
                 wgts = np.asarray([self.Y(key, m) for m in range(self.Ntimes)])
                 wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
             else:
-                wgts = self.Y(key)
+                wgts = self.Y(key, 0)
                 wgt_sq = np.outer(wgts, wgts)
             wgt_sq[np.isnan(wgt_sq)] = 0.
 
@@ -1920,7 +1924,7 @@ class PSpecData(object):
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
             of q_hat for details).
 
-        pol : str/int/bool, optional
+        pol : str/int/bool/2-tuple/2-list, optional
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
@@ -2045,7 +2049,7 @@ class PSpecData(object):
             If False, Q_alt is used (HERA memo #44, Eq. 16), and the power
             spectrum is normalized separately.
 
-        pol : str/int/bool, optional
+        pol : str/int/bool/2-tuple/2-list, optional
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
@@ -2717,10 +2721,10 @@ class PSpecData(object):
         Parameters
         ----------
         G : array_like
-            Denominator matrix for the bandpowers, with dimensions (Ntimes, Nfreqs, Nfreqs).
+            Denominator matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
 
         H : array_like
-            Response matrix for the bandpowers, with dimensions (Ntimes, Nfreqs, Nfreqs).
+            Response matrix for the bandpowers, with dimensions (Nfreqs, Nfreqs).
 
         mode : str, optional
             Definition to use for M. Must be one of the options listed above.
@@ -2946,7 +2950,7 @@ class PSpecData(object):
         Parameters
         ----------
 
-        pol : str/int/bool, optional
+        pol : str/int/bool/2-tuple, optional
             Which beam polarization to use. If the specified polarization
             doesn't exist, a uniform isotropic beam (with integral 4pi for all
             frequencies) is assumed. Default: False (uniform beam).
@@ -2964,15 +2968,21 @@ class PSpecData(object):
         try:
             # Get beam response in (frequency, pixel), beam area(freq) and
             # Nside, used in computing dtheta
-            beam_res, beam_omega, N = \
-                self.primary_beam.beam_normalized_response(pol, nu)
-            prod = 1. / beam_omega
-            beam_prod = beam_res * prod[:, np.newaxis]
+            if not isinstance(pol, (tuple, list)):
+                # support for cross-pol normalization
+                pol = (pol, pol)
+            beam_prods = []
+            for p in pol:
+                beam_res, beam_omega, N = \
+                    self.primary_beam.beam_normalized_response(p, nu)
+                prod = 1. / beam_omega
+                beam_prod = beam_res * prod[:, np.newaxis]
+                beam_prods += [beam_prod]
 
             # beam_prod has omega subsumed, but taper is still part of R matrix
             # The nside term is dtheta^2, where dtheta is the resolution in
             # healpix map
-            integral_beam = np.pi/(3.*N*N) * np.dot(beam_prod, beam_prod.T)
+            integral_beam = np.pi/(3.*N*N) * np.dot(beam_prods[0], beam_prods[1].T)
 
         except(AttributeError):
             warnings.warn("The beam response could not be calculated. "
@@ -4781,6 +4791,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # update dsets
         ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
         ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
+        # update _time_independent_weights
+        keys = list(ds._time_independent_weights.keys())
+        for key in keys:
+            ds._time_independent_weights[(1,) + key[1:]] = ds._time_independent_weights[key]
         ds.labels.append("dset1")
         ds.Ntimes = ds.Ntimes // 2#divide number of times by two.
         # update dsets_std
