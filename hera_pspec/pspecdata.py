@@ -2283,6 +2283,11 @@ class PSpecData(object):
     def get_unnormed_V(self, key1, key2, time_index, model='empirical', exact_norm=False,
                        pol=False, allow_fft=False):
         """
+
+        ATTENTION: This function computes the complex covariance of qhat which can be useful
+                   for normalization but does not have all the information on the covariances of the real
+                   and imaginary components of qHat. For these, see get_analytic_covariances.
+
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
 
