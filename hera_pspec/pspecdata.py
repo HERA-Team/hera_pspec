@@ -260,18 +260,34 @@ class PSpecData(object):
         self._time_independent_weights = {}
         # Check weights. If they are time independent, then set _time_independent_weights = True.
         for dind, dset in enumerate(self.dsets):
+            bls_conj = []
             if len(dset.get_pols()) > 1:
                 # hash antpairpol if there is more then one polarization
+                # along with conjugates
                 bls = dset.get_antpairpols()
+                for bl in bls:
+                    bls_conj.append(bl[:2][::-1] + (bl[-1][::-1],))
             else:
                 # otherwise, hash antpair and antpairpol
+                # along with their conjugates
+                # this is done because other parts of hera_pspec play
+                # fast and loose with hasing (sometimes don't explicitly hash pols)
                 bls = dset.get_antpairs()
-            for bl in bls:
+                for bl in bls:
+                    bls_conj.append(bl[::-1])
+            for bl, blc in zip(bls, bls_conj):
+                if len(bl) == 3:
+                    bl = bl[:2] + (uvutils.polnum2str(uvutils.polstr2num(bl[-1], x_orientation=dset.x_orientation)),)
+                    blc = blc[:2] + (bl[-1][::-1],)
                 blkey = (dind, bl)
+                blkeyc = (dind, blc)
                 wwf = self.w(blkey)
                 self._time_independent_weights[blkey] = np.all([np.all(wrow == wrow[0]) for wrow in wwf])
-                if len(blkey) == 2:
-                    self._time_independent_weights[(dind, bl + tuple(dset.get_pols()))] = self._time_independent_weights[blkey]
+                self._time_independent_weights[blkeyc] = self._time_independent_weights[blkey]
+                if len(bl) == 2:
+                    pol = uvutils.polnum2str(uvutils.polstr2num(dset.get_pols()[0], x_orientation=dset.x_orientation))
+                    self._time_independent_weights[(dind, bl + (pol,))] = self._time_independent_weights[blkey]
+                    self._time_independent_weights[(dind, blc + (pol[::-1],))] = self._time_independent_weights[blkey]
 
 
 
