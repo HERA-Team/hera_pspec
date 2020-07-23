@@ -19,7 +19,6 @@ BASELINE_DEPENDENT_WEIGHTS = ['dayenu', 'iC']
 
 from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
 
-
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
@@ -476,6 +475,127 @@ class PSpecData(object):
             return dset
         else:
             raise TypeError("dset must be either an int or string")
+
+    def weighting_hash(self, time_index, key1, key2=None):
+        """hash baseline-times based on weights and flagging patterns.
+
+        Function for hashing matrices for a particular time integration
+        based on their flagging patterns and any additional necessary information
+        that depends on the weighting being used.
+
+        Currently, identity weights are only hashed on the flagging pattern of
+        key1 and (optional) key2
+
+        parametric weights are hashed on flagging patterns of key1 and (optional)
+        key 2 and the r_params of key1 / key2. Since different baselines can have
+        identical r_params, the number of unique hashes is less then the number
+        of baseline (pairs).
+
+        inverse covariance weights are hashed on flagging pattern and baseline pair
+        if empirical. This means that hte number of unique hashes is equal to the
+        number of baseline (pairs).
+
+        Parameters
+        ----------
+
+        time_index : int, integer specifying the time-index to be hashed.
+
+        key1 : 3 or 4-tuple, first index is dset index, second/third indices are
+               antenna indices of baseline pair. Fourth index is polarization.
+
+        key2 : 3 or 4-tuple (optional) see key1 description. This optional arg
+               should be provided when hashing baseline pairs rather then a
+               single baseline.
+
+        Returns
+        -------
+            key : tuple whose items depend on the time index, baseline keys and
+            data_weighting being used.
+
+        """
+        output_key = (self.data_weighting, )
+        # for identity weights, only hash by flagging patterns.
+        if self.data_weighting == 'identity':
+            key = tuple(self.w(key1, time_index)) +
+            if key2 is not None:
+                key = key + tuple(self.w(key2, time_index))
+        elif self.data_weighting in R_PARAM_WEIGHTINGS:
+            # for parametric weights, hash on r_params and flagging pattern.
+            r_param_key = (self.data_weighting, ) + key1
+            if not r_param_key in self.r_params:
+                raise ValueError("r_param not set for %s!"%str(r_param_key))
+            else:
+                key = self.r_params[r_param_key] + tuple(self.w(key1, time_index))
+            if key2 is not None:
+                r_param_key = (self.data_weighting, ) + key2
+                if not r_param_key in self.r_params:
+                    raise ValueError("r_param not set for %s!"%str(r_param_key))
+                else:
+                    key += self.r_params[r_param_key] + tuple(self.w(key2, time_index))
+        elif self.data_weighting == 'iC':
+            # empirical covariance is hashed by baseline pair but not
+            # by time since the covariance is computed across time.
+            if self.cov_model in ['empirical', 'autos']:
+                    key = key1
+                    if key2 is not None:
+                        key += key2
+            # for dset covariances, the time_index must be hashed.
+            elif self.cov_model == 'dsets':
+                    key = key1 + (time_index, )
+                    if key2 is not None:
+                        key += key2
+            else:
+                raise ValueError("Invalid cov model. Cannot hash.")
+
+        else:
+            raise ValueError("Invalid data weighting. Cannot hash.")
+        return key + (self.spw_Nfreqs, self.symmetric_taper, self.filter_extension)
+
+    def fisher_hash(self, time_index, key1, key2):
+        """hashing function for fisher matrices.
+
+        Parameters
+        ----------
+        time_index: int
+            index of time to hash.
+
+        key1 : 3 or 4-tuple, first index is dset index, second/third indices are
+               antenna indices of baseline pair. Fourth index is polarization.
+
+        key2 : 3 or 4-tuple (optional) see key1 description.
+
+        Returns
+        -------
+        tuple for hashing normalization level matrices (that involve baseline-pairs)
+        keys may or may not actually be used in hashing (see docstring for weighting_hash)
+        """
+        return self.weighting_hash(key1, key2, time_index)\
+         + (sampling, pol, exact_norm, self.spw_Ndlys)
+
+    def cov_hash(self, time_index, key1, key2):
+        """hashing function for covariances of q-hat.
+
+        Parameters
+        ----------
+        time_index: int
+            index of time to hash
+        key1 : 3 or 4-tuple, first index is dset index, second/third indices are
+               antenna indices of baseline pair. Fourth index is polarization.
+
+        key2 : 3 or 4-tuple (optional) see key1 description.
+        """
+        key = self.fisher_hash(time_index, key1, key2)
+        # if covariance is empirical, then must be hashed on
+        # baseline pair but does not necessarily include time-index.
+        if self.cov_model == ['empirical', 'autos']:
+            key = key + key1 + key2
+        # if dsets are being used, then must hash on time index as well.
+        elif self.cov_model == 'dsets'
+            key = key + key1 + key2 + (time_index, )
+        key = key + (self.cov_model, )
+        return key
+
+
 
     def parse_blkey(self, key):
         """
@@ -1003,7 +1123,7 @@ class PSpecData(object):
         for k in d:
             self._R[k] = d[k]
 
-    def R(self, key, time_index=None):
+    def R(self, key, time_indices=None):
         """
         Return the data-weighting matrix R, which is a product of
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and
@@ -1030,167 +1150,62 @@ class PSpecData(object):
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
 
-        average_times : bool, optional
-            If true, average over all times so that output is (spw_Nfreqs x spw_Nfreqs)
+        time_indices : integer or list of integers
 
         Returns
             If weights for key are time-independent, returns an spw_Nfreqs x spw_Nfreqs array.
             Otherwise, return an Ntimes x spw_Nfreqs x spw_Nfreqs array.
         """
+        if isinstance(time_indices, (int, np.int)):
+            time_indices = [time_indices]
         # type checks
+        if time_indices is None:
+            time_indices = np.arange(self.Ntimes).astype(int)
         assert isinstance(key, tuple)
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
         tindep = self._time_independent_weights[self.parse_blkey(key)]
+        fext = self.filter_extension
+        nfreq = np.sum(fext) + self.spw_Nfreqs
         # Only add to Rkey if a particular mode is enabled
         # If you do add to this, you need to specify this in self.set_R docstring!
-        Rkey = key + (self.taper, tindep)
-        if self.data_weighting == 'dayenu':
-            # add extra dayenu params
-            Rkey = Rkey + tuple(self.filter_extension,) + (self.spw_Nfreqs,) \
-                   + (self.symmetric_taper,)
-
-        Rkey = Rkey + (self.data_weighting,)
-        if Rkey not in self._R:
-            # form sqrt(taper) matrix
-            if self.taper == 'none':
-                myTaper = np.ones(self.spw_Nfreqs)
-            else:
-                myTaper = dspec.gen_window(self.taper, self.spw_Nfreqs)
-            # get flag weight vector: straight multiplication of vectors
-            # mimics matrix multiplication
-
-            # replace possible nans with zero (when something dips negative
-            # in sqrt for some reason)
-            myTaper[np.isnan(myTaper)] = 0.0
-            fext = self.filter_extension
-            nfreq = np.sum(fext) + self.spw_Nfreqs
-            #if we want to use a full-band filter, set the R-matrix to filter and then truncate.
-            tmat = np.zeros((self.spw_Nfreqs,
-                             nfreq), dtype=complex)
-            tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=np.complex128)
-            # form R matrix
-            if not tindep:
-                wgts = np.asarray([self.Y(key, m) for m in range(self.Ntimes)])
-                wgt_sq = np.asarray([np.outer(wgts[m], wgts[m]) for m in range(self.Ntimes)])
-            else:
-                wgts = self.Y(key, 0)
-                wgt_sq = np.outer(wgts, wgts)
-            wgt_sq[np.isnan(wgt_sq)] = 0.
-
-            if self.data_weighting == 'identity':
-                if tindep:
-                    rmat = self.I(key) * wgt_sq
-                else:
-                    rmat =  np.asarray([self.I(key) * wgt_sq[m] for m in range(self.Ntimes)])
-
-            elif self.data_weighting == 'iC':
-                rmat = self.iC(key)
-
-            elif self.data_weighting == 'dayenu':
-                r_param_key = (self.data_weighting,) + key
-                if not r_param_key in self.r_params:
-                    raise ValueError("r_param not set for %s!"%str(r_param_key))
-                r_params = self.r_params[r_param_key]
-                if not 'filter_centers' in r_params or\
-                   not 'filter_half_widths' in r_params or\
-                   not  'filter_factors' in r_params:
-                       raise ValueError("filtering parameters not specified!")
-                #This line retrieves a the psuedo-inverse of a lazy covariance
-                #matrix given by dspec.dayenu_mat_inv.
-                # Note that we multiply sqrtY inside of the pinv
-                # to apply flagging weights before taking psuedo inverse.
-                if tindep:
-                    rmat = np.zeros(nfreq, nfreq)
-                else:
-                    rmat = np.zeros((self.Ntimes, nfreq, nfreq))
-                _freqs = self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]]
-                df = np.abs(_freqs[1]-_freqs[0])
-                if tindep:
-                    rdkey = tuple(wgts) + tuple(np.round(np.array(r_params['filter_centers']) * df, 8))\
-                    + tuple(np.round(df * np.array(r_params['filter_half_widths']), 8))\
-                    + tuple(np.round(df * np.array(r_params['filter_factors']) * 1e8, 8))\
-                    + ('dayenu',) + (self.spw_Nfreqs,) + self.filter_extension
-                    if not rdkey in self.r_cache:
-                        rm = dspec.dayenu_mat_inv(x=_freqs,
+        output = np.zeros((self.Ntimes, self.spw_Nfreqs, nfreq), dtype=np.complex128)
+        for mindex, tindex in enumerate(time_indices):
+            wgt = self.Y(key, tindex)
+            wgt_sq = np.outer(wgt, wgt)
+            Rkey = self.weighting_hash(time_index, key)
+            if Rkey not in self._R:
+                if self.data_weighting == 'identity':
+                        rmat = self.I(key) * wgt_sq
+                elif self.data_weighting == 'dayenu':
+                        r_param_key = (self.data_weighting,) + key
+                        _freqs = self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]]
+                        rmat = dspec.dayenu_mat_inv(x=_freqs,
                                         filter_centers=r_params['filter_centers'],
                                         filter_half_widths=r_params['filter_half_widths'],
                                         filter_factors=r_params['filter_factors']) * wgt_sq
-                        self.r_cache[rdkey] = np.linalg.pinv(rm)
-                    rmat = self.r_cache[rdkey]
+                        rmat = np.linalg.pinv(rmat)
+                elif self.data_weighting == 'iC':
+                    rmat = self.iC(key)
                 else:
-                    for m in range(self.Ntimes):
-                        rdkey = tuple(wgts[m]) + tuple(np.round(np.array(r_params['filter_centers']) * df, 8))\
-                        + tuple(np.round(df * np.array(r_params['filter_half_widths']), 8))\
-                        + tuple(np.round(df * np.array(r_params['filter_factors']) * 1e8, 8))\
-                        + ('dayenu',) + (self.spw_Nfreqs,) + self.filter_extension
-                        if not rdkey in self.r_cache:
-                            rm = dspec.dayenu_mat_inv(x=_freqs,
-                                            filter_centers=r_params['filter_centers'],
-                                            filter_half_widths=r_params['filter_half_widths'],
-                                            filter_factors=r_params['filter_factors']) * wgt_sq[m]
-                            self.r_cache[rdkey] = np.linalg.pinv(rm)
-                        rmat[m] = self.r_cache[rdkey]
-            else:
-                raise ValueError("data_weighting must be in ['identity', 'iC', 'dayenu']")
-                # allow for restore_foregrounds option which introduces clean-interpolated
-                # foregrounds that are propagated to the power-spectrum.
-            rmat = tmat @ rmat
-            if self.data_weighting == 'dayenu' and 'restore_half_width' in r_params:
-                if isinstance(r_params['restore_half_width'], (float, int)) and r_params['restore_half_width']>0:
-                    if not 'restore_fundamental_period' in r_params:
-                        fundamental_period = 2 * self.spw_Nfreqs
-                    else:
-                        fundamental_period = r_params['restore_fundamental_period']
-                    ndlys_restore = int(r_params['restore_half_width'] * np.mean(np.diff(self.freqs)) * fundamental_period)
-                    if tindep:
-                        if np.sum((wgts>0).astype(float)) >= ndlys_restore:
-                            rmat = rmat + \
-                            dspec.delay_interpolation_matrix(self.spw_Nfreqs, ndlys_restore,
-                            wgts[self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
-                            @ (tmat - rmat)
-                    else:
-                        for m in range(self.Ntimes):
-                            if np.sum((wgts[m]>0).astype(float)) >= ndlys_restore:
-                                rmat[m] = rmat[m] + \
-                                dspec.delay_interpolation_matrix(self.spw_Nfreqs, ndlys_restore,
-                                wgts[m][self.spw_range[0]:self.spw_range[1]], fundamental_period=fundamental_period)\
-                                @ (tmat - rmat[m])
-                else:
-                    raise ValueError("'restore_half_width' must be supplied as an integer or float >0.")
+                    raise ValueError("data_weighting must be in ['identity', 'iC', 'dayenu']")
 
-            # transpose rmat
-            if tindep:
+                myTaper = dspec.gen_window(self.taper, self.spw_Nfreqs)
+                tmat = np.zeros((self.spw_Nfreqs, nfreq), dtype=complex)
+                tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=np.complex128)
+
+                rmat = tmat @ rmat
                 rmat = rmat.T
                 if self.symmetric_taper:
                     sqrtT = np.sqrt(myTaper)
                     rmat = np.transpose(sqrtT[:, None] * rmat * sqrtT[None, :])
                 else:
                     rmat = np.transpose(myTaper[None, :] * rmat)
-            else:
-                rmat =  np.transpose(rmat, (1, 0, 2))
-                if self.symmetric_taper:
-                    sqrtT = np.sqrt(myTaper)
-                    rmat = np.transpose(sqrtT[:,None,None] * rmat * sqrtT[None,None,:], (1,0,2))
-                else:
-                    rmat = np.transpose(myTaper[:,None,None] * rmat, (1,0,2))
-            #move time-axis to the back. This is helpful for future broadcasting
-            #exploitation
-            #self._R[Rkey] = np.swap_axes(np.swap_axes(rmat, 1, 2), 0, 1)
-            self._R[Rkey] = rmat
+                self._R[Rkey] = rmat
 
-        rmat = self._R[Rkey]
-        if tindep: # if time independent, then return the spw_Ndlys x spw_Ndlys matrix.
-            return rmat
-        else:
-            # if not time independent,
-            # and time_index specified, then return spw_Ndlys x spw_Ndlys matrix at time_index.
-            if time_index is not None:
-                return rmat[time_index].squeeze()
-            else:
-                # otherwise return Ntimes x spw_Ndlys x spw_Ndlys R matrix.
-                return rmat
+            output[mindex] = self._R[Rkey]
 
+        return output.squeeze()
 
     def set_symmetric_taper(self, use_symmetric_taper):
         """
@@ -1428,15 +1443,12 @@ class PSpecData(object):
                                   exact_norm=exact_norm, pol=pol, time_index=t, allow_fft=allow_fft)\
                                   for t in time_indices])
 
-            elif model in ['empirical', 'empirical_pspec']:
+            elif model in ['empirical']:
                 #empirical error bars require broadcasting flags
                 if model == 'empirical':
                     flag_backup=self.broadcast_dset_flags(spw_ranges=[self.spw_range], set_time_independent_weights=False)
                 vm = self.get_unnormed_V(k1, k2, model=model,
                                   exact_norm=exact_norm, time_index = 0, pol=pol, allow_fft=allow_fft)
-                if model == 'empirical':
-                    for dset,flag in zip(self.dsets, flag_backup):
-                        dset.flag_array = flag
                 output += 1./np.asarray([vm for t in time_indices])
 
         return float(len(key1)) / output
@@ -1595,17 +1607,13 @@ class PSpecData(object):
             and sampling False
             Default: False.
 
-
         Returns
         -------
         G : array_like, complex
             Fisher matrix, with dimensions (spw_Nfreqs, spw_Nfreqs).
         """
-        Gkey = (self.data_weighting, self.taper, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1, time_index))\
-               + tuple(self.Y(key2, time_index)) + self.filter_extension + (self.spw_Nfreqs,)
-        if self.data_weighting in BASELINE_DEPENDENT_WEIGHTS:
-            Gkey = Gkey + key1 + key2
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
+        Gkey = self.fisher_hash(time_index, key1, key2)
         if not Gkey in self._G:
             R1 = self.R(key1, time_index)
             R2 = self.R(key2, time_index)
@@ -1752,11 +1760,7 @@ class PSpecData(object):
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
-        Hkey = (self.data_weighting, self.taper, sampling, pol, exact_norm, self.spw_Ndlys) + tuple(self.Y(key1, time_index))\
-               + tuple(self.Y(key2, time_index)) + self.filter_extension + (self.spw_Nfreqs,)
-        # if we are using identity weighting, then do not hash by baseline pairs.
-        if self.data_weighting in BASELINE_DEPENDENT_WEIGHTS:
-            Hkey = Hkey + key1 + key2
+        Hkey = self.fisher_hash(time_index, key1, key2)
         if not Hkey in self._H:
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1, time_index)
@@ -2371,11 +2375,9 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Ndlys, Ndlys).
         """
         # Collect all the relevant pieces
-        Vkey = key1 + key2 + (pol, exact_norm, self.taper, self.spw_Ndlys, model, self.data_weighting)\
-        + tuple(self.Y(key1, time_index)) + tuple(self.Y(key2, time_index))
-
+        Vkey = self.cov_hash(time_index, key1, key2)
         if not Vkey in self._V:
-            if model in ['dsets', 'empirical']:
+            if model in ['dsets', 'empirical', 'autos']:
                 C1 = self.C_model(key1, model=model, time_index=time_index)
                 C2 = self.C_model(key2, model=model, time_index=time_index)
                 P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False)
@@ -2409,9 +2411,7 @@ class PSpecData(object):
                     p21_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(P21_filtered[:,::-1])))
                     auto_term = c1_fft * np.conj(c2_fft)
                     cross_term = p21_fft @ np.conj(s21_fft)
-            elif model in ['empirical_pspec']:
-                output = utils.cov(self.q_hat(key1, key2),
-                        np.ones((self.spw_Ndlys, self.Ntimes)))
+
             self._V[Vkey] = output
 
         return self._V[Vkey]
@@ -2468,11 +2468,7 @@ class PSpecData(object):
         """
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
         assert(mode in modes)
-        Mkey = (mode, exact_norm, self.spw_Ndlys) + (self.taper, self.data_weighting)\
-        + tuple(self.Y(key1, time_index)) + tuple(self.Y(key2, time_index))\
-        + self.filter_extension + (self.spw_Nfreqs,)
-        if self.data_weighting in BASELINE_DEPENDENT_WEIGHTS:
-            Mkey = Mkey + key1 + key2
+        Mkey = self.fisher_hash(time_index, key1, key2) + (, mode)
         if not Mkey in self._M:
             if mode != 'I' and exact_norm==True:
                 raise NotImplementedError("Exact norm is not supported for non-I modes")
@@ -2574,11 +2570,7 @@ class PSpecData(object):
         W : array_like, complex
             Dimensions (Ndlys, Ndlys).
         """
-        Wkey = (mode, sampling, exact_norm, self.taper, self.data_weighting, self.spw_Ndlys) + \
-        tuple(self.Y(key1 ,time_index)) + tuple(self.Y(key2, time_index))\
-        + tuple(self.filter_extension) + (self.spw_Nfreqs,)
-        if self.data_weighting in BASELINE_DEPENDENT_WEIGHTS:
-            Wkey = Wkey + key1 + key2
+        Wkey = self.fisher_hash(time_index, key1, key2)
         if not Wkey in self._W:
             M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
             H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
