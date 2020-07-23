@@ -277,6 +277,8 @@ class PSpecData(object):
                     bls_conj.append(bl[::-1])
             for bl, blc in zip(bls, bls_conj):
                 if len(bl) == 3:
+                    # only hash xx / yy strings
+                    # since these are how the other matrices seem to be hashed.
                     bl = bl[:2] + (uvutils.polnum2str(uvutils.polstr2num(bl[-1], x_orientation=dset.x_orientation)),)
                     blc = blc[:2] + (bl[-1][::-1],)
                 blkey = (dind, bl)
@@ -1940,7 +1942,7 @@ class PSpecData(object):
             Exact normalization (see HERA memo #44, Eq. 11 and documentation
             of q_hat for details).
 
-        pol : str/int/bool/2-tuple/2-list, optional
+        pol : str/int/bool, optional
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
@@ -2065,7 +2067,7 @@ class PSpecData(object):
             If False, Q_alt is used (HERA memo #44, Eq. 16), and the power
             spectrum is normalized separately.
 
-        pol : str/int/bool/2-tuple/2-list, optional
+        pol : str/int/bool, optional
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
@@ -2783,7 +2785,7 @@ class PSpecData(object):
         Parameters
         ----------
 
-        pol : str/int/bool/2-tuple, optional
+        pol : str/int/bool, optional
             Which beam polarization to use. If the specified polarization
             doesn't exist, a uniform isotropic beam (with integral 4pi for all
             frequencies) is assumed. Default: False (uniform beam).
@@ -2801,21 +2803,15 @@ class PSpecData(object):
         try:
             # Get beam response in (frequency, pixel), beam area(freq) and
             # Nside, used in computing dtheta
-            if not isinstance(pol, (tuple, list)):
-                # support for cross-pol normalization
-                pol = (pol, pol)
-            beam_prods = []
-            for p in pol:
-                beam_res, beam_omega, N = \
-                    self.primary_beam.beam_normalized_response(p, nu)
-                prod = 1. / beam_omega
-                beam_prod = beam_res * prod[:, np.newaxis]
-                beam_prods += [beam_prod]
+            beam_res, beam_omega, N = \
+                self.primary_beam.beam_normalized_response(pol, nu)
+            prod = 1. / beam_omega
+            beam_prod = beam_res * prod[:, np.newaxis]
 
             # beam_prod has omega subsumed, but taper is still part of R matrix
             # The nside term is dtheta^2, where dtheta is the resolution in
             # healpix map
-            integral_beam = np.pi/(3.*N*N) * np.dot(beam_prods[0], beam_prods[1].T)
+            integral_beam = np.pi/(3.*N*N) * np.dot(beam_prod, beam_prod.T)
 
         except(AttributeError):
             warnings.warn("The beam response could not be calculated. "
