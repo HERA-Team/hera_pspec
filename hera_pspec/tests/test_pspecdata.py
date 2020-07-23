@@ -809,7 +809,6 @@ class Test_PSpecData(unittest.TestCase):
         ds1.get_unnormed_V(key1, key2, time_index=0)
         h=ds1.get_H(key1, key2)
         g=ds1.get_G(key1, key2)
-        ds1.get_MW(g, h)
         #make sure identity weighting isn't broken.
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         ds1 = copy.deepcopy(self.ds)
