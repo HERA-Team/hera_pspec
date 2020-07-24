@@ -698,7 +698,7 @@ class Test_PSpecData(unittest.TestCase):
             self.ds.set_weighting(input_data_weight)
             #check error raised
             if input_data_weight == 'dayenu':
-                nt.assert_raises(ValueError,self.ds.R, key1)
+                nt.assert_raises(KeyError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
@@ -810,7 +810,7 @@ class Test_PSpecData(unittest.TestCase):
         for input_data_weight in ['identity', 'iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
-                nt.assert_raises(ValueError,self.ds.R, key1)
+                nt.assert_raises(KeyError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
@@ -880,7 +880,7 @@ class Test_PSpecData(unittest.TestCase):
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
-                nt.assert_raises(ValueError,self.ds.R, key1)
+                nt.assert_raises(KeyError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
@@ -920,7 +920,7 @@ class Test_PSpecData(unittest.TestCase):
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
-                nt.assert_raises(ValueError,self.ds.R, key1)
+                nt.assert_raises(KeyError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
@@ -960,7 +960,7 @@ class Test_PSpecData(unittest.TestCase):
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
-                nt.assert_raises(ValueError,self.ds.R, key1)
+                nt.assert_raises(KeyError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
@@ -994,7 +994,7 @@ class Test_PSpecData(unittest.TestCase):
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
-                nt.assert_raises(ValueError,self.ds.R, key1)
+                nt.assert_raises(KeyError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[200e-9],'filter_factors':[1e-9]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
@@ -1033,7 +1033,7 @@ class Test_PSpecData(unittest.TestCase):
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
-                nt.assert_raises(ValueError,self.ds.R, key1)
+                nt.assert_raises(KeyError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[0.],'filter_factors':[0.]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
@@ -1123,7 +1123,7 @@ class Test_PSpecData(unittest.TestCase):
         for input_data_weight in ['identity','iC', 'dayenu']:
             self.ds.set_weighting(input_data_weight)
             if input_data_weight == 'dayenu':
-                nt.assert_raises(ValueError,self.ds.R, key1)
+                nt.assert_raises(KeyError,self.ds.R, key1)
                 rpk = {'filter_centers':[0.],'filter_half_widths':[200e-9],'filter_factors':[1e-9]}
                 self.ds.set_r_param(key1,rpk)
                 self.ds.set_r_param(key2,rpk)
