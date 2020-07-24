@@ -15,7 +15,7 @@ import uvtools.dspec as dspec
 # This is a list of weights that will depend on baseline.
 # If data_weighting is in this list, G and H will be hashed per
 # baseline pair.
-BASELINE_DEPENDENT_WEIGHTS = ['dayenu', 'iC']
+R_PARAM_WEIGHTINGS = ['dayenu']
 
 from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
 
@@ -251,6 +251,7 @@ class PSpecData(object):
 
         # Store the actual frequencies
         self.freqs = self.dsets[0].freq_array[0]
+        self.df = np.median(np.diff(self.freqs))
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
         self.spw_Ndlys = self.spw_Nfreqs
@@ -476,6 +477,31 @@ class PSpecData(object):
         else:
             raise TypeError("dset must be either an int or string")
 
+    def r_param_hash(self, rpkey):
+        """Function for hashing parameters for parameteric R-matrices.
+        Parameters
+        ----------
+        rpkey : tuple
+            tuple of r-parameters dictionary entry that we wish to hash.
+
+        Returns
+        -------
+            hashable tuple based on values of r-parameters.
+        """
+        if rpkey in self.r_params:
+            if self.data_weighting == 'dayenu':
+                rp = self.r_params[rpkey]
+                key = tuple((np.asarray(rp['filter_centers']) * self.df * self.spw_Nfreqs).astype(int)) + \
+                      tuple((np.asarray(rp['filter_half_widths']) * self.df * self.spw_Nfreqs).astype(int)) + \
+                      tuple((np.asarray(rp['filter_factors']) * 1e9).astype(int))
+            else:
+                raise ValueError("only 'dayenu' currently supported for r_param hashing.")
+        else:
+            raise KeyError("%s not in self.r_params"%str(rpkey))
+        return key
+
+
+
     def weighting_hash(self, time_index, key1, key2=None):
         """hash baseline-times based on weights and flagging patterns.
 
@@ -516,22 +542,19 @@ class PSpecData(object):
         output_key = (self.data_weighting, )
         # for identity weights, only hash by flagging patterns.
         if self.data_weighting == 'identity':
-            key = tuple(self.w(key1, time_index)) +
+            key = tuple(self.Y(key1, time_index))
             if key2 is not None:
-                key = key + tuple(self.w(key2, time_index))
+                key = key + tuple(self.Y(key2, time_index))
         elif self.data_weighting in R_PARAM_WEIGHTINGS:
             # for parametric weights, hash on r_params and flagging pattern.
             r_param_key = (self.data_weighting, ) + key1
-            if not r_param_key in self.r_params:
-                raise ValueError("r_param not set for %s!"%str(r_param_key))
-            else:
-                key = self.r_params[r_param_key] + tuple(self.w(key1, time_index))
+            key = self.r_param_hash(r_param_key) + tuple(self.Y(key1, time_index))
             if key2 is not None:
                 r_param_key = (self.data_weighting, ) + key2
                 if not r_param_key in self.r_params:
                     raise ValueError("r_param not set for %s!"%str(r_param_key))
                 else:
-                    key += self.r_params[r_param_key] + tuple(self.w(key2, time_index))
+                    key += self.r_params[r_param_key] + tuple(self.Y(key2, time_index))
         elif self.data_weighting == 'iC':
             # empirical covariance is hashed by baseline pair but not
             # by time since the covariance is computed across time.
@@ -551,7 +574,7 @@ class PSpecData(object):
             raise ValueError("Invalid data weighting. Cannot hash.")
         return key + (self.spw_Nfreqs, self.symmetric_taper, self.filter_extension)
 
-    def fisher_hash(self, time_index, key1, key2):
+    def fisher_hash(self, time_index, key1, key2, sampling, exact_norm, pol):
         """hashing function for fisher matrices.
 
         Parameters
@@ -564,15 +587,27 @@ class PSpecData(object):
 
         key2 : 3 or 4-tuple (optional) see key1 description.
 
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details).
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+
         Returns
         -------
         tuple for hashing normalization level matrices (that involve baseline-pairs)
         keys may or may not actually be used in hashing (see docstring for weighting_hash)
         """
-        return self.weighting_hash(key1, key2, time_index)\
-         + (sampling, pol, exact_norm, self.spw_Ndlys)
+        return self.weighting_hash(time_index, key1, key2)\
+         + (sampling, exact_norm, pol, self.spw_Ndlys)
 
-    def cov_hash(self, time_index, key1, key2):
+    def cov_hash(self, time_index, key1, key2, exact_norm, pol):
         """hashing function for covariances of q-hat.
 
         Parameters
@@ -583,14 +618,30 @@ class PSpecData(object):
                antenna indices of baseline pair. Fourth index is polarization.
 
         key2 : 3 or 4-tuple (optional) see key1 description.
+
+        sampling : boolean, optional
+            Whether to sample the power spectrum or to assume integrated
+            bands over wide delay bins. Default: False
+
+        exact_norm : boolean, optional
+            Exact normalization (see HERA memo #44, Eq. 11 and documentation
+            of q_hat for details).
+
+        pol : str/int/bool, optional
+            Polarization parameter to be used for extracting the correct beam.
+            Used only if exact_norm is True.
+
+        Returns
+        -------
+        tuple for hashing covariances of q-hat.
         """
-        key = self.fisher_hash(time_index, key1, key2)
+        key = self.fisher_hash(time_index, key1, key2, sampling=False, exact_norm=exact_norm, pol=pol)
         # if covariance is empirical, then must be hashed on
         # baseline pair but does not necessarily include time-index.
         if self.cov_model == ['empirical', 'autos']:
             key = key + key1 + key2
         # if dsets are being used, then must hash on time index as well.
-        elif self.cov_model == 'dsets'
+        elif self.cov_model == 'dsets':
             key = key + key1 + key2 + (time_index, )
         key = key + (self.cov_model, )
         return key
@@ -1156,7 +1207,7 @@ class PSpecData(object):
             If weights for key are time-independent, returns an spw_Nfreqs x spw_Nfreqs array.
             Otherwise, return an Ntimes x spw_Nfreqs x spw_Nfreqs array.
         """
-        if isinstance(time_indices, (int, np.int)):
+        if isinstance(time_indices, (int, np.integer)):
             time_indices = [time_indices]
         # type checks
         if time_indices is None:
@@ -1169,16 +1220,17 @@ class PSpecData(object):
         nfreq = np.sum(fext) + self.spw_Nfreqs
         # Only add to Rkey if a particular mode is enabled
         # If you do add to this, you need to specify this in self.set_R docstring!
-        output = np.zeros((self.Ntimes, self.spw_Nfreqs, nfreq), dtype=np.complex128)
+        output = np.zeros((len(time_indices), self.spw_Nfreqs, nfreq), dtype=np.complex128)
         for mindex, tindex in enumerate(time_indices):
             wgt = self.Y(key, tindex)
             wgt_sq = np.outer(wgt, wgt)
-            Rkey = self.weighting_hash(time_index, key)
+            Rkey = self.weighting_hash(tindex, key)
             if Rkey not in self._R:
                 if self.data_weighting == 'identity':
                         rmat = self.I(key) * wgt_sq
                 elif self.data_weighting == 'dayenu':
                         r_param_key = (self.data_weighting,) + key
+                        r_params = self.r_params[r_param_key]
                         _freqs = self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]]
                         rmat = dspec.dayenu_mat_inv(x=_freqs,
                                         filter_centers=r_params['filter_centers'],
@@ -1519,21 +1571,23 @@ class PSpecData(object):
             key2 = [key2]
         for _key in key1:
             tindep = self._time_independent_weights[self.parse_blkey(_key)]
-            rmat = self.R(_key)
             x_wf = self.x(_key, include_extension=True)
             if tindep:
+                rmat = self.R(_key, 0)
                 Rx1 += (rmat @ x_wf).T
             else:
+                rmat = self.R(_key)
                 Rx1 += np.asarray([rmat[m] @ x_wf[:,m] for m in range(self.Ntimes)])
 
         # Calculate R x_2
         for _key in key2:
             tindep = self._time_independent_weights[self.parse_blkey(_key)]
-            rmat = self.R(_key)
             x_wf = self.x(_key, include_extension=True)
             if tindep:
+                rmat = self.R(_key, 0)
                 Rx2 += (rmat @ x_wf).T
             else:
+                rmat = self.R(_key)
                 Rx2 += np.asarray([rmat[m] @ x_wf[:, m] for m in range(self.Ntimes)])
 
         # The set of operations for exact_norm == True are drawn from Equations
@@ -1613,7 +1667,7 @@ class PSpecData(object):
             Fisher matrix, with dimensions (spw_Nfreqs, spw_Nfreqs).
         """
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
-        Gkey = self.fisher_hash(time_index, key1, key2)
+        Gkey = self.fisher_hash(time_index, key1, key2, pol=pol, exact_norm=exact_norm, sampling=False)
         if not Gkey in self._G:
             R1 = self.R(key1, time_index)
             R2 = self.R(key2, time_index)
@@ -1760,7 +1814,7 @@ class PSpecData(object):
         #Each H with fixed taper, input data weight, and weightings on key1 and key2
         #pol, and sampling bool is unique. This reduces need to recompute H over multiple times.
         assert isinstance(time_index, (int, np.int32, np.int64)), "time_index must be an integer. Supplied %s"%(time_index)
-        Hkey = self.fisher_hash(time_index, key1, key2)
+        Hkey = self.fisher_hash(time_index, key1, key2, sampling, exact_norm, pol)
         if not Hkey in self._H:
             H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
             R1 = self.R(key1, time_index)
@@ -1964,8 +2018,7 @@ class PSpecData(object):
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None")
 
-        Ekey = key1 + key2 + (pol, exact_norm, self.taper, self.spw_Ndlys, self.data_weighting)\
-        + tuple(self.Y(key1, time_index)) + tuple(self.Y(key2, time_index))
+        Ekey = self.fisher_hash(time_index, key1, key2, pol=pol, exact_norm=exact_norm, sampling=False)
         if not Ekey in self._E:
             assert time_index >= 0 and time_index < self.Ntimes, "time_index must be between 0 and Ntimes"
             nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
@@ -2380,7 +2433,7 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Ndlys, Ndlys).
         """
         # Collect all the relevant pieces
-        Vkey = self.cov_hash(time_index, key1, key2)
+        Vkey = self.cov_hash(time_index, key1, key2, exact_norm, pol)
         if not Vkey in self._V:
             if model in ['dsets', 'empirical', 'autos']:
                 C1 = self.C_model(key1, model=model, time_index=time_index)
@@ -2473,7 +2526,7 @@ class PSpecData(object):
         """
         modes = ['H^-1', 'V^-1/2', 'I', 'L^-1', 'H^-1/2']
         assert(mode in modes)
-        Mkey = self.fisher_hash(time_index, key1, key2) + (, mode)
+        Mkey = self.fisher_hash(time_index, key1, key2, sampling, exact_norm, pol) + (mode, )
         if not Mkey in self._M:
             if mode != 'I' and exact_norm==True:
                 raise NotImplementedError("Exact norm is not supported for non-I modes")
@@ -2575,7 +2628,7 @@ class PSpecData(object):
         W : array_like, complex
             Dimensions (Ndlys, Ndlys).
         """
-        Wkey = self.fisher_hash(time_index, key1, key2)
+        Wkey = self.fisher_hash(time_index, key1, key2, sampling, exact_norm, pol) + (mode, )
         if not Wkey in self._W:
             M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
             H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
