@@ -742,36 +742,6 @@ class Test_PSpecData(unittest.TestCase):
                 else:
                     self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
 
-    def test_R_interpolation(self):
-        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
-        Nfreq = self.ds.spw_Nfreqs
-        Ntime = self.ds.Ntimes
-        Ndlys = Nfreq - 20
-        self.ds.spw_Ndlys = Ndlys
-
-
-        # Set baselines to use for tests
-        key1 = (0, 24, 38)
-        key2 = (1, 25, 38)
-
-        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9], 'restore_half_width':100e-9}
-        self.ds.set_weighting('dayenu')
-        self.ds.set_r_param(key1,rpk1)
-        df = np.mean(np.diff(self.ds.freqs))
-        nd = int(df * 100e-9 * Nfreq * 2)
-        wgt = self.ds.w(key1)[:,0].squeeze()
-        imat=dspec.delay_interpolation_matrix(Nfreq, nd, wgts=wgt, fundamental_period=2*Nfreq)
-        fmati=dspec.dayenu_mat_inv(x=self.ds.freqs, filter_centers=[0.],
-                                            filter_half_widths=[100e-9], filter_factors=[1e-9])
-        fmat = np.linalg.pinv(fmati * np.outer(wgt, wgt))
-        rmat = self.ds.R(key1).squeeze()
-        mymat = imat @ (np.identity(Nfreq, dtype=complex) - fmat) + fmat
-        assert(np.all(np.isclose(mymat, rmat, atol=1e-3)))
-        #test that an invalid data weighting causes a value error.
-        self.ds.set_weighting('arglebargle')
-        nt.assert_raises(ValueError, self.ds.R, key1)
-
-
     def test_R_truncation(self):
         """
         Test truncation of R-matrices. These should give a q_hat that is all
@@ -798,9 +768,9 @@ class Test_PSpecData(unittest.TestCase):
         ds1.set_symmetric_taper(False)
         ds1.set_filter_extension([10,10])
         ds1.set_filter_extension((10,10))
-        rm1 = self.ds.R(key1)
-        rm2 = ds1.R(key2)
-        rm3 = ds1.R(key1)
+        rm1 = self.ds.R(key1, 0)
+        rm2 = ds1.R(key2, 0)
+        rm3 = ds1.R(key1, 0)
         self.assertTrue(np.shape(rm2) == (ds1.spw_Nfreqs, self.ds.spw_Nfreqs))
             #check that all values that are not truncated match values of untrancated matrix.
         self.assertTrue(np.all(np.isclose(rm1[10:-10], rm2, atol=1e-6)))
@@ -1951,7 +1921,7 @@ class Test_PSpecData(unittest.TestCase):
         Nfreq = uvd.data_array.shape[2]
         # Basic test of shape
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        test_R = ds.R((1, 37, 38, 'xx'))
+        test_R = ds.R((1, 37, 38, 'xx'), time_indices=0)
         nt.assert_equal(test_R.shape, (Nfreq, Nfreq))
         # First test that turning-off flagging does nothing if there are no flags in the data
         bls1 = [(24, 25)]
