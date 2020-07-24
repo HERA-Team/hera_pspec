@@ -15,7 +15,7 @@ import uvtools.dspec as dspec
 # This is a list of weights that will depend on baseline.
 # If data_weighting is in this list, G and H will be hashed per
 # baseline pair.
-R_PARAM_WEIGHTINGS = ['dayenu', 'iC']
+R_PARAM_WEIGHTINGS = ['dayenu']
 
 from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
 
@@ -105,6 +105,7 @@ class PSpecData(object):
         # Store a primary beam
         self.primary_beam = beam
         self.cov_model = cov_model
+        self.r_cov_model = cov_model
 
     def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True):
         """
@@ -544,7 +545,6 @@ class PSpecData(object):
             data_weighting being used.
 
         """
-        output_key = (self.data_weighting, )
         # for identity weights, only hash by flagging patterns.
         if self.data_weighting == 'identity':
             key = tuple(self.Y(key1, time_index))
@@ -563,7 +563,7 @@ class PSpecData(object):
         elif self.data_weighting == 'iC':
             # empirical covariance is hashed by baseline pair but not
             # by time since the covariance is computed across time.
-            if self.r_params['cov_model'] in ['empirical', 'autos']:
+            if self.r_cov_model in ['empirical', 'autos']:
                     key = key1
                     if key2 is not None:
                         key += key2
@@ -577,7 +577,7 @@ class PSpecData(object):
 
         else:
             raise ValueError("Invalid data weighting. Cannot hash.")
-        return key + (self.spw_Nfreqs, self.symmetric_taper, self.filter_extension)
+        return key + (self.spw_Nfreqs, self.symmetric_taper, self.filter_extension, self.taper, self.data_weighting)
 
     def fisher_hash(self, time_index, key1, key2, sampling, exact_norm, pol):
         """hashing function for fisher matrices.
@@ -1253,7 +1253,7 @@ class PSpecData(object):
                     # model for R covariance is specified in r_params
                     # rather then self.cov_model which sets how error bars
                     # are computed.
-                    rmat = self.iC(key, model=self.r_params['cov_model'])
+                    rmat = self.iC(key, model=self.r_cov_model)
                 else:
                     raise ValueError("data_weighting must be in ['identity', 'iC', 'dayenu']")
 
@@ -1325,7 +1325,7 @@ class PSpecData(object):
         filter_extension[1] = np.min([self.Nfreqs - self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
         self.filter_extension = tuple(filter_extension)
 
-    def set_weighting(self, data_weighting, cov_model='empirical'):
+    def set_weighting(self, data_weighting, r_cov_model='empirical'):
         """
         Set data weighting type.
 
@@ -1339,7 +1339,9 @@ class PSpecData(object):
         """
         self.data_weighting = data_weighting
         if data_weighting == 'iC':
-            self.r_params['cov_model'] = cov_model
+            self.r_cov_model = r_cov_model
+        else:
+            self.r_cov_model = self.cov_model
 
     def set_r_param(self, key, r_params):
         """
@@ -3340,7 +3342,7 @@ class PSpecData(object):
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
               baseline_tol=1.0, store_cov=False, store_cov_diag=False, return_q=False, store_window=True, verbose=True,
               filter_extensions=None, exact_norm=False, history='', r_params=None,
-              cov_model='empirical', known_cov=None,allow_fft=False):
+              cov_model='empirical', r_cov_model='empirical', known_cov=None,allow_fft=False):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -3556,7 +3558,7 @@ class PSpecData(object):
         # set taper and data weighting
         self.set_taper(taper)
         self.set_symmetric_taper(symmetric_taper)
-        self.set_weighting(input_data_weight)
+        self.set_weighting(input_data_weight, r_cov_model=r_cov_model)
 
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
@@ -3697,6 +3699,7 @@ class PSpecData(object):
         sclr_arr = []
         blp_arr = []
         bls_arr = []
+        self.cov_model = cov_model
         # Loop over spectral windows
         for i in range(len(spw_ranges)):
             # set spectral range
