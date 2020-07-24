@@ -15,14 +15,15 @@ import uvtools.dspec as dspec
 # This is a list of weights that will depend on baseline.
 # If data_weighting is in this list, G and H will be hashed per
 # baseline pair.
-R_PARAM_WEIGHTINGS = ['dayenu']
+R_PARAM_WEIGHTINGS = ['dayenu', 'iC']
 
 from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
 
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
-                 beam=None, cals=None, cal_flag=True, r_cache=None):
+                 beam=None, cals=None, cal_flag=True, r_cache=None,
+                 cov_model='empirical'):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -62,6 +63,9 @@ class PSpecData(object):
 
         r_cache : dict, optional
             Dictionary of pre-computed R-matrices with appropriate keys.
+
+        cov_model : str, optional
+            Model method for computing data covariances. Default is 'empirical'.
         """
         self.clear_cache(clear_r_params=True)  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
@@ -100,6 +104,7 @@ class PSpecData(object):
 
         # Store a primary beam
         self.primary_beam = beam
+        self.cov_model = cov_model
 
     def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True):
         """
@@ -554,11 +559,11 @@ class PSpecData(object):
                 if not r_param_key in self.r_params:
                     raise ValueError("r_param not set for %s!"%str(r_param_key))
                 else:
-                    key += self.r_params[r_param_key] + tuple(self.Y(key2, time_index))
+                    key += self.r_param_hash(r_param_key) + tuple(self.Y(key2, time_index))
         elif self.data_weighting == 'iC':
             # empirical covariance is hashed by baseline pair but not
             # by time since the covariance is computed across time.
-            if self.cov_model in ['empirical', 'autos']:
+            if self.r_params['cov_model'] in ['empirical', 'autos']:
                     key = key1
                     if key2 is not None:
                         key += key2
@@ -607,7 +612,7 @@ class PSpecData(object):
         return self.weighting_hash(time_index, key1, key2)\
          + (sampling, exact_norm, pol, self.spw_Ndlys)
 
-    def cov_hash(self, time_index, key1, key2, exact_norm, pol):
+    def cov_hash(self, time_index, key1, key2, exact_norm, pol, model):
         """hashing function for covariances of q-hat.
 
         Parameters
@@ -631,6 +636,15 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
+        model : str, default: 'empirical'
+            How the covariances of the input data should be estimated.
+            in 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. If 'empirical' is
+            set, then error bars are estimated from the data by calculating the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+             frequency-domain covariances.
+
         Returns
         -------
         tuple for hashing covariances of q-hat.
@@ -638,12 +652,12 @@ class PSpecData(object):
         key = self.fisher_hash(time_index, key1, key2, sampling=False, exact_norm=exact_norm, pol=pol)
         # if covariance is empirical, then must be hashed on
         # baseline pair but does not necessarily include time-index.
-        if self.cov_model == ['empirical', 'autos']:
+        if model in ['empirical', 'autos']:
             key = key + key1 + key2
         # if dsets are being used, then must hash on time index as well.
-        elif self.cov_model == 'dsets':
+        elif model == 'dsets':
             key = key + key1 + key2 + (time_index, )
-        key = key + (self.cov_model, )
+        key = key + (model, )
         return key
 
 
@@ -1213,8 +1227,6 @@ class PSpecData(object):
         if time_indices is None:
             time_indices = np.arange(self.Ntimes).astype(int)
         assert isinstance(key, tuple)
-        dset, bl = self.parse_blkey(key)
-        key = (dset,) + (bl,)
         tindep = self._time_independent_weights[self.parse_blkey(key)]
         fext = self.filter_extension
         nfreq = np.sum(fext) + self.spw_Nfreqs
@@ -1238,7 +1250,10 @@ class PSpecData(object):
                                         filter_factors=r_params['filter_factors']) * wgt_sq
                         rmat = np.linalg.pinv(rmat)
                 elif self.data_weighting == 'iC':
-                    rmat = self.iC(key)
+                    # model for R covariance is specified in r_params
+                    # rather then self.cov_model which sets how error bars
+                    # are computed.
+                    rmat = self.iC(key, model=self.r_params['cov_model'])
                 else:
                     raise ValueError("data_weighting must be in ['identity', 'iC', 'dayenu']")
 
@@ -1310,7 +1325,7 @@ class PSpecData(object):
         filter_extension[1] = np.min([self.Nfreqs - self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
         self.filter_extension = tuple(filter_extension)
 
-    def set_weighting(self, data_weighting):
+    def set_weighting(self, data_weighting, cov_model='empirical'):
         """
         Set data weighting type.
 
@@ -1318,8 +1333,13 @@ class PSpecData(object):
         ----------
         data_weighting : str
             Type of data weightings. Options=['identity', 'iC', dayenu]
+        cov_model : str, optional
+            Specify method for computing covariance for iC weighting.
+            Default is 'empirical'.
         """
         self.data_weighting = data_weighting
+        if data_weighting == 'iC':
+            self.r_params['cov_model'] = cov_model
 
     def set_r_param(self, key, r_params):
         """
@@ -1344,7 +1364,6 @@ class PSpecData(object):
                                                   is to be suppressed.
                 Absence of r_params dictionary will result in an error!
         """
-        key = self.parse_blkey(key)
         key = (self.data_weighting,) + key
         self.r_params[key] = r_params
 
@@ -2433,7 +2452,7 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Ndlys, Ndlys).
         """
         # Collect all the relevant pieces
-        Vkey = self.cov_hash(time_index, key1, key2, exact_norm, pol)
+        Vkey = self.cov_hash(time_index, key1, key2, exact_norm, pol, model)
         if not Vkey in self._V:
             if model in ['dsets', 'empirical', 'autos']:
                 C1 = self.C_model(key1, model=model, time_index=time_index)
