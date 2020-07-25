@@ -1040,7 +1040,8 @@ class PSpecData(object):
             over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth
             and integration time.
 
-        time_index : integer, compute covariance at specific time-step
+        time_index : integer or list
+            time indices to obtain iC for.
 
         Returns
         -------
@@ -1063,40 +1064,19 @@ class PSpecData(object):
             #empirically determined C is not per-time but weights are.
             #Thus, we need to loop through each set of per-time weights and take
             #a psuedo-inverse at each time.
-            if tindep:
-                wgts = self.Y(key, 0)
-                _iC = np.zeros(nfreq, nfreq)
-                wgts_sq = np.outer(wgts, wgts)
+            wgts = self.Y(key, time_index)
+            _iC = np.zeros(nfreq, nfreq)
+            wgts_sq = np.outer(wgts, wgts)
+            C = self.C_model(key, model=model, time_index=time_index)
+            _iC = wgts_sq * C
+            if np.linalg.cond(_iC) >= 1e9:
+                warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
+                _iC = np.linalg.pinv(_iC)
             else:
-                wgts = self.Y(key)
-                _iC = np.zeros((self.Ntimes, nfreq, nfreq))
-                wgts_sq = np.asarray([np.outer(wgts[:,m], wgts[:,m]) for m in range(self.Ntimes)])
-            # if the weights for this dset and baseline are time independent, then just
-            # compute C, take its inverse (or psuedoinverse if cond number is to great).
-            if tindep:
-                C = self.C_model(key, model=model, time_index=0)
-                _iC = wgts_sq * C
-                if np.linalg.cond(_iC) >= 1e9:
-                    warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
-                    _iC = np.linalg.pinv(_iC)
-                else:
-                    _iC = np.linalg.inv(_iC)
-            else:
-                #Now, for each time we want to calculate the psuedo-inverse for.
-                for m in range(self.Ntimes):
-                    C = self.C_model(key, model=model, time_index=m)
-                    #multiply C --
-                    #which is a single Ndlys x Ndlys matrix estimated from multiple times
-                    _iC[m] = wgts_sq[m] * C
-                    #by wgts_sq at that time
-                    #next...
-                    if np.linalg.cond(_iC[m]) >= 1e9:
-                        warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
-                        _iC[m] = np.linalg.pinv(_iC[m])
-                    else:
-                        _iC[m] = np.linalg.inv(_iC[m])
+                _iC = np.linalg.inv(_iC)
             self.set_iC({Ckey:_iC})
-        return self._iC[Ckey]
+        return self._iC[Ckey][time_index]
+
     def Y(self, key, time_index=None):
         """
         Return the weighting (diagonal) matrix, Y. This matrix
@@ -1243,7 +1223,7 @@ class PSpecData(object):
                     # model for R covariance is specified in r_params
                     # rather then self.cov_model which sets how error bars
                     # are computed.
-                    rmat = self.iC(key, model=self.r_cov_model)
+                    rmat = self.iC(key, model=self.r_cov_model, time_index=tindex)
                 else:
                     raise ValueError("data_weighting must be in ['identity', 'iC', 'dayenu']")
 
