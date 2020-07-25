@@ -22,7 +22,7 @@ from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uv
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
-                 beam=None, cals=None, cal_flag=True, r_cache=None,
+                 beam=None, cals=None, cal_flag=True,
                  cov_model='empirical'):
         """
         Object to store multiple sets of UVData visibilities and perform
@@ -86,10 +86,6 @@ class PSpecData(object):
         self.taper = 'none'
         self.symmetric_taper = True
         # Set all weights to None if wgts=None
-        if r_cache is None:
-            self.r_cache = {}
-        else:
-            self.r_cache = r_cache
         if wgts is None:
             wgts = [None for dset in dsets]
 
@@ -439,7 +435,6 @@ class PSpecData(object):
             self._H, self._G = {}, {}
             self._W, self._M = {}, {}
             self._E, self._V = {}, {}
-            self.r_cache = {}
         else:
             for k in keys:
                 try: del(self._C[k])
@@ -453,8 +448,6 @@ class PSpecData(object):
                 try: del(self._Y[k])
                 except(KeyError): pass
                 try: del(self._R[k])
-                except(KeyError): pass
-                try: del(self.r_cache[k])
                 except(KeyError): pass
 
     def dset_idx(self, dset):
@@ -556,10 +549,7 @@ class PSpecData(object):
             key = self.r_param_hash(r_param_key) + tuple(self.Y(key1, time_index))
             if key2 is not None:
                 r_param_key = (self.data_weighting, ) + key2
-                if not r_param_key in self.r_params:
-                    raise ValueError("r_param not set for %s!"%str(r_param_key))
-                else:
-                    key += self.r_param_hash(r_param_key) + tuple(self.Y(key2, time_index))
+                key += self.r_param_hash(r_param_key) + tuple(self.Y(key2, time_index))
         elif self.data_weighting == 'iC':
             # empirical covariance is hashed by baseline pair but not
             # by time since the covariance is computed across time.
@@ -568,7 +558,7 @@ class PSpecData(object):
                     if key2 is not None:
                         key += key2
             # for dset covariances, the time_index must be hashed.
-            elif self.cov_model == 'dsets':
+            elif self.r_cov_model == 'dsets':
                     key = key1 + (time_index, )
                     if key2 is not None:
                         key += key2

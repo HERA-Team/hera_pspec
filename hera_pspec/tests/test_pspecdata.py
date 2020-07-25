@@ -742,6 +742,55 @@ class Test_PSpecData(unittest.TestCase):
                 else:
                     self.assertTrue(np.isclose(0., cov_p[0, p, q], atol=1e-6))
 
+    def test_r_param_hash(self):
+        """Test exception raise.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        Nfreq = self.ds.spw_Nfreqs
+        Ntime = self.ds.Ntimes
+        Ndlys = Nfreq - 20
+        self.ds.spw_Ndlys = Ndlys
+        # Set baselines to use for tests
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        rpk1 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
+        rpk2 = {'filter_centers':[0.],'filter_half_widths':[100e-9],'filter_factors':[1e-9]}
+        self.ds.set_weighting('dayenu')
+        self.ds.set_r_param(key1,rpk1)
+        self.ds.set_r_param(key2,rpk2)
+        self.ds.r_param_hash(('dayenu', ) + key1)
+        self.ds.set_weighting('wait')
+        nt.assert_raises(ValueError, self.ds.r_param_hash, ('dayenu',) + key1)
+
+
+    def test_weighting_hash(self):
+        """Cover edge cases for test_weighting_hash.
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d,  dsets_std=self.d_std,
+                                      wgts=self.w)
+        self.ds.r_cov_model = 'dsets'
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        self.ds.data_weighting = 'iC'
+        kdsets = self.ds.weighting_hash(0, key1, key2)
+        nt.assert_true(kdsets == key1 + (0,) + key2 + (self.ds.spw_Nfreqs,
+                                                       self.ds.symmetric_taper,
+                                                       self.ds.filter_extension,
+                                                       self.ds.taper,
+                                                       self.ds.data_weighting))
+        self.ds.r_cov_model = 'idk'
+        nt.assert_raises(ValueError, self.ds.weighting_hash, 0, key1, key2)
+        self.ds.data_weighting = 'idk'
+        nt.assert_raises(ValueError, self.ds.weighting_hash, 0, key1, key2)
+
+    def test_R(self):
+        """Test edge case for R()
+        """
+        self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        self.ds.data_weighting = 'idk'
+        key1 = (0, 24, 38)
+        nt.assert_raises(ValueError, self.ds.R, key1)
+
     def test_R_truncation(self):
         """
         Test truncation of R-matrices. These should give a q_hat that is all
