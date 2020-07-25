@@ -910,6 +910,39 @@ class Test_PSpecData(unittest.TestCase):
                 self.assertTrue(np.isclose(np.real(q_hat_a/q_hat_a_slow), 1).all())
                 self.assertTrue(np.isclose(np.imag(q_hat_a/q_hat_a_slow), 0, atol=1e-6).all())
 
+    def test_q_hat_t_dep(self):
+        """Test time-dependent q-hat calculation.
+        """
+        # Set weights and pack data into PSpecData
+        ds1 = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
+        # make weights time-dependent
+        dtd = copy.deepcopy(self.d)
+        for uvd in dtd:
+            for app in uvd.get_antpairpols():
+                flags = uvd.get_flags(app)
+                flags[-1][10] = ~flags[0][10] # put in time dependence.
+                dselection = (uvd.ant_1_array == app[0]) & (uvd.ant_2_array == app[1])
+                uvd.flag_array[dselection, 0, :, 0] = flags
+
+        ds2 = pspecdata.PSpecData(dsets=dtd, wgts=self.w)
+        # now compute q_hat for d1 and ds
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        rpk = {'filter_centers':[0.], 'filter_half_widths':[200e-9], 'filter_factors':[1e-9]}
+        for weighting in ['iC', 'identity', 'dayenu']:
+            ds1.set_weighting(weighting)
+            ds2.set_weighting(weighting)
+            if weighting == 'dayenu':
+                ds1.set_r_param(key1, rpk)
+                ds2.set_r_param(key1, rpk)
+                ds1.set_r_param(key2, rpk)
+                ds2.set_r_param(key2, rpk)
+            qhat1 = ds1.q_hat(key2, key1)
+            qhat2 = ds2.q_hat(key2, key1)
+            if weighting in ['identity', 'dayenu']:
+                nt.assert_true(np.all(np.isclose(qhat1[:, :-1], qhat2[:, :-1])))
+                nt.assert_true(not np.all(np.isclose(qhat1[:, -1], qhat2[:, -1])))
+
     def test_get_H(self):
         """
         Test Fisher/weight matrix calculation.
@@ -989,6 +1022,11 @@ class Test_PSpecData(unittest.TestCase):
                 # second M computation made to check that no extra items are added to _M cache.
                 M = self.ds.get_M(key1, key2)[0]
                 nt.assert_true(len(self.ds._M) == npatterns * nconfigs)
+        # now test some error cases.
+        nt.assert_raises(NotImplementedError, self.ds.get_M, key1, key2, mode='H^-1', exact_norm=True)
+        nt.assert_raises(NotImplementedError, self.ds.get_M, key1, key2, mode='L^-1')
+        # test H^-1/2 normalization runs.
+        mmat = self.ds._get_M(key1, key2, 0, mode='H^-1/2')
 
     def test_get_W(self):
         """
