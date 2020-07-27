@@ -1891,37 +1891,37 @@ class PSpecData(object):
                 S22 = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
                 P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
                 S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
-                E12C21 = np.matmul(E_matrices, C21)
-                E12P22 = np.matmul(E_matrices, P22)
-                E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
-                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
-                E12C22 = np.matmul(E_matrices, C22)
-                E12starS21 = np.matmul(E_matrices.conj(), S21)
-                E12P21 = np.matmul(E_matrices, P21)
-                E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
-                E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
-                E12starS22 = np.matmul(E_matrices.conj(), S22) 
                 # Get q_q, q_qdagger, qdagger_qdagger
-                if np.isclose(E12P22, 0).all() or np.isclose(E21starS11,0).all():
+                if np.isclose(P22, 0).all() or np.isclose(S11,0).all():
                     q_q = 0.+1.j*0
                 else:
+                    E12P22 = np.matmul(E_matrices, P22)
+                    E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
                     q_q = np.einsum('bij, cji->bc', E12P22, E21starS11, optimize=einstein_path_0)
-                if np.isclose(E12C21, 0).all(): 
+                if np.isclose(C21, 0).all(): 
                     q_q += 0.+1.j*0
                 else:
+                    E12C21 = np.matmul(E_matrices, C21)
                     q_q += np.einsum('bij, cji->bc', E12C21, E12C21, optimize=einstein_path_0)
+                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
+                E12C22 = np.matmul(E_matrices, C22)
                 q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path_0) 
-                if np.isclose(E12P21, 0).all() or np.isclose(E12starS21,0).all():
+                if np.isclose(P21, 0).all() or np.isclose(S21,0).all():
                     q_qdagger += 0.+1.j*0
                 else:
+                    E12P21 = np.matmul(E_matrices, P21)
+                    E12starS21 = np.matmul(E_matrices.conj(), S21)
                     q_qdagger += np.einsum('bij, cji->bc', E12P21, E12starS21, optimize=einstein_path_0)
-                if np.isclose(E21C12, 0).all(): 
+                if np.isclose(C12, 0).all(): 
                     qdagger_qdagger = 0.+1.j*0
                 else:
+                    E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
                     qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12, optimize=einstein_path_0) 
-                if np.isclose(E21P11, 0).all() or np.isclose(E12starS22,0).all():
+                if np.isclose(P11, 0).all() or np.isclose(S22,0).all():
                     qdagger_qdagger += 0.+1.j*0
                 else:
+                    E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
+                    E12starS22 = np.matmul(E_matrices.conj(), S22) 
                     qdagger_qdagger += np.einsum('bij, cji->bc', E21P11, E12starS22, optimize=einstein_path_0)
 
             cov_q_real_temp = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
@@ -1935,16 +1935,13 @@ class PSpecData(object):
                 assert np.shape(q_q) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
                 MMq_q = np.einsum('ab,cd,bd->ac', m, m, q_q, optimize=einstein_path_2)
             # calculate \sum_{bd} [ M_{ab} M_{cd}^* (<q_b q_d^dagger> - <q_b><q_d^dagger>) ]
+            # and \sum_{bd} [ M_{ab}^* M_{cd} (<q_b^dagger q_d> - <q_b^dagger><q_d>) ]
             if np.isclose([q_qdagger], 0).all():
                 MM_q_qdagger = 0.+1.j*0
-            else:
-                assert np.shape(q_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
-                MM_q_qdagger = np.einsum('ab,cd,bd->ac', m, m.conj(), q_qdagger, optimize=einstein_path_2)
-            # calculate \sum_{bd} [ M_{ab}^* M_{cd} (<q_b^dagger q_d> - <q_b^dagger><q_d>) ]
-            if np.isclose([q_qdagger], 0).all():
                 M_Mq_qdagger_ = 0.+1.j*0
             else:
                 assert np.shape(q_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
+                MM_q_qdagger = np.einsum('ab,cd,bd->ac', m, m.conj(), q_qdagger, optimize=einstein_path_2)
                 M_Mq_qdagger_ = np.einsum('ab,cd,bd->ac', m.conj(), m, q_qdagger.conj(), optimize=einstein_path_2)
             # calculate \sum_{bd} [ M_{ab}^* M_{cd}^* (<q_b^dagger q_d^dagger> - <q_b^dagger><q_d^dagger>) ]
             if np.isclose([qdagger_qdagger], 0).all():
