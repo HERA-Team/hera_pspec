@@ -1841,7 +1841,7 @@ class PSpecData(object):
         # we are expected to have time-dependent inputs, thus check_uniform_input is always set to be False here.  
             C11_first = self.C_model(key1, model=model, known_cov=known_cov, time_index=0)
             C11_last = self.C_model(key1, model=model, known_cov=known_cov, time_index=self.dsets[0].Ntimes-1)
-            if np.isclose(C11_first, C11_last).all() and np.all(np.isclose(self.Y(key1)[0], self.Y(key1)[-1])) and np.all(np.isclose(self.Y(key2)[0], self.Y(key2)[-1])):
+            if np.isclose(C11_first, C11_last).all():
                 check_uniform_input = True
 
         cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = [], [], [], []
@@ -1964,6 +1964,7 @@ class PSpecData(object):
                 cov_q_imag.extend([cov_q_imag_temp]*self.dsets[0].Ntimes)
                 cov_p_real.extend([cov_p_real_temp]*self.dsets[0].Ntimes)
                 cov_p_imag.extend([cov_p_imag_temp]*self.dsets[0].Ntimes)
+                warnings.warn("Producing time-uniform covariance matrices between bandpowers.")
                 break
             else:
                 cov_q_real.append(cov_q_real_temp)
