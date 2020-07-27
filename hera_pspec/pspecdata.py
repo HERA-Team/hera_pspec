@@ -573,6 +573,9 @@ class PSpecData(object):
         spectral_window : tuple
             In (start_chan, end_chan).
         """
+        if sum(self.filter_extension) > 0:
+            include_extension = True
+        # if there is non-zero self.filter_extension, include_extension is automatically set to be True
         if include_extension:
             return (self.spw_range[0] - self.filter_extension[0], self.spw_range[1] + self.filter_extension[1])
         else:
@@ -729,13 +732,8 @@ class PSpecData(object):
                               self.x(key2, include_extension=include_extension), self.w(key2, include_extension=include_extension),
                               conj_1=conj_1, conj_2=conj_2)
         if model in ['dsets','autos']:
-            if include_extension:
-                covar = np.zeros((np.sum(self.filter_extension) + self.spw_Nfreqs,
-                                  np.sum(self.filter_extension) + self.spw_Nfreqs),
-                                  dtype=np.float64)
-            else:
-                covar = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs),
-                                  dtype=np.float64)
+            covar = np.zeros((np.diff(self.get_spw(include_extension=include_extension))[0], 
+                np.diff(self.get_spw(include_extension=include_extension))[0]), dtype=np.float64)
         # Check if model exists in known_cov. If so, just overwrite covar with known_cov.  
         if known_cov is not None:
             Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
@@ -813,7 +811,7 @@ class PSpecData(object):
 
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
-            C = self.C_model(key, model=model, time_index=time_index, include_extension=True)
+            C = self.C_model(key, model=model, time_index=time_index)
             #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if np.linalg.cond(C) >= 1e9:
                 warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
@@ -862,7 +860,7 @@ class PSpecData(object):
         key = (dset,) + (bl,)
 
         if key not in self._Y:
-            self._Y[key] = np.diag(np.max(self.w(key, include_extension=True), axis=1))
+            self._Y[key] = np.diag(np.max(self.w(key), axis=1))
             if not np.all(np.isclose(self._Y[key], 0.0) \
                         + np.isclose(self._Y[key], 1.0)):
                 raise NotImplementedError("Non-binary weights not currently implmented")
@@ -1288,19 +1286,19 @@ class PSpecData(object):
         # Calculate R x_1
         if isinstance(key1, list):
             for _key in key1:
-                Rx1 += np.dot(self.R(_key), self.x(_key, include_extension=True))
+                Rx1 += np.dot(self.R(_key), self.x(_key))
                 R1 += self.R(_key)
         else:
-            Rx1 = np.dot(self.R(key1), self.x(key1, include_extension=True))
+            Rx1 = np.dot(self.R(key1), self.x(key1))
             R1  = self.R(key1)
 
         # Calculate R x_2
         if isinstance(key2, list):
             for _key in key2:
-                Rx2 += np.dot(self.R(_key), self.x(_key, include_extension=True))
+                Rx2 += np.dot(self.R(_key), self.x(_key))
                 R2 += self.R(_key)
         else:
-            Rx2 = np.dot(self.R(key2), self.x(key2, include_extension=True))
+            Rx2 = np.dot(self.R(key2), self.x(key2))
             R2  = self.R(key2)
 
         # The set of operations for exact_norm == True are drawn from Equations
@@ -1683,10 +1681,10 @@ class PSpecData(object):
         """
         # Collect all the relevant pieces
         E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
-        C1 = self.C_model(key1, model=model, time_index=time_index, include_extension=True)
-        C2 = self.C_model(key2, model=model, time_index=time_index, include_extension=True)
-        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, time_index=time_index, include_extension=True)
-        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, time_index=time_index, include_extension=True)
+        C1 = self.C_model(key1, model=model, time_index=time_index)
+        C2 = self.C_model(key2, model=model, time_index=time_index)
+        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, time_index=time_index)
+        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, time_index=time_index)
 
         E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
         E12C2 = np.dot(E_matrices, C2)
@@ -1841,8 +1839,8 @@ class PSpecData(object):
         if model != 'foreground_dependent':
         # When model is 'foreground_dependent', since we are processing the outer products of visibilities from different times,
         # we are expected to have time-dependent inputs, thus check_uniform_input is always set to be False here.  
-            C11_first = self.C_model(key1, model=model, known_cov=known_cov, time_index=0, include_extension=True)
-            C11_last = self.C_model(key1, model=model, known_cov=known_cov, time_index=self.dsets[0].Ntimes-1, include_extension=True)
+            C11_first = self.C_model(key1, model=model, known_cov=known_cov, time_index=0)
+            C11_last = self.C_model(key1, model=model, known_cov=known_cov, time_index=self.dsets[0].Ntimes-1)
             if np.isclose(C11_first, C11_last).all() and np.all(np.isclose(self.Y(key1)[0], self.Y(key1)[-1])) and np.all(np.isclose(self.Y(key2)[0], self.Y(key2)[-1])):
                 check_uniform_input = True
 
@@ -1852,8 +1850,8 @@ class PSpecData(object):
                 # calculate <q_a q_b^dagger> - <q_a><q_b^dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]
                 # We have used tr[A D_1 B D_2] = \sum_{ijkm} A_{ij} d_{1j} \delta_{jk} B_{km} d_{2m} \delta_{mi} = \sum_{ik} [A_{ik}*d_{1k}] * [B_{ki}*d_{2i}]
                 # to simplify the computation. 
-                C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index, include_extension=True)
-                C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index, include_extension=True)
+                C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
+                C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
                 E21C11 = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11))
                 E12C22 = np.multiply(E_matrices, np.diag(C22))
                 # Get q_q, q_qdagger, qdagger_qdagger
@@ -1867,12 +1865,12 @@ class PSpecData(object):
                 # we have used tr[A u u*^t B D_2] = \sum_{ijkm} A_{ij} u_j u*_k B_{km} D_{2mi} \\
                 # = \sum_{i} [ \sum_j A_{ij} u_j ] * [\sum_k u*_k B_{ki} ] * d_{2i}
                 # to simplify the computation. 
-                C11_autos = self.C_model(key1, model='autos', known_cov=known_cov, time_index=time_index, include_extension=True)
-                C22_autos = self.C_model(key2, model='autos', known_cov=known_cov, time_index=time_index, include_extension=True)
+                C11_autos = self.C_model(key1, model='autos', known_cov=known_cov, time_index=time_index)
+                C22_autos = self.C_model(key2, model='autos', known_cov=known_cov, time_index=time_index)
                 E21C11_autos = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11_autos))
                 E12C22_autos = np.multiply(E_matrices, np.diag(C22_autos))
-                x1 = self.w(key1, include_extension=True)[:,time_index] * self.x(key1, include_extension=True)[:,time_index]
-                x2 = self.w(key2, include_extension=True)[:,time_index] * self.x(key2, include_extension=True)[:,time_index]
+                x1 = self.w(key1)[:,time_index] * self.x(key1)[:,time_index]
+                x2 = self.w(key2)[:,time_index] * self.x(key2)[:,time_index]
                 # Get q_q, q_qdagger, qdagger_qdagger
                 q_q, qdagger_qdagger = 0.+1.j*0, 0.+1.j*0
                 E12_x2 = np.dot(E_matrices, x2)
@@ -1883,16 +1881,16 @@ class PSpecData(object):
                             + np.einsum('bij, cji->bc', E12C22_autos, E21C11_autos, optimize=einstein_path_0) 
             else:
                 # for general case (which is the slowest without simplification)
-                C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index, include_extension=True)
-                C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index, include_extension=True)
-                C21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True)
-                C12 = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True)
-                P11 = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index, include_extension=True)
-                S11 = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True)
-                P22 = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index, include_extension=True)
-                S22 = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True)
-                P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index, include_extension=True)
-                S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True)
+                C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
+                C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
+                C21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)
+                C12 = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)
+                P11 = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
+                S11 = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
+                P22 = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
+                S22 = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
+                P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
+                S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
                 E12C21 = np.matmul(E_matrices, C21)
                 E12P22 = np.matmul(E_matrices, P22)
                 E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
@@ -3254,9 +3252,9 @@ class PSpecData(object):
                     wgts2 = self.w(key2).T
 
                     # get avg of nsample across frequency axis, weighted by wgts
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, self.spw_range[0]:self.spw_range[1]] * wgts1, axis=1) \
+                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, slice(*self.get_spw())] * wgts1, axis=1) \
                              / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, self.spw_range[0]:self.spw_range[1]] * wgts2, axis=1) \
+                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, slice(*self.get_spw())] * wgts2, axis=1) \
                              / np.sum(wgts2, axis=1).clip(1, np.inf)
 
                     # get integ1
