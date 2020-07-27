@@ -1386,6 +1386,10 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
                 else:
                     P_N = uvp.get_stats(precomp_P_N, key)
 
+                if 'P_N' in err_type:
+                    # set stats
+                    uvp.set_stats('P_N', key, P_N)
+
                 if 'P_SN' in err_type:
                     # calculate P_SN: see Tan+2020 and
                     # H1C_IDR2/notebooks/validation/errorbars_with_systematics_and_noise.ipynb
@@ -1396,8 +1400,3 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
                     P_SN[np.isnan(P_SN)] = np.inf
                     # set stats
                     uvp.set_stats('P_SN', key, P_SN)
-                if 'P_N' in err_type:
-                    # set stats
-                    uvp.set_stats('P_N', key, P_N)
-                else:
-                    raise NameError("error type {} not recognized".format(err_type))
