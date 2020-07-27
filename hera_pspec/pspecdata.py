@@ -593,20 +593,18 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos',...]
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos', 
+            (other model names in known_cov)]
             How the covariances of the input data should be estimated.
-            in 'dsets' mode, error bars are estimated from user-provided
+            In 'dsets' mode, error bars are estimated from user-provided
             per baseline and per channel standard deivations. 
-            If 'empirical' is
-            set, then error bars are estimated from the data by calculating the
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
             channel-channel covariance of each baseline over time and
             then applying the appropriate linear transformations to these
             frequency-domain covariances. 
             If 'autos' is set, the covariances of the input data
             over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
             and integration time. 
-            'outer_product' will only be called when calculating the 'foreground_dependent' covariance. For more 
-            details see ds.get_analytic_covariance().
 
         time_index : integer, compute covariance at specific time-step in dset
             supported if mode == 'dsets' or 'autos'
@@ -632,29 +630,20 @@ class PSpecData(object):
 
         # parse key
         dset, bl = self.parse_blkey(key)
-        if model in ['dsets', 'autos', 'outer_product', 'foreground_dependent']:
+        if model == 'empirical':
+            # add model to key
+            Ckey = ((dset, dset), (bl,bl), ) + (model, None, False, True,)
+        else:
             assert isinstance(time_index, int), "time_index must be integer if cov-model=={}".format(model)
             # add model to key
             Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
-        elif model == 'empirical':
-            # add model to key
-            Ckey = ((dset, dset), (bl,bl), ) + (model, None, False, True,)
-
-        else:
-            if known_cov is None:
-                raise ValueError("didn't recognize model {}".format(model))
-            else:
-                assert isinstance(time_index, int), "time_index must be integer if using a outer known_cov"
-                # add model to key
-                Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
-
-        # Update self._C with known_cov
+        # Check if Ckey exists in known_cov. If so, just update self._C[Ckey] with known_cov.   
         if known_cov is not None:
-            spw = slice(*self.get_spw(include_extension=include_extension))
-            for known_cov_key in known_cov.keys():
-                covariance = known_cov[known_cov_key][spw, spw]
-                self.set_C({known_cov_key: covariance})
+            if Ckey in known_cov.keys():
+                spw = slice(*self.get_spw(include_extension=include_extension))
+                covariance = known_cov[Ckey][spw, spw]
+                self.set_C({Ckey: covariance})
 
         # check cache
         if Ckey not in self._C:
@@ -687,20 +676,18 @@ class PSpecData(object):
             subsequent indices specify the baseline index, in _key2inds format.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos',...]
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos', 
+            (other model names in known_cov)]
             How the covariances of the input data should be estimated.
-            in 'dsets' mode, error bars are estimated from user-provided
+            In 'dsets' mode, error bars are estimated from user-provided
             per baseline and per channel standard deivations. 
-            If 'empirical' is
-            set, then error bars are estimated from the data by calculating the
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
             channel-channel covariance of each baseline over time and
             then applying the appropriate linear transformations to these
             frequency-domain covariances. 
             If 'autos' is set, the covariances of the input data
             over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
             and integration time. 
-            'outer_product' will only be called when calculating the 'foreground_dependent' covariance. For more 
-            details see ds.get_analytic_covariance().
 
         time_index : integer, compute covariance at specific time-step 
 
@@ -735,12 +722,13 @@ class PSpecData(object):
         # parse key
         dset1, bl1 = self.parse_blkey(key1)
         dset2, bl2 = self.parse_blkey(key2)
+        covar = None
 
         if model == 'empirical':
             covar = utils.cov(self.x(key1, include_extension=include_extension), self.w(key1, include_extension=include_extension),
                               self.x(key2, include_extension=include_extension), self.w(key2, include_extension=include_extension),
                               conj_1=conj_1, conj_2=conj_2)
-        elif model in ['dsets','autos']:
+        if model in ['dsets','autos']:
             if include_extension:
                 covar = np.zeros((np.sum(self.filter_extension) + self.spw_Nfreqs,
                                   np.sum(self.filter_extension) + self.spw_Nfreqs),
@@ -748,16 +736,15 @@ class PSpecData(object):
             else:
                 covar = np.zeros((self.spw_Nfreqs, self.spw_Nfreqs),
                                   dtype=np.float64)
-        # we assume no baseline-baseline covariances.
-        else:
-            if known_cov is None:
-                raise ValueError("didn't recognize model {}".format(model))
-            else:
-                # add model to key
-                Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
-                assert Ckey in known_cov.keys(), "didn't recognize Ckey {}".format(Ckey)
+        # Check if model exists in known_cov. If so, just overwrite covar with known_cov.  
+        if known_cov is not None:
+            Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
+            if Ckey in known_cov.keys():
                 spw = slice(*self.get_spw(include_extension=include_extension))
                 covar = known_cov[Ckey][spw, spw]
+
+        if covar is None:
+            raise ValueError("didn't recognize model {}".format(model))
 
         return covar
 
@@ -797,21 +784,18 @@ class PSpecData(object):
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
 
-        model : string
-            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos',...]
+        model : string, optional
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos']
             How the covariances of the input data should be estimated.
-            in 'dsets' mode, error bars are estimated from user-provided
+            In 'dsets' mode, error bars are estimated from user-provided
             per baseline and per channel standard deivations. 
-            If 'empirical' is
-            set, then error bars are estimated from the data by calculating the
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
             channel-channel covariance of each baseline over time and
             then applying the appropriate linear transformations to these
             frequency-domain covariances. 
             If 'autos' is set, the covariances of the input data
             over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
             and integration time. 
-            'outer_product' will only be called when calculating the 'foreground_dependent' covariance. For more 
-            details see ds.get_analytic_covariance().
 
         time_index : integer, compute covariance at specific time-step
 
@@ -1155,7 +1139,7 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
-    def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol = False,
+    def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
                   time_indices=None):
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
@@ -1185,21 +1169,18 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
-        model : str, default: 'empirical'
-            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos',...]
+        model : string, optional
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos']
             How the covariances of the input data should be estimated.
-            in 'dsets' mode, error bars are estimated from user-provided
+            In 'dsets' mode, error bars are estimated from user-provided
             per baseline and per channel standard deivations. 
-            If 'empirical' is
-            set, then error bars are estimated from the data by calculating the
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
             channel-channel covariance of each baseline over time and
             then applying the appropriate linear transformations to these
             frequency-domain covariances. 
             If 'autos' is set, the covariances of the input data
             over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
             and integration time. 
-            'outer_product' will only be called when calculating the 'foreground_dependent' covariance. For more 
-            details see ds.get_analytic_covariance().
 
         time_indices: list of indices of times to include or just a single time.
         default is None -> compute covariance for all times.
@@ -1680,21 +1661,18 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
-        model : str, default: 'empirical'
-            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos',...]
+        model : string, optional
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos']
             How the covariances of the input data should be estimated.
-            in 'dsets' mode, error bars are estimated from user-provided
+            In 'dsets' mode, error bars are estimated from user-provided
             per baseline and per channel standard deivations. 
-            If 'empirical' is
-            set, then error bars are estimated from the data by calculating the
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
             channel-channel covariance of each baseline over time and
             then applying the appropriate linear transformations to these
             frequency-domain covariances. 
             If 'autos' is set, the covariances of the input data
             over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
             and integration time. 
-            'outer_product' will only be called when calculating the 'foreground_dependent' covariance. For more 
-            details see ds.get_analytic_covariance().
 
         time_index : integer, compute covariance at specific time-step 
 
@@ -1810,7 +1788,8 @@ class PSpecData(object):
             Used only if exact_norm is True.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos', 'foreground_dependent']
+            Type of covariance model to use. if not cached. Options=['empirical', 'dsets', 'autos', 'foreground_dependent', 
+            (other model names in known_cov)]
             In 'dsets' mode, error bars are estimated from user-provided
             per baseline and per channel standard deivations. In 'empirical' mode, 
             error bars are estimated from the data by averaging the
@@ -1818,12 +1797,14 @@ class PSpecData(object):
             then applying the appropriate linear transformations to these
             frequency-domain covariances. In 'autos' mode, the covariances of the input data
             over a baseline is estimated from the autocorrelations of the two antennas forming the baseline
-            across channel bandwidth and integration time.
+            across channel bandwidth and integration time. 
+            In 'foreground_dependent' mode, it involves using auto-correlation amplitudes to model the input noise covariance
+            and visibility outer products to model the input systematics covariance. 
             
             ############
             When model is chosen as "autos" or "dsets", only C^{11} and C^{22} are accepted as non-zero values,
-            and the two matrices are expected to be diagonal, 
-            thus only <q_a q_b^dagger> - <q_a><q_b^dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]exists 
+            and the two matrices are also expected to be diagonal, 
+            thus only <q_a q_b^dagger> - <q_a><q_b^dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ] exists 
             in the covariance terms of q vectors.
             When model is chosen as 'foreground_dependent', we further include the signal-noise coupling term
             besides the noise in the output covariance. Still only <q_a q_b^dagger> - <q_a><q_b^dagger> is non-zero,
@@ -1846,11 +1827,9 @@ class PSpecData(object):
         if M.ndim == 2:
             M = np.asarray([M for time in range(self.Ntimes)])
         # M has a shape of (Ntimes, spw_Ndlys,spw_Ndlys)
-       
-        
         E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
         # E_matrices has a shape of (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
-        
+
         # using numpy.einsum_path to speed up the array products with numpy.einsum
         einstein_path_0 =  np.einsum_path('bij, cji->bc', E_matrices, E_matrices, optimize='optimal')[0]
         einstein_path_1 = np.einsum_path('bi, ci,i->bc', E_matrices[:,:,0], E_matrices[:,:,0],E_matrices[0,:,0], optimize='optimal')[0]
@@ -1903,7 +1882,7 @@ class PSpecData(object):
                 q_qdagger = np.einsum('bi,ci,i->bc', E12_x2, x2star_E21, np.diag(C11_autos), optimize=einstein_path_1) + np.einsum('bi,ci,i->bc', x1star_E12, E21_x1, np.diag(C22_autos), optimize=einstein_path_1)\
                             + np.einsum('bij, cji->bc', E12C22_autos, E21C11_autos, optimize=einstein_path_0) 
             else:
-                # for general case (which is the slowest)
+                # for general case (which is the slowest without simplification)
                 C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index, include_extension=True)
                 C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index, include_extension=True)
                 C21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index, include_extension=True)
@@ -2799,20 +2778,19 @@ class PSpecData(object):
             Default: True
 
         cov_model : string, optional
-            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos',...]
-            How the covariances of the input data should be estimated.
-            in 'dsets' mode, error bars are estimated from user-provided
-            per baseline and per channel standard deivations. 
-            If 'empirical' is
-            set, then error bars are estimated from the data by calculating the
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos', 'foreground_dependent',
+            (other model names in known_cov)]
+            In 'dsets' mode, error bars are estimated from user-provided per baseline and per channel standard deivations. 
+            In 'empirical' mode, error bars are estimated from the data by averaging the
             channel-channel covariance of each baseline over time and
             then applying the appropriate linear transformations to these
             frequency-domain covariances. 
-            If 'autos' is set, the covariances of the input data
-            over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
-            and integration time. 
-            'outer_product' will only be called when calculating the 'foreground_dependent' covariance. For more 
-            details see ds.get_analytic_covariance().
+            In 'autos' mode, the covariances of the input data
+            over a baseline is estimated from the autocorrelations of the two antennas forming the baseline
+            across channel bandwidth and integration time. 
+            In 'foreground_dependent' mode, it involves using auto-correlation amplitudes to model the input noise covariance
+            and visibility outer products to model the input systematics covariance. 
+            For more details see ds.get_analytic_covariance().
 
         known_cov : dicts of input covariance matrices
             known_cov has a type {Ckey:covariance}, which is the same with 
@@ -3864,20 +3842,19 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         access when file may be locked temporarily by other processes).
 
     cov_model : string, optional
-        Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos',...]
-        How the covariances of the input data should be estimated.
-        in 'dsets' mode, error bars are estimated from user-provided
-        per baseline and per channel standard deivations. 
-        If 'empirical' is
-        set, then error bars are estimated from the data by calculating the
+        Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos', 'foreground_dependent',
+        (other model names in known_cov)]
+        In 'dsets' mode, error bars are estimated from user-provided per baseline and per channel standard deivations. 
+        In 'empirical' mode, error bars are estimated from the data by averaging the
         channel-channel covariance of each baseline over time and
         then applying the appropriate linear transformations to these
         frequency-domain covariances. 
-        If 'autos' is set, the covariances of the input data
-        over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
-        and integration time. 
-        'outer_product' will only be called when calculating the 'foreground_dependent' covariance. For more 
-        details see ds.get_analytic_covariance().
+        In 'autos' mode, the covariances of the input data
+        over a baseline is estimated from the autocorrelations of the two antennas forming the baseline
+        across channel bandwidth and integration time. 
+        In 'foreground_dependent' mode, it involves using auto-correlation amplitudes to model the input noise covariance
+        and visibility outer products to model the input systematics covariance. 
+        For more details see ds.get_analytic_covariance().
 
     r_params: dict, optional
         Dictionary with parameters for weighting matrix. Required fields and

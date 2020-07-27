@@ -834,7 +834,6 @@ class Test_PSpecData(unittest.TestCase):
         rm1 = ds1.R(key1)
 
 
-
     def test_q_hat(self):
         """
         Test that q_hat has right shape and accepts keys in the right format.
@@ -1366,7 +1365,7 @@ class Test_PSpecData(unittest.TestCase):
         # assert that imag component of covariance is near zero
         key1 = (0, bls1[0], "xx")
         key2 = (1, bls2[0], "xx")
-        ds.set_spw((60, 80))
+        ds.set_spw((60, 90))
         M_ = np.diag(np.ones(ds.spw_Ndlys))
         for model in ['autos', 'empirical']:
             (cov_q_real, cov_q_imag, cov_p_real,
@@ -1377,31 +1376,82 @@ class Test_PSpecData(unittest.TestCase):
             for cov in [cov_q_real, cov_q_imag, cov_p_real, cov_p_imag]:
                 assert np.isclose(cov.imag, 0, atol=abs(cov.real).max() / 1e10).all()
 
+        # Here we generate a known_cov to be passed to ds.pspec, which stores two cov_models named 'dsets' and 'fiducial'.
+        # The two models have actually the same data, while in generating output covariance, 'dsets' mode will follow the shorter 
+        # path where we use some optimization for diagonal matrices, while 'fiducial' mode will follow the longer path 
+        # where there is no such optimization. This test should show the results from two paths are equivalent.      
+        known_cov_test = dict()
+        C_n_11 = np.diag([2.]*ds.Nfreqs)
+        P_n_11, S_n_11, C_n_12, P_n_12, S_n_12 = np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11)
+        models = ['dsets','fiducial']
+        for model in models:
+            for blpair in list(zip(bls1, bls2)):
+                for time_index in range(ds.Ntimes):
+                    key1 = (0,blpair[0],'xx')
+                    dset1, bl1 = ds.parse_blkey(key1)
+                    key2 = (1,blpair[1],'xx')
+                    dset2, bl2 = ds.parse_blkey(key2)
+
+                    Ckey = ((dset1, dset1), (bl1,bl1), ) + (model, time_index, False, True,)
+                    known_cov_test[Ckey] = C_n_11
+                    Ckey = ((dset1, dset1), (bl1,bl1), ) + (model, time_index, False, False,)
+                    known_cov_test[Ckey] = P_n_11
+                    Ckey = ((dset1, dset1), (bl1,bl1), ) + (model, time_index, True, True,)
+                    known_cov_test[Ckey] = S_n_11
+
+                    Ckey = ((dset2, dset2), (bl2,bl2), ) + (model, time_index, False, True,)
+                    known_cov_test[Ckey] = C_n_11
+                    Ckey = ((dset2, dset2), (bl2,bl2), ) + (model, time_index, False, False,)
+                    known_cov_test[Ckey] = P_n_11
+                    Ckey = ((dset2, dset2), (bl2,bl2), ) + (model, time_index, True, True,)
+                    known_cov_test[Ckey] = S_n_11
+
+                    Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, False, True,)
+                    known_cov_test[Ckey] = C_n_12
+                    Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, False, True,)
+                    known_cov_test[Ckey] = C_n_12
+                    Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, False, False,)
+                    known_cov_test[Ckey] = P_n_12
+                    Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, True, True,)
+                    known_cov_test[Ckey] = S_n_12 
+
+        uvp_dsets_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
+                                 cov_model='dsets', known_cov=known_cov_test, verbose=False, taper='bh')
+        uvp_fiducial_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
+                                 cov_model='fiducial', known_cov=known_cov_test, verbose=False, taper='bh')
+        # check their cov_array are equal 
+        nt.assert_true(np.allclose(uvp_dsets_cov.cov_array_real[0], uvp_fiducial_cov.cov_array_real[0], rtol=1e-05))
+
         # check noise floor computation from auto correlations
-        uvp_auto_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 80), store_cov=True,
-                                cov_model='autos', verbose=False, taper='bh')
+        uvp_auto_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
+                                 cov_model='autos', verbose=False, taper='bh')
         # get RMS of noise-dominated bandpowers for uvp_auto_cov
-        noise_dlys = np.abs(uvp_auto_cov.get_dlys(0) * 1e9) > 2000
+        noise_dlys = np.abs(uvp_auto_cov.get_dlys(0) * 1e9) > 1000
         rms = []
         for key in uvp_auto_cov.get_all_keys():
             rms.append(np.std(uvp_auto_cov.get_data(key).real \
-                / np.sqrt(np.diagonal(uvp_auto_cov.get_cov(key).real, axis1=1, axis2=2)), axis=0))
+                 / np.sqrt(np.diagonal(uvp_auto_cov.get_cov(key).real, axis1=1, axis2=2)), axis=0))
         rms = np.mean(rms, axis=0)
         # assert this is close to 1.0
         assert np.isclose(np.mean(rms[noise_dlys]), 1.0, atol=0.1)
 
+        error_bar_auto = np.sqrt(np.mean(np.diagonal(uvp_auto_cov .cov_array_real[0][:,:,:,0], axis1=1, axis2=2), axis=0))
         # check signal + noise floor computation
-        uvp_fgdep_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 80), store_cov=True,
+        uvp_fgdep_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
                                  cov_model='foreground_dependent', verbose=False, taper='bh')
-        # get RMS of data: divisor is time-averaged covariance this time
-        # b/c noise in empirically estimated fg-dep cov yields biased errorbar (tavg is not unbiased, but less-biased)
-        rms = []
-        for key in uvp_fgdep_cov.get_all_keys():
-            rms.append(np.std(uvp_fgdep_cov.get_data(key).real \
-                / np.sqrt(np.mean(np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2), axis=0)), axis=0))
-        rms = np.mean(rms, axis=0)
-        # assert this is close to 1.0
-        assert np.isclose(np.mean(rms), 1.0, atol=0.1)
+        # analytic foreground-dependent error bars will be biased since we use C_outer to model C_sys,
+        # while C_outer has contributtions from C_noise.  
+        error_bar_fg = np.sqrt(np.mean(np.diagonal(uvp_fgdep_cov.cov_array_real[0][:,:,:,0], axis1=1, axis2=2), axis=0))
+        # In tr[ E^{12,b} Cautos^{22} E^{21,c} Cautos^{11} +  E^{12,b} Couter^{22} E^{21,c} Cautos^{11} +  E^{12,b} Cautos^{22} E^{21,c} Couter^{11} ]
+        # which we use to derive the foregorund depedent variance, we can see it will rougly increase the variance in noise-domiated by
+        # a factor of three. 
+        assert np.isclose(np.mean(error_bar_fg[noise_dlys]/np.sqrt(3)/error_bar_auto[noise_dlys]), 1.0, atol=0.1)
+        # The effectively less-biased error bar
+        error_bar_fg_less_biased = copy.deepcopy(error_bar_fg)
+        error_bar_fg_less_biased[noise_dlys] -= (np.sqrt(3)-1)*error_bar_auto[noise_dlys]
+        data_std = np.std(uvp_fgdep_cov.data_array[0][:,:,0].real, axis=0)
+        # assert this ratio is close to 1.0
+        assert np.isclose(np.mean(data_std/error_bar_fg_less_biased), 1.0, atol=0.1)
 
     def test_pspec(self):
         # generate ds
@@ -1579,6 +1629,9 @@ class Test_PSpecData(unittest.TestCase):
         uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,20)], filter_extensions=[(2,2)], symmetric_taper=False, store_cov=True, cov_model='empirical')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
+        key = (0, (bls1[0],bls2[0]), "xx")
+        # also check the output covariance is uniform along time axis when cov_model='empirical'
+        nt.assert_true(np.allclose(uvp.get_cov(key)[0], uvp.get_cov(key)[-1])) 
 
         uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='dsets')
