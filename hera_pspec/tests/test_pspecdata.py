@@ -940,7 +940,7 @@ class Test_PSpecData(unittest.TestCase):
             qhat1 = ds1.q_hat(key2, key1)
             qhat2 = ds2.q_hat(key2, key1)
             if weighting in ['identity', 'dayenu']:
-                nt.assert_true(np.all(np.isclose(qhat1[:, :-1], qhat2[:, :-1])))
+                nt.assert_true(np.all(np.isclose(qhat1[:, :-1], qhat2[:, :-1], atol=1e-6, rtol=1e-12)))
                 nt.assert_true(not np.all(np.isclose(qhat1[:, -1], qhat2[:, -1])))
 
     def test_get_H(self):

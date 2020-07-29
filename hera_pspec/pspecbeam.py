@@ -703,7 +703,9 @@ class PSpecBeamFromArray(PSpecBeamBase):
                             "arrays.")
 
         # Check for disallowed polarizations
-        for key in OmegaP.keys():
+        # python no longer likes when you iterate over changing lists of keys.
+        ompkeys = list(OmegaP.keys())
+        for key in ompkeys:
             # turn into pol integer if a pol string
             if isinstance(key, str):
                 new_key = uvutils.polstr2num(key, x_orientation=self.x_orientation)
@@ -712,7 +714,9 @@ class PSpecBeamFromArray(PSpecBeamBase):
             # check its an allowed pol
             if key not in self.allowed_pols:
               raise KeyError("Unrecognized polarization '%s' in OmegaP." % key)
-        for key in OmegaPP.keys():
+        # python no longer likes when you iterate over changing lists of keys.
+        omppkeys = list(OmegaPP.keys())
+        for key in omppkeys:
             # turn into pol integer if a pol string
             if isinstance(key, str):
                 new_key = uvutils.polstr2num(key, x_orientation=self.x_orientation)
