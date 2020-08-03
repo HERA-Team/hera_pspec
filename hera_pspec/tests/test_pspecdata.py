@@ -1435,23 +1435,18 @@ class Test_PSpecData(unittest.TestCase):
         # assert this is close to 1.0
         assert np.isclose(np.mean(rms[noise_dlys]), 1.0, atol=0.1)
 
-        error_bar_auto = np.sqrt(np.mean(np.diagonal(uvp_auto_cov .cov_array_real[0][:,:,:,0], axis1=1, axis2=2), axis=0))
         # check signal + noise floor computation
         uvp_fgdep_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
                                  cov_model='foreground_dependent', verbose=False, taper='bh')
-        # analytic foreground-dependent error bars will be biased since we use C_outer to model C_sys,
-        # while C_outer has contributtions from C_noise.  
-        error_bar_fg = np.sqrt(np.mean(np.diagonal(uvp_fgdep_cov.cov_array_real[0][:,:,:,0], axis1=1, axis2=2), axis=0))
-        # In tr[ E^{12,b} Cautos^{22} E^{21,c} Cautos^{11} +  E^{12,b} Couter^{22} E^{21,c} Cautos^{11} +  E^{12,b} Cautos^{22} E^{21,c} Couter^{11} ]
-        # which we use to derive the foregorund depedent variance, we can see it will rougly increase the variance in noise-domiated by
-        # a factor of three. 
-        assert np.isclose(np.mean(error_bar_fg[noise_dlys]/np.sqrt(3)/error_bar_auto[noise_dlys]), 1.0, atol=0.1)
-        # The effectively less-biased error bar
-        error_bar_fg_less_biased = copy.deepcopy(error_bar_fg)
-        error_bar_fg_less_biased[noise_dlys] -= (np.sqrt(3)-1)*error_bar_auto[noise_dlys]
-        data_std = np.std(uvp_fgdep_cov.data_array[0][:,:,0].real, axis=0)
-        # assert this ratio is close to 1.0
-        assert np.isclose(np.mean(data_std/error_bar_fg_less_biased), 1.0, atol=0.1)
+        # get RMS of data: divisor is foreground_dependent covariance this time
+        # b/c noise in empirically estimated fg-dep cov yields biased errorbar (tavg is not unbiased, but less-biased)
+        rms = []
+        for key in uvp_fgdep_cov.get_all_keys():
+            rms.append(np.std(uvp_fgdep_cov.get_data(key)[:,~noise_dlys].real \
+                / np.sqrt(np.mean(np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2)[:,~noise_dlys], axis=0)), axis=0))
+        rms = np.mean(rms, axis=0)
+        # assert this is close to 1.0
+        assert np.isclose(np.mean(rms), 1.0, atol=0.1) 
 
     def test_pspec(self):
         # generate ds
@@ -1639,12 +1634,12 @@ class Test_PSpecData(unittest.TestCase):
 
         # test the results of stats_array[cov_model] 
         uvp_cov = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='autos')
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='foreground_dependent')
         uvp_cov_diag = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov_diag=True, cov_model='autos')
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov_diag=True, cov_model='foreground_dependent')
 
         key = (0, (bls1[0],bls2[0]), "xx")
-        nt.assert_true(np.isclose(np.diagonal(uvp_cov.get_cov(key), axis1=1, axis2=2), (np.real(uvp_cov_diag.get_stats('autos_diag', key)))**2).all())
+        nt.assert_true(np.isclose(np.diagonal(uvp_cov.get_cov(key), axis1=1, axis2=2), (np.real(uvp_cov_diag.get_stats('foreground_dependent_diag', key)))**2).all())
     
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],

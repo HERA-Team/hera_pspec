@@ -27,7 +27,7 @@ P_{\tilde{x}_1\tilde{x}_2} & = \tilde{s}^*\tilde{s} + \tilde{s}^*\tilde{n}_2 + \
 & \phantom{=} + \{a(d_2-d_1)+b(c_1-c_2)+d_2 c_1-d_1 c_2\}i \,.
 \end{align*}
 
-Here we consider $\langle s \rangle = s$, which means $a$ and $b$ are not random variables, but related to the true sky power spectrum by $P_{\tilde{s}\tilde{s}} = a^2 +b^2$, and $c_1$, $d_1$, $c_2$ and $d_2$ are i.i.d random normal variables. We then have 
+Here we consider $\langle s \rangle = s$, which means $a$ and $b$ are not random variables, but related to the true signal power spectrum by $P_{\tilde{s}\tilde{s}} = a^2 +b^2$, and $c_1$, $d_1$, $c_2$ and $d_2$ are i.i.d random normal variables. We then have 
 \begin{align}
 \label{eq:var_real_ps}
 \text{var} \left[\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) \right] &= \text{var} \left[a^2+b^2 + a(c_1+c_2) + b(d_1+d_2) + c_1c_2 + d_1d_2 \right] \notag \\
@@ -35,7 +35,7 @@ Here we consider $\langle s \rangle = s$, which means $a$ and $b$ are not random
 & = \sqrt{2}P_{\tilde{s}\tilde{s}}P_\text{N} + P_\text{N}^2 \notag \\
 & = \sqrt{2}\langle \text{Re} (P_{\tilde{x}_1\tilde{x}_2})\rangle P_\text{N} + P_\text{N}^2 \,.
 \end{align}
-In the equations above we have used the relation $\text{var} ( c_1c_2 + d_1d_2) = 2\langle c_1^2\rangle^2 = P_\text{N}^2$, where $P_\text{N}$ is the noise power spectrum we will refer to again later. We have also used the fact $\langle \text{Re} (P_{\tilde{x}_1\tilde{x}_2})\rangle = P_{\tilde{s}\tilde{s}}$, therefore we can choose $\sqrt{2}\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) P_\text{N} + P_\text{N}^2$ as a general form of error bars with the existence of foregrounds or systematics. This will of course come with excess variance, which is not ideal, but may still be a good first-order approximation in the limit that we don't have good signal or residual systematic models. 
+In the equations above we have used the relation $\text{var} ( c_1c_2 + d_1d_2) = 2\langle c_1^2\rangle^2 = P_\text{N}^2$, where $P_\text{N}$ is the analytic noise power spectrum we will refer to again later. We have also used the fact $\langle \text{Re} (P_{\tilde{x}_1\tilde{x}_2})\rangle = P_{\tilde{s}\tilde{s}}$, therefore we can choose $\sqrt{2}\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) P_\text{N} + P_\text{N}^2$ as a general form of error bars with the existence of foregrounds or systematics. Also, since $\text{Re} (P_{\tilde{x}_1\tilde{x}_2})$ could be negative due to noise randomness, we explicitly exert a zero clipping for negative values of $\text{Re} (P_{\tilde{x}_1\tilde{x}_2})$. This will of course come with excess variance, which is not ideal, but may still be a good first-order approximation in the limit that we don't have good signal or residual systematic models.   
 
 If we consider the variance on the whole complex values of power spectrum, then 
 \begin{align}
@@ -46,9 +46,9 @@ If we consider the variance on the whole complex values of power spectrum, then
 \end{align}
 It is just the form in \citet{kolopanis2019simplified}, while they used the notation $P_\text{N} = 2\langle c_1^2\rangle$, thus $\text{var} \left[P_{\tilde{x}_1\tilde{x}_2} \right] = 2 P_{\tilde{s}\tilde{s}} P_\text{N} + P_\text{N}^2$ there. 
 
-\section{Analytic method from OQE formalism}
+\section{Analytic method from QE formalism}
 \label{ap:analytic}
-The OQE formalism used in HERA PSPEC power spectrum estimation \footnote{\url{http://reionization.org/wp-content/uploads/2020/04/HERA044_power_spectrum_normalization_v2.pdf}} naturally leads to an analytic expression of the output covariance between bandpowers. 
+The QE formalism used in HERA PSPEC power spectrum estimation \footnote{\url{http://reionization.org/wp-content/uploads/2020/04/HERA044_power_spectrum_normalization_v2.pdf}} naturally leads to an analytic expression of the output covariance between bandpowers. 
 
 In HERA PSPEC, an unnormalized estimator to $\alpha$th bandpowers $\hat{q}_\alpha$ is defined as $\hat{q}_\alpha = \bm{x}_1^\dagger \bm{Q}^{12,\alpha} \bm{x}_2 = \sum_{ij} \bm{x}_{1,i}^*\bm{Q}^{12,\alpha}_{ij}\bm{x}_{2,j}$, where $\bm{x}_{1}$ and $\bm{x}_{2}$ are visibilities across frequencies. The key idea here is to propagate the input covariance on visibilities between frequencies into the output covariance on bandpowers between delays. We continue to define three sets of input covariance matrices $\bm{C}^{12}$, $\bm{U}^{12}$ and $\bm{S}^{12}$
 \begin{align}
@@ -160,27 +160,19 @@ If we also consider a `Foreground/systematics dependent variance', Equation \ref
     & \frac{1}{2} \sum_{\beta\gamma} 
     \Big\{\bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma}^* \big[\text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) 
     \notag \\
-    \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{sky}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) 
+    \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{signal}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) 
     \notag \\ 
-    \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{sky}^{11}) \big]  \Big\}\,,
+    \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{signal}^{11}) \big]  \Big\}\,,
 \end{align}
-
-or 
+where
 \begin{align}
-\label{eq:alter_reduced_var_in_ps_real}
-    & \frac{1}{2} \sum_{\beta\gamma} 
-    \Big\{\bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma}^* \big[\text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) 
-    \notag \\
-    \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{outer}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) 
-    \notag \\ 
-    \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{outer}^{11}) \big]  \Big\}\,,
+    \bm{C}_{\text{signal}, ij}^{11} = \bm{C}_{\text{signal}, ij}^{22} = \frac{1}{2}\left[\bm{x}_{1,i} \bm{x}_{2,j}^* + \bm{x}_{2,i} \bm{x}_{1,j}^*\right]\,.
 \end{align}
-$\bm{C}_\text{outer}^{11}$ or $\bm{C}_\text{outer}^{22}$ here is taken to be the outer product of input visibilities, like $\bm{C}_{\text{outer}, ij}^{11} = \bm{x}_{1,i} \bm{x}_{1,j}^*$. Equation \ref{eq:alter_reduced_var_in_ps_real}
-is an equivalent form to $\sqrt{2}\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) P_\text{N} + P_\text{N}^2$. 
+Equation \ref{eq:reduced_var_in_ps_real} is an equivalent form to $\sqrt{2}\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) P_\text{N} + P_\text{N}^2$. We also apply a similar zero clipping on $\bm{C}_{\text{signal}, ij}^{11}$, where rows and columns containing negative diagonal elements are set to be zero.  
 
 \subsection{Direct Noise Estimation By Differencing Visibility}
 \label{subsubsec:diff}
-For $P_\text{N}$, there are several other ways to calculate it. The sky signal (foregrounds and EoR signal) vary relatively slowly in time (or frequency), so that in a short time range we can assume the sky keeps almost constant. Thus by differencing the visibility between very close LST bins (or frequency channels), the residual is almost noise, like
+For $P_\text{N}$, there are several other ways to calculate it. The signal signal (foregrounds and EoR signal) vary relatively slowly in time (or frequency), so that in a short time range we can assume the signal keeps almost constant. Thus by differencing the visibility between very close LST bins (or frequency channels), the residual is almost noise, like
 \begin{eqnarray}
     V(\bm{b},\nu,t_1) -  V(\bm{b},\nu,t_2) & \approx & V_\text{n}(\bm{b},\nu,t_1) -  V_\text{n}(\bm{b},\nu,t_2) \,, \notag \\
     V(\bm{b},\nu_1,t) -  V(\bm{b},\nu_2,t) & \approx & V_\text{n}(\bm{b},\nu_1, t) -  V_\text{n}(\bm{b},\nu_2, t) \,.\notag \\
@@ -216,17 +208,17 @@ The `analytic' noise power specturm can be also estimated from a system temperat
 \label{eq:analytic_P_N}
     P_\text{N} = \frac{X^2 Y \Omega_\text{eff} T_\text{sys}^2}{t_\text{int} N_\text{coherent}\sqrt{2N_\text{incoherent}}}\,,
 \end{equation}
-where $X^2Y$ are conversion factors from sky angles and frequencies to cosmological coordinates, $\Omega_\text{eff}$ is the effective beam area, $t_\text{int}$ is the integration time, $N_\text{coherent}$ is the number of samples averaged at the level of visibility while $N_\text{incoherent}$ is the numbers of samples averaged at the level of power spectrum.
+where $X^2Y$ are conversion factors from signal angles and frequencies to cosmological coordinates, $\Omega_\text{eff}$ is the effective beam area, $t_\text{int}$ is the integration time, $N_\text{coherent}$ is the number of samples averaged at the level of visibility while $N_\text{incoherent}$ is the numbers of samples averaged at the level of power spectrum.
 
-Generally, $T_\text{sys} = T_\text{sky} + T_\text{rcvr}$. It can be estimated via the RMS of the differenced visibilities over samples, where we take the differences of raw visibilities in adjacent time and frequency channels to obtain the differenced visibilities first. By the relation  
+Generally, $T_\text{sys} = T_\text{signal} + T_\text{rcvr}$. It can be estimated via the RMS of the differenced visibilities over samples, where we take the differences of raw visibilities in adjacent time and frequency channels to obtain the differenced visibilities first. By the relation  
 \begin{equation}
 \label{eq:RMS_Tsys}
-V_\text{RMS} = \frac{2k_b \nu^2}{c^2 \Omega_p}\frac{T_\text{sys}}{B \Delta t} \,,
+V_\text{RMS} = \frac{2k_b \nu^2 \Omega_p}{c^2}\frac{T_\text{sys}}{B \Delta t} \,,
 \end{equation}
 we could have a distinct system temperature on one baseline by taking RMS over all its time samples, or a baseline-time averaged system temperature over all times and baselines. Another way to estimate $T_\text{sys}$ is also using the auto-correlation visibility, since itself is a good measure on the noise level on one antenna, by
 \begin{equation}
 \label{eq:auto_Tsys}
-\sqrt{V(\{a,a\}) V(\{b,b\})} = \frac{2k_b \nu^2}{c^2 \Omega_p} T_\text{sys,\{a,b\}}\,.
+\sqrt{V(\{a,a\}) V(\{b,b\})} = \frac{2k_b \nu^2 \Omega_p}{c^2} T_\text{sys,\{a,b\}}\,.
 \end{equation}
 Combining both Equation \ref{eq:RMS_Tsys} and Equation \ref{eq:auto_Tsys} we derive a relation
 \begin{equation}

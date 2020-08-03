@@ -152,11 +152,14 @@ def test_analytic_noise():
     uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
                    taper=taper, sampling=False, little_h=True, spw_ranges=[(0, Nchan)], verbose=False,
                    cov_model='autos', store_cov=True)
+    uvp_fg = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
+                   taper=taper, sampling=False, little_h=True, spw_ranges=[(0, Nchan)], verbose=False,
+                   cov_model='foreground_dependent', store_cov=True)
 
     # get P_N estimate
     auto_Tsys = utils.uvd_to_Tsys(uvd, beam, os.path.join(DATA_PATH, "test_uvd.uvh5"))
     assert os.path.exists(os.path.join(DATA_PATH, "test_uvd.uvh5"))
-    utils.uvp_noise_error(uvp, auto_Tsys, err_type='P_N')
+    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'])
 
     # check consistency of 1-sigma standard dev. to 1%
     cov_diag = uvp.cov_array_real[0][:, range(Nchan), range(Nchan)]
@@ -165,7 +168,12 @@ def test_analytic_noise():
 
     assert np.abs(frac_ratio).mean() < 0.01
 
-    ## todo: check P_SN consistency
+    ## check P_SN consistency of 1-sigma standard dev. to 1%
+    cov_diag = uvp_fg.cov_array_real[0][:, range(Nchan), range(Nchan)]
+    stats_diag = uvp.stats_array['P_SN'][0]
+    frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
+
+    assert np.abs(frac_ratio).mean() < 0.01
 
     # clean up
     os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))

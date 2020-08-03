@@ -1807,10 +1807,12 @@ class PSpecData(object):
             When model is chosen as 'foreground_dependent', we further include the signal-noise coupling term
             besides the noise in the output covariance. Still only <q_a q_b^dagger> - <q_a><q_b^dagger> is non-zero,
             while it takes a form of tr[ E^{12,a} Cn^{22} E^{21,b} Cn^{11} +  
-            E^{12,a} Couter^{22} E^{21,b} Cn^{11} + 
-            E^{12,a} Cn^{22} E^{21,b} Couter^{11} ],
+            E^{12,a} Cs^{22} E^{21,b} Cn^{11} + 
+            E^{12,a} Cn^{22} E^{21,b} Cs^{11} ],
             where Cn is just Cautos, the input noise covariance estimated by the auto-correlation amplitudes (by calling C_model(model='autos')), and 
-            Couter is the outer product of input visibilities, which is used to model the covariance on systematics.
+            Cs uses the outer product of input visibilities to model the covariance on systematics.
+            To construct a symmetric and unbiased covariance matrix, we choose
+            Cs^{11}_{ij} = Cs^{22}_{ij} = 1/2 * [ x1_i x2_j^{*} + x2_i x1_j^{*} ], which preserves the property Cs_{ij}^* = Cs_{ji}. 
             #############
 
         known_cov : dicts of covariance matrices
@@ -1859,9 +1861,10 @@ class PSpecData(object):
                 q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path_0) 
             elif model == 'foreground_dependent':
                 # calculate tr[ E^{12,b} Cautos^{22} E^{21,c} Cautos^{11} +  
-                # E^{12,b} Couter^{22} E^{21,c} Cautos^{11} + 
-                # E^{12,b} Cautos^{22} E^{21,c} Couter^{11} ]
-                # For terms like E^{12,b} Couter^{22} E^{21,c} Cautos^{11},
+                # E^{12,b} Cs E^{21,c} Cautos^{11} + 
+                # E^{12,b} Cautos^{22} E^{21,c} Cs ], 
+                # and we take Cs_{ij} = 1/2 * [ x1_i x2_j^{*} + x2_i x1_j^{*} ]. 
+                # For terms like E^{12,b} Cs E^{21,c} Cautos^{11},
                 # we have used tr[A u u*^t B D_2] = \sum_{ijkm} A_{ij} u_j u*_k B_{km} D_{2mi} \\
                 # = \sum_{i} [ \sum_j A_{ij} u_j ] * [\sum_k u*_k B_{ki} ] * d_{2i}
                 # to simplify the computation. 
@@ -1869,16 +1872,25 @@ class PSpecData(object):
                 C22_autos = self.C_model(key2, model='autos', known_cov=known_cov, time_index=time_index)
                 E21C11_autos = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11_autos))
                 E12C22_autos = np.multiply(E_matrices, np.diag(C22_autos))
-                x1 = self.w(key1)[:,time_index] * self.x(key1)[:,time_index]
-                x2 = self.w(key2)[:,time_index] * self.x(key2)[:,time_index]
                 # Get q_q, q_qdagger, qdagger_qdagger
                 q_q, qdagger_qdagger = 0.+1.j*0, 0.+1.j*0
+                q_qdagger = np.einsum('bij, cji->bc', E12C22_autos, E21C11_autos, optimize=einstein_path_0)
+                x1 = self.w(key1)[:,time_index] * self.x(key1)[:,time_index]
+                x2 = self.w(key2)[:,time_index] * self.x(key2)[:,time_index]
+                E12_x1 = np.dot(E_matrices, x1)
                 E12_x2 = np.dot(E_matrices, x2)
-                x2star_E21 = np.dot(E_matrices.conj(), np.conj(x2))
-                E21_x1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), x1)
-                x1star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), np.conj(x1))
-                q_qdagger = np.einsum('bi,ci,i->bc', E12_x2, x2star_E21, np.diag(C11_autos), optimize=einstein_path_1) + np.einsum('bi,ci,i->bc', x1star_E12, E21_x1, np.diag(C22_autos), optimize=einstein_path_1)\
-                            + np.einsum('bij, cji->bc', E12C22_autos, E21C11_autos, optimize=einstein_path_0) 
+                x2star_E21 = E12_x2.conj()
+                x1star_E21 = E12_x1.conj()
+                x1star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), x1.conj())
+                x2star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), x2.conj())
+                E21_x1 = x1star_E12.conj()
+                E21_x2 = x2star_E12.conj()
+                SN_cov = np.einsum('bi,ci,i->bc', E12_x1, x2star_E21, np.diag(C11_autos), optimize=einstein_path_1)/2. + np.einsum('bi,ci,i->bc', E12_x2, x1star_E21, np.diag(C11_autos), optimize=einstein_path_1)/2.\
+                            + np.einsum('bi,ci,i->bc', x2star_E12, E21_x1, np.diag(C22_autos), optimize=einstein_path_1)/2. + np.einsum('bi,ci,i->bc', x1star_E12, E21_x2, np.diag(C22_autos), optimize=einstein_path_1)/2.
+                # Apply zero clipping on the columns and rows containing negative diagonal elements
+                SN_cov[np.real(np.diag(SN_cov))<=0., :] = 0. + 1.j*0
+                SN_cov[:, np.real(np.diag(SN_cov))<=0.,] = 0. + 1.j*0
+                q_qdagger += SN_cov        
             else:
                 # for general case (which is the slowest without simplification)
                 C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
