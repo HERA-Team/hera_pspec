@@ -520,6 +520,8 @@ class PSpecData(object):
         if empirical. This means that hte number of unique hashes is equal to the
         number of baseline (pairs).
 
+        Since we use binary weights, we hash as bools for efficient storage use.
+
         Parameters
         ----------
 
@@ -540,16 +542,16 @@ class PSpecData(object):
         """
         # for identity weights, only hash by flagging patterns.
         if self.data_weighting == 'identity':
-            key = tuple(self.Y(key1, time_index))
+            key = tuple(self.Y(key1, time_index).astype(bool))
             if key2 is not None:
-                key = key + tuple(self.Y(key2, time_index))
+                key = key + tuple(self.Y(key2, time_index).astype(bool))
         elif self.data_weighting in R_PARAM_WEIGHTINGS:
             # for parametric weights, hash on r_params and flagging pattern.
             r_param_key = (self.data_weighting, ) + key1
-            key = self.r_param_hash(r_param_key) + tuple(self.Y(key1, time_index))
+            key = self.r_param_hash(r_param_key) + tuple(self.Y(key1, time_index).astype(bool))
             if key2 is not None:
                 r_param_key = (self.data_weighting, ) + key2
-                key += self.r_param_hash(r_param_key) + tuple(self.Y(key2, time_index))
+                key += self.r_param_hash(r_param_key) + tuple(self.Y(key2, time_index).astype(bool))
         elif self.data_weighting == 'iC':
             # empirical covariance is hashed by baseline pair but not
             # by time since the covariance is computed across time.
