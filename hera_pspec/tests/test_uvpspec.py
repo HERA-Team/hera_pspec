@@ -527,7 +527,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp_folded.fold_spectra()
         # Average folded spectra
         uvp_folded_avg = uvp_folded.average_spectra(time_avg=True, inplace=False)
-        nt.assert_equal(uvp_avg_folded.get_data((0, ((37, 38), (38, 39)), 'xx')).shape, uvp_folded_avg.get_data((0, ((37, 38), (38, 39)), 'xx')).shape) 
+        nt.assert_true(np.allclose(uvp_avg_folded.get_data((0, ((37, 38), (38, 39)), 'xx')), uvp_folded_avg.get_data((0, ((37, 38), (38, 39)), 'xx')), rtol=1e-5))
 
     def test_str(self):
         a = str(self.uvp)
