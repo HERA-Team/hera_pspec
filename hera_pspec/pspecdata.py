@@ -2163,13 +2163,6 @@ class PSpecData(object):
         if M.ndim == 2:
             M = np.asarray([M for time in range(self.Ntimes)])
         # M has a shape of (Ntimes, spw_Ndlys,spw_Ndlys)
-        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
-        # E_matrices has a shape of (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
-
-        # using numpy.einsum_path to speed up the array products with numpy.einsum
-        einstein_path_0 =  np.einsum_path('bij, cji->bc', E_matrices, E_matrices, optimize='optimal')[0]
-        einstein_path_1 = np.einsum_path('bi, ci,i->bc', E_matrices[:,:,0], E_matrices[:,:,0],E_matrices[0,:,0], optimize='optimal')[0]
-        einstein_path_2 =  np.einsum_path('ab,cd,bd->ac', M[0], M[0], M[0], optimize='optimal')[0]
 
         # check if the covariance matrix is uniform along the time axis. If so, we just calculate the result for one timestamp and duplicate its copies
         # along the time axis.
@@ -2184,6 +2177,13 @@ class PSpecData(object):
 
         cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = [], [], [], []
         for time_index in range(self.dsets[0].Ntimes):
+            E_matrices = self.get_unnormed_E(key1, key2, time_index=time_index, exact_norm=exact_norm, pol=pol)
+            # E_matrices has a shape of (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
+
+            # using numpy.einsum_path to speed up the array products with numpy.einsum
+            einstein_path_0 =  np.einsum_path('bij, cji->bc', E_matrices, E_matrices, optimize='optimal')[0]
+            einstein_path_1 = np.einsum_path('bi, ci,i->bc', E_matrices[:,:,0], E_matrices[:,:,0],E_matrices[0,:,0], optimize='optimal')[0]
+            einstein_path_2 =  np.einsum_path('ab,cd,bd->ac', M[0], M[0], M[0], optimize='optimal')[0]
             if model in ['dsets','autos']:
                 # calculate <q_a q_b^dagger> - <q_a><q_b^dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]
                 # We have used tr[A D_1 B D_2] = \sum_{ijkm} A_{ij} d_{1j} \delta_{jk} B_{km} d_{2m} \delta_{mi} = \sum_{ik} [A_{ik}*d_{1k}] * [B_{ki}*d_{2i}]
@@ -4250,7 +4250,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
-              allow_fft=False, sampling=False,
+              allow_fft=False,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
