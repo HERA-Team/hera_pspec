@@ -4,9 +4,9 @@ import numpy as np
 import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps, trapz
-from hera_pspec import pspecdata, pspecbeam, conversions, container, utils
+from hera_pspec import pspecdata, pspecbeam, conversions, container, utils, testing
 from hera_pspec.data import DATA_PATH
-from pyuvdata import UVData, UVCal
+from pyuvdata import UVData, UVCal, utils as uvutils
 from hera_cal import redcal
 from scipy.signal import windows
 from scipy.interpolate import interp1d
@@ -591,7 +591,7 @@ class Test_PSpecData(unittest.TestCase):
         key1 = ('red', (24, 25), 'xx')
         key2 = ('blue', (25, 38), 'xx')
 
-        nt.assert_raises(AssertionError, ds.cross_covar_model, key1, key2, model='other_string')
+        nt.assert_raises(ValueError, ds.cross_covar_model, key1, key2, model='other_string')
         nt.assert_raises(AssertionError, ds.cross_covar_model, key1, 'a_string')
 
         conj1_conj1 = ds.cross_covar_model(key1, key1, conj_1=True, conj_2=True)
@@ -832,7 +832,6 @@ class Test_PSpecData(unittest.TestCase):
         ds1.set_symmetric_taper(False)
         ds1.set_filter_extension([10,10])
         rm1 = ds1.R(key1)
-
 
 
     def test_q_hat(self):
@@ -1323,40 +1322,131 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_equal(ds._C[Ckey].shape, (spws[1][1]-spws[1][0], spws[1][1]-spws[1][0]))
 
     def test_get_analytic_covariance(self):
-        # test get_analytic_covariance return almost real values
         uvd = UVData()
         uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        uvd.nsample_array[:] = 1.0
+        uvd.flag_array[:] = False
         cosmo = conversions.Cosmo_Conversions()
         uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
-        
-        # slide the time axis of uvd by one integration
-        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:(uvd.Ntimes//2):1], inplace=False)
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[(uvd.Ntimes//2):(uvd.Ntimes//2 + uvd.Ntimes//2):1], inplace=False)
-        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
-        ds.rephase_to_dset(0)
 
-        spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
-        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
-        antpos = dict(zip(ants, antpos))
-        red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
-        bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
+        # extend time axis by factor of 4
+        for i in range(2):
+            new = copy.deepcopy(uvd)
+            new.time_array += new.Ntimes * np.diff(np.unique(new.time_array))[0]
+            new.lst_array = uvutils.get_lst_for_time(new.time_array, *new.telescope_location_lat_lon_alt_degrees)
+            uvd += new
 
+        # get redundant baselines
+        reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True)
+
+        # append roughly 20 blpairs to a list
+        bls1, bls2 = [], []
+        for red in reds[:3]:
+            _bls1, _bls2, _ = utils.construct_blpairs(red, exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=False)
+            bls1.extend(_bls1)
+            bls2.extend(_bls2)
+        # keep only 20 blpairs for speed (each with 40 independent time samples)
+        bls1, bls2 = bls1[:20], bls2[:20]
+        Nblpairs = len(bls1)
+
+        # generate a sky and noise simulation: each bl has the same FG signal, constant in time
+        # but has a different noise realization
+        np.random.seed(0)
+        sim1 = testing.sky_noise_sim(uvd, uvb, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
+                                     constant_in_time=True, bl_loop_seed=0, divide_by_nsamp=False)
+        np.random.seed(0)
+        sim2 = testing.sky_noise_sim(uvd, uvb, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
+                                     constant_in_time=True, bl_loop_seed=1, divide_by_nsamp=False)
+ 
+        # setup ds
+        ds = pspecdata.PSpecData(dsets=[sim1, sim2], wgts=[None, None], beam=uvb)
+        ds.Jy_to_mK()
+
+        # assert that imag component of covariance is near zero
         key1 = (0, bls1[0], "xx")
         key2 = (1, bls2[0], "xx")
-        ds.set_spw(spws[1])
+        ds.set_spw((60, 90))
         M_ = np.diag(np.ones(ds.spw_Ndlys))
-        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False, model='empirical', known_cov=None)
-        for time_index in range(ds.Ntimes):
-            nt.assert_true((abs(cov_q_real[time_index].real) / abs\
-                (cov_q_real[time_index].imag) > 1e8).all())
-            nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
-                (cov_q_imag[time_index].imag) > 1e8).all())
-        cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False, model='autos', known_cov=None)
-        for time_index in range(ds.Ntimes):
-            nt.assert_true((abs(cov_q_real[time_index].real) / abs\
-                (cov_q_real[time_index].imag) > 1e8).all())
-            nt.assert_true((abs(cov_q_imag[time_index].real) / abs\
-                (cov_q_imag[time_index].imag) > 1e8).all())
+        for model in ['autos', 'empirical']:
+            (cov_q_real, cov_q_imag, cov_p_real,
+             cov_p_imag) = ds.get_analytic_covariance(key1, key2, M=M_, exact_norm=False, pol=False,
+                                                      model=model, known_cov=None)
+            # assert these arrays are effectively real-valued, even though they are complex type.
+            # some numerical noise can leak-in, so check to within a dynamic range of peak real power.
+            for cov in [cov_q_real, cov_q_imag, cov_p_real, cov_p_imag]:
+                assert np.isclose(cov.imag, 0, atol=abs(cov.real).max() / 1e10).all()
+
+        # Here we generate a known_cov to be passed to ds.pspec, which stores two cov_models named 'dsets' and 'fiducial'.
+        # The two models have actually the same data, while in generating output covariance, 'dsets' mode will follow the shorter 
+        # path where we use some optimization for diagonal matrices, while 'fiducial' mode will follow the longer path 
+        # where there is no such optimization. This test should show the results from two paths are equivalent.      
+        known_cov_test = dict()
+        C_n_11 = np.diag([2.]*ds.Nfreqs)
+        P_n_11, S_n_11, C_n_12, P_n_12, S_n_12 = np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11)
+        models = ['dsets','fiducial']
+        for model in models:
+            for blpair in list(zip(bls1, bls2)):
+                for time_index in range(ds.Ntimes):
+                    key1 = (0,blpair[0],'xx')
+                    dset1, bl1 = ds.parse_blkey(key1)
+                    key2 = (1,blpair[1],'xx')
+                    dset2, bl2 = ds.parse_blkey(key2)
+
+                    Ckey = ((dset1, dset1), (bl1,bl1), ) + (model, time_index, False, True,)
+                    known_cov_test[Ckey] = C_n_11
+                    Ckey = ((dset1, dset1), (bl1,bl1), ) + (model, time_index, False, False,)
+                    known_cov_test[Ckey] = P_n_11
+                    Ckey = ((dset1, dset1), (bl1,bl1), ) + (model, time_index, True, True,)
+                    known_cov_test[Ckey] = S_n_11
+
+                    Ckey = ((dset2, dset2), (bl2,bl2), ) + (model, time_index, False, True,)
+                    known_cov_test[Ckey] = C_n_11
+                    Ckey = ((dset2, dset2), (bl2,bl2), ) + (model, time_index, False, False,)
+                    known_cov_test[Ckey] = P_n_11
+                    Ckey = ((dset2, dset2), (bl2,bl2), ) + (model, time_index, True, True,)
+                    known_cov_test[Ckey] = S_n_11
+
+                    Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, False, True,)
+                    known_cov_test[Ckey] = C_n_12
+                    Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, False, True,)
+                    known_cov_test[Ckey] = C_n_12
+                    Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, False, False,)
+                    known_cov_test[Ckey] = P_n_12
+                    Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, True, True,)
+                    known_cov_test[Ckey] = S_n_12 
+
+        uvp_dsets_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
+                                 cov_model='dsets', known_cov=known_cov_test, verbose=False, taper='bh')
+        uvp_fiducial_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
+                                 cov_model='fiducial', known_cov=known_cov_test, verbose=False, taper='bh')
+        # check their cov_array are equal 
+        nt.assert_true(np.allclose(uvp_dsets_cov.cov_array_real[0], uvp_fiducial_cov.cov_array_real[0], rtol=1e-05))
+
+        # check noise floor computation from auto correlations
+        uvp_auto_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
+                                 cov_model='autos', verbose=False, taper='bh')
+        # get RMS of noise-dominated bandpowers for uvp_auto_cov
+        noise_dlys = np.abs(uvp_auto_cov.get_dlys(0) * 1e9) > 1000
+        rms = []
+        for key in uvp_auto_cov.get_all_keys():
+            rms.append(np.std(uvp_auto_cov.get_data(key).real \
+                 / np.sqrt(np.diagonal(uvp_auto_cov.get_cov(key).real, axis1=1, axis2=2)), axis=0))
+        rms = np.mean(rms, axis=0)
+        # assert this is close to 1.0
+        assert np.isclose(np.mean(rms[noise_dlys]), 1.0, atol=0.1)
+
+        # check signal + noise floor computation
+        uvp_fgdep_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
+                                 cov_model='foreground_dependent', verbose=False, taper='bh')
+        # get RMS of data: divisor is foreground_dependent covariance this time
+        # b/c noise in empirically estimated fg-dep cov yields biased errorbar (tavg is not unbiased, but less-biased)
+        rms = []
+        for key in uvp_fgdep_cov.get_all_keys():
+            rms.append(np.std(uvp_fgdep_cov.get_data(key)[:,~noise_dlys].real \
+                / np.sqrt(np.mean(np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2)[:,~noise_dlys], axis=0)), axis=0))
+        rms = np.mean(rms, axis=0)
+        # assert this is close to 1.0
+        assert np.isclose(np.mean(rms), 1.0, atol=0.1) 
 
     def test_pspec(self):
         # generate ds
@@ -1530,13 +1620,26 @@ class Test_PSpecData(unittest.TestCase):
         uvd_std = copy.deepcopy(self.uvd_std)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],
                                  dsets_std=[uvd_std, uvd_std], beam=self.bm)
-        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,14)], store_cov=True, cov_model='empirical')
+        # test covariance methods with non-zero filter_extension
+        uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], filter_extensions=[(2,2)], symmetric_taper=False, store_cov=True, cov_model='empirical')
+        nt.assert_true(hasattr(uvp, 'cov_array_real'))
+        key = (0, (bls1[0],bls2[0]), "xx")
+        # also check the output covariance is uniform along time axis when cov_model='empirical'
+        nt.assert_true(np.allclose(uvp.get_cov(key)[0], uvp.get_cov(key)[-1])) 
+
+        uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='dsets')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
-        uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
-                                little_h=True, verbose=True, spw_ranges=[(10,14)], exact_norm=True, store_cov=True, cov_model='empirical')
-        nt.assert_true(hasattr(uvp, 'cov_array_real'))
+        # test the results of stats_array[cov_model] 
+        uvp_cov = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='foreground_dependent')
+        uvp_cov_diag = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
+                                little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov_diag=True, cov_model='foreground_dependent')
+
+        key = (0, (bls1[0],bls2[0]), "xx")
+        nt.assert_true(np.isclose(np.diagonal(uvp_cov.get_cov(key), axis1=1, axis2=2), (np.real(uvp_cov_diag.get_stats('foreground_dependent_diag', key)))**2).all())
     
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],

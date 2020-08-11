@@ -4,7 +4,9 @@ import copy, operator, itertools
 from collections import OrderedDict as odict
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
-from scipy import stats
+from scipy import stats, interpolate
+import hera_sim as hs
+from astropy import constants
 
 from . import uvpspec, pspecdata, conversions, pspecbeam, utils, uvpspec_utils as uvputils
 
@@ -370,3 +372,157 @@ def noise_sim(data, Tsys, beam=None, Nextend=0, seed=None, inplace=False,
 
     if not inplace:
         return data
+
+
+def gauss_cov_fg(cov_amp, cov_length_scale, freqs, Ntimes=100, constant_in_time=True):
+    """
+    Generate a random foreground signal from a Gaussian covariance
+
+        C = cov_amp * exp(-((f1 - f2) / cov_length_scale)^2)
+
+    Parameters
+    ----------
+    cov_amp : float
+        Covariance amplitude (e.g. in Jy^2)
+    cov_length_scale : float
+        Length scale of correlation in frequency (in freqs units)
+    freqs : ndarray
+        Frequency array [Hz]
+    Ntimes : int
+        Number of time integrations
+    constant_in_time : bool
+        If True, draw one signal realization for all times
+        Else, draw an independent realization for each time
+
+    Returns
+    -------
+    ndarray
+        shape (Ntimes, Nfreqs)
+    """
+    # generate a random process from a Gaussian covariance
+    Nfreqs = len(freqs)
+
+    C = cov_amp * np.exp(-((freqs[:, None] - freqs[None, :]) / cov_length_scale)**2)  # a covariance model
+
+    if constant_in_time:
+        s = stats.multivariate_normal.rvs(np.zeros(Nfreqs), C, 2).reshape(2, 1, Nfreqs)
+        s = s[0] + 1j * s[1]
+        s = np.repeat(s, Ntimes, axis=0)
+
+    else:
+        s = stats.multivariate_normal.rvs(np.zeros(Nfreqs), C, 2 * Ntimes).reshape(2, Ntimes, Nfreqs)
+        s = s[0] + 1j * s[1]
+
+    return s
+
+
+def sky_noise_sim(data, beam, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
+                  constant_in_time=True, bl_loop_seed=None, divide_by_nsamp=False):
+    """
+    Generate a mock simulation of foreground sky + noise.
+
+    Noise component is drawn from the autos in data.
+    Sky component is drawn from a Gaussian covariance.
+    Each cross correlation is statistically independent.
+
+    Parameters
+    ----------
+    data : str or UVData object
+    beam : str or PSpecBeam object
+    cov_amp : float
+        Covariance amplitude. See gauss_cov_fg()
+    cov_length_scale : float
+        Covariance length scale [MHz]. See gauss_cov_fg()
+    constant_in_time : bool
+        If True, foreground signal is constant in time
+    constant_per_bl : bool
+        If True, foreground signal is constant across baselines
+    bl_loop_seed : int
+        random seed to use before starting per-baseline loop
+    divide_by_nsamp : bool
+        If True, divide noise sim by sqrt(Nsample) in data
+
+    Returns
+    -------
+    UVData object
+    """
+    STOKPOLS = ['PI', 'PU', 'PQ', 'PV']
+    AUTOVISPOLS = ['XX', 'YY', 'EE', 'NN'] + STOKPOLS
+
+    if isinstance(data, str):
+        uvd = UVData()
+        uvd.read(data)
+    else:
+        uvd = copy.deepcopy(data)
+    assert -7 not in uvd.polarization_array and -8 not in uvd.polarization_array, "Does not operate on cross-hand polarizations"
+
+    if isinstance(beam, str):
+        beam = pspecbeam.PSpecBeamUV(beam)
+
+    # get metadata
+    freqs = uvd.freq_array[0]
+    Ntimes = uvd.Ntimes
+    lsts = np.unique(uvd.lst_array)
+    int_time = np.median(uvd.integration_time)
+    pols = uvd.get_pols()
+
+    # get OmegaP from beam
+    OmegaP = {}
+    for pol in uvd.get_pols():
+        # replace pQ, pU, pV with pI
+        if pol.upper() in ['PQ', 'PU', 'PV']:
+            OmegaP[pol] = beam.power_beam_int('pI')
+        else:
+            OmegaP[pol] = beam.power_beam_int(pol)
+        # interpolate to freq_array of data
+        OmegaP[pol] = interpolate.interp1d(beam.primary_beam.freq_array[0], OmegaP[pol], kind='linear', bounds_error=False,
+                               fill_value='extrapolate')(freqs)
+
+    # get baselines
+    bls = uvd.get_antpairpols()
+    crossbls = [bl for bl in bls if bl[0] != bl[1]]
+
+    # get autos in Kelvin
+    autos = {}
+    for key in bls:
+        if key[0] == key[1] and key[2].upper() in AUTOVISPOLS:
+            J2K = hs.noise.jy2T(freqs/1e9, OmegaP[key[2]]) / 1e3
+            # handle stokespols
+            if key[2].upper() in ['PQ', 'PU', 'PV']:
+                autos[key] = uvd.get_data(key[:2] + ('pI',)).real * J2K
+            else:
+                autos[key] = uvd.get_data(key).real * J2K
+
+    # get signal if constant across bl
+    if constant_per_bl:
+        # get signal
+        sig = gauss_cov_fg(cov_amp, cov_length_scale * 1e6, freqs, Ntimes=Ntimes,
+                           constant_in_time=constant_in_time)
+
+    # iterate over cross correlations
+    np.random.seed(bl_loop_seed)
+    for bl in crossbls:
+        # get time and freq dependent Tsys for this baseline
+        Tsys = np.sqrt(autos[(bl[0], bl[0], bl[2])] * autos[(bl[1], bl[1], bl[2])])
+
+        # get raw thermal noise
+        n = hs.noise.sky_noise_jy(Tsys, freqs/1e9, lsts, OmegaP[bl[2]], inttime=int_time)
+
+        # divide by nsamples: set nsample==0 to inf
+        if divide_by_nsamp:
+            nsamp = uvd.get_nsamples(bl).copy()
+            nsamp[np.isclose(nsamp, 0)] = np.inf
+            n /= np.sqrt(nsamp)
+
+        # get signal
+        if not constant_per_bl:
+            sig = gauss_cov_fg(cov_amp, cov_length_scale * 1e6, freqs, Ntimes=Ntimes,
+                               constant_in_time=constant_in_time)
+
+        # fill data
+        blt_inds = uvd.antpair2ind(bl[:2])
+        pol_ind = pols.index(bl[2])
+        uvd.data_array[blt_inds, 0, :, pol_ind] = n + sig
+
+    return uvd
+

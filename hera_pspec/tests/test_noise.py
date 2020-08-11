@@ -3,19 +3,19 @@ import nose.tools as nt
 import numpy as np
 import os
 import sys
-from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, pspecdata, pspecbeam, noise, testing, utils
 import copy
 import h5py
 from collections import OrderedDict as odict
 from pyuvdata import UVData
+
+from hera_pspec.data import DATA_PATH
+from hera_pspec import uvpspec, conversions, pspecdata, pspecbeam, noise, testing, utils
 
 
 class Test_Sensitivity(unittest.TestCase):
     """
     Test noise.Sensitivity object
     """
-
     def setUp(self):
         self.cosmo = conversions.Cosmo_Conversions()
         self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 
@@ -121,4 +121,60 @@ def test_noise_validation():
     # This should be updated to be within standard error on P_rms
     # when the spw_range-variable pspec amplitude bug is resolved
     nt.assert_true(np.abs(P_rms - P_N) / P_N < 0.02)
+
+
+def test_analytic_noise():
+    """
+    Test the two forms of analytic noise calculation
+    one using QE propagated from auto-correlation
+    second using P_N from Tsys estimate
+    """
+    bfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+    beam = pspecbeam.PSpecBeamUV(bfile)
+    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    uvd = UVData()
+    uvd.read(uvfile)
+
+    # setup PSpecData
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], 
+                             wgts=[None, None], beam=beam,
+                             dsets_std=[copy.deepcopy(uvd), copy.deepcopy(uvd)])
+    ds.Jy_to_mK()
+
+    # get pspec
+    reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True, 
+                                      bl_len_range=(10, 20),
+                                      bl_deg_range=(0, 1))
+    bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=True, 
+                                               exclude_permutations=True)
+    taper = 'bh'
+    Nchan = 20
+    uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
+                   taper=taper, sampling=False, little_h=True, spw_ranges=[(0, Nchan)], verbose=False,
+                   cov_model='autos', store_cov=True)
+    uvp_fg = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
+                   taper=taper, sampling=False, little_h=True, spw_ranges=[(0, Nchan)], verbose=False,
+                   cov_model='foreground_dependent', store_cov=True)
+
+    # get P_N estimate
+    auto_Tsys = utils.uvd_to_Tsys(uvd, beam, os.path.join(DATA_PATH, "test_uvd.uvh5"))
+    assert os.path.exists(os.path.join(DATA_PATH, "test_uvd.uvh5"))
+    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'])
+
+    # check consistency of 1-sigma standard dev. to 1%
+    cov_diag = uvp.cov_array_real[0][:, range(Nchan), range(Nchan)]
+    stats_diag = uvp.stats_array['P_N'][0]
+    frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
+
+    assert np.abs(frac_ratio).mean() < 0.01
+
+    ## check P_SN consistency of 1-sigma standard dev. to 1%
+    cov_diag = uvp_fg.cov_array_real[0][:, range(Nchan), range(Nchan)]
+    stats_diag = uvp.stats_array['P_SN'][0]
+    frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
+
+    assert np.abs(frac_ratio).mean() < 0.01
+
+    # clean up
+    os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
 

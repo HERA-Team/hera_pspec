@@ -98,3 +98,49 @@ def test_noise_sim():
     nt.assert_equal(uvn.Npols, uvd.Npols)
 
 
+def test_sky_noise_sim():
+    uvd = UVData()
+    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    uvd.read_miriad(uvfile)
+    beam = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    beam_ps = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
+
+    # basic test
+    np.random.seed(0)
+    sim = testing.sky_noise_sim(uvd, beam, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
+                                divide_by_nsamp=False)
+    # assert something was inserted
+    for bl in sim.get_antpairpols():
+        if bl[0] != bl[1]:
+            assert np.all(~np.isclose(sim.get_data(bl), uvd.get_data(bl)))
+
+    # try with psuedo stokes
+    np.random.seed(0)
+    uvd2, uvd2b = copy.deepcopy(uvd), copy.deepcopy(uvd)
+    uvd2.polarization_array[0] = 1
+    uvd2b.polarization_array[0] = 2
+    uvd2 += uvd2b
+    sim2 = testing.sky_noise_sim(uvd2, beam_ps, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
+                                 divide_by_nsamp=False)
+    # assert something was inserted
+    for bl in sim2.get_antpairpols():
+        if bl[0] != bl[1]:
+            assert np.all(~np.isclose(sim2.get_data(bl), uvd2.get_data(bl)))
+
+    # try divide by nsamp : set cov_amp=0 so we are only probing noise
+    sim3 = testing.sky_noise_sim(uvd, beam, cov_amp=0, cov_length_scale=10, constant_in_time=True,
+                                divide_by_nsamp=True)
+
+    # assert noise in channel 104 is zero (because nsample = 0)
+    assert np.isclose(sim3.get_data(53, 69)[:, 104], 0).all()
+
+    # test constant across time and bl
+    sim3 = copy.deepcopy(uvd)
+    sim3.integration_time[:] = np.inf  # set int_time to zero so we are only probing fg signal
+    sim3 = testing.sky_noise_sim(sim3, beam, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
+                                 constant_per_bl=True, divide_by_nsamp=True)
+
+    # assert constant in time and across baseline
+    d = sim3.get_data(52, 53)
+    assert np.isclose(d - d[0], 0).all()
+    assert np.isclose(sim3.get_data(52, 53) - sim3.get_data(67, 68), 0).all()
