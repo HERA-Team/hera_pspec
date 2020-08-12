@@ -514,6 +514,20 @@ class Test_UVPSpec(unittest.TestCase):
         cov_folded = uvp1.get_cov((0, ((37, 38), (38, 39)), ('xx','xx')))
         data_folded = uvp1.get_data((0, ((37,38), (38, 39)), ('xx','xx')))
 
+        # Test fold_spectra method is consistent with average_spectra()
+        uvp = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std,
+                                         spw_ranges=[(0,17)], beam=beam)
+        # Average then fold
+        uvp_avg = uvp.average_spectra(time_avg=True, inplace=False)
+        # Fold averaged spectra
+        uvp_avg_folded = copy.deepcopy(uvp_avg)
+        uvp_avg_folded.fold_spectra()
+        # Fold then average
+        uvp_folded = copy.deepcopy(uvp)
+        uvp_folded.fold_spectra()
+        # Average folded spectra
+        uvp_folded_avg = uvp_folded.average_spectra(time_avg=True, inplace=False)
+        nt.assert_true(np.allclose(uvp_avg_folded.get_data((0, ((37, 38), (38, 39)), 'xx')), uvp_folded_avg.get_data((0, ((37, 38), (38, 39)), 'xx')), rtol=1e-5))
 
     def test_str(self):
         a = str(self.uvp)
