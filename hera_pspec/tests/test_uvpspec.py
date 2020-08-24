@@ -82,6 +82,11 @@ class Test_UVPSpec(unittest.TestCase):
         # test get_blpairs
         blps = self.uvp.get_blpairs()
         nt.assert_equal(blps, [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))])
+        # test get_blpair_vecs
+        blp_vecs = self.uvp.get_blpair_blvecs()
+        assert blp_vecs.shape == (self.uvp.Nblpairs, 3)
+        blp_vecs2 = self.uvp.get_blpair_blvecs(use_second_bl=True)
+        assert np.isclose(blp_vecs, blp_vecs2).all()
         # test get_polpairs
         polpairs = self.uvp.get_polpairs()
         nt.assert_equal(polpairs, [('xx', 'xx')])

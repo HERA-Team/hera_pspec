@@ -238,6 +238,11 @@ class Test_Utils(unittest.TestCase):
         nt.assert_true(np.all([_l > bl_len_range[0] and _l < bl_len_range[1] for _l in l]))
         nt.assert_true(np.all([_a > bl_deg_range[0] and _a < bl_deg_range[1] for _a in a]))
 
+        # min EW cut
+        r, l, a = utils.get_reds(uvd, bl_len_range=(14, 16), min_EW_cut=14)
+        nt.assert_true(len(l) == len(a) == 1)
+        nt.assert_true(np.isclose(a[0] % 180, 0, atol=1))
+
         # autos
         r, l, a = utils.get_reds(fname, xants=xants, add_autos=True)
         nt.assert_almost_equal(l[0], 0)
@@ -247,7 +252,6 @@ class Test_Utils(unittest.TestCase):
         # Check errors when wrong types input
         nt.assert_raises(TypeError, utils.get_reds, [1., 2.])
         
-
     def test_config_pspec_blpairs(self):
         # test basic execution
         uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
