@@ -1059,7 +1059,7 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
 
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False, 
+             bl_deg_range=(0, 180), xants=None, add_autos=False, min_EW_cut=0,
              file_type='miriad'):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
@@ -1094,6 +1094,10 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     add_autos : bool
         If True, add into autocorrelation group to the redundant group list.
     
+    min_EW_cut : float
+        Baselines with a projected East-West absolute baseline length in meters
+        less than this are not included in the output.
+
     file_type : str, optional
         File type of the input files. Default: 'miriad'.
 
@@ -1141,11 +1145,12 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     # restrict baselines
     _reds, _lens, _angs = [], [], []
     for i, (l, a) in enumerate(zip(lens, angs)):
-        if l >= bl_len_range[0] and l <= bl_len_range[1]:
-            if a >= bl_deg_range[0] and a <= bl_deg_range[1]:
-                _reds.append(reds[i])
-                _lens.append(lens[i])
-                _angs.append(angs[i])
+        if l < bl_len_range[0] or l > bl_len_range[1]: continue
+        if a < bl_deg_range[0] or a > bl_deg_range[1]: continue
+        if np.abs(l * np.cos(a * np.pi / 180)) < min_EW_cut: continue
+        _reds.append(reds[i])
+        _lens.append(lens[i])
+        _angs.append(angs[i])
     reds, lens, angs = _reds, _lens, _angs
 
     # filter based on xants
