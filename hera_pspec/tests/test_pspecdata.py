@@ -2081,6 +2081,15 @@ def test_pspec_run():
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
 
+    # test with cov_model that requires autos w/ fname as filepath 
+    fnames = glob.glob(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
+    pspecdata.pspec_run([fnames], "./out.h5", spw_ranges=[(50, 70)], dset_pairs=[(0, 0)],
+                         verbose=False, overwrite=True, file_type='miriad', pol_pairs=[('xx', 'xx')],
+                         blpairs=[((37, 38), (37, 38))], cov_model='foreground_dependent', store_cov=True)
+    psc = container.PSpecContainer("out.h5", keep_open=False)
+    uvp = psc.get_pspec('dset0', 'dset0_x_dset0')
+    assert hasattr(uvp, 'cov_array_real')
+    os.path.remove('out.h5')
 
 def test_input_calibration():
     dfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458116.30*.HH.uvh5")))

@@ -3864,6 +3864,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         and visibility outer products to model the input systematics covariance. 
         For more details see ds.get_analytic_covariance().
 
+        Note: if dsets are str and cov_model is autos or fg_dependent, will also load auto correlations.
+
     r_params: dict, optional
         Dictionary with parameters for weighting matrix. Required fields and
         formats depend on the mode of `data_weighting`. Default: None.
@@ -3917,7 +3919,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         bls = None
 
     # check cov_model
-    if cov_model == "autos" and bls is not None:
+    if cov_model in ["autos", "foreground_dependent"] and bls is not None:
         # include autos if cov_model is autos
         bls += [(ant, ant) for ant in np.unique(utils.flatten(bls))]
 
