@@ -464,6 +464,38 @@ class UVPSpec(object):
 
         return blp_avg_sep
 
+    def get_blpair_blvecs(self, use_second_bl=False):
+        """
+        For each baseline-pair, get the baseline vector in ENU
+        frame of the first baseline in the pair. Ordering matches
+        self.get_blpairs()
+
+        Parameters
+        ----------
+        use_second_bl : bool
+            If True, return the vector of the second bl in the blpair.
+
+        Returns
+        -------
+        ndarray shape=(Nblpairs,)
+            vector in ENU frame of the baseline
+        """
+        # get list of bl vectors
+        bl_vecs = self.get_ENU_bl_vecs()
+        bl_array = self.bl_array.tolist()
+
+        # construct blpair_bls
+        i = 0
+        if use_second_bl:
+            i = 1
+        blpairs = _ordered_unique(self.blpair_array)
+        bls = [self.antnums_to_bl(self.blpair_to_antnums(blp)[i]) for blp in blpairs]
+        blp_blvecs = []
+        for bl in bls:
+            blp_blvecs.append(bl_vecs[bl_array.index(bl)])
+
+        return np.array(blp_blvecs)
+
     def get_kperps(self, spw, little_h=True):
         """
         Get transverse (perpendicular) cosmological wavevector for each
