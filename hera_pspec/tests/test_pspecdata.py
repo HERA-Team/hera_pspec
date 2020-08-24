@@ -2089,7 +2089,7 @@ def test_pspec_run():
     psc = container.PSpecContainer("out.h5", keep_open=False)
     uvp = psc.get_pspec('dset0', 'dset0_x_dset0')
     assert hasattr(uvp, 'cov_array_real')
-    os.path.remove('out.h5')
+    os.remove('out.h5')
 
 def test_input_calibration():
     dfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458116.30*.HH.uvh5")))
