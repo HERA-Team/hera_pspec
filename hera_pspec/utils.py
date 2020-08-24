@@ -1135,13 +1135,6 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     vecs = np.array([antpos_dict[r[0][0]] - antpos_dict[r[0][1]] for r in reds])
     lens, angs = get_bl_lens_angs(vecs, bl_error_tol=bl_error_tol)
 
-    # put in autocorrs
-    if add_autos:
-        ants = antpos_dict.keys()
-        reds = [list(zip(ants, ants))] + reds
-        lens = np.insert(lens, 0, 0)
-        angs = np.insert(angs, 0, 0)
-
     # restrict baselines
     _reds, _lens, _angs = [], [], []
     for i, (l, a) in enumerate(zip(lens, angs)):
@@ -1152,6 +1145,13 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         _lens.append(lens[i])
         _angs.append(angs[i])
     reds, lens, angs = _reds, _lens, _angs
+
+    # put in autocorrs
+    if add_autos:
+        ants = antpos_dict.keys()
+        reds = [list(zip(ants, ants))] + reds
+        lens = np.insert(lens, 0, 0)
+        angs = np.insert(angs, 0, 0)
 
     # filter based on xants
     if xants is not None:
