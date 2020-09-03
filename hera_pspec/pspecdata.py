@@ -3742,8 +3742,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         to use in utils.calc_blpair_reds. Total range is between 0 and 180
         degrees.
 
-    bl_error_tol : float
-        Baseline vector error tolerance when constructing redundant groups.
+    bl_error_tol : float, optional
+        Baseline vector error tolerance when constructing redundant groups. 
+        Default: 1.0.
 
     store_window : bool
         If True, store computed window functions (warning, these can be large!)
@@ -4086,7 +4087,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       exclude_permutations=exclude_permutations,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
-                                      bl_deg_range=bl_deg_range)
+                                      bl_deg_range=bl_deg_range, 
+                                      bl_tol=bl_error_tol)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
 
