@@ -1329,11 +1329,6 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
     precomp_P_N : str
         If computing P_SN and P_N is already computed, use this key
         to index stats_array for P_N rather than computing it from auto_Tsys.
-
-    Returns
-    -------
-    UVPSpec object
-        input uvp with 'P_N' or 'P_SN' error in stats_array
     """
     from hera_pspec import uvpspec_utils
 
