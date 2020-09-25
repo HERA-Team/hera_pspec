@@ -827,6 +827,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             cm = np.moveaxis(cov_array_real[spw], -1, 0)
             cm = Ht @ cm @ H
             cov_array_real[spw] = np.moveaxis(cm, 0, -1)
+            cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
     # handle data arrays
     uvp.data_array = data_array
@@ -843,19 +844,22 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     # handle spw metadata
     uvp.Nspwdlys = len(spw_dlys_array)
-    uvp.Ndlys = len(dlys_array)
+    uvp.Ndlys = len(np.unique(dlys_array))
     uvp.dly_array = np.asarray(dlys_array)
     uvp.spw_dly_array = np.asarray(spw_dlys_array)
 
     # handle baseline metadata: use first blpair as representative blpair
     blp = uvp.blpair_array[0]  
-    uvp.blpair_array = uvp.blpair_array[uvp.blpair_to_indices(blp)]
+    blp_inds = uvp.blpair_to_indices(blp)
+    uvp.blpair_array = uvp.blpair_array[blp_inds]
     uvp.Nblpairts = uvp.Ntimes
     uvp.Nblpairs = 1
     bl_array = np.unique([uvp.antnums_to_bl(an) for an in uvp.blpair_to_antnums(blp)])
     uvp.bl_vecs = np.asarray([uvp.bl_vecs[np.argmin(uvp.bl_array - bl)] for bl in bl_array])
     uvp.bl_array = bl_array
     uvp.Nbls = len(bl_array)
+    uvp.label_1_array = uvp.label_1_array[:, blp_inds]
+    uvp.label_2_array = uvp.label_2_array[:, blp_inds]
 
     # set bl_vecs mag to zero
     # k_mag stored as k_paras for spherically averaged uvp by convention!

@@ -2188,6 +2188,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
             u.spw_dly_array = uvps[0].spw_dly_array.copy()
             u.freq_array = uvps[0].freq_array.copy()
             u.dly_array = uvps[0].dly_array.copy()
+            u.Nfreqs = len(np.unique(u.freq_array))
+            u.Nspwfreqs = len(u.spw_freq_array)
+            u.Ndlys = len(np.unique(u.dly_array))
+            u.Nspwdlys = len(u.spw_dly_array)
 
     # other metadata
     u.polpair_array = np.array(new_polpairs)
@@ -2196,10 +2200,6 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.Nspws = Nspws
     u.Nblpairts = Nblpairts
     u.Npols = Npols
-    u.Nfreqs = len(np.unique(u.freq_array))
-    u.Nspwdlys = len(u.spw_dly_array)
-    u.Nspwfreqs = len(u.spw_freq_array)
-    u.Ndlys = len(np.unique(u.dly_array))
 
     # Prepare time and label arrays
     u.time_1_array, u.time_2_array = np.empty(Nblpairts, np.float64), \
@@ -2304,6 +2304,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         u.dly_array = np.array(dly_array)
         u.spw_freq_array = np.array(spw_freq_array)
         u.spw_dly_array = np.array(spw_dly_array)
+        u.Nfreqs = len(np.unique(u.freq_array))
+        u.Nspwfreqs = len(u.spw_freq_array)
+        u.Ndlys = len(np.unique(u.dly_array))
+        u.Nspwdlys = len(u.spw_dly_array)
 
         # Populate new LST, time, and blpair arrays
         for j, blpt in enumerate(new_blpts):
