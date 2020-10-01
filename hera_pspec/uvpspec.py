@@ -2180,18 +2180,18 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         if store_stats:
             for stat in stored_stats:
                 u.stats_array[stat][i] = np.empty((Nblpairts, spw[3], Npols), np.complex128)
-        # Set frequencies and delays: if concat_ax == 'spw' this is changed below
-        if i == 0:
-            # assumes spw metadata are the same for all uvps
-            u.spw_array = uvps[0].spw_array.copy()
-            u.spw_freq_array = uvps[0].spw_freq_array.copy()
-            u.spw_dly_array = uvps[0].spw_dly_array.copy()
-            u.freq_array = uvps[0].freq_array.copy()
-            u.dly_array = uvps[0].dly_array.copy()
-            u.Nfreqs = len(np.unique(u.freq_array))
-            u.Nspwfreqs = len(u.spw_freq_array)
-            u.Ndlys = len(np.unique(u.dly_array))
-            u.Nspwdlys = len(u.spw_dly_array)
+
+    # Set frequencies and delays: if concat_ax == 'spw' this is changed below
+    # assumes spw metadata are the same for all uvps
+    u.spw_array = uvps[0].spw_array.copy()
+    u.spw_freq_array = uvps[0].spw_freq_array.copy()
+    u.spw_dly_array = uvps[0].spw_dly_array.copy()
+    u.freq_array = uvps[0].freq_array.copy()
+    u.dly_array = uvps[0].dly_array.copy()
+    u.Nfreqs = len(np.unique(u.freq_array))
+    u.Nspwfreqs = len(u.spw_freq_array)
+    u.Ndlys = len(np.unique(u.dly_array))
+    u.Nspwdlys = len(u.spw_dly_array)
 
     # other metadata
     u.polpair_array = np.array(new_polpairs)

@@ -3329,9 +3329,9 @@ class PSpecData(object):
             if len(spw_polpair) == 0:
                 raise ValueError("None of the specified polarization pairs "
                                  "match that of the UVData objects")
-            self.set_filter_extension((0,0))
+            self.set_filter_extension((0, 0))
             # set filter_extension to be zero when ending the loop
-            
+
         # fill uvp object
         uvp = uvpspec.UVPSpec()
         uvp.symmetric_taper=symmetric_taper
