@@ -520,7 +520,7 @@ class PSpecBeamUV(PSpecBeamBase):
         self.primary_beam = uvb
         if uvb.beam_type == 'efield':
             self.primary_beam.efield_to_power(inplace=True)
-            self.primary_beam.peak_normalize()
+        self.primary_beam.peak_normalize()
 
     def beam_normalized_response(self, pol='pI', freq=None, x_orientation=None):
         """

@@ -4264,7 +4264,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
-              allow_fft=False, time_avg=False,
+              allow_fft=False, time_avg=False, vis_units="UNCALIB",
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
@@ -4414,9 +4414,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         See conversions.Cosmo_Conversions for details.
 
     interleave_times : bool
-        Only applicable if Ndsets == 1. If True, copy dset[0] into
+        Only applicable if Ndsets == 1 or Ndsets==2. If True, copy dset[0] into
         a dset[1] slot and interleave their time arrays. This updates
-        dset_pairs to [(0, 1)].
+        dset_pairs to [(0, 1)]. If two dsets, switch the even and odd time-steps
+        in dset number 2.
 
     rephase_to_dset : integer
         Integer index of the anchor dataset when rephasing all other datasets.
@@ -4629,7 +4630,12 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 return None
 
         assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
-
+    if vis_units != "UNCALIB":
+        for dset in dsets:
+            dset.vis_units = vis_units
+        if dsets_std is not None:
+            for dset in dsets_std:
+                dset.vis_units = vis_units
     # read calibration if provided (calfits partial IO not yet supported)
     if cals is not None:
         if not isinstance(cals, (list, tuple)):
@@ -4694,6 +4700,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             else:
                 ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
                 ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
+            # wgts is currently always None
+            ds.wgts.append(None)
         elif len(ds.dsets) == 2:
             Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
             Ntimes -= Ntimes % 2
@@ -4715,8 +4723,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             odd_flags = ds.dsets[1].flag_array[1::2]
             ds.dsets[1].flag_array[::2] = odd_flags
             ds.dsets[1].flag_array[1::2] = even_flags
-        # wgts is currently always None
-        ds.wgts.append(None)
 
         dset_pairs = [(0, 1)]
         dsets = ds.dsets
@@ -4878,10 +4884,12 @@ def get_pspec_run_argparser():
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
     a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20 20, 40 40' ->> [(20, 20), (40, 40), ...]")
     a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
-    a.add_argument("--allow_fft", default=False, type=bool, help="If True, speed computations up with ffts. Requires all spw_Nfreqs = spw_Ndelays and --sampling=True")
-    a.add_argument("--sampling", default=False, type=bool, help="If True, bandpowers are delta functions at k-bin centers rather then piecewise constant.")
+    a.add_argument("--allow_fft", default=False, action='store_true', help="If True, speed computations up with ffts. Requires all spw_Nfreqs = spw_Ndelays and --sampling=True")
+    a.add_argument("--sampling", default=False, action='store_true', help="If True, bandpowers are delta functions at k-bin centers rather then piecewise constant.")
     a.add_argument("--interleave_times", default=False, action='store_true', help="interleave even and odd time-steps. Can be used with one or two data sets.")
     a.add_argument("--time_avg", default=False, action='store_true', help='average power spectra in time.')
+    a.add_argument("--file_type", default='miriad', help="filetype to load", type=str)
+    a.add_argument("--vis_units", default="UNCALIB", help="override vis_units", type=str)
     return a
 
 
