@@ -4264,7 +4264,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
-              allow_fft=False,
+              allow_fft=False, time_avg=False,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
@@ -4672,27 +4672,49 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # interleave times
     if interleave_times:
-        if len(ds.dsets) != 1:
-            raise ValueError("interleave_times only applicable for Ndsets == 1")
-        Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
-        Ntimes -= Ntimes % 2  # make it an even number
-        # update dsets
-        ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
-        ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
-        # update _time_independent_weights
-        keys = list(ds._time_independent_weights.keys())
-        for key in keys:
-            ds._time_independent_weights[(1,) + key[1:]] = ds._time_independent_weights[key]
-            ds._unflagged_time_integration[(1,) + key[1:]] = ds._unflagged_time_integration[key]
-        ds.labels.append("dset1")
-        ds.Ntimes = ds.Ntimes // 2#divide number of times by two.
-        # update dsets_std
-        if ds.dsets_std[0] is None:
-            ds.dsets_std.append(None)
-        else:
-            ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
-            ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
+        if len(ds.dsets) not in [1, 2]:
+            raise ValueError("interleave_times only applicable for Ndsets == 1 and Ndsets==2")
 
+        # update dsets
+        if len(ds.dsets) == 1:
+            Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
+            Ntimes -= Ntimes % 2  # make it an even number
+            ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
+            ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
+            # update _time_independent_weights
+            keys = list(ds._time_independent_weights.keys())
+            for key in keys:
+                ds._time_independent_weights[(1,) + key[1:]] = ds._time_independent_weights[key]
+                ds._unflagged_time_integration[(1,) + key[1:]] = ds._unflagged_time_integration[key]
+            ds.labels.append("dset1")
+            ds.Ntimes = ds.Ntimes // 2#divide number of times by two.
+            # update dsets_std
+            if ds.dsets_std[0] is None:
+                ds.dsets_std.append(None)
+            else:
+                ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
+                ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
+        elif len(ds.dsets) == 2:
+            Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
+            Ntimes -= Ntimes % 2
+            ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[:Ntimes])
+            ds.dsets[1].select(times=np.unique(ds.dsets[1].time_array)[:Ntimes])
+            if ds.dsets_std[0] is not None:
+                ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[:Ntimes])
+                ds.dsets_std[1].select(times=np.unique(ds.dsets_std[1].time_array)[:Ntimes])
+            # reshuffle the data in the second data set.
+            even_data = ds.dsets[1].data_array[::2]
+            odd_data = ds.dsets[1].data_array[1::2]
+            ds.dsets[1].data_array[::2] = odd_data
+            ds.dsets[1].data_array[1::2] = even_data
+            even_nsamples = ds.dsets[1].nsample_array[::2]
+            odd_nsamples = ds.dsets[1].nsample_array[1::2]
+            ds.dsets[1].nsample_array[::2] = odd_nsamples
+            ds.dsets[1].nsample_array[1::2] = even_nsamples
+            even_flags = ds.dsets[1].flag_array[::2]
+            odd_flags = ds.dsets[1].flag_array[1::2]
+            ds.dsets[1].flag_array[::2] = odd_flags
+            ds.dsets[1].flag_array[1::2] = even_flags
         # wgts is currently always None
         ds.wgts.append(None)
 
@@ -4793,6 +4815,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
+        if time_avg:
+            uvp.average_spectra(time_avg=True)
 
         # write in transactional mode
         if verbose: print("Storing {}".format(psname))
@@ -4856,7 +4880,8 @@ def get_pspec_run_argparser():
     a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
     a.add_argument("--allow_fft", default=False, type=bool, help="If True, speed computations up with ffts. Requires all spw_Nfreqs = spw_Ndelays and --sampling=True")
     a.add_argument("--sampling", default=False, type=bool, help="If True, bandpowers are delta functions at k-bin centers rather then piecewise constant.")
-
+    a.add_argument("--interleave_times", default=False, action='store_true', help="interleave even and odd time-steps. Can be used with one or two data sets.")
+    a.add_argument("--time_avg", default=False, action='store_true', help='average power spectra in time.')
     return a
 
 
