@@ -4714,6 +4714,48 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             keys = list(ds._time_independent_weights.keys())
             for key in keys:
                 ds._time_independent_weights[(1,) + key[1:]] = ds._time_independent_weights[key]
+            ds.labels.append("dset1")
+            ds.Ntimes = ds.Ntimes // 2#divide number of times by two.
+            # update dsets_std
+            if ds.dsets_std[0] is None:
+                ds.dsets_std.append(None)
+            else:
+                ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
+                ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
+        elif len(ds.dsets) == 2:
+            Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
+            Ntimes -= Ntimes % 2
+            ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[:Ntimes])
+            ds.dsets[1].select(times=np.unique(ds.dsets[1].time_array)[:Ntimes])
+            if ds.dsets_std[0] is not None:
+                ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[:Ntimes])
+                ds.dsets_std[1].select(times=np.unique(ds.dsets_std[1].time_array)[:Ntimes])
+            # reshuffle the data in the second data set.
+            even_data = ds.dsets[1].data_array[::2]
+            odd_data = ds.dsets[1].data_array[1::2]
+            ds.dsets[1].data_array[::2] = odd_data
+            ds.dsets[1].data_array[1::2] = even_data
+            even_nsamples = ds.dsets[1].nsample_array[::2]
+            odd_nsamples = ds.dsets[1].nsample_array[1::2]
+            ds.dsets[1].nsample_array[::2] = odd_nsamples
+            ds.dsets[1].nsample_array[1::2] = even_nsamples
+            even_flags = ds.dsets[1].flag_array[::2]
+            odd_flags = ds.dsets[1].flag_array[1::2]
+            ds.dsets[1].flag_array[::2] = odd_flags
+            ds.dsets[1].flag_array[1::2] = even_flags
+        # wgts is currently always None
+        ds.wgts.append(None)
+
+        # update dsets
+        if len(ds.dsets) == 1:
+            Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
+            Ntimes -= Ntimes % 2  # make it an even number
+            ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
+            ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
+            # update _time_independent_weights
+            keys = list(ds._time_independent_weights.keys())
+            for key in keys:
+                ds._time_independent_weights[(1,) + key[1:]] = ds._time_independent_weights[key]
                 ds._unflagged_time_integration[(1,) + key[1:]] = ds._unflagged_time_integration[key]
             ds.labels.append("dset1")
             ds.Ntimes = ds.Ntimes // 2#divide number of times by two.
