@@ -2189,155 +2189,153 @@ class PSpecData(object):
                 check_uniform_input = True
 
         cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = [], [], [], []
-        if model != 'empirical_pspec':
-            for time_index in range(self.dsets[0].Ntimes):
-                E_matrices = self.get_unnormed_E(key1, key2, time_index=time_index, exact_norm=exact_norm, pol=pol)
-                # E_matrices has a shape of (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
+        for time_index in range(self.dsets[0].Ntimes):
+            E_matrices = self.get_unnormed_E(key1, key2, time_index=time_index, exact_norm=exact_norm, pol=pol)
+            # E_matrices has a shape of (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
-                # using numpy.einsum_path to speed up the array products with numpy.einsum
-                einstein_path_0 =  np.einsum_path('bij, cji->bc', E_matrices, E_matrices, optimize='optimal')[0]
-                einstein_path_1 = np.einsum_path('bi, ci,i->bc', E_matrices[:,:,0], E_matrices[:,:,0],E_matrices[0,:,0], optimize='optimal')[0]
-                einstein_path_2 =  np.einsum_path('ab,cd,bd->ac', M[0], M[0], M[0], optimize='optimal')[0]
-                if model in ['dsets','autos']:
-                    # calculate <q_a q_b^dagger> - <q_a><q_b^dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]
-                    # We have used tr[A D_1 B D_2] = \sum_{ijkm} A_{ij} d_{1j} \delta_{jk} B_{km} d_{2m} \delta_{mi} = \sum_{ik} [A_{ik}*d_{1k}] * [B_{ki}*d_{2i}]
-                    # to simplify the computation.
-                    C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
-                    C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
-                    E21C11 = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11))
-                    E12C22 = np.multiply(E_matrices, np.diag(C22))
-                    # Get q_q, q_qdagger, qdagger_qdagger
-                    q_q, qdagger_qdagger = 0.+1.j*0, 0.+1.j*0
-                    q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path_0)
-                elif model == 'foreground_dependent':
-                    # calculate tr[ E^{12,b} Cautos^{22} E^{21,c} Cautos^{11} +
-                    # E^{12,b} Cs E^{21,c} Cautos^{11} +
-                    # E^{12,b} Cautos^{22} E^{21,c} Cs ],
-                    # and we take Cs_{ij} = 1/2 * [ x1_i x2_j^{*} + x2_i x1_j^{*} ].
-                    # For terms like E^{12,b} Cs E^{21,c} Cautos^{11},
-                    # we have used tr[A u u*^t B D_2] = \sum_{ijkm} A_{ij} u_j u*_k B_{km} D_{2mi} \\
-                    # = \sum_{i} [ \sum_j A_{ij} u_j ] * [\sum_k u*_k B_{ki} ] * d_{2i}
-                    # to simplify the computation.
-                    C11_autos = self.C_model(key1, model='autos', known_cov=known_cov, time_index=time_index)
-                    C22_autos = self.C_model(key2, model='autos', known_cov=known_cov, time_index=time_index)
-                    E21C11_autos = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11_autos))
-                    E12C22_autos = np.multiply(E_matrices, np.diag(C22_autos))
-                    # Get q_q, q_qdagger, qdagger_qdagger
-                    q_q, qdagger_qdagger = 0.+1.j*0, 0.+1.j*0
-                    q_qdagger = np.einsum('bij, cji->bc', E12C22_autos, E21C11_autos, optimize=einstein_path_0)
-                    x1 = self.w(key1)[:,time_index] * self.x(key1)[:,time_index]
-                    x2 = self.w(key2)[:,time_index] * self.x(key2)[:,time_index]
-                    E12_x1 = np.dot(E_matrices, x1)
-                    E12_x2 = np.dot(E_matrices, x2)
-                    x2star_E21 = E12_x2.conj()
-                    x1star_E21 = E12_x1.conj()
-                    x1star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), x1.conj())
-                    x2star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), x2.conj())
-                    E21_x1 = x1star_E12.conj()
-                    E21_x2 = x2star_E12.conj()
-                    SN_cov = np.einsum('bi,ci,i->bc', E12_x1, x2star_E21, np.diag(C11_autos), optimize=einstein_path_1)/2. + np.einsum('bi,ci,i->bc', E12_x2, x1star_E21, np.diag(C11_autos), optimize=einstein_path_1)/2.\
-                                + np.einsum('bi,ci,i->bc', x2star_E12, E21_x1, np.diag(C22_autos), optimize=einstein_path_1)/2. + np.einsum('bi,ci,i->bc', x1star_E12, E21_x2, np.diag(C22_autos), optimize=einstein_path_1)/2.
-                    # Apply zero clipping on the columns and rows containing negative diagonal elements
-                    SN_cov[np.real(np.diag(SN_cov))<=0., :] = 0. + 1.j*0
-                    SN_cov[:, np.real(np.diag(SN_cov))<=0.,] = 0. + 1.j*0
-                    q_qdagger += SN_cov
+            # using numpy.einsum_path to speed up the array products with numpy.einsum
+            einstein_path_0 =  np.einsum_path('bij, cji->bc', E_matrices, E_matrices, optimize='optimal')[0]
+            einstein_path_1 = np.einsum_path('bi, ci,i->bc', E_matrices[:,:,0], E_matrices[:,:,0],E_matrices[0,:,0], optimize='optimal')[0]
+            einstein_path_2 =  np.einsum_path('ab,cd,bd->ac', M[0], M[0], M[0], optimize='optimal')[0]
+            if model in ['dsets','autos']:
+                # calculate <q_a q_b^dagger> - <q_a><q_b^dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]
+                # We have used tr[A D_1 B D_2] = \sum_{ijkm} A_{ij} d_{1j} \delta_{jk} B_{km} d_{2m} \delta_{mi} = \sum_{ik} [A_{ik}*d_{1k}] * [B_{ki}*d_{2i}]
+                # to simplify the computation.
+                C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
+                C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
+                E21C11 = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11))
+                E12C22 = np.multiply(E_matrices, np.diag(C22))
+                # Get q_q, q_qdagger, qdagger_qdagger
+                q_q, qdagger_qdagger = 0.+1.j*0, 0.+1.j*0
+                q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path_0)
+            elif model == 'foreground_dependent':
+                # calculate tr[ E^{12,b} Cautos^{22} E^{21,c} Cautos^{11} +
+                # E^{12,b} Cs E^{21,c} Cautos^{11} +
+                # E^{12,b} Cautos^{22} E^{21,c} Cs ],
+                # and we take Cs_{ij} = 1/2 * [ x1_i x2_j^{*} + x2_i x1_j^{*} ].
+                # For terms like E^{12,b} Cs E^{21,c} Cautos^{11},
+                # we have used tr[A u u*^t B D_2] = \sum_{ijkm} A_{ij} u_j u*_k B_{km} D_{2mi} \\
+                # = \sum_{i} [ \sum_j A_{ij} u_j ] * [\sum_k u*_k B_{ki} ] * d_{2i}
+                # to simplify the computation.
+                C11_autos = self.C_model(key1, model='autos', known_cov=known_cov, time_index=time_index)
+                C22_autos = self.C_model(key2, model='autos', known_cov=known_cov, time_index=time_index)
+                E21C11_autos = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11_autos))
+                E12C22_autos = np.multiply(E_matrices, np.diag(C22_autos))
+                # Get q_q, q_qdagger, qdagger_qdagger
+                q_q, qdagger_qdagger = 0.+1.j*0, 0.+1.j*0
+                q_qdagger = np.einsum('bij, cji->bc', E12C22_autos, E21C11_autos, optimize=einstein_path_0)
+                x1 = self.w(key1)[:,time_index] * self.x(key1)[:,time_index]
+                x2 = self.w(key2)[:,time_index] * self.x(key2)[:,time_index]
+                E12_x1 = np.dot(E_matrices, x1)
+                E12_x2 = np.dot(E_matrices, x2)
+                x2star_E21 = E12_x2.conj()
+                x1star_E21 = E12_x1.conj()
+                x1star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), x1.conj())
+                x2star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), x2.conj())
+                E21_x1 = x1star_E12.conj()
+                E21_x2 = x2star_E12.conj()
+                SN_cov = np.einsum('bi,ci,i->bc', E12_x1, x2star_E21, np.diag(C11_autos), optimize=einstein_path_1)/2. + np.einsum('bi,ci,i->bc', E12_x2, x1star_E21, np.diag(C11_autos), optimize=einstein_path_1)/2.\
+                            + np.einsum('bi,ci,i->bc', x2star_E12, E21_x1, np.diag(C22_autos), optimize=einstein_path_1)/2. + np.einsum('bi,ci,i->bc', x1star_E12, E21_x2, np.diag(C22_autos), optimize=einstein_path_1)/2.
+                # Apply zero clipping on the columns and rows containing negative diagonal elements
+                SN_cov[np.real(np.diag(SN_cov))<=0., :] = 0. + 1.j*0
+                SN_cov[:, np.real(np.diag(SN_cov))<=0.,] = 0. + 1.j*0
+                q_qdagger += SN_cov
+            else:
+                # for general case (which is the slowest without simplification)
+                C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
+                C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
+                C21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)
+                C12 = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)
+                P11 = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
+                S11 = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
+                P22 = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
+                S22 = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
+                P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
+                S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
+                # Get q_q, q_qdagger, qdagger_qdagger
+                if np.isclose(P22, 0).all() or np.isclose(S11,0).all():
+                    q_q = 0.+1.j*0
                 else:
-                    # for general case (which is the slowest without simplification)
-                    C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
-                    C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
-                    C21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)
-                    C12 = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)
-                    P11 = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
-                    S11 = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
-                    P22 = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
-                    S22 = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
-                    P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
-                    S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
-                    # Get q_q, q_qdagger, qdagger_qdagger
-                    if np.isclose(P22, 0).all() or np.isclose(S11,0).all():
-                        q_q = 0.+1.j*0
-                    else:
-                        E12P22 = np.matmul(E_matrices, P22)
-                        E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
-                        q_q = np.einsum('bij, cji->bc', E12P22, E21starS11, optimize=einstein_path_0)
-                    if np.isclose(C21, 0).all():
-                        q_q += 0.+1.j*0
-                    else:
-                        E12C21 = np.matmul(E_matrices, C21)
-                        q_q += np.einsum('bij, cji->bc', E12C21, E12C21, optimize=einstein_path_0)
-                    E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
-                    E12C22 = np.matmul(E_matrices, C22)
-                    q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path_0)
-                    if np.isclose(P21, 0).all() or np.isclose(S21,0).all():
-                        q_qdagger += 0.+1.j*0
-                    else:
-                        E12P21 = np.matmul(E_matrices, P21)
-                        E12starS21 = np.matmul(E_matrices.conj(), S21)
-                        q_qdagger += np.einsum('bij, cji->bc', E12P21, E12starS21, optimize=einstein_path_0)
-                    if np.isclose(C12, 0).all():
-                        qdagger_qdagger = 0.+1.j*0
-                    else:
-                        E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
-                        qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12, optimize=einstein_path_0)
-                    if np.isclose(P11, 0).all() or np.isclose(S22,0).all():
-                        qdagger_qdagger += 0.+1.j*0
-                    else:
-                        E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
-                        E12starS22 = np.matmul(E_matrices.conj(), S22)
-                        qdagger_qdagger += np.einsum('bij, cji->bc', E21P11, E12starS22, optimize=einstein_path_0)
-
-                cov_q_real_temp = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
-                cov_q_imag_temp = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
-
-                m = M[time_index]
-                # calculate \sum_{bd} [ M_{ab} M_{cd} (<q_b q_d> - <q_b><q_d>) ]
-                if np.isclose([q_q], 0).all():
-                    MMq_q = np.zeros((E_matrices.shape[0],E_matrices.shape[0])).astype(np.complex128)
+                    E12P22 = np.matmul(E_matrices, P22)
+                    E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
+                    q_q = np.einsum('bij, cji->bc', E12P22, E21starS11, optimize=einstein_path_0)
+                if np.isclose(C21, 0).all():
+                    q_q += 0.+1.j*0
                 else:
-                    assert np.shape(q_q) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
-                    MMq_q = np.einsum('ab,cd,bd->ac', m, m, q_q, optimize=einstein_path_2)
-                # calculate \sum_{bd} [ M_{ab} M_{cd}^* (<q_b q_d^dagger> - <q_b><q_d^dagger>) ]
-                # and \sum_{bd} [ M_{ab}^* M_{cd} (<q_b^dagger q_d> - <q_b^dagger><q_d>) ]
-                if np.isclose([q_qdagger], 0).all():
-                    MM_q_qdagger = 0.+1.j*0
-                    M_Mq_qdagger_ = 0.+1.j*0
+                    E12C21 = np.matmul(E_matrices, C21)
+                    q_q += np.einsum('bij, cji->bc', E12C21, E12C21, optimize=einstein_path_0)
+                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
+                E12C22 = np.matmul(E_matrices, C22)
+                q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path_0)
+                if np.isclose(P21, 0).all() or np.isclose(S21,0).all():
+                    q_qdagger += 0.+1.j*0
                 else:
-                    assert np.shape(q_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
-                    MM_q_qdagger = np.einsum('ab,cd,bd->ac', m, m.conj(), q_qdagger, optimize=einstein_path_2)
-                    M_Mq_qdagger_ = np.einsum('ab,cd,bd->ac', m.conj(), m, q_qdagger.conj(), optimize=einstein_path_2)
-                # calculate \sum_{bd} [ M_{ab}^* M_{cd}^* (<q_b^dagger q_d^dagger> - <q_b^dagger><q_d^dagger>) ]
-                if np.isclose([qdagger_qdagger], 0).all():
-                    M_M_qdagger_qdagger = 0.+1.j*0
+                    E12P21 = np.matmul(E_matrices, P21)
+                    E12starS21 = np.matmul(E_matrices.conj(), S21)
+                    q_qdagger += np.einsum('bij, cji->bc', E12P21, E12starS21, optimize=einstein_path_0)
+                if np.isclose(C12, 0).all():
+                    qdagger_qdagger = 0.+1.j*0
                 else:
-                    assert np.shape(qdagger_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
-                    M_M_qdagger_qdagger = np.einsum('ab,cd,bd->ac', m.conj(), m.conj(), qdagger_qdagger, optimize=einstein_path_2)
-
-                cov_p_real_temp = ( MMq_q + MM_q_qdagger + M_Mq_qdagger_ + M_M_qdagger_qdagger)/ 4.
-                cov_p_imag_temp = -( MMq_q - MM_q_qdagger - M_Mq_qdagger_ + M_M_qdagger_qdagger)/ 4.
-                # cov_p_real_temp has a shaoe of (spw_Ndlys, spw_Ndlys)
-
-                if check_uniform_input:
-                # if the covariance matrix is uniform along the time axis, we just calculate the result for one timestamp and duplicate its copies
-                # along the time axis.
-                    cov_q_real.extend([cov_q_real_temp]*self.dsets[0].Ntimes)
-                    cov_q_imag.extend([cov_q_imag_temp]*self.dsets[0].Ntimes)
-                    cov_p_real.extend([cov_p_real_temp]*self.dsets[0].Ntimes)
-                    cov_p_imag.extend([cov_p_imag_temp]*self.dsets[0].Ntimes)
-                    warnings.warn("Producing time-uniform covariance matrices between bandpowers.")
-                    break
+                    E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
+                    qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12, optimize=einstein_path_0)
+                if np.isclose(P11, 0).all() or np.isclose(S22,0).all():
+                    qdagger_qdagger += 0.+1.j*0
                 else:
-                    cov_q_real.append(cov_q_real_temp)
-                    cov_q_imag.append(cov_q_imag_temp)
-                    cov_p_real.append(cov_p_real_temp)
-                    cov_p_imag.append(cov_p_imag_temp)
+                    E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
+                    E12starS22 = np.matmul(E_matrices.conj(), S22)
+                    qdagger_qdagger += np.einsum('bij, cji->bc', E21P11, E12starS22, optimize=einstein_path_0)
 
-            cov_q_real = np.asarray(cov_q_real)
-            cov_q_imag = np.asarray(cov_q_imag)
-            cov_p_real = np.asarray(cov_p_real)
-            cov_p_imag = np.asarray(cov_p_imag)
-            # (Ntimes, spw_Ndlys, spw_Ndlys)
-        else:
-            
+            cov_q_real_temp = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
+            cov_q_imag_temp = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
+
+            m = M[time_index]
+            # calculate \sum_{bd} [ M_{ab} M_{cd} (<q_b q_d> - <q_b><q_d>) ]
+            if np.isclose([q_q], 0).all():
+                MMq_q = np.zeros((E_matrices.shape[0],E_matrices.shape[0])).astype(np.complex128)
+            else:
+                assert np.shape(q_q) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
+                MMq_q = np.einsum('ab,cd,bd->ac', m, m, q_q, optimize=einstein_path_2)
+            # calculate \sum_{bd} [ M_{ab} M_{cd}^* (<q_b q_d^dagger> - <q_b><q_d^dagger>) ]
+            # and \sum_{bd} [ M_{ab}^* M_{cd} (<q_b^dagger q_d> - <q_b^dagger><q_d>) ]
+            if np.isclose([q_qdagger], 0).all():
+                MM_q_qdagger = 0.+1.j*0
+                M_Mq_qdagger_ = 0.+1.j*0
+            else:
+                assert np.shape(q_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
+                MM_q_qdagger = np.einsum('ab,cd,bd->ac', m, m.conj(), q_qdagger, optimize=einstein_path_2)
+                M_Mq_qdagger_ = np.einsum('ab,cd,bd->ac', m.conj(), m, q_qdagger.conj(), optimize=einstein_path_2)
+            # calculate \sum_{bd} [ M_{ab}^* M_{cd}^* (<q_b^dagger q_d^dagger> - <q_b^dagger><q_d^dagger>) ]
+            if np.isclose([qdagger_qdagger], 0).all():
+                M_M_qdagger_qdagger = 0.+1.j*0
+            else:
+                assert np.shape(qdagger_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
+                M_M_qdagger_qdagger = np.einsum('ab,cd,bd->ac', m.conj(), m.conj(), qdagger_qdagger, optimize=einstein_path_2)
+
+            cov_p_real_temp = ( MMq_q + MM_q_qdagger + M_Mq_qdagger_ + M_M_qdagger_qdagger)/ 4.
+            cov_p_imag_temp = -( MMq_q - MM_q_qdagger - M_Mq_qdagger_ + M_M_qdagger_qdagger)/ 4.
+            # cov_p_real_temp has a shaoe of (spw_Ndlys, spw_Ndlys)
+
+            if check_uniform_input:
+            # if the covariance matrix is uniform along the time axis, we just calculate the result for one timestamp and duplicate its copies
+            # along the time axis.
+                cov_q_real.extend([cov_q_real_temp]*self.dsets[0].Ntimes)
+                cov_q_imag.extend([cov_q_imag_temp]*self.dsets[0].Ntimes)
+                cov_p_real.extend([cov_p_real_temp]*self.dsets[0].Ntimes)
+                cov_p_imag.extend([cov_p_imag_temp]*self.dsets[0].Ntimes)
+                warnings.warn("Producing time-uniform covariance matrices between bandpowers.")
+                break
+            else:
+                cov_q_real.append(cov_q_real_temp)
+                cov_q_imag.append(cov_q_imag_temp)
+                cov_p_real.append(cov_p_real_temp)
+                cov_p_imag.append(cov_p_imag_temp)
+
+        cov_q_real = np.asarray(cov_q_real)
+        cov_q_imag = np.asarray(cov_q_imag)
+        cov_p_real = np.asarray(cov_p_real)
+        cov_p_imag = np.asarray(cov_p_imag)
+        # (Ntimes, spw_Ndlys, spw_Ndlys)
+
         return cov_q_real, cov_q_imag, cov_p_real, cov_p_imag
 
 
@@ -4702,8 +4700,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             else:
                 ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
                 ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
-            # wgts is currently always None
-            ds.wgts.append(None)
+                # wgts is currently always None
+                ds.wgts.append(None)
         elif len(ds.dsets) == 2:
             Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
             Ntimes -= Ntimes % 2
