@@ -3842,24 +3842,48 @@ class PSpecData(object):
                     #Generate the covariance matrix if error bars provided
                     if store_cov or store_cov_diag:
                         if verbose: print(" Building q_hat covariance...")
-                        cov_q_real, cov_q_imag, cov_real, cov_imag \
-                            = self.get_analytic_covariance(key1, key2, Mv,
-                                                           exact_norm=exact_norm,
-                                                           pol=pol,
-                                                           model=cov_model,
-                                                           known_cov=known_cov, )
+                        if cov_model != 'empirical_pspec':
+                            cov_q_real, cov_q_imag, cov_real, cov_imag \
+                                = self.get_analytic_covariance(key1, key2, Mv,
+                                                               exact_norm=exact_norm,
+                                                               pol=pol,
+                                                               model=cov_model,
+                                                               known_cov=known_cov, )
 
-                        if self.primary_beam != None:
-                            cov_real = cov_real * (scalar)**2.
-                            cov_imag = cov_imag * (scalar)**2.
+                            if self.primary_beam != None:
+                                cov_real = cov_real * (scalar)**2.
+                                cov_imag = cov_imag * (scalar)**2.
 
-                        if norm == 'I' and not(exact_norm):
-                            if isinstance(sa, (np.float, float)):
-                                cov_real = cov_real * (sa)**2.
-                                cov_imag = cov_imag * (sa)**2.
+                            if norm == 'I' and not(exact_norm):
+                                if isinstance(sa, (np.float, float)):
+                                    cov_real = cov_real * (sa)**2.
+                                    cov_imag = cov_imag * (sa)**2.
+                                else:
+                                    cov_real = cov_real * np.outer(sa, sa)[None]
+                                    cov_imag = cov_imag * np.outer(sa, sa)[None]
+                        else:
+                            # empirical_pspec mode just lets us compute covs from data directly.
+                            pwgts = (~np.all(np.isclose(pv, 0), axis=0)).astype(float)
+                            if not np.all(pwgts == 0.):
+                                cov_real = np.cov(pv.real, aweights=pwgts)
+                                cov_imag = np.cov(pv.imag, aweights=pwgts)
                             else:
-                                cov_real = cov_real * np.outer(sa, sa)[None]
-                                cov_imag = cov_imag * np.outer(sa, sa)[None]
+                                cov_real=np.zeros((self.spw_Ndlys, self.spw_Ndlys))
+                                cov_imag=np.zeros((self.spw_Ndlys, self.spw_Ndlys))
+
+                            qwgts = (~np.all(np.isclose(pv, 0), axis=0)).astype(float)
+                            if not np.all(qwgts == 0.):
+                                cov_q_real = np.cov(qv.real, aweights=qwgts)
+                                cov_q_imag = np.cov(qv.imag, aweights=qwgts)
+                            else:
+                                cov_q_real=np.zeros((self.spw_Ndlys, self.spw_Ndlys))
+                                cov_q_imag=np.zeros((self.spw_Ndlys, self.spw_Ndlys))
+                            # broadcast in time
+
+                            cov_real = pwgts[:, None, None] * np.asarray([cov_real for t in range(self.Ntimes)])
+                            cov_imag = pwgts[:, None, None] * np.asarray([cov_imag for t in range(self.Ntimes)])
+                            cov_q_real = qwgts[:, None, None] * np.asarray([cov_q_real for t in range(self.Ntimes)])
+                            cov_q_imag = qwgts[:, None, None] * np.asarray([cov_q_imag for t in range(self.Ntimes)])
 
                         if not return_q:
                             if store_cov:
@@ -4822,7 +4846,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
                                     dset_labels[dset_idxs[1]], psname_ext)
         if time_avg:
-            uvp.average_spectra(time_avg=True)
+            if store_cov_diag:
+                err_field = cov_model + '_diag'
+            else:
+                err_field = None
+            uvp.average_spectra(time_avg=True, error_field=cov_model + '_diag')
 
         # write in transactional mode
         if verbose: print("Storing {}".format(psname))
