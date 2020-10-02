@@ -4699,7 +4699,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # trim dset LSTs
     if trim_dset_lsts:
         ds.trim_dset_lsts()
-
     # interleave times
     if interleave_times:
         if len(ds.dsets) not in [1, 2]:
@@ -4725,7 +4724,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
                 ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
                 # wgts is currently always None
-                ds.wgts.append(None)
+            ds.wgts.append(None)
         elif len(ds.dsets) == 2:
             Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
             Ntimes -= Ntimes % 2
@@ -4747,7 +4746,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             odd_flags = ds.dsets[1].flag_array[1::2]
             ds.dsets[1].flag_array[::2] = odd_flags
             ds.dsets[1].flag_array[1::2] = even_flags
-
         dset_pairs = [(0, 1)]
         dsets = ds.dsets
         dsets_std = ds.dsets_std
