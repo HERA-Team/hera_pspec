@@ -2211,8 +2211,13 @@ def test_pspec_run():
         os.remove("./out2.h5")
     uvd1 = copy.deepcopy(uvd)
     dnoise = np.random.randn(*uvd1.data_array.shape)
-    uvd1.data_array[::2, :, :, :] = 3. * dnoise[::2, :, :, :]
-    uvd1.data_array[1::2, :, :, :] = 2. * dnoise[::2, :, :, :]
+    Nbls = uvd1.Nbls
+    noise =  np.random.randn(uvd1.Ntimes//2, 1, uvd1.Nfreqs, uvd1.Npols)
+    # generate a data set that will have identical results for even/odd
+    # ps time-steps if the data is interleaved.
+    for tind in range(uvd1.Ntimes):
+        uvd1.data_array[tind::2*Nbls, :, :, :] = 3. * noise
+        uvd1.data_array[Nbls+tind::2*Nbls, :, :, :] = 2. * noise
     uvd1.flag_array[:] = False
     uvd1.nsample_array[:] = 1.
     uvd2 = copy.deepcopy(uvd1)
@@ -2224,10 +2229,8 @@ def test_pspec_run():
                              broadcast_dset_flags=True, time_thresh=0.3)
     psc =  container.PSpecContainer('./out3.h5')
     ps = psc.get_pspec('dset0_dset1')[0]
-    print(np.mean(ps.data_array[0][::2]))
-    print(np.mean(ps.data_array[0][1::2]))
     # all data should be equal if time interleaving was performed correctly.
-    nt.assert_true(np.isclose(np.mean(ps.data_array[0][::2]), np.mean(ps.data_array[0][1::2])))
+    nt.assert_true(np.all(np.isclose(ps.data_array[0][::2], ps.data_array[0][1::2])))
     # repeat feeding dsets_std and wgts
     if os.path.exists("./out2.h5"):
         os.remove("./out2.h5")

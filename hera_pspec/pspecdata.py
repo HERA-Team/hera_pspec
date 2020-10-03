@@ -4734,18 +4734,23 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[:Ntimes])
                 ds.dsets_std[1].select(times=np.unique(ds.dsets_std[1].time_array)[:Ntimes])
             # reshuffle the data in the second data set.
-            even_data = ds.dsets[1].data_array[::2]
-            odd_data = ds.dsets[1].data_array[1::2]
-            ds.dsets[1].data_array[::2] = odd_data
-            ds.dsets[1].data_array[1::2] = even_data
-            even_nsamples = ds.dsets[1].nsample_array[::2]
-            odd_nsamples = ds.dsets[1].nsample_array[1::2]
-            ds.dsets[1].nsample_array[::2] = odd_nsamples
-            ds.dsets[1].nsample_array[1::2] = even_nsamples
-            even_flags = ds.dsets[1].flag_array[::2]
-            odd_flags = ds.dsets[1].flag_array[1::2]
-            ds.dsets[1].flag_array[::2] = odd_flags
-            ds.dsets[1].flag_array[1::2] = even_flags
+            # get even / odd time-indices
+            Nbls = ds.dsets[0].Nbls
+            even_data = np.asarray([ds.dsets[1].data_array[tind::2*Nbls] for tind in range(Ntimes)])
+            odd_data = np.asarray([ds.dsets[1].data_array[Nbls+tind::2*Nbls] for tind in range(Ntimes)])
+            for tind in range(Ntimes):
+                ds.dsets[1].data_array[tind::2*Nbls] = odd_data[tind]
+                ds.dsets[1].data_array[Nbls+tind::2*Nbls] = even_data[tind]
+            even_flags = np.asarray([ds.dsets[1].flag_array[tind::2*Nbls] for tind in range(Ntimes)])
+            odd_flags = np.asarray([ds.dsets[1].flag_array[Nbls+tind::2*Nbls] for tind in range(Ntimes)])
+            for tind in range(Ntimes):
+                ds.dsets[1].flag_array[tind::2*Nbls] = odd_flags[tind]
+                ds.dsets[1].flag_array[Nbls+tind::2*Nbls] = even_flags[tind]
+            even_nsamples = np.asarray([ds.dsets[1].nsample_array[tind::2*Nbls] for tind in range(Ntimes)])
+            odd_nsamples = np.asarray([ds.dsets[1].nsample_array[Nbls+tind::2*Nbls] for tind in range(Ntimes)])
+            for tind in range(Ntimes):
+                ds.dsets[1].nsample_array[tind::2*Nbls] = odd_nsamples[tind]
+                ds.dsets[1].nsample_array[Nbls+tind::2*Nbls] = even_nsamples[tind]
         dset_pairs = [(0, 1)]
         dsets = ds.dsets
         dsets_std = ds.dsets_std
