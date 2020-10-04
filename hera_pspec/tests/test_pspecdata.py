@@ -2212,12 +2212,12 @@ def test_pspec_run():
     uvd1 = copy.deepcopy(uvd)
     dnoise = np.random.randn(*uvd1.data_array.shape)
     Nbls = uvd1.Nbls
-    noise =  np.random.randn(uvd1.Ntimes//2, 1, uvd1.Nfreqs, uvd1.Npols)
+    noise =  np.random.randn(uvd1.Nbls, 1, uvd1.Nfreqs, uvd1.Npols)
     # generate a data set that will have identical results for even/odd
     # ps time-steps if the data is interleaved.
-    for tind in range(uvd1.Ntimes):
-        uvd1.data_array[tind::2*Nbls, :, :, :] = 3. * noise
-        uvd1.data_array[Nbls+tind::2*Nbls, :, :, :] = 2. * noise
+    for tind in range(uvd1.Ntimes//2):
+        uvd1.data_array[2*tind*Nbls:(2*tind+1)*Nbls] = 3. * noise
+        uvd1.data_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = 2. * noise
     uvd1.flag_array[:] = False
     uvd1.nsample_array[:] = 1.
     uvd2 = copy.deepcopy(uvd1)
