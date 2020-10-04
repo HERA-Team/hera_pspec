@@ -4742,7 +4742,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 ds.dsets[1].data_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_data[tind]
                 ds.dsets[1].data_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_data[tind]
             even_flags = np.asarray([ds.dsets[1].flag_array[2*tind*Nbls:(2*tind+1)*Nbls] for tind in range(Ntimes//2)])
-            odd_flags = np.asarray([ds.dsets[1].flag_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] for tind in range(Ntimes)])
+            odd_flags = np.asarray([ds.dsets[1].flag_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] for tind in range(Ntimes//2)])
             for tind in range(Ntimes//2):
                 ds.dsets[1].flag_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_flags[tind]
                 ds.dsets[1].flag_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_flags[tind]
