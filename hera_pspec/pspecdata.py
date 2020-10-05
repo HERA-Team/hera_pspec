@@ -1498,133 +1498,135 @@ class PSpecData(object):
 
         return float(len(key1)) / output
 
-    def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
-        """
+def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
+    """
 
-        If exact_norm is False:
-        Construct an unnormalized bandpower, q_hat, from a given pair of
-        visibility vectors. Returns the following quantity:
+    If exact_norm is False:
+    Construct an unnormalized bandpower, q_hat, from a given pair of
+    visibility vectors. Returns the following quantity:
 
-          \hat{q}_a = (1/2) conj(x_1) R_1 Q^alt_a R_2 x_2
+      \hat{q}_a = (1/2) conj(x_1) R_1 Q^alt_a R_2 x_2
 
-        Note that the R matrix need not be set to C^-1. This is something that
-        is set by the user in the set_R method.
+    Note that the R matrix need not be set to C^-1. This is something that
+    is set by the user in the set_R method.
 
-        This is related to Equation 13 of arXiv:1502.06016. However, notice
-        that there is a Q^alt_a instead of Q_a. The latter is defined as
-        Q_a \equiv dC/dp_a. Since this is the derivative of the covariance
-        with respect to the power spectrum, it contains factors of the primary
-        beam etc. Q^alt_a strips away all of this, leaving only the barebones
-        job of taking a Fourier transform. See HERA memo #44 for details.
+    This is related to Equation 13 of arXiv:1502.06016. However, notice
+    that there is a Q^alt_a instead of Q_a. The latter is defined as
+    Q_a \equiv dC/dp_a. Since this is the derivative of the covariance
+    with respect to the power spectrum, it contains factors of the primary
+    beam etc. Q^alt_a strips away all of this, leaving only the barebones
+    job of taking a Fourier transform. See HERA memo #44 for details.
 
-        This function uses the state of self.data_weighting and self.taper
-        in constructing q_hat. See PSpecData.pspec for details.
+    This function uses the state of self.data_weighting and self.taper
+    in constructing q_hat. See PSpecData.pspec for details.
 
-        If exact_norm is True:
-        Takes beam factors into account (Eq. 14 in HERA memo #44)
+    If exact_norm is True:
+    Takes beam factors into account (Eq. 14 in HERA memo #44)
 
-        Parameters
-        ----------
-        key1, key2: tuples or lists of tuples
-            Tuples containing indices of dataset and baselines for the two
-            input datavectors for each power spectrum estimate.
-            q_a formed from key1, key2
-            If a list of tuples is provided, the baselines
-            in the list will be combined with inverse noise weights.
+    Parameters
+    ----------
+    key1, key2: tuples or lists of tuples
+        Tuples containing indices of dataset and baselines for the two
+        input datavectors for each power spectrum estimate.
+        q_a formed from key1, key2
+        If a list of tuples is provided, the baselines
+        in the list will be combined with inverse noise weights.
 
-        allow_fft : bool, optional
-            Whether to use a fast FFT summation trick to construct q_hat, or
-            a simpler brute-force matrix multiplication. The FFT method assumes
-            a delta-fn bin in delay space. It also only works if the number
-            of delay bins is equal to the number of frequencies. Default: False.
+    allow_fft : bool, optional
+        Whether to use a fast FFT summation trick to construct q_hat, or
+        a simpler brute-force matrix multiplication. The FFT method assumes
+        a delta-fn bin in delay space. It also only works if the number
+        of delay bins is equal to the number of frequencies. Default: False.
 
-        exact_norm: bool, optional
-            If True, beam and spectral window factors are taken
-            in the computation of Q_matrix (dC/dp = Q, and not Q_alt)
-            (HERA memo #44, Eq. 11). Q matrix, for each delay mode,
-            is weighted by the integral of beam over theta,phi.
+    exact_norm: bool, optional
+        If True, beam and spectral window factors are taken
+        in the computation of Q_matrix (dC/dp = Q, and not Q_alt)
+        (HERA memo #44, Eq. 11). Q matrix, for each delay mode,
+        is weighted by the integral of beam over theta,phi.
 
-        pol: str/int/bool, optional
-            Used only if exact_norm is True. This argument is passed to get_integral_beam
-            to extract the requested beam polarization. Default is the first
-            polarization passed to pspec.
+    pol: str/int/bool, optional
+        Used only if exact_norm is True. This argument is passed to get_integral_beam
+        to extract the requested beam polarization. Default is the first
+        polarization passed to pspec.
 
-        Returns
-        -------
-        q_hat : array_like
-            Unnormalized/normalized bandpowers
-        """
-        Rx1 = np.zeros((self.Ntimes, self.spw_Nfreqs),
-                            dtype=complex)
-        Rx2 = np.zeros_like(Rx1)
-        # Calculate R x_1
-        if not isinstance(key1, list):
-            key1 = [key1]
-        if not isinstance(key2, list):
-            key2 = [key2]
-        for _key in key1:
-            tindep = self._time_independent_weights[self.parse_blkey(_key)]
-            x_wf = self.x(_key, include_extension=True)
-            if tindep:
-                rmat = self.R(_key, 0)
-                Rx1 += (rmat @ x_wf).T
-            else:
-                rmat = self.R(_key)
-                Rx1 += np.asarray([rmat[m] @ x_wf[:,m] for m in range(self.Ntimes)])
+    Returns
+    -------
+    q_hat : array_like
+        Unnormalized/normalized bandpowers
+    """
+    Rx1 = np.zeros((self.Ntimes, self.spw_Nfreqs),
+                        dtype=complex)
+    Rx2 = np.zeros_like(Rx1)
+    # Calculate R x_1
+    if not isinstance(key1, list):
+        key1 = [key1]
+    if not isinstance(key2, list):
+        key2 = [key2]
+    for _key in key1:
+        tindep = self._time_independent_weights[self.parse_blkey(_key)]
+        unflagged_ind = self._unflagged_time_integration[self.parse_blkey(_key)]
+        x_wf = self.x(_key, include_extension=True)
+        if tindep:
+            rmat = self.R(_key, unflagged_ind)
+            Rx1 += (rmat @ x_wf).T
+        else:
+            rmat = self.R(_key)
+            Rx1 += np.asarray([rmat[m] @ x_wf[:,m] for m in range(self.Ntimes)])
 
-        # Calculate R x_2
-        for _key in key2:
-            tindep = self._time_independent_weights[self.parse_blkey(_key)]
-            x_wf = self.x(_key, include_extension=True)
-            if tindep:
-                rmat = self.R(_key, 0)
-                Rx2 += (rmat @ x_wf).T
-            else:
-                rmat = self.R(_key)
-                Rx2 += np.asarray([rmat[m] @ x_wf[:, m] for m in range(self.Ntimes)])
+    # Calculate R x_2
+    for _key in key2:
+        tindep = self._time_independent_weights[self.parse_blkey(_key)]
+        unflagged_ind = self._unflagged_time_integration[self.parse_blkey(_key)]
+        x_wf = self.x(_key, include_extension=True)
+        if tindep:
+            rmat = self.R(_key, unflagged_ind)
+            Rx2 += (rmat @ x_wf).T
+        else:
+            rmat = self.R(_key)
+            Rx2 += np.asarray([rmat[m] @ x_wf[:, m] for m in range(self.Ntimes)])
 
-        # The set of operations for exact_norm == True are drawn from Equations
-        # 11(a) and 11(b) from HERA memo #44. We are incorporating the
-        # multiplicatives to the exponentials, and sticking to quantities in
-        # their physical units.
+    # The set of operations for exact_norm == True are drawn from Equations
+    # 11(a) and 11(b) from HERA memo #44. We are incorporating the
+    # multiplicatives to the exponentials, and sticking to quantities in
+    # their physical units.
 
-        # exact norm can be used with use_fft.
+    # exact norm can be used with use_fft.
+    if exact_norm:
+        del_tau = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
+        integral_beam = self.get_integral_beam(pol) #Integral of beam in Eq.11(a) (HERA memo #44)
+        qnorm = del_tau * integral_beam
+    else:
+        qnorm = 1.
+    if not allow_fft:
+        q  = []
+        for i in range(self.spw_Ndlys):
+            # Ideally, del_tau and integral_beam should be part of get_Q. We use them here to
+            # avoid their repeated computation for each delay mode.
+            Q =  self.get_Q_alt(i) * qnorm
+            QRx2 = np.dot(Q, Rx2.T).T
+
+            # Square and sum over columns
+            #qi = 0.5 * np.einsum('i...,i...->...', Rx1.conj(), QRx2)
+            qi =  0.5 * np.sum(Rx1.conj() * QRx2, axis=1)
+            q.append(qi)
+
+        q = np.asarray(q) #(Ndlys X Ntime)
+        return q
+
+    # use FFT if possible and allowed
+    elif allow_fft and (self.spw_Nfreqs  == self.spw_Ndlys - np.sum(self.filter_extension)):
+        _Rx1 = np.fft.fft(Rx1, axis=1)
+        _Rx2 = np.fft.fft(Rx2, axis=1)
         if exact_norm:
-            del_tau = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
-            integral_beam = self.get_integral_beam(pol) #Integral of beam in Eq.11(a) (HERA memo #44)
-            qnorm = del_tau * integral_beam
-        else:
-            qnorm = 1.
-        if not allow_fft:
-            q  = []
-            for i in range(self.spw_Ndlys):
-                # Ideally, del_tau and integral_beam should be part of get_Q. We use them here to
-                # avoid their repeated computation for each delay mode.
-                Q =  self.get_Q_alt(i) * qnorm
-                QRx2 = np.dot(Q, Rx2.T).T
+            qnorm = np.diag(np.sqrt(qnorm))
+        #We are applying the exact norm after the R matrix consistent with above.
+        #We may want to think if the order should be reversed but I doubt it
+        #matters much.
+        return (0.5 * np.fft.fftshift(_Rx1 * qnorm, axes=1).conj() \
+                   * np.fft.fftshift(_Rx2 * qnorm, axes=1)).T
 
-                # Square and sum over columns
-                #qi = 0.5 * np.einsum('i...,i...->...', Rx1.conj(), QRx2)
-                qi =  0.5 * np.sum(Rx1.conj() * QRx2, axis=1)
-                q.append(qi)
-
-            q = np.asarray(q) #(Ndlys X Ntime)
-            return q
-
-        # use FFT if possible and allowed
-        elif allow_fft and (self.spw_Nfreqs  == self.spw_Ndlys - np.sum(self.filter_extension)):
-            _Rx1 = np.fft.fft(Rx1, axis=1)
-            _Rx2 = np.fft.fft(Rx2, axis=1)
-            if exact_norm:
-                qnorm = np.diag(np.sqrt(qnorm))
-            #We are applying the exact norm after the R matrix consistent with above.
-            #We may want to think if the order should be reversed but I doubt it
-            #matters much.
-            return (0.5 * np.fft.fftshift(_Rx1 * qnorm, axes=1).conj() \
-                       * np.fft.fftshift(_Rx2 * qnorm, axes=1)).T
-
-        else:
-            raise ValueError("spw_Nfreqs + extensions must equal spw_Ndlys if using fft.")
+    else:
+        raise ValueError("spw_Nfreqs + extensions must equal spw_Ndlys if using fft.")
 
     def _get_G(self, key1, key2, time_index, exact_norm=False, pol=False,
                allow_fft=False):
@@ -4370,7 +4372,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         degrees.
 
     bl_error_tol : float, optional
-        Baseline vector error tolerance when constructing redundant groups. 
+        Baseline vector error tolerance when constructing redundant groups.
         Default: 1.0.
 
     store_window : bool
@@ -4732,7 +4734,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       exclude_permutations=exclude_permutations,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
-                                      bl_deg_range=bl_deg_range, 
+                                      bl_deg_range=bl_deg_range,
                                       bl_tol=bl_error_tol)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
