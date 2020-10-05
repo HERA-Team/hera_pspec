@@ -493,7 +493,7 @@ class PSpecContainer(object):
         except:
             pass
 
-def combine_pspec_containers(psc_list, group, output, time_avg=False, error_field=None,
+def combine_pspec_containers(psc_list, group, output, time_avg=False, error_field=None, grp_index=0,
                              overwrite=False, run_check=True):
     """
     Combine power spectra with the same group name stored across multiple
@@ -521,12 +521,12 @@ def combine_pspec_containers(psc_list, group, output, time_avg=False, error_fiel
     containers = []
     for psf in psc_list:
         if isinstance(psf, str):
-            containers.append(PSpecContainer(psf)
+            containers.append(PSpecContainer(psf))
         elif insinstance(psf, PSpecContainer):
             containers.append(psf)
         else:
             raise ValueError("psc_list must be a list of containers or a list of strings!")
-    pspecs = [c.get_pspec(group) for c in containers]
+    pspecs = [c.get_pspec(group)[grp_index] for c in containers]
     combined = pspecs[0]
     for ps in pspecs[1:]:
         combined += ps
@@ -671,9 +671,10 @@ def combine_pspec_containers_argparser():
     a = argparse.ArgumentParser(
         description="argument parser for extracting and combining power spectra in pspec containers.")
     a.add_argument("pspec_containers", type=str, nargs="+", help="list of filepaths to pspec containers to combine.")
-    a.add_argument("intput", type=str, help="Name of input file (used to determine if combining will run).")
+    a.add_argument("input", type=str, help="Name of input file (used to determine if combining will run).")
     a.add_argument("output", type=str, help="Name of output file.")
     a.add_argument("--group", type=str, default='dset0_dset1', help="name of group to extract across multiple containers.")
     a.add_argument("--time_avg", default=False, action="store_true", help="if true, take time average of combined power spectra.")
     a.add_argument("--error_field", default=None, type=str, help="error field to store in stats array.")
     a.add_argument("--clobber", default=False, action="store_true", help="overwrite existing output.")
+    return a
