@@ -260,6 +260,7 @@ class PSpecData(object):
 
         # clear time independent weights.
         self._time_independent_weights = {}
+        self._unflagged_time_integration = {} # stores smallest unflagged time integration.
         # Check weights. If they are time independent, then set _time_independent_weights = True.
         for dind, dset in enumerate(self.dsets):
             bls_conj = []
@@ -285,14 +286,24 @@ class PSpecData(object):
                     blc = blc[:2] + (bl[-1][::-1],)
                 blkey = (dind, bl)
                 blkeyc = (dind, blc)
-                wwf = self.w(blkey)
-                self._time_independent_weights[blkey] = np.all([np.all(wrow == wrow[0]) for wrow in wwf])
+                wwf = self.w(blkey).T
+                template = None
+                for rownum, wrow in enumerate(wwf):
+                    if not np.all(np.isclose(wrow, 0.0)):
+                        template = wrow
+                        break
+                if template is None:
+                    template = np.zeros_like(wrow)
+                self._time_independent_weights[blkey] = np.all([np.all(np.isclose(wrow, template)) or np.all(np.isclose(wrow, 0.0)) for wrow in wwf])
                 self._time_independent_weights[blkeyc] = self._time_independent_weights[blkey]
+                self._unflagged_time_integration[blkey] = rownum # smallest unflagged integration
+                self._unflagged_time_integration[blkeyc] = rownum
                 if len(bl) == 2:
                     pol = uvutils.polnum2str(uvutils.polstr2num(dset.get_pols()[0], x_orientation=dset.x_orientation))
                     self._time_independent_weights[(dind, bl + (pol,))] = self._time_independent_weights[blkey]
+                    self._unflagged_time_integration[(dind, bl + (pol,))] = rownum
                     self._time_independent_weights[(dind, blc + (pol[::-1],))] = self._time_independent_weights[blkey]
-
+                    self._unflagged_time_integration[(dind, blc + (pol[::-1],))] = rownum
 
 
     def __str__(self):
