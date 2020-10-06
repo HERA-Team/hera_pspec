@@ -521,7 +521,7 @@ def combine_pspec_containers(psc_list, group, output, time_avg=False, error_fiel
     containers = []
     for psf in psc_list:
         if isinstance(psf, str):
-            containers.append(PSpecContainer(psf))
+            containers.append(PSpecContainer(psf, keep_open=False))
         elif insinstance(psf, PSpecContainer):
             containers.append(psf)
         else:
