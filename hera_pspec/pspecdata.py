@@ -12,12 +12,14 @@ import glob
 import warnings
 import json
 import uvtools.dspec as dspec
+
 # This is a list of weights that will depend on baseline.
 # If data_weighting is in this list, G and H will be hashed per
 # baseline pair.
 R_PARAM_WEIGHTINGS = ['dayenu']
 
 from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
+from . import conversions.units as fundamental_constants
 
 class PSpecData(object):
 
@@ -3341,7 +3343,7 @@ class PSpecData(object):
               input_data_weight='identity', norm='I', taper='none', exclude_flagged_edge_channels=False,
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True, Nspws=1,
               baseline_tol=1.0, store_cov=False, store_cov_diag=False, return_q=False, store_window=True, verbose=True,
-              filter_extensions=None, exact_norm=False, history='', r_params=None,
+              filter_extensions=None, exact_norm=False, history='', r_params=None, standoff=None, suppression_factor=None,
               cov_model='empirical', r_cov_model='empirical', known_cov=None,allow_fft=False):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
@@ -3837,11 +3839,29 @@ class PSpecData(object):
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
                         if not key1 in r_params:
-                            raise ValueError("No r_param dictionary supplied"
-                                             " for baseline %s"%(str(key1)))
+                            if standoff is None or suppression_factor is None:
+                                raise ValueError("No r_param dictionary supplied"
+                                                 " for baseline %s"%(str(key1)))
+                            else:
+                                antpos, ants = dsets[0].get_ENU_antpos()
+                                p1 = antpos[np.where(ants==blp[0][0])[0][0]]
+                                p2 = antpos[np.where(ants==blp[0][1])[0][0]]
+                                bl_dly = np.linalg.norm(p2 - p1) / fundamental_constants.C
+                                r_params[key1] = {'filter_half_widths':[standoff * 1e-9 + bl_dly],
+                                                  'filter_centers':[0.0],
+                                                  'filter_factors':[suppression_factor]}
                         if not key2 in r_params:
-                            raise ValueError("No r_param dictionary supplied"
-                                             " for baseline %s"%(str(key2)))
+                            if standoff is None or suppression_factor is None:
+                                raise ValueError("No r_param dictionary supplied"
+                                                 " for baseline %s"%(str(key2)))
+                            else:
+                                antpos, ants = dsets[1].get_ENU_antpos()
+                                p1 = antpos[np.where(ants==blp[1][0])[0][0]]
+                                p2 = antpos[np.where(ants==blp[1][1])[0][0]]
+                                bl_dly = np.linalg.norm(p2 - p1) / fundamental_constants.C
+                                r_params[key2] = {'filter_half_widths':[standoff * 1e-9 + bl_dly],
+                                                  'filter_centers':[0.0],
+                                                  'filter_factors':[suppression_factor]}
                         self.set_r_param(key1, r_params[key1])
                         self.set_r_param(key2, r_params[key2])
 
@@ -4092,7 +4112,7 @@ class PSpecData(object):
                       "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20,
                                 filename1, label1, cal1, dset1.history, '-'*20,
                                 filename2, label2, cal2, dset2.history, '-'*20)
-        uvp.r_params = uvputils.compress_r_params(r_params)
+        uvp.r_params = uvputils.compress_r_params(self.r_params)
         uvp.taper = taper
         if not return_q:
             uvp.norm = norm
@@ -4330,7 +4350,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), exclude_flagged_edge_channels=False, Nspws=1,
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
-              allow_fft=False, time_avg=False, vis_units="UNCALIB",
+              allow_fft=False, time_avg=False, vis_units="UNCALIB", standoff=0.0, suppression_factor=1e-9,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
@@ -4914,8 +4934,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
                        store_cov=store_cov, store_cov_diag=store_cov_diag, input_data_weight=input_data_weight,
                        exact_norm=exact_norm, sampling=sampling, allow_fft=allow_fft,
-                       return_q=return_q, cov_model=cov_model, known_cov=known_cov,
-                       exclude_flagged_edge_channels=exclude_flagged_edge_channels,
+                       return_q=return_q, cov_model=cov_model, known_cov=known_cov, suppression_factor=suppression_factor,
+                       exclude_flagged_edge_channels=exclude_flagged_edge_channels, standoff=standoff,
                        norm=norm, taper=taper, history=history, verbose=verbose, Nspws=Nspws,
                        filter_extensions=filter_extensions, store_window=store_window)
 
@@ -4997,6 +5017,8 @@ def get_pspec_run_argparser():
     a.add_argument("--vis_units", default="UNCALIB", help="override vis_units", type=str)
     a.add_argument("--Nspws", default=1, help="number of spw windows to use. Overriden by spw_ranges.", type=int)
     a.add_argument("--exclude_flagged_edge_channels", default=False, action="store_true", help="ignore entirely flagged edge channels. overriden by spw_ranges.")
+    a.add_argument("--standoff", default=0.0, help="number of ns to use as a standoff if input_data_weight=='dayenu'.", type=float)
+    a.add_argument("--suppression_factor", default=1e-9, help="suppression factor if input_data_weight=='dayenu'.", type=float)
     return a
 
 
