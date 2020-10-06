@@ -4968,6 +4968,8 @@ def get_pspec_run_argparser():
     a.add_argument("--time_avg", default=False, action='store_true', help='average power spectra in time.')
     a.add_argument("--file_type", default='miriad', help="filetype to load", type=str)
     a.add_argument("--vis_units", default="UNCALIB", help="override vis_units", type=str)
+    a.add_argument("--Nspws", default=1, help="number of spw windows to use. Overriden by spw_ranges.", type=int)
+    a.add_argument("--exclude_flagged_edge_channels", default=False, action="store_true", help="ignore entirely flagged edge channels. overriden by spw_ranges.")
     return a
 
 
