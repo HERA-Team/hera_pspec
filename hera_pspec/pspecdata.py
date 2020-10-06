@@ -3324,8 +3324,8 @@ class PSpecData(object):
         return valid
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
-              input_data_weight='identity', norm='I', taper='none',
-              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
+              input_data_weight='identity', norm='I', taper='none', exclude_flagged_edge_channels=False,
+              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True, Nspws=1,
               baseline_tol=1.0, store_cov=False, store_cov_diag=False, return_q=False, store_window=True, verbose=True,
               filter_extensions=None, exact_norm=False, history='', r_params=None,
               cov_model='empirical', r_cov_model='empirical', known_cov=None,allow_fft=False):
@@ -3601,7 +3601,28 @@ class PSpecData(object):
 
         # configure spectral window selections
         if spw_ranges is None:
-            spw_ranges = [(0, self.Nfreqs)]
+            if exclude_flagged_edge_channels:
+                # find max and min unflagged channels.
+                unflagged_channels = np.zeros(self.dsets[0].Nfreqs, dtype=bool)
+                for dsnum in range(len(self.dsets)):
+                    unflagged_channels = unflagged_channels | np.any(np.any(~self.dsets[dsnum].flag_array[:, 0, :, :].squeeze(), axis=0), axis=1)
+                if np.any(unflagged_channels):
+                    min_chan = np.where(unflagged_channels)[0].min()
+                    max_chan = np.where(unflagged_channels)[0].max() + 1
+                else:
+                    min_chan = 0
+                    max_chan = self.Nfreqs
+            else:
+                min_chan = 0
+                max_chan = self.Nfreqs
+            # now divide up range between min and max chans
+            # into Nspw windows
+            spw_width = (max_chan - min_chan) // Nspws
+            spw_ranges = [[min_chan + spw_width * m, min_chan + spw_width * (m+1)] for m in range(Nspws)]
+            # extend final spw to include max chan
+            spw_ranges[-1][-1] = max_chan
+            spw_ranges = [tuple(spw) for spw in spw_ranges]
+
         if isinstance(spw_ranges, tuple):
             spw_ranges = [spw_ranges,]
 
@@ -4286,7 +4307,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
               input_data_weight='identity', norm='I', taper='none', sampling=False,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
-              Nblps_per_group=None, bl_len_range=(0, 1e10),
+              Nblps_per_group=None, bl_len_range=(0, 1e10), exclude_flagged_edge_channels=False, Nspws=1,
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
               allow_fft=False, time_avg=False, vis_units="UNCALIB",
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
@@ -4401,6 +4422,15 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     bl_len_range : len-2 float tuple
         A tuple containing the minimum and maximum baseline length to use
         in utils.calc_blpair_reds call. Only used if blpairs is None.
+
+    exclude_flagged_edge_channels : bool, optional
+        If True, set spw_ranges to exclude edge channels in the data that are entirely flagged.
+        overridden by spw_ranges.
+
+    Nspws : int, optional
+        If spw_ranges is not provided, split up frequency band of data into Nspw sub-ranges
+        if exclude_flagged_edge_channels is True, these ranges are limited to within the
+        entirely flagged edges.
 
     bl_deg_range : len-2 float tuple
         A tuple containing the min and max baseline angle (ENU frame in degrees)
@@ -4858,7 +4888,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                        store_cov=store_cov, store_cov_diag=store_cov_diag, input_data_weight=input_data_weight,
                        exact_norm=exact_norm, sampling=sampling, allow_fft=allow_fft,
                        return_q=return_q, cov_model=cov_model, known_cov=known_cov,
-                       norm=norm, taper=taper, history=history, verbose=verbose,
+                       exclude_flagged_edge_channels=exclude_flagged_edge_channels,
+                       norm=norm, taper=taper, history=history, verbose=verbose, Nspws=Nspws,
                        filter_extensions=filter_extensions, store_window=store_window)
 
         # Store output
