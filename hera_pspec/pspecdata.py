@@ -3946,10 +3946,16 @@ class PSpecData(object):
                     wgts2 = self.w(key2).T
 
                     # get avg of nsample across frequency axis, weighted by wgts
+                    # we may want to use the total integration time, rather then the average.
                     nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, slice(*self.get_spw())] * wgts1, axis=1) \
                              / np.sum(wgts1, axis=1).clip(1, np.inf)
                     nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, slice(*self.get_spw())] * wgts2, axis=1) \
                              / np.sum(wgts2, axis=1).clip(1, np.inf)
+
+                    # if the sum of wgts is zero, then set nsamps to zero!
+                    nsamp1[np.isclose(np.sum(wgts1, axis=1), 0.)] = 0.
+                    nsamp2[np.isclose(np.sum(wgts2, axis=1), 0.)] = 0.
+
 
                     # get integ1
                     blts1 = dset1.antpair2ind(bl1, ordered=False)
@@ -4093,8 +4099,9 @@ class PSpecData(object):
         uvp.data_array = data_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
+        # set nsamples = 0 where we didn't take data.
         uvp.nsample_array = dict(
-                        [ (k, np.ones_like(uvp.integration_array[k], np.float))
+                        [ (k, (~np.isclose(uvp.integration_array[k], 0.0)).astype(float))
                          for k in uvp.integration_array.keys() ] )
 
         if store_cov:
