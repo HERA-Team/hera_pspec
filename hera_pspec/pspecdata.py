@@ -1,5 +1,5 @@
 import numpy as np
-from pyuvdata import UVData, UVCal
+from pyuvdata import UVData, UVCal, UVFlag
 import copy, operator, itertools, sys
 from collections import OrderedDict as odict
 import hera_cal as hc
@@ -103,7 +103,7 @@ class PSpecData(object):
         self.cov_model = cov_model
         self.r_cov_model = cov_model
 
-    def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True):
+    def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True, external_flags=None):
         """
         Add a dataset to the collection in this PSpecData object.
 
