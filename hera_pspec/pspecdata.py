@@ -4751,6 +4751,22 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             for tind in range(Ntimes//2):
                 ds.dsets[1].nsample_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_nsamples[tind]
                 ds.dsets[1].nsample_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_nsamples[tind]
+            if dsets_std[1] is not None:
+                even_data = np.asarray([ds.dsets_std[1].data_array[2*tind*Nbls:(2*tind+1)*Nbls] for tind in range(Ntimes//2)])
+                odd_data = np.asarray([ds.dsets_std[1].data_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] for tind in range(Ntimes//2)])
+                for tind in range(0, Ntimes//2):
+                    ds.dsets_std[1].data_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_data[tind]
+                    ds.dsets_std[1].data_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_data[tind]
+                even_flags = np.asarray([ds.dsets_std[1].flag_array[2*tind*Nbls:(2*tind+1)*Nbls] for tind in range(Ntimes//2)])
+                odd_flags = np.asarray([ds.dsets_std[1].flag_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] for tind in range(Ntimes//2)])
+                for tind in range(Ntimes//2):
+                    ds.dsets_std[1].flag_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_flags[tind]
+                    ds.dsets_std[1].flag_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_flags[tind]
+                even_nsamples = np.asarray([ds.dsets_std[1].nsample_array[2*tind*Nbls:(2*tind+1)*Nbls] for tind in range(Ntimes//2)])
+                odd_nsamples = np.asarray([ds.dsets_std[1].nsample_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] for tind in range(Ntimes//2)])
+                for tind in range(Ntimes//2):
+                    ds.dsets_std[1].nsample_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_nsamples[tind]
+                    ds.dsets_std[1].nsample_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_nsamples[tind]
         dset_pairs = [(0, 1)]
         dsets = ds.dsets
         dsets_std = ds.dsets_std
