@@ -22,7 +22,7 @@ from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uv
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
-                 beam=None, cals=None, cal_flag=True,
+                 beam=None, cals=None, cal_flag=True, external_flags=None,
                  cov_model='empirical'):
         """
         Object to store multiple sets of UVData visibilities and perform
@@ -96,7 +96,7 @@ class PSpecData(object):
         # Store the input UVData objects if specified
         self._time_independent_weights = {}
         if len(dsets) > 0:
-            self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag)
+            self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag, external_flags=external_flags)
 
         # Store a primary beam
         self.primary_beam = beam
@@ -173,9 +173,11 @@ class PSpecData(object):
         if isinstance(labels, str): labels = [labels,]
         if isinstance(dsets_std, UVData): dsets_std = [dsets_std,]
         if isinstance(cals, UVCal): cals = [cals,]
+        if isinstance(external_flags, UVFlag): external_flags = [external_flag for m in range(len(dsets))]
         if wgts is None: wgts = [wgts,]
         if dsets_std is None: dsets_std = [dsets_std for m in range(len(dsets))]
         if cals is None: cals = [cals for m in range(len(dsets))]
+        if external_flags is None: external_flags = [external_flags for m in range(len(dsets))]
         if isinstance(dsets, tuple): dsets = list(dsets)
         if isinstance(wgts, tuple): wgts = list(wgts)
         if isinstance(dsets_std, tuple): dsets_std = list(dsets_std)
@@ -194,6 +196,8 @@ class PSpecData(object):
             "The dsets and dsets_std lists must have equal length"
         assert len(cals) == len(dsets), \
             "The dsets and cals lists must have equal length"
+        assert len(external_flags) == len(dsets), \
+            "The dsets and external flags lists must have equal length"
         if labels is not None:
             assert len(dsets) == len(labels), \
                 "If labels are specified, the dsets and labels lists " \
@@ -221,7 +225,7 @@ class PSpecData(object):
                     for i in range(len(self.dsets), len(dsets) + len(self.dsets))]
 
         # Apply calibration if provided
-        for dset, dset_std, cal in zip(dsets, dsets_std, cals):
+        for dset, dset_std, cal, uvf in zip(dsets, dsets_std, cals, external_flags):
             if cal is not None:
                 if dset is not None:
                     uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
@@ -229,6 +233,16 @@ class PSpecData(object):
                 if dset_std is not None:
                     uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
                     dset_std.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
+            if uvf is not None:
+                # apply external flags.
+                if uvf.type == 'waterfall':
+                    uvf.to_baseline(dset, force_pol=True)
+                if dset is not None:
+                    dset.data_array = dset.data_array | uvf.data_array
+                if dset_std is not None:
+                    dset_std.data_array = dset_std.data_array | uvf.data_array
+                # collapse uvf again to prevent memory leak.
+                uvf.to_waterfall(method='and', keep_pol=False)
 
         # Append to list
         self.dsets += dsets
@@ -4318,7 +4332,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
               allow_fft=False, time_avg=False, vis_units="UNCALIB",
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
-              trim_dset_lsts=False, broadcast_dset_flags=True,
+              trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical'):
@@ -4708,6 +4722,12 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                       lvl=1, verbose=verbose)
         err_msg = "cals must be a list of UVCal, filepaths, or list of filepaths"
         assert np.all([isinstance(c, UVCal) for c in cals]), err_msg
+
+    if external_flags is not None:
+        if not isinstance(external_flags, (list, tuple)):
+            external_flags = [external_flags for d in dsets]
+        if not isinstance(external_flags[0], UVFlag):
+            external_flags = [UVFlag(extf) for extf in external_flags]
 
     # configure polarization
     if pol_pairs is None:
