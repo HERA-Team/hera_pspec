@@ -18,8 +18,7 @@ import uvtools.dspec as dspec
 # baseline pair.
 R_PARAM_WEIGHTINGS = ['dayenu']
 
-from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
-from . import conversions.units as fundamental_constants
+from . import uvpspec, utils, version, pspecbeam, conversions, container, uvpspec_utils as uvputils
 
 class PSpecData(object):
 
@@ -3557,6 +3556,8 @@ class PSpecData(object):
             blpairs = [ [(A, D), (B, E)], (C, F)]
 
         """
+        if r_params is None:
+            r_params = {}
         # set taper and data weighting
         self.set_taper(taper)
         self.set_symmetric_taper(symmetric_taper)
@@ -3843,27 +3844,32 @@ class PSpecData(object):
                                 raise ValueError("No r_param dictionary supplied"
                                                  " for baseline %s"%(str(key1)))
                             else:
-                                antpos, ants = dsets[0].get_ENU_antpos()
+                                antpos, ants = self.dsets[dsets[0]].get_ENU_antpos()
                                 p1 = antpos[np.where(ants==blp[0][0])[0][0]]
                                 p2 = antpos[np.where(ants==blp[0][1])[0][0]]
-                                bl_dly = np.linalg.norm(p2 - p1) / fundamental_constants.C
-                                r_params[key1] = {'filter_half_widths':[standoff * 1e-9 + bl_dly],
+                                bl_dly = np.linalg.norm(p2 - p1) / conversions.units.c
+                                rp1 = {'filter_half_widths':[standoff * 1e-9 + bl_dly],
                                                   'filter_centers':[0.0],
                                                   'filter_factors':[suppression_factor]}
+                        else:
+                            rp1 = r_params[key1]
                         if not key2 in r_params:
                             if standoff is None or suppression_factor is None:
                                 raise ValueError("No r_param dictionary supplied"
                                                  " for baseline %s"%(str(key2)))
                             else:
-                                antpos, ants = dsets[1].get_ENU_antpos()
+                                antpos, ants = self.dsets[dsets[1]].get_ENU_antpos()
                                 p1 = antpos[np.where(ants==blp[1][0])[0][0]]
                                 p2 = antpos[np.where(ants==blp[1][1])[0][0]]
-                                bl_dly = np.linalg.norm(p2 - p1) / fundamental_constants.C
-                                r_params[key2] = {'filter_half_widths':[standoff * 1e-9 + bl_dly],
+                                bl_dly = np.linalg.norm(p2 - p1) / conversions.units.c
+                                rp2 = {'filter_half_widths':[standoff * 1e-9 + bl_dly],
                                                   'filter_centers':[0.0],
                                                   'filter_factors':[suppression_factor]}
-                        self.set_r_param(key1, r_params[key1])
-                        self.set_r_param(key2, r_params[key2])
+                        else:
+                            rp1 = r_params[key2]
+
+                        self.set_r_param(key1, rp1)
+                        self.set_r_param(key2, rp2)
 
                     if verbose: print("  Building G...")
                     Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol, allow_fft=allow_fft)
