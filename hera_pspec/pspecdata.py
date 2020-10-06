@@ -1263,7 +1263,7 @@ class PSpecData(object):
                 rmat = rmat.T
                 if self.symmetric_taper:
                     sqrtT = np.sqrt(myTaper)
-                    rmat = np.transpose(sqrtT[:, None] * rmat * sqrtT[None, :])
+                    rmat = np.transpose(sqrtT[None, :] * rmat * sqrtT[None, :])
                 else:
                     rmat = np.transpose(myTaper[None, :] * rmat)
                 self._R[Rkey] = rmat
@@ -1310,8 +1310,8 @@ class PSpecData(object):
             self.symmetric_taper = False
         assert isinstance(filter_extension, (list, tuple)), "filter_extension must a tuple or list"
         assert len(filter_extension) == 2, "filter extension must be length 2"
-        assert isinstance(filter_extension[0], int) and\
-               isinstance(filter_extension[1], int) and \
+        assert isinstance(filter_extension[0], (int, np.integer)) and\
+               isinstance(filter_extension[1], (int, np.integer)) and \
                filter_extension[0] >= 0 and\
                filter_extension[1] >=0, "filter extension must contain only positive integers"
         filter_extension=list(filter_extension)
@@ -3616,22 +3616,22 @@ class PSpecData(object):
         # validate bl-pair redundancy
         validate_blpairs(bl_pairs, dset1, dset2, baseline_tol=baseline_tol)
 
-        # configure spectral window selections
-        if spw_ranges is None:
-            if exclude_flagged_edge_channels:
-                # find max and min unflagged channels.
-                unflagged_channels = np.zeros(self.dsets[0].Nfreqs, dtype=bool)
-                for dsnum in range(len(self.dsets)):
-                    unflagged_channels = unflagged_channels | np.any(np.any(~self.dsets[dsnum].flag_array[:, 0, :, :].squeeze(), axis=0), axis=1)
-                if np.any(unflagged_channels):
-                    min_chan = np.where(unflagged_channels)[0].min()
-                    max_chan = np.where(unflagged_channels)[0].max() + 1
-                else:
-                    min_chan = 0
-                    max_chan = self.Nfreqs
+        if exclude_flagged_edge_channels:
+            # find max and min unflagged channels.
+            unflagged_channels = np.zeros(self.dsets[0].Nfreqs, dtype=bool)
+            for dsnum in range(len(self.dsets)):
+                unflagged_channels = unflagged_channels | np.any(np.any(~self.dsets[dsnum].flag_array[:, 0, :, :].squeeze(), axis=0), axis=1)
+            if np.any(unflagged_channels):
+                min_chan = np.where(unflagged_channels)[0].min()
+                max_chan = np.where(unflagged_channels)[0].max() + 1
             else:
                 min_chan = 0
                 max_chan = self.Nfreqs
+        else:
+            min_chan = 0
+            max_chan = self.Nfreqs
+        # configure spectral window selections
+        if spw_ranges is None:
             # now divide up range between min and max chans
             # into Nspw windows
             spw_width = (max_chan - min_chan) // Nspws
@@ -3648,6 +3648,13 @@ class PSpecData(object):
         # convert to list if only a tuple was given
         if isinstance(filter_extensions, tuple):
             filter_extensions = [filter_extensions,]
+        # truncate filter extensions to only extend to max_chan and min_chan.
+        for spw in range(len(spw_ranges)):
+            fx = list(filter_extensions[spw])
+            fx[0] = np.min([spw_ranges[spw][0] - min_chan, filter_extensions[spw][0]])
+            fx[1] = np.min([max_chan - spw_ranges[spw][1], filter_extensions[spw][1]])
+            filter_extensions[spw] = tuple(fx)
+
 
         assert len(spw_ranges) == len(filter_extensions), "must provide same number of spw_ranges as filter_extensions"
 
