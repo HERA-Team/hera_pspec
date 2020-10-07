@@ -1365,6 +1365,9 @@ class PSpecData(object):
                 Absence of r_params dictionary will result in an error!
         """
         key = (self.data_weighting,) + key
+        # make sure that the key doesn't use numpy integers.
+        # numpy integers break json.
+        key = (key[0], key[1], int(key[2]), int(key[3]), key[4])
         self.r_params[key] = r_params
 
     def set_taper(self, taper):
@@ -3869,10 +3872,10 @@ class PSpecData(object):
                                 antpos, ants = self.dsets[dsets[0]].get_ENU_antpos()
                                 p1 = antpos[np.where(ants==blp[0][0])[0][0]]
                                 p2 = antpos[np.where(ants==blp[0][1])[0][0]]
-                                bl_dly = np.linalg.norm(p2 - p1) / conversions.units.c
+                                bl_dly = float(np.linalg.norm(p2 - p1) / conversions.units.c)
                                 rp1 = {'filter_half_widths':[standoff * 1e-9 + bl_dly],
                                                   'filter_centers':[0.0],
-                                                  'filter_factors':[suppression_factor]}
+                                                  'filter_factors':[float(suppression_factor)]}
                         else:
                             rp1 = r_params[key1]
                         if not key2 in r_params:
@@ -3883,10 +3886,10 @@ class PSpecData(object):
                                 antpos, ants = self.dsets[dsets[1]].get_ENU_antpos()
                                 p1 = antpos[np.where(ants==blp[1][0])[0][0]]
                                 p2 = antpos[np.where(ants==blp[1][1])[0][0]]
-                                bl_dly = np.linalg.norm(p2 - p1) / conversions.units.c
+                                bl_dly = float(np.linalg.norm(p2 - p1) / conversions.units.c)
                                 rp2 = {'filter_half_widths':[standoff * 1e-9 + bl_dly],
                                                   'filter_centers':[0.0],
-                                                  'filter_factors':[suppression_factor]}
+                                                  'filter_factors':[float(suppression_factor)]}
                         else:
                             rp1 = r_params[key2]
 
@@ -4380,7 +4383,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
               allow_fft=False, time_avg=False, vis_units="UNCALIB", standoff=0.0, suppression_factor=1e-9,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
-              trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None,
+              trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None, include_autocorrs=False,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True, fullband_filter=False,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical'):
@@ -4924,6 +4927,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
                                       bl_deg_range=bl_deg_range,
+                                      include_autocorrs=include_autocorrs,
                                       bl_tol=bl_error_tol)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
@@ -5049,6 +5053,7 @@ def get_pspec_run_argparser():
     a.add_argument("--suppression_factor", default=1e-9, help="suppression factor if input_data_weight=='dayenu'.", type=float)
     a.add_argument("--fullband_filter", default=False, action="store_true", help="If True, extend filtering step to include entire data band. Overriden by filter_extensions.")
     a.add_argument("--external_flags", default=None, type=str, nargs="+", help="Optional, specify external flag file to incorporate in data flagging.")
+    a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include auto power spectra.")
     return a
 
 

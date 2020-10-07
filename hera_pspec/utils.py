@@ -230,7 +230,7 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_cross_bls=False,
 
 def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                      xant_flag_thresh=0.95, exclude_auto_bls=False,
-                     exclude_cross_bls=False,
+                     exclude_cross_bls=False, include_autocorrs=False,
                      exclude_permutations=True, Nblps_per_group=None,
                      bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
                      xants=None, extra_info=False):
@@ -370,6 +370,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
+                                add_autos=include_autocorrs,
                                 bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
     # construct baseline pairs
     baselines1, baselines2, blpairs, red_groups = [], [], [], []
@@ -665,6 +666,7 @@ def flatten(nested_list):
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
                          exclude_permutations=True, bl_len_range=(0, 1e10),
                          bl_deg_range=(0, 180), xants=None, exclude_patterns=None,
+                         include_autocorrs=False,
                          file_type='miriad', verbose=True):
     """
     Given a list of glob-parseable file templates and selections for
@@ -804,7 +806,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     (_bls1, _bls2, _, _,
      _) = calc_blpair_reds(uvd, uvd, filter_blpairs=False, exclude_auto_bls=exclude_auto_bls,
                     exclude_permutations=exclude_permutations, bl_len_range=bl_len_range,
-                    bl_deg_range=bl_deg_range)
+                    include_autocorrs=include_autocorrs, bl_deg_range=bl_deg_range)
 
     # take out xants if fed
     if xants is not None:
