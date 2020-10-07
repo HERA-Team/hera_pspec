@@ -3656,7 +3656,10 @@ class PSpecData(object):
             spw_ranges = [spw_ranges,]
 
         if filter_extensions is None:
-            filter_extensions = [(0, 0) for m in range(len(spw_ranges))]
+            if fullband_filter:
+                filter_extensions = [(spw[0] - chan_min, chan_max - spw[1]) for spw in spw_ranges]
+            else:
+                filter_extensions = [(0, 0) for m in range(len(spw_ranges))]
         # convert to list if only a tuple was given
         if isinstance(filter_extensions, tuple):
             filter_extensions = [filter_extensions,]
@@ -4378,7 +4381,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               allow_fft=False, time_avg=False, vis_units="UNCALIB", standoff=0.0, suppression_factor=1e-9,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None,
-              time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
+              time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True, fullband_filter=False,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical'):
     """
@@ -5044,6 +5047,7 @@ def get_pspec_run_argparser():
     a.add_argument("--exclude_flagged_edge_channels", default=False, action="store_true", help="ignore entirely flagged edge channels. overriden by spw_ranges.")
     a.add_argument("--standoff", default=0.0, help="number of ns to use as a standoff if input_data_weight=='dayenu'.", type=float)
     a.add_argument("--suppression_factor", default=1e-9, help="suppression factor if input_data_weight=='dayenu'.", type=float)
+    a.add_argument("--fullband_filter", default=False, action="store_true", help="If True, extend filtering step to include entire data band. Overriden by filter_extensions.")
     return a
 
 
