@@ -1639,10 +1639,12 @@ class PSpecData(object):
             q = np.asarray(q) #(Ndlys X Ntime)
             return q
 
-        # use FFT if possible and allowed
-        elif allow_fft and (self.spw_Nfreqs  == self.spw_Ndlys - np.sum(self.filter_extension)):
-            _Rx1 = np.fft.fft(Rx1, axis=1)
-            _Rx2 = np.fft.fft(Rx2, axis=1)
+        # use FFT
+        elif allow_fft:
+            lst_grtr_mult = int(np.ceil(self.spw_Nfreqs / self.spw_Ndlys)) # lowest multiple of Ndlys greater then Nfreq
+            npad = self.spw_Ndlys * lst_grtr_mult - nf # padding necessary for fft to have harmonics of spw_Ndlys.
+            _Rx1 = np.fft.fft(np.pad(Rx1, [(0, 0), (0, npad)], mode='constant'), axis=1)[:, ::lst_grtr_mult]
+            _Rx2 = np.fft.fft(np.pad(Rx2, [(0, 0), (0, npad)], mode='constant'), axis=1)[:, ::lst_grtr_mult]
             if exact_norm:
                 qnorm = np.diag(np.sqrt(qnorm))
             #We are applying the exact norm after the R matrix consistent with above.
@@ -1702,10 +1704,11 @@ class PSpecData(object):
                 qnorm1 = 1.
                 qnorm2 = 1.
             if allow_fft:
-                if not (self.spw_Nfreqs + np.sum(self.filter_extension) == self.spw_Ndlys):
-                    raise ValueError("Nfreqs with extensions must equal Nspw for allow_fft")
+                #if not (self.spw_Nfreqs + np.sum(self.filter_extension) == self.spw_Ndlys):
+                #    raise ValueError("Nfreqs with extensions must equal Nspw for allow_fft")
                 #We can calculate H much faster with an fft if we
                 #don't have sampling
+                # find least common multiple 
                 r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R1 * qnorm1)[:,::-1])))
                 r2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R2 * qnorm2)[:,::-1])))
                 G = np.conj(r1_fft) * r2_fft
@@ -1858,6 +1861,7 @@ class PSpecData(object):
                 #don't have sampling
                 r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R1 * qnorm1)[:,::-1])))
                 r2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R2 * qnorm2)[:,::-1])))
+                # restrict r1 and r2 to wavenumbers
                 H = r1_fft * np.conj(r2_fft)
             else:
                 if not sampling:
@@ -3687,10 +3691,10 @@ class PSpecData(object):
         #check that the number of frequencies in each spectral window
         #equals the number of delays
         if allow_fft:
-            for spw, ndly, fext in zip(spw_ranges, n_dlys ,filter_extensions):
-                nf_spw = spw[1]-spw[0] + np.sum(filter_extensions)
-                if not nf_spw == ndly:
-                    raise ValueError("allow_fft is True! Number of delays in each spw must equal the number of frequencies in each spw.")
+            #for spw, ndly, fext in zip(spw_ranges, n_dlys ,filter_extensions):
+            #    nf_spw = spw[1]-spw[0] + np.sum(filter_extensions)
+            #    if not nf_spw == ndly:
+            #        raise ValueError("allow_fft is True! Number of delays in each spw must equal the number of frequencies in each spw.")
             if not sampling:
                 raise ValueError("allow_fft is True! Sampling must also be set to True for allow_fft!")
 
