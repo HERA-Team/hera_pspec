@@ -5048,6 +5048,7 @@ def get_pspec_run_argparser():
     a.add_argument("--standoff", default=0.0, help="number of ns to use as a standoff if input_data_weight=='dayenu'.", type=float)
     a.add_argument("--suppression_factor", default=1e-9, help="suppression factor if input_data_weight=='dayenu'.", type=float)
     a.add_argument("--fullband_filter", default=False, action="store_true", help="If True, extend filtering step to include entire data band. Overriden by filter_extensions.")
+    a.add_argument("--external_flags", default=None, type=str, nargs="+", help="Optional, specify external flag file to incorporate in data flagging.")
     return a
 
 
