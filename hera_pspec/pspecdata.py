@@ -1708,9 +1708,13 @@ class PSpecData(object):
                 #    raise ValueError("Nfreqs with extensions must equal Nspw for allow_fft")
                 #We can calculate H much faster with an fft if we
                 #don't have sampling
-                # find least common multiple 
-                r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R1 * qnorm1)[:,::-1])))
-                r2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R2 * qnorm2)[:,::-1])))
+                # find least common multiple
+                lcm0 = int(np.ceil(R1.shape[0] / self.spw_Ndlys)) # lowest multiple of Ndlys greater then Nfreq
+                pad0 = self.spw_Ndlys * lcm0 - R1.shape[0] # padding necessary for fft to have harmonics of spw_Ndlys.
+                lcm1 = int(np.ceil(R1.shape[1] / self.spw_Ndlys))
+                pad1 = self.spw_Ndlys * lcm1 - R1.shape[1]
+                r1_fft = np.fft.fftshift(np.fft.fft2(np.pad((R1 * qnorm1)[:,::-1], [(0, pad0), (0, pad1)], mode='constant'))[::lcm0, ::lcm1])
+                r2_fft = np.fft.fftshift(np.fft.fft2(np.pad((R2 * qnorm2)[:,::-1], [(0, pad0), (0, pad1)], mode='constant'))[::lcm0, ::lcm1])
                 G = np.conj(r1_fft) * r2_fft
             else:
                 G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
@@ -1853,14 +1857,18 @@ class PSpecData(object):
                 qnorm1 = 1.
                 qnorm2 = 1.
             if allow_fft:
-                if not (self.spw_Nfreqs + np.sum(self.filter_extension) == self.spw_Ndlys):
-                    raise ValueError("Nfreqs must equal Nspw for allow_fft")
                 if not sampling:
                     raise ValueError("sampling must equal True for allow_fft")
                 #We can calculate H much faster with an fft if we
                 #don't have sampling
-                r1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R1 * qnorm1)[:,::-1])))
-                r2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift((R2 * qnorm2)[:,::-1])))
+                    # find least common multiple
+                    lcm0 = int(np.ceil(R1.shape[0] / self.spw_Ndlys)) # lowest multiple of Ndlys greater then Nfreq
+                    pad0 = self.spw_Ndlys * lcm0 - R1.shape[0] # padding necessary for fft to have harmonics of spw_Ndlys.
+                    lcm1 = int(np.ceil(R1.shape[1] / self.spw_Ndlys))
+                    pad1 = self.spw_Ndlys * lcm1 - R1.shape[1]
+                    r1_fft = np.fft.fftshift(np.fft.fft2(np.pad((R1 * qnorm1)[:,::-1], [(0, pad0), (0, pad1)], mode='constant'))[::lcm0, ::lcm1])
+                    r2_fft = np.fft.fftshift(np.fft.fft2(np.pad((R2 * qnorm2)[:,::-1], [(0, pad0), (0, pad1)], mode='constant'))[::lcm0, ::lcm1])
+
                 # restrict r1 and r2 to wavenumbers
                 H = r1_fft * np.conj(r2_fft)
             else:
@@ -2480,18 +2488,18 @@ class PSpecData(object):
                         qnorm = self.get_integral_beam(pol) * np.median(np.diff(self.delays()))*1e-9
                     else:
                         qnorm = 1.
-                    if self.spw_Nfreqs + np.sum(self.filter_extension) != self.spw_Ndlys:
-                        raise ValueError("allow_fft requires spw_Nfreqs == spw_Ndlys")
                     R1 = self.R(key1, time_index)
                     R2 = self.R(key2, time_index)
                     C1_filtered = R1 @ C1 @ np.conj(R1).T * qnorm
                     C2_filtered = R2 @ C2 @ np.conj(R2).T * qnorm
                     S21_filtered = R1 @ S21 @ np.conj(R1).T * qnorm
                     P21_filtered = R2 @ P21 @ np.conj(R2).T * qnorm
-                    c1_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(C_1_filtered[:,::-1])))
-                    c2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(C_2_filtered[:,::-1])))
-                    s21_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(S21_filtered[:,::-1])))
-                    p21_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(P21_filtered[:,::-1])))
+                    lcm = int(np.ceil(self.spw_Nfreqs / self.spw_Ndlys)) # lowest multiple of Ndlys greater then Nfreq
+                    pad = self.spw_Ndlys * lcm - self.spw_Nfreqs
+                    c1_fft = np.fft.fftshift(np.fft.fft2(np.pad(C_1_filtered[:,::-1], [(0, pad), (0, pad)], mode='constant'))[::lcm, ::lcm])
+                    c2_fft = np.fft.fftshift(np.fft.fft2(np.pad(C_2_filtered[:,::-1], [(0, pad), (0, pad)], mode='constant'))[::lcm, ::lcm])
+                    s21_fft = np.fft.fftshift(np.fft.fft2(np.pad(S21_filtered[:,::-1], [(0, pad), (0, pad)], mode='constant'))[::lcm, ::lcm])
+                    p21_fft = np.fft.fftshift(np.fft.fft2(np.pad(P21_filtered[:,::-1], [(0, pad), (0, pad)], mode='constant'))[::lcm, ::lcm])
                     auto_term = c1_fft * np.conj(c2_fft)
                     cross_term = p21_fft @ np.conj(s21_fft)
 
