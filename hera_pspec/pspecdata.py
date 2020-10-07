@@ -3352,7 +3352,7 @@ class PSpecData(object):
 
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
               input_data_weight='identity', norm='I', taper='none', exclude_flagged_edge_channels=False,
-              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True, Nspws=1,
+              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True, Nspws=1, fullband_filter=False,
               baseline_tol=1.0, store_cov=False, store_cov_diag=False, return_q=False, store_window=True, verbose=True,
               filter_extensions=None, exact_norm=False, history='', r_params=None, standoff=None, suppression_factor=None,
               cov_model='empirical', r_cov_model='empirical', known_cov=None,allow_fft=False):
