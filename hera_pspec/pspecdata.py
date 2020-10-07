@@ -1642,7 +1642,7 @@ class PSpecData(object):
         # use FFT
         elif allow_fft:
             lst_grtr_mult = int(np.ceil(self.spw_Nfreqs / self.spw_Ndlys)) # lowest multiple of Ndlys greater then Nfreq
-            npad = self.spw_Ndlys * lst_grtr_mult - nf # padding necessary for fft to have harmonics of spw_Ndlys.
+            npad = self.spw_Ndlys * lst_grtr_mult - self.spw_Nfreqs # padding necessary for fft to have harmonics of spw_Ndlys.
             _Rx1 = np.fft.fft(np.pad(Rx1, [(0, 0), (0, npad)], mode='constant'), axis=1)[:, ::lst_grtr_mult]
             _Rx2 = np.fft.fft(np.pad(Rx2, [(0, 0), (0, npad)], mode='constant'), axis=1)[:, ::lst_grtr_mult]
             if exact_norm:
@@ -1861,16 +1861,16 @@ class PSpecData(object):
                     raise ValueError("sampling must equal True for allow_fft")
                 #We can calculate H much faster with an fft if we
                 #don't have sampling
-                    # find least common multiple
-                    lcm0 = int(np.ceil(R1.shape[0] / self.spw_Ndlys)) # lowest multiple of Ndlys greater then Nfreq
-                    pad0 = self.spw_Ndlys * lcm0 - R1.shape[0] # padding necessary for fft to have harmonics of spw_Ndlys.
-                    lcm1 = int(np.ceil(R1.shape[1] / self.spw_Ndlys))
-                    pad1 = self.spw_Ndlys * lcm1 - R1.shape[1]
-                    r1_fft = np.fft.fftshift(np.fft.fft2(np.pad((R1 * qnorm1)[:,::-1], [(0, pad0), (0, pad1)], mode='constant'))[::lcm0, ::lcm1])
-                    r2_fft = np.fft.fftshift(np.fft.fft2(np.pad((R2 * qnorm2)[:,::-1], [(0, pad0), (0, pad1)], mode='constant'))[::lcm0, ::lcm1])
+                # find least common multiple
+                lcm0 = int(np.ceil(R1.shape[0] / self.spw_Ndlys)) # lowest multiple of Ndlys greater then Nfreq
+                pad0 = self.spw_Ndlys * lcm0 - R1.shape[0] # padding necessary for fft to have harmonics of spw_Ndlys.
+                lcm1 = int(np.ceil(R1.shape[1] / self.spw_Ndlys))
+                pad1 = self.spw_Ndlys * lcm1 - R1.shape[1]
+                r1_fft = np.fft.fftshift(np.fft.fft2(np.pad((R1 * qnorm1)[:,::-1], [(0, pad0), (0, pad1)], mode='constant'))[::lcm0, ::lcm1])
+                r2_fft = np.fft.fftshift(np.fft.fft2(np.pad((R2 * qnorm2)[:,::-1], [(0, pad0), (0, pad1)], mode='constant'))[::lcm0, ::lcm1])
 
                 # restrict r1 and r2 to wavenumbers
-                H = r1_fft * np.conj(r2_fft)
+                H = np.conj(r1_fft) * r2_fft
             else:
                 if not sampling:
                     nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
