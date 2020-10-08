@@ -1067,6 +1067,16 @@ class Test_PSpecData(unittest.TestCase):
                 # second W computation made to check that no extra items are added to _W cache.
                 W = self.ds.get_W(key1, key2)
                 nt.assert_true(len(self.ds._W) == npatterns * nconfigs)
+        # now test that W does not have Nans if we have a flagged time!
+        dflagged = copy.deepcopy(self.d)
+        dflagged[0].flag_array[:] = True
+        self.ds = pspecdata.PSpecData(dsets=dflagged)
+        key1 = (0, 24, 38)
+        key2 = (1, 25, 38)
+        self.ds.set_weighting('iC')
+        W = self.ds.get_W(key1, key2)
+        # make sure all W elements are equal to zero!
+        assert np.all(np.isclose(W, 0.0))
 
     def test_get_H_fft(self):
         """
@@ -1583,7 +1593,7 @@ class Test_PSpecData(unittest.TestCase):
         np.random.seed(0)
         sim2 = testing.sky_noise_sim(uvd, uvb, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
                                      constant_in_time=True, bl_loop_seed=1, divide_by_nsamp=False)
- 
+
         # setup ds
         ds = pspecdata.PSpecData(dsets=[sim1, sim2], wgts=[None, None], beam=uvb)
         ds.Jy_to_mK()
@@ -1603,9 +1613,9 @@ class Test_PSpecData(unittest.TestCase):
                 assert np.isclose(cov.imag, 0, atol=abs(cov.real).max() / 1e10).all()
 
         # Here we generate a known_cov to be passed to ds.pspec, which stores two cov_models named 'dsets' and 'fiducial'.
-        # The two models have actually the same data, while in generating output covariance, 'dsets' mode will follow the shorter 
-        # path where we use some optimization for diagonal matrices, while 'fiducial' mode will follow the longer path 
-        # where there is no such optimization. This test should show the results from two paths are equivalent.      
+        # The two models have actually the same data, while in generating output covariance, 'dsets' mode will follow the shorter
+        # path where we use some optimization for diagonal matrices, while 'fiducial' mode will follow the longer path
+        # where there is no such optimization. This test should show the results from two paths are equivalent.
         known_cov_test = dict()
         C_n_11 = np.diag([2.]*ds.Nfreqs)
         P_n_11, S_n_11, C_n_12, P_n_12, S_n_12 = np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11)
@@ -1639,13 +1649,13 @@ class Test_PSpecData(unittest.TestCase):
                     Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, False, False,)
                     known_cov_test[Ckey] = P_n_12
                     Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, True, True,)
-                    known_cov_test[Ckey] = S_n_12 
+                    known_cov_test[Ckey] = S_n_12
 
         uvp_dsets_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
                                  cov_model='dsets', known_cov=known_cov_test, verbose=False, taper='bh')
         uvp_fiducial_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
                                  cov_model='fiducial', known_cov=known_cov_test, verbose=False, taper='bh')
-        # check their cov_array are equal 
+        # check their cov_array are equal
         nt.assert_true(np.allclose(uvp_dsets_cov.cov_array_real[0], uvp_fiducial_cov.cov_array_real[0], rtol=1e-05))
 
         # check noise floor computation from auto correlations
@@ -1672,7 +1682,7 @@ class Test_PSpecData(unittest.TestCase):
                 / np.sqrt(np.mean(np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2)[:,~noise_dlys], axis=0)), axis=0))
         rms = np.mean(rms, axis=0)
         # assert this is close to 1.0
-        assert np.isclose(np.mean(rms), 1.0, atol=0.1) 
+        assert np.isclose(np.mean(rms), 1.0, atol=0.1)
 
     def test_pspec(self):
         # generate ds
@@ -1864,14 +1874,14 @@ class Test_PSpecData(unittest.TestCase):
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
         key = (0, (bls1[0],bls2[0]), "xx")
         # also check the output covariance is uniform along time axis when cov_model='empirical'
-        nt.assert_true(np.allclose(uvp.get_cov(key)[0], uvp.get_cov(key)[-1])) 
+        nt.assert_true(np.allclose(uvp.get_cov(key)[0], uvp.get_cov(key)[-1]))
 
         uvp = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='dsets')
         nt.assert_true(hasattr(uvp, 'cov_array_real'))
 
 
-        # test the results of stats_array[cov_model] 
+        # test the results of stats_array[cov_model]
         uvp_cov = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='foreground_dependent')
         uvp_cov_diag = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
@@ -1879,7 +1889,7 @@ class Test_PSpecData(unittest.TestCase):
 
         key = (0, (bls1[0],bls2[0]), "xx")
         nt.assert_true(np.isclose(np.diagonal(uvp_cov.get_cov(key), axis1=1, axis2=2), (np.real(uvp_cov_diag.get_stats('foreground_dependent_diag', key)))**2).all())
-    
+
 
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
@@ -2319,7 +2329,7 @@ def test_pspec_run():
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
 
-    # test with cov_model that requires autos w/ fname as filepath 
+    # test with cov_model that requires autos w/ fname as filepath
     fnames = glob.glob(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
     pspecdata.pspec_run([fnames], "./out.h5", spw_ranges=[(50, 70)], dset_pairs=[(0, 0)],
                          verbose=False, overwrite=True, file_type='miriad', pol_pairs=[('xx', 'xx')],
