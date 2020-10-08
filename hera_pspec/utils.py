@@ -336,7 +336,8 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
             antnums = uvd1.baseline_to_antnums(bl)
 
             # continue if autocorr
-            if antnums[0] == antnums[1]: continue
+            if not include_autocorrs:
+                if antnums[0] == antnums[1]: continue
 
             # work on xants1
             if bl in uvd1.baseline_array:
