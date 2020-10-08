@@ -2629,7 +2629,8 @@ class PSpecData(object):
 
         return self._M[Mkey]
 
-    def _get_W(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False, pol=False, allow_fft=False):
+    def _get_W(self, key1, key2, time_index, mode='I', sampling=False, exact_norm=False, pol=False,
+               allow_fft=False, rcond=1e-15):
         """
         Helper function that returns W-matrix for a single time step.
         Parameters
@@ -2666,7 +2667,8 @@ class PSpecData(object):
         """
         Wkey = self.fisher_hash(time_index, key1, key2, sampling, exact_norm, pol) + (mode, )
         if not Wkey in self._W:
-            M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+            M = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling,
+                            exact_norm=exact_norm, pol=pol, allow_fft=allow_fft, rcond=rcond)
             H = self._get_H(key1, key2, time_index, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
             W = np.dot(M, H)
             if mode == 'H^-1':
@@ -2680,7 +2682,8 @@ class PSpecData(object):
         return self._W[Wkey]
 
     def get_M(self, key1, key2, mode='I', exact_norm=False,
-              sampling=False, time_indices=None, pol=False, allow_fft=False):
+              sampling=False, time_indices=None, pol=False,
+              allow_fft=False, rcond=1e-15):
         """
         Construct the normalization matrix M This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2736,10 +2739,11 @@ class PSpecData(object):
             time_indices = np.arange(self.Ntimes).astype(int)
         M = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         for tind, time_index in enumerate(time_indices):
-            M[tind] = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+            M[tind] = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm,
+                                  pol=pol, allow_fft=allow_fft, rcond=rcond)
         return M
 
-    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, pol=False, allow_fft=False):
+    def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, pol=False, allow_fft=False, rcond=1e-15):
         """
         Construct the Window function matrix W. This is defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2795,7 +2799,7 @@ class PSpecData(object):
             time_indices = np.arange(self.Ntimes).astype(int)
         W = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
         for tind, time_index in enumerate(time_indices):
-            W[tind] = self._get_W(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol)
+            W[tind] = self._get_W(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, rcond=rcond)
         return W
 
     def get_Q_alt(self, mode, allow_fft=True, include_extension=False):
@@ -3358,7 +3362,7 @@ class PSpecData(object):
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True, Nspws=1, fullband_filter=False,
               baseline_tol=1.0, store_cov=False, store_cov_diag=False, return_q=False, store_window=True, verbose=True,
               filter_extensions=None, exact_norm=False, history='', r_params=None, standoff=None, suppression_factor=None,
-              cov_model='empirical', r_cov_model='empirical', known_cov=None,allow_fft=False):
+              cov_model='empirical', r_cov_model='empirical', known_cov=None,allow_fft=False, rcond=1e-15):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -3907,12 +3911,15 @@ class PSpecData(object):
                     if verbose: print("  Normalizing power spectrum...")
                     #if norm == 'V^-1/2':
                     #    V_mat = self.cov_q_hat(key1, key2, exact_norm=exact_norm, pol = pol, model=cov_model)
-                        #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)                                    #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
+                        #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
+                        #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
                     #else:
                     #    Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
-                    Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+                    Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol,
+                                    allow_fft=allow_fft, rcond=rcond)
                     pv = self.p_hat(Mv, qv)
-                    Wv = self.get_W(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+                    Wv = self.get_W(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol,
+                                    allow_fft=allow_fft, rcond=rcond)
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
@@ -4382,7 +4389,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), exclude_flagged_edge_channels=False, Nspws=1,
               bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
               allow_fft=False, time_avg=False, vis_units="UNCALIB", standoff=0.0, suppression_factor=1e-9,
-              beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
+              beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None, rcond=1e-15,
               trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None, include_autocorrs=False,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True, fullband_filter=False,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
@@ -4960,10 +4967,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # check bls lists aren't empty
         if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
             continue
-
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
-                       spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
+                       spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params, rcond=rcond,
                        store_cov=store_cov, store_cov_diag=store_cov_diag, input_data_weight=input_data_weight,
                        exact_norm=exact_norm, sampling=sampling, allow_fft=allow_fft,
                        return_q=return_q, cov_model=cov_model, known_cov=known_cov, suppression_factor=suppression_factor,
@@ -5054,6 +5060,7 @@ def get_pspec_run_argparser():
     a.add_argument("--fullband_filter", default=False, action="store_true", help="If True, extend filtering step to include entire data band. Overriden by filter_extensions.")
     a.add_argument("--external_flags", default=None, type=str, nargs="+", help="Optional, specify external flag file to incorporate in data flagging.")
     a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include auto power spectra.")
+    a.add_argument("--rcond", default=1e-15, type=float, help="Cutoff for eigenvalues in taking psuedo-inverse for nomralization.")
     return a
 
 
