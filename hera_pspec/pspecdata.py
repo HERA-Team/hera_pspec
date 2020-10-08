@@ -2646,6 +2646,7 @@ class PSpecData(object):
                 W_norm = np.diag(1. / np.sum(H, axis=1))
                 W = np.dot(W_norm, H)
             self._W[Wkey] = W
+            W[~np.isfinite(W)] = 0. # H can have NaNs!
         return self._W[Wkey]
 
     def get_M(self, key1, key2, mode='I', exact_norm=False,
