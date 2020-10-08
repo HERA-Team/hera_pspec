@@ -7,6 +7,7 @@ from astropy import stats as astats
 import os
 
 from . import utils, version, uvpspec_utils as uvputils
+from . import conversions
 from .uvpspec import _ordered_unique
 
 
@@ -102,6 +103,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     blpair_weights=None, error_field=None,
                     error_weights=None,
                     normalize_weights=True, inplace=True,
+                    exclude_wedge=False, standoff=0.0,
                     add_to_history=''):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
@@ -173,6 +175,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     inplace : bool, optional
         If True, edit data in self, else make a copy and return. Default:
         True.
+
+    exclude_wedge : bool, optional
+        If True, do not include modes inside of the wedge in average.
+
+    standoff : float, optional
+        number of nanoseconds off of wedge to exclude from average.
 
     add_to_history : str, optional
         Added text to add to file history.
@@ -368,7 +376,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
                         w = (ints * np.sqrt(nsmp))**2
                         # shape of w: (Ntimes, 1)
-
+                    if exclude_wedge:
+                        # set weights inside of the wedge to zero.
+                        blp_index = uvp.get_blpairs().index(blp)
+                        bl_dly  = np.linalg.norm(uvp.get_blpair_blvecs[blp_index]) / conversions.units.c
+                        dly_exclude = bl_dly + standoff * 1e-9
+                        w[uvp.get_dlys(spw) < dly_exclude, :] = 0.
                     # Take time average if desired
                     if time_avg:
                         wsum = np.sum(w, axis=0).clip(1e-40, np.inf)
@@ -555,7 +568,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
 def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
                       weight_by_cov=False, error_weights=None, add_to_history='', little_h=True, A={},
-                      run_check=True):
+                      exclude_wedge=False, standoff=0.0, run_check=True):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
     Use UVPSpec.set_stats_slice to downweight regions of k_perp and k_para grid before averaging.
@@ -600,6 +613,13 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     A : dict, optional
         Empty dict to populate with A matrix
 
+    exclude_wedge : bool, optional
+        If True, exclude wedge from averaging.
+
+    standoff : float, optional
+        number of nanoseconds off of the edge of the wedge to throw away data.
+        if exclude_wedge is True.
+
     run_check : bool, optional
         If True, run UVPSpec.check() on resultant object
 
@@ -640,6 +660,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     # perform time and cylindrical averaging upfront if requested
     if blpair_groups is not None or time_avg:
         uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg,
+                            exclude_wedge=exclude_wedge, standoff=standoff,
                             blpair_weights=blpair_weights, error_weights=error_weights,
                             inplace=True)
 
