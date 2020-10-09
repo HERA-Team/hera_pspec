@@ -6,7 +6,7 @@ import astropy.units as u
 import astropy.constants as c
 from pyuvdata import UVData
 import uvtools
-from scipy.interpolate import interp1d
+import scipy.interpolate as interp
 from . import conversions, uvpspec, utils
 
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
