@@ -6,64 +6,102 @@ import astropy.units as u
 import astropy.constants as c
 from pyuvdata import UVData
 import uvtools
-
+from scipy.interpolate import interp1d
 from . import conversions, uvpspec, utils
 
 
-def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False, 
-                   average_times=False, fold=False, plot_noise=False, 
+def get_window_confidence_intervals(window_function_matrix, kvals, regularizer=1e-4, lcu=[0.16, 0.5, 0.84]):
+    """
+    Get horizontal error bars from window function matrix.
+
+    Parameters
+    ----------
+    window_function_matrix : array-like
+        Nbp x Npb window function matrix.
+    kvals : array-like
+        Nbp vector of k-values for each bandpower.
+    regularizer : float, optional
+        A regularization factor to help with interpolating the CDF of window function matrix rows.
+    lcu : 3-tuple or list, optional
+        First value is the cumulative probability of a window row to set left error bar at.
+        Second value is the cumulative probability of a window row to set center of bin at.
+        Third value is the cumulative probability of a window matrix row to set right error bar at.
+    Returns
+    -------
+    kcs, kls, krs
+    kcs: k-values at window-function median
+    kls: left error bars extending to 1 sigma to left (to 16% in cdf)
+
+    """
+    if not np.all(np.isclose(np.diff(kvals), np.diff(kvals)[0])):
+        raise NotImplementedError("Only Supports linearly spaced k-bins")
+    wm = np.asarray([w / w.sum() for w in window_function_matrix])
+
+    cdfs = np.asarray([ [wm[m][:n].real.sum() for n in range(wm.shape[1]+1)] for m in range(wm.shape[0])])
+    #add a little bit of slope to make sure the interpolated function is 1-to-1.
+    cdfs = np.asarray([cdrow + regularizer * (np.arange(len(cdrow))-len(cdrow)//2) for cdrow in cdfs])
+    dks = np.asarray([(kvals[m+1] - kvals[m])/2. for m in range(len(kvals) -1)])
+    kbin_upper_vals = np.asarray([kvals[m] + dks[m] for m in range(len(kvals)-1)])
+    kbin_upper_vals = np.hstack([ [kvals[0]-dks[0]], kbin_upper_vals, [kparas[-1] + dks[-1]]])
+    kc = np.asarray([ interp.interp1d(cdfs[m], kbin_upper_vals)(0.5) for m in range(nm)])
+    kr = np.asarray([ interp.interp1d(cdfs[m], kbin_upper_vals)(0.84) - kc[m] for m in range(nm)])
+    kl = np.asarray([ -interp.interp1d(cdfs[m], kbin_upper_vals)(0.16) + kc[m] for m in range(nm)])
+    return kc, kl, kr
+
+def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
+                   average_times=False, fold=False, plot_noise=False,
                    delay=True, deltasq=False, legend=False, ax=None,
                    component='real', lines=True, markers=False, error=None,
                    times=None, logscale=True, force_plot=False,
                    label_type='blpairt', plot_stats=None, **kwargs):
     """
     Plot a 1D delay spectrum (or spectra) for a group of baselines.
-    
+
     Parameters
     ----------
     uvp : UVPspec
-        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        UVPSpec object, containing delay spectra for a set of baseline-pairs,
         times, polarizations, and spectral windows.
-    
+
     blpairs : list of tuples or lists of tuples
         List of baseline-pair tuples, or groups of baseline-pair tuples.
-    
+
     spw, pol : int or str
         Which spectral window and polarization to plot.
-    
+
     average_blpairs : bool, optional
         If True, average over the baseline pairs within each group.
-        
+
     average_times : bool, optional
         If True, average spectra over the time axis. Default: False.
-    
+
     fold : bool, optional
-        Whether to fold the power spectrum in :math:`|k_\parallel|`. 
+        Whether to fold the power spectrum in :math:`|k_\parallel|`.
         Default: False.
-    
+
     plot_noise : bool, optional
         Whether to plot noise power spectrum curves or not. Default: False.
-    
+
     delay : bool, optional
-        Whether to plot the power spectrum in delay units (ns) or cosmological 
+        Whether to plot the power spectrum in delay units (ns) or cosmological
         units (h/Mpc). Default: True.
-    
+
     deltasq : bool, optional
-        If True, plot dimensionless power spectra, Delta^2. This is ignored if 
+        If True, plot dimensionless power spectra, Delta^2. This is ignored if
         delay=True. Default: False.
-    
+
     legend : bool, optional
         Whether to switch on the plot legend. Default: False.
-    
+
     ax : matplotlib.axes, optional
-        Use this to pass in an existing Axes object, which the power spectra 
-        will be added to. (Warning: Labels and legends will not be altered in 
-        this case, even if the existing plot has completely different axis 
+        Use this to pass in an existing Axes object, which the power spectra
+        will be added to. (Warning: Labels and legends will not be altered in
+        this case, even if the existing plot has completely different axis
         labels etc.) If None, a new Axes object will be created. Default: None.
 
     component : str, optional
         Component of complex spectra to plot, options=['abs', 'real', 'imag'].
-        Default: 'real'. 
+        Default: 'real'.
 
     lines : bool, optional
         If True, plot lines between bandpowers for a given pspectrum.
@@ -132,14 +170,14 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     # Average over blpairs or times if requested
     blpairs_in = copy.deepcopy(blpairs) # Save input blpair list
     if average_blpairs:
-        uvp_plt = uvp.average_spectra(blpair_groups=blpairs, 
+        uvp_plt = uvp.average_spectra(blpair_groups=blpairs,
                                       time_avg=average_times, inplace=False)
     else:
         uvp_plt = copy.deepcopy(uvp)
         if average_times:
             # Average over times, but not baseline-pairs
             uvp_plt.average_spectra(time_avg=True, inplace=True)
-      
+
     # Check plot size
     if uvp_plt.Ntimes * len(blpairs) > 100 and force_plot == False:
         raise ValueError("Trying to plot > 100 spectra... Set force_plot=True to continue.")
@@ -147,11 +185,11 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     # Fold the power spectra if requested
     if fold:
         uvp_plt.fold_spectra()
-    
+
     # Convert to Delta^2 units if requested
     if deltasq and not delay:
         uvp_plt.convert_to_deltasq()
-    
+
     # Get x-axis units (delays in ns, or k_parallel in Mpc^-1 or h Mpc^-1)
     if delay:
         dlys = uvp_plt.get_dlys(spw) * 1e9 # ns
@@ -159,7 +197,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     else:
         k_para = uvp_plt.get_kparas(spw)
         x = k_para
-    
+
     # Check plot_stats
     if plot_stats is not None:
         assert plot_stats in uvp_plt.stats_array, "specified key {} not found in stats_array".format(plot_stats)
@@ -233,14 +271,14 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                     # plot markers
                     if logscale:
                         # plot positive w/ filled circles
-                        cax, = ax.plot(x[y >= 0], np.abs(y[y >= 0]), c=c, ls='None', marker='o', 
+                        cax, = ax.plot(x[y >= 0], np.abs(y[y >= 0]), c=c, ls='None', marker='o',
                                       markerfacecolor=c, markeredgecolor=c, label=label, **kwargs)
                         # plot negative w/ unfilled circles
                         c = cax.get_color()
                         cax, = ax.plot(x[y < 0], np.abs(y[y < 0]), c=c, ls='None', marker='o',
                                        markerfacecolor='None', markeredgecolor=c, **kwargs)
                     else:
-                        cax, = ax.plot(x, y, c=c, ls='None', marker='o', 
+                        cax, = ax.plot(x, y, c=c, ls='None', marker='o',
                                       markerfacecolor=c, markeredgecolor=c, label=label, **kwargs)
 
                 if error is not None and hasattr(uvp_plt, 'stats_array'):
@@ -257,18 +295,18 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                     else:
                         raise KeyError("Error variable '%s' not found in stats_array of UVPSpec object." % error)
 
-            # If blpairs were averaged, only the first blpair in the group 
+            # If blpairs were averaged, only the first blpair in the group
             # exists any more (so skip the rest)
             if average_blpairs: break
-    
+
     # Set log scale
     if logscale:
         ax.set_yscale('log')
-    
+
     # Add legend
     if legend:
         ax.legend(loc='upper left')
-    
+
     # Add labels with units
     if ax.get_xlabel() == "":
         if delay:
@@ -276,86 +314,86 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         else:
             ax.set_xlabel("$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
     if ax.get_ylabel() == "" and plot_stats is None:
-        # Sanitize power spectrum units 
+        # Sanitize power spectrum units
         psunits = uvp_plt.units
         if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
         if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}")
-        if "Mpc" in psunits and "\\rm" not in psunits: 
+        if "Mpc" in psunits and "\\rm" not in psunits:
             psunits = psunits.replace("Mpc", r"{\rm Mpc}")
-        if "pi" in psunits and "\\pi" not in psunits: 
+        if "pi" in psunits and "\\pi" not in psunits:
             psunits = psunits.replace("pi", r"\pi")
-        
+
         # Power spectrum type
         if deltasq:
             ax.set_ylabel("$\Delta^2$ $[%s]$" % psunits, fontsize=16)
         else:
             ax.set_ylabel("$P(k_\parallel)$ $[%s]$" % psunits, fontsize=16)
-    
+
     # Return Figure: the axis is an attribute of figure
     if new_plot:
         return fig
 
 
-def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real', 
-                    average_blpairs=False, fold=False, delay=True, 
+def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
+                    average_blpairs=False, fold=False, delay=True,
                     deltasq=False, log=True, lst_in_hrs=True,
-                    vmin=None, vmax=None, cmap='YlGnBu', axes=None, 
-                    figsize=(14, 6), force_plot=False, times=None, 
+                    vmin=None, vmax=None, cmap='YlGnBu', axes=None,
+                    figsize=(14, 6), force_plot=False, times=None,
                     title_type='blpair', colorbar=True):
     """
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
-    
+
     Parameters
     ----------
     uvp : UVPspec
-        UVPSpec object, containing delay spectra for a set of baseline-pairs, 
+        UVPSpec object, containing delay spectra for a set of baseline-pairs,
         times, polarizations, and spectral windows.
-    
+
     blpairs : list of tuples or lists of tuples
         List of baseline-pair tuples, or groups of baseline-pair tuples.
-    
+
     spw, pol : int or str
         Which spectral window and polarization to plot.
-    
+
     component : str
         Component of complex spectra to plot, options=['abs', 'real', 'imag', 'abs-real', 'abs-imag'].
         abs-real is abs(real(data)), whereas 'real' is real(data)
-        Default: 'abs-real'. 
+        Default: 'abs-real'.
 
     average_blpairs : bool, optional
         If True, average over the baseline pairs within each group.
-    
+
     fold : bool, optional
-        Whether to fold the power spectrum in :math:`|k_\parallel|`. 
+        Whether to fold the power spectrum in :math:`|k_\parallel|`.
         Default: False.
-    
+
     delay : bool, optional
-        Whether to plot the power spectrum in delay units (ns) or cosmological 
+        Whether to plot the power spectrum in delay units (ns) or cosmological
         units (h/Mpc). Default: True.
-    
+
     deltasq : bool, optional
-        If True, plot dimensionless power spectra, Delta^2. This is ignored if 
+        If True, plot dimensionless power spectra, Delta^2. This is ignored if
         delay=True. Default: False.
-    
+
     log : bool, optional
         Whether to plot the log10 of the data. Default: True.
-    
+
     lst_in_hrs : bool, optional
         If True, LST is plotted in hours, otherwise its plotted in radians.
 
     vmin, vmax : float, optional
-        Clip the color scale of the delay spectrum to these min./max. values. 
+        Clip the color scale of the delay spectrum to these min./max. values.
         If None, use the natural range of the data. Default: None.
-    
+
     cmap : str, optional
         Matplotlib colormap to use. Default: 'YlGnBu'.
-    
+
     axes : array of matplotlib.axes, optional
         Use this to pass in an existing Axes object or array of axes, which
         the power spectra will be added to. (Warning: Labels and legends will
-        not be altered in this case, even if the existing plot has completely different axis 
+        not be altered in this case, even if the existing plot has completely different axis
         labels etc.) If None, a new Axes object will be created. Default: None.
-    
+
     figsize : tuple
         len-2 integer tuple specifying figure size if axes is None
 
@@ -369,7 +407,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     title_type : str, optional
         Type of title to put above plot(s). Options = ['blpair', 'blvec']
         blpair : "bls: {bl1} x {bl2}"
-        blvec : "bl len {len} m & ang {ang} deg" 
+        blvec : "bl len {len} m & ang {ang} deg"
 
     colorbar : bool, optional
         Whether to make a colorbar. Default: True
@@ -416,11 +454,11 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     # Average over blpairs or times if requested
     blpairs_in = copy.deepcopy(blpairs) # Save input blpair list
     if average_blpairs:
-        uvp_plt = uvp.average_spectra(blpair_groups=blpairs, 
+        uvp_plt = uvp.average_spectra(blpair_groups=blpairs,
                                       time_avg=False, inplace=False)
     else:
         uvp_plt = copy.deepcopy(uvp)
-        
+
     # Fold the power spectra if requested
     if fold:
         uvp_plt.fold_spectra()
@@ -428,7 +466,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     # Convert to Delta^2 units if requested
     if deltasq and not delay:
         uvp_plt.convert_to_deltasq()
-    
+
     # Get x-axis units (delays in ns, or k_parallel in Mpc^-1 or h Mpc^-1)
     if delay:
         dlys = uvp_plt.get_dlys(spw) * 1e9 # ns
@@ -436,7 +474,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     else:
         k_para = uvp_plt.get_kparas(spw)
         x = k_para
-    
+
     # Extract power spectra into array
     waterfall = odict()
     for blgrp in blpairs:
@@ -470,10 +508,10 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
             # assign to waterfall
             waterfall[key] = power
 
-            # If blpairs were averaged, only the first blpair in the group 
+            # If blpairs were averaged, only the first blpair in the group
             # exists any more (so skip the rest)
             if average_blpairs: break
-    
+
     # check for reasonable number of blpairs to plot...
     Nkeys = len(waterfall)
     if Nkeys > 20 and force_plot == False:
@@ -486,7 +524,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
         logunits = "\log_{10}"
     else:
         logunits = ""
-    
+
     # Create new Axes if none specified
     new_plot = False
     if axes is None:
@@ -495,13 +533,13 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
         Nkeys = len(waterfall)
         Nside = int(np.ceil(np.sqrt(Nkeys)))
         fig, axes = plt.subplots(Nside, Nside, figsize=figsize)
-    
+
     # Ensure axes is an ndarray
     if isinstance(axes, matplotlib.axes._subplots.Axes):
         axes = np.array([[axes]])
     if isinstance(axes, list):
         axes = np.array(axes)
-    
+
     # Ensure its 2D and get side lengths
     if axes.ndim == 1:
         axes = axes[:, None]
@@ -524,18 +562,18 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     # get baseline vectors
     blvecs = dict(zip([uvp_plt.bl_to_antnums(bl) for bl in uvp_plt.bl_array], uvp_plt.get_ENU_bl_vecs()))
 
-    # Sanitize power spectrum units 
+    # Sanitize power spectrum units
     psunits = uvp_plt.units
     if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
     if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}")
     if "Hz" in psunits: psunits = psunits.replace("Hz", r"{\rm Hz}")
     if "str" in psunits: psunits = psunits.replace("str", r"\,{\rm str}")
-    if "Mpc" in psunits and "\\rm" not in psunits: 
+    if "Mpc" in psunits and "\\rm" not in psunits:
         psunits = psunits.replace("Mpc", r"{\rm Mpc}")
-    if "pi" in psunits and "\\pi" not in psunits: 
+    if "pi" in psunits and "\\pi" not in psunits:
         psunits = psunits.replace("pi", r"\pi")
     if "beam normalization not specified" in psunits:
-        psunits = psunits.replace("beam normalization not specified", 
+        psunits = psunits.replace("beam normalization not specified",
                                  r"{\rm unnormed}")
 
     # Iterate over waterfall keys
@@ -556,8 +594,8 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
             blp = uvp_plt.blpair_to_antnums(key[1])
 
             # plot waterfall
-            cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', 
-                             vmin=vmin, vmax=vmax, 
+            cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto',
+                             vmin=vmin, vmax=vmax,
                              extent=[x[0], x[-1], y[-1], y[0]])
 
             # ax config
@@ -599,7 +637,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
             else:
                 ax.set_xticklabels([])
 
-            k += 1        
+            k += 1
 
     # make suptitle
     if axes[0][0].get_figure()._suptitle is None:
@@ -609,7 +647,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
             units = "$%sP(k_\parallel)$ $[%s]$" % (logunits, psunits)
 
         spwrange = np.around(np.array(uvp_plt.get_spw_ranges()[spw][:2]) / 1e6, 2)
-        axes[0][0].get_figure().suptitle("{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange), 
+        axes[0][0].get_figure().suptitle("{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange),
                                          y=1.03, fontsize=14)
 
     # Return Axes
@@ -622,17 +660,17 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
                 red_tol=1.0, center_line=False, horizon_lines=False,
                 title=None, ax=None, cmap='viridis', figsize=(8, 6),
                 deltasq=False, colorbar=False, cbax=None, vmin=None, vmax=None,
-                edgecolor='none', flip_xax=False, flip_yax=False, lw=2, 
-                set_bl_tick_major=False, set_bl_tick_minor=False, 
+                edgecolor='none', flip_xax=False, flip_yax=False, lw=2,
+                set_bl_tick_major=False, set_bl_tick_minor=False,
                 xtick_size=10, xtick_rot=0, ytick_size=10, ytick_rot=0,
                 **kwargs):
     """
     Plot a 2D delay spectrum (or spectra) from a UVPSpec object. Note that
-    all integrations and redundant baselines are averaged (unless specifying 
+    all integrations and redundant baselines are averaged (unless specifying
     times) before plotting.
 
     Note: this deepcopies input uvp before averaging.
-    
+
     Parameters
     ----------
     uvp : UVPSpec
@@ -652,11 +690,11 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
         select on before plotting. Default: None.
 
     error_weights : string, optional
-         error_weights specify which kind of errors we use for weights 
+         error_weights specify which kind of errors we use for weights
          during averaging power spectra.
 
     fold : bool, optional
-        Whether to fold the power spectrum in k_parallel. 
+        Whether to fold the power spectrum in k_parallel.
         Default: False.
 
     delay : bool, optional
@@ -733,7 +771,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
         Line-width of horizon and center lines if plotted. Default: 2.
 
     set_bl_tick_major : bool, optional
-        If True, use the baseline lengths as major ticks, rather than default 
+        If True, use the baseline lengths as major ticks, rather than default
         uniform grid.
 
     set_bl_tick_minor : bool, optional
@@ -774,7 +812,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
 
     # Average across redundant groups and time
     # this also ensures blpairs are ordered from short_bl --> long_bl
-    blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol, 
+    blp_grps, lens, angs, tags = utils.get_blvec_reds(uvp, bl_error_tol=red_tol,
                                                       match_bl_lens=True)
     uvp.average_spectra(blpair_groups=blp_grps, time_avg=True, error_weights=error_weights, inplace=True)
 
@@ -809,12 +847,12 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
     if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}\ ")
     if "Hz" in psunits: psunits = psunits.replace("Hz", r"{\rm Hz}\ ")
     if "str" in psunits: psunits = psunits.replace("str", r"\,{\rm str}\ ")
-    if "Mpc" in psunits and "\\rm" not in psunits: 
+    if "Mpc" in psunits and "\\rm" not in psunits:
         psunits = psunits.replace("Mpc", r"{\rm Mpc}")
-    if "pi" in psunits and "\\pi" not in psunits: 
+    if "pi" in psunits and "\\pi" not in psunits:
         psunits = psunits.replace("pi", r"\pi")
     if "beam normalization not specified" in psunits:
-        psunits = psunits.replace("beam normalization not specified", 
+        psunits = psunits.replace("beam normalization not specified",
                                  r"{\rm unnormed}")
 
     # get data with shape (Nblpairs, Ndlys)
@@ -863,7 +901,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
     y_edges = np.array([y_axis[0]-ydiff[0]/2.0] + list(y_axis[:-1]+ydiff/2.0) + [y_axis[-1]+ydiff[-1]/2.0])
     X, Y = np.meshgrid(x_edges, y_edges)
 
-    # plot 
+    # plot
     cax = ax.pcolormesh(X, Y, data, cmap=cmap, edgecolor=edgecolor, lw=0.01,
                         vmin=vmin, vmax=vmax, **kwargs)
 
@@ -875,10 +913,10 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
             ax.set_yticks([np.around(x, _get_sigfig(x)+2) for x in y_axis])
     if set_bl_tick_minor:
         if rotate:
-            ax.set_xticks([np.around(x, _get_sigfig(x)+2) for x in x_axis], 
+            ax.set_xticks([np.around(x, _get_sigfig(x)+2) for x in x_axis],
                           minor=True)
         else:
-            ax.set_yticks([np.around(x, _get_sigfig(x)+2) for x in y_axis], 
+            ax.set_yticks([np.around(x, _get_sigfig(x)+2) for x in y_axis],
                           minor=True)
 
     # Add colorbar
@@ -977,47 +1015,98 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
     if new_plot:
         return fig
 
+def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
+                  delta_sq=True, error_field=None,
+                  plot_imag=True, axis=None, ylim=None):
+    spw = key[0]
+    blpair = key[1]
+    kparas = uvp.get_kparas(spw)
+    bl_index = uvp.get_blpairs().index(blpair, little_h=little_h)
+    kperp = uvp.get_kperps(little_h=little_h)[bl_index]
+    kvals = np.sqrt(kpars ** 2. + kperp ** 2.)
+    ps = uvp.get_data(key).squeeze()
+    if error_field is not None:
+        errs = upv.get_stats(error_field, key)
+    else:
+        errs = np.zeros_like(ps)
+    if hasattr(uvp, window_function_array):
+        kcs, klerrs, krerrs = get_window_confidence_intervals(uvp.window_function_array, kvals):
+    else:
+        kcs = kvals
+        klerrs = np.zeros_like(kvals)
+        krerrs = np.zeros_like(kvals)
+    gtz = ps.real >= 0.
+    ltz = ps.real <= 0.
+    if axis is not None:
+        plt.sca(axis)
+    lines = []
+    lines.append(plt.errorbar(kcs[gtz], ps.real[gtz], errs[gtz], xerr=[kls[gtz], krs[gtz],
+                 ls='none', marker='o', color=rcolor)[0])
+    plt.errorbar(kcs[ltz], np.abs(ps.real[ltz]), errs[ltz], xerr=[kls[gtz], krs[gtz],
+                 ls='none', marker='o', color=rcolor, markerfacecolor='none')
 
-def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log', 
+    if plot_imag:
+        lines.append(plt.errorbar(kcs[gtz], ps.real[gtz], errs[gtz], xerr=[kls[gtz], krs[gtz],
+                                  ls='none', marker='o', color=icolor)[0])
+        plt.errorbar(kcs[ltz], np.abs(ps.real[ltz]), errs[ltz], xerr=[kls[gtz], krs[gtz],
+                     ls='none', marker='o', color=icolor, markerfacecolor='none')
+    if ylim is None:
+        ylim = [np.min(np.abs(ps.real[gtz])/10), np.max(np.abs(ps.real[gtz])*10)]
+    plt.gca().set_ylim(ylim)
+    if uvp.units == '(mK)^2 h^-3 Mpc^3':
+        ylabel = 'P(k) [mK$^2 h^{-3}$Mpc$^3$]'
+    elif uvp.units == '(mK^2)':
+        ylabel = '$\\Delta^2$ [mK$^2$]'
+    plt.set_ylabel(ylabel)
+    if little_h:
+        xlabel = '$k$ [$h$Mpc$^{-1}$]'
+    else:
+        xlabel = '$k$ [Mpc$^{-1}$]'
+    plt.set_xlabel(xlabel)
+    plt.legend(lines, ['real', 'imag'])
+    plt.grid()
+    return plt.gca()
+
+def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
                            vmin=None, vmax=None, recenter=False, format='png',
                            **kwargs):
     """
-    Plot waterfalls for all baselines and polarizations within a UVData object, 
+    Plot waterfalls for all baselines and polarizations within a UVData object,
     and save to individual files.
-    
+
     Parameters
     ----------
     uvd : UVData object
-        Input data object. Waterfalls will be stored for all baselines and 
-        polarizations within the object; use uvd.select() to remove unwanted 
+        Input data object. Waterfalls will be stored for all baselines and
+        polarizations within the object; use uvd.select() to remove unwanted
         information.
 
     basename : str
-        Base filename for the output plots. This must have two placeholders 
-        for baseline ID ('bl') and polarization ('pol'), 
+        Base filename for the output plots. This must have two placeholders
+        for baseline ID ('bl') and polarization ('pol'),
         e.g. basename='plots/uvdata.{pol}.{bl}'.
-    
+
     data : str, optional
-        Which data array to plot from the UVData object. Options are: 
+        Which data array to plot from the UVData object. Options are:
             'data', 'flags', 'nsamples'. Default: 'data'.
-    
+
     plot_mode : str, optional
         Plot mode, passed to uvtools.plot.waterfall. Default: 'log'.
-    
+
     vmin, vmax : float, optional
-        Min./max. values of the plot colorscale. Default: None (uses the 
+        Min./max. values of the plot colorscale. Default: None (uses the
         min./max. of the data).
-    
+
     recenter : bool, optional
-        Whether to apply recentering (see uvtools.plot.waterfall). 
+        Whether to apply recentering (see uvtools.plot.waterfall).
         Default: False.
-    
+
     format : str, optional
-        The file format of the output images. If None, the image format will be 
+        The file format of the output images. If None, the image format will be
         deduced from the basename string. Default: 'png'.
-    
+
     **kwargs : dict
-        Keyword arguments passed to uvtools.plot.waterfall, which passes them 
+        Keyword arguments passed to uvtools.plot.waterfall, which passes them
         on to matplotlib.imshow.
     """
     import matplotlib
@@ -1027,19 +1116,19 @@ def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
     assert data in ['data', 'flags', 'nsamples'], \
             "'%s' not a valid data array; use 'data', 'flags', or 'nsamples'" \
             % data
-    
+
     # Set plot colorscale max/min if specified
     drng = None
-    if vmin is not None: 
+    if vmin is not None:
         assert vmax is not None, "Must also specify vmax if vmin is specified."
         drng = vmax - vmin
-    
+
     # Empty figure
     fig, ax = plt.subplots(1, 1)
-    
+
     # Loop over antenna pairs and pols
     for (ant1, ant2, pol), d in uvd.antpairpol_iter():
-        
+
         # Get chosen data array
         if data == 'data':
             pass
@@ -1049,12 +1138,12 @@ def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
             d = uvd.get_nsamples((ant1, ant2, pol))
         else:
             raise KeyError("Invalid data array type '%s'" % data)
-        
+
         # Make plot
-        img = uvtools.plot.waterfall(d, mode=plot_mode, mx=vmax, drng=drng, 
+        img = uvtools.plot.waterfall(d, mode=plot_mode, mx=vmax, drng=drng,
                                      recenter=recenter, **kwargs)
         fig.colorbar(img)
-        
+
         # Save to file
         outfile = basename.format(bl="%d.%d"%(ant1, ant2), pol=pol)
         if format is not None:

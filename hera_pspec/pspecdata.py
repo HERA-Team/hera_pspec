@@ -4293,7 +4293,7 @@ class PSpecData(object):
         if inplace is False:
             return dsets
 
-    def Jy_to_mK(self, beam=None):
+    def Jy_to_mK(self, average_conversion=False, beam=None):
         """
         Convert internal datasets from a Jy-scale to mK scale using a primary
         beam model if available. Note that if you intend to rephase_to_dset(),
@@ -4303,6 +4303,9 @@ class PSpecData(object):
         ----------
         beam : PSpecBeam object
             Beam object.
+
+        average_conversion : bool, optional
+            If True, average conversion factor in frequency before multiplying by data.
         """
         # get all unique polarizations of all the datasets
         pols = set(np.ravel([dset.polarization_array for dset in self.dsets]))
@@ -4327,6 +4330,8 @@ class PSpecData(object):
         factors = {}
         for p in pols:
             factors[p] = beam.Jy_to_mK(self.freqs, pol=p)
+            if average_conversion:
+                factors[p] = np.mean(factors[p]) * np.ones_like(factors[p])
 
         # iterate over datasets and apply factor
         for i, dset in enumerate(self.dsets):
@@ -4388,7 +4393,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               input_data_weight='identity', norm='I', taper='none', sampling=False,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10), exclude_flagged_edge_channels=False, Nspws=1,
-              bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True,
+              bl_deg_range=(0, 180), bl_error_tol=1.0, store_window=True, Jy2mK_avg=False,
               allow_fft=False, time_avg=False, vis_units="UNCALIB", standoff=0.0, suppression_factor=1e-9,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None, rcond=1e-15,
               trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None, include_autocorrs=False,
@@ -4900,7 +4905,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # perform Jy to mK conversion if desired
     if Jy2mK:
-        ds.Jy_to_mK()
+        ds.Jy_to_mK(average_conversion=Jy2mK_avg)
 
     # Print warning if auto_bls is set to exclude correlations of the
     # same baseline with itself, because this may cause a bias if one
@@ -5062,6 +5067,7 @@ def get_pspec_run_argparser():
     a.add_argument("--external_flags", default=None, type=str, nargs="+", help="Optional, specify external flag file to incorporate in data flagging.")
     a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include auto power spectra.")
     a.add_argument("--rcond", default=1e-15, type=float, help="Cutoff for eigenvalues in taking psuedo-inverse for nomralization.")
+    a.add_argument("--Jy2mK_avg", default=False, action="store_true", help="Average Jy2mK factorin frequency before applying to data to avoid introducing spurious spectral structure.")
     return a
 
 

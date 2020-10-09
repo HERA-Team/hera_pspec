@@ -104,7 +104,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     error_weights=None,
                     normalize_weights=True, inplace=True,
                     exclude_wedge=False, standoff=0.0,
-                    add_to_history=''):
+                    add_to_history='', include_autos=True, min_bl=0.0):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
     each spectrum's integration time or a specified kind of error bars.
@@ -184,6 +184,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
     add_to_history : str, optional
         Added text to add to file history.
+
+    min_bl float, optional
+        minimum baseline length to include in average, Inclusive!. Default is 0.0
 
     Notes
     -----
@@ -367,7 +370,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
                         stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy()
                         np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
-                        w = np.real(1. / stat_val.clip(1e-40, np.inf))
+                        w = np.real(1. / np.abs(stat_val.clip(1e-40, np.inf)) ** 2.) # make sure too square
                         # shape of w: (Ntimes, Ndlys)
                     else:
                     # Otherwise all arrays are averaged in a way weighted by the integration time,
@@ -376,12 +379,16 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
                         w = (ints * np.sqrt(nsmp))**2
                         # shape of w: (Ntimes, 1)
+                    blp_index = uvp.get_blpairs().index(blp)
+                    bl_len = np.linalg.norm(uvp.get_blpair_blvecs[blp_index])
                     if exclude_wedge:
                         # set weights inside of the wedge to zero.
-                        blp_index = uvp.get_blpairs().index(blp)
-                        bl_dly  = np.linalg.norm(uvp.get_blpair_blvecs[blp_index]) / conversions.units.c
+                        bl_dly  =  bl_len / conversions.units.c
                         dly_exclude = bl_dly + standoff * 1e-9
                         w[uvp.get_dlys(spw) < dly_exclude, :] = 0.
+                    # flag whole baseline if less then min_bl.
+                    if bl_len < min_bl:
+                        w[:] = 0.
                     # Take time average if desired
                     if time_avg:
                         wsum = np.sum(w, axis=0).clip(1e-40, np.inf)
@@ -568,7 +575,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
 def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
                       weight_by_cov=False, error_weights=None, add_to_history='', little_h=True, A={},
-                      exclude_wedge=False, standoff=0.0, run_check=True):
+                      exclude_wedge=False, standoff=0.0, min_bl=0.0, run_check=True):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
     Use UVPSpec.set_stats_slice to downweight regions of k_perp and k_para grid before averaging.
@@ -620,6 +627,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         number of nanoseconds off of the edge of the wedge to throw away data.
         if exclude_wedge is True.
 
+    min_bl : float, optional
+        minimum baseline length.
+
     run_check : bool, optional
         If True, run UVPSpec.check() on resultant object
 
@@ -662,7 +672,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg,
                             exclude_wedge=exclude_wedge, standoff=standoff,
                             blpair_weights=blpair_weights, error_weights=error_weights,
-                            inplace=True)
+                            inplace=True, min_bl=min_bl)
 
     # initialize blank arrays and dicts
     Nk = len(kbins)
