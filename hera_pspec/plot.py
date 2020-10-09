@@ -1117,7 +1117,7 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
                   delta_sq=True, error_field=None, xlabel=None,
                   plot_imag=True, axis=None, ylim=None, ylabel=None,
                   xlim=None, rcolor='k', icolor='orange', logscale=True,
-                  tile=None):
+                  tile=None, convert_to_deltasq=True):
 
 
     import matplotlib.pyplot as plt
@@ -1131,7 +1131,7 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
     ps = uvp.get_data(key).squeeze()
     if error_field is not None:
         errs = uvp.get_stats(error_field, key)[0]
-        errs = errs * kvals ** 3. / (2. * np.pi ** 2.)
+        errs = errs
     else:
         errs = np.zeros_like(ps)
     if hasattr(uvp, 'window_function_array'):
@@ -1140,25 +1140,28 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
         kcs = kvals
         klerrs = np.zeros_like(kvals)
         krerrs = np.zeros_like(kvals)
-
+    if convert_to_deltasq and not uvp.units == '(mK)^2 k^3 / (2pi^2)':
+        coeff = kcs ** 3. / (2. * np.pi ** 2.)
+    else:
+        coeff = np.ones_like(kvals)
     if axis is not None:
         plt.sca(axis)
     lines = []
     gtz = ps.real >= 0.
     ltz = ps.real <= 0.
-    lines.append(plt.errorbar(kcs[gtz], ps[gtz].real, errs[gtz].real, xerr=[klerrs[gtz], krerrs[gtz]],
+    lines.append(plt.errorbar(kcs[gtz], ps[gtz].real * coeff, errs[gtz].real * coeff, xerr=[klerrs[gtz], krerrs[gtz]],
                  ls='none', marker='o', color=rcolor)[0])
-    plt.errorbar(kcs[ltz], np.abs(ps.real[ltz]), errs[ltz], xerr=[klerrs[ltz], krerrs[ltz]],
+    plt.errorbar(kcs[ltz], np.abs(ps.real[ltz]) * coeff, errs[ltz] * coeff, xerr=[klerrs[ltz], krerrs[ltz]],
                  ls='none', marker='o', color=rcolor, markerfacecolor='w')
-    plt.plot(kcs, np.abs(errs.real), ls='--', color=rcolor)
+    plt.plot(kcs, np.abs(errs.real) * coeff, ls='--', color=rcolor)
     if plot_imag:
         gtz = ps.imag >= 0.
         ltz = ps.imag <= 0.
-        lines.append(plt.errorbar(kcs[gtz], ps[gtz].imag, errs[gtz].imag, xerr=[klerrs[gtz], krerrs[gtz]],
+        lines.append(plt.errorbar(kcs[gtz], ps[gtz].imag * coeff, errs[gtz].imag * coeff, xerr=[klerrs[gtz], krerrs[gtz]],
                                   ls='none', marker='o', color=icolor)[0])
-        plt.errorbar(kcs[ltz], np.abs(ps[ltz].imag), errs[ltz].imag, xerr=[klerrs[ltz], krerrs[ltz]],
+        plt.errorbar(kcs[ltz], np.abs(ps[ltz].imag) * coeff, errs[ltz].imag * coeff, xerr=[klerrs[ltz], krerrs[ltz]],
                      ls='none', marker='o', color=icolor, markerfacecolor='w')
-        plt.plot(kcs, np.abs(errs.imag), ls='--', color=icolor)
+        plt.plot(kcs, np.abs(errs.imag) * coeff, ls='--', color=icolor)
     if logscale:
         plt.yscale('log')
     if ylim is None:
@@ -1166,10 +1169,9 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
     if xlim is not None:
         plt.gca().set_xlim(xlim)
     plt.gca().set_ylim(ylim)
-    print(uvp.units)
-    if uvp.units == '(mK)^2 h^-3 Mpc^3':
+    if uvp.units == '(mK)^2 h^-3 Mpc^3' and not convert_to_deltasq:
         ylabel = 'P(k) [mK$^2 h^{-3}$Mpc$^3$]'
-    elif uvp.units == '(mK)^2 k^3 / (2pi^2)':
+    elif uvp.units == '(mK)^2 k^3 / (2pi^2)' or convert_to_deltasq:
         ylabel = '$\\Delta^2$ [mK$^2$]'
     plt.ylabel(ylabel)
     if little_h:

@@ -780,6 +780,14 @@ class UVPSpec(object):
 
             # multiply into data
             uvp.data_array[spw] *= coeff
+            # multiply stats array
+            if hasattr(uvp, 'stats_array'):
+                for k in uvp.stats_array:
+                    uvp.stats_array[k][spw] *= coeff
+            if hasattr(uvp, 'cov_array_real'):
+                uvp.cov_array_real[spw] *= np.outer(coeff, coeff)
+                uvp.cov_array_imag[spw] *= np.outer(coeff, coeff)
+            # multiply cov array
 
         # edit units
         uvp.norm_units = "k^3 / (2pi^2)"
