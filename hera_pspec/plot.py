@@ -9,45 +9,6 @@ import uvtools
 from scipy.interpolate import interp1d
 from . import conversions, uvpspec, utils
 
-
-def get_window_confidence_intervals(window_function_matrix, kvals, regularizer=1e-4, lcu=[0.16, 0.5, 0.84]):
-    """
-    Get horizontal error bars from window function matrix.
-
-    Parameters
-    ----------
-    window_function_matrix : array-like
-        Nbp x Npb window function matrix.
-    kvals : array-like
-        Nbp vector of k-values for each bandpower.
-    regularizer : float, optional
-        A regularization factor to help with interpolating the CDF of window function matrix rows.
-    lcu : 3-tuple or list, optional
-        First value is the cumulative probability of a window row to set left error bar at.
-        Second value is the cumulative probability of a window row to set center of bin at.
-        Third value is the cumulative probability of a window matrix row to set right error bar at.
-    Returns
-    -------
-    kcs, kls, krs
-    kcs: k-values at window-function median
-    kls: left error bars extending to 1 sigma to left (to 16% in cdf)
-
-    """
-    if not np.all(np.isclose(np.diff(kvals), np.diff(kvals)[0])):
-        raise NotImplementedError("Only Supports linearly spaced k-bins")
-    wm = np.asarray([w / w.sum() for w in window_function_matrix])
-
-    cdfs = np.asarray([ [wm[m][:n].real.sum() for n in range(wm.shape[1]+1)] for m in range(wm.shape[0])])
-    #add a little bit of slope to make sure the interpolated function is 1-to-1.
-    cdfs = np.asarray([cdrow + regularizer * (np.arange(len(cdrow))-len(cdrow)//2) for cdrow in cdfs])
-    dks = np.asarray([(kvals[m+1] - kvals[m])/2. for m in range(len(kvals) -1)])
-    kbin_upper_vals = np.asarray([kvals[m] + dks[m] for m in range(len(kvals)-1)])
-    kbin_upper_vals = np.hstack([ [kvals[0]-dks[0]], kbin_upper_vals, [kparas[-1] + dks[-1]]])
-    kc = np.asarray([ interp.interp1d(cdfs[m], kbin_upper_vals)(0.5) for m in range(nm)])
-    kr = np.asarray([ interp.interp1d(cdfs[m], kbin_upper_vals)(0.84) - kc[m] for m in range(nm)])
-    kl = np.asarray([ -interp.interp1d(cdfs[m], kbin_upper_vals)(0.16) + kc[m] for m in range(nm)])
-    return kc, kl, kr
-
 def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                    average_times=False, fold=False, plot_noise=False,
                    delay=True, deltasq=False, legend=False, ax=None,
@@ -1015,57 +976,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
     if new_plot:
         return fig
 
-def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
-                  delta_sq=True, error_field=None,
-                  plot_imag=True, axis=None, ylim=None):
-    spw = key[0]
-    blpair = key[1]
-    kparas = uvp.get_kparas(spw)
-    bl_index = uvp.get_blpairs().index(blpair, little_h=little_h)
-    kperp = uvp.get_kperps(little_h=little_h)[bl_index]
-    kvals = np.sqrt(kpars ** 2. + kperp ** 2.)
-    ps = uvp.get_data(key).squeeze()
-    if error_field is not None:
-        errs = upv.get_stats(error_field, key)
-    else:
-        errs = np.zeros_like(ps)
-    if hasattr(uvp, window_function_array):
-        kcs, klerrs, krerrs = get_window_confidence_intervals(uvp.window_function_array, kvals):
-    else:
-        kcs = kvals
-        klerrs = np.zeros_like(kvals)
-        krerrs = np.zeros_like(kvals)
-    gtz = ps.real >= 0.
-    ltz = ps.real <= 0.
-    if axis is not None:
-        plt.sca(axis)
-    lines = []
-    lines.append(plt.errorbar(kcs[gtz], ps.real[gtz], errs[gtz], xerr=[kls[gtz], krs[gtz],
-                 ls='none', marker='o', color=rcolor)[0])
-    plt.errorbar(kcs[ltz], np.abs(ps.real[ltz]), errs[ltz], xerr=[kls[gtz], krs[gtz],
-                 ls='none', marker='o', color=rcolor, markerfacecolor='none')
 
-    if plot_imag:
-        lines.append(plt.errorbar(kcs[gtz], ps.real[gtz], errs[gtz], xerr=[kls[gtz], krs[gtz],
-                                  ls='none', marker='o', color=icolor)[0])
-        plt.errorbar(kcs[ltz], np.abs(ps.real[ltz]), errs[ltz], xerr=[kls[gtz], krs[gtz],
-                     ls='none', marker='o', color=icolor, markerfacecolor='none')
-    if ylim is None:
-        ylim = [np.min(np.abs(ps.real[gtz])/10), np.max(np.abs(ps.real[gtz])*10)]
-    plt.gca().set_ylim(ylim)
-    if uvp.units == '(mK)^2 h^-3 Mpc^3':
-        ylabel = 'P(k) [mK$^2 h^{-3}$Mpc$^3$]'
-    elif uvp.units == '(mK^2)':
-        ylabel = '$\\Delta^2$ [mK$^2$]'
-    plt.set_ylabel(ylabel)
-    if little_h:
-        xlabel = '$k$ [$h$Mpc$^{-1}$]'
-    else:
-        xlabel = '$k$ [Mpc$^{-1}$]'
-    plt.set_xlabel(xlabel)
-    plt.legend(lines, ['real', 'imag'])
-    plt.grid()
-    return plt.gca()
 
 def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
                            vmin=None, vmax=None, recenter=False, format='png',
@@ -1163,3 +1074,106 @@ def _round_sigfig(x, up=True):
         return np.ceil(10**sigfigs * x) / 10**sigfigs
     else:
         return np.floor(10**sigfigs * x) / 10**sigfigs
+
+def get_window_confidence_intervals(window_function_matrix, kvals, regularizer=1e-4, lcu=[0.16, 0.5, 0.84]):
+    """
+    Get horizontal error bars from window function matrix.
+
+    Parameters
+    ----------
+    window_function_matrix : array-like
+        Nbp x Npb window function matrix.
+    kvals : array-like
+        Nbp vector of k-values for each bandpower.
+    regularizer : float, optional
+        A regularization factor to help with interpolating the CDF of window function matrix rows.
+    lcu : 3-tuple or list, optional
+        First value is the cumulative probability of a window row to set left error bar at.
+        Second value is the cumulative probability of a window row to set center of bin at.
+        Third value is the cumulative probability of a window matrix row to set right error bar at.
+    Returns
+    -------
+    kcs, kls, krs
+    kcs: k-values at window-function median
+    kls: left error bars extending to 1 sigma to left (to 16% in cdf)
+
+    """
+    if not np.all(np.isclose(np.diff(kvals), np.diff(kvals)[0], atol=1e-6, rtol=1e-6)):
+        raise NotImplementedError("Only Supports linearly spaced k-bins")
+    wm = np.asarray([w / w.sum() for w in window_function_matrix])
+    nm = len(wm)
+    cdfs = np.asarray([ [wm[m][:n].real.sum() for n in range(wm.shape[1]+1)] for m in range(wm.shape[0])])
+    #add a little bit of slope to make sure the interpolated function is 1-to-1.
+    cdfs = np.asarray([cdrow + regularizer * (np.arange(len(cdrow))-len(cdrow)//2) for cdrow in cdfs])
+    dks = np.asarray([(kvals[m+1] - kvals[m])/2. for m in range(len(kvals) -1)])
+    kbin_upper_vals = np.asarray([kvals[m] + dks[m] for m in range(len(kvals)-1)])
+    kbin_upper_vals = np.hstack([ [kvals[0]-dks[0]], kbin_upper_vals, [kvals[-1] + dks[-1]]])
+    kc = np.asarray([ interp.interp1d(cdfs[m], kbin_upper_vals)(0.5) for m in range(nm)])
+    kr = np.asarray([ interp.interp1d(cdfs[m], kbin_upper_vals)(0.84) - kc[m] for m in range(nm)])
+    kl = np.asarray([ -interp.interp1d(cdfs[m], kbin_upper_vals)(0.16) + kc[m] for m in range(nm)])
+    return kc, kl, kr
+
+def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
+                  delta_sq=True, error_field=None, xlabel=None,
+                  plot_imag=True, axis=None, ylim=None, ylabel=None,
+                  xlim=None, rcolor='k', icolor='orange', logscale=True,
+                  tile=None):
+    spw = key[0]
+    blpair = key[1]
+    kparas = uvp.get_kparas(spw, little_h=little_h)
+    bl_index = uvp.get_blpairs().index(blpair)
+    kperp = uvp.get_kperps(spw, little_h=little_h)[bl_index]
+    kperp = 0.
+    kvals = np.sqrt(kparas ** 2. + kperp ** 2.)
+    ps = uvp.get_data(key).squeeze()
+    if error_field is not None:
+        errs = uvp.get_stats(error_field, key)[0]
+        errs = errs * kvals ** 3. / (2. * np.pi ** 2.)
+    else:
+        errs = np.zeros_like(ps)
+    if hasattr(uvp, 'window_function_array'):
+        kcs, klerrs, krerrs = get_window_confidence_intervals(uvp.get_window_function(key).squeeze(), kvals * np.sign(kparas))
+    else:
+        kcs = kvals
+        klerrs = np.zeros_like(kvals)
+        krerrs = np.zeros_like(kvals)
+
+    if axis is not None:
+        plt.sca(axis)
+    lines = []
+    gtz = ps.real >= 0.
+    ltz = ps.real <= 0.
+    lines.append(plt.errorbar(kcs[gtz], ps[gtz].real, errs[gtz].real, xerr=[klerrs[gtz], krerrs[gtz]],
+                 ls='none', marker='o', color=rcolor)[0])
+    plt.errorbar(kcs[ltz], np.abs(ps.real[ltz]), errs[ltz], xerr=[klerrs[ltz], krerrs[ltz]],
+                 ls='none', marker='o', color=rcolor, markerfacecolor='w')
+    plt.plot(kcs, np.abs(errs.real), ls='--', color=rcolor)
+    if plot_imag:
+        gtz = ps.imag >= 0.
+        ltz = ps.imag <= 0.
+        lines.append(plt.errorbar(kcs[gtz], ps[gtz].imag, errs[gtz].imag, xerr=[klerrs[gtz], krerrs[gtz]],
+                                  ls='none', marker='o', color=icolor)[0])
+        plt.errorbar(kcs[ltz], np.abs(ps[ltz].imag), errs[ltz].imag, xerr=[klerrs[ltz], krerrs[ltz]],
+                     ls='none', marker='o', color=icolor, markerfacecolor='w')
+        plt.plot(kcs, np.abs(errs.imag), ls='--', color=icolor)
+    if logscale:
+        plt.yscale('log')
+    if ylim is None:
+        ylim = [np.min(np.abs(ps.real[gtz])/10), np.max(np.abs(ps.real[gtz])*10)]
+    if xlim is not None:
+        plt.gca().set_xlim(xlim)
+    plt.gca().set_ylim(ylim)
+    print(uvp.units)
+    if uvp.units == '(mK)^2 h^-3 Mpc^3':
+        ylabel = 'P(k) [mK$^2 h^{-3}$Mpc$^3$]'
+    elif uvp.units == '(mK)^2 k^3 / (2pi^2)':
+        ylabel = '$\\Delta^2$ [mK$^2$]'
+    plt.ylabel(ylabel)
+    if little_h:
+        xlabel = '$k$ [$h$Mpc$^{-1}$]'
+    else:
+        xlabel = '$k$ [Mpc$^{-1}$]'
+    plt.xlabel(xlabel)
+    plt.legend(lines, ['real', 'imag'])
+    plt.grid()
+    return plt.gca()
