@@ -1118,6 +1118,9 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
                   plot_imag=True, axis=None, ylim=None, ylabel=None,
                   xlim=None, rcolor='k', icolor='orange', logscale=True,
                   tile=None):
+
+
+    import matplotlib.pyplot as plt
     spw = key[0]
     blpair = key[1]
     kparas = uvp.get_kparas(spw, little_h=little_h)
@@ -1176,4 +1179,4 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
     plt.xlabel(xlabel)
     plt.legend(lines, ['real', 'imag'])
     plt.grid()
-    return plt.gca()
+    return plt.gcf()
