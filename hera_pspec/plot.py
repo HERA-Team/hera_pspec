@@ -1113,12 +1113,45 @@ def get_window_confidence_intervals(window_function_matrix, kvals, regularizer=1
     kl = np.asarray([ -interp.interp1d(cdfs[m], kbin_upper_vals)(0.16) + kc[m] for m in range(nm)])
     return kc, kl, kr
 
-def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
-                  delta_sq=True, error_field=None, xlabel=None,
+def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
+                  error_field=None, xlabel=None, title=None,
                   plot_imag=True, axis=None, ylim=None, ylabel=None,
                   xlim=None, rcolor='k', icolor='orange', logscale=True,
-                  tile=None, convert_to_deltasq=True):
+                  tile=None, convert_to_deltasq=True, xerr_cut=0.05):
+    """
+    Function to make spherical power spectrum plots of a single time index.
+    (Really intended for use on time averaged and spherically averaged data)
 
+    Parameters
+    ----------
+    uvp : UVPSpec Object to plot
+
+    key : tuple
+        (SPW, blpair, polpair) of power spectrum you want to plot.
+
+    time_index : int
+        index of time you want to plot.
+
+    error_field : str, optional
+        stats_array field to use for vertical error bars.
+        If none is provided, no vertical error bars will be drawn.
+
+    xlabel : str, optional
+        string to put in the x-label.
+        Default is '$k$ [h Mpc^{-1}]'
+
+    plot_imag: bool, optional
+        If true, plot imaginary part of power spectrum
+        Default is True.
+
+    axis : matplotlib figure axis handle
+        user provided axis if they wish to draw the plot in a sub-axis
+
+    ylim : optional 2-tuple
+        set the y-axis. If none provided use min /10 max * 10
+
+
+    """
 
     import matplotlib.pyplot as plt
     spw = key[0]
@@ -1128,7 +1161,7 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
     kperp = uvp.get_kperps(spw, little_h=little_h)[bl_index]
     kperp = 0.
     kvals = np.sqrt(kparas ** 2. + kperp ** 2.)
-    ps = uvp.get_data(key).squeeze()
+    ps = uvp.get_data(key)[time_index]
     if error_field is not None:
         errs = uvp.get_stats(error_field, key)[0]
         errs = errs
@@ -1140,6 +1173,7 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
         kcs = kvals
         klerrs = np.zeros_like(kvals)
         krerrs = np.zeros_like(kvals)
+    include = klerrs + krerrs < xerr_cut
     if convert_to_deltasq and not uvp.units == '(mK)^2 k^3 / (2pi^2)':
         coeff = kcs ** 3. / (2. * np.pi ** 2.)
     else:
@@ -1147,21 +1181,21 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
     if axis is not None:
         plt.sca(axis)
     lines = []
-    gtz = ps.real >= 0.
-    ltz = ps.real <= 0.
-    lines.append(plt.errorbar(kcs[gtz], ps[gtz].real * coeff, errs[gtz].real * coeff, xerr=[klerrs[gtz], krerrs[gtz]],
+    gtz = ps.real[include] >= 0.
+    ltz = ps.real[include] <= 0.
+    lines.append(plt.errorbar(kcs[include][gtz], (ps.real * coeff)[include][gtz], (errs.real * coeff)[include][gtz], xerr=[klerrs[gtz], krerrs[gtz]],
                  ls='none', marker='o', color=rcolor)[0])
-    plt.errorbar(kcs[ltz], np.abs(ps.real[ltz]) * coeff, errs[ltz] * coeff, xerr=[klerrs[ltz], krerrs[ltz]],
+    plt.errorbar(kcs[include][ltz], np.abs(ps.real * coeff)[include][ltz] , (errs * coeff)[include][ltz], xerr=[klerrs[include][ltz], krerrs[include][ltz]],
                  ls='none', marker='o', color=rcolor, markerfacecolor='w')
-    plt.plot(kcs, np.abs(errs.real) * coeff, ls='--', color=rcolor)
+    plt.plot(kcs[include], np.abs(errs.real)[include] * coeff[include], ls='--', color=rcolor)
     if plot_imag:
         gtz = ps.imag >= 0.
         ltz = ps.imag <= 0.
-        lines.append(plt.errorbar(kcs[gtz], ps[gtz].imag * coeff, errs[gtz].imag * coeff, xerr=[klerrs[gtz], krerrs[gtz]],
+        lines.append(plt.errorbar(kcs[include][gtz], (ps.imag * coeff)[include][gtz], (errs.imag * coeff)[include][gtz], xerr=[klerrs[include][gtz], krerrs[include][gtz]],
                                   ls='none', marker='o', color=icolor)[0])
-        plt.errorbar(kcs[ltz], np.abs(ps[ltz].imag) * coeff, errs[ltz].imag * coeff, xerr=[klerrs[ltz], krerrs[ltz]],
+        plt.errorbar(kcs[include][ltz], np.abs(ps.imag * coeff)[include][ltz], (errs.imag * coeff)[include][ltz], xerr=[klerrs[include][ltz], krerrs[include][ltz]],
                      ls='none', marker='o', color=icolor, markerfacecolor='w')
-        plt.plot(kcs, np.abs(errs.imag) * coeff, ls='--', color=icolor)
+        plt.plot(kcs[include], np.abs(errs.imag)[include] * coeff[include], ls='--', color=icolor)
     if logscale:
         plt.yscale('log')
     if ylim is None:
@@ -1178,6 +1212,10 @@ def plot_1d_pspec(uvp, key, cmap='inferno', little_h=True,
         xlabel = '$k$ [$h$Mpc$^{-1}$]'
     else:
         xlabel = '$k$ [Mpc$^{-1}$]'
+    if title is None:
+        spw_range = uvp.get_spw_ranges(spw)
+        day = int(uvp.time_avg_array[spw][time_index])
+        title = f'{k[1][0]} x {k[1][1]}, {int(spw_range[0] / 1e6)}-{int(spw_range[1] / 1e6)}'
     plt.xlabel(xlabel)
     plt.legend(lines, ['real', 'imag'])
     plt.grid()
