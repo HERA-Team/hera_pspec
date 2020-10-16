@@ -2163,7 +2163,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     u.spw_dly_array, u.spw_freq_array = [], []
 
-    # Loop over spectral windows
+    # Loop over new spectral windows and setup arrays
     for i, spw in enumerate(new_spws):
         # Initialize new arrays
         u.data_array[i] = np.empty((Nblpairts, spw[3], Npols), np.complex128)
@@ -2180,35 +2180,26 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         if store_stats:
             for stat in stored_stats:
                 u.stats_array[stat][i] = np.empty((Nblpairts, spw[3], Npols), np.complex128)
-        # Set frequencies and delays
-        spw_Nfreqs = spw[2]
-        spw_Ndlys = spw[3]
-        spw_freqs = np.linspace(*spw[:3], endpoint=False)
-        spw_dlys = np.fft.fftshift(
-                        np.fft.fftfreq(spw_Ndlys,
-                                       np.median(np.diff(spw_freqs)) ) )
-        u.spw_freq_array.extend(np.ones(spw_Nfreqs, np.int32) * i)
-        u.spw_dly_array.extend(np.ones(spw_Ndlys, np.int32) * i)
-        u.spw_array.extend([i])
-        u.freq_array.extend(spw_freqs)
-        u.dly_array.extend(spw_dlys)
 
-    # Convert to numpy arrays
-    u.spw_array = np.array(u.spw_array)
-    u.spw_freq_array = np.array(u.spw_freq_array)
-    u.spw_dly_array = np.array(u.spw_dly_array)
-    u.freq_array = np.array(u.freq_array)
-    u.dly_array = np.array(u.dly_array)
+    # Set frequencies and delays: if concat_ax == 'spw' this is changed below
+    # assumes spw metadata are the same for all uvps
+    u.spw_array = uvps[0].spw_array.copy()
+    u.spw_freq_array = uvps[0].spw_freq_array.copy()
+    u.spw_dly_array = uvps[0].spw_dly_array.copy()
+    u.freq_array = uvps[0].freq_array.copy()
+    u.dly_array = uvps[0].dly_array.copy()
+    u.Nfreqs = len(np.unique(u.freq_array))
+    u.Nspwfreqs = len(u.spw_freq_array)
+    u.Ndlys = len(np.unique(u.dly_array))
+    u.Nspwdlys = len(u.spw_dly_array)
+
+    # other metadata
     u.polpair_array = np.array(new_polpairs)
 
     # Number of spectral windows, delays etc.
     u.Nspws = Nspws
     u.Nblpairts = Nblpairts
     u.Npols = Npols
-    u.Nfreqs = len(np.unique(u.freq_array))
-    u.Nspwdlys = len(u.spw_dly_array)
-    u.Nspwfreqs = len(u.spw_freq_array)
-    u.Ndlys = len(np.unique(u.dly_array))
 
     # Prepare time and label arrays
     u.time_1_array, u.time_2_array = np.empty(Nblpairts, np.float64), \
@@ -2256,10 +2247,25 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     # fill in data arrays depending on concat ax
     if concat_ax == 'spw':
 
+        u.spw_array = np.arange(Nspws, dtype=np.int32)
+        freq_array, dly_array = [], []
+        spw_freq_array, spw_dly_array = [], []
+
         # Concatenate spectral windows
         for i, spw in enumerate(new_spws):
+            # get index of this new spw in uvps and its spw index
             l = [spw in _u for _u in uvp_spws].index(True)
             m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+
+            # freq metadata
+            spw_freq_inds = np.where(uvps[l].spw_freq_array == m)[0]
+            freq_array.extend(uvps[l].freq_array[spw_freq_inds])
+            spw_freq_array.extend(np.ones(len(spw_freq_inds), dtype=np.int32) * i)
+
+            # dly metadata
+            spw_dly_inds = np.where(uvps[l].spw_dly_array == m)[0]
+            dly_array.extend(uvps[l].dly_array[spw_dly_inds])
+            spw_dly_array.extend(np.ones(len(spw_dly_inds), dtype=np.int32) * i)
 
             # Lookup indices of new_blpts in the uvp_blpts[l] array
             blpts_idxs = uvputils._fast_lookup_blpairts(uvp_blpts[l], new_blpts)
@@ -2293,6 +2299,15 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     if store_stats:
                         for stat in stored_stats:
                             u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][m][n, :, q]
+
+        u.freq_array = np.array(freq_array)
+        u.dly_array = np.array(dly_array)
+        u.spw_freq_array = np.array(spw_freq_array)
+        u.spw_dly_array = np.array(spw_dly_array)
+        u.Nfreqs = len(np.unique(u.freq_array))
+        u.Nspwfreqs = len(u.spw_freq_array)
+        u.Ndlys = len(np.unique(u.dly_array))
+        u.Nspwdlys = len(u.spw_dly_array)
 
         # Populate new LST, time, and blpair arrays
         for j, blpt in enumerate(new_blpts):

@@ -397,6 +397,7 @@ def test_spherical_average():
     uvd.polarization_array[0] = -6
     uvp += testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo)
     # insert cov_array and stats_array
+    uvp.cov_model = 'empirical'
     uvp.cov_array_real = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.float64)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
                         for s in range(uvp.Nspws)}
     uvp.cov_array_imag = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.float64)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
@@ -425,6 +426,10 @@ def test_spherical_average():
         # assert errorbars are 1/sqrt(N) what they used to be
         assert np.isclose(np.sqrt(sph.cov_array_real[spw])[:, range(Nk), range(Nk)], 1/np.sqrt(A[spw].sum(axis=1))).all()
         assert np.isclose(sph.stats_array['err'][spw], 1/np.sqrt(A[spw].sum(axis=1))).all()
+    # bug check: time_avg_array was not down-selected to new Nblpairts
+    assert sph.time_avg_array.size == sph.Nblpairts
+    # bug check: cov_array_imag was not updated
+    assert sph.cov_array_real[0].shape == sph.cov_array_imag[0].shape
 
     # try without little h
     sph2 = grouping.spherical_average(uvp, kbins * cosmo.h, bin_widths * cosmo.h, little_h=False)
@@ -457,6 +462,12 @@ def test_spherical_average():
         assert np.isclose(sph2.window_function_array[spw].sum(axis=2)[:, 3:, :], 1).all()
     # assert resultant stats are not nan
     assert (~np.isnan(sph2.stats_array['err'][0])).all()
+
+    # try combine after spherical and assert it is equivalent
+    sph_a, sph_b = sph.select(spws=[0], inplace=False), sph.select(spws=[1], inplace=False)
+    sph_c = uvpspec.combine_uvpspec([sph_a, sph_b], merge_history=False, verbose=False)
+    # bug check: in the past, combine after spherical average erroneously changed dly_array
+    assert sph == sph_c
 
     # exceptions
     nt.assert_raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)

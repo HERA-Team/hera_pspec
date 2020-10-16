@@ -584,8 +584,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     
     error_weights : str, optional
         Error field to use as weights in averaging. Weight is 1/err^2.
-        This is the only error field that will be propagated to the final object.
-        If not specified perform a uniform average.
+        If not specified, perform a uniform average.
 
     add_to_history : str, optional
         String to append to object history
@@ -595,7 +594,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         If False, user must ensure adopted h is consistent with uvp_in.cosmo
 
     A : dict, optional
-        Empty dict to populate with A matrix
+        Empty dict to populate with A matrix. This is useful for debugging,
+        or if you'd like to look at the A matrix used for the average.
+        Default is empty and not saved to globals.
 
     run_check : bool, optional
         If True, run UVPSpec.check() on resultant object
@@ -826,6 +827,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             cm = np.moveaxis(cov_array_real[spw], -1, 0)
             cm = Ht @ cm @ H
             cov_array_real[spw] = np.moveaxis(cm, 0, -1)
+            cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
     # handle data arrays
     uvp.data_array = data_array
@@ -840,24 +842,36 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if store_window:
         uvp.window_function_array = window_function_array
 
-    # handle metadata
+    # handle spw metadata
     uvp.Nspwdlys = len(spw_dlys_array)
-    uvp.Ndlys = len(dlys_array)
+    uvp.Ndlys = len(np.unique(dlys_array))
     uvp.dly_array = np.asarray(dlys_array)
     uvp.spw_dly_array = np.asarray(spw_dlys_array)
-    blp = uvp.blpair_array[0]  
 
-    # use first blpair as representative blpair
-    uvp.blpair_array = uvp.blpair_array[uvp.blpair_to_indices(blp)]
+    # handle baseline metadata: use first blpair as representative blpair
+    blp = uvp.blpair_array[0]  
+    blp_inds = uvp.blpair_to_indices(blp)
+    uvp.blpair_array = uvp.blpair_array[blp_inds]
     uvp.Nblpairts = uvp.Ntimes
     uvp.Nblpairs = 1
     bl_array = np.unique([uvp.antnums_to_bl(an) for an in uvp.blpair_to_antnums(blp)])
     uvp.bl_vecs = np.asarray([uvp.bl_vecs[np.argmin(uvp.bl_array - bl)] for bl in bl_array])
     uvp.bl_array = bl_array
     uvp.Nbls = len(bl_array)
+    uvp.label_1_array = uvp.label_1_array[:, blp_inds]
+    uvp.label_2_array = uvp.label_2_array[:, blp_inds]
 
-    # set bl_vecs mag to zero (k_mag comes purely from k_paras for spherically averaged uvp)
+    # set bl_vecs mag to zero
+    # k_mag stored as k_paras for spherically averaged uvp by convention!
     uvp.bl_vecs[:] = 0.0
+
+    # handle other metadata
+    uvp.time_avg_array = np.unique(uvp_in.time_avg_array)
+    uvp.time_1_array = np.unique(uvp_in.time_1_array)
+    uvp.time_2_array = np.unique(uvp_in.time_2_array)
+    uvp.lst_avg_array = np.unique(uvp_in.lst_avg_array)
+    uvp.lst_1_array = np.unique(uvp_in.lst_1_array)
+    uvp.lst_2_array = np.unique(uvp_in.lst_2_array)
 
     # Add to history
     uvp.history += version.history_string(notes=add_to_history)
