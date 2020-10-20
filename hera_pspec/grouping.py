@@ -379,8 +379,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
                         w = (ints * np.sqrt(nsmp))**2
                         # shape of w: (Ntimes, 1)
-                    blp_index = uvp.get_blpairs().index(blp)
-                    bl_len = np.linalg.norm(uvp.get_blpair_blvecs[blp_index])
+                    blp_index = uvp.get_blpairs().index(uvp.blpair_to_antnums(blp))
+                    bl_len = np.linalg.norm(uvp.get_blpair_blvecs()[blp_index])
                     if exclude_wedge:
                         # set weights inside of the wedge to zero.
                         bl_dly  =  bl_len / conversions.units.c
