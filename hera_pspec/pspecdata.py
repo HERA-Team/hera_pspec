@@ -12,12 +12,13 @@ import glob
 import warnings
 import json
 import uvtools.dspec as dspec
+from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
+
+
 # This is a list of weights that will depend on baseline.
 # If data_weighting is in this list, G and H will be hashed per
 # baseline pair.
 R_PARAM_WEIGHTINGS = ['dayenu']
-
-from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
 
 class PSpecData(object):
 
@@ -60,9 +61,6 @@ class PSpecData(object):
 
         cal_flag : bool, optional
             If True, propagate flags from calibration into data
-
-        r_cache : dict, optional
-            Dictionary of pre-computed R-matrices with appropriate keys.
 
         cov_model : str, optional
             Model method for computing data covariances. Default is 'empirical'.
