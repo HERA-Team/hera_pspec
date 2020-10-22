@@ -5068,6 +5068,7 @@ def get_pspec_run_argparser():
     a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include auto power spectra.")
     a.add_argument("--rcond", default=1e-15, type=float, help="Cutoff for eigenvalues in taking psuedo-inverse for nomralization.")
     a.add_argument("--Jy2mK_avg", default=False, action="store_true", help="Average Jy2mK factorin frequency before applying to data to avoid introducing spurious spectral structure.")
+    a.add_argument("--store_window", default=False, action="store_true", help="Store the window function.")
     return a
 
 
