@@ -101,7 +101,8 @@ def sample_baselines(bls, seed=None):
 
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     blpair_weights=None, error_field=None,
-                    error_weights=None,
+                    error_weights=None, time_weights=None,
+                    inv_fg_weights=False,
                     normalize_weights=True, inplace=True,
                     exclude_wedge=False, standoff=0.0,
                     add_to_history='', include_autos=True, min_bl=0.0):
@@ -378,14 +379,27 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # Since P_N ~ Tsys^2 / sqrt{N_incoherent} t_int (see N. Kern, The Astrophysical Journal 888.2 (2020): 70, Equation 7),
                     # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
                         w = (ints * np.sqrt(nsmp))**2
+                    if time_weights is not None:
+                        w = w * time_weights[:, None]
                         # shape of w: (Ntimes, 1)
+
                     blp_index = uvp.get_blpairs().index(uvp.blpair_to_antnums(blp))
                     bl_len = np.linalg.norm(uvp.get_blpair_blvecs()[blp_index])
+                    # weight by the inverse of the average power spectrum amplitude inside of the wedge.
+                    if inv_fg_weights:
+                        bl_dly  =  bl_len / conversions.units.c
+                        dly_avg = bl_dly + standoff * 1e-9
+                        fg_amp = np.mean(np.abs(data[:, np.abs(uvp.get_dlys(spw)) < dly_avg]), axis=1)
+                        fg_amp /= fg_amp[np.isfinite(fg_amp)].mean()
+                        fg_amp = fg_amp ** 2.
+                        w = w / fg_amp[:, None]
+                        w[np.isclose(fg_amp, 0.), :] = 0.
+
                     if exclude_wedge:
                         # set weights inside of the wedge to zero.
                         bl_dly  =  bl_len / conversions.units.c
                         dly_exclude = bl_dly + standoff * 1e-9
-                        w[uvp.get_dlys(spw) < dly_exclude, :] = 0.
+                        w[:, np.abs(uvp.get_dlys(spw)) < dly_exclude] = 0.
                     # flag whole baseline if less then min_bl.
                     if bl_len < min_bl:
                         w[:] = 0.
@@ -575,7 +589,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
 def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
                       weight_by_cov=False, error_weights=None, add_to_history='', little_h=True, A={},
-                      exclude_wedge=False, standoff=0.0, min_bl=0.0, run_check=True):
+                      exclude_wedge=False, standoff=0.0, min_bl=0.0, inv_fg_weights=None, error_field=None,
+                      time_weights=None, run_check=True):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
     Use UVPSpec.set_stats_slice to downweight regions of k_perp and k_para grid before averaging.
@@ -672,7 +687,8 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg,
                             exclude_wedge=exclude_wedge, standoff=standoff,
                             blpair_weights=blpair_weights, error_weights=error_weights,
-                            inplace=True, min_bl=min_bl)
+                            inplace=True, min_bl=min_bl, inv_fg_weights=inv_fg_weights,
+                            time_weights=time_weights, error_field=error_field)
 
     # initialize blank arrays and dicts
     Nk = len(kbins)
@@ -784,6 +800,17 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 stat_weight = stats_array[error_weights][spw][:, dslice].real.copy()
                 np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
                 E[:, range(dstart, dstop), range(dstart, dstop)] = 1 / stat_weight.clip(1e-40, np.inf)
+
+            if exclude_wedge:
+                # weight all data in wedge to be zero.
+                #blp_index = uvp.get_blpairs().index(uvp.blpair_to_antnums(blp))
+                bl_len = np.linalg.norm(uvp.get_blpair_blvecs()[b])
+                bl_dly  =  bl_len / conversions.units.c
+                dly_lim = bl_dly + standoff * 1e-9
+                dlys_exclude =  np.abs(uvp.get_dlys(spw)) < dly_lim
+                for t in range(E.shape[0]):
+                    for p in range(E.shape[-1]):
+                        E[t, dslice, dslice, p][dlys_exclude, :][:, dlys_exclude] = 0.
 
             else:
                 # uniform weighting along diagonal, except for flagged data

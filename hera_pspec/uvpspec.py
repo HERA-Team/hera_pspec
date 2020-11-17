@@ -1900,6 +1900,7 @@ class UVPSpec(object):
 
     def average_spectra(self, blpair_groups=None, time_avg=False,
                         blpair_weights=None, error_field=None, error_weights=None,
+                        time_weights=None, inv_fg_weights=False, exclude_wedge=False,
                         inplace=True):
         """
         Average power spectra across the baseline-pair-time axis, weighted by
@@ -1982,6 +1983,9 @@ class UVPSpec(object):
                                      error_field=error_field,
                                      error_weights=error_weights,
                                      blpair_weights=blpair_weights,
+                                     time_weights=time_weights,
+                                     inv_fg_weights=inv_fg_weights,
+                                     exclude_wedge=exclude_wedge,
                                      inplace=True)
         else:
             return grouping.average_spectra(self, blpair_groups=blpair_groups,
@@ -1989,6 +1993,9 @@ class UVPSpec(object):
                                             error_field=error_field,
                                             error_weights=error_weights,
                                             blpair_weights=blpair_weights,
+                                            time_weights=time_weights,
+                                            inv_fg_weights=inv_fg_weights,
+                                            exclude_wedge=exclude_wedge,
                                             inplace=False)
 
     def fold_spectra(self):
