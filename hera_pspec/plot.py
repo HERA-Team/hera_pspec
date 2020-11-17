@@ -1117,7 +1117,10 @@ def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
                   error_field=None, xlabel=None, title=None,
                   plot_imag=True, axis=None, ylim=None, ylabel=None,
                   xlim=None, rcolor='k', icolor='orange', logscale=True,
-                  tile=None, convert_to_deltasq=True, xerr_cut=0.05):
+                  tile=None, convert_to_deltasq=True, xerr_cut=0.05,
+                  draw_legend=False, scale_factor=1.,
+                  plot_errs=True, fold=False, norm_max=False,
+                  **plot_kwargs):
     """
     Function to make spherical power spectrum plots of a single time index.
     (Really intended for use on time averaged and spherically averaged data)
@@ -1154,58 +1157,74 @@ def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
     """
 
     import matplotlib.pyplot as plt
+    uvp_plt = copy.deepcopy(uvp)
+    if fold:
+        uvp_plt.fold_spectra()
     spw = key[0]
     blpair = key[1]
-    kparas = uvp.get_kparas(spw, little_h=little_h)
-    bl_index = uvp.get_blpairs().index(blpair)
-    kperp = uvp.get_kperps(spw, little_h=little_h)[bl_index]
+    kparas = uvp_plt.get_kparas(spw, little_h=little_h)
+    bl_index = uvp_plt.get_blpairs().index(blpair)
+    kperp = uvp_plt.get_kperps(spw, little_h=little_h)[bl_index]
     kperp = 0.
     kvals = np.sqrt(kparas ** 2. + kperp ** 2.)
-    ps = uvp.get_data(key)[time_index]
+    ps = uvp_plt.get_data(key)[time_index]
     if error_field is not None:
-        errs = uvp.get_stats(error_field, key)[0]
+        errs = uvp_plt.get_stats(error_field, key)[0]
         errs = errs
     else:
         errs = np.zeros_like(ps)
-    if hasattr(uvp, 'window_function_array'):
-        kcs, klerrs, krerrs = get_window_confidence_intervals(uvp.get_window_function(key).squeeze(), kvals * np.sign(kparas))
+    if hasattr(uvp_plt, 'window_function_array'):
+        kcs, klerrs, krerrs = get_window_confidence_intervals(uvp_plt.get_window_function(key).squeeze(), kvals * np.sign(kparas))
     else:
-        kcs = kvals
+        kcs = kvals * np.sign(kparas)
         klerrs = np.zeros_like(kvals)
         krerrs = np.zeros_like(kvals)
     include = klerrs + krerrs < xerr_cut
-    if convert_to_deltasq and not uvp.units == '(mK)^2 k^3 / (2pi^2)':
+    if convert_to_deltasq and not uvp_plt.units == '(mK)^2 k^3 / (2pi^2)':
         coeff = kcs ** 3. / (2. * np.pi ** 2.)
     else:
         coeff = np.ones_like(kvals)
     if axis is not None:
         plt.sca(axis)
     lines = []
+    if norm_max:
+        norm = np.abs(ps * scale_factor).max()
+    else:
+        norm = 1.
+    scale_factor /= norm
     gtz = ps.real[include] >= 0.
     ltz = ps.real[include] <= 0.
-    lines.append(plt.errorbar(kcs[include][gtz], (ps.real * coeff)[include][gtz], (errs.real * coeff)[include][gtz], xerr=[klerrs[gtz], krerrs[gtz]],
-                 ls='none', marker='o', color=rcolor)[0])
-    plt.errorbar(kcs[include][ltz], np.abs(ps.real * coeff)[include][ltz] , (errs * coeff)[include][ltz], xerr=[klerrs[include][ltz], krerrs[include][ltz]],
-                 ls='none', marker='o', color=rcolor, markerfacecolor='w')
-    plt.plot(kcs[include], np.abs(errs.real)[include] * coeff[include], ls='--', color=rcolor)
+    lines.append(plt.errorbar(kcs[include][gtz], scale_factor * (ps.real * coeff)[include][gtz],
+                              scale_factor * (errs.real * coeff)[include][gtz],
+                              xerr=[klerrs[include][gtz], krerrs[include][gtz]],
+                              color=rcolor, **plot_kwargs)[0])
+    plt.errorbar(kcs[include][ltz], scale_factor * np.abs(ps.real * coeff)[include][ltz] ,
+                            scale_factor * (errs * coeff)[include][ltz],
+                            xerr=[klerrs[include][ltz], krerrs[include][ltz]],
+                            color=rcolor, markerfacecolor='w', **plot_kwargs)
+    if plot_errs:
+        plt.plot(kcs[include], scale_factor * np.abs(errs.real)[include] * coeff[include], ls='--', color=rcolor)
     if plot_imag:
-        gtz = ps.imag >= 0.
-        ltz = ps.imag <= 0.
-        lines.append(plt.errorbar(kcs[include][gtz], (ps.imag * coeff)[include][gtz], (errs.imag * coeff)[include][gtz], xerr=[klerrs[include][gtz], krerrs[include][gtz]],
-                                  ls='none', marker='o', color=icolor)[0])
-        plt.errorbar(kcs[include][ltz], np.abs(ps.imag * coeff)[include][ltz], (errs.imag * coeff)[include][ltz], xerr=[klerrs[include][ltz], krerrs[include][ltz]],
-                     ls='none', marker='o', color=icolor, markerfacecolor='w')
-        plt.plot(kcs[include], np.abs(errs.imag)[include] * coeff[include], ls='--', color=icolor)
+        gtz = ps.imag[include] >= 0.
+        ltz = ps.imag[include] <= 0.
+        lines.append(plt.errorbar(kcs[include][gtz], scale_factor * (ps.imag * coeff)[include][gtz],
+                     scale_factor * (errs.imag * coeff)[include][gtz], xerr=[klerrs[include][gtz], krerrs[include][gtz]],
+                     color=icolor, **plot_kwargs)[0])
+        plt.errorbar(kcs[include][ltz], scale_factor * np.abs(ps.imag * coeff)[include][ltz],
+                     scale_factor * (errs.imag * coeff)[include][ltz], xerr=[klerrs[include][ltz], krerrs[include][ltz]],
+                     color=icolor, markerfacecolor='w', **plot_kwargs)
+        if plot_errs:
+            plt.plot(kcs[include], scale_factor * np.abs(errs.imag)[include] * coeff[include], ls='--', color=icolor)
     if logscale:
         plt.yscale('log')
     if ylim is None:
-        ylim = [np.min(np.abs(ps.real[gtz])/10), np.max(np.abs(ps.real[gtz])*10)]
+        ylim = [np.min(scale_factor * np.abs(ps.real[include][gtz])/10), np.max(scale_factor * np.abs(ps.real[include][gtz])*10)]
     if xlim is not None:
         plt.gca().set_xlim(xlim)
     plt.gca().set_ylim(ylim)
-    if uvp.units == '(mK)^2 h^-3 Mpc^3' and not convert_to_deltasq:
+    if uvp_plt.units == '(mK)^2 h^-3 Mpc^3' and not convert_to_deltasq:
         ylabel = 'P(k) [mK$^2 h^{-3}$Mpc$^3$]'
-    elif uvp.units == '(mK)^2 k^3 / (2pi^2)' or convert_to_deltasq:
+    elif uvp_plt.units == '(mK)^2 k^3 / (2pi^2)' or convert_to_deltasq:
         ylabel = '$\\Delta^2$ [mK$^2$]'
     plt.ylabel(ylabel)
     if little_h:
@@ -1213,10 +1232,11 @@ def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
     else:
         xlabel = '$k$ [Mpc$^{-1}$]'
     if title is None:
-        spw_range = uvp.get_spw_ranges(spw)
-        day = int(uvp.time_avg_array[spw][time_index])
-        title = f'{k[1][0]} x {k[1][1]}, {int(spw_range[0] / 1e6)}-{int(spw_range[1] / 1e6)}'
+        spw_range = uvp_plt.get_spw_ranges(spw)
+        day = int(np.median(uvp_plt.time_avg_array.flatten()))
+        title = f'{key[1][0]} x {key[1][1]}, {int(spw_range[0] / 1e6)}-{int(spw_range[1] / 1e6)}'
     plt.xlabel(xlabel)
-    plt.legend(lines, ['real', 'imag'])
+    if draw_legend:
+        plt.legend(lines, ['real', 'imag'])
     plt.grid()
     return plt.gcf()
