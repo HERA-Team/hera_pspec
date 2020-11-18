@@ -55,7 +55,7 @@ class CompressedArray():
             if not np.all(np.isclose(value, self.array(key))):
                 for k in self.array.keys():
                     if np.all(np.isclose(value, self.array(key))):
-                        
+
                         break
 
         # akey must be empty!
