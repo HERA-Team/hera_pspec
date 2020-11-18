@@ -4889,12 +4889,12 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                     ds.dsets_std[1].nsample_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_nsamples[tind]
                     ds.dsets_std[1].nsample_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_nsamples[tind]
         # swap unflagged time integration index!
-        for blkey in self._unflagged_time_integration:
+        for blkey in ds._unflagged_time_integration:
             if blkey[0] == 1:
-                if self._unflagged_time_integration[blkey] % 2 == 0:
-                    self._unflagged_time_integration[blkey] += 1
+                if ds._unflagged_time_integration[blkey] % 2 == 0:
+                    ds._unflagged_time_integration[blkey] += 1
                 else:
-                    self._unflagged_time_integration[blkey] -= 1
+                    ds._unflagged_time_integration[blkey] -= 1
         dset_pairs = [(0, 1)]
         dsets = ds.dsets
         dsets_std = ds.dsets_std
