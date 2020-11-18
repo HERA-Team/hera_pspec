@@ -3639,7 +3639,7 @@ class PSpecData(object):
             # find max and min unflagged channels.
             unflagged_channels = np.zeros(self.dsets[0].Nfreqs, dtype=bool)
             for dsnum in range(len(self.dsets)):
-                unflagged_channels = unflagged_channels | np.any(np.any(~self.dsets[dsnum].flag_array[:, 0, :, :].squeeze(), axis=0), axis=1)
+                unflagged_channels = unflagged_channels | np.any(np.any(~self.dsets[dsnum].flag_array[:, 0, :, :], axis=-1), axis=0).squeeze()
             if np.any(unflagged_channels):
                 min_chan = np.where(unflagged_channels)[0].min()
                 max_chan = np.where(unflagged_channels)[0].max() + 1
@@ -4888,6 +4888,13 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 for tind in range(Ntimes//2):
                     ds.dsets_std[1].nsample_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_nsamples[tind]
                     ds.dsets_std[1].nsample_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_nsamples[tind]
+        # swap unflagged time integration index!
+        for blkey in self._unflagged_time_integration:
+            if blkey[0] == 1:
+                if self._unflagged_time_integration[blkey] % 2 == 0:
+                    self._unflagged_time_integration[blkey] += 1
+                else:
+                    self._unflagged_time_integration[blkey] -= 1
         dset_pairs = [(0, 1)]
         dsets = ds.dsets
         dsets_std = ds.dsets_std
@@ -5001,7 +5008,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     return ds
 
 
-def get_pspec_run_argparser():
+c_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
     def list_of_int_tuples(v):
