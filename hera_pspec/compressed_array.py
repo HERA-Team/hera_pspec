@@ -2,7 +2,7 @@ import numpy as np
 
 # Class for storing high dimensional arrays with many copies of the same slice.
 class CompressedArray():
-    def __init__(shape, psuedo_dims, fill_value=0.0):
+    def __init__(shape, psuedo_dims, init_value=0.0, rtol=1e-5, atol=1e-8, dtype=np.float64):
         """
         shape: tuple
             tuple of integers giving the shape of our the compressed array.
@@ -23,6 +23,25 @@ class CompressedArray():
         self.fill_value = fill_value
         self.ndims = len(self.shape)
         self.array = {}
+        self.pdims = psuedo_dims
+        self.npdims = len(self.pdims)
+        # initialize array.
+        self.nadims = self.ndims - self.npdims
+        adims = []
+        ashape = []
+        for m in range(self.ndims):
+            if m not in psuedo_dims:
+                adims.append(m)
+                ashape.append(self.shape[m])
+        self.adims = tuple(adims)
+        self.ashape = tuple(ashape)
+        self.atol = atol
+        self.rtol = rtol
+        self.dtype = dtype
+        self.key_groups = {} # dictionary with lists of keys for each
+                                 # integer indexed unique item.
+        self.nunique = len(self.key_groups)
+
 
     def _parse_key(key):
         """
@@ -50,34 +69,55 @@ class CompressedArray():
         if not len(akey) > 0:
             for a in akey:
                 if not (isinstance(a, slice) and a[0] is None and a[1] is None and a[2] is None):
-                    raise ValueError("CompressedArray does not support setting values within slices!")
-        if key in self.array:
-            if not np.all(np.isclose(value, self.array(key))):
-                for k in self.array.keys():
-                    if np.all(np.isclose(value, self.array(key))):
+                    raise ValueError("CompressedArray does not allow setting values within existing slices!")
+        if pkey in self.array:
+            # determine group that pkey is in
+            for kg in self.key_groups:
+                if pkey in self.key_groups[kg]:
+                    this_kg = kg
+                    this_index = self.key_groups[kg].index(pkey)
 
-                        break
+            if not np.all(np.isclose(value, self.array[pkey], atol=self.atol, rtol=self.rtol)):
+                exist = False
+                for kg in self.key_groups:
+                    k = self.key_groups[kg][0]
+                    if np.all(np.isclose(value, self.array[k], atol=self.atol, rtol=self.rtol)):
+                        self.array[pkey] = self.array[k]
+                        self.key_groups[kg].append(self.key_groups[this_kg].pop(kind))
+                        exists = True
+                # if value does not exist, set slice to that value.
+                if not exists:
+                    self.array[pkey] = value.astype(self.dtype)
+                    self.key_groups[self.nunique] = [self.key_groups[this_kg].pop(kind)]
+                    self.nunique += 1
+                # prune empty key groups
+                if len(self.key_groups[this_kg]) == 0:
+                    del self.key_groups[this_kg]
+        else:
+            # only support integer keys with same length of npdim for now
+            if not len(pkey) == self.npdims:
+                raise NotImplementedError("CompressedArray does not yet support partial keys!")
+            for p in pkey:
+                if not isinstance(p, (int, np.integer)):
+                    raise NotImplementedError("CompressedArray does not yet support slicing of psuedo_dims!")
+            self.array[pkey] = value
+            self.key_groups[self.nunique] = [pkey]
+            self.nunique += 1
 
-        # akey must be empty!
 
-        # if all array dims are unspecified or filled
-        # then iterate through keys until we get an equal array.
-        # if no equal/close array is found, initialize a new array.
-
-        # if only some array dims are unspecified, find appropriate
-        # slice, if it exists and fill these dims
-        # if this slice does not exist, intialize a slice with fill_value.
-        # and set values.
-
-        # if psuedo dims are
-
-
-
-    def mean(axis=None):
+    def __getitem__(self, key, value):
         """
-        Take average of data
+
         """
-
-    def to_numpy_array():
-
-    def __eq__():
+        pkey, akey = parse_key(key)
+        # only support integer keys with same length of npdim for now
+        if not len(pkey) == self.npdims:
+            raise NotImplementedError("CompressedArray does not yet support partial keys!")
+        for p in pkey:
+            if not isinstance(p, (int, np.integer)):
+                raise NotImplementedError("CompressedArray does not yet support slicing of psuedo_dims!")
+        if pkey in self.array:
+            if len(akey) > 0:
+                return self.array[pkey][akey]
+            else:
+                return self.array[pkey]

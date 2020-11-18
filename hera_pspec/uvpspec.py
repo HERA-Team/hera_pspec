@@ -200,18 +200,18 @@ class UVPSpec(object):
             if hasattr(self,'cov_array_real'):
                 if self.folded:
                     Ndlys = np.count_nonzero(self.spw_dly_array == spw)
-                    return self.cov_array_real[spw][blpairts, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
+                    return np.asarray([self.cov_array_real[spw][blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair] for blpt in blpairts])
                 else:
-                    return self.cov_array_real[spw][blpairts, :, :, polpair]
+                    return np.asarray([self.cov_array_real[spw][blpt, :, :, polpair] for blpt in blpairts])
             else:
                 raise AttributeError("No covariance array has been calculated.")
         elif component == 'imag':
             if hasattr(self,'cov_array_imag'):
                 if self.folded:
                     Ndlys = np.count_nonzero(self.spw_dly_array == spw)
-                    return self.cov_array_imag[spw][blpairts, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
+                    return np.asarray([self.cov_array_imag[spw][blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair] for blpt in blpairts])
                 else:
-                    return self.cov_array_imag[spw][blpairts, :, :, polpair]
+                    return np.asarray([self.cov_array_imag[spw][blpt, :, :, polpair] for blpt in blpairts])
             else:
                 raise AttributeError("No covariance array has been calculated.")
         else:
@@ -251,9 +251,9 @@ class UVPSpec(object):
         # if data has been folded, return only positive delays
         if self.folded:
             Ndlys = np.count_nonzero(self.spw_dly_array == spw)
-            return self.window_function_array[spw][blpairts, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
+            return np.asarray([self.window_function_array[spw][blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair] for blpt in blpairts])
         else:
-            return self.window_function_array[spw][blpairts, :, :, polpair]
+            return np.asarray([self.window_function_array[spw][blpt, :, :, polpair] for blpt in blpairts])
 
     def get_data(self, key, omit_flags=False):
         """
@@ -785,8 +785,10 @@ class UVPSpec(object):
                 for k in uvp.stats_array:
                     uvp.stats_array[k][spw] *= coeff
             if hasattr(uvp, 'cov_array_real'):
-                uvp.cov_array_real[spw] *= np.outer(coeff, coeff)
-                uvp.cov_array_imag[spw] *= np.outer(coeff, coeff)
+                for kg in uvp.cov_array_real[spw].key_groups:
+                    uvp.cov_array_real[spw][uvp.cov_array_real[spw][kg][0]] *= np.outer(coeff, coeff)
+                for kg in uvp.cov_array_real[spw].key_groups:
+                    uvp.cov_array_imag[spw][uvp.cov_array_imag[spw][kg][0]] *= np.outer(coeff, coeff)
             # multiply cov array
 
         # edit units
@@ -2188,10 +2190,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         # so needs to keep this shape)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if store_window:
-            u.window_function_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
+            u.window_function_array[i] = CompressedArray((Nblpairts, spw[3], spw[3], Npols), (0, 3))
         if store_cov:
-            u.cov_array_real[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
-            u.cov_array_imag[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
+            u.cov_array_real[i] = CompressedArray((Nblpairts, spw[3], spw[3], Npols), (0, 3))
+            u.cov_array_imag[i] = CompressedArray((Nblpairts, spw[3], spw[3], Npols), (0, 3))
         if store_stats:
             for stat in stored_stats:
                 u.stats_array[stat][i] = np.empty((Nblpairts, spw[3], Npols), np.complex128)

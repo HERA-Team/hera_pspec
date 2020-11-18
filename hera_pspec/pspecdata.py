@@ -19,7 +19,7 @@ import uvtools.dspec as dspec
 R_PARAM_WEIGHTINGS = ['dayenu']
 
 from . import uvpspec, utils, version, pspecbeam, conversions, container, uvpspec_utils as uvputils
-
+from .compressed_array import CompressedArray
 class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
@@ -3733,13 +3733,16 @@ class PSpecData(object):
                 p = (p[0], uvutils.polstr2num(p[1], x_orientation=self.dsets[0].x_orientation))
             _pols.append(p)
         pols = _pols
-
+        # precalculate Nblpairst and npols
+        npols = len(pols)
+        nblpairts = len(bl_pairs) * self.Ntimes
+        cshape = (nblpairts, self.spw_Ndlys, self.spw_Ndlys, npols)
         # initialize empty lists
         data_array = odict()
         wgt_array = odict()
         integration_array = odict()
         cov_array_real = odict()
-        cov_array_imag = odict()
+        cov_array_image = odict()
         stats_array_cov_model = odict()
         window_function_array = odict()
         time1 = []
@@ -3771,10 +3774,10 @@ class PSpecData(object):
             spw_ints = []
             spw_scalar = []
             spw_polpair = []
-            spw_cov_real = []
-            spw_cov_imag = []
             spw_stats_array_cov_model = []
-            spw_window_function = []
+            spw_window_function = CompressedArray(cshape, (0, 3))
+            spw_cov_real = CompressedArray(cshape, (0, 3))
+            spw_cov_imag = CompressedArray(cshape, (0, 3))
 
             d = self.delays() * 1e-9
             f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
@@ -3782,6 +3785,7 @@ class PSpecData(object):
             dly_spws.extend(np.ones_like(d, np.int16) * i)
             freq_spws.extend(np.ones_like(f, np.int16) * i)
             freqs.extend(f)
+
 
             # Loop over polarizations
             for j, p in enumerate(pols):
@@ -3980,23 +3984,29 @@ class PSpecData(object):
                             cov_q_imag = qwgts[:, None, None] * np.asarray([cov_q_imag for t in range(self.Ntimes)])
 
                         if not return_q:
-                            if store_cov:
-                                pol_cov_real.extend(np.real(cov_real).astype(np.float64))
-                                pol_cov_imag.extend(np.real(cov_imag).astype(np.float64))
+                            if store_cov
+                                for t in range(self.Nimes):
+                                    bpt = k*len(bl_pairs) + t
+                                    spw_cov_real[bpt, :, :, j] = np.real(cov_real[t]).astype(np.float64)
+                                    spw_cov_imag[bpt, :, :, j] = np.real(cov_imag[t]).astype(np.float64)
                             if store_cov_diag:
                                 stats = np.sqrt(np.diagonal(np.real(cov_real), axis1=1, axis2=2)) + 1.j*np.sqrt(np.diagonal(np.real(cov_imag), axis1=1, axis2=2))
                                 pol_stats_array_cov_model.extend(stats)
                         else:
                             if store_cov:
-                                pol_cov_real.extend(np.real(cov_q_real).astype(np.float64))
-                                pol_cov_imag.extend(np.real(cov_q_imag).astype(np.float64))
+                                for t in range(self.Nimes):
+                                    bpt = k*len(bl_pairs) + t
+                                    spw_cov_real[bpt, :, :, j] = np.real(cov_q_real[t]).astype(np.float64)
+                                    spw_cov_imag[bpt, :, :, j] = np.real(cov_q_imag[t]).astype(np.float64)
                             if store_cov_diag:
                                 stats = np.sqrt(np.diagonal(np.real(cov_q_real), axis1=1, axis2=2)) + 1.j*np.sqrt(np.diagonal(np.real(cov_q_imag), axis1=1, axis2=2))
                                 pol_stats_array_cov_model.extend(stats)
 
                     # store the window_function
-                    pol_window_function.extend(Wv.astype(np.float64))
-
+                    if store_window_function:
+                        for t in range(self.Ntimes):
+                            bpt = k*len(bl_pairs) * t
+                            window_function_array[bpt, :, :, j] = Wv.astype(np.float64)
                     # Get baseline keys
                     if isinstance(blp, list):
                         bl1 = blp[0][0]
@@ -4066,18 +4076,12 @@ class PSpecData(object):
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
                 spw_stats_array_cov_model.append(pol_stats_array_cov_model)
-                spw_cov_real.append(pol_cov_real)
-                spw_cov_imag.append(pol_cov_imag)
-                spw_window_function.append(pol_window_function)
 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
             spw_stats_array_cov_model = np.moveaxis(np.array(spw_stats_array_cov_model), 0, -1)
-            spw_cov_real = np.moveaxis(np.array(spw_cov_real), 0, -1)
-            spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
-            spw_window_function = np.moveaxis(np.array(spw_window_function), 0, -1)
 
             data_array[i] = spw_data
             stats_array_cov_model[i] = spw_stats_array_cov_model
@@ -4889,12 +4893,12 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                     ds.dsets_std[1].nsample_array[2*tind*Nbls:(2*tind+1)*Nbls] = odd_nsamples[tind]
                     ds.dsets_std[1].nsample_array[(2*tind+1)*Nbls:(2*tind+2)*Nbls] = even_nsamples[tind]
         # swap unflagged time integration index!
-        for blkey in self._unflagged_time_integration:
+        for blkey in ds._unflagged_time_integration:
             if blkey[0] == 1:
-                if self._unflagged_time_integration[blkey] % 2 == 0:
-                    self._unflagged_time_integration[blkey] += 1
+                if ds._unflagged_time_integration[blkey] % 2 == 0:
+                    ds._unflagged_time_integration[blkey] += 1
                 else:
-                    self._unflagged_time_integration[blkey] -= 1
+                    ds._unflagged_time_integration[blkey] -= 1
         dset_pairs = [(0, 1)]
         dsets = ds.dsets
         dsets_std = ds.dsets_std
