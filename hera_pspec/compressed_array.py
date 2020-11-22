@@ -2,7 +2,7 @@ import numpy as np
 
 # Class for storing high dimensional arrays with many copies of the same slice.
 class CompressedArray():
-    def __init__(shape, psuedo_dims, init_value=0.0, rtol=1e-5, atol=1e-8, dtype=np.float64):
+    def __init__(shape=None, psuedo_dims=None, init_value=0.0, rtol=1e-5, atol=1e-8, dtype=np.float64):
         """
         shape: tuple
             tuple of integers giving the shape of our the compressed array.
@@ -14,14 +14,12 @@ class CompressedArray():
         We can only set values on the slice level. No setting of values of slices
         is allowed!
         """
-        # shape is a tuple
-        if not isinstance(shape, tuple):
-            raise ValueError("shape must be a tuple.")
-        for m in shape:
-            if not isinstance(shape, (int, ))
         self.shape = shape
         self.fill_value = fill_value
-        self.ndims = len(self.shape)
+        if self.shape is not None:
+            self.ndims = len(self.shape)
+        else:
+            self.ndims = None
         self.array = {}
         self.pdims = psuedo_dims
         self.npdims = len(self.pdims)
@@ -29,10 +27,11 @@ class CompressedArray():
         self.nadims = self.ndims - self.npdims
         adims = []
         ashape = []
-        for m in range(self.ndims):
-            if m not in psuedo_dims:
-                adims.append(m)
-                ashape.append(self.shape[m])
+        if self.ndims is not None and self.psuedo_dims is not None:
+            for m in range(self.ndims):
+                if m not in psuedo_dims:
+                    adims.append(m)
+                    ashape.append(self.shape[m])
         self.adims = tuple(adims)
         self.ashape = tuple(ashape)
         self.atol = atol
@@ -90,9 +89,13 @@ class CompressedArray():
                     self.array[pkey] = value.astype(self.dtype)
                     self.key_groups[self.nunique] = [self.key_groups[this_kg].pop(kind)]
                     self.nunique += 1
-                # prune empty key groups
+                # if we emptied this key group, then remove it and decrement all groups greater then it
+                # so that indices are always spaced by 1 and range from 0 to nunique where nunique-1 where nunique is
+                # the number of unique slices.
                 if len(self.key_groups[this_kg]) == 0:
-                    del self.key_groups[this_kg]
+                    for kind in range(this_kg+1, self.nunique):
+                        self.key_groups[kind-1] = self.key_groups.pop(kind)
+                    self.nunique -= 1
         else:
             # only support integer keys with same length of npdim for now
             if not len(pkey) == self.npdims:
@@ -103,7 +106,6 @@ class CompressedArray():
             self.array[pkey] = value
             self.key_groups[self.nunique] = [pkey]
             self.nunique += 1
-
 
     def __getitem__(self, key, value):
         """
@@ -121,3 +123,44 @@ class CompressedArray():
                 return self.array[pkey][akey]
             else:
                 return self.array[pkey]
+
+    def __eq__(self, other):
+        """
+        overloaded equality
+        """
+        equal = True
+        equal = equal and
+
+    def create_datasets(self, group, label_stem):
+        """
+        write compressed array to hdf5 group
+
+        Parameters
+        ----------
+        group: HDF5 group
+            The handle of the HDF5 group that the compressed array should be written to
+
+        label_stem: string stem for label of data group.
+
+        """
+        for kg in self.key_groups:
+            if len(self.key_groups[kg]) > 0:
+                k0 = self.key_groups[kg][0]
+                group.create_dataset(label_stem + ".data_kg{}".format(kg),
+                                     data=self.array[k0],
+                                     dtype=self.dtype)
+                group.create_dataset(label_stem + ".keys_kg{}".format(kg),
+                                     data=np.asarray(self.key_groups[kg]),
+                                     dtype=numpy.integer)
+                group.attr[label_stem + ".fill_value"] = str(self.fill_value)
+                group.attr[label_stem + ".ndims"] = str(self.ndims)
+                group.attr[label_stem + ".pdims"] = str(self.pdims)
+                group.attr[label_stem + ".npdims"] = str(self.npdims)
+                group.attr[label_stem + ".nadims"] = str(self.nadims)
+                group.attr[label_stem + ".adims"] = str(self.adims)
+                group.attr[label_stem + ".ashape"] = str(self.ashape)
+                group.attr[label_stem + ".atol"] = str(self.atol)
+                group.attr[label_stem + ".rtol"] = str(self.rtol)
+
+    def read_from_group(self, group, label_stem):
+        # build key groups

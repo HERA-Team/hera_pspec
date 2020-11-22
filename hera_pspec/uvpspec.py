@@ -1474,16 +1474,12 @@ class UVPSpec(object):
                                  data=self.nsample_array[i],
                                  dtype=np.float)
             if hasattr(self, "window_function_array"):
-                group.create_dataset("window_function_spw{}".format(i),
-                                     data=self.window_function_array[i],
-                                     dtype=np.float64)
+                self.window_function_array[i].create_dataset(group, "window_function_spw{}".format(i))
+
             if hasattr(self, "cov_array_real"):
-                group.create_dataset("cov_real_spw{}".format(i),
-                                     data=self.cov_array_real[i],
-                                     dtype=np.float64)
-                group.create_dataset("cov_imag_spw{}".format(i),
-                                     data=self.cov_array_imag[i],
-                                     dtype=np.float64)
+                self.cov_array_real[i].create_dataset(group, "cov_real_spw{}".format(i))
+                self.cov_array_imag[i].create_dataset(group, "cov_imag_spw{}".format(i))
+
 
         # Store any statistics arrays
         if hasattr(self, "stats_array"):
