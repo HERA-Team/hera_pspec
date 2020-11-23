@@ -2,7 +2,7 @@ import numpy as np
 
 # Class for storing high dimensional arrays with many copies of the same slice.
 class CompressedArray():
-    def __init__(shape=None, psuedo_dims=None, init_value=0.0, rtol=1e-5, atol=1e-8, dtype=np.float64):
+    def __init__(shape=None, psuedo_dims=None, fill_value=0.0, rtol=1e-5, atol=1e-8, dtype=np.float64):
         """
         shape: tuple
             tuple of integers giving the shape of our the compressed array.

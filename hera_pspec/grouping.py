@@ -9,7 +9,7 @@ import os
 from . import utils, version, uvpspec_utils as uvputils
 from . import conversions
 from .uvpspec import _ordered_unique
-
+from .compressed_array import CompressedArray
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
                     seed=None):
@@ -293,11 +293,22 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     for spw in range(uvp.Nspws):
         spw_data, spw_wgts, spw_ints, spw_nsmp = [], [], [], []
         spw_stats = odict([[stat, []] for stat in stat_l])
+        ndlys = len(uvp.spw_to_freq_indices(spw))
+        # final nblt = nblts - Ntime * nblg for blg in blpg
+        # where Ntime = 1 if time averaging or uvp.Ntimes otherwise.
+        nblt_final = upv.Nblpairts
+        if average_times:
+            nt_final = 1
+        else:
+            nt_final = uvp.Ntimes
+        for blg in blpair_groups:
+            nblt_final -= nt_final * len(blg)
+        cshape = (nblt_final, ndlys, ndlys, uvp.Npols)
         if store_window:
-            spw_window_function = []
+            spw_window_function = CompressedArray(shape=cshape, psuedo_dims=(0, 3))
         if store_cov:
-            spw_cov_real = []
-            spw_cov_imag = []
+            spw_cov_real = CompressedArray(shape=cshape, psuedo_dims=(0, 3))
+            spw_cov_imag = CompressedArray(shape=cshape, psuedo_dims=(0, 3))
         # Iterate over polarizations
         for i, p in enumerate(uvp.polpair_array):
             pol_data, pol_wgts, pol_ints, pol_nsmp = [], [], [], []
@@ -312,12 +323,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             for j, blpg in enumerate(blpair_groups):
                 bpg_data, bpg_wgts, bpg_ints, bpg_nsmp = [], [], [], []
                 bpg_stats = odict([[stat, []] for stat in stat_l])
-                if store_window:
-                    bpg_window_function = []
-                if store_cov:
-                    bpg_cov_real = []
-                    bpg_cov_imag = []
-                w_list = []
+                #if store_window:
+                    #bpg_window_function = []
+                #if store_cov:
+                    #bpg_cov_real = []
+                    #bpg_cov_imag = []
+                #w_list = []
 
                 # Sum over all weights within this baseline group to get
                 # normalization (if weights specified). The normalization is
@@ -345,11 +356,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     ints = uvp.get_integrations((spw, blp, p))[:, None]
                     # shape of ints: (Ntimes, 1)
                     if store_window:
-                        window_function = uvp.get_window_function((spw, blp, p))
+                        window_function = uvp.get_window_function((spw, blp, p), output_compressed=True)
                         # shape of window_function: (Ntimes, Ndlys, Ndlys)
                     if store_cov:
-                        cov_real = uvp.get_cov((spw, blp, p), component="real")
-                        cov_imag = uvp.get_cov((spw, blp, p), component="imag")
+                        cov_real = uvp.get_cov((spw, blp, p), component="real", output_compressed=True)
+                        cov_imag = uvp.get_cov((spw, blp, p), component="imag", output_compressed=True)
                         # shape of cov: (Ntimes, Ndlys, Ndlys)
                     # Get squared statistic
                     errws = {}
@@ -418,13 +429,19 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                                 / wsum)[None]
                         nsmp = np.sum(nsmp, axis=0)[None]
                         if store_window:
-                            window_function = (np.sum(window_function * w[:, :, None], axis=0) \
-                                               / (wsum)[:, None])[None]
+                            # this is a compressed array
+                            wf_sum = np.zeros((1, ndlys, ndlys))
+                            for t in range(uvp.Ntimes):
+                                wf_sum[0] += window_function[t, :, :, 0] * w[t, :, None] / (wsum)[:, None]
+                            window_function = wf_sum
                         if store_cov:
-                            cov_real = (np.sum(cov_real * w[:, :, None] * w[:, None, :], axis=0) \
-                                   / wsum[:, None] / wsum[None, :])[None]
-                            cov_imag = (np.sum(cov_imag * w[:, :, None] * w[:, None, :], axis=0) \
-                                   / wsum[:, None] / wsum[None, :])[None]
+                            cr_sum = np.zeros((1, ndlys, ndlys))
+                            ci_sum = np.zeros_like(cr_sum)
+                            for t in range(uvp.Ntimes):
+                                cr_sum[0] += cov_real[t, :, :, 0] * w[t, :, None] * w[t, None, :] / wsum[:, None] / wsum[None, :]
+                                ci_sum[0] += cov_imag[t, :, :, 0] * w[t, :, None] * w[t, None, :] / wsum[:, None] / wsum[None, :]
+                            cov_real = cr_sum
+                            cov_imag = ci_sum
                         for stat in stat_l:
                             # clip errws to eliminate nan: inf * 0 yields nans
                             weighted_errws = errws[stat].clip(0, 1e40) * w**2

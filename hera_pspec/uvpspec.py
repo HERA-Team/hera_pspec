@@ -163,7 +163,7 @@ class UVPSpec(object):
         self.get_red_bls.__func__.__doc__ = uvputils._get_red_bls.__doc__
         self.get_red_blpairs.__func__.__doc__ = uvputils._get_red_blpairs.__doc__
 
-    def get_cov(self, key, component='real', omit_flags=False):
+    def get_cov(self, key, component='real', omit_flags=False, output_compressed=False):
         """
         Slice into covariance array with a specified data key in the format
         (spw, ((ant1, ant2),(ant3, ant4)), (pol1, pol2))
@@ -186,6 +186,9 @@ class UVPSpec(object):
             If True, remove time integrations (or spectra) that
             came from visibility data that were completely flagged
             across the spectral window (i.e. integration == 0).
+        output_compressed : bool, optional
+            If False, return numpy array. If True, return CompressedArray
+            Default is False
 
         Returns
         -------
@@ -197,27 +200,38 @@ class UVPSpec(object):
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
         if component == 'real':
-            if hasattr(self,'cov_array_real'):
-                if self.folded:
-                    Ndlys = np.count_nonzero(self.spw_dly_array == spw)
-                    return np.asarray([self.cov_array_real[spw][blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair] for blpt in blpairts])
-                else:
-                    return np.asarray([self.cov_array_real[spw][blpt, :, :, polpair] for blpt in blpairts])
+            if hasattr(self, 'cov_array_real'):
+                cov_component = getattr(self, 'cov_array_real')[spw]
             else:
                 raise AttributeError("No covariance array has been calculated.")
         elif component == 'imag':
-            if hasattr(self,'cov_array_imag'):
-                if self.folded:
-                    Ndlys = np.count_nonzero(self.spw_dly_array == spw)
-                    return np.asarray([self.cov_array_imag[spw][blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair] for blpt in blpairts])
-                else:
-                    return np.asarray([self.cov_array_imag[spw][blpt, :, :, polpair] for blpt in blpairts])
+            if hasattr(self, 'cov_array_imag'):
+                cov_component = getattr(self, 'cov_array_imag')[spw]
             else:
                 raise AttributeError("No covariance array has been calculated.")
         else:
             raise ValueError("No types besides real and imag.")
 
-    def get_window_function(self, key, omit_flags=False):
+        if self.folded:
+            Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+            if not output_compressed:
+                return np.asarray([cov_component[blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair] for blpt in blpairts])
+            else:
+                output = CompressedArray((len(blpairts), Ndlys - Ndlys//2, Ndlys - Ndlys//2, 1), psuedo_dims=(0, 3))
+                for blptind, blpt in enumerate(blpairts):
+                    output[blptind, :, :, 0] = cov_component[blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
+                return output
+        else:
+            if not output_compressed:
+                return np.asarray([cov_component[blpt, :, :, polpair] for blpt in blpairts])
+            else:
+                output = CompressedArray((len(blpairts), Ndlys, Ndlys, 1), psuedo_dims=(0, 3))
+                for blptind, blpt in enumerate(blpairts):
+                    output[blptind, :, :, 0] = cov_component[blpt, :, :, polpair]
+                return output
+
+
+    def get_window_function(self, key, omit_flags=False, output_compressed=False):
         """
         Slice into window_function array with a specified data key in the format
         (spw, ((ant1, ant2),(ant3, ant4)), (pol1, pol2))
@@ -251,9 +265,21 @@ class UVPSpec(object):
         # if data has been folded, return only positive delays
         if self.folded:
             Ndlys = np.count_nonzero(self.spw_dly_array == spw)
-            return np.asarray([self.window_function_array[spw][blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair] for blpt in blpairts])
+            if not output_compressed:
+                return np.asarray([self.window_function_array[spw][blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair] for blpt in blpairts])
+            else:
+                output = CompressedArray((len(blpairts), Ndlys - Ndlys//2, Ndlys - Ndlys//2, 1), psuedo_dims=(0, 3))
+                for blptind, blpt in enumerate(blpairts):
+                    output[blptind, :, :, 0] = self.window_function_array[spw][blpt, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
+                return output
         else:
-            return np.asarray([self.window_function_array[spw][blpt, :, :, polpair] for blpt in blpairts])
+            if not output_compressed:
+                return np.asarray([self.window_function_array[spw][blpt, :, :, polpair] for blpt in blpairts])
+            else:
+                output = CompressedArray((len(blpairts), Ndlys, Ndlys, 1), psuedo_dims=(0, 3))
+                for blptind, blpt in enumerate(blpairts):
+                    output[blptind, :, :, 0] = self.window_function_array[spw][blpt, :, :, polpair]
+                return output
 
     def get_data(self, key, omit_flags=False):
         """
