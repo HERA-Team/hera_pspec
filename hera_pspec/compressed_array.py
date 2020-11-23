@@ -129,7 +129,19 @@ class CompressedArray():
         overloaded equality
         """
         equal = True
-        equal = equal and
+        # check that has same number of unique elements.
+        equal = equal and list(self.key_groups.keys()) == list(other.key_groups.keys())
+        # check that all slices are close
+        for kg in self.key_groups:
+            equal = equal and np.isclose(self.array[self.key_groups[kg][0]], self.array[self.key_groups[kg][0]],
+                                         atol=self.atol, rtol=self.rtol)
+        # check all attrs.
+        equal = equal and self.fill_value == other.fill_value
+        equal = equal and self.ndims == other.ndims
+        equal = equal and self.pdims == other.pdims
+        equal = equal and self. npdims == other.npdims
+
+        return equal
 
     def create_datasets(self, group, label_stem):
         """
