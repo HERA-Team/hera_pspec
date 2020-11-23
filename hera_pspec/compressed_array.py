@@ -139,11 +139,26 @@ class CompressedArray():
         equal = equal and self.fill_value == other.fill_value
         equal = equal and self.ndims == other.ndims
         equal = equal and self.pdims == other.pdims
-        equal = equal and self. npdims == other.npdims
-
+        equal = equal and self.npdims == other.npdims
+        equal = equal and self.nadims == other.nadims
+        equal = equal and self.adims == other.adims
+        equal = equal and self.ashape == other.ashape
+        equal = equal and self.atol == other.atol
+        equal = equal and self.rtol == other.rtol
+        equal = equal and self.dtype == other.dtype
+        equal = equal and self.nunique == other.nunique
+        # check that key groups are the same when sorted by for column and then second column.
+        for kg in self.key_groups:
+            this_kg = np.asarray(self.key_groups[kg], dtype={'names':(str(a) for a in range(self.npdims)),
+                                                             'formats':(str(np.integer) for a in range(self.npdims))})
+            other_kg = np.asarray(other.key_groups[kg],dtype={'names':(str(a) for a in range(self.npdims)),
+                                                             'formats':(str(np.integer) for a in range(self.npdims))})
+            this_kg.sort(this_kg, order=[str(a) for a in range(self.npdims)])
+            other_kg.sort(this_kg, order=[str(a) for a in range(self.nadims)])
+            equal = equal and this_kg == other_kg
         return equal
 
-    def create_datasets(self, group, label_stem):
+    def write_to_group(self, group, label_stem):
         """
         write compressed array to hdf5 group
 
@@ -173,6 +188,42 @@ class CompressedArray():
                 group.attr[label_stem + ".ashape"] = str(self.ashape)
                 group.attr[label_stem + ".atol"] = str(self.atol)
                 group.attr[label_stem + ".rtol"] = str(self.rtol)
+                group.attr[label_stem + '.dtype'] = str(self.dtype)
+                group.attr[label_stem + '.nunique'] = str(self.nunique)
 
     def read_from_group(self, group, label_stem):
-        # build key groups
+        """Read in compressed array from HDF5 group
+
+        Parameters
+        ----------
+        group: HDF5 group
+            The handle of the HDF5 group that the compressed array should be written to
+
+        label_stem: string stem for label of data group.
+
+        """
+        self.dtype = np.dtype(group.attr[label_stem + '.dtype'])
+        self.rtol = float(group.attr[label_stem + '.rtol'])
+        self.atol = float(group.attr[label_stem + '.atol'])
+        self.ashape = (int(a) for a in group.attr[label_stem + ".ashape"][1:-1].split(','))
+        self.adims = (int(a) for a in group.attr[label_stem + ".adims"][1:-1].split(','))
+        self.nadims = (int(a) for a in group.attr[label_stem + ".nadims"][1:-1].split(','))
+        self.npdims = (int(a) for a in group.attr[label_stem + '.npdims'][1:-1].split(','))
+        self.pdims = (int(a) for a in group.attr[label_stem + '.pdims'][1:-1].split(','))
+        self.ndims = len(self.pdims) + len(self.adims)
+        if self.dtype == np.float64 or self.dtype == np.float:
+            self.fill_value = np.float(group.attr[label_stem + '.fill_value'])
+        elif self.dtype == np.complex128 or self.dtype == np.complex:
+            self.fill_value = np.complex(group.attr[label_stem + '.fill_value'])
+        elif self.dtype = np.integer:
+            self.fill_value = np.integer(group.attr[label_stem + '.fill_value'])
+        elif self.dtype == np.bool
+            self.fill_value = np.bool(group.attr[label_stem + '.fill_value'])
+        self.nunique = int(group.attr[label_stem+'.nunique'])
+        # now read in data.
+        for kg in range(self.nunique):
+            data = group[label_stem + ".data_kg{}".format(kg)]
+            keys = tuple(group[label_stem + '.keys_kg{}'.format(kg)])
+            for k in keys:
+                self.__setitem__(k, data)
+        # all good!

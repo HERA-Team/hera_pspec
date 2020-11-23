@@ -1335,7 +1335,14 @@ class UVPSpec(object):
                 setattr(self, k, val)
         for k in grp:
             if k in self._meta_dsets:
-                setattr(self, k, grp[k][:])
+                if 'cov_array' not in k and 'window_function' not in k:
+                    setattr(self, k, grp[k][:])
+                else:
+                    # only read in for the data_kg0 postfix.
+                    if k[-7:] == 'data_kg0':
+                        carr = CompressedArray()
+                        carr.read_from_group(grp, k[:-8])
+                        setattr(self, k, carr)
 
         # Backwards compatibility: pol_array exists (not polpair_array)
         if 'pol_array' in grp.attrs:
@@ -1474,11 +1481,11 @@ class UVPSpec(object):
                                  data=self.nsample_array[i],
                                  dtype=np.float)
             if hasattr(self, "window_function_array"):
-                self.window_function_array[i].create_dataset(group, "window_function_spw{}".format(i))
+                self.window_function_array[i].write_to_group(group, "window_function_spw{}".format(i))
 
             if hasattr(self, "cov_array_real"):
-                self.cov_array_real[i].create_dataset(group, "cov_real_spw{}".format(i))
-                self.cov_array_imag[i].create_dataset(group, "cov_imag_spw{}".format(i))
+                self.cov_array_real[i].write_to_group(group, "cov_real_spw{}".format(i))
+                self.cov_array_imag[i].write_to_group(group, "cov_imag_spw{}".format(i))
 
 
         # Store any statistics arrays
@@ -1669,10 +1676,12 @@ class UVPSpec(object):
                         for k in getattr(self, p).keys():
                             assert isinstance(getattr(self, p)[k], (dict, odict))
                             for j in getattr(self, p)[k].keys():
-                                assert isinstance(getattr(self, p)[k][j], np.ndarray)
-
+                                assert isinstance(getattr(self, p)[k][j], (np.ndarray, CompressedArray))
                                 try:
-                                    getattr(self, p)[k][j] = a.expected_type(getattr(self, p)[k][j])
+                                    if isinstance(getattr(self, p)[k][j], CompressedArray):
+                                        getattr(self, p)[k][j].dtype = a.expected_type(getattr(self, p)[k][j])
+                                    else:
+                                        getattr(self, p)[k][j] = a.expected_type(getattr(self, p)[k][j])
                                 except:
                                     raise AssertionError(err_msg)
         # check spw convention
