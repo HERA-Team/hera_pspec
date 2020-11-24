@@ -744,6 +744,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         Ndlyblps = Ndlys * uvp.Nblpairs
         data_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128)
         if store_cov:
+            # We really shouldn't be storing the off-diagonal blocks since we don't use them.
             cov_array_real[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
             cov_array_imag[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
         if store_stats:
@@ -797,15 +798,22 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # store data
             data_array[spw][:, dslice] = uvp.data_array[spw][blpt_inds]
 
-            if store_window:
-                window_function_array[spw][:, dslice, dslice] = uvp.window_function_array[spw][blpt_inds]
+            # This function should be compressivied some other time.
+            # For now, just doing everything with fully numpy
+            # representation.
+            for t in blpt_inds:
+                for p in range(uvp.Npols):
+                    if store_window:
+                        window_function_array[spw][t, dslice, dslice, p] = uvp.window_function_array[spw][t, :, :, p]
+                    if store_cov:
+                        cov_array_real[spw][t, dslice, dslice, p] = uvp.cov_array_real[spw][t, :, :, p]
+                        cov_array_imag[spw][t, dslice, dslice, p] = uvp.cov_array_imag[spw][t, :, :, p]
 
             if store_stats:
                 for stat in stats_array:
                     stats_array[stat][spw][:, dslice] = uvp.stats_array[stat][spw][blpt_inds]
 
-            if store_cov:
-                cov_array_real[spw][:, dslice, dslice] = uvp.cov_array_real[spw][blpt_inds]
+
 
             # fill weighting matrix E
             if weight_by_cov:
@@ -907,6 +915,11 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             cm = Ht @ cm @ H
             cov_array_real[spw] = np.moveaxis(cm, 0, -1)
 
+            cm = np.moveaxis(cov_array_imag[spw], -1, 0)
+            cm = Ht @ cm @ H
+            cov_array_imag[spw] = np.moveaxis(cm, 0, -1)
+
+
     # handle data arrays
     uvp.data_array = data_array
     uvp.integration_array = integration_array
@@ -994,7 +1007,7 @@ def fold_spectra(uvp):
                         rightleft = uvp.window_function_array[spw][t, Ndlys//2+1: , 1:Ndlys//2, p][:, ::-1]
                         rightright = uvp.window_function_array[spw][t, Ndlys//2+1:, Ndlys//2+1:, p]
                         tslice[Ndlys//2+1:, Ndlys//2+1:] = .25*(leftleft + leftright + rightleft + rightright)
-                uvp.window_function_array[spw][t, :, :, p] = tslice
+                        uvp.window_function_array[spw][t, :, :, p] = tslice
 
             # fold covariance array if it exists.
             if hasattr(uvp,'cov_array_real'):
@@ -1006,8 +1019,7 @@ def fold_spectra(uvp):
                         rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, ::-1]
                         rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
                         tslice[Ndlys//2+1:, Ndlys//2+1:] = .25*(leftleft + leftright + rightleft + rightright)
-
-                uvp.cov_array_real[spw][t, :, :, p] = tslice
+                        uvp.cov_array_real[spw][t, :, :, p] = tslice
 
                 for t in range(uvp.Nblpairts):
                     for p in range(uvp.Npols):
@@ -1017,8 +1029,7 @@ def fold_spectra(uvp):
                         rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, ::-1]
                         rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
                         tslice[Ndlys//2+1:, Ndlys//2+1:] = .25*(leftleft + leftright + rightleft + rightright)
-
-                uvp.cov_array_imag[spw][t, :, :, p] = tslice
+                        uvp.cov_array_imag[spw][t, :, :, p] = tslice
 
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
@@ -1036,40 +1047,37 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
             if hasattr(uvp, 'window_function_array'):
-                leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                             +leftright\
-                                                                             +rightleft\
-                                                                             +rightright)
-                uvp.window_function_array[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.window_function_array[spw][:, :, :Ndlys//2, : :] = 0.0
+                for t in range(uvp.Nblpairts):
+                    for p in range(uvp.Npols):
+                        tslice = np.zeros((Ndlys, Ndlys))
+                        leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][::-1, ::-1]
+                        leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][::-1, :]
+                        rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, ::-1]
+                        rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                        tslice[Ndlys//2+1:, Ndlys//2+1:] = .25*(leftleft + leftright + rightleft + rightright)
+                        uvp.window_function_array[spw][t, :, :, p] = tslice
 
             # fold covariance array if it exists.
             if hasattr(uvp,'cov_array_real'):
-                leftleft = uvp.cov_array_real[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.cov_array_real[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-                uvp.cov_array_real[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_real[spw][:, :, :Ndlys//2, : :] = 0.0
+                for t in range(uvp.Nblpairts):
+                    for p in range(uvp.Npols):
+                        tslice = np.zeros((Ndlys, Ndlys))
+                        leftleft = uvp.cov_array_real[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
+                        leftright = uvp.cov_array_real[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                        rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                        rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                        tslice[Ndlys//2+1:, Ndlys//2+1:] = .25*(leftleft + leftright + rightleft + rightright)
+                        uvp.cov_array_real[spw][t, :, :, p]  tslice
 
-                leftleft = uvp.cov_array_imag[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.cov_array_imag[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-                uvp.cov_array_imag[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_imag[spw][:, :, :Ndlys//2, : :] = 0.0
+                for t in range(uvp.Nblpairts):
+                    for p in range(uvp.Npols):
+                        tslice = np.zeros((Ndlys, Ndlys))
+                        leftleft = uvp.cov_array_imag[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
+                        leftright = uvp.cov_array_imag[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                        rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                        rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                        tslice[Ndlys//2+1:, Ndlys//2+1:] = .25*(leftleft + leftright + rightleft + rightright)
+                        uvp.cov_array_imag[spw][t, :, :, p]  tslice
 
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
