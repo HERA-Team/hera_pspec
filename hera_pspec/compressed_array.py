@@ -52,7 +52,7 @@ class CompressedArray():
         array_key = []
         for knum,k in enumerate(key):
             if knum in psuedo_dims:
-                psuedo_key.append(k)
+                psuedo_key.append(int(k)) # always use ints for psuedo dimensions.
             else:
                 array_key.append(k)
         return tuple(psuedo_key), tuple(array_key)
@@ -61,7 +61,7 @@ class CompressedArray():
 
 
     def __setitem__(self, key, value):
-        """
+        """set value or slice in compressed array
 
         """
         pkey, akey = parse_key(key)
@@ -118,11 +118,15 @@ class CompressedArray():
         for p in pkey:
             if not isinstance(p, (int, np.integer)):
                 raise NotImplementedError("CompressedArray does not yet support slicing of psuedo_dims!")
+        if not np.all(pkey>=0):
+            raise NotImplementedError("Do not yet support negative indices for psuedo dimensions.")
         if pkey in self.array:
             if len(akey) > 0:
                 return self.array[pkey][akey]
             else:
                 return self.array[pkey]
+        else:
+            return np.ones(self.ashape, dtype=self.dtype) * self.fill_value
 
     def __eq__(self, other):
         """
