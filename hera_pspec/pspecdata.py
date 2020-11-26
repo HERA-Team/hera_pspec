@@ -4896,10 +4896,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 else:
                     ds._unflagged_time_integration[blkey] -= 1
         dset_pairs = [(0, 1)]
-        dsets = ds.dsets
-        dsets_std = ds.dsets_std
-        wgts = ds.wgts
-        dset_labels = ds.labels
+    dsets = ds.dsets
+    dsets_std = ds.dsets_std
+    wgts = ds.wgts
+    dset_labels = ds.labels
 
     # rephase if desired
     if rephase_to_dset is not None:

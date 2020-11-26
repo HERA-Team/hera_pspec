@@ -1120,6 +1120,7 @@ def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
                   tile=None, convert_to_deltasq=True, xerr_cut=0.05,
                   draw_legend=False, scale_factor=1.,
                   plot_errs=True, fold=False, norm_max=False,
+                  xaxis='k',
                   **plot_kwargs):
     """
     Function to make spherical power spectrum plots of a single time index.
@@ -1153,6 +1154,8 @@ def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
     ylim : optional 2-tuple
         set the y-axis. If none provided use min /10 max * 10
 
+    xaxis : optional str
+        specify whether to use 'k', 'kpara', or 'delay' for x-axis values.
 
     """
 
@@ -1166,7 +1169,15 @@ def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
     bl_index = uvp_plt.get_blpairs().index(blpair)
     kperp = uvp_plt.get_kperps(spw, little_h=little_h)[bl_index]
     kperp = 0.
-    kvals = np.sqrt(kparas ** 2. + kperp ** 2.)
+    if xaxis == 'k':
+        kvals = np.sqrt(kparas ** 2. + kperp ** 2.)
+        xlabel = '$k$ '
+    elif xaxis == 'kpara':
+        kvals = np.abs(kparas)
+        xlabel = '$k_{\\parallel}$'
+    elif xaxis == 'delay':
+        kvals = np.abs(uvp.get_dlys(spw)) * 1e9
+        xlabel = '$\\tau$'
     ps = uvp_plt.get_data(key)[time_index]
     if error_field is not None:
         errs = uvp_plt.get_stats(error_field, key)[0]
@@ -1179,6 +1190,7 @@ def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
         kcs = kvals * np.sign(kparas)
         klerrs = np.zeros_like(kvals)
         krerrs = np.zeros_like(kvals)
+
     include = klerrs + krerrs < xerr_cut
     if convert_to_deltasq and not uvp_plt.units == '(mK)^2 k^3 / (2pi^2)':
         coeff = kcs ** 3. / (2. * np.pi ** 2.)
@@ -1227,10 +1239,14 @@ def plot_1d_pspec(uvp, key, little_h=True, time_index=0,
     elif uvp_plt.units == '(mK)^2 k^3 / (2pi^2)' or convert_to_deltasq:
         ylabel = '$\\Delta^2$ [mK$^2$]'
     plt.ylabel(ylabel)
-    if little_h:
-        xlabel = '$k$ [$h$Mpc$^{-1}$]'
+    if xaxis == 'delay':
+        xlabel = xlabel + ' [ns]'
     else:
-        xlabel = '$k$ [Mpc$^{-1}$]'
+        if little_h:
+            xlabel = xlabel + ' [$h$Mpc$^{-1}$]'
+        else:
+            xlabel = xlabel + ' [Mpc$^{-1}$]'
+
     if title is None:
         spw_range = uvp_plt.get_spw_ranges(spw)
         day = int(np.median(uvp_plt.time_avg_array.flatten()))
