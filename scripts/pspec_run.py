@@ -6,7 +6,7 @@ from hera_pspec import pspecdata
 # parse args
 args = pspecdata.get_pspec_run_argparser()
 a = args.parse_args()
-
+print(a.pol_pairs)
 # turn into dictionary
 kwargs = vars(a)
 

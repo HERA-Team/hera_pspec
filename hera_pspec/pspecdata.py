@@ -12,6 +12,7 @@ import glob
 import warnings
 import json
 import uvtools.dspec as dspec
+from . import pstokes
 
 # This is a list of weights that will depend on baseline.
 # If data_weighting is in this list, G and H will be hashed per
@@ -4308,6 +4309,7 @@ class PSpecData(object):
             If True, average conversion factor in frequency before multiplying by data.
         """
         # get all unique polarizations of all the datasets
+        print([dset.polarization_array for dset in self.dsets])
         pols = set(np.ravel([dset.polarization_array for dset in self.dsets]))
 
         # assign beam
@@ -4813,6 +4815,35 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # package into PSpecData
     ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels,
                    dsets_std=dsets_std, beam=beam, cals=cals, cal_flag=cal_flag)
+    # if pStokes are requested in polpairs, then construct pstokes and add to datasets where necessary.
+    for dp in dset_pairs:
+        for pp in pol_pairs:
+            if 1 in pp or 'pI' in pp:
+                if 1 in pp:
+                    pl = 1
+                else:
+                    pl = 'pI'
+                for d in dp:
+                    dst = ds.dsets[d]
+                    if 1 not in dst.polarization_array and -5 in dst.polarization_array and -6 in dst.polarization_array:
+                            print('-5 detected and -5 detected')
+                            dsx = dst.select(polarizations=[-5], inplace=False)
+                            dsy = dst.select(polarizations=[-6], inplace=False)
+                            dss = pstokes.construct_pstokes(dsx, dsy, pstokes='pI')
+                            ds.dsets[d] = ds.dsets[d] + dss
+            if 2 in pp or 'pQ' in pp:
+                if 2 in pp:
+                    pl = 2
+                else:
+                    pl = 'pQ'
+                for d in dp:
+                    dst = ds.dsets[d]
+                    if 2 not in dst.polarization_array and -5 in dst.polarization_array and -6 in dst.polarization_array:
+                            print('-5 detected and -5 detected')
+                            dsx = dst.select(polarizations=[-5], inplace=False)
+                            dsy = dst.select(polarizations=[-6], inplace=False)
+                            dss = pstokes.construct_pstokes(dsx, dsy, pstokes='pQ')
+                            ds.dsets[d] = ds.dsets[d] + dss
 
     # erase calibration as they are no longer needed
     del cals
@@ -4974,7 +5005,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # assign group name
     if groupname is None:
         groupname = '_'.join(dset_labels)
-
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
         # check bls lists aren't empty
@@ -5183,7 +5213,14 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
             dfiles = glob.glob(dset)
         else:
             dfiles = dset
-        uvd.read(dfiles, bls=bls, polarizations=pols,
+        uvd.read(dfiles, read_data=False)
+        # only read pols that are in data
+        _pols = []
+        for p in pols:
+            if p in uvd.get_pols():
+                _pols.append(p)
+        print(_pols)
+        uvd.read(dfiles, bls=bls, polarizations=_pols,
                  file_type=file_type)
         uvd.extra_keywords['filename'] = json.dumps(dfiles)
         dsets.append(uvd)
