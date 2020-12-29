@@ -4826,11 +4826,22 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 for d in dp:
                     dst = ds.dsets[d]
                     if 1 not in dst.polarization_array and -5 in dst.polarization_array and -6 in dst.polarization_array:
-                            print('-5 detected and -5 detected')
                             dsx = dst.select(polarizations=[-5], inplace=False)
                             dsy = dst.select(polarizations=[-6], inplace=False)
                             dss = pstokes.construct_pstokes(dsx, dsy, pstokes='pI')
                             ds.dsets[d] = ds.dsets[d] + dss
+                # add time independent weights keys
+                original_keys = list(ds._time_independent_weights)
+                for k in original_keys:
+                    sk = k[:1] + ((k[1][0], k[1][1], 'pI'), )
+                    if 'xx' in k[1] or 'yy' in k[1] or 'ee' in k[1] or 'nn' in k[1]:
+                        if sk in ds._time_independent_weights:
+                            ds._time_independent_weights[sk] = ds._time_independent_weights[sk] & copy.deepcopy(ds._time_independent_weights[k])
+                            ds._unflagged_time_integration[sk] = ds._unflagged_time_integration[sk] & copy.deepcopy(ds._unflagged_time_integration[k])
+                        else:
+                            ds._time_independent_weights[sk] = copy.deepcopy(ds._time_independent_weights[k])
+                            ds._unflagged_time_integration[sk] = copy.deepcopy(ds._unflagged_time_integration[k])
+
             if 2 in pp or 'pQ' in pp:
                 if 2 in pp:
                     pl = 2
@@ -4839,12 +4850,21 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 for d in dp:
                     dst = ds.dsets[d]
                     if 2 not in dst.polarization_array and -5 in dst.polarization_array and -6 in dst.polarization_array:
-                            print('-5 detected and -5 detected')
                             dsx = dst.select(polarizations=[-5], inplace=False)
                             dsy = dst.select(polarizations=[-6], inplace=False)
                             dss = pstokes.construct_pstokes(dsx, dsy, pstokes='pQ')
                             ds.dsets[d] = ds.dsets[d] + dss
-
+                # add time independent weights keys
+                original_keys = list(ds._time_independent_weights)
+                for k in original_keys:
+                    sk = k[:1] + ((k[1][0], k[1][1], 'pQ'), )
+                    if 'xx' in k[1] or 'yy' in k[1] or 'ee' in k[1] or 'nn' in k[1]:
+                        if sk in ds._time_independent_weights:
+                            ds._time_independent_weights[sk] = ds._time_independent_weights[sk] & copy.deepcopy(ds._time_independent_weights[k])
+                            ds._unflagged_time_integration[sk] = ds._unflagged_time_integration[sk] & copy.deepcopy(ds._unflagged_time_integration[k])
+                        else:
+                            ds._time_independent_weights[sk] = copy.deepcopy(ds._time_independent_weights[k])
+                            ds._unflagged_time_integration[sk] = copy.deepcopy(ds._unflagged_time_integration[k])
     # erase calibration as they are no longer needed
     del cals
 

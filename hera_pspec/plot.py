@@ -624,6 +624,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
                 edgecolor='none', flip_xax=False, flip_yax=False, lw=2,
                 set_bl_tick_major=False, set_bl_tick_minor=False,
                 xtick_size=10, xtick_rot=0, ytick_size=10, ytick_rot=0,
+                min_EW_cos=0.,
                 **kwargs):
     """
     Plot a 2D delay spectrum (or spectra) from a UVPSpec object. Note that
@@ -738,6 +739,9 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
     set_bl_tick_minor : bool, optional
         If True, use the baseline lengths as minor ticks, which have no labels.
 
+    min_EW_cos : float, optional
+        minimum abs cos from EW allowed.
+
     kwargs : dictionary
         Additional keyword arguments to pass to pcolormesh() call.
 
@@ -781,7 +785,10 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
     blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps()
     osort = np.argsort(blpair_seps)
     blpairs, blpair_seps = [blpairs[oi] for oi in osort], blpair_seps[osort]
-
+    angs = [angs[oi] for oi in osort]
+    blpairs = [blp for blp, ang in zip(blpairs, angs) if np.abs(np.cos(ang)) >= min_EW_cos]
+    blpair_seps = np.asarray([blp for blp, ang in zip(blpair_seps, angs) if np.abs(np.cos(ang)) >= min_EW_cos])
+    angs = [ang for ang in angs if np.abs(np.cos(ang)) >= min_EW_cos]
     # Convert to DeltaSq
     if deltasq and not delay:
         uvp.convert_to_deltasq(inplace=True)
@@ -818,6 +825,9 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
 
     # get data with shape (Nblpairs, Ndlys)
     data = [uvp.get_data((spw, blp, pol)).squeeze() for blp in blpairs]
+    for dind, ang in enumerate(angs):
+        if np.cos(ang) < 0:
+            data[dind] = data[dind][::-1]
 
     # get component
     if component == 'real':
