@@ -788,7 +788,6 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
     angs = [angs[oi] for oi in osort]
     blpairs = [blp for blp, ang in zip(blpairs, angs) if np.abs(np.cos(ang)) >= min_EW_cos]
     blpair_seps = np.asarray([blp for blp, ang in zip(blpair_seps, angs) if np.abs(np.cos(ang)) >= min_EW_cos])
-    angs = [ang for ang in angs if np.abs(np.cos(ang)) >= min_EW_cos]
     # Convert to DeltaSq
     if deltasq and not delay:
         uvp.convert_to_deltasq(inplace=True)
@@ -804,11 +803,12 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
     else:
         x_axis = uvp.get_kparas(spw, little_h=little_h)
         y_axis = uvp.get_kperps(spw, little_h=little_h)
+        y_axis = [y for y, ang in zip(y_axis, angs) if np.abs(np.cos(ang)) >= min_EW_cos]
     if rotate:
         _x_axis = y_axis
         y_axis = x_axis
         x_axis = _x_axis
-
+    angs = [ang for ang in angs if np.abs(np.cos(ang)) >= min_EW_cos]
     # Conigure Units
     psunits = "({})^2\ {}".format(uvp.vis_units, uvp.norm_units)
     if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}\ ")
@@ -825,9 +825,10 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
 
     # get data with shape (Nblpairs, Ndlys)
     data = [uvp.get_data((spw, blp, pol)).squeeze() for blp in blpairs]
-    for dind, ang in enumerate(angs):
-        if np.cos(ang) < 0:
-            data[dind] = data[dind][::-1]
+    if not fold:
+        for dind, ang in enumerate(angs):
+            if np.cos(ang) < 0:
+                data[dind] = data[dind][::-1]
 
     # get component
     if component == 'real':
