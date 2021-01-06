@@ -799,7 +799,7 @@ class UVPSpec(object):
                 uvp.cov_array_imag[spw] = np.einsum("tip,tijp,tjp->tijp", coeff, cov, coeff)
 
         # edit units
-        uvp.norm_units = "k^3 / (2pi^2)"
+        uvp.norm_units += " k^3 / (2pi^2)"
 
         if inplace == False:
             return uvp

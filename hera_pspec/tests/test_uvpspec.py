@@ -234,7 +234,7 @@ class Test_UVPSpec(unittest.TestCase):
             # check cov
             assert np.isclose(dsq.cov_array_real[spw][0, :, :, 0].diagonal(),
                               uvp.cov_array_real[spw][0, :, :, 0].diagonal()*coeff[0, :, 0]**2).all()
-        nt.assert_equal(dsq.norm_units, 'k^3 / (2pi^2)')
+        nt.assert_equal(dsq.norm_units, uvp.norm_units + ' k^3 / (2pi^2)')
 
     def test_blpair_conversions(self):
         # test blpair -> antnums
