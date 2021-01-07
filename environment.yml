@@ -17,7 +17,6 @@ dependencies:
   - future
   - pyuvdata>=1.4.1
   - pip:
-    - git+https://github.com/HERA-Team/linsolve
     - git+https://github.com/HERA-Team/uvtools
     - git+https://github.com/HERA-Team/hera_cal
     - pyephem

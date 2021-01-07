@@ -752,7 +752,7 @@ class UVPSpec(object):
         Convert from P(k) to Delta^2(k) by multiplying by k^3 / (2pi^2).
 
         The units of the output is therefore the current units (self.units) times
-        (h^3) Mpc^-3, where the h^3 is only included h^-3 is in self.norm_units
+        (h^3) Mpc^-3, where the h^3 is only included if h^-3 is in self.norm_units
 
         Parameters
         ----------
