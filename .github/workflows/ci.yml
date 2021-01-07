@@ -52,14 +52,5 @@ jobs:
       run: |
         export PATH="$HOME/miniconda/bin:$PATH"
         source activate $ENV_NAME
-        pytest --cov-report xml:./coverage.xml
-
-    - name: Upload Coverage (Ubuntu)
-      if: matrix.os == 'ubuntu-latest' && success()
-      run: |
-        bash <(curl -s https://codecov.io/bash) -t ${{ secrets.CODECOV_TOKEN }}
-
-    - name: Python Style Checker
-      run: |
-        export PATH="$HOME/miniconda/bin:$PATH"
-        source activate ${ENV_NAME}
+        nosetests -P hera_pspec --with-coverage --cover-package=hera_pspec --verbose
+  
