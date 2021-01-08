@@ -747,27 +747,32 @@ class UVPSpec(object):
                     self.stats_array[stat][i][tind, dinds, :] = val
 
 
-    def convert_to_deltasq(self, little_h=True, inplace=True):
+    def convert_to_deltasq(self, inplace=True):
         """
         Convert from P(k) to Delta^2(k) by multiplying by k^3 / (2pi^2).
 
-        The units of the output is therefore the current units (self.units)
-        times h^3 Mpc^-3, where the h^3 is only included if little_h == True.
+        The units of the output is therefore the current units (self.units) times
+        (h^3) Mpc^-3, where the h^3 is only included if h^-3 is in self.norm_units
 
         Parameters
         ----------
-        little_h : bool, optional
-            Whether to use h^-1 units. Default: True.
-
         inplace : bool, optional
             If True edit and overwrite arrays in self, else make a copy of
             self and return. Default: True.
+
+        Notes:
+        ------
+        Alters data_array, stats_array, and cov_array if present,
+        as well as metadata like norm_units
         """
         # copy object
         if inplace:
             uvp = self
         else:
             uvp = copy.deepcopy(self)
+
+        # determine if little_h is required
+        little_h = 'h^-3' in uvp.norm_units
 
         # loop over spectral windows
         for spw in range(uvp.Nspws):
@@ -781,8 +786,20 @@ class UVPSpec(object):
             # multiply into data
             uvp.data_array[spw] *= coeff
 
+            # update stats array
+            if hasattr(uvp, 'stats_array'):
+                for stat in uvp.stats_array:
+                    uvp.stats_array[stat][spw] *= coeff
+
+            # update cov array
+            if hasattr(uvp, 'cov_array_real'):
+                cov = uvp.cov_array_real[spw]
+                uvp.cov_array_real[spw] = np.einsum("tip,tijp,tjp->tijp", coeff, cov, coeff)
+                cov = uvp.cov_array_imag[spw]
+                uvp.cov_array_imag[spw] = np.einsum("tip,tijp,tjp->tijp", coeff, cov, coeff)
+
         # edit units
-        uvp.norm_units = "k^3 / (2pi^2)"
+        uvp.norm_units += " k^3 / (2pi^2)"
 
         if inplace == False:
             return uvp

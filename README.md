@@ -29,7 +29,7 @@ environment. The following commands will install all relevant development packag
     $ cd hera_pspec
     $ conda create -n hera_pspec python=3
     $ conda activate hera_pspec
-    $ conda env update -n hera_pspec -f environment.yml
+    $ conda env update -n hera_pspec -f ci/hera_pspec_tests.yml
     $ pip install -e . 
 
 This will install extra dependencies required for testing/development as well as the 

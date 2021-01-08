@@ -28,6 +28,20 @@ class Test_UVPSpec(unittest.TestCase):
     def runTest(self):
         pass
 
+    def _add_optionals(self, uvp):
+        """add dummy optional cov_array and stats_array to uvp"""
+        uvp.cov_array_real = odict()
+        uvp.cov_array_imag = odict()
+        uvp.cov_model = 'empirical'
+        stat = 'noise_err'
+        uvp.stats_array = odict({stat: odict()})
+        for spw in uvp.spw_array:
+            ndlys = uvp.get_spw_ranges(spw)[0][-1]
+            uvp.cov_array_real[spw] = np.empty((uvp.Nblpairts, ndlys, ndlys, uvp.Npols), np.float64)
+            uvp.cov_array_imag[spw] = np.empty((uvp.Nblpairts, ndlys, ndlys, uvp.Npols), np.float64)
+            uvp.stats_array[stat][spw] = np.empty((uvp.Nblpairts, ndlys, uvp.Npols), np.complex128)
+        return uvp
+
     def test_param(self):
         a = parameter.PSpecParam("example", description="example", expected_type=int)
 
@@ -191,12 +205,36 @@ class Test_UVPSpec(unittest.TestCase):
         assert np.isclose(uvp.get_stats('err', key)[:, np.abs(uvp.get_dlys(0)*1e9) < 15 * 50], 1).all()
 
     def test_convert_deltasq(self):
-        uvp = copy.deepcopy(self.uvp)
-        uvp.convert_to_deltasq(little_h=True)
-        k_perp, k_para = self.uvp.get_kperps(0), self.uvp.get_kparas(0)
-        k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
-        nt.assert_true(np.isclose(uvp.data_array[0][0,:,0], (self.uvp.data_array[0]*k_mag**3/(2*np.pi**2))[0,:,0]).all())
-        nt.assert_equal(uvp.norm_units, 'k^3 / (2pi^2)')
+        # setup uvp build
+        uvd = UVData()
+        uvd.read_miriad(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+        beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
+                                               "HERA_NF_dipole_power.beamfits"))
+        uvd_std = copy.deepcopy(uvd)  # dummy uvd_std
+        uvd_std.data_array[:] = 1.0
+        bls = [(37, 38), (38, 39), (52, 53)]
+        uvp = testing.uvpspec_from_data(uvd, bls, data_std=uvd_std,
+                                        spw_ranges=[(20, 30), (60, 90)], 
+                                        beam=beam)
+        # dummy stats_array build
+        Tsys = utils.uvd_to_Tsys(uvd, beam)
+        utils.uvp_noise_error(uvp, Tsys)
+
+        # testing
+        dsq = uvp.convert_to_deltasq(inplace=False)
+        for spw in uvp.spw_array:
+            k_perp, k_para = uvp.get_kperps(spw), uvp.get_kparas(spw)
+            k_mag = np.sqrt(k_perp[:, None, None]**2 + k_para[None, :, None]**2)
+            coeff = k_mag**3 / (2 * np.pi**2)
+            # check data
+            assert np.isclose(dsq.data_array[spw][0, :, 0], (uvp.data_array[spw]*coeff)[0, :, 0]).all()
+            # check stats
+            assert np.isclose(dsq.stats_array['P_N'][spw][0, :, 0],
+                              (uvp.stats_array['P_N'][spw] * coeff)[0, :, 0]).all()
+            # check cov
+            assert np.isclose(dsq.cov_array_real[spw][0, :, :, 0].diagonal(),
+                              uvp.cov_array_real[spw][0, :, :, 0].diagonal()*coeff[0, :, 0]**2).all()
+        nt.assert_equal(dsq.norm_units, uvp.norm_units + ' k^3 / (2pi^2)')
 
     def test_blpair_conversions(self):
         # test blpair -> antnums
@@ -568,20 +606,6 @@ class Test_UVPSpec(unittest.TestCase):
         uvp.set_cosmology(new_cosmo2, overwrite=True, new_beam=self.beam)
         nt.assert_equal(uvp.cosmo, new_cosmo2)
         nt.assert_true(hasattr(uvp, 'OmegaP'))
-
-    def _add_optionals(self, uvp):
-        """add dummy optional cov_array and stats_array to uvp"""
-        uvp.cov_array_real = odict()
-        uvp.cov_array_imag = odict()
-        uvp.cov_model = 'empirical'
-        stat = 'noise_err'
-        uvp.stats_array = odict({stat: odict()})
-        for spw in uvp.spw_array:
-            ndlys = uvp.get_spw_ranges(spw)[0][-1]
-            uvp.cov_array_real[spw] = np.empty((uvp.Nblpairts, ndlys, ndlys, uvp.Npols), np.float64)
-            uvp.cov_array_imag[spw] = np.empty((uvp.Nblpairts, ndlys, ndlys, uvp.Npols), np.float64)
-            uvp.stats_array[stat][spw] = np.empty((uvp.Nblpairts, ndlys, uvp.Npols), np.complex128)
-        return uvp
 
     def test_combine_uvpspec(self):
         # setup uvp build
