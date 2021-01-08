@@ -1,6 +1,6 @@
 # ``hera_pspec``: HERA delay spectrum estimation
 
-[![Build Status](https://travis-ci.org/HERA-Team/hera_pspec.svg?branch=master)](https://travis-ci.org/HERA-Team/hera_pspec)
+![Run Tests](https://github.com/HERA-Team/hera_pspec/workflows/Run%20Tests/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/HERA-Team/hera_pspec/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/hera_pspec?branch=master)
 [![Documentation](https://readthedocs.org/projects/hera-pspec/badge/?version=latest)](https://readthedocs.org/projects/hera-pspec/badge/?version=latest)
 
