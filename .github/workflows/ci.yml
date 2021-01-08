@@ -53,4 +53,3 @@ jobs:
         export PATH="$HOME/miniconda/bin:$PATH"
         source activate $ENV_NAME
         nosetests -P hera_pspec --with-coverage --cover-package=hera_pspec --verbose
-  
