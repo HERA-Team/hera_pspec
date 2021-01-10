@@ -301,7 +301,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
                     deltasq=False, log=True, lst_in_hrs=True,
                     vmin=None, vmax=None, cmap='YlGnBu', axes=None, 
                     figsize=(14, 6), force_plot=False, times=None, 
-                    title_type='blpair', colorbar=True):
+                    title_type='blpair', colorbar=True, **kwargs):
     """
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
@@ -373,6 +373,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
 
     colorbar : bool, optional
         Whether to make a colorbar. Default: True
+
+    kwargs : keyword arguments
+        Additional kwargs to pass to ax.matshow()
 
     Returns
     -------
@@ -558,7 +561,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
             # plot waterfall
             cax = ax.matshow(waterfall[key], cmap=cmap, aspect='auto', 
                              vmin=vmin, vmax=vmax, 
-                             extent=[x[0], x[-1], y[-1], y[0]])
+                             extent=[x[0], x[-1], y[-1], y[0]], **kwargs)
 
             # ax config
             ax.xaxis.set_ticks_position('bottom')
