@@ -362,24 +362,22 @@ class UVPSpec(object):
 
     def get_r_params(self):
         """
-        decompress r_params dictionary (so it can be readily used).
-        in a pspecdata object, r_parms are stored as a dictionary
-        with one entry per baseline.
-        In uvpspec, the dictionary is compressed so that a single r_param entry
-        correspondsto multiple baselines and is stored as a json format string.
-        get_r_params() reads the compressed string and returns the dictionary
-        with the format
-        r_params: dictionary with parameters for weighting matrix.
-          Proper fields
-          and formats depend on the mode of data_weighting.
-          data_weighting == 'dayenu':
-            dictionary with fields
-            'filter_centers', list of floats (or float) specifying the (delay) channel numbers
-                              at which to center filtering windows. Can specify fractional channel number.
-            'filter_half_widths', list of floats (or float) specifying the width of each
-                             filter window in (delay) channel numbers. Can specify fractional channel number.
-            'filter_factors', list of floats (or float) specifying how much power within each filter window
-                              is to be suppressed.
+        Return an `r_params` dictionary.
+        
+        In a `PSpecData` object, the `r_params` are stored as a dictionary with 
+        one entry per baseline.
+        
+        In a `UVPSpec` object, the dictionary is compressed so that a single 
+        `r_param` entry correspondsto multiple baselines and is stored as a 
+        JSON format string.
+        
+        This function reads the compressed string and returns the dictionary
+        with the correct following fields and structure.
+        
+        Returns
+        -------
+        r_params : dict
+            Dictionary of r_params for this object.
         """
         return uvputils.decompress_r_params(self.r_params)
 
@@ -1776,13 +1774,15 @@ class UVPSpec(object):
         where scalar is the cosmological and beam scalar (i.e. X2Y * Omega_eff)
         calculated from pspecbeam with noise_scalar = True, integration_time is
         in seconds and comes from self.integration_array and Nincoherent is the
-        number of incoherent averaging samples and comes from
-        self.nsample_array. If component is 'real' or 'imag', P_N is divided by
-        an additional factor of sqrt(2).
+        number of incoherent averaging samples and comes from `self.nsample_array`. 
+        If `component` is `real` or `imag`, P_N is divided by an additional 
+        factor of sqrt(2).
 
         If the polarizations specified are pseudo Stokes pol (I, Q, U or V)
         then an extra factor of 2 is divided.
-        If form == 'DelSq' then a factor of |k|^3 / (2pi^2) is multiplied.
+        
+        If `form` is `DelSq` then a factor of `|k|^3 / (2pi^2)` is multiplied.
+        
         If real is True, a factor of sqrt(2) is divided to account for
         discarding imaginary noise component.
 
@@ -1822,8 +1822,9 @@ class UVPSpec(object):
             Number of frequency bins to use in integrating power spectrum
             scalar in pspecbeam. Default: 2000.
 
-        component : str, options=['real', 'imag', 'abs']
-            If component is real or imag, divide by an extra factor of sqrt(2)
+        component : str
+            Options=['real', 'imag', 'abs'].
+            If component is real or imag, divide by an extra factor of sqrt(2).
 
         Returns
         -------
@@ -1915,8 +1916,8 @@ class UVPSpec(object):
         each spectrum's integration time.
 
         This is an "incoherent" average, in the sense that this averages power
-        spectra, rather than visibility data. The 'nsample_array' and
-        'integration_array' will be updated to reflect the averaging.
+        spectra, rather than visibility data. The `nsample_array` and
+        `integration_array` will be updated to reflect the averaging.
 
         In the case of averaging across baseline pairs, the resultant averaged
         spectrum is assigned to the zeroth blpair in the group. In the case of
@@ -1929,7 +1930,7 @@ class UVPSpec(object):
         equivalent to cylindrical binning in 3D k-space.
 
         If you want help constructing baseline-pair groups from baseline
-        groups, see self.get_blpair_groups_from_bl_groups.
+        groups, see `self.get_blpair_groups_from_bl_groups`.
 
         Parameters
         ----------
@@ -1937,6 +1938,7 @@ class UVPSpec(object):
             List of list of baseline-pair group tuples or integers. All power
             spectra in a baseline-pair group are averaged together. If a
             baseline-pair exists in more than one group, a warning is raised.
+            
             Examples::
 
                 blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))],
@@ -1951,6 +1953,7 @@ class UVPSpec(object):
         blpair_weights : list, optional
             List of float or int weights dictating the relative weight of each
             baseline-pair when performing the average.
+            
             This is useful for bootstrapping. This should have the same shape
             as blpair_groups if specified. The weights are automatically
             normalized within each baseline-pair group. Default: None (all
@@ -1965,17 +1968,18 @@ class UVPSpec(object):
 
         error_weights: string, optional
             error_weights specify which kind of errors we use for weights 
-            during averaging power spectra.
-            The weights are defined as $w_i = 1/ sigma_i^2$, 
-            where $sigma_i$ is taken from the relevant field of stats_array.
-            If `error_weight' is set to None, which means we just use the 
-            integration time as weights. If error_weights is specified,
-            then it also gets appended to error_field as a list.
-            Default: None
+            during averaging power spectra. The weights are defined as 
+            $w_i = 1/ sigma_i^2$, where $sigma_i$ is taken from the relevant 
+            field of stats_array.
+            
+            If `error_weight` is set to `None`, which means we just use the 
+            integration time as weights. If `error_weights` is specified,
+            then it also gets appended to `error_field` as a list.
+            Default: None.
 
         inplace : bool, optional
-            If True, edit data in self, else make a copy and return. Default:
-            True.
+            If True, edit data in self, else make a copy and return. 
+            Default: True.
 
         Notes
         -----
