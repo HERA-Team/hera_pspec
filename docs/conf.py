@@ -32,7 +32,7 @@ MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'scipy.integrate',
                 'astropy.cosmology', 'astropy.units', 'astropy.constants', 
                 'matplotlib', 'matplotlib.pyplot', 'pylab', 'yaml', 
                 'pyuvdata.utils', 'hera_sim']
-                
+
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = mock.Mock()
 
