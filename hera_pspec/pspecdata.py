@@ -1618,8 +1618,8 @@ class PSpecData(object):
 
         .. math ::
             E^{12,a} = (1/2) R_1 Q^a R_2
-            C^1 = <x1 x1^dagger> - <x1><x1^dagger>
-            C^2 = <x2 x2^dagger> - <x2><x2^dagger>
+            C^1 = <x1 x1^\dagger> - <x1><x1^\dagger>
+            C^2 = <x2 x2^\dagger> - <x2><x2^\dagger>
             P^{12} = <x1 x2> - <x1><x2>
             S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
 
@@ -1721,51 +1721,51 @@ class PSpecData(object):
         Define:
         
             Real part of q_a = (1/2) (q_a + q_a^*)
-            Imaginary part of q_a = (1/2i) (q_a - q_a^dagger)
-            Real part of p_a = (1/2) (p_a + p_a^dagger)
-            Imaginary part of p_a = (1/2i) (p_a - p_a^dagger)
+            Imaginary part of q_a = (1/2i) (q_a - q_a^\dagger)
+            Real part of p_a = (1/2) (p_a + p_a^\dagger)
+            Imaginary part of p_a = (1/2i) (p_a - p_a^\dagger)
         
         .. math ::
         
             E^{12,a} = (1/2) R_1 Q^a R_2
-            C^{12} = <x1 x2^dagger> - <x1><x2^dagger>
+            C^{12} = <x1 x2^\dagger> - <x1><x2^\dagger>
             P^{12} = <x1 x2> - <x1><x2>
             S^{12} = <x1^* x2^*> - <x1^*> <x2^*>
             p_a = M_{ab} q_b
 
         Then:
         
-        The variance of (1/2) (q_a + q_a^dagger):
+        The variance of (1/2) (q_a + q_a^\dagger):
         
         .. math ::
         
-            (1/4){ (<q_a q_a> - <q_a><q_a>) + 2(<q_a q_a^dagger> - <q_a><q_a^dagger>)
-            + (<q_a^dagger q_a^dagger> - <q_a^dagger><q_a^dagger>) }
+            (1/4){ (<q_a q_a> - <q_a><q_a>) + 2(<q_a q_a^\dagger> - <q_a><q_a^\dagger>)
+            + (<q_a^\dagger q_a^\dagger> - <q_a^\dagger><q_a^\dagger>) }
 
-        The variance of (1/2i) (q_a - q_a^dagger):
+        The variance of (1/2i) (q_a - q_a^\dagger):
         
         .. math ::
         
-            (-1/4){ (<q_a q_a> - <q_a><q_a>) - 2(<q_a q_a^dagger> - <q_a><q_a^dagger>)
-            + (<q_a^dagger q_a^dagger> - <q_a^dagger><q_a^dagger>) }
+            (-1/4){ (<q_a q_a> - <q_a><q_a>) - 2(<q_a q_a^\dagger> - <q_a><q_a^\dagger>)
+            + (<q_a^\dagger q_a^\dagger> - <q_a^\dagger><q_a^\dagger>) }
 
-        The variance of (1/2) (p_a + p_a^dagger):
+        The variance of (1/2) (p_a + p_a^\dagger):
         
         .. math ::
         
             (1/4) { M_{ab} M_{ac} (<q_b q_c> - <q_b><q_c>) +
-            M_{ab} M_{ac}^* (<q_b q_c^dagger> - <q_b><q_c^dagger>) +
-            M_{ab}^* M_{ac} (<q_b^dagger q_c> - <q_b^dagger><q_c>) +
-            M_{ab}^* M_{ac}^* (<q_b^dagger q_c^dagger> - <q_b^dagger><q_c^dagger>) }
+            M_{ab} M_{ac}^* (<q_b q_c^\dagger> - <q_b><q_c^\dagger>) +
+            M_{ab}^* M_{ac} (<q_b^\dagger q_c> - <q_b^\dagger><q_c>) +
+            M_{ab}^* M_{ac}^* (<q_b^\dagger q_c^\dagger> - <q_b^\dagger><q_c^\dagger>) }
 
-        The variance of (1/2i) (p_a - p_a^dagger):
+        The variance of (1/2i) (p_a - p_a^\dagger):
         
         .. math ::
         
             (-1/4) { M_{ab} M_{ac} (<q_b q_c> - <q_b><q_c>) -
-            M_{ab} M_{ac}^* (<q_b q_c^dagger> - <q_b><q_c^dagger>) -
-            M_{ab}^* M_{ac} (<q_b^dagger q_c> - <q_b^dagger><q_c>) +
-            M_{ab}^* M_{ac}^* (<q_b^dagger q_c^dagger> - <q_b^dagger><q_c^dagger>) }
+            M_{ab} M_{ac}^* (<q_b q_c^\dagger> - <q_b><q_c^\dagger>) -
+            M_{ab}^* M_{ac} (<q_b^\dagger q_c> - <q_b^\dagger><q_c>) +
+            M_{ab}^* M_{ac}^* (<q_b^\dagger q_c^\dagger> - <q_b^\dagger><q_c^\dagger>) }
 
         where
         
@@ -1773,10 +1773,10 @@ class PSpecData(object):
             <q_a q_b> - <q_a><q_b> =
                         tr(E^{12,a} C^{21} E^{12,b} C^{21})
                         + tr(E^{12,a} P^{22} E^{21,b*} S^{11})
-            <q_a q_b^dagger> - <q_a><q_b^dagger> =
+            <q_a q_b^\dagger> - <q_a><q_b^\dagger> =
                         tr(E^{12,a} C^{22} E^{21,b} C^{11})
                         + tr(E^{12,a} P^{21} E^{12,b *} S^{21})
-            <q_a^dagger q_b^dagger> - <q_a^dagger><q_b^dagger> =
+            <q_a^\dagger q_b^\dagger> - <q_a^\dagger><q_b^\dagger> =
                         tr(E^{21,a} C^{12} E^{21,b} C^{12})
                         + tr(E^{21,a} P^{11} E^{12,b *} S^{22})
 
@@ -1842,12 +1842,12 @@ class PSpecData(object):
             When model is chosen as `autos` or `dsets`, only C^{11} and C^{22} 
             are accepted as non-zero values, and the two matrices are also 
             expected to be diagonal, thus only 
-            <q_a q_b^dagger> - <q_a><q_b^dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ] 
+            <q_a q_b^\dagger> - <q_a><q_b^\dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ] 
             exists in the covariance terms of q vectors.
             
             When model is chosen as `foreground_dependent`, we further include 
             the signal-noise coupling term besides the noise in the output 
-            covariance. Still only <q_a q_b^dagger> - <q_a><q_b^dagger> is 
+            covariance. Still only <q_a q_b^\dagger> - <q_a><q_b^\dagger> is 
             non-zero, while it takes a form of 
             tr[ E^{12,a} Cn^{22} E^{21,b} Cn^{11} +  
             E^{12,a} Cs^{22} E^{21,b} Cn^{11} + 
@@ -1895,7 +1895,7 @@ class PSpecData(object):
         cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = [], [], [], []
         for time_index in range(self.dsets[0].Ntimes):
             if model in ['dsets','autos']:
-                # calculate <q_a q_b^dagger> - <q_a><q_b^dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]
+                # calculate <q_a q_b^\dagger> - <q_a><q_b^\dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]
                 # We have used tr[A D_1 B D_2] = \sum_{ijkm} A_{ij} d_{1j} \delta_{jk} B_{km} d_{2m} \delta_{mi} = \sum_{ik} [A_{ik}*d_{1k}] * [B_{ki}*d_{2i}]
                 # to simplify the computation. 
                 C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
@@ -1992,8 +1992,8 @@ class PSpecData(object):
             else:
                 assert np.shape(q_q) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
                 MMq_q = np.einsum('ab,cd,bd->ac', m, m, q_q, optimize=einstein_path_2)
-            # calculate \sum_{bd} [ M_{ab} M_{cd}^* (<q_b q_d^dagger> - <q_b><q_d^dagger>) ]
-            # and \sum_{bd} [ M_{ab}^* M_{cd} (<q_b^dagger q_d> - <q_b^dagger><q_d>) ]
+            # calculate \sum_{bd} [ M_{ab} M_{cd}^* (<q_b q_d^\dagger> - <q_b><q_d^\dagger>) ]
+            # and \sum_{bd} [ M_{ab}^* M_{cd} (<q_b^\dagger q_d> - <q_b^\dagger><q_d>) ]
             if np.isclose([q_qdagger], 0).all():
                 MM_q_qdagger = 0.+1.j*0
                 M_Mq_qdagger_ = 0.+1.j*0
@@ -2001,7 +2001,7 @@ class PSpecData(object):
                 assert np.shape(q_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
                 MM_q_qdagger = np.einsum('ab,cd,bd->ac', m, m.conj(), q_qdagger, optimize=einstein_path_2)
                 M_Mq_qdagger_ = np.einsum('ab,cd,bd->ac', m.conj(), m, q_qdagger.conj(), optimize=einstein_path_2)
-            # calculate \sum_{bd} [ M_{ab}^* M_{cd}^* (<q_b^dagger q_d^dagger> - <q_b^dagger><q_d^dagger>) ]
+            # calculate \sum_{bd} [ M_{ab}^* M_{cd}^* (<q_b^\dagger q_d^\dagger> - <q_b^\dagger><q_d^\dagger>) ]
             if np.isclose([qdagger_qdagger], 0).all():
                 M_M_qdagger_qdagger = 0.+1.j*0
             else:
