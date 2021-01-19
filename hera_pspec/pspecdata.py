@@ -3951,7 +3951,7 @@ class PSpecData(object):
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
             spw_stats_array_cov_model = np.moveaxis(np.array(spw_stats_array_cov_model), 0, -1)
-            if store_cove:
+            if store_cov:
                 spw_cov_real = np.moveaxis(np.array(spw_cov_real), 0, -1)
                 spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
             if store_window:
