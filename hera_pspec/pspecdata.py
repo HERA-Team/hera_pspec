@@ -3940,24 +3940,30 @@ class PSpecData(object):
                 spw_wgts.append(pol_wgts)
                 spw_ints.append(pol_ints)
                 spw_stats_array_cov_model.append(pol_stats_array_cov_model)
-                spw_cov_real.append(pol_cov_real)
-                spw_cov_imag.append(pol_cov_imag)
-                spw_window_function.append(pol_window_function)
+                if store_cov:
+                    spw_cov_real.append(pol_cov_real)
+                    spw_cov_imag.append(pol_cov_imag)
+                if store_window:
+                    spw_window_function.append(pol_window_function)
 
             # insert into data and integration dictionaries
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
             spw_stats_array_cov_model = np.moveaxis(np.array(spw_stats_array_cov_model), 0, -1)
-            spw_cov_real = np.moveaxis(np.array(spw_cov_real), 0, -1)
-            spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
-            spw_window_function = np.moveaxis(np.array(spw_window_function), 0, -1)
+            if store_cove:
+                spw_cov_real = np.moveaxis(np.array(spw_cov_real), 0, -1)
+                spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
+            if store_window:
+                spw_window_function = np.moveaxis(np.array(spw_window_function), 0, -1)
 
             data_array[i] = spw_data
             stats_array_cov_model[i] = spw_stats_array_cov_model
-            cov_array_real[i] = spw_cov_real
-            cov_array_imag[i] = spw_cov_imag
-            window_function_array[i] = spw_window_function
+            if store_cov:
+                cov_array_real[i] = spw_cov_real
+                cov_array_imag[i] = spw_cov_imag
+            if store_window:
+                window_function_array[i] = spw_window_function
             wgt_array[i] = spw_wgts
             integration_array[i] = spw_ints
             sclr_arr.append(spw_scalar)
