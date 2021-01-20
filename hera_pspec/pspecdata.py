@@ -3879,7 +3879,8 @@ class PSpecData(object):
                                 pol_stats_array_cov_model.extend(stats)
 
                     # store the window_function
-                    pol_window_function.extend(Wv.astype(np.float64))
+                    if store_window:
+                        pol_window_function.extend(Wv.astype(np.float64))
 
                     # Get baseline keys
                     if isinstance(blp, list):
