@@ -469,6 +469,13 @@ def test_spherical_average():
     # bug check: in the past, combine after spherical average erroneously changed dly_array
     assert sph == sph_c
 
+    # insert an inf into the arrays as a test
+    uvp2 = copy.deepcopy(uvp)
+    uvp2.cov_array_real[0][0], uvp2.cov_array_imag[0][0] = np.inf, np.inf
+    uvp2.stats_array['err'][0][0] = np.inf
+    sph = grouping.spherical_average(uvp, kbins, bin_widths)
+    assert np.isfinite(sph.cov_array_real[0]).all()
+
     # exceptions
     nt.assert_raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)
 

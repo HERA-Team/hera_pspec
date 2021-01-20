@@ -815,7 +815,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 sq_stat = stats_array[stat][spw].copy()
                 np.square(sq_stat, out=sq_stat, where=np.isfinite(sq_stat))
                 # einsum is fast enough for this, and is more succinct than matmul
-                avg_stat = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, sq_stat.clip(0, 1e40), H))
+                avg_stat = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, sq_stat.clip(0, 1e50), H))
                 # set zeroed stats to large number
                 avg_stat[np.isclose(avg_stat, 0)] = 1e40
                 # update stats_array
@@ -825,7 +825,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # bin covariance: C_sph = H.T C_cyl H
             # cm shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
             cm = np.moveaxis(cov_array_real[spw], -1, 0)
-            cm = Ht @ cm @ H
+            cm = Ht @ cm.clip(-1e50, 1e50) @ H  # clip infs
             cov_array_real[spw] = np.moveaxis(cm, 0, -1)
             cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
