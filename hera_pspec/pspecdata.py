@@ -3822,9 +3822,13 @@ class PSpecData(object):
                         #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)                                    #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
                     #else:
                     #    Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
-                    Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
-                    pv = self.p_hat(Mv, qv)
-                    Wv = self.get_W(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+                    # compute M and apply on a per-time basis to avoid memory overload.
+                    pv = np.zeros_like(qv)
+                    for t in range(self.Ntimes):
+                        Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft, time_indices=[t])
+                        pv[t] = self.p_hat(Mv[t], qv[t])
+                    if store_window:
+                        Wv = self.get_W(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
                     # Multiply by scalar
                     if self.primary_beam != None:
                         if verbose: print("  Computing and multiplying scalar...")
