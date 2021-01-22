@@ -1768,13 +1768,20 @@ class PSpecData(object):
                              "by now! Cannot be equal to None.")
         if time_indices is None:
             time_indices = np.arange(self.Ntimes).astype(int)
-        G = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        for tind, time_index in enumerate(time_indices):
-            G[tind] = self._get_G(key1=key1, key2=key2, time_index=time_index,
-            exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+        k1 = (key1[0], key1[1:])
+        k2 = (key2[0], key2[1:])
+        if self._time_independent_weights[k1] and self._time_independent_weights[k2] and\
+            self._unflagged_time_integration[k1] == self._unflagged_time_integration[k2]:
+            G = self._get_G(key1=key1, key2=key2, time_index=self._unflagged_time_integration[k1],
+                            exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+        else:
+            G = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+            for tind, time_index in enumerate(time_indices):
+                G[tind] = self._get_G(key1=key1, key2=key2, time_index=time_index,
+                exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
         # check if all zeros, in which case turn into identity
-        if np.count_nonzero(G) == 0:
-            G = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
+        #if np.count_nonzero(G) == 0:
+        #    G = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
         return G
 
     def _get_H(self, key1, key2, time_index, sampling=False, exact_norm=False, pol=False,
@@ -1959,15 +1966,23 @@ class PSpecData(object):
         if self.spw_Ndlys == None:
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None.")
-        H = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-
-        for tind,time_index in enumerate(time_indices):
-            H[tind] = self._get_H(key1=key1, key2=key2, time_index=time_index,
-            sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+        # if _time_independent_weights is True, return matrix
+        # if not True, return 3d array
+        k1 = (key1[0], key1[1:])
+        k2 = (key2[0], key2[1:])
+        if self._time_independent_weights[k1] and self._time_independent_weights[k2] and\
+            self._unflagged_time_integration[k1] == self._unflagged_time_integration[k2]:
+            H = self._get_H(key1=key1, key2=key2, time_index=self._unflagged_time_integration[k1],
+                            sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+        else:
+            H = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+            for tind,time_index in enumerate(time_indices):
+                H[tind] = self._get_H(key1=key1, key2=key2, time_index=time_index,
+                sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
 
         # check if all zeros, in which case turn into identity
-        if np.count_nonzero(H) == 0:
-            H = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
+        #if np.count_nonzero(H) == 0:
+        #    H = np.asarray([np.eye(self.spw_Ndlys) for m in range(len(time_indices))])
         return H
 
     def get_unnormed_E(self, key1, key2, time_index, exact_norm=False, pol=False):
@@ -2700,11 +2715,19 @@ class PSpecData(object):
         M : array_like, complex
             Dimensions (Ntimes Ndlys, Ndlys) or (Ndlys, Ndlys) if average_times is True.
         """
-        if time_indices is None:
-            time_indices = np.arange(self.Ntimes).astype(int)
-        M = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        for tind, time_index in enumerate(time_indices):
-            M[tind] = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+        # return 2d array if time independent weights.
+        k1 = (key1[0], key1[1:])
+        k2 = (key2[0], key2[1:])
+        if self._time_independent_weights[k1] and self._time_independent_weights[k2]\
+            and self._unflagged_time_integration[k1] == self._unflagged_time_integration[k2]:
+            M = self._get_M(key1, key2, time_index=self._unflagged_time_integration[k1], mode=mode,
+                            sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+        else:
+            if time_indices is None:
+                time_indices = np.arange(self.Ntimes).astype(int)
+            M = np.zeros((len(time_indices),self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+            for tind, time_index in enumerate(time_indices):
+                M[tind] = self._get_M(key1, key2, time_index, mode=mode, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
         return M
 
     def get_W(self, key1, key2, mode='I', sampling=False, exact_norm=False, time_indices=None, pol=False, allow_fft=False):
@@ -3229,8 +3252,8 @@ class PSpecData(object):
         """
         if Gv is None or Hv is None:
             assert isinstance(time_index,(int,np.int64, np.int32)),"Must provide valid time index! None supplied!"
-        if Gv is None: Gv = self.get_G(key1, key2, time_indices=[time_index])[0]
-        if Hv is None: Hv = self.get_H(key1, key2, time_indices=[time_index])[0]
+        if Gv is None: Gv = self.get_G(key1, key2, time_indices=[time_index]).squeeze()
+        if Hv is None: Hv = self.get_H(key1, key2, time_indices=[time_index]).squeeze()
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
@@ -3823,10 +3846,14 @@ class PSpecData(object):
                     #else:
                     #    Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
                     # compute M and apply on a per-time basis to avoid memory overload.
-                    pv = np.zeros_like(qv)
-                    for t in range(self.Ntimes):
-                        Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft, time_indices=[t]).squeeze()
-                        pv[:, t] = self.p_hat(Mv, qv[:, t])
+                    if Gv.ndim > 2:
+                        pv = np.zeros_like(qv)
+                        for t in range(self.Ntimes):
+                            Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft, time_indices=[t]).squeeze()
+                            pv[:, t] = self.p_hat(Mv, qv[:, t])
+                    else:
+                        Mv = self.get_M(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft).squeeze()
+                        pv = self.p_hat(Mv, qv)
                     if store_window:
                         Wv = self.get_W(key1, key2, mode=norm, sampling=sampling, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
                     # Multiply by scalar
@@ -3837,9 +3864,12 @@ class PSpecData(object):
                     # Wide bin adjustment of scalar, which is only needed for
                     # the diagonal norm matrix mode (i.e., norm = 'I')
                     if norm == 'I' and not(exact_norm):
-                        for t in range(self.Ntimes):
-                            sa = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
-                            pv[:,t] = pv[:,t] * sa
+                        if Gv.ndim > 2:
+                            for t in range(self.Ntimes):
+                                sa = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
+                                pv[:,t] = pv[:,t] * sa
+                        else:
+                            pv = pv * self.scalar_delay_adjustment(Gv=Gv, Hv=Hv, sampling=sampling)
 
                     #Generate the covariance matrix if error bars provided
                     if store_cov or store_cov_diag:

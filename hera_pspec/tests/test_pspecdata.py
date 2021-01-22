@@ -969,18 +969,18 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.set_taper(taper)
                 self.ds.set_Ndlys(Nfreq//3)
-                H = self.ds.get_H(key1, key2)[0]
+                H = self.ds.get_H(key1, key2)
                 nconfigs += 1
                 self.assertEqual(H.shape, (Nfreq//3, Nfreq//3)) # Test shape
                 self.ds.set_Ndlys()
-                H = self.ds.get_H(key1, key2)[0]
+                H = self.ds.get_H(key1, key2)
                 self.assertEqual(H.shape, (Nfreq, Nfreq))
                 nconfigs += 1
                 # assert that number of keys in H equals the number of flagging patterns
                 # times the number of tapering and weighting configurations that have been
                 # cycled through.
                 # second H computation made to check that no extra items are added to _H cache.
-                H = self.ds.get_H(key1, key2)[0]
+                H = self.ds.get_H(key1, key2)
                 nt.assert_true(len(self.ds._H) == npatterns * nconfigs)
 
     def test_get_M(self):
@@ -1009,18 +1009,18 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.set_taper(taper)
                 self.ds.set_Ndlys(Nfreq//3)
-                M = self.ds.get_M(key1, key2)[0]
+                M = self.ds.get_M(key1, key2)
                 nconfigs += 1
                 self.assertEqual(M.shape, (Nfreq//3, Nfreq//3)) # Test shape
                 self.ds.set_Ndlys()
-                M = self.ds.get_M(key1, key2)[0]
+                M = self.ds.get_M(key1, key2)
                 self.assertEqual(M.shape, (Nfreq, Nfreq))
                 nconfigs += 1
                 # assert that number of keys in _M equals the number of flagging patterns
                 # times the number of tapering and weighting configurations that have been
                 # cycled through.
                 # second M computation made to check that no extra items are added to _M cache.
-                M = self.ds.get_M(key1, key2)[0]
+                M = self.ds.get_M(key1, key2)
                 nt.assert_true(len(self.ds._M) == npatterns * nconfigs)
         # now test some error cases.
         nt.assert_raises(NotImplementedError, self.ds.get_M, key1, key2, mode='H^-1', exact_norm=True)
@@ -1105,8 +1105,7 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_Ndlys(Nfreq//3)
                 nt.assert_raises(ValueError, self.ds.get_H, key1, key2, allow_fft=True, sampling=True)
                 #check if H1 and H2 are close to one part in 10e-10
-                for m in range(H1.shape[0]):
-                    nt.assert_true(np.all(np.abs(H1[m]-H2[m])/np.mean(np.diag(np.abs(H1[m]))) <= 1e-10))
+                nt.assert_true(np.all(np.abs(H1-H2)/np.mean(np.diag(np.abs(H1))) <= 1e-10))
 
 
 
