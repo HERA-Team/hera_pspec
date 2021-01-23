@@ -874,7 +874,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.lst_2_array = np.unique(uvp_in.lst_2_array)
 
     # Add to history
-    uvp.history += version.history_string(notes=add_to_history)
+    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
 
     # validity check
     if run_check:
