@@ -2716,8 +2716,8 @@ class PSpecData(object):
             Dimensions (Ntimes Ndlys, Ndlys) or (Ndlys, Ndlys) if average_times is True.
         """
         # return 2d array if time independent weights.
-        k1 = (key1[0], key1[1:])
-        k2 = (key2[0], key2[1:])
+        k1 = (key1[0],) + key1[1][0] + (key1[1][1], )
+        k2 = (key2[0],) + key2[1][0] + (key2[1][1], )
         if self._time_independent_weights[k1] and self._time_independent_weights[k2]\
             and self._unflagged_time_integration[k1] == self._unflagged_time_integration[k2]:
             M = self._get_M(key1, key2, time_index=self._unflagged_time_integration[k1], mode=mode,
