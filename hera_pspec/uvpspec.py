@@ -1910,7 +1910,7 @@ class UVPSpec(object):
 
     def average_spectra(self, blpair_groups=None, time_avg=False,
                         blpair_weights=None, error_field=None, error_weights=None,
-                        inplace=True):
+                        inplace=True, add_to_history=''):
         """
         Average power spectra across the baseline-pair-time axis, weighted by
         each spectrum's integration time.
@@ -1981,6 +1981,9 @@ class UVPSpec(object):
             If True, edit data in self, else make a copy and return. 
             Default: True.
 
+        add_to_history : str, optional
+            Added text to add to file history.
+
         Notes
         -----
         Currently, every baseline-pair in a blpair group must have the same
@@ -1995,14 +1998,14 @@ class UVPSpec(object):
                                      error_field=error_field,
                                      error_weights=error_weights,
                                      blpair_weights=blpair_weights,
-                                     inplace=True)
+                                     inplace=True, add_to_history=add_to_history)
         else:
             return grouping.average_spectra(self, blpair_groups=blpair_groups,
                                             time_avg=time_avg,
                                             error_field=error_field,
                                             error_weights=error_weights,
                                             blpair_weights=blpair_weights,
-                                            inplace=False)
+                                            inplace=False, add_to_history=add_to_history)
 
     def fold_spectra(self):
         """
