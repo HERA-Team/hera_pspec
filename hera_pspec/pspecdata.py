@@ -2716,8 +2716,8 @@ class PSpecData(object):
             Dimensions (Ntimes Ndlys, Ndlys) or (Ndlys, Ndlys) if average_times is True.
         """
         # return 2d array if time independent weights.
-        k1 = (key1[0],) + key1[1][0] + (key1[1][1], )
-        k2 = (key2[0],) + key2[1][0] + (key2[1][1], )
+        k1 = (key1[0], key1[1:])
+        k2 = (key2[0], key2[1:])
         if self._time_independent_weights[k1] and self._time_independent_weights[k2]\
             and self._unflagged_time_integration[k1] == self._unflagged_time_integration[k2]:
             M = self._get_M(key1, key2, time_index=self._unflagged_time_integration[k1], mode=mode,
@@ -3840,12 +3840,6 @@ class PSpecData(object):
                     qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
 
                     if verbose: print("  Normalizing power spectrum...")
-                    #if norm == 'V^-1/2':
-                    #    V_mat = self.cov_q_hat(key1, key2, exact_norm=exact_norm, pol = pol, model=cov_model)
-                        #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)                                    #Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
-                    #else:
-                    #    Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
-                    # compute M and apply on a per-time basis to avoid memory overload.
                     if Gv.ndim > 2:
                         pv = np.zeros_like(qv)
                         for t in range(self.Ntimes):
@@ -3869,7 +3863,8 @@ class PSpecData(object):
                                 sa = self.scalar_delay_adjustment(Gv=Gv[t], Hv=Hv[t], sampling=sampling)
                                 pv[:,t] = pv[:,t] * sa
                         else:
-                            pv = pv * self.scalar_delay_adjustment(Gv=Gv, Hv=Hv, sampling=sampling)
+                            sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv, sampling=sampling)
+                            pv = (sa * pv.T).T
 
                     #Generate the covariance matrix if error bars provided
                     if store_cov or store_cov_diag:

@@ -2389,7 +2389,7 @@ def test_window_funcs():
     ds.set_spw((0, 20))
     ds.set_taper('bh')
     bl = (37, 38)
-    key = (0, bl, 'xx')
+    key = (0, ) +  bl + ('xx', )
     # iterate over various R and M matrices and ensure
     # normalization and dtype is consistent
     for data_weight in ['identity', 'iC']:
