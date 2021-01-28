@@ -1410,7 +1410,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                     uvp.set_stats('P_SN', key, P_SN)
 
     # P_SN correction
-    if P_SN_correction:
+    if P_SN_correction and "P_SN" in err_type:
         if precomp_P_N is None:
             precomp_P_N = 'P_N'
         apply_P_SN_correction(uvp, P_SN='P_SN', P_N=precomp_P_N)
