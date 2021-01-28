@@ -1301,7 +1301,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
     return uvd
 
 
-def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
+def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_correction=True):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
     Adds to uvp.stats_array inplace.
@@ -1313,9 +1313,10 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
         If err_type == 'P_SN', uvp should not have any
         incoherent averaging applied.
 
-    auto_Tsys : UVData object
+    auto_Tsys : UVData object, optional
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.
+        Needed for P_N computation, not needed if feeding precomp_P_N.
 
     err_type : str or list of str, options = ['P_N', 'P_SN']
         Type of thermal noise error to compute. P_N is the standard
@@ -1326,9 +1327,13 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
         which uses uses Re[P(tau)] as a proxy for P_S.
         To store both, feed as err_type = ['P_N', 'P_SN']
 
-    precomp_P_N : str
+    precomp_P_N : str, optional
         If computing P_SN and P_N is already computed, use this key
         to index stats_array for P_N rather than computing it from auto_Tsys.
+
+    P_SN_correctoin : bool, optional
+        Apply correction factor if computing P_SN to account for double
+        counting of noise.
     """
     from hera_pspec import uvpspec_utils
 
@@ -1336,9 +1341,10 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
     if isinstance(err_type, str):
         err_type = [err_type]
 
-    # get metadata
-    lsts = np.unique(auto_Tsys.lst_array)
-    freqs = auto_Tsys.freq_array[0]
+    # get metadata if needed
+    if precomp_P_N is None:
+        lsts = np.unique(auto_Tsys.lst_array)
+        freqs = auto_Tsys.freq_array[0]
 
     # iterate over spectral window
     for spw in uvp.spw_array:
@@ -1393,10 +1399,47 @@ def uvp_noise_error(uvp, auto_Tsys, err_type='P_N', precomp_P_N=None):
                 if 'P_SN' in err_type:
                     # calculate P_SN: see Tan+2020 and
                     # H1C_IDR2/notebooks/validation/errorbars_with_systematics_and_noise.ipynb
+                    # get signal proxy
                     P_S = uvp.get_data(key).real
+                    # clip negative values
                     P_S[P_S < 0] = 0
                     P_SN = np.sqrt(np.sqrt(2) * P_S * P_N + P_N**2)
                     # catch nans, set to inf
                     P_SN[np.isnan(P_SN)] = np.inf
                     # set stats
                     uvp.set_stats('P_SN', key, P_SN)
+
+    # P_SN correction
+    if P_SN_correction:
+        if precomp_P_N is None:
+            precomp_P_N = 'P_N'
+        apply_P_SN_correction(uvp, P_SN='P_SN', P_N=precomp_P_N)
+
+
+def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
+    """
+    Apply correction factor to P_SN errorbar in stats_array to account
+    for double counting of noise by using data as proxy for signal.
+    See Jianrong Tan et al. 2021 (Errorbar methodologies).
+    Operates in place. Must have both P_SN and P_N in stats_array.
+
+    Args:
+        uvp : UVPSpec object
+            With P_SN errorbar (not variance) as a key
+        P_SN : str
+            Key in stats array for P_SN errorbar
+        P_N : str
+            Key in stats_array for P_N errorbar
+    """
+    assert P_SN in uvp.stats_array
+    assert P_N in uvp.stats_array
+    for spw in uvp.spw_array:
+        # get P_SN and P_N
+        p_n = uvp.stats_array[P_N][spw]
+        p_sn = uvp.stats_array[P_SN][spw]
+        # derive correction
+        corr = 1 - (np.sqrt(1 / np.sqrt(np.pi) + 1) - 1) * p_n.real / p_sn.real.clip(1e-40, np.inf)
+        corr[np.isclose(corr, 0)] = np.inf
+        corr[corr < 0] = np.inf
+        # apply correction
+        uvp.stats_array[P_SN][spw] *= corr

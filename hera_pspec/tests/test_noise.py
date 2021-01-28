@@ -159,21 +159,26 @@ def test_analytic_noise():
     # get P_N estimate
     auto_Tsys = utils.uvd_to_Tsys(uvd, beam, os.path.join(DATA_PATH, "test_uvd.uvh5"))
     assert os.path.exists(os.path.join(DATA_PATH, "test_uvd.uvh5"))
-    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'])
+    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=False)
 
     # check consistency of 1-sigma standard dev. to 1%
     cov_diag = uvp.cov_array_real[0][:, range(Nchan), range(Nchan)]
     stats_diag = uvp.stats_array['P_N'][0]
     frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
-
     assert np.abs(frac_ratio).mean() < 0.01
 
     ## check P_SN consistency of 1-sigma standard dev. to 1%
     cov_diag = uvp_fg.cov_array_real[0][:, range(Nchan), range(Nchan)]
     stats_diag = uvp.stats_array['P_SN'][0]
     frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
-
     assert np.abs(frac_ratio).mean() < 0.01
+
+    # now compute unbiased P_SN and check that it matches P_N at high-k    
+    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=True)
+    frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
+    dlys = uvp.get_dlys(0) * 1e9
+    select = np.abs(dlys) > 3000
+    assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nblpairts)
 
     # clean up
     os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
