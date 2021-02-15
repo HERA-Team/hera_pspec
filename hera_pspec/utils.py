@@ -1425,9 +1425,9 @@ def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
 
     Args:
         uvp : UVPSpec object
-            With P_SN errorbar (not variance) as a key
+            With P_SN and P_N errorbar (not variance) as a key in stats_array
         P_SN : str
-            Key in stats array for P_SN errorbar
+            Key in stats_array for P_SN errorbar
         P_N : str
             Key in stats_array for P_N errorbar
     """
