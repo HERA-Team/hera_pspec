@@ -25,7 +25,7 @@ class PSpecData(object):
 
     def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
                  beam=None, cals=None, cal_flag=True, external_flags=None,
-                 cov_model='empirical'):
+                 cov_model='empirical', truncate_taper=False):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -68,6 +68,10 @@ class PSpecData(object):
 
         cov_model : str, optional
             Model method for computing data covariances. Default is 'empirical'.
+
+        truncate_taper : bool, optional
+            If True, truncate taper at largest and smallest unflagged channels for each blpair
+            and time step.
         """
         self.clear_cache(clear_r_params=True)  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
@@ -87,6 +91,7 @@ class PSpecData(object):
         self.data_weighting = 'identity'
         self.taper = 'none'
         self.symmetric_taper = True
+        self.truncate_taper = truncate_taper
         # Set all weights to None if wgts=None
         if wgts is None:
             wgts = [None for dset in dsets]
@@ -1255,8 +1260,13 @@ class PSpecData(object):
                     rmat = self.iC(key, model=self.r_cov_model, time_index=tindex)
                 else:
                     raise ValueError("data_weighting must be in ['identity', 'iC', 'dayenu']")
-
-                myTaper = dspec.gen_window(self.taper, self.spw_Nfreqs)
+                if self.truncate_taper and np.any(~np.isclose(wgt, 0.0)):
+                    edgecut_low = np.min(np.where(~np.isclose(wgt, 0.0)))
+                    edgecut_hi = len(wgt) - np.max(np.where(~np.isclose(wgt, 0.0)))
+                else:
+                    edgecut_low = 0
+                    edgecut_hi = 0
+                myTaper = dspec.gen_window(self.taper, self.spw_Nfreqs, edgecut_low=edgecut_low, edgecut_hi=edgecut_hi)
                 tmat = np.zeros((self.spw_Nfreqs, nfreq), dtype=complex)
                 tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=np.complex128)
 
@@ -4401,7 +4411,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None, include_autocorrs=False,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True, fullband_filter=False,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
-              history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical'):
+              history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical', truncate_taper=False):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -4680,6 +4690,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             - `filter_factors`: list of floats (or float) specifying how much
                                 power within each filter window is to be
                                 suppressed.
+    truncate_taper : bool, optional
+        If True, truncate all tapers to min / max unflagged channels.
 
     Returns
     -------
@@ -4814,7 +4826,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # package into PSpecData
     ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels,
-                   dsets_std=dsets_std, beam=beam, cals=cals, cal_flag=cal_flag)
+                   dsets_std=dsets_std, beam=beam, cals=cals, cal_flag=cal_flag, truncate_taper=truncate_taper)
     # if pStokes are requested in polpairs, then construct pstokes and add to datasets where necessary.
     for dp in dset_pairs:
         for pp in pol_pairs:
@@ -5125,6 +5137,7 @@ def get_pspec_run_argparser():
     a.add_argument("--rcond", default=1e-15, type=float, help="Cutoff for eigenvalues in taking psuedo-inverse for nomralization.")
     a.add_argument("--Jy2mK_avg", default=False, action="store_true", help="Average Jy2mK factorin frequency before applying to data to avoid introducing spurious spectral structure.")
     a.add_argument("--store_window", default=False, action="store_true", help="Store the window function.")
+    a.add_argument("--truncate_taper", default=False, action="store_true", help="truncate tapers to min/max unflagged channels.")
     return a
 
 
