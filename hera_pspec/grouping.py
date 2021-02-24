@@ -741,7 +741,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
 
         # setup weighting matrix: block diagonal for each Ndly x Ndly
-        E = np.zeros((uvp.Ntimes, Ndlyblps, Ndly, uvp.Npols), dtype=np.float64)
+        E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
 
         # get kperps for this spw: shape (Nblpairts,)
         kperps = uvp.get_kperps(spw, little_h=True)
@@ -854,7 +854,11 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         # Ht shape (Npols, Ntimes, Nk, Ndlyblps)
         Am = np.moveaxis(A[spw], -1, 0)
         Em = np.moveaxis(E, -1, 0)
-        EmAm = np.asarray([[np.vstack([Em[p, t, Ndlys * b: Ndlys * (b+1)].squeeze() @ Am[p, t, Ndlys * b: Ndlys * (b + 1)].squeeze() for b in range(Nblpairs)]) for t in range(Ntimes)] for p in range(Npols)])
+        EmAm = np.zeros_like(Am)
+        for t in range(uvp.Ntimes):
+            for p in range(uvp.Npols):
+                for b in range(uvp.Nblpairs):
+                    EmAm[p, t, Ndlys * b: Ndlys * (b+1)] = Em[p, t, Ndlys * b: Ndlys * (b+1)].squeeze() @ Am[p, t, Ndlys * b: Ndlys * (b + 1)].squeeze()
         invAEA = np.linalg.pinv(Am.transpose(0, 1, 3, 2) @ EmAm)
         H = EmAm @ invAEA
         Ht = H.transpose(0, 1, 3, 2)
