@@ -805,6 +805,11 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
                 E[:, range(dstart, dstop), range(0, Ndlys)] = 1 / stat_weight.clip(1e-40, np.inf)
 
+            else:
+                E[:, range(dstart, dstop), range(0, Ndlys)] = 1.0
+                f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
+                E[:, range(dstart, dstop), range(0, Ndlys)] *= (~f[:, None, :])
+
             if exclude_wedge:
                 # weight all data in wedge to be zero.
                 #blp_index = uvp.get_blpairs().index(uvp.blpair_to_antnums(blp))
@@ -815,12 +820,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 for t in range(E.shape[0]):
                     for p in range(E.shape[-1]):
                         E[t, dslice, :, p][dlys_exclude, :][:, dlys_exclude] = 0.
-
-            else:
-                E[:, range(dstart, dstop), range(0, Ndlys)] = 1.0
-                f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
-                E[:, range(dstart, dstop), range(0, Ndlys)] *= (~f[:, None, :])
-
             # append to non-dly arrays
             Emean = np.trace(E[:, dslice, :], axis1=1, axis2=2)  # use sum of E across delay as weight
             wgt_array[spw] += wgts * Emean[:, None, None, :]
