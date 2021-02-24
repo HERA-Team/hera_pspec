@@ -854,7 +854,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         # Ht shape (Npols, Ntimes, Nk, Ndlyblps)
         Am = np.moveaxis(A[spw], -1, 0)
         Em = np.moveaxis(E, -1, 0)
-        EmAm = np.asarray([[[Em[p, t, Ndlys * b: Ndlys * (b+1)].squeeze() @ Am[p, t, Ndlys * b: Ndlys * (b + 1)].squeeze() for b in range(Nblpairs)] for t in range(Ntimes)] for p in range(Npols)])
+        EmAm = np.asarray([[np.vstack([Em[p, t, Ndlys * b: Ndlys * (b+1)].squeeze() @ Am[p, t, Ndlys * b: Ndlys * (b + 1)].squeeze() for b in range(Nblpairs)]) for t in range(Ntimes)] for p in range(Npols)])
         invAEA = np.linalg.pinv(Am.transpose(0, 1, 3, 2) @ EmAm)
         H = EmAm @ invAEA
         Ht = H.transpose(0, 1, 3, 2)
