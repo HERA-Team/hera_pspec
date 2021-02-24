@@ -803,7 +803,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 # fill diagonal with by 1/stats_array^2 as weight
                 stat_weight = stats_array[error_weights][spw][:, dslice].real.copy()
                 np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
-                E[:, range(dstart, dstop)] = 1 / stat_weight.clip(1e-40, np.inf)
+                E[:, range(dstart, dstop), range(0, Ndlys)] = 1 / stat_weight.clip(1e-40, np.inf)
 
             if exclude_wedge:
                 # weight all data in wedge to be zero.
@@ -817,9 +817,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                         E[t, dslice, :, p][dlys_exclude, :][:, dlys_exclude] = 0.
 
             else:
-                # uniform weighting along diagonal, except for flagged data
+                E[:, range(dstart, dstop), range(0, Ndlys)] = 1.0
                 f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
-                E[:, range(dstart, dstop), :] = np.diagonal((~f[:, None, :]).astype(float))
+                E[:, range(dstart, dstop), range(0, Ndlys)] *= (~f[:, None, :])
 
             # append to non-dly arrays
             Emean = np.trace(E[:, dslice, :], axis1=1, axis2=2)  # use sum of E across delay as weight
