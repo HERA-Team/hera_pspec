@@ -104,7 +104,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     error_weights=None, time_weights=None,
                     inv_fg_weights=False,
                     normalize_weights=True, inplace=True,
-                    exclude_wedge=False, standoff=0.0,
+                    exclude_wedge=False, standoff=0.0, min_bl_cosine=0,
                     add_to_history='', include_autos=True, min_bl=0.0):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
@@ -385,6 +385,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
                     blp_index = uvp.get_blpairs().index(uvp.blpair_to_antnums(blp))
                     bl_len = np.linalg.norm(uvp.get_blpair_blvecs()[blp_index])
+                    bl_cos = uvp.get_blpair_blvecs()[blp_index][0] / bl_len
                     # weight by the inverse of the average power spectrum amplitude inside of the wedge.
                     if inv_fg_weights:
                         bl_dly  =  bl_len / conversions.units.c
@@ -402,6 +403,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         w[:, np.abs(uvp.get_dlys(spw)) < dly_exclude] = 0.
                     # flag whole baseline if less then min_bl.
                     if bl_len < min_bl:
+                        w[:] = 0.
+                    # flag whole baseline of angle cosine less then min_bl_cosine
+                    if np.abs(bl_cos) < min_bl_cosine:
                         w[:] = 0.
                     # Take time average if desired
                     if time_avg:
@@ -590,7 +594,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
                       weight_by_cov=False, error_weights=None, add_to_history='', little_h=True, A={},
                       exclude_wedge=False, standoff=0.0, min_bl=0.0, inv_fg_weights=None, error_field=None,
-                      time_weights=None, run_check=True):
+                      time_weights=None, run_check=True, min_bl_cosine=0.):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
     Use UVPSpec.set_stats_slice to downweight regions of k_perp and k_para grid before averaging.
@@ -688,7 +692,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                             exclude_wedge=exclude_wedge, standoff=standoff,
                             blpair_weights=blpair_weights, error_weights=error_weights,
                             inplace=True, min_bl=min_bl, inv_fg_weights=inv_fg_weights,
-                            time_weights=time_weights, error_field=error_field)
+                            time_weights=time_weights, error_field=error_field, min_bl_cosine=min_bl_cosine)
 
     # initialize blank arrays and dicts
     Nk = len(kbins)
@@ -737,7 +741,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
 
         # setup weighting matrix: block diagonal for each Ndly x Ndly
-        E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
+        E = np.zeros((uvp.Ntimes, Ndlyblps, Ndly, uvp.Npols), dtype=np.float64)
 
         # get kperps for this spw: shape (Nblpairts,)
         kperps = uvp.get_kperps(spw, little_h=True)
@@ -793,13 +797,13 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 # weight by inverse (real) covariance
                 for p in range(uvp.Npols):
                     # the covariance is block diagonal assuming no correlations between baseline-pairs
-                    E[:, dslice, dslice, p] = np.linalg.pinv(cov_array_real[spw][:, dslice, dslice, p].real)
+                    E[:, dslice, :, p] = np.linalg.pinv(cov_array_real[spw][:, dslice, dslice, p].real)
 
             elif error_weights is not None:
                 # fill diagonal with by 1/stats_array^2 as weight
                 stat_weight = stats_array[error_weights][spw][:, dslice].real.copy()
                 np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
-                E[:, range(dstart, dstop), range(dstart, dstop)] = 1 / stat_weight.clip(1e-40, np.inf)
+                E[:, range(dstart, dstop)] = 1 / stat_weight.clip(1e-40, np.inf)
 
             if exclude_wedge:
                 # weight all data in wedge to be zero.
@@ -810,16 +814,15 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 dlys_exclude =  np.abs(uvp.get_dlys(spw)) < dly_lim
                 for t in range(E.shape[0]):
                     for p in range(E.shape[-1]):
-                        E[t, dslice, dslice, p][dlys_exclude, :][:, dlys_exclude] = 0.
+                        E[t, dslice, :, p][dlys_exclude, :][:, dlys_exclude] = 0.
 
             else:
                 # uniform weighting along diagonal, except for flagged data
-                E[:, range(dstart, dstop), range(dstart, dstop)] = 1.0
                 f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
-                E[:, range(dstart, dstop), range(dstart, dstop)] *= (~f[:, None, :])
+                E[:, range(dstart, dstop), :] = np.diagonal((~f[:, None, :]).astype(float))
 
             # append to non-dly arrays
-            Emean = np.trace(E[:, dslice, dslice], axis1=1, axis2=2)  # use sum of E across delay as weight
+            Emean = np.trace(E[:, dslice, :], axis1=1, axis2=2)  # use sum of E across delay as weight
             wgt_array[spw] += wgts * Emean[:, None, None, :]
             integration_array[spw] += ints * Emean
             nsample_array[spw] += nsmp
@@ -847,12 +850,13 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         # first compute: H = E A [A.T E A]^-1
         # move axes to enable matmul and inv over Ndlyblps and Nk axes
         # Am shape (Npols, Ntimes, Ndlyblps, Nk)
-        # Em shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
+        # Em shape (Npols, Ntimes, Ndlyblps, Ndly)
         # Ht shape (Npols, Ntimes, Nk, Ndlyblps)
         Am = np.moveaxis(A[spw], -1, 0)
         Em = np.moveaxis(E, -1, 0)
-        invAEA = np.linalg.pinv(Am.transpose(0, 1, 3, 2) @ Em @ Am)
-        H = Em @ Am @ invAEA
+        EmAm = np.asarray([[[Em[p, t, Ndlys * b: Ndlys * (b+1)].squeeze() @ Am[p, t, Ndlys * b: Ndlys * (b + 1)].squeeze() for b in range(Nblpairs)] for t in range(Ntimes)] for p in range(Npols)])
+        invAEA = np.linalg.pinv(Am.transpose(0, 1, 3, 2) @ EmAm)
+        H = EmAm @ invAEA
         Ht = H.transpose(0, 1, 3, 2)
 
         # bin data: p_sph = H.T p_cyl
