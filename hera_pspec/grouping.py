@@ -779,6 +779,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             dstart, dstop = Ndlys * b, Ndlys * (b + 1)
             dslice = slice(dstart, dstop)
 
+            bl_len = np.linalg.norm(uvp.get_blpair_blvecs()[b])
+            bl_cos = uvp.get_blpair_blvecs()[b][0] / bl_len
+
             # store data
             data_array[spw][:, dslice] = uvp.data_array[spw][blpt_inds]
 
@@ -817,9 +820,13 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 bl_dly  =  bl_len / conversions.units.c
                 dly_lim = bl_dly + standoff * 1e-9
                 dlys_exclude =  np.abs(uvp.get_dlys(spw)) < dly_lim
-                for t in range(E.shape[0]):
-                    for p in range(E.shape[-1]):
-                        E[t, dslice, :, p][dlys_exclude, :][:, dlys_exclude] = 0.
+                dlysblpairs_exlude = np.arange(dstart, dstop).astype(int)[dlys_exclude]
+                dlys_exclude = np.arange(0, Ndlys).astype(int)[dlys_exclude]
+                E[:, dlysblpairs_exlude, dlys_exclude] = 0.
+            if bl_len < min_bl:
+                E[:, dslice] = 0.
+            if np.abs(bl_cos) < min_bl_cosine:
+                E[:, dslice] = 0.
             # append to non-dly arrays
             Emean = np.trace(E[:, dslice, :], axis1=1, axis2=2)  # use sum of E across delay as weight
             wgt_array[spw] += wgts * Emean[:, None, None, :]
