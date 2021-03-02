@@ -825,7 +825,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # bin covariance: C_sph = H.T C_cyl H
             # cm shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
             cm = np.moveaxis(cov_array_real[spw], -1, 0)
-            cm = Ht @ cm @ H
+            cm = Ht @ cm.clip(-1e40, 1e40) @ H  # clip infs
             cov_array_real[spw] = np.moveaxis(cm, 0, -1)
             cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
@@ -874,7 +874,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.lst_2_array = np.unique(uvp_in.lst_2_array)
 
     # Add to history
-    uvp.history += version.history_string(notes=add_to_history)
+    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
 
     # validity check
     if run_check:
