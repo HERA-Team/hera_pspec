@@ -799,7 +799,8 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         for t in range(uvp.Ntimes):
             for p in range(uvp.Npols):
                 for b in range(uvp.Nblpairs):
-                    EmAm[p, t, Ndlys * b: Ndlys * (b+1)] = Em[p, t, Ndlys * b: Ndlys * (b+1)].squeeze() @ Am[p, t, Ndlys * b: Ndlys * (b + 1)].squeeze()
+                    blpslice = slice(Ndlys * b, Ndlys * (b + 1))
+                    EmAm[p, t, blpslice] = Em[p, t, blpslice] @ Am[p, t, blpslice]
         invAEA = np.linalg.pinv(Am.transpose(0, 1, 3, 2) @ EmAm)
         H = EmAm @ invAEA
         Ht = H.transpose(0, 1, 3, 2)
