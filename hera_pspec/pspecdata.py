@@ -4411,7 +4411,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               trim_dset_lsts=False, broadcast_dset_flags=True, external_flags=None, include_autocorrs=False,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True, fullband_filter=False,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
-              history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical', truncate_taper=False):
+              history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical',
+              truncate_taper=False, avg_redundant=True):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -4692,6 +4693,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                 suppressed.
     truncate_taper : bool, optional
         If True, truncate all tapers to min / max unflagged channels.
+
+    avg_redundant : bool, optional
+        average redundant baseline groups.
+        default is False.
 
     Returns
     -------
@@ -5000,8 +5005,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     for i, dsetp in enumerate(dset_pairs):
         # get bls if blpairs not fed
         if blpairs is None:
-            (bls1, bls2, blps, xants1,
-             xants2) = utils.calc_blpair_reds(
+            bls1, bls2, blps, xants1,
+             xants2, red_groups, _, _ = utils.calc_blpair_reds(
                                       dsets[dsetp[0]], dsets[dsetp[1]],
                                       filter_blpairs=True,
                                       exclude_auto_bls=exclude_auto_bls,
@@ -5011,7 +5016,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       bl_len_range=bl_len_range,
                                       bl_deg_range=bl_deg_range,
                                       include_autocorrs=include_autocorrs,
-                                      bl_tol=bl_error_tol)
+                                      bl_tol=bl_error_tol, extra_info=True)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
 
@@ -5061,6 +5066,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             else:
                 err_field = None
             uvp.average_spectra(time_avg=True, error_field=cov_model + '_diag')
+        if avg_redundant:
+            uvp.average_spectra(error_field=cov_model + '_diag', blpair_groups=red_groups)
+
 
         # write in transactional mode
         if verbose: print("Storing {}".format(psname))
@@ -5138,6 +5146,7 @@ def get_pspec_run_argparser():
     a.add_argument("--Jy2mK_avg", default=False, action="store_true", help="Average Jy2mK factorin frequency before applying to data to avoid introducing spurious spectral structure.")
     a.add_argument("--store_window", default=False, action="store_true", help="Store the window function.")
     a.add_argument("--truncate_taper", default=False, action="store_true", help="truncate tapers to min/max unflagged channels.")
+    a.add_argument("--avg_redundant", default=False, action="store_true", help="average power-spectra of redundant baselines.")
     return a
 
 
