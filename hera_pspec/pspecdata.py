@@ -5002,11 +5002,12 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # Get baseline-pairs to use for each dataset pair
     bls1_list, bls2_list = [], []
+    red_groups_list = []
     for i, dsetp in enumerate(dset_pairs):
         # get bls if blpairs not fed
         if blpairs is None:
             bls1, bls2, blps, xants1,
-             xants2, red_groups, _, _ = utils.calc_blpair_reds(
+            xants2, red_groups, _, _ = utils.calc_blpair_reds(
                                       dsets[dsetp[0]], dsets[dsetp[1]],
                                       filter_blpairs=True,
                                       exclude_auto_bls=exclude_auto_bls,
@@ -5019,7 +5020,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       bl_tol=bl_error_tol, extra_info=True)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
-
+            red_groups_list.append(red_groups)
         # ensure fed blpairs exist in each of the datasets
         else:
             dset1_bls = dsets[dsetp[0]].get_antpairs()
@@ -5034,6 +5035,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
             bls1_list.append(_bls1)
             bls2_list.append(_bls2)
+            red_groups_list = None
 
     # Open PSpecContainer to store all output in
     if verbose: print("Opening {} in transactional mode".format(filename))
@@ -5066,8 +5068,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             else:
                 err_field = None
             uvp.average_spectra(time_avg=True, error_field=cov_model + '_diag')
-        if avg_redundant:
-            uvp.average_spectra(error_field=cov_model + '_diag', blpair_groups=red_groups)
+        if avg_redundant and red_groups is not None:
+            red_antpairs = [[] for m in range(np.max(red_groups)+1)]
+            for bl1, bl2, grp in zip(bls1_list[i], bls2_list[i], red_groups_list[i]):
+                red_antpairs[grp].append((bl1, bl2))
+            uvp.average_spectra(error_field=cov_model + '_diag', blpair_groups=red_antpairs)
 
 
         # write in transactional mode
