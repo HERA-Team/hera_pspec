@@ -451,12 +451,12 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp)
         if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
         uvp.write_hdf5('./ex.hdf5', overwrite=True)
-        assert(os.path.exists('./ex.hdf5'))
+        assert os.path.exists('./ex.hdf5')
         
         # test basic read
         uvp2 = uvpspec.UVPSpec()
         uvp2.read_hdf5('./ex.hdf5')
-        assert(uvp, uvp2)
+        assert uvp == uvp2
         
         # test just meta
         uvp2 = uvpspec.UVPSpec()
@@ -540,11 +540,10 @@ class Test_UVPSpec(unittest.TestCase):
 
         # test time averaging
         uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
-        assert(uvp2.Ntimes, 1)
+        assert uvp2.Ntimes == 1
         assert(np.isclose(
                 uvp2.get_nsamples((0, 101102101102, ('xx','xx'))), 10.0).all())
-        assert(uvp2.get_data((0, 101102101102, ('xx','xx'))).shape,
-                       (1, 30))
+        assert uvp2.get_data((0, 101102101102, ('xx','xx'))).shape == (1, 30)
         # ensure averaging works when multiple repeated baselines are present, but only
         # if time_avg = True
         uvp.blpair_array[uvp.blpair_to_indices(102103102103)] = 101102101102
@@ -701,7 +700,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp1.write_hdf5('uvp1.hdf5', overwrite=True)
         uvp2.write_hdf5('uvp2.hdf5', overwrite=True)
         out = uvpspec.combine_uvpspec(['uvp1.hdf5', 'uvp2.hdf5'], verbose=False)
-        assert(out.Npols, 2)
+        assert out.Npols == 2
         for ff in ['uvp1.hdf5', 'uvp2.hdf5']:
             if os.path.exists(ff):
                 os.remove(ff)
@@ -912,7 +911,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp1.write_hdf5('uvp1.hdf5', overwrite=True)
         uvp2.write_hdf5('uvp2.hdf5', overwrite=True)
         out = uvpspec.combine_uvpspec(['uvp1.hdf5', 'uvp2.hdf5'], verbose=False)
-        assert(out.Npols, 2)
+        assert out.Npols == 2
         for ff in ['uvp1.hdf5', 'uvp2.hdf5']:
             if os.path.exists(ff): os.remove(ff)
 
