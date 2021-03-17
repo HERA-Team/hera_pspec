@@ -1,6 +1,5 @@
 import unittest
-from nose.tools import assert_raises
-import nose.tools as nt
+import pytest
 import numpy as np
 import os, sys, copy
 from hera_pspec.data import DATA_PATH
@@ -52,7 +51,7 @@ class Test_PSpecContainer(unittest.TestCase):
         ps_store = PSpecContainer(self.fname, mode='rw', keep_open=keep_open, swmr=swmr)
 
         # Make sure that invalid mode arguments are caught
-        assert_raises(ValueError, PSpecContainer, fname, mode='x')
+        pytest.raises(ValueError, PSpecContainer, fname, mode='x')
 
         # Check that power spectra can be overwritten
         for psname in pspec_names:
@@ -60,15 +59,15 @@ class Test_PSpecContainer(unittest.TestCase):
                                pspec=self.uvp, overwrite=True)
 
         # Check that overwriting fails if overwrite=False
-        assert_raises(AttributeError, ps_store.set_pspec, group=group_names[2], 
+        pytest.raises(AttributeError, ps_store.set_pspec, group=group_names[2], 
                       psname=psname, pspec=self.uvp, overwrite=False)
 
         # Check that wrong pspec types are rejected by the set() method
-        assert_raises(TypeError, ps_store.set_pspec, group=group_names[2], 
+        pytest.raises(TypeError, ps_store.set_pspec, group=group_names[2], 
                       psname=psname, pspec=np.arange(11), overwrite=True)
-        assert_raises(TypeError, ps_store.set_pspec, group=group_names[2], 
+        pytest.raises(TypeError, ps_store.set_pspec, group=group_names[2], 
                       psname=psname, pspec=1, overwrite=True)
-        assert_raises(TypeError, ps_store.set_pspec, group=group_names[2], 
+        pytest.raises(TypeError, ps_store.set_pspec, group=group_names[2], 
                       psname=psname, pspec="abc", overwrite=True)
         
         # Check that power spectra can be retrieved one by one
@@ -83,12 +82,12 @@ class Test_PSpecContainer(unittest.TestCase):
         for p in ps_list: assert(isinstance(p, UVPSpec))
 
         # Check that asking for an invalid group or pspec raises an error
-        assert_raises(KeyError, ps_store.get_pspec, 'x', pspec_names[0])
-        assert_raises(KeyError, ps_store.get_pspec, 1, pspec_names[0])
-        assert_raises(KeyError, ps_store.get_pspec, ['x', 'y'], pspec_names[0])
-        assert_raises(KeyError, ps_store.get_pspec, group_names[0], 'x')
-        assert_raises(KeyError, ps_store.get_pspec, group_names[0], 1)
-        assert_raises(KeyError, ps_store.get_pspec, group_names[0], ['x','y'])
+        pytest.raises(KeyError, ps_store.get_pspec, 'x', pspec_names[0])
+        pytest.raises(KeyError, ps_store.get_pspec, 1, pspec_names[0])
+        pytest.raises(KeyError, ps_store.get_pspec, ['x', 'y'], pspec_names[0])
+        pytest.raises(KeyError, ps_store.get_pspec, group_names[0], 'x')
+        pytest.raises(KeyError, ps_store.get_pspec, group_names[0], 1)
+        pytest.raises(KeyError, ps_store.get_pspec, group_names[0], ['x','y'])
         
         # Check that printing functions work
         print(ps_store)
@@ -98,7 +97,7 @@ class Test_PSpecContainer(unittest.TestCase):
         ps_readonly = PSpecContainer(fname, mode='r', keep_open=keep_open, swmr=swmr)
         ps = ps_readonly.get_pspec(group_names[0], pspec_names[0])
         assert(isinstance(ps, UVPSpec))
-        assert_raises(IOError, ps_readonly.set_pspec, group=group_names[2], 
+        pytest.raises(IOError, ps_readonly.set_pspec, group=group_names[2], 
                       psname=pspec_names[2], pspec=self.uvp, overwrite=True)
         
         # Check that spectra() and groups() methods return the things we put in
@@ -110,7 +109,7 @@ class Test_PSpecContainer(unittest.TestCase):
         for g in grplist: assert(g in group_names)
 
         # Check that spectra() raises an error if group doesn't exist
-        assert_raises(KeyError, ps_store.spectra, "x")
+        pytest.raises(KeyError, ps_store.spectra, "x")
         
         # Check that spectra() and groups() can be iterated over to retrieve ps
         for g in ps_store.groups():
@@ -127,14 +126,14 @@ class Test_PSpecContainer(unittest.TestCase):
         assert np.all(np.isclose(ps.blpair_array, 101102101102))
 
         # Check that invalid list arguments raise errors in set_pspec()
-        assert_raises(ValueError, ps_store.set_pspec, group=group_names[:2], 
+        pytest.raises(ValueError, ps_store.set_pspec, group=group_names[:2], 
                       psname=pspec_names[0], pspec=self.uvp, overwrite=True)
-        assert_raises(ValueError, ps_store.set_pspec, group=group_names[0], 
+        pytest.raises(ValueError, ps_store.set_pspec, group=group_names[0], 
                       psname=pspec_names, pspec=self.uvp, overwrite=True)
-        assert_raises(ValueError, ps_store.set_pspec, group=group_names[0], 
+        pytest.raises(ValueError, ps_store.set_pspec, group=group_names[0], 
                       psname=pspec_names[0], pspec=[self.uvp, self.uvp, self.uvp], 
                       overwrite=True)
-        assert_raises(TypeError, ps_store.set_pspec, group=group_names[0], 
+        pytest.raises(TypeError, ps_store.set_pspec, group=group_names[0], 
                       psname=pspec_names, pspec=[self.uvp, None, self.uvp], 
                       overwrite=True)
      
@@ -165,16 +164,16 @@ class Test_PSpecContainer(unittest.TestCase):
         
         # Try to open container read-only (transactional)
         psc_ro = PSpecContainer(fname, mode='r', keep_open=False, swmr=True)
-        nt.assert_equal(len(psc_ro.groups()), len(group_names))
+        assert len(psc_ro.groups()) == len(group_names)
         
         # Open container read-only in non-transactional mode
         psc_ro_noatom = PSpecContainer(fname, mode='r', keep_open=True, swmr=True)
-        nt.assert_equal(len(psc_ro_noatom.groups()), len(group_names))
+        assert len(psc_ro_noatom.groups()) == len(group_names)
         
         # Original RO handle should work fine; RW handle will throw an error
-        nt.assert_equal(len(psc_ro.groups()), len(group_names))
-        assert_raises(OSError, psc_rw.groups)
-        assert_raises(OSError, psc_rw.groups)
+        assert len(psc_ro.groups()) == len(group_names)
+        pytest.raises(OSError, psc_rw.groups)
+        pytest.raises(OSError, psc_rw.groups)
         
         # Close the non-transactional file; the RW file should now work
         psc_ro_noatom._close()
@@ -182,9 +181,9 @@ class Test_PSpecContainer(unittest.TestCase):
                          pspec=self.uvp, overwrite=True)
 
         # test that write of new group or dataset with SWMR is blocked
-        assert_raises(ValueError, psc_rw.set_pspec, group='new_group', psname=pspec_names[0], 
+        pytest.raises(ValueError, psc_rw.set_pspec, group='new_group', psname=pspec_names[0], 
                       pspec=self.uvp, overwrite=True)
-        assert_raises(ValueError, psc_rw.set_pspec, group=group_names[0], psname='new_psname', 
+        pytest.raises(ValueError, psc_rw.set_pspec, group=group_names[0], psname='new_psname', 
                       pspec=self.uvp, overwrite=True)
      
         # ensure SWMR attr is propagated
@@ -212,7 +211,7 @@ def test_combine_psc_spectra():
     psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "uvp_b", uvp2, overwrite=True)
     container.combine_psc_spectra(psc, dset_split_str=None, ext_split_str='_')
-    nt.assert_equal(psc.spectra('grp1'), [u'uvp'])
+    assert psc.spectra('grp1') == [u'uvp']
 
     # test dset name handling
     if os.path.exists('ex.h5'):
@@ -225,19 +224,19 @@ def test_combine_psc_spectra():
     container.combine_psc_spectra('ex.h5', dset_split_str='_x_', ext_split_str='_')
     spec_list = psc.spectra('grp1')
     spec_list.sort()
-    nt.assert_equal(spec_list, [u'd1_x_d2', u'd2_x_d3'])
+    assert spec_list == [u'd1_x_d2', u'd2_x_d3']
 
     # test exceptions
     if os.path.exists('ex.h5'):
         os.remove('ex.h5')
     psc = PSpecContainer("ex.h5", mode='rw')
     # test no group exception
-    nt.assert_raises(AssertionError, container.combine_psc_spectra, psc)
+    pytest.raises(AssertionError, container.combine_psc_spectra, psc)
     # test failed combine_uvpspec
     psc.set_pspec("grp1", "d1_x_d2_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "d1_x_d2_b", uvp1, overwrite=True)
     container.combine_psc_spectra(psc, dset_split_str='_x_', ext_split_str='_')
-    nt.assert_equal(psc.spectra('grp1'), [u'd1_x_d2_a', u'd1_x_d2_b'])
+    assert psc.spectra('grp1') == [u'd1_x_d2_a', u'd1_x_d2_b']
 
     if os.path.exists("ex.h5"):
         os.remove("ex.h5")
@@ -246,8 +245,8 @@ def test_combine_psc_spectra():
 def test_combine_psc_spectra_argparser():
     args = container.get_combine_psc_spectra_argparser()
     a = args.parse_args(["filename", "--dset_split_str", "_x_", "--ext_split_str", "_"])
-    nt.assert_equal(a.filename, "filename")
-    nt.assert_equal(a.dset_split_str, "_x_")
-    nt.assert_equal(a.ext_split_str, "_")
+    assert a.filename == "filename"
+    assert a.dset_split_str == "_x_"
+    assert a.ext_split_str == "_"
 
 

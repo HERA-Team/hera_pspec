@@ -1,5 +1,5 @@
 import unittest
-import nose.tools as nt
+import pytest
 import numpy as np
 import os
 import sys
@@ -33,16 +33,16 @@ class Test_Sensitivity(unittest.TestCase):
 
         C = conversions.Cosmo_Conversions()
         sense.set_cosmology(C)
-        nt.assert_equal(C.get_params(), sense.cosmo.get_params())
+        assert C.get_params() == sense.cosmo.get_params()
         params = str(C.get_params())
         sense.set_cosmology(params)
-        nt.assert_equal(C.get_params(), sense.cosmo.get_params())
+        assert C.get_params() == sense.cosmo.get_params()
 
         sense.set_beam(self.beam)
-        nt.assert_equal(sense.cosmo.get_params(), sense.beam.cosmo.get_params())
+        assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
         self.beam.cosmo = C
         sense.set_beam(self.beam)
-        nt.assert_equal(sense.cosmo.get_params(), sense.beam.cosmo.get_params())
+        assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
         
         bm = copy.deepcopy(self.beam)
         delattr(bm, 'cosmo')
@@ -51,8 +51,8 @@ class Test_Sensitivity(unittest.TestCase):
     def test_scalar(self):
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
         self.sense.calc_scalar(freqs, 'pI', num_steps=5000, little_h=True)
-        nt.assert_true(np.isclose(freqs, self.sense.subband).all())
-        nt.assert_true(self.sense.pol, 'pI')
+        assert np.isclose(freqs, self.sense.subband).all()
+        assert self.sense.pol == 'pI'
 
     def test_calc_P_N(self):
         
@@ -66,13 +66,13 @@ class Test_Sensitivity(unittest.TestCase):
         t_int = 10.7
         P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, 
                                   form='Pk')
-        nt.assert_true(isinstance(P_N, (float, np.float)))
-        nt.assert_true(np.isclose(P_N, 642386932892.2921))
+        assert isinstance(P_N, (float, np.float))
+        assert np.isclose(P_N, 642386932892.2921)
         # calculate DelSq
         Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, 
                                   Nincoherent=1, form='DelSq')
-        nt.assert_equal(Dsq.shape, (10,))
-        nt.assert_true(Dsq[1] < P_N)
+        assert Dsq.shape == (10,)
+        assert Dsq[1] < P_N
 
 
 def test_noise_validation():
@@ -120,7 +120,7 @@ def test_noise_validation():
     # assert close to P_N: 2%
     # This should be updated to be within standard error on P_rms
     # when the spw_range-variable pspec amplitude bug is resolved
-    nt.assert_true(np.abs(P_rms - P_N) / P_N < 0.02)
+    assert np.abs(P_rms - P_N) / P_N < 0.02
 
 
 def test_analytic_noise():
