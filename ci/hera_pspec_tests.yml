@@ -21,7 +21,6 @@ dependencies:
   - future
   - pytest-cov
   - coveralls
-  - nose
 
   - pip:
     - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
