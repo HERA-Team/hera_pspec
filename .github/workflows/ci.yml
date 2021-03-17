@@ -52,6 +52,7 @@ jobs:
       run: |
         export PATH="$HOME/miniconda/bin:$PATH"
         source activate $ENV_NAME
+        export MPLBACKEND=agg
         #nosetests -P hera_pspec --with-coverage --cover-package=hera_pspec --verbose
         pytest --pyargs hera_pspec --cov=hera_pspec --cov-config="./.coveragerc" \
                --cov-report xml:"./coverage.xml" --junitxml="./test-reports/xunit.xml"
