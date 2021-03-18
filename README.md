@@ -19,7 +19,7 @@ required dependencies. See below for manual dependency management.
 If you are using `conda`, you may wish to install the following dependencies manually
 to avoid them being installed automatically by `pip`::
 
-    $ conda install -c conda-forge "numpy>=1.15" "astropy>=2.0" "aipy>=3.0rc2" h5py pyuvdata scipy matplotlib pyyaml h5py scikit-learn
+    $ conda install -c conda-forge "numpy>=1.15" "astropy>=2.0" h5py pyuvdata scipy matplotlib pyyaml
     
 ### Developing
 If you are developing `hera_pspec`, it is preferred that you do so in a fresh `conda`
@@ -36,8 +36,8 @@ This will install extra dependencies required for testing/development as well as
 standard ones.
 
 ### Running Tests
-Uses the `nose` package to execute test suite.
-From the source `hera_pspec` directory run: `nosetests`.
+Uses the `pytest` package to execute test suite.
+From the source `hera_pspec` directory run: `pytest`.
 
 
 ## Running `hera_pspec`
