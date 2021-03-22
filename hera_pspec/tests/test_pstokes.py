@@ -111,12 +111,12 @@ class Test_pstokes(unittest.TestCase):
         out2 = pstokes.filter_dset_on_stokes_pol(dsets, 'pI')
         assert out == out2
 
-    def test_generate_pstokes_argparser():
+    def test_generate_pstokes_argparser(self):
         # test argparser for noise error bars.
         ap = pstokes.generate_pstokes_argparser()
         args=ap.parse_args(["input.uvh5", "--pstokes", "pI", "pQ", "--clobber"])
         nt.assert_equal(args.inputdata, "input.uvh5")
-        nt.assert_equal(args.outputdata, "--outputdata")
+        nt.assert_true(args.outputdata is None)
         nt.assert_equal(args.clobber, True)
 
 
