@@ -1448,7 +1448,7 @@ def uvp_noise_error_parser():
     a.add_argument("beam", type=str, help="Filename for UVBeam storing primary beam.")
     a.add_argument("--groups", type=str, help="Name of power-spectrum group to compute noise for.", default=None, nargs="+")
     a.add_argument("--spectra", default=None, type=str, nargs='+',
-                   help="List of power spectra names (with group prefix) to bootstrap over.")
+                   help="List of power spectra names (with group prefix) to calculate noise for.")
     a.add_argument("--err_type", default="P_N", type=str,
                     nargs="+", help="Which components of noise error"
                                     "to compute, 'P_N' or 'P_SN'")
