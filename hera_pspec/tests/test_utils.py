@@ -352,6 +352,16 @@ def test_uvp_noise_error_arser():
     nt.assert_equal(args.groups, ["dset0_dset1"])
     nt.assert_true(args.spectra is None)
 
+def test_uvp_noise_error_arser():
+    # test argparser for noise error bars.
+    ap = utils.uvp_noise_error_parser()
+    args=ap.parse_args(["container.hdf5", "autos.uvh5", "beam.uvbeam", "dset0_dset1"])
+    nt.assert_equal(args.pspec_container, "container.hdf5")
+    nt.assert_equal(args.auto_file, "autos.uvh5")
+    nt.assert_equal(args.beam, "beam.uvbeam")
+    nt.assert_equal(args.group, "dset0_dset1")
+    nt.assert_true(args.spectra is None)
+
 def test_job_monitor():
     # open empty files
     datafiles = ["./{}".format(i) for i in ['a', 'b', 'c', 'd']]
