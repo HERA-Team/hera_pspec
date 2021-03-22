@@ -2,7 +2,7 @@ import unittest
 import pytest
 import os, sys
 from hera_pspec.data import DATA_PATH
-from .. import pstokes 
+from .. import pstokes
 import pyuvdata
 import pyuvdata.utils as uvutils
 import copy
@@ -110,6 +110,14 @@ class Test_pstokes(unittest.TestCase):
         dsets = [self.uvd2, self.uvd1]
         out2 = pstokes.filter_dset_on_stokes_pol(dsets, 'pI')
         assert out == out2
+
+    def test_generate_pstokes_argparser():
+        # test argparser for noise error bars.
+        ap = pstokes.generate_pstokes_argparser()
+        args=ap.parse_args(["input.uvh5", "--pstokes", "pI", "pQ", "--clobber"])
+        nt.assert_equal(args.inputdata, "input.uvh5")
+        nt.assert_equal(args.outputdata, "--outputdata")
+        nt.assert_equal(args.clobber, True)
 
 
 if __name__ == "__main__":
