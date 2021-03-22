@@ -9,6 +9,7 @@ from datetime import datetime
 import copy
 from scipy.interpolate import interp1d
 import uvtools as uvt
+import argparse
 
 from .conversions import Cosmo_Conversions
 
@@ -42,7 +43,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
         Whether to conjugate d1 or not. Default: False
     conj_2 : boolean, optional
         Whether to conjugate d2 or not. Default: True
-   
+
     Returns
     -------
     cov : array_like
@@ -80,7 +81,7 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     Predict noise variance on a baseline from autocorrelation amplitudes on antennas.
     Pick a baseline $b=(alpha,beta)$ where $alpha$ and $beta$ are antennas,
     The way to estimate the covariance matrix $C$ from auto-visibility is:
-    $C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t}, 
+    $C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t},
     where $b_alpha = (alpha,alpha)$ and $b_beta = (beta,beta)$.
     With LST binned over days, we have $C_{ii}(b, LST) = |V(b_alpha,nu_i,t) V(b_beta, nu_i,t)| / {N_{samples} B Delta_t}$.
 
@@ -90,9 +91,9 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
 
     bl : tuple
         baseline (pol) key, in the format of (ant1, ant2, pol)
-        
+
     spw_range : tuple
-        Length-2 tuple of the spectral window 
+        Length-2 tuple of the spectral window
 
     time_index : int
 
@@ -102,16 +103,16 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
 
     """
     assert isinstance(bl, tuple) and len(bl)==3, "bl must be fed as Length-3 tuple"
-    assert isinstance(spw_range, tuple) and len(spw_range)==2, "spw_range must be fed as Length-2 tuple"  
+    assert isinstance(spw_range, tuple) and len(spw_range)==2, "spw_range must be fed as Length-2 tuple"
     dt = np.median(uvd.integration_time)
     # Delta_t
     df = uvd.channel_width
     # B
-    bl1 = (bl[0],bl[0], bl[2]) 
+    bl1 = (bl[0],bl[0], bl[2])
     # baseline b_alpha
     bl2 = (bl[1], bl[1], bl[2])
     # baseline b_beta
-    spw = slice(spw_range[0], spw_range[1])    
+    spw = slice(spw_range[0], spw_range[1])
     x_bl1 = uvd.get_data(bl1)[time_index, spw]
     x_bl2 = uvd.get_data(bl2)[time_index, spw]
     nsample_bl = uvd.get_nsamples(bl)[time_index, spw]
@@ -318,7 +319,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     antpos2, ants2 = uvd2.get_ENU_antpos(pick_data_ants=False)
     antpos2 = dict(list(zip(ants2, antpos2)))
     antpos = dict(list(antpos1.items()) + list(antpos2.items()))
-    
+
     # assert antenna positions match
     for a in set(antpos1).union(set(antpos2)):
         if a in antpos1 and a in antpos2:
@@ -370,7 +371,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
-                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)    
+                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
     # construct baseline pairs
     baselines1, baselines2, blpairs, red_groups = [], [], [], []
     for j, r in enumerate(reds):
@@ -664,7 +665,7 @@ def flatten(nested_list):
 
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
                          exclude_permutations=True, bl_len_range=(0, 1e10),
-                         bl_deg_range=(0, 180), xants=None, exclude_patterns=None, 
+                         bl_deg_range=(0, 180), xants=None, exclude_patterns=None,
                          file_type='miriad', verbose=True):
     """
     Given a list of glob-parseable file templates and selections for
@@ -712,16 +713,16 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
 
     xants : list, optional
         A list of integer antenna numbers to exclude. Default: None.
-    
+
     exclude_patterns : list, optional
-        A list of patterns to exclude if found in the final list of input 
-        files (after the templates have been filled-in). This currently 
-        just takes a list of strings, and does not recognize wildcards. 
+        A list of patterns to exclude if found in the final list of input
+        files (after the templates have been filled-in). This currently
+        just takes a list of strings, and does not recognize wildcards.
         Default: None.
 
     file_type : str, optional
         File type of the input files. Default: 'miriad'.
-    
+
     verbose : bool, optional
         If True, print feedback to stdout. Default: True.
 
@@ -769,11 +770,11 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     # Exclude user-specified patterns
     if exclude_patterns is not None:
         to_exclude = []
-        
+
         # Loop over files and patterns
         for f in unique_files:
             for pattern in exclude_patterns:
-                
+
                 # Add to list of files to be excluded
                 if pattern in f:
                     if verbose:
@@ -781,20 +782,20 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                               % (pattern, f))
                     to_exclude.append(f)
                     continue
-        
+
         # Exclude files that matched a pattern
         for f in to_exclude:
             try:
                 unique_files.remove(f)
             except:
                 pass
-        
+
         # Test for empty list and fail if found
         if len(unique_files) == 0:
             if verbose:
                 print("config_pspec_blpairs: All files were filtered out!")
             return []
-        
+
     # use a single file from unique_files and a single pol-group combination to get antenna positions
     _file = unique_files[0].format(pol=pol_grps[0][0], group=pol_grps[0][1])
     uvd = UVData()
@@ -1072,8 +1073,8 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     uvd : UVData object or str or dictionary
         UVData object or filepath string or antenna position dictionary.
         An antpos dict is formed via dict(zip(ants, ant_vecs)).
-        
-        N.B. If uvd is a filepath, use the `file_type` kwarg to specify the 
+
+        N.B. If uvd is a filepath, use the `file_type` kwarg to specify the
         file type.
 
     bl_error_tol : float
@@ -1131,7 +1132,7 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
                         "of antenna positions.")
     # get redundant baselines
     reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
-    
+
     # get vectors, len and ang for each baseline group
     vecs = np.array([antpos_dict[r[0][0]] - antpos_dict[r[0][1]] for r in reds])
     lens, angs = get_bl_lens_angs(vecs, bl_error_tol=bl_error_tol)
@@ -1174,14 +1175,14 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
 
 def pspecdata_time_difference(ds, time_diff):
     """
-    Given a PSpecData object and a time difference, give the time difference PSpecData object.  
+    Given a PSpecData object and a time difference, give the time difference PSpecData object.
 
     Parameters
     ----------
     ds : PSpecData object
 
     time_diff : float
-        The time difference in seconds. 
+        The time difference in seconds.
 
     Returns
     -------
@@ -1199,14 +1200,14 @@ def pspecdata_time_difference(ds, time_diff):
 
 def uvd_time_difference(uvd, time_diff):
     """
-    Given a UVData object and a time difference, give the time difference UVData object.  
+    Given a UVData object and a time difference, give the time difference UVData object.
 
     Parameters
     ----------
     uvd : UVData object
 
     time_diff : float
-        The time difference in seconds. 
+        The time difference in seconds.
 
     Returns
     -------
@@ -1216,7 +1217,7 @@ def uvd_time_difference(uvd, time_diff):
     index_diff = int(time_diff / min_time_diff) + 1
     if index_diff > len(np.unique(uvd.time_array))-2:
         index_diff = len(np.unique(uvd.time_array))-2
-    
+
     uvd0 = uvd.select(times=np.unique(uvd.time_array)[0:-1:index_diff], inplace=False)
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[1::index_diff], inplace=False)
     data0 = uvd0.data_array
@@ -1415,6 +1416,28 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
             precomp_P_N = 'P_N'
         apply_P_SN_correction(uvp, P_SN='P_SN', P_N=precomp_P_N)
 
+def uvp_noise_error_parser():
+    """
+    Get argparser to generate noise error bars using autos
+
+    Args:
+        N/A
+    Returns:
+        a: argparser object with arguments used in auto_noise_run.py.
+    """
+    a = argparse.ArgumentParser(description="argument parser for computing "
+                                            "thermal noise error bars from "
+                                            "autocorrelations")
+    a.add_argument("pspec_container", type=str,
+                   help="Filename of HDF5 container (PSpecContainer) containing "
+                        "input power spectra.")
+    a.add_argument("auto_file", type=str, help="Filename of UVData object containing only autocorr baselines to use"
+                                                "in thermal noise error bar estimation.")
+    a.add_argument("beam", type=str, help="Filename for UVBeam storing primary beam.")
+    a.add_argument("group", type=str, help="Name of power-spectrum group to compute noise for.")
+    a.add_argument("--spectra", default=None, type=str, nargs='+',
+                   help="List of power spectra names (with group prefix) to bootstrap over.")
+    return a
 
 def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
     """
