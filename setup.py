@@ -49,7 +49,9 @@ setup_args = {
     ],
     'include_package_data': True,
     'scripts': ['scripts/pspec_run.py', 'scripts/pspec_red.py',
-                'scripts/bootstrap_run.py'],
+                'scripts/bootstrap_run.py',
+                'scripts/generate_pstokes_run.py',
+                'scripts/auto_noise_run.py'],
     'zip_safe': False,
 }
 
