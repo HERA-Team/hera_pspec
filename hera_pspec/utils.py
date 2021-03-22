@@ -234,7 +234,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                      exclude_cross_bls=False,
                      exclude_permutations=True, Nblps_per_group=None,
                      bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
-                     xants=None, extra_info=False):
+                     xants=None, include_autocorrs=False, extra_info=False):
     """
     Use hera_cal.redcal to get matching, redundant baseline-pair groups from
     uvd1 and uvd2 within the specified baseline tolerance, not including
@@ -287,6 +287,11 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     bl_deg_range : tuple, optional
         len-2 tuple containing (minimum, maximum) baseline angle in degrees
         to keep in baseline selection
+
+    include_autocorrs : bool, optional
+        If True, include autocorrelation visibilities in their own redundant group.
+        If False, dont return any autocorrelation visibilities.
+        default is False.
 
     extra_info : bool, optional
         If True, return three extra arrays containing
@@ -1441,9 +1446,12 @@ def uvp_noise_error_parser():
     a.add_argument("auto_file", type=str, help="Filename of UVData object containing only autocorr baselines to use"
                                                 "in thermal noise error bar estimation.")
     a.add_argument("beam", type=str, help="Filename for UVBeam storing primary beam.")
-    a.add_argument("group", type=str, help="Name of power-spectrum group to compute noise for.")
+    a.add_argument("--groups", type=str, help="Name of power-spectrum group to compute noise for.", default=None, nargs="+")
     a.add_argument("--spectra", default=None, type=str, nargs='+',
                    help="List of power spectra names (with group prefix) to bootstrap over.")
+    a.add_argument("--err_type", default="P_N", type=str,
+                    nargs="+", help="Which components of noise error"
+                                    "to compute, 'P_N' or 'P_SN'")
     return a
 
 def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):

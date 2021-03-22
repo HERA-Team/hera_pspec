@@ -354,7 +354,7 @@ def generate_pstokes_argparser():
     a.add_argument("inputdata", type=str, help="Filename of UVData object with"
                                                "linearly polarized data to add pstokes to.")
     a.add_argument("--pstokes", type=str, help="list of pStokes you wish to calculate. Default is ['pI']",
-                   nargs="+", default=["pI"])
+                   nargs="+", default="pI")
     a.add_argument("--outputdata", type=str, help="Filename to write out data. Output includes original linear pols."
                                                    "if no outputdata is provided, will use inputdata, appending"
                                                    "pstokes to original linear pols.")
