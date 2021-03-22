@@ -336,8 +336,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
             # get antenna numbers
             antnums = uvd1.baseline_to_antnums(bl)
 
-            # continue if autocorr
-            if antnums[0] == antnums[1]: continue
+            # continue if autocorr and we dont want to include them
+            if not include_autocorrs:
+                if antnums[0] == antnums[1]: continue
 
             # work on xants1
             if bl in uvd1.baseline_array:
@@ -371,6 +372,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
+                                add_autos=include_autocorrs,
                                 bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
     # construct baseline pairs
     baselines1, baselines2, blpairs, red_groups = [], [], [], []
@@ -666,6 +668,7 @@ def flatten(nested_list):
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
                          exclude_permutations=True, bl_len_range=(0, 1e10),
                          bl_deg_range=(0, 180), xants=None, exclude_patterns=None,
+                         include_autocorrs=False,
                          file_type='miriad', verbose=True):
     """
     Given a list of glob-parseable file templates and selections for
@@ -719,6 +722,10 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
         files (after the templates have been filled-in). This currently
         just takes a list of strings, and does not recognize wildcards.
         Default: None.
+
+    include_autocorrs : bool, optional
+        If True, include autocorrelation visibilities
+        in the set of blpair groups calculated and returned.
 
     file_type : str, optional
         File type of the input files. Default: 'miriad'.
@@ -805,7 +812,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     (_bls1, _bls2, _, _,
      _) = calc_blpair_reds(uvd, uvd, filter_blpairs=False, exclude_auto_bls=exclude_auto_bls,
                     exclude_permutations=exclude_permutations, bl_len_range=bl_len_range,
-                    bl_deg_range=bl_deg_range)
+                    include_autocorrs=include_autocorrs, bl_deg_range=bl_deg_range)
 
     # take out xants if fed
     if xants is not None:
