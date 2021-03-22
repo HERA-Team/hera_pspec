@@ -248,10 +248,10 @@ class Test_Utils(unittest.TestCase):
         nt.assert_almost_equal(l[0], 0)
         nt.assert_almost_equal(a[0], 0)
         nt.assert_true(len(r), 105)
-        
+
         # Check errors when wrong types input
         nt.assert_raises(TypeError, utils.get_reds, [1., 2.])
-        
+
     def test_config_pspec_blpairs(self):
         # test basic execution
         uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
@@ -268,11 +268,11 @@ class Test_Utils(unittest.TestCase):
         # test xants
         groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], xants=[0, 1, 2], verbose=False, exclude_auto_bls=True)
         nt.assert_equal(len(list(groupings.values())[0]), 9735)
-        
+
         # test exclude_patterns
-        groupings = utils.config_pspec_blpairs(uv_template, 
-                                               [('xx', 'xx'), ('yy', 'yy')], 
-                                               [('even', 'odd'), ('even', 'odd')], 
+        groupings = utils.config_pspec_blpairs(uv_template,
+                                               [('xx', 'xx'), ('yy', 'yy')],
+                                               [('even', 'odd'), ('even', 'odd')],
                                                exclude_patterns=['1.288'],
                                                verbose=False, exclude_auto_bls=True)
         nt.assert_equal(len(groupings), 0)
@@ -340,6 +340,16 @@ def test_get_blvec_reds():
     (red_bl_grp, red_bl_len, red_bl_ang,
      red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=1.0, match_bl_lens=True)
     nt.assert_equal(len(red_bl_grp), 1)
+
+def test_uvp_noise_error_arser():
+    # test argparser for noise error bars.
+    ap = utils.uvp_noise_error_parser()
+    args=ap.parse_args(["container.hdf5", "autos.uvh5", "beam.uvbeam", "dset0_dset1"])
+    nt.assert_equal(args.pspec_container, "container.hdf5")
+    nt.assert_equal(args.auto_file, "autos.uvh5")
+    nt.assert_equal(args.beam, "beam.uvbeam")
+    nt.assert_equal(args.group, "dset0_dset1")
+    nt.assert_true(args.spectra is None)
 
 def test_job_monitor():
     # open empty files

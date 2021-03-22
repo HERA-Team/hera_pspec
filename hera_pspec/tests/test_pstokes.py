@@ -2,7 +2,7 @@ import unittest
 import nose.tools as nt
 import os, sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import pstokes 
+from hera_pspec import pstokes
 import pyuvdata
 import pyuvdata.utils as uvutils
 import copy
@@ -26,11 +26,11 @@ class Test_pstokes:
     def test_combine_pol(self):
         uvd1 = self.uvd1
         uvd2 = self.uvd2
-     
+
         # basic execution on pol strings
-        out1 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')   
+        out1 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
         # again w/ pol ints
-        out2 = pstokes._combine_pol(uvd1, uvd2, -5, -6)   
+        out2 = pstokes._combine_pol(uvd1, uvd2, -5, -6)
         # assert equivalence
         nt.assert_equal(out1, out2)
 
@@ -38,7 +38,7 @@ class Test_pstokes:
         nt.assert_raises(AssertionError, pstokes._combine_pol, dset1, dset2, 'XX', 'YY' )
         nt.assert_raises(AssertionError, pstokes._combine_pol, uvd1, uvd2, 'XX', 1)
 
-    def test_construct_pstokes(self):   
+    def test_construct_pstokes(self):
         uvd1 = self.uvd1
         uvd2 = self.uvd2
 
@@ -47,7 +47,7 @@ class Test_pstokes:
         uvdQ = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes='pQ')
 
         # check exceptions
-        nt.assert_raises(AssertionError, pstokes.construct_pstokes, uvd1, 1)   
+        nt.assert_raises(AssertionError, pstokes.construct_pstokes, uvd1, 1)
 
         # check baselines
         uvd3 = uvd2.select(ant_str='auto', inplace=False)
@@ -104,6 +104,14 @@ class Test_pstokes:
         dsets = [self.uvd2, self.uvd1]
         out2 = pstokes.filter_dset_on_stokes_pol(dsets, 'pI')
         nt.assert_true(out == out2)
+
+    def test_generate_pstokes_argparser():
+        # test argparser for noise error bars.
+        ap = pstokes.generate_pstokes_argparser()
+        args=ap.parse_args(["input.uvh5", "--pstokes", "pI", "pQ", "--clobber"])
+        nt.assert_equal(args.inputdata, "input.uvh5")
+        nt.assert_equal(args.outputdata, "--outputdata")
+        nt.assert_equal(args.clobber, True)
 
 
 if __name__ == "__main__":
