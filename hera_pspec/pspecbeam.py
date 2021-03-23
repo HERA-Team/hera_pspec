@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
 import uvtools.dspec as dspec
 from collections import OrderedDict as odict
-
+import copy
 
 from . import conversions as conversions, uvpspec_utils as uvputils
 
