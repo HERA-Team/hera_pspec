@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Pipeline script to obtain error bars from autocorrelations.
 """

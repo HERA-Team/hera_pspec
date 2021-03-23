@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Pipeline script for generating pstokes visibility.
 """
