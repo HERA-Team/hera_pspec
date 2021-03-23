@@ -4004,7 +4004,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # Construct dataset pairs to operate on
     Ndsets = len(dsets)
     if dset_pairs is None:
-        dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+        # this fails silently if we only provided a single dset.
+        if len(dsets) > 1:
+            dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+        else:
+            dset_pairs = [(0, 0)]
 
     if dset_labels is None:
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
@@ -4198,7 +4202,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # check bls lists aren't empty
         if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
             continue
-
+        print('calculating power spectrum')
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
@@ -4274,6 +4278,7 @@ def get_pspec_run_argparser():
     a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20 20, 40 40' ->> [(20, 20), (40, 40), ...]")
     a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
     a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include power spectra of autocorr visibilities.")
+    a.add_argument("--interleave_times", default=False, action="store_true", help="Cross multiply even/odd time intervals.")
     return a
 
 
