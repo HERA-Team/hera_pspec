@@ -3,8 +3,8 @@
 Pipeline script to obtain error bars from autocorrelations.
 """
 
-from . import utils
-from .container import PSpecContainer
+from hera_pspec import utils
+from hera_pspec.container import PSpecContainer
 from pyuvdata import UVData
 
 parser = utils.uvp_noise_error_parser()
