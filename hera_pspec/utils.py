@@ -353,7 +353,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                 if np.sum(f1) < np.prod(f1.shape) * xant_flag_thresh:
                     if antnums[0] in xants1:
                         xants1.remove(antnums[0])
-                    if antnums[1] in xants2:
+                    if antnums[1] != antnums[0] and antnums[1] in xants1:
                         xants1.remove(antnums[1])
 
             # work on xants2
@@ -364,7 +364,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                 if np.sum(f2) < np.prod(f2.shape) * xant_flag_thresh:
                     if antnums[0] in xants2:
                         xants2.remove(antnums[0])
-                    if antnums[1] in xants2:
+                    if antnums[1] != antnums[0] and antnums[1] in xants2:
                         xants2.remove(antnums[1])
 
         xants1 = sorted(xants1)
