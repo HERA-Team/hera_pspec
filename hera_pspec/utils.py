@@ -1297,8 +1297,13 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
             raise ValueError("UVPSpec must have OmegaP and OmegaPP to make a beam")
     else:
         raise ValueError("beam must be a string, PSpecBeamBase subclass or UVPSpec object")
-
+    # set primary beam x-orientation to match uvdata if None.
+    if beam.primary_beam.x_orientation is None:
+        beam.primary_beam.x_orientation = uvd.x_orientation
+    if hasattr(beam, 'primary_beam_stokes') and beam.primary_beam_stokes.x_orientation is None:
+        beam.primary_beam_stokes.x_orientation = uvd.x_orientation
     # convert autos in Jy to Tsys in Kelvin
+    # set x_orientation
     J2K = {pol: beam.Jy_to_mK(uvd.freq_array[0], pol=pol)/1e3 for pol in pols}
     for blpol in uvd.get_antpairpols():
         bl, pol = blpol[:2], blpol[2]
@@ -1397,7 +1402,12 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                         Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
                         Tflag = np.all(Tflag, axis=-1)
                         # interpolate to appropriate LST grid
-                        Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+                        if np.count_nonzero(~Tflag) > 1:
+                            Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+                        elif np.count_nonzero(~Tflag) == 1:
+                            Tsys = Tsys[~Tflag]
+                        else:
+                            Tsys = np.inf
 
                     # calculate P_N
                     P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real')[blp_int]
