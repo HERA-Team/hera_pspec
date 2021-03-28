@@ -1172,13 +1172,13 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
             j += n_blps
 
     # Loop over UVPSpec objects and calculate averages in each blpair group,
-    # using the bootstrap-sampled blpair weights
-    if hasattr(uvp, 'stats_array'):
-        error_fields = list(uvp.stats_array.keys())
-    else:
-        error_fields = None
     uvp_avg = []
     for i, uvp in enumerate(uvp_list):
+        # using the bootstrap-sampled blpair weights
+        if hasattr(uvp, 'stats_array'):
+            error_fields = list(uvp.stats_array.keys())
+        else:
+            error_fields = None
         _uvp = average_spectra(uvp, blpair_groups=blpair_grps_list[i],
                                blpair_weights=blpair_wgts_list[i],
                                time_avg=time_avg, inplace=False, error_field=error_fields)
