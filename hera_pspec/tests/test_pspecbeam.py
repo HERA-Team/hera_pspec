@@ -22,7 +22,7 @@ class Test_DataSet(unittest.TestCase):
         bm = pspecbeam.PSpecBeamUV(beamfile)
 
     def test_UVbeam(self):
-        # Precomputed results in the following tests were done "by hand" using 
+        # Precomputed results in the following tests were done "by hand" using
         # iPython notebook "Scalar_dev2.ipynb" in tests directory
         pstokes_beamfile = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
         beam = pspecbeam.PSpecBeamUV(pstokes_beamfile)
@@ -34,7 +34,7 @@ class Test_DataSet(unittest.TestCase):
 
         # check pI polarization
         scalar = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='pI', num_steps=2000)
-        
+
         nt.assert_almost_equal(Om_p[0], 0.080082680885906782)
         nt.assert_almost_equal(Om_p[18], 0.031990943334017245)
         nt.assert_almost_equal(Om_p[-1], 0.03100215028171072)
@@ -48,9 +48,9 @@ class Test_DataSet(unittest.TestCase):
         # Check array dimensionality
         nt.assert_equal(Om_p.ndim, 1)
         nt.assert_equal(Om_pp.ndim, 1)
-        
+
         # convergence of integral
-        scalar_large_Nsteps = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='pI', num_steps=10000) 
+        scalar_large_Nsteps = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='pI', num_steps=10000)
         nt.assert_almost_equal(scalar / scalar_large_Nsteps, 1.0, delta=1e-5)
 
         # Check that user-defined cosmology can be specified
@@ -83,10 +83,10 @@ class Test_DataSet(unittest.TestCase):
 
         # Check that invalid polarizations raise an error
         pol = 'pZ'
-        nt.assert_raises(KeyError, beam.compute_pspec_scalar, 
+        nt.assert_raises(KeyError, beam.compute_pspec_scalar,
                          lower_freq, upper_freq, num_freqs, pol=pol)
         pol = 'XX'
-        nt.assert_raises(ValueError, beam.compute_pspec_scalar, 
+        nt.assert_raises(ValueError, beam.compute_pspec_scalar,
                          lower_freq, upper_freq, num_freqs, pol=pol)
 
         # check dipole beams work
@@ -100,8 +100,10 @@ class Test_DataSet(unittest.TestCase):
         efield_beamfile = os.path.join(DATA_PATH, "HERA_NF_efield.beamfits")
         beam = pspecbeam.PSpecBeamUV(efield_beamfile)
         scalar = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='XX')
-        nt.assert_raises(ValueError, beam.compute_pspec_scalar,
-                         lower_freq, upper_freq, num_freqs, pol='pI')
+        # I've added support for mixing pstokes and lin-pol beams so this line can
+        # be deleted (if we proceed in keeping this)
+        #nt.assert_raises(ValueError, beam.compute_pspec_scalar,
+        #                 lower_freq, upper_freq, num_freqs, pol='pI')
 
     def test_Gaussbeam(self):
         gauss = pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))
@@ -112,12 +114,12 @@ class Test_DataSet(unittest.TestCase):
         upper_freq = 128.*10**6
         num_freqs = 20
         scalar = gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol='pI', num_steps=2000)
-        
+
         # Check that user-defined cosmology can be specified
-        bgauss = pspecbeam.PSpecBeamGauss(0.8, 
-                                 np.linspace(115e6, 130e6, 50, endpoint=False), 
+        bgauss = pspecbeam.PSpecBeamGauss(0.8,
+                                 np.linspace(115e6, 130e6, 50, endpoint=False),
                                  cosmo=conversions.Cosmo_Conversions())
-        
+
         # Check array dimensionality
         self.assertEqual(Om_p.ndim,1)
         self.assertEqual(Om_pp.ndim,1)
@@ -129,15 +131,15 @@ class Test_DataSet(unittest.TestCase):
         self.assertAlmostEqual(Om_pp[4], Om_pp[0])
 
         self.assertAlmostEqual(scalar/6392750120.8657961, 1.0, delta=1e-4)
-        
+
         # convergence of integral
         scalar_large_Nsteps = gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000)
         self.assertAlmostEqual(scalar / scalar_large_Nsteps, 1.0, delta=1e-5)
 
         # test taper execution
         scalar = gauss.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, num_steps=5000, taper='blackman')
-        self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)    
-    
+        self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)
+
     def test_BeamFromArray(self):
         """
         Test PSpecBeamFromArray
@@ -147,79 +149,79 @@ class Test_DataSet(unittest.TestCase):
         Om_P = gauss.power_beam_int()
         Om_PP = gauss.power_beam_sq_int()
         beam_freqs = gauss.beam_freqs
-        
+
         # Array specs for tests
         lower_freq = 120.*10**6
         upper_freq = 128.*10**6
         num_freqs = 20
-        
+
         # Check that PSpecBeamFromArray can be instantiated
-        psbeam = pspecbeam.PSpecBeamFromArray(OmegaP=Om_P, OmegaPP=Om_PP, 
+        psbeam = pspecbeam.PSpecBeamFromArray(OmegaP=Om_P, OmegaPP=Om_PP,
                                               beam_freqs=beam_freqs)
-        
+
         psbeampol = pspecbeam.PSpecBeamFromArray(
                                 OmegaP={'pI': Om_P, 'pQ': Om_P},
                                 OmegaPP={'pI': Om_PP, 'pQ': Om_PP},
                                 beam_freqs=beam_freqs)
-        
+
         # Check that user-defined cosmology can be specified
-        bm2 = pspecbeam.PSpecBeamFromArray(OmegaP=Om_P, OmegaPP=Om_PP, 
+        bm2 = pspecbeam.PSpecBeamFromArray(OmegaP=Om_P, OmegaPP=Om_PP,
                                            beam_freqs=beam_freqs,
                                            cosmo=conversions.Cosmo_Conversions())
-        
+
         # Compare scalar calculation with Gaussian case
-        scalar = psbeam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, 
+        scalar = psbeam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs,
                                              pol='pI', num_steps=2000)
-        g_scalar = gauss.compute_pspec_scalar(lower_freq, upper_freq, 
-                                                   num_freqs, pol='pI', 
+        g_scalar = gauss.compute_pspec_scalar(lower_freq, upper_freq,
+                                                   num_freqs, pol='pI',
                                                    num_steps=2000)
         np.testing.assert_array_almost_equal(scalar, g_scalar)
-        
+
         # Check that polarizations are recognized and invalid ones rejected
-        scalarp = psbeampol.compute_pspec_scalar(lower_freq, upper_freq, 
-                                                 num_freqs, pol='pQ', 
+        scalarp = psbeampol.compute_pspec_scalar(lower_freq, upper_freq,
+                                                 num_freqs, pol='pQ',
                                                  num_steps=2000)
-        
+
         # Test taper execution (same as Gaussian case)
-        scalar = psbeam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, 
+        scalar = psbeam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs,
                                              num_steps=5000, taper='blackman')
         self.assertAlmostEqual(scalar / 22123832163.072491, 1.0, delta=1e-8)
-        
+
         # Check that invalid init args raise errors
-        nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray, OmegaP=Om_P, 
+        nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray, OmegaP=Om_P,
                          OmegaPP={'pI': Om_PP}, beam_freqs=beam_freqs)
         nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
                          OmegaP={'pI': Om_P, 'pQ': Om_P},
                          OmegaPP={'pI': Om_PP,},
                          beam_freqs=beam_freqs)
-        
+
         nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'A': Om_P}, 
+                         OmegaP={'A': Om_P},
                          OmegaPP={'A': Om_PP,},
                          beam_freqs=beam_freqs)
-        
+
         nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray,
                          OmegaP={'pI': Om_P,},
                          OmegaPP={'pI': 'string',},
                          beam_freqs=beam_freqs)
-        
+
         nt.assert_raises(ValueError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'pI': Om_P}, 
+                         OmegaP={'pI': Om_P},
                          OmegaPP={'pI': Om_PP[:-2],},
                          beam_freqs=beam_freqs)
 
         nt.assert_raises(TypeError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP=Om_P, 
+                         OmegaP=Om_P,
                          OmegaPP={'pI': Om_PP[:-2],},
                          beam_freqs=beam_freqs)
- 
+
         nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'foo': Om_P}, 
+                         OmegaP={'foo': Om_P},
                          OmegaPP={'pI': Om_PP,},
                          beam_freqs=beam_freqs)
 
         nt.assert_raises(KeyError, pspecbeam.PSpecBeamFromArray,
-                         OmegaP={'pI': Om_P}, 
+                         OmegaP={'pI': Om_P},
                          OmegaPP={'foo': Om_PP,},
                          beam_freqs=beam_freqs)
 
@@ -230,18 +232,18 @@ class Test_DataSet(unittest.TestCase):
         # Check that invalid method args raise errors
         nt.assert_raises(KeyError, psbeam.power_beam_int, pol='blah')
         nt.assert_raises(KeyError, psbeam.power_beam_sq_int, pol='blah')
-        nt.assert_raises(KeyError, psbeam.add_pol, pol='A', 
+        nt.assert_raises(KeyError, psbeam.add_pol, pol='A',
                          OmegaP=Om_P, OmegaPP=Om_PP)
-        
+
         # Check that string works
         self.assert_(len(str(psbeam)) > 0)
-    
+
     def test_PSpecBeamBase(self):
         """
         Test that base class can be instantiated.
         """
         bm1 = pspecbeam.PSpecBeamBase()
-        
+
         # Check that user-defined cosmology can be specified
         bm2 = pspecbeam.PSpecBeamBase(cosmo=conversions.Cosmo_Conversions())
 
@@ -254,7 +256,7 @@ class Test_DataSet(unittest.TestCase):
         OP, OPP = beam.get_Omegas([(-5,-5), (-6,-6)])
         nt.assert_equal(OP.shape, (26, 2))
         nt.assert_equal(OPP.shape, (26, 2))
-        
+
         nt.assert_raises(TypeError, beam.get_Omegas, 'xx')
         nt.assert_raises(NotImplementedError, beam.get_Omegas, [('pI','pQ'),])
 
@@ -265,32 +267,32 @@ class Test_DataSet(unittest.TestCase):
         freq     = np.linspace(130.0*1e6, 140.0*1e6, 10)
         nside    = beam.primary_beam.nside #uvbeam object
         beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol='xx', freq=freq)
-        
+
         #tests for dimensions
-        nt.assert_equal(len(beam_res[1]), len(freq)) 
-        nt.assert_equal(beam_res[0].ndim, 2) 
+        nt.assert_equal(len(beam_res[1]), len(freq))
+        nt.assert_equal(beam_res[0].ndim, 2)
         nt.assert_equal(np.shape(beam_res[0]), (len(freq), (12*nside**2)))
-        
+
         #tests for polarization
-        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam, pol='ll', freq=freq) 
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam, pol='ll', freq=freq)
 
         #test if it is a power beam
         efield_beamfile = os.path.join(DATA_PATH, "HERA_NF_efield.beamfits")
         beam_efield     = pspecbeam.PSpecBeamUV(efield_beamfile)
         beam_efield.primary_beam.beam_type='voltage'
-        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq) 
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq)
 
         #test for right axes
         beam_efield.primary_beam.beam_type='power'
         beam_efield.primary_beam.Naxes_vec=2
-        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq) 
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq)
 
         #test for peak normalization
         beam_efield.primary_beam.Naxes_vec=1
         beam_efield.primary_beam._data_normalization.value = 'area'
-        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq) 
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq)
 
         #test for the coordinate system
         beam_efield.primary_beam._data_normalization.value = 'peak'
         beam_efield.primary_beam.pixel_coordinate_system = 'cartesian'
-        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq) 
+        nt.assert_raises(ValueError, pspecbeam.PSpecBeamUV.beam_normalized_response, beam_efield, pol='xx', freq=freq)
