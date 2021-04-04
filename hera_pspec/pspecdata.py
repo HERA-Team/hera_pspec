@@ -4285,6 +4285,7 @@ def get_pspec_run_argparser():
     a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include power spectra of autocorr visibilities.")
     a.add_argument("--interleave_times", default=False, action="store_true", help="Cross multiply even/odd time intervals.")
     a.add_argument("--xant_flag_thresh", default=0.95, type=float, help="fraction of baseline waterfall that needs to be flagged for entire baseline to be flagged (and excluded from pspec)")
+    a.add_argument("--store_window", default=False, action="store_true", help="store window function array.")
     return a
 
 
