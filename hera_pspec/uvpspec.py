@@ -135,7 +135,7 @@ class UVPSpec(object):
                           "bl_vecs", "bl_array", "telescope_location",
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
-        self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array", 
+        self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array",
                        "nsample_array", "cov_array_real", "cov_array_imag"]
         self._dicts_of_dicts = ["stats_array"]
 
@@ -181,7 +181,7 @@ class UVPSpec(object):
         key: tuple
             Contains the baseline-pair, spw, polpair keys
         component : str
-            "real" or "imag". Indicating which cov_array the function calls.   
+            "real" or "imag". Indicating which cov_array the function calls.
         omit_flags : bool, optional
             If True, remove time integrations (or spectra) that
             came from visibility data that were completely flagged
@@ -215,7 +215,7 @@ class UVPSpec(object):
             else:
                 raise AttributeError("No covariance array has been calculated.")
         else:
-            raise ValueError("No types besides real and imag.") 
+            raise ValueError("No types besides real and imag.")
 
     def get_window_function(self, key, omit_flags=False):
         """
@@ -363,17 +363,17 @@ class UVPSpec(object):
     def get_r_params(self):
         """
         Return an `r_params` dictionary.
-        
-        In a `PSpecData` object, the `r_params` are stored as a dictionary with 
+
+        In a `PSpecData` object, the `r_params` are stored as a dictionary with
         one entry per baseline.
-        
-        In a `UVPSpec` object, the dictionary is compressed so that a single 
-        `r_param` entry correspondsto multiple baselines and is stored as a 
+
+        In a `UVPSpec` object, the dictionary is compressed so that a single
+        `r_param` entry correspondsto multiple baselines and is stored as a
         JSON format string.
-        
+
         This function reads the compressed string and returns the dictionary
         with the correct following fields and structure.
-        
+
         Returns
         -------
         r_params : dict
@@ -1738,7 +1738,7 @@ class UVPSpec(object):
                     for i in getattr(self, p):
                         assert np.isclose(getattr(self, p)[i],\
                             getattr(other, p)[i]).all()
-                            
+
         except AssertionError:
             if verbose:
                 print("UVPSpec parameter '{}' not equivalent between {} and {}" \
@@ -1762,7 +1762,7 @@ class UVPSpec(object):
 
     def generate_noise_spectra(self, spw, polpair, Tsys, blpairs=None,
                                little_h=True, form='Pk', num_steps=2000,
-                               component='real'):
+                               component='real', scalar=None):
         """
         Generate the expected RMS noise power spectrum given a selection of
         spectral window, system temp. [K], and polarization. This estimate is
@@ -1774,15 +1774,15 @@ class UVPSpec(object):
         where scalar is the cosmological and beam scalar (i.e. X2Y * Omega_eff)
         calculated from pspecbeam with noise_scalar = True, integration_time is
         in seconds and comes from self.integration_array and Nincoherent is the
-        number of incoherent averaging samples and comes from `self.nsample_array`. 
-        If `component` is `real` or `imag`, P_N is divided by an additional 
+        number of incoherent averaging samples and comes from `self.nsample_array`.
+        If `component` is `real` or `imag`, P_N is divided by an additional
         factor of sqrt(2).
 
         If the polarizations specified are pseudo Stokes pol (I, Q, U or V)
         then an extra factor of 2 is divided.
-        
+
         If `form` is `DelSq` then a factor of `|k|^3 / (2pi^2)` is multiplied.
-        
+
         If real is True, a factor of sqrt(2) is divided to account for
         discarding imaginary noise component.
 
@@ -1826,6 +1826,11 @@ class UVPSpec(object):
             Options=['real', 'imag', 'abs'].
             If component is real or imag, divide by an extra factor of sqrt(2).
 
+        scalar : float
+            Optional noise scalar used to convert from Tsys to cosmological units
+            output from pspecbeam.compute_pspec_scalar(...,noise_scalar=True)
+            Default is None. If None provided, will calculate scalar in function.
+
         Returns
         -------
         P_N : dict
@@ -1845,8 +1850,9 @@ class UVPSpec(object):
         polpair_ind = self.polpair_to_indices(polpair)
 
         # Calculate scalar
-        scalar = self.compute_scalar(spw, polpair, num_steps=num_steps,
-                                     little_h=little_h, noise_scalar=True)
+        if scalar is None:
+            scalar = self.compute_scalar(spw, polpair, num_steps=num_steps,
+                                         little_h=little_h, noise_scalar=True)
 
         # Get k vectors
         if form == 'DelSq':
@@ -1938,7 +1944,7 @@ class UVPSpec(object):
             List of list of baseline-pair group tuples or integers. All power
             spectra in a baseline-pair group are averaged together. If a
             baseline-pair exists in more than one group, a warning is raised.
-            
+
             Examples::
 
                 blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))],
@@ -1953,7 +1959,7 @@ class UVPSpec(object):
         blpair_weights : list, optional
             List of float or int weights dictating the relative weight of each
             baseline-pair when performing the average.
-            
+
             This is useful for bootstrapping. This should have the same shape
             as blpair_groups if specified. The weights are automatically
             normalized within each baseline-pair group. Default: None (all
@@ -1967,18 +1973,18 @@ class UVPSpec(object):
             not specified is thrown out of the new averaged object.
 
         error_weights: string, optional
-            error_weights specify which kind of errors we use for weights 
-            during averaging power spectra. The weights are defined as 
-            $w_i = 1/ sigma_i^2$, where $sigma_i$ is taken from the relevant 
+            error_weights specify which kind of errors we use for weights
+            during averaging power spectra. The weights are defined as
+            $w_i = 1/ sigma_i^2$, where $sigma_i$ is taken from the relevant
             field of stats_array.
-            
-            If `error_weight` is set to `None`, which means we just use the 
+
+            If `error_weight` is set to `None`, which means we just use the
             integration time as weights. If `error_weights` is specified,
             then it also gets appended to `error_field` as a list.
             Default: None.
 
         inplace : bool, optional
-            If True, edit data in self, else make a copy and return. 
+            If True, edit data in self, else make a copy and return.
             Default: True.
 
         add_to_history : str, optional
