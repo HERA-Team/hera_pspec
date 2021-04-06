@@ -1762,7 +1762,7 @@ class UVPSpec(object):
 
     def generate_noise_spectra(self, spw, polpair, Tsys, blpairs=None,
                                little_h=True, form='Pk', num_steps=2000,
-                               component='real'):
+                               component='real', scalar=None):
         """
         Generate the expected RMS noise power spectrum given a selection of
         spectral window, system temp. [K], and polarization. This estimate is
@@ -1826,6 +1826,11 @@ class UVPSpec(object):
             Options=['real', 'imag', 'abs'].
             If component is real or imag, divide by an extra factor of sqrt(2).
 
+        scalar : float
+            Optional noise scalar used to convert from Tsys to cosmological units
+            output from pspecbeam.compute_pspec_scalar(...,noise_scalar=True)
+            Default is None. If None provided, will calculate scalar in function.
+
         Returns
         -------
         P_N : dict
@@ -1845,8 +1850,9 @@ class UVPSpec(object):
         polpair_ind = self.polpair_to_indices(polpair)
 
         # Calculate scalar
-        scalar = self.compute_scalar(spw, polpair, num_steps=num_steps,
-                                     little_h=little_h, noise_scalar=True)
+        if scalar is None:
+            scalar = self.compute_scalar(spw, polpair, num_steps=num_steps,
+                                         little_h=little_h, noise_scalar=True)
 
         # Get k vectors
         if form == 'DelSq':
@@ -1906,6 +1912,7 @@ class UVPSpec(object):
             P_N[blp] = np.array(P_blp)
 
         return P_N
+
 
 
     def average_spectra(self, blpair_groups=None, time_avg=False,
