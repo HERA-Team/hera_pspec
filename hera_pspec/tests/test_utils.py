@@ -157,7 +157,7 @@ class Test_Utils(unittest.TestCase):
         (bls1, bls2, blps, xants1, xants2, rgrps, lens,
          angs) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, extra_info=True,
                                         exclude_auto_bls=False, exclude_permutations=True)
-        assert len(bls1) == len(bls2), 15
+        assert len(bls1) == len(bls2) == 15
         assert blps == list(zip(bls1, bls2))
         assert xants1 == xants2
         assert len(xants1) == 42

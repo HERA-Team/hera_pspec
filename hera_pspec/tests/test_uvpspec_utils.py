@@ -152,7 +152,7 @@ def test_get_red_blpairs():
     assert len(blps) == len(angs) # Ditto, for angles
 
     # Check output type
-    assert isinstance(blps[0][0], (np.int, int)) == True
+    assert isinstance(blps[0][0], (np.int, int))
 
     # Check that number of grouped blps = total no. of blps
     num_blps = 0
