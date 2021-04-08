@@ -1244,8 +1244,8 @@ class Test_PSpecData(unittest.TestCase):
         uvd2.lst_array += np.linspace(0, 1e-3, uvd2.Nblts)
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
         pytest.raises(ValueError, ds.trim_dset_lsts)
-        #assert ds.dsets[0].Ntimes == 60
-        #assert ds.dsets[1].Ntimes == 60
+        assert ds.dsets[0].Ntimes == 60
+        assert ds.dsets[1].Ntimes == 60
 
     def test_units(self):
         ds = pspecdata.PSpecData()
