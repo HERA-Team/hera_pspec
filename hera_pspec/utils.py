@@ -234,7 +234,8 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                      exclude_cross_bls=False,
                      exclude_permutations=True, Nblps_per_group=None,
                      bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
-                     xants=None, include_autocorrs=False, extra_info=False):
+                     xants=None, include_autocorrs=False,
+                     include_crosscorrs=True, extra_info=False):
     """
     Use hera_cal.redcal to get matching, redundant baseline-pair groups from
     uvd1 and uvd2 within the specified baseline tolerance, not including
@@ -293,6 +294,11 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         If False, dont return any autocorrelation visibilities.
         default is False.
 
+    include_crosscorrs : bool, optional
+        If True, include crosscorrelation visibilities. Set to False only if you
+        want to compute power spectra for autocorrelation visibilities only!
+        default is True.
+
     extra_info : bool, optional
         If True, return three extra arrays containing
         redundant baseline group indices, lengths and angles
@@ -344,6 +350,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
             # continue if autocorr and we dont want to include them
             if not include_autocorrs:
                 if antnums[0] == antnums[1]: continue
+
+            if not include_crosscorrs:
+                if antnums[0] != antnums[1]: continue
 
             # work on xants1
             if bl in uvd1.baseline_array:
