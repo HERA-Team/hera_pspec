@@ -637,14 +637,15 @@ class PSpecData(object):
             # add model to key
             Ckey = ((dset, dset), (bl,bl), ) + (model, None, False, True,)
         else:
-            assert isinstance(time_index, int), "time_index must be integer if cov-model=={}".format(model)
+            if (known_cov is None): 
+                assert isinstance(time_index, int), "time_index must be integer if cov-model=={}".format(model)
             # add model to key
             Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
 
         # Check if Ckey exists in known_cov. If so, just update self._C[Ckey] with known_cov.
         if known_cov is not None:
             if Ckey in known_cov.keys():
-                spw = slice(*self.get_spw(include_extension=include_extension))
+                spw = slice(self.get_spw(include_extension=include_extension)[0],self.get_spw(include_extension=include_extension)[1])
                 covariance = known_cov[Ckey][spw, spw]
                 self.set_C({Ckey: covariance})
 
@@ -663,8 +664,8 @@ class PSpecData(object):
 
         return self._C[Ckey]
 
-    def cross_covar_model(self, key1, key2, model='empirical',
-                          time_index=None, conj_1=False, conj_2=True, known_cov=None, include_extension=False):
+    def cross_covar_model(self, key1, key2, model='empirical', known_cov=None,
+                          time_index=None, conj_1=False, conj_2=True, include_extension=False):
         """
         Return a covariance model having specified a key and model type.
         Note: Time-dependent flags that differ from frequency channel-to-channel
@@ -771,7 +772,7 @@ class PSpecData(object):
             self._I[key] = np.identity(self.spw_Nfreqs + np.sum(self.filter_extension))
         return self._I[key]
 
-    def iC(self, key, model='empirical', time_index=None):
+    def iC(self, key, model='empirical', known_cov=None, time_index=None):
         """
         Return the inverse covariance matrix, C^-1.
 
@@ -795,6 +796,12 @@ class PSpecData(object):
             over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth
             and integration time.
 
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+
         time_index : integer, compute covariance at specific time-step
 
         Returns
@@ -811,7 +818,7 @@ class PSpecData(object):
 
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
-            C = self.C_model(key, model=model, time_index=time_index)
+            C = self.C_model(key, model=model, known_cov=known_cov, time_index=time_index)
             #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if np.linalg.cond(C) >= 1e9:
                 warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
@@ -901,7 +908,7 @@ class PSpecData(object):
         for k in d:
             self._R[k] = d[k]
 
-    def R(self, key):
+    def R(self, key, cov_model = 'empirical', known_cov = None):
         """
         Return the data-weighting matrix R, which is a product of
         data covariance matrix (I or C^-1), diagonal flag matrix (Y) and
@@ -924,6 +931,26 @@ class PSpecData(object):
             Tuple containing indices of dataset and baselines. The first item
             specifies the index (ID) of a dataset in the collection, while
             subsequent indices specify the baseline index, in _key2inds format.
+
+        model : string, optional
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos']
+            How the covariances of the input data should be estimated.
+            In 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. 
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances. 
+            If 'autos' is set, the covariances of the input data
+            over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
+            and integration time. 
+
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+            
         """
         # type checks
         assert isinstance(key, tuple)
@@ -967,9 +994,9 @@ class PSpecData(object):
 
             elif self.data_weighting == 'iC':
                 if self.symmetric_taper:
-                    self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
+                    self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key,model=cov_model,known_cov=known_cov) * sqrtY * sqrtT
                 else:
-                    self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.iC(key) * sqrtY )
+                    self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.iC(key,model=cov_model,known_cov=known_cov) * sqrtY )
 
             elif self.data_weighting == 'dayenu':
                 r_param_key = (self.data_weighting,) + key
@@ -1146,7 +1173,7 @@ class PSpecData(object):
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
 
-    def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
+    def cov_q_hat(self, key1, key2, model='empirical', known_cov=None, exact_norm=False, pol=False,
                   time_indices=None):
         """
         Compute the un-normalized covariance matrix for q_hat for a given pair
@@ -1189,6 +1216,12 @@ class PSpecData(object):
             over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth
             and integration time.
 
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+
         time_indices: list of indices of times to include or just a single time.
         default is None -> compute covariance for all times.
 
@@ -1222,18 +1255,19 @@ class PSpecData(object):
         output = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
         for k1, k2 in zip(key1, key2):
             if model == 'dsets':
-                output+=1./np.asarray([self.get_unnormed_V(k1, k2, model=model,
+                output+=1./np.asarray([self.get_unnormed_V(k1, k2, model=model, known_cov=known_cov,
                                   exact_norm=exact_norm, pol=pol, time_index=t)\
                                   for t in time_indices])
 
             elif model == 'empirical':
-                cm = self.get_unnormed_V(k1, k2, model=model,
+                cm = self.get_unnormed_V(k1, k2, model=model, known_cov=known_cov,
                                   exact_norm=exact_norm, pol=pol)
                 output+=1./np.asarray([cm for m in range(len(time_indices))])
 
         return float(len(key1)) / output
 
-    def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
+    def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False, 
+              cov_model='empirical', known_cov=None):
         """
 
         If exact_norm is False:
@@ -1284,6 +1318,25 @@ class PSpecData(object):
             to extract the requested beam polarization. Default is the first
             polarization passed to pspec.
 
+        model : string, optional
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos']
+            How the covariances of the input data should be estimated.
+            In 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. 
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances. 
+            If 'autos' is set, the covariances of the input data
+            over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
+            and integration time. 
+
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+
         Returns
         -------
         q_hat : array_like
@@ -1295,20 +1348,20 @@ class PSpecData(object):
         # Calculate R x_1
         if isinstance(key1, list):
             for _key in key1:
-                Rx1 += np.dot(self.R(_key), self.x(_key))
-                R1 += self.R(_key)
+                Rx1 += np.dot(self.R(_key,cov_model=cov_model,known_cov=known_cov), self.x(_key))
+                R1 += self.R(_key,cov_model=cov_model,known_cov=known_cov)
         else:
-            Rx1 = np.dot(self.R(key1), self.x(key1))
-            R1  = self.R(key1)
+            Rx1 = np.dot(self.R(key1,cov_model=cov_model,known_cov=known_cov), self.x(key1))
+            R1  = self.R(key1,cov_model=cov_model,known_cov=known_cov)
 
         # Calculate R x_2
         if isinstance(key2, list):
             for _key in key2:
-                Rx2 += np.dot(self.R(_key), self.x(_key))
-                R2 += self.R(_key)
+                Rx2 += np.dot(self.R(_key,cov_model=cov_model,known_cov=known_cov), self.x(_key))
+                R2 += self.R(_key,cov_model=cov_model,known_cov=known_cov)
         else:
-            Rx2 = np.dot(self.R(key2), self.x(key2))
-            R2  = self.R(key2)
+            Rx2 = np.dot(self.R(key2,cov_model=cov_model,known_cov=known_cov), self.x(key2))
+            R2  = self.R(key2,cov_model=cov_model,known_cov=known_cov)
 
         # The set of operations for exact_norm == True are drawn from Equations
         # 11(a) and 11(b) from HERA memo #44. We are incorporating the
@@ -1353,7 +1406,7 @@ class PSpecData(object):
                 q.append(qi)
             return 0.5 * np.array(q)
 
-    def get_G(self, key1, key2, exact_norm=False, pol=False):
+    def get_G(self, key1, key2, exact_norm=False, pol=False, cov_model='empirical', known_cov=None):
         """
         Calculates
 
@@ -1381,6 +1434,25 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
+        model : string, optional
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos']
+            How the covariances of the input data should be estimated.
+            In 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. 
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances. 
+            If 'autos' is set, the covariances of the input data
+            over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
+            and integration time. 
+
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+           
         Returns
         -------
         G : array_like, complex
@@ -1391,8 +1463,8 @@ class PSpecData(object):
                              "by now! Cannot be equal to None")
 
         G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        R1 = self.R(key1)
-        R2 = self.R(key2)
+        R1 = self.R(key1,cov_model=cov_model,known_cov=known_cov)
+        R2 = self.R(key2,cov_model=cov_model,known_cov=known_cov)
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
@@ -1427,7 +1499,8 @@ class PSpecData(object):
 
         return G / 2.
 
-    def get_H(self, key1, key2, sampling=False, exact_norm=False, pol=False):
+    def get_H(self, key1, key2, sampling=False, exact_norm=False, pol=False, 
+              cov_model='empirical', known_cov=None):
         """
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
@@ -1488,6 +1561,25 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
+        model : string, optional
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos']
+            How the covariances of the input data should be estimated.
+            In 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. 
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances. 
+            If 'autos' is set, the covariances of the input data
+            over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
+            and integration time. 
+
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+           
         Returns
         -------
         H : array_like, complex
@@ -1498,8 +1590,8 @@ class PSpecData(object):
                              "by now! Cannot be equal to None.")
 
         H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
-        R1 = self.R(key1)
-        R2 = self.R(key2)
+        R1 = self.R(key1,cov_model=cov_model,known_cov=known_cov)
+        R2 = self.R(key2,cov_model=cov_model,known_cov=known_cov)
         if not sampling:
             nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
             sinc_matrix = np.zeros((nfreq, nfreq))
@@ -1544,7 +1636,8 @@ class PSpecData(object):
 
         return H / 2.
 
-    def get_unnormed_E(self, key1, key2, exact_norm=False, pol=False):
+    def get_unnormed_E(self, key1, key2, exact_norm=False, pol=False, 
+                        cov_model='empirical', known_cov=False):
         """
         Calculates a series of unnormalized E matrices, such that
 
@@ -1579,6 +1672,25 @@ class PSpecData(object):
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
+        model : string, optional
+            Type of covariance model to calculate, if not cached. Options=['empirical', 'dsets', 'autos']
+            How the covariances of the input data should be estimated.
+            In 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. 
+            If 'empirical' is set, then error bars are estimated from the data by averaging the
+            channel-channel covariance of each baseline over time and
+            then applying the appropriate linear transformations to these
+            frequency-domain covariances. 
+            If 'autos' is set, the covariances of the input data
+            over a baseline is estimated from the autocorrelations of the two antennas over channel bandwidth 
+            and integration time. 
+
+        known_cov : dicts of covariance matrices
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+           
         Returns
         -------
         E : array_like, complex
@@ -1591,8 +1703,8 @@ class PSpecData(object):
         nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
         E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
                                dtype=np.complex)
-        R1 = self.R(key1)
-        R2 = self.R(key2)
+        R1 = self.R(key1,cov_model=cov_model,known_cov=known_cov)
+        R2 = self.R(key2,cov_model=cov_model,known_cov=known_cov)
         if (exact_norm):
             integral_beam = self.get_integral_beam(pol)
             del_tau = np.median(np.diff(self.delays()))*1e-9
@@ -1605,7 +1717,7 @@ class PSpecData(object):
 
 
     def get_unnormed_V(self, key1, key2, model='empirical', exact_norm=False, 
-                       pol=False, time_index=None):
+                       pol=False, time_index=None, known_cov=None):
         """
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
@@ -1670,7 +1782,7 @@ class PSpecData(object):
             Used only if exact_norm is True.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. 
+            Type of covariance model to calculate, if not cached or given in known_cov. 
             Options=['empirical', 'dsets', 'autos']
             How the covariances of the input data should be estimated.
             
@@ -1686,6 +1798,12 @@ class PSpecData(object):
             baseline is estimated from the autocorrelations of the two antennas 
             over channel bandwidth and integration time. 
 
+        known_cov : dicts of covariance matrices, optional
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+           
         time_index : int, optional
             Compute covariance at specific time-step. Default: None.
 
@@ -1695,13 +1813,14 @@ class PSpecData(object):
             Bandpower covariance matrix, with dimensions (Ndlys, Ndlys).
         """
         # Collect all the relevant pieces
-        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
-        C1 = self.C_model(key1, model=model, time_index=time_index)
-        C2 = self.C_model(key2, model=model, time_index=time_index)
-        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, 
-                                     conj_2=False, time_index=time_index)
-        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, 
-                                     conj_2=True, time_index=time_index)
+        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol, 
+                                        cov_model=model, known_cov=known_cov)
+        C1 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
+        C2 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
+        P21 = self.cross_covar_model(key2, key1, model=model, known_cov=known_cov, 
+                                    conj_1=False, conj_2=False, time_index=time_index)
+        S21 = self.cross_covar_model(key2, key1, model=model, known_cov=known_cov, 
+                                    conj_1=True, conj_2=True, time_index=time_index)
 
         E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
         E12C2 = np.dot(E_matrices, C2)
@@ -1873,7 +1992,7 @@ class PSpecData(object):
         if M.ndim == 2:
             M = np.asarray([M for time in range(self.Ntimes)])
         # M has a shape of (Ntimes, spw_Ndlys,spw_Ndlys)
-        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
+        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol, cov_model=model, known_cov=known_cov)
         # E_matrices has a shape of (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
         # using numpy.einsum_path to speed up the array products with numpy.einsum
@@ -2585,7 +2704,7 @@ class PSpecData(object):
         return scalar
 
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
-                                Gv=None, Hv=None):
+                                Gv=None, Hv=None, model='empirical', known_cov=None):
         """
         Computes an adjustment factor for the pspec scalar that is needed
         when the number of delay bins is not equal to the number of
@@ -2622,14 +2741,37 @@ class PSpecData(object):
             If specified, use these arrays instead of calling self.get_G() and
             self.get_H(). Using precomputed Gv and Hv will speed up this
             function significantly. Default: None.
+            
+        model : string, optional
+            Type of covariance model to calculate, if not cached or given in known_cov. 
+            Options=['empirical', 'dsets', 'autos']
+            How the covariances of the input data should be estimated.
+            
+            In 'dsets' mode, error bars are estimated from user-provided
+            per baseline and per channel standard deivations. 
+            
+            If 'empirical' is set, then error bars are estimated from the data 
+            by averaging the channel-channel covariance of each baseline over 
+            time and then applying the appropriate linear transformations to 
+            these frequency-domain covariances. 
+            
+            If 'autos' is set, the covariances of the input data over a 
+            baseline is estimated from the autocorrelations of the two antennas 
+            over channel bandwidth and integration time. 
 
+        known_cov : dicts of covariance matrices, optional
+            Covariance matrices that are imported from a outer dict instead of 
+            using data stored or calculated inside the PSpecData object. 
+            known_cov could be initialized when using PSpecData.pspec() method. 
+            See PSpecData.pspec() for more details. 
+           
         Returns
         -------
         adjustment : float if the data_weighting is 'identity'
                      1d array of floats with length spw_Ndlys otherwise.
         """
-        if Gv is None: Gv = self.get_G(key1, key2)
-        if Hv is None: Hv = self.get_H(key1, key2, sampling)
+        if Gv is None: Gv = self.get_G(key1, key2, cov_model=cov_model, known_cov=known_cov)
+        if Hv is None: Hv = self.get_H(key1, key2, sampling, cov_model=cov_model, known_cov=known_cov)
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
@@ -2956,6 +3098,17 @@ class PSpecData(object):
         self.set_symmetric_taper(symmetric_taper)
         self.set_weighting(input_data_weight)
 
+        # check consistency of input data weighting and covariance model
+        assert isinstance(cov_model, str), "cov_model must be a string (see documentation)"
+        if cov_model not in ['empirical', 'dsets', 'autos', 'foreground_dependent']:
+            assert known_cov is not None and isinstance(known_cov, dict), \
+            "Need to give dictionary of input covariance matrices if using your own covariance model"
+            if input_data_weight in ['identity', 'dayenu']:
+                raise_warning("Using user-input covariance but identity weighting: "
+                    "there will be no effect on data",
+                    verbose=verbose)
+            if verbose: print("Using user-input covariance model {}".format(cov_model))
+
         # Validate the input data to make sure it's sensible
         self.validate_datasets(verbose=verbose)
 
@@ -3229,8 +3382,10 @@ class PSpecData(object):
                         else:
                             # This Y doesn't exist, so compute it
                             if verbose: print("  Building G...")
-                            Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
-                            Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
+                            Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol, 
+                                                cov_model=cov_model, known_cov=known_cov)
+                            Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, 
+                                                pol = pol, cov_model=cov_model, known_cov=known_cov)
                             # cache it
                             self._identity_Y[(key1, key2)] = Y
                             self._identity_G[(key1, key2)] = Gv
@@ -3239,16 +3394,20 @@ class PSpecData(object):
                         # for non identity weighting (i.e. iC weighting)
                         # Gv and Hv are always different, so compute them
                         if verbose: print("  Building G...")
-                        Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
-                        Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
+                        Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol, 
+                                            cov_model=cov_model, known_cov=known_cov)
+                        Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol, 
+                                            cov_model=cov_model, known_cov=known_cov)
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol)
+                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol, 
+                                        cov_model=cov_model, known_cov=known_cov)
 
                     if verbose: print("  Normalizing power spectrum...")
                     if norm == 'V^-1/2':
-                        V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol)
+                        V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol, 
+                                                            model=cov_model, known_cov=known_cov)
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
                     else:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
@@ -3262,7 +3421,7 @@ class PSpecData(object):
                     # Wide bin adjustment of scalar, which is only needed for
                     # the diagonal norm matrix mode (i.e., norm = 'I')
                     if norm == 'I' and not(exact_norm):
-                        sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
+                        sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv, model=cov_model, known_cov=known_cov)
                         if isinstance(sa, (np.float, float)):
                             pv *= sa
                         else:
