@@ -2770,8 +2770,8 @@ class PSpecData(object):
         adjustment : float if the data_weighting is 'identity'
                      1d array of floats with length spw_Ndlys otherwise.
         """
-        if Gv is None: Gv = self.get_G(key1, key2, cov_model=cov_model, known_cov=known_cov)
-        if Hv is None: Hv = self.get_H(key1, key2, sampling, cov_model=cov_model, known_cov=known_cov)
+        if Gv is None: Gv = self.get_G(key1, key2, cov_model=model, known_cov=known_cov)
+        if Hv is None: Hv = self.get_H(key1, key2, sampling, cov_model=model, known_cov=known_cov)
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
