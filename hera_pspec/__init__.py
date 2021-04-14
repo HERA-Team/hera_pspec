@@ -1,7 +1,7 @@
 """
 __init__.py file for hera_pspec
 """
-from . import version, conversions, grouping, pspecbeam, plot, pstokes, testing
+from . import version, conversions, grouping, pspecbeam, plot, pstokes, testing, utils
 from . import uvpspec_utils as uvputils
 
 from .uvpspec import UVPSpec
