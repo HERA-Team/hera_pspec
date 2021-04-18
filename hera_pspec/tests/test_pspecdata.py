@@ -1235,8 +1235,8 @@ class Test_PSpecData(unittest.TestCase):
         # test basic execution
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
         ds.trim_dset_lsts()
-        assert ds.dsets[0].Ntimes == 50 #52
-        assert ds.dsets[1].Ntimes == 50 #52
+        assert ds.dsets[0].Ntimes == 50
+        assert ds.dsets[1].Ntimes == 50
         
         assert np.all( (2458042.178948477 < ds.dsets[0].time_array) \
                         + (ds.dsets[0].time_array < 2458042.1843023109))
