@@ -2726,7 +2726,7 @@ class PSpecData(object):
               baseline_tol=1.0, store_cov=False, store_cov_diag=False,
               return_q=False, store_window=True, verbose=True,
               filter_extensions=None, exact_norm=False, history='', r_params=None,
-              cov_model='empirical', known_cov=None):
+              cov_model='empirical', known_cov=None, allow_fft=False):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2906,6 +2906,10 @@ class PSpecData(object):
             power within each filter window is to be suppressed.
 
             Absence of an `r_params` dictionary will result in an error.
+
+        allow_fft : bool, optional
+            Use an fft to compute q-hat.
+            Default is False.
 
         Returns
         -------
@@ -3244,7 +3248,7 @@ class PSpecData(object):
 
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol)
+                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
 
                     if verbose: print("  Normalizing power spectrum...")
                     if norm == 'V^-1/2':
@@ -3701,7 +3705,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical',
-              include_autocorrs=False, include_crosscorrs=True, xant_flag_thresh=0.95):
+              include_autocorrs=False, include_crosscorrs=True, xant_flag_thresh=0.95, allow_fft=False):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -3964,6 +3968,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     xant_flag_thresh : float, optional
         fraction of waterfall that needs to be flagged for entire baseline to be
         considered flagged and excluded from data. Default is 0.95
+
+    allow_fft : bool, optional
+        Use an fft to compute q-hat.
+        Default is False.
 
     Returns
     -------
@@ -4287,6 +4295,7 @@ def get_pspec_run_argparser():
     a.add_argument("--interleave_times", default=False, action="store_true", help="Cross multiply even/odd time intervals.")
     a.add_argument("--xant_flag_thresh", default=0.95, type=float, help="fraction of baseline waterfall that needs to be flagged for entire baseline to be flagged (and excluded from pspec)")
     a.add_argument("--store_window", default=False, action="store_true", help="store window function array.")
+    a.add_argument("--allow_fft", default=False, action="store_true", help="use an FFT to comptue q-hat.")
     return a
 
 
