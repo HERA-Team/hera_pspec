@@ -56,3 +56,16 @@ jobs:
         #nosetests -P hera_pspec --with-coverage --cover-package=hera_pspec --verbose
         pytest --pyargs hera_pspec --cov=hera_pspec --cov-config="./.coveragerc" \
                --cov-report xml:"./coverage.xml" --junitxml="./test-reports/xunit.xml"
+               
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.xml
+        directory: ./coverage/reports/
+        flags: unittests
+        env_vars: OS,PYTHON
+        name: codecov-umbrella
+        fail_ci_if_error: true
+        path_to_write_report: ./coverage/codecov_report.txt
+        verbose: true
