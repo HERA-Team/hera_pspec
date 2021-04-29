@@ -4,24 +4,19 @@ channels:
   - defaults
 dependencies:
   - pip
-  - aipy>=3.0.0rc2
   - astropy>=3.2.3
-  - h5py
+  - h5py<=3.2
   - numpy>=1.10
   - pytest
   - scipy
-  - scikit-learn
   - mpi4py
   - pyyaml
-  - pycodestyle
   - psutil
   - astropy-healpix
-  - pyephem
   - basemap
   - future
   - pytest-cov
   - coveralls
-  - nose
 
   - pip:
     - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata

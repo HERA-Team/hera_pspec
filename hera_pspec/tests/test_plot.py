@@ -1,5 +1,5 @@
 import unittest
-import nose.tools as nt
+import pytest
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -102,21 +102,21 @@ class Test_Plot(unittest.TestCase):
         f1 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol=('xx','xx'),
                                   average_blpairs=True, average_times=True)
         elements = [(matplotlib.lines.Line2D, 1),]
-        self.assertTrue( axes_contains(f1.axes[0], elements) )
+        assert axes_contains(f1.axes[0], elements)
         plt.close(f1)
 
         # Average over baseline-pairs but keep the time bins intact
         f2 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol=('xx','xx'),
                                   average_blpairs=True, average_times=False)
         elements = [(matplotlib.lines.Line2D, self.uvp.Ntimes),]
-        self.assertTrue( axes_contains(f2.axes[0], elements) )
+        assert axes_contains(f2.axes[0], elements)
         plt.close(f2)
 
         # Average over times, but keep the baseline-pairs separate
         f3 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol=('xx','xx'),
                                   average_blpairs=False, average_times=True)
         elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
-        self.assertTrue( axes_contains(f3.axes[0], elements) )
+        assert axes_contains(f3.axes[0], elements)
         plt.close(f3)
 
         # Plot the spectra averaged over baseline-pairs and times, but also
@@ -125,7 +125,7 @@ class Test_Plot(unittest.TestCase):
                                   average_blpairs=True, average_times=True,
                                   fold=True)
         elements = [(matplotlib.lines.Line2D, 1),]
-        self.assertTrue( axes_contains(f4.axes[0], elements) )
+        assert axes_contains(f4.axes[0], elements)
         plt.close(f4)
 
         # Plot imaginary part
@@ -133,7 +133,7 @@ class Test_Plot(unittest.TestCase):
                                   average_blpairs=False, average_times=True,
                                   component='imag')
         elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
-        self.assertTrue( axes_contains(f4.axes[0], elements) )
+        assert axes_contains(f4.axes[0], elements)
         plt.close(f4)
 
         # Plot abs
@@ -141,7 +141,7 @@ class Test_Plot(unittest.TestCase):
                                   average_blpairs=False, average_times=True,
                                   component='abs')
         elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs),]
-        self.assertTrue( axes_contains(f4.axes[0], elements) )
+        assert axes_contains(f4.axes[0], elements)
         plt.close(f5)
 
         # test errorbar plotting w/ markers
@@ -217,7 +217,7 @@ class Test_Plot(unittest.TestCase):
             _uvp = copy.deepcopy(uvp)
             _uvp.time_avg_array += (i+1)**2
             uvp = uvp + _uvp
-        nt.assert_raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs(), 0, 'xx')
+        pytest.raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs(), 0, 'xx')
 
         f2 = plot.delay_spectrum(uvp, uvp.get_blpairs(), 0, ('xx','xx'), 
                                  force_plot=True, label_type='blpairt', 
@@ -225,7 +225,7 @@ class Test_Plot(unittest.TestCase):
         plt.close(f2)
 
         # exceptions
-        nt.assert_raises(ValueError, plot.delay_spectrum, uvp, 
+        pytest.raises(ValueError, plot.delay_spectrum, uvp, 
                          uvp.get_blpairs()[:3], 0, ('xx','xx'),
                          label_type='foo')
 
@@ -278,7 +278,7 @@ class Test_Plot(unittest.TestCase):
             _uvp = copy.deepcopy(self.uvp)
             _uvp.blpair_array += i * 20
             uvp += _uvp
-        nt.assert_raises(ValueError, plot.delay_waterfall, uvp, 
+        pytest.raises(ValueError, plot.delay_waterfall, uvp, 
                          uvp.get_blpairs(), 0, ('xx','xx'))
         fig = plot.delay_waterfall(uvp, uvp.get_blpairs(), 0, ('xx','xx'), 
                                    force_plot=True)
@@ -298,7 +298,7 @@ class Test_Plot(unittest.TestCase):
                                         data=d, plot_mode='real')
 
             figfiles = glob.glob("test_waterfall_plots_3423523923_*_*.png")
-            nt.assert_equal(len(figfiles), 15)
+            assert len(figfiles) == 15
             for f in figfiles:
                 os.remove(f)
 
@@ -379,7 +379,7 @@ class Test_Plot(unittest.TestCase):
         plt.close()
 
         # test exceptions
-        nt.assert_raises(ValueError, plot.delay_wedge, uvp, 0, ('xx','xx'), 
+        pytest.raises(ValueError, plot.delay_wedge, uvp, 0, ('xx','xx'), 
                          component='foo')
         plt.close()
         
