@@ -1,7 +1,7 @@
 # ``hera_pspec``: HERA delay spectrum estimation
 
 ![Run Tests](https://github.com/HERA-Team/hera_pspec/workflows/Run%20Tests/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/HERA-Team/hera_pspec/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/hera_pspec?branch=master)
+[![codecov](https://codecov.io/gh/HERA-Team/hera_pspec/branch/master/graph/badge.svg)](https://codecov.io/gh/HERA-Team/hera_pspec)
 [![Documentation](https://readthedocs.org/projects/hera-pspec/badge/?version=latest)](https://readthedocs.org/projects/hera-pspec/badge/?version=latest)
 
 The ``hera_pspec`` library provides all of the tools and data structures needed to perform a delay 
