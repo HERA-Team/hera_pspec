@@ -2,7 +2,7 @@ import unittest
 import pytest
 import os, sys
 from hera_pspec.data import DATA_PATH
-from hera_pspec import pstokes 
+from .. import pstokes 
 import pyuvdata
 import pyuvdata.utils as uvutils
 import copy
@@ -22,21 +22,21 @@ class Test_pstokes(unittest.TestCase):
         self.uvd1.read_miriad(dset1)
         self.uvd2 = pyuvdata.UVData()
         self.uvd2.read_miriad(dset2)
-    
+
     def tearDown(self):
         pass
 
     def runTest(self):
         pass
-    
+
     def test_combine_pol(self):
         uvd1 = self.uvd1
         uvd2 = self.uvd2
-     
+
         # basic execution on pol strings
-        out1 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')   
+        out1 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
         # again w/ pol ints
-        out2 = pstokes._combine_pol(uvd1, uvd2, -5, -6)   
+        out2 = pstokes._combine_pol(uvd1, uvd2, -5, -6)
         # assert equivalence
         assert out1 == out2
 
@@ -44,7 +44,7 @@ class Test_pstokes(unittest.TestCase):
         pytest.raises(AssertionError, pstokes._combine_pol, dset1, dset2, 'XX', 'YY' )
         pytest.raises(AssertionError, pstokes._combine_pol, uvd1, uvd2, 'XX', 1)
 
-    def test_construct_pstokes(self):   
+    def test_construct_pstokes(self):
         uvd1 = self.uvd1
         uvd2 = self.uvd2
 
@@ -53,7 +53,7 @@ class Test_pstokes(unittest.TestCase):
         uvdQ = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes='pQ')
 
         # check exceptions
-        pytest.raises(AssertionError, pstokes.construct_pstokes, uvd1, 1)   
+        pytest.raises(AssertionError, pstokes.construct_pstokes, uvd1, 1)
 
         # check baselines
         uvd3 = uvd2.select(ant_str='auto', inplace=False)
