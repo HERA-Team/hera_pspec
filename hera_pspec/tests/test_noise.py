@@ -9,7 +9,7 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, pspecdata, pspecbeam, noise, testing, utils
+from .. import uvpspec, conversions, pspecdata, pspecbeam, noise, testing, utils
 
 
 class Test_Sensitivity(unittest.TestCase):
@@ -18,7 +18,7 @@ class Test_Sensitivity(unittest.TestCase):
     """
     def setUp(self):
         self.cosmo = conversions.Cosmo_Conversions()
-        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 
+        self.beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                               'HERA_NF_pstokes_power.beamfits'))
         self.sense = noise.Sensitivity(beam=self.beam, cosmo=self.cosmo)
 
@@ -43,7 +43,7 @@ class Test_Sensitivity(unittest.TestCase):
         self.beam.cosmo = C
         sense.set_beam(self.beam)
         assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
-        
+
         bm = copy.deepcopy(self.beam)
         delattr(bm, 'cosmo')
         sense.set_beam(bm)
@@ -55,21 +55,21 @@ class Test_Sensitivity(unittest.TestCase):
         assert self.sense.pol == 'pI'
 
     def test_calc_P_N(self):
-        
+
         # calculate scalar
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
         self.sense.calc_scalar(freqs, 'pI', num_steps=5000, little_h=True)
-        
-        # basic execution 
+
+        # basic execution
         k = np.linspace(0, 3, 10)
         Tsys = 500.0
         t_int = 10.7
-        P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, 
+        P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1,
                                   form='Pk')
         assert isinstance(P_N, (float, np.float))
         assert np.isclose(P_N, 642386932892.2921)
         # calculate DelSq
-        Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, 
+        Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1,
                                   Nincoherent=1, form='DelSq')
         assert Dsq.shape == (10,)
         assert Dsq[1] < P_N
@@ -89,18 +89,18 @@ def test_noise_validation():
 
     # generate noise
     seed = 0
-    uvd = testing.noise_sim(uvfile, Tsys, beam, seed=seed, whiten=True, 
+    uvd = testing.noise_sim(uvfile, Tsys, beam, seed=seed, whiten=True,
                             inplace=False, Nextend=9)
 
     # get redundant baseline group
-    reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True, 
+    reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True,
                                       bl_len_range=(10, 20),
                                       bl_deg_range=(0, 1))
-    bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=True, 
+    bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=True,
                                                exclude_permutations=True)
 
     # setup PSpecData
-    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], 
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
                              wgts=[None, None], beam=beam)
     ds.Jy_to_mK()
 
@@ -109,7 +109,7 @@ def test_noise_validation():
                    taper='none', sampling=False, little_h=True, spw_ranges=[(0, 50)], verbose=False)
 
     # get noise spectra from one of the blpairs
-    P_N = list(uvp.generate_noise_spectra(0, ('xx','xx'), Tsys, 
+    P_N = list(uvp.generate_noise_spectra(0, ('xx','xx'), Tsys,
                                           blpairs=uvp.get_blpairs()[:1], num_steps=2000,
                                           component='real').values())[0][0, 0]
 
@@ -136,16 +136,16 @@ def test_analytic_noise():
     uvd.read(uvfile)
 
     # setup PSpecData
-    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], 
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
                              wgts=[None, None], beam=beam,
                              dsets_std=[copy.deepcopy(uvd), copy.deepcopy(uvd)])
     ds.Jy_to_mK()
 
     # get pspec
-    reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True, 
+    reds, lens, angs = utils.get_reds(uvd, pick_data_ants=True,
                                       bl_len_range=(10, 20),
                                       bl_deg_range=(0, 1))
-    bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=True, 
+    bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=True,
                                                exclude_permutations=True)
     taper = 'bh'
     Nchan = 20
@@ -173,7 +173,7 @@ def test_analytic_noise():
     frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
     assert np.abs(frac_ratio).mean() < 0.01
 
-    # now compute unbiased P_SN and check that it matches P_N at high-k    
+    # now compute unbiased P_SN and check that it matches P_N at high-k
     utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=True)
     frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
     dlys = uvp.get_dlys(0) * 1e9
@@ -182,4 +182,3 @@ def test_analytic_noise():
 
     # clean up
     os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
-

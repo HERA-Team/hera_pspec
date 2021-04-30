@@ -10,7 +10,7 @@ except:
     # Python 3
     from io import StringIO
 import hera_pspec
-from hera_pspec import version
+from .. import version
 import json
 
 

@@ -4,7 +4,7 @@ import numpy as np
 import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps, trapz
-from hera_pspec import pspecdata, pspecbeam, conversions, container, utils, testing
+from .. import pspecdata, pspecbeam, conversions, container, utils, testing
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData, UVCal, utils as uvutils
 from hera_cal import redcal
@@ -1231,13 +1231,13 @@ class Test_PSpecData(unittest.TestCase):
         uvd1.read_miriad(fname)
         uvd2 = copy.deepcopy(uvd1)
         uvd2.lst_array = (uvd2.lst_array + 10. * np.median(np.diff(np.unique(uvd2.lst_array)))) % (2.*np.pi)
-        
+
         # test basic execution
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
         ds.trim_dset_lsts()
         assert ds.dsets[0].Ntimes == 50
         assert ds.dsets[1].Ntimes == 50
-        
+
         assert np.all( (2458042.178948477 < ds.dsets[0].time_array) \
                         + (ds.dsets[0].time_array < 2458042.1843023109))
         # test exception
@@ -1274,17 +1274,17 @@ class Test_PSpecData(unittest.TestCase):
         # generate ds
         uvd = copy.deepcopy(self.d[0])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
-        
+
         # check for existing key
         assert ds.check_key_in_dset(('xx'), 0)
         assert ds.check_key_in_dset((24, 25), 0)
         assert ds.check_key_in_dset((24, 25, 'xx'), 0)
-        
+
         # check for non-existing key
         assert ds.check_key_in_dset('yy', 0) == False
         assert ds.check_key_in_dset((24, 26), 0) == False
         assert ds.check_key_in_dset((24, 26, 'yy'), 0) == False
-        
+
         # check exception
         pytest.raises(KeyError, ds.check_key_in_dset, (1,2,3,4,5), 0)
 
@@ -1360,7 +1360,7 @@ class Test_PSpecData(unittest.TestCase):
         np.random.seed(0)
         sim2 = testing.sky_noise_sim(uvd, uvb, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
                                      constant_in_time=True, bl_loop_seed=1, divide_by_nsamp=False)
- 
+
         # setup ds
         ds = pspecdata.PSpecData(dsets=[sim1, sim2], wgts=[None, None], beam=uvb)
         ds.Jy_to_mK()
@@ -1380,9 +1380,9 @@ class Test_PSpecData(unittest.TestCase):
                 assert np.isclose(cov.imag, 0, atol=abs(cov.real).max() / 1e10).all()
 
         # Here we generate a known_cov to be passed to ds.pspec, which stores two cov_models named 'dsets' and 'fiducial'.
-        # The two models have actually the same data, while in generating output covariance, 'dsets' mode will follow the shorter 
-        # path where we use some optimization for diagonal matrices, while 'fiducial' mode will follow the longer path 
-        # where there is no such optimization. This test should show the results from two paths are equivalent.      
+        # The two models have actually the same data, while in generating output covariance, 'dsets' mode will follow the shorter
+        # path where we use some optimization for diagonal matrices, while 'fiducial' mode will follow the longer path
+        # where there is no such optimization. This test should show the results from two paths are equivalent.
         known_cov_test = dict()
         C_n_11 = np.diag([2.]*ds.Nfreqs)
         P_n_11, S_n_11, C_n_12, P_n_12, S_n_12 = np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11), np.zeros_like(C_n_11)
@@ -1416,13 +1416,13 @@ class Test_PSpecData(unittest.TestCase):
                     Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, False, False,)
                     known_cov_test[Ckey] = P_n_12
                     Ckey = ((dset2, dset1), (bl2,bl1), ) + (model, time_index, True, True,)
-                    known_cov_test[Ckey] = S_n_12 
+                    known_cov_test[Ckey] = S_n_12
 
         uvp_dsets_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
                                  cov_model='dsets', known_cov=known_cov_test, verbose=False, taper='bh')
         uvp_fiducial_cov = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), spw_ranges=(60, 90), store_cov=True,
                                  cov_model='fiducial', known_cov=known_cov_test, verbose=False, taper='bh')
-        # check their cov_array are equal 
+        # check their cov_array are equal
         assert np.allclose(uvp_dsets_cov.cov_array_real[0], uvp_fiducial_cov.cov_array_real[0], rtol=1e-05)
 
         # check noise floor computation from auto correlations
@@ -1449,7 +1449,7 @@ class Test_PSpecData(unittest.TestCase):
                 / np.sqrt(np.mean(np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2)[:,~noise_dlys], axis=0)), axis=0))
         rms = np.mean(rms, axis=0)
         # assert this is close to 1.0
-        assert np.isclose(np.mean(rms), 1.0, atol=0.1) 
+        assert np.isclose(np.mean(rms), 1.0, atol=0.1)
 
     def test_pspec(self):
         # generate ds
@@ -1481,16 +1481,16 @@ class Test_PSpecData(unittest.TestCase):
             my_r_params[key1] = rp
             my_r_params_dset0_only[key1] = rp
             my_r_params[key2] = rp
-        
+
         #test inverse sinc weighting.
         ds.pspec(bls,bls,(0, 1), ('xx','xx'),
         spw_ranges = (10,20), input_data_weight  = 'dayenu',
         r_params = my_r_params)
-        
+
         #test value error
         pytest.raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
         spw_ranges = (10,20), input_data_weight  = 'dayenu', r_params = {})
-        
+
         #test value error no dset1 keys
         pytest.raises(ValueError, ds.pspec, bls, bls, (0, 1), ('xx','xx'),
         spw_ranges = (10,20), input_data_weight  = 'dayenu',
@@ -1638,7 +1638,7 @@ class Test_PSpecData(unittest.TestCase):
                                 little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='dsets')
         assert hasattr(uvp, 'cov_array_real')
 
-        # test the results of stats_array[cov_model] 
+        # test the results of stats_array[cov_model]
         uvp_cov = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
                                 little_h=True, verbose=True, spw_ranges=[(10,20)], exact_norm=True, store_cov=True, cov_model='foreground_dependent')
         uvp_cov_diag = ds.pspec(bls1[:1], bls2[:1], (0, 1), ('xx','xx'), input_data_weight='identity', norm='I', taper='none',
@@ -1646,7 +1646,7 @@ class Test_PSpecData(unittest.TestCase):
 
         key = (0, (bls1[0],bls2[0]), "xx")
         assert np.isclose(np.diagonal(uvp_cov.get_cov(key), axis1=1, axis2=2), (np.real(uvp_cov_diag.get_stats('foreground_dependent_diag', key)))**2).all()
-    
+
         # test identity_Y caching works
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(self.uvd), copy.deepcopy(self.uvd)], wgts=[None, None],
                                  beam=self.bm)
@@ -1657,7 +1657,7 @@ class Test_PSpecData(unittest.TestCase):
         assert len(ds._identity_Y) == len(ds._identity_G) == len(ds._identity_H)
         assert len(ds._identity_Y) == 1
         assert list(ds._identity_Y.keys())[0] == ((0, 24, 25, 'xx'), (1, 24, 25, 'xx'))
-        
+
         # assert caching is not used when inappropriate
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), :, 25, :] = True
         uvp = ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ('xx', 'xx'),
@@ -1699,15 +1699,15 @@ class Test_PSpecData(unittest.TestCase):
         data1 = d1.get_data(bls1[0])
         data2 = d2.get_data(bls2[0])
         legacy = np.fft.fftshift(np.conj(np.fft.fft(data1, axis=1)) * np.fft.fft(data2, axis=1) * scalar / len(freqs)**2, axes=1)[0]
-        
+
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
         uvp = ds.pspec(bls1, bls2, (0, 1), pols=('xx','xx'), taper='none', input_data_weight='identity', norm='I', sampling=True)
         oqe = uvp.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
-        
+
         # assert answers are same to within 3%
         assert np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all()
-        
+
         # taper
         window = windows.blackmanharris(len(freqs))
         NEB = Bp / trapz(window**2, x=freqs)
@@ -1715,12 +1715,12 @@ class Test_PSpecData(unittest.TestCase):
         data1 = d1.get_data(bls1[0])
         data2 = d2.get_data(bls2[0])
         legacy = np.fft.fftshift(np.conj(np.fft.fft(data1*window[None, :], axis=1)) * np.fft.fft(data2*window[None, :], axis=1) * scalar / len(freqs)**2, axes=1)[0]
-        
+
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
         uvp = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), taper='blackman-harris', input_data_weight='identity', norm='I')
         oqe = uvp.get_data((0, ((24, 25), (37, 38)), ('xx','xx')))[0]
-        
+
         # assert answers are same to within 3%
         assert np.isclose(np.real(oqe)/np.real(legacy), 1, atol=0.03, rtol=0.03).all()
 
@@ -1734,7 +1734,7 @@ class Test_PSpecData(unittest.TestCase):
         # test basic execution w/ a spw selection
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.2)
-        assert ds.dsets[0].get_flags(24, 25)[:, 550:650].any() == False 
+        assert ds.dsets[0].get_flags(24, 25)[:, 550:650].any() == False
 
         # test w/ no spw selection
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
@@ -1959,16 +1959,16 @@ def test_pspec_run():
     # assert dsets are properly interleaved
     assert np.isclose((np.unique(ds.dsets[0].time_array) - np.unique(ds.dsets[1].time_array))[0],
                               -np.diff(np.unique(uvd.time_array))[0])
-    
+
     # assert first integration flagged across entire spw
     assert ds.dsets[0].get_flags(37, 38)[0, 0:25].all()
-    
+
     # assert first integration flagged *ONLY* across spw
     assert ds.dsets[0].get_flags(37, 38)[0, :0].any() + ds.dsets[0].get_flags(37, 38)[0, 25:].any() == False
-    
+
     # assert channel 15 flagged for all ints
     assert ds.dsets[0].get_flags(37, 38)[:, 15].all()
-    
+
     # assert phase errors decreased after re-phasing
     phserr_before = np.mean(np.abs(np.angle(uvd1.data_array / uvd2.data_array)))
     phserr_after = np.mean(np.abs(np.angle(ds.dsets[0].data_array / ds.dsets[1].data_array)))
@@ -2097,7 +2097,7 @@ def test_pspec_run():
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
 
-    # test with cov_model that requires autos w/ fname as filepath 
+    # test with cov_model that requires autos w/ fname as filepath
     fnames = glob.glob(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
     pspecdata.pspec_run([fnames], "./out.h5", spw_ranges=[(50, 70)], dset_pairs=[(0, 0)],
                          verbose=False, overwrite=True, file_type='miriad', pol_pairs=[('xx', 'xx')],
@@ -2194,7 +2194,7 @@ def test_get_argparser():
     assert a.dset_pairs == [(0, 0), (1, 1)]
     assert a.spw_ranges == [(300, 400), (600, 800)]
     assert a.blpairs == [((24, 25), (24, 25)), ((37, 38), (37, 38))]
-                      
+
 """
 # LEGACY MONTE CARLO TESTS
     def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):

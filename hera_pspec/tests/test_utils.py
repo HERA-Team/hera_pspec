@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import os, sys, copy
 from hera_pspec.data import DATA_PATH
-from hera_pspec import utils, testing
+from .. import utils, testing
 from collections import OrderedDict as odict
 from pyuvdata import UVData
 from hera_cal import redcal
@@ -25,7 +25,7 @@ def test_cov():
     cov = utils.cov(d1, w2, d2=d2, w2=w2)
     assert cov.shape == (60, 60)
     assert cov.dtype == np.complex
-    
+
     # test exception
     pytest.raises(TypeError, utils.cov, d1, w1*1j)
     pytest.raises(TypeError, utils.cov, d1, w1, d2=d2, w2=w2*1j)
@@ -249,10 +249,10 @@ class Test_Utils(unittest.TestCase):
         np.testing.assert_almost_equal(l[0], 0)
         np.testing.assert_almost_equal(a[0], 0)
         assert len(r) == 105
-        
+
         # Check errors when wrong types input
         pytest.raises(TypeError, utils.get_reds, [1., 2.])
-        
+
     def test_config_pspec_blpairs(self):
         # test basic execution
         uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
@@ -269,11 +269,11 @@ class Test_Utils(unittest.TestCase):
         # test xants
         groupings = utils.config_pspec_blpairs(uv_template, [('xx', 'xx')], [('even', 'odd')], xants=[0, 1, 2], verbose=False, exclude_auto_bls=True)
         assert len(list(groupings.values())[0]) == 9735
-        
+
         # test exclude_patterns
-        groupings = utils.config_pspec_blpairs(uv_template, 
-                                               [('xx', 'xx'), ('yy', 'yy')], 
-                                               [('even', 'odd'), ('even', 'odd')], 
+        groupings = utils.config_pspec_blpairs(uv_template,
+                                               [('xx', 'xx'), ('yy', 'yy')],
+                                               [('even', 'odd'), ('even', 'odd')],
                                                exclude_patterns=['1.288'],
                                                verbose=False, exclude_auto_bls=True)
         assert len(groupings) == 0

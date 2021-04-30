@@ -1,6 +1,6 @@
 import pytest
 from hera_pspec.data import DATA_PATH
-from hera_pspec import testing, uvpspec, conversions, pspecbeam, utils
+from .. import testing, uvpspec, conversions, pspecbeam, utils
 import os
 from pyuvdata import UVData, UVBeam
 import numpy as np

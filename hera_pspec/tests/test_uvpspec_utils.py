@@ -1,8 +1,8 @@
 import unittest
 import pytest
 import numpy as np
-from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec import testing, pspecbeam, UVPSpec
+from .. import uvpspec_utils as uvputils
+from .. import testing, pspecbeam, UVPSpec
 from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 import os
@@ -295,4 +295,3 @@ def test_r_param_compression():
 
     assert uvputils.compress_r_params({}) == ''
     assert uvputils.decompress_r_params('') == {}
-
