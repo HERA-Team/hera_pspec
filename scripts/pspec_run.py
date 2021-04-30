@@ -15,7 +15,7 @@ dsets = kwargs.pop('dsets')
 filename = kwargs.pop('filename')
 # we want to compute cross-corr power spectra by default so feed
 # the inverse of the include_autocorrs arg.
-kwargs['include_crosscorrs'] = not(kwarg.pop('exclude_crosscorrs'))
+kwargs['include_crosscorrs'] = not(kwargs.pop('exclude_crosscorrs'))
 # get special kwargs
 history = ' '.join(sys.argv)
 
