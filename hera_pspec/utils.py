@@ -386,7 +386,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
-                                add_autos=include_autocorrs,
+                                add_autos=include_autocorrs, autos_only=not(include_crosscorrs),
                                 bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
     # construct baseline pairs
     baselines1, baselines2, blpairs, red_groups = [], [], [], []
@@ -1082,7 +1082,8 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
 
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False, min_EW_cut=0,
+             bl_deg_range=(0, 180), xants=None, add_autos=False,
+             autos_only=False, min_EW_cut=0,
              file_type='miriad'):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
@@ -1116,6 +1117,10 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
 
     add_autos : bool
         If True, add into autocorrelation group to the redundant group list.
+
+    autos_only : bool, optional
+        If True, only include autocorrelations.
+        Default is False.
 
     min_EW_cut : float
         Baselines with a projected East-West absolute baseline length in meters
@@ -1175,6 +1180,11 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         reds = [list(zip(ants, ants))] + reds
         lens = np.insert(lens, 0, 0)
         angs = np.insert(angs, 0, 0)
+        if autos_only:
+            reds = reds[:1]
+            lens = lens[:1]
+            angs = angs[:1]
+
 
     # filter based on xants
     if xants is not None:
