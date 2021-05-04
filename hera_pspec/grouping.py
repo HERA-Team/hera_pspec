@@ -688,9 +688,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
 
         # setup weighting matrix: block diagonal for each Ndly x Ndly
-        # we can represent the Ndlyblps x Ndlyblps block diagonal matrix as Ndlyblps x Ndlys
-        E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
-
+        E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
 
         # get kperps for this spw: shape (Nblpairts,)
         kperps = uvp.get_kperps(spw, little_h=True)
@@ -746,21 +744,22 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 # weight by inverse (real) covariance
                 for p in range(uvp.Npols):
                     # the covariance is block diagonal assuming no correlations between baseline-pairs
-                    E[:, dslice, :, p] = np.linalg.pinv(cov_array_real[spw][:, dslice, dslice, p].real)
+                    E[:, dslice, dslice, p] = np.linalg.pinv(cov_array_real[spw][:, dslice, dslice, p].real)
 
             elif error_weights is not None:
                 # fill diagonal with by 1/stats_array^2 as weight
                 stat_weight = stats_array[error_weights][spw][:, dslice].real.copy()
                 np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
-                E[:, range(dstart, dstop), range(0, Ndlys)] = 1 / stat_weight.clip(1e-40, np.inf)
+                E[:, range(dstart, dstop), range(dstart, dstop)] = 1 / stat_weight.clip(1e-40, np.inf)
 
             else:
-                E[:, range(dstart, dstop), range(0, Ndlys)] = 1.0
+                # uniform weighting along diagonal, except for flagged data
+                E[:, range(dstart, dstop), range(dstart, dstop)] = 1.0
                 f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
-                E[:, range(dstart, dstop), range(0, Ndlys)] *= (~f[:, None, :])
+                E[:, range(dstart, dstop), range(dstart, dstop)] *= (~f[:, None, :])
 
             # append to non-dly arrays
-            Emean = np.trace(E[:, dslice, :], axis1=1, axis2=2)  # use sum of E across delay as weight
+            Emean = np.trace(E[:, dslice, dslice], axis1=1, axis2=2)  # use sum of E across delay as weight
             wgt_array[spw] += wgts * Emean[:, None, None, :]
             integration_array[spw] += ints * Emean
             nsample_array[spw] += nsmp
@@ -788,21 +787,12 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         # first compute: H = E A [A.T E A]^-1
         # move axes to enable matmul and inv over Ndlyblps and Nk axes
         # Am shape (Npols, Ntimes, Ndlyblps, Nk)
-        # Em shape (Npols, Ntimes, Ndlyblps, Ndlys)
+        # Em shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
         # Ht shape (Npols, Ntimes, Nk, Ndlyblps)
         Am = np.moveaxis(A[spw], -1, 0)
         Em = np.moveaxis(E, -1, 0)
-        # Multiply block diagoinal Em @ Am
-        # by applying each baseline block in Em
-        # to each Ndly x Nk baseline-horizontal block in Am
-        EmAm = np.zeros_like(Am)
-        for t in range(uvp.Ntimes):
-            for p in range(uvp.Npols):
-                for b in range(uvp.Nblpairs):
-                    blpslice = slice(Ndlys * b, Ndlys * (b + 1))
-                    EmAm[p, t, blpslice] = Em[p, t, blpslice] @ Am[p, t, blpslice]
-        invAEA = np.linalg.pinv(Am.transpose(0, 1, 3, 2) @ EmAm)
-        H = EmAm @ invAEA
+        invAEA = np.linalg.pinv(Am.transpose(0, 1, 3, 2) @ Em @ Am)
+        H = Em @ Am @ invAEA
         Ht = H.transpose(0, 1, 3, 2)
 
         # bin data: p_sph = H.T p_cyl
@@ -1172,16 +1162,12 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
             j += n_blps
 
     # Loop over UVPSpec objects and calculate averages in each blpair group,
+    # using the bootstrap-sampled blpair weights
     uvp_avg = []
     for i, uvp in enumerate(uvp_list):
-        # using the bootstrap-sampled blpair weights
-        if hasattr(uvp, 'stats_array'):
-            error_fields = list(uvp.stats_array.keys())
-        else:
-            error_fields = None
         _uvp = average_spectra(uvp, blpair_groups=blpair_grps_list[i],
                                blpair_weights=blpair_wgts_list[i],
-                               time_avg=time_avg, inplace=False, error_field=error_fields)
+                               time_avg=time_avg, inplace=False)
         uvp_avg.append(_uvp)
 
     # Return list of averaged spectra for now
@@ -1257,14 +1243,8 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
     if blpair_groups is None:
         blpair_groups, _, _, _ = utils.get_blvec_reds(uvp, bl_error_tol=bl_error_tol)
 
-    # average already existing estimated errors if they exist.
-    if hasattr(uvp, 'stats_array'):
-        error_fields = list(uvp.stats_array.keys())
-    else:
-        error_fields = None
     # Uniform average
-    uvp_avg = average_spectra(uvp, blpair_groups=blpair_groups, time_avg=time_avg,
-                              inplace=False, error_field=error_fields)
+    uvp_avg = average_spectra(uvp, blpair_groups=blpair_groups, time_avg=time_avg, inplace=False)
 
     # initialize a seed
     if seed is not None: np.random.seed(seed)
