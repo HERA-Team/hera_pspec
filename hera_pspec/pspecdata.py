@@ -3705,7 +3705,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical',
-              include_autocorrs=False, include_crosscorrs=True, xant_flag_thresh=0.95, allow_fft=False):
+              xant_flag_thresh=0.95, allow_fft=False):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -3961,9 +3961,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             - `filter_factors`: list of floats (or float) specifying how much
                                 power within each filter window is to be
                                 suppressed.
-    include_autocorrs : bool, optional
-        If True, include power spectra of autocorrelation visibilities.
-        Default is False.
 
     xant_flag_thresh : float, optional
         fraction of waterfall that needs to be flagged for entire baseline to be
@@ -4180,8 +4177,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
                                       bl_deg_range=bl_deg_range,
-                                      include_autocorrs=include_autocorrs,
-                                      include_crosscorrs=include_crosscorrs,
                                       bl_tol=bl_error_tol,
                                       xant_flag_thresh=xant_flag_thresh)
             bls1_list.append(bls1)
