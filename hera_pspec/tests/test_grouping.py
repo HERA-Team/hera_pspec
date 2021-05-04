@@ -248,7 +248,6 @@ class Test_grouping(unittest.TestCase):
         _blpairs = list(np.unique(self.uvp.blpair_array)[:3])
         uvp3 = self.uvp.select(spws=0, inplace=False, blpairs=_blpairs)
         # add stats_array.
-        uvp3.stats_array = odict({'P_N': odict({spw: np.ones(uvp3.data_array[spw].shape, dtype=complex) for spw in uvp3.spw_array})})
         Nt = uvp3.Ntimes
         uvp3.data_array[0][Nt:2*Nt] = uvp3.data_array[0][:Nt]
         uvp3.data_array[0][2*Nt:] = uvp3.data_array[0][:Nt]
@@ -276,9 +275,7 @@ class Test_grouping(unittest.TestCase):
                 print(uvp_avg.polpair_array)
                 raise
             ps_boot = uvp4[0].get_data((0, blpair, ('xx','xx')))
-            ps_boot_std = uvp4[0].get_stats('P_N', (0, blpair, ('xx','xx')))
             np.testing.assert_array_almost_equal(ps_avg, ps_boot)
-            np.testing.assert_array_almost_equal(ps_avg_std, ps_boot_std)
 
 def test_bootstrap_resampled_error():
     # generate a UVPSpec
