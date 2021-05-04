@@ -1245,7 +1245,7 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
 
     # Uniform average
     uvp_avg = average_spectra(uvp, blpair_groups=blpair_groups, time_avg=time_avg,
-                              inplace=False, error_field=error_fields)
+                              inplace=False)
 
     # initialize a seed
     if seed is not None: np.random.seed(seed)
