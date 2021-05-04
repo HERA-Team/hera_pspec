@@ -9,7 +9,7 @@ from .. import grouping, container
 from pyuvdata import UVData
 from hera_cal import redcal
 import copy
-
+from collections import OrderedDict as odict
 
 class Test_grouping(unittest.TestCase):
 
@@ -228,7 +228,6 @@ class Test_grouping(unittest.TestCase):
         uvp1, wgts = grouping.bootstrap_average_blpairs([self.uvp,],
                                                         blpair_groups,
                                                         time_avg=False)
-
         uvp2, wgts = grouping.bootstrap_average_blpairs([self.uvp,],
                                                         blpair_groups,
                                                         time_avg=True)
@@ -248,6 +247,8 @@ class Test_grouping(unittest.TestCase):
         # Reduce UVPSpec to only 3 blpairs and set them all to the same values
         _blpairs = list(np.unique(self.uvp.blpair_array)[:3])
         uvp3 = self.uvp.select(spws=0, inplace=False, blpairs=_blpairs)
+        # add stats_array.
+        uvp3.stats_array = odict({'P_N': odict({spw: np.ones(uvp3.data_array[spw].shape, dtype=complex) for spw in uvp3.spw_array})})
         Nt = uvp3.Ntimes
         uvp3.data_array[0][Nt:2*Nt] = uvp3.data_array[0][:Nt]
         uvp3.data_array[0][2*Nt:] = uvp3.data_array[0][:Nt]
@@ -259,7 +260,7 @@ class Test_grouping(unittest.TestCase):
         # the same values for uvp3)
         np.random.seed(10)
         uvp_avg = uvp3.average_spectra(blpair_groups=[_blpairs,],
-                                       time_avg=True, inplace=False)
+                                       time_avg=True, inplace=False, error_field=['P_N'])
         blpair = uvp_avg.blpair_array[0]
         for i in range(5):
             # Generate multiple samples and make sure that they are all equal
@@ -270,11 +271,14 @@ class Test_grouping(unittest.TestCase):
                                                      time_avg=True)
             try:
                 ps_avg = uvp_avg.get_data((0, blpair, ('xx','xx')))
+                ps_avg_std = uvp_avg.get_stats('P_N', (0, blpair, ('xx','xx')))
             except:
                 print(uvp_avg.polpair_array)
                 raise
             ps_boot = uvp4[0].get_data((0, blpair, ('xx','xx')))
+            ps_boot_std = uvp4[0].get_stats('P_N', (0, blpair, ('xx','xx')))
             np.testing.assert_array_almost_equal(ps_avg, ps_boot)
+            np.testing.assert_array_almost_equal(ps_avg_std, ps_boot_std)
 
 def test_bootstrap_resampled_error():
     # generate a UVPSpec
