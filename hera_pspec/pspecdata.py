@@ -4282,7 +4282,7 @@ def get_pspec_run_argparser():
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
     a.add_argument("--file_type", default="uvh5", help="filetypes of input UVData. Default is 'uvh5'")
-    a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20 20, 40 40' ->> [(20, 20), (40, 40), ...]")
+    a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20~20,40~40' ->> [(20, 20), (40, 40), ...]")
     a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
     a.add_argument("--interleave_times", default=False, action="store_true", help="Cross multiply even/odd time intervals.")
     a.add_argument("--xant_flag_thresh", default=0.95, type=float, help="fraction of baseline waterfall that needs to be flagged for entire baseline to be flagged (and excluded from pspec)")
