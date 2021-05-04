@@ -1162,12 +1162,16 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
             j += n_blps
 
     # Loop over UVPSpec objects and calculate averages in each blpair group,
-    # using the bootstrap-sampled blpair weights
     uvp_avg = []
     for i, uvp in enumerate(uvp_list):
+        # using the bootstrap-sampled blpair weights
+        if hasattr(uvp, 'stats_array'):
+            error_fields = list(uvp.stats_array.keys())
+        else:
+            error_fields = None
         _uvp = average_spectra(uvp, blpair_groups=blpair_grps_list[i],
                                blpair_weights=blpair_wgts_list[i],
-                               time_avg=time_avg, inplace=False)
+                               time_avg=time_avg, inplace=False, error_field=error_fields)
         uvp_avg.append(_uvp)
 
     # Return list of averaged spectra for now
@@ -1243,8 +1247,14 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
     if blpair_groups is None:
         blpair_groups, _, _, _ = utils.get_blvec_reds(uvp, bl_error_tol=bl_error_tol)
 
+    # average already existing estimated errors if they exist.
+    if hasattr(uvp, 'stats_array'):
+        error_fields = list(uvp.stats_array.keys())
+    else:
+        error_fields = None
     # Uniform average
-    uvp_avg = average_spectra(uvp, blpair_groups=blpair_groups, time_avg=time_avg, inplace=False)
+    uvp_avg = average_spectra(uvp, blpair_groups=blpair_groups, time_avg=time_avg,
+                              inplace=False, error_field=error_fields)
 
     # initialize a seed
     if seed is not None: np.random.seed(seed)
