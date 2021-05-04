@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
 import uvtools.dspec as dspec
 from collections import OrderedDict as odict
-import copy
+
 
 from . import conversions as conversions, uvpspec_utils as uvputils
 
@@ -428,13 +428,9 @@ class PSpecBeamUV(PSpecBeamBase):
 
         # setup primary power beam
         self.primary_beam = uvb
-        self.primary_beam_stokes = copy.deepcopy(uvb)
         if uvb.beam_type == 'efield':
             self.primary_beam.efield_to_power(inplace=True)
-            self.primary_beam_stokes.efield_to_pstokes(inplace=True)
-
-        self.primary_beam.peak_normalize()
-        self.primary_beam_stokes.peak_normalize()
+            self.primary_beam.peak_normalize()
 
     def beam_normalized_response(self, pol='pI', freq=None, x_orientation=None):
         """
@@ -518,10 +514,7 @@ class PSpecBeamUV(PSpecBeamBase):
             Scalar integral over beam solid angle.
         """
         if hasattr(self.primary_beam, 'get_beam_area'):
-            if pol in ['pI', 'pQ', 'pU', 'pV', 1, 2, 3, 4]:
-                return np.real(self.primary_beam_stokes.get_beam_area(pol))
-            else:
-                return np.real(self.primary_beam.get_beam_area(pol))
+            return np.real(self.primary_beam.get_beam_area(pol))
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
 
@@ -546,10 +539,7 @@ class PSpecBeamUV(PSpecBeamBase):
         primary_beam_area: float, array-like
         """
         if hasattr(self.primary_beam, 'get_beam_area'):
-            if pol in ['pI', 'pQ', 'pU', 'pV', 1, 2, 3, 4]:
-                return np.real(self.primary_beam_stokes.get_beam_sq_area(pol))
-            else:
-                return np.real(self.primary_beam.get_beam_sq_area(pol))
+            return np.real(self.primary_beam.get_beam_sq_area(pol))
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
 
