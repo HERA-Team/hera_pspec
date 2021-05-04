@@ -346,11 +346,11 @@ def test_uvp_noise_error_arser():
     # test argparser for noise error bars.
     ap = utils.uvp_noise_error_parser()
     args=ap.parse_args(["container.hdf5", "autos.uvh5", "beam.uvbeam", "--groups", "dset0_dset1"])
-    nt.assert_equal(args.pspec_container, "container.hdf5")
-    nt.assert_equal(args.auto_file, "autos.uvh5")
-    nt.assert_equal(args.beam, "beam.uvbeam")
-    nt.assert_equal(args.groups, ["dset0_dset1"])
-    nt.assert_true(args.spectra is None)
+    assert args.pspec_container == "container.hdf5"
+    assert args.auto_file == "autos.uvh5"
+    assert args.beam == "beam.uvbeam"
+    assert args.groups == ["dset0_dset1"]
+    assert args.spectra is None
 
 def test_job_monitor():
     # open empty files
