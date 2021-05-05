@@ -9,7 +9,6 @@ from .. import grouping, container
 from pyuvdata import UVData
 from hera_cal import redcal
 import copy
-from collections import OrderedDict as odict
 
 class Test_grouping(unittest.TestCase):
 
