@@ -259,7 +259,7 @@ class Test_grouping(unittest.TestCase):
         # the same values for uvp3)
         np.random.seed(10)
         uvp_avg = uvp3.average_spectra(blpair_groups=[_blpairs,],
-                                       time_avg=True, inplace=False, error_field=['P_N'])
+                                       time_avg=True, inplace=False)
         blpair = uvp_avg.blpair_array[0]
         for i in range(5):
             # Generate multiple samples and make sure that they are all equal
@@ -270,7 +270,6 @@ class Test_grouping(unittest.TestCase):
                                                      time_avg=True)
             try:
                 ps_avg = uvp_avg.get_data((0, blpair, ('xx','xx')))
-                ps_avg_std = uvp_avg.get_stats('P_N', (0, blpair, ('xx','xx')))
             except:
                 print(uvp_avg.polpair_array)
                 raise
