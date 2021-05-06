@@ -13,9 +13,15 @@ uvd = UVData()
 uvd.read(args.inputdata)
 if args.outputdata is None:
     args.outputdata = args.inputdata
-# generate pstokes and append to file.
+if args.inplace:
+    # if inplace, append new pstokes onto existing file.
+    uvd_output = copy.deepcopy(uvd)
+else:
+    # otherwise, output uvd does not contain original polarizations.
+    uvd_output = pstokes.construct_pstokes(args.pstokes[0])
 for p in args.pstokes:
-    if pyuvdata.utils.polstr2num(p) not in uvd.polarization_array:
-        uvd += pstokes.construct_pstokes(uvd, uvd, pstokes=p)
+    if pyuvdata.utils.polstr2num(p) not in uvd_output.polarization_array:
+        uvd_output += pstokes.construct_pstokes(uvd, uvd, pstokes=p)
+
 # overwrite file.
-uvd.write_uvh5(args.outputdata, clobber=args.clobber)
+uvd_output.write_uvh5(args.outputdata, clobber=args.clobber)
