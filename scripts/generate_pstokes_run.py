@@ -18,7 +18,7 @@ if args.inplace:
     uvd_output = copy.deepcopy(uvd)
 else:
     # otherwise, output uvd does not contain original polarizations.
-    uvd_output = pstokes.construct_pstokes(args.pstokes[0])
+    uvd_output = pstokes.construct_pstokes(uvd, uvd, args.pstokes[0])
 for p in args.pstokes:
     if pyuvdata.utils.polstr2num(p) not in uvd_output.polarization_array:
         uvd_output += pstokes.construct_pstokes(uvd, uvd, pstokes=p)
