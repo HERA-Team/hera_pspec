@@ -359,4 +359,5 @@ def generate_pstokes_argparser():
                                                    "if no outputdata is provided, will use inputdata, appending"
                                                    "pstokes to original linear pols.")
     a.add_argument("--clobber", action="store_true", default=False, help="Overwrite outputdata or original linpol only file.")
+    a.add_argument("--inplace", action="store_true", default=False, help="If inplace, keep the original linear polarizations in the input file. Default is False.")
     return a
