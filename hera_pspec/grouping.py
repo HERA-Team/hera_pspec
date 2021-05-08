@@ -1162,6 +1162,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
             j += n_blps
 
     # Loop over UVPSpec objects and calculate averages in each blpair group,
+    # using the bootstrap-sampled blpair weights
     uvp_avg = []
     for i, uvp in enumerate(uvp_list):
         # using the bootstrap-sampled blpair weights

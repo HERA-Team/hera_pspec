@@ -4012,7 +4012,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # Construct dataset pairs to operate on
     Ndsets = len(dsets)
     if dset_pairs is None:
-        # this fails silently if we only provided a single dset.
         if len(dsets) > 1:
             dset_pairs = list(itertools.combinations(range(Ndsets), 2))
         else:
@@ -4235,28 +4234,45 @@ def get_pspec_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
     def list_of_int_tuples(v):
-        v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        if '~' in v:
+            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_str_tuples(v):
-        v = [tuple([str(_x) for _x in x.split('~')]) for x in v.split(",")]
+        if '~' in v:
+            v = [tuple([str(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([str(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_tuple_tuples(v):
-        v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
-        v = [(x[:2], x[2:]) for x in v]
+        if '~' in v:
+            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+            v = [(x[:2], x[2:]) for x in v]
+        else:
+            v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
     a.add_argument("filename", type=str, help="Output filename of HDF5 container.")
     a.add_argument("--dsets_std", nargs='*', default=None, type=str, help="List of miriad filepaths to visibility standard deviations.")
     a.add_argument("--groupname", default=None, type=str, help="Groupname for the UVPSpec objects in the HDF5 container.")
-    a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE. Ex: '0~0,1~1' --> [(0, 0), (1, 1), ...]")
+    a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE. Two acceptable formats are "
+                                                                               "Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and "
+                                                                               "Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]")
     a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
-    a.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections. Ex: '200~300,500~650' --> [(200, 300), (500, 650), ...]")
+    a.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections. Two acceptable formats are "
+                                                                               "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
+                                                                               "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     a.add_argument("--n_dlys", default=None, type=int, nargs='+', help="List of integers specifying number of delays to use per spectral window selection.")
-    a.add_argument("--pol_pairs", default=None, type=list_of_str_tuples, help="List of pol-string pairs to use in OQE. Ex: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]")
-    a.add_argument("--blpairs", default=None, type=list_of_tuple_tuples, help="List of baseline-pair antenna integers to run OQE on. Ex: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]")
+    a.add_argument("--pol_pairs", default=None, type=list_of_str_tuples, help="List of pol-string pairs to use in OQE. Two acceptable formats are "
+                                                                              "Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and "
+                                                                              "Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]")
+    a.add_argument("--blpairs", default=None, type=list_of_tuple_tuples, help="List of baseline-pair antenna integers to run OQE on. Two acceptable formats are "
+                                                                              "Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and "
+                                                                              "Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]")
     a.add_argument("--input_data_weight", default='identity', type=str, help="Data weighting for OQE. See PSpecData.pspec for details.")
     a.add_argument("--norm", default='I', type=str, help='M-matrix normalization type for OQE. See PSpecData.pspec for details.')
     a.add_argument("--taper", default='none', type=str, help="Taper function to use in OQE delay transform. See PSpecData.pspec for details.")
