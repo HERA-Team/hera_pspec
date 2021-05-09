@@ -4250,9 +4250,9 @@ def get_pspec_run_argparser():
     def list_of_tuple_tuples(v):
         if '~' in v:
             v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
-            v = [(x[:2], x[2:]) for x in v]
         else:
             v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
+        v = [(x[:2], x[2:]) for x in v]
         return v
 
     a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
