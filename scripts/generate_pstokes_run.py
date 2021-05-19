@@ -13,7 +13,7 @@ uvd = UVData()
 uvd.read(args.inputdata)
 if args.outputdata is None:
     args.outputdata = args.inputdata
-if args.inplace:
+if args.keep_vispols:
     # if inplace, append new pstokes onto existing file.
     uvd_output = copy.deepcopy(uvd)
 else:
