@@ -893,7 +893,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     return uvp
 
 
-
 def fold_spectra(uvp):
     """
     Average bandpowers from matching positive and negative delay bins onto a
