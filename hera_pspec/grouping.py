@@ -1175,7 +1175,6 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
     # using the bootstrap-sampled blpair weights
     uvp_avg = []
     for i, uvp in enumerate(uvp_list):
-        # using the bootstrap-sampled blpair weights
         _uvp = average_spectra(uvp, blpair_groups=blpair_grps_list[i],
                                blpair_weights=blpair_wgts_list[i],
                                time_avg=time_avg, inplace=False)
