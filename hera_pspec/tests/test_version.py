@@ -1,8 +1,7 @@
 """Tests for version.py."""
 import os
 import sys
-
-import nose.tools as nt
+import pytest
 
 try:
     # Python 2
@@ -11,7 +10,7 @@ except:
     # Python 3
     from io import StringIO
 import hera_pspec
-from hera_pspec import version
+from .. import version
 import json
 
 
@@ -24,7 +23,7 @@ def test_main():
         sys.stdout = out
         hera_pspec.version.main()
         output = out.getvalue()
-        nt.assert_equal(output, 'Version = {v}\ngit origin = {o}\n'
+        assert (output == 'Version = {v}\ngit origin = {o}\n'
                                 'git branch = {b}\ngit description = {d}\n'
                         .format(v=version_info['version'],
                                 o=version_info['git_origin'],

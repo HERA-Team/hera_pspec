@@ -1,8 +1,8 @@
 import unittest
-import nose.tools as nt
+import pytest
 import numpy as np
-from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec import testing, pspecbeam, UVPSpec
+from .. import uvpspec_utils as uvputils
+from .. import testing, pspecbeam, UVPSpec
 from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 import os
@@ -36,7 +36,7 @@ def test_select_common():
     uvp_list = [uvp1, uvp2]
     uvp_new = uvputils.select_common(uvp_list, spws=True, blpairs=True,
                                      times=True, polpairs=True, inplace=False)
-    nt.assert_equal(uvp_new[0], uvp_new[1])
+    assert uvp_new[0] == uvp_new[1]
     np.testing.assert_array_equal(uvp_new[0].time_avg_array,
                                   uvp_new[1].time_avg_array)
 
@@ -44,13 +44,13 @@ def test_select_common():
     uvp_list_2 = [uvp1, uvp2, uvp3]
     uvp_new_2 = uvputils.select_common(uvp_list_2, spws=True, blpairs=True,
                                        times=True, polpairs=True, inplace=False)
-    nt.assert_equal(uvp_new_2[0], uvp_new_2[1])
-    nt.assert_equal(uvp_new_2[0], uvp_new_2[2])
+    assert uvp_new_2[0] == uvp_new_2[1]
+    assert uvp_new_2[0] == uvp_new_2[2]
     np.testing.assert_array_equal(uvp_new_2[0].time_avg_array,
                                   uvp_new_2[1].time_avg_array)
 
     # Check that zero overlap in times raises a ValueError
-    nt.assert_raises(ValueError, uvputils.select_common, [uvp2, uvp6],
+    pytest.raises(ValueError, uvputils.select_common, [uvp2, uvp6],
                                   spws=True, blpairs=True, times=True,
                                   polpairs=True, inplace=False)
 
@@ -61,39 +61,39 @@ def test_select_common():
                                        polpairs=True, inplace=False)
 
     # Check that zero overlap in baselines raises a ValueError
-    nt.assert_raises(ValueError, uvputils.select_common, [uvp3, uvp5],
+    pytest.raises(ValueError, uvputils.select_common, [uvp3, uvp5],
                                   spws=True, blpairs=True, times=True,
                                   polpairs=True, inplace=False)
 
     # Check that matching times are ignored when set to False
     uvp_new = uvputils.select_common(uvp_list, spws=True, blpairs=True,
                                      times=False, polpairs=True, inplace=False)
-    nt.assert_not_equal( np.sum(uvp_new[0].time_avg_array
-                              - uvp_new[1].time_avg_array), 0.)
-    nt.assert_equal(len(uvp_new), len(uvp_list))
+    assert  np.sum(uvp_new[0].time_avg_array
+                   - uvp_new[1].time_avg_array) != 0.
+    assert len(uvp_new) == len(uvp_list)
 
     # Check that in-place selection works
     uvputils.select_common(uvp_list, spws=True, blpairs=True,
                            times=True, polpairs=True, inplace=True)
-    nt.assert_equal(uvp1, uvp2)
+    assert uvp1 == uvp2
 
     # check uvplist > 2
-    nt.assert_raises(IndexError, uvputils.select_common, uvp_list[:1])
+    pytest.raises(IndexError, uvputils.select_common, uvp_list[:1])
 
     # check no spw overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.freq_array += 10e6
-    nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], spws=True)
+    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7], spws=True)
 
     # check no lst overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.lst_avg_array += 0.1
-    nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7], lsts=True)
+    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7], lsts=True)
 
     # check pol overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.polpair_array[0] = 1212 # = (-8,-8)
-    nt.assert_raises(ValueError, uvputils.select_common, [uvp1, uvp7],
+    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7],
                                  polpairs=True)
 
 def test_get_blpairs_from_bls():
@@ -123,16 +123,16 @@ def test_get_red_bls():
     # Get redundant baseline groups
     bls, lens, angs = uvp.get_red_bls()
 
-    nt.assert_equal(len(bls), 3) # three red grps in this file
-    nt.assert_equal(len(bls), len(lens)) # Should be one length for each group
-    nt.assert_equal(len(bls), len(angs)) # Ditto, for angles
+    assert len(bls) == 3 # three red grps in this file
+    assert len(bls) == len(lens) # Should be one length for each group
+    assert len(bls) == len(angs) # Ditto, for angles
 
     # Check that number of grouped baselines = total no. of baselines
     num_bls = 0
     for grp in bls:
         for bl in grp:
             num_bls += 1
-    nt.assert_equal(num_bls, np.unique(uvp.bl_array).size)
+    assert num_bls == np.unique(uvp.bl_array).size
 
 
 def test_get_red_blpairs():
@@ -147,19 +147,19 @@ def test_get_red_blpairs():
     # Get redundant baseline groups
     blps, lens, angs = uvp.get_red_blpairs()
 
-    nt.assert_equal(len(blps), 3) # three red grps in this file
-    nt.assert_equal(len(blps), len(lens)) # Should be one length for each group
-    nt.assert_equal(len(blps), len(angs)) # Ditto, for angles
+    assert len(blps) == 3 # three red grps in this file
+    assert len(blps) == len(lens) # Should be one length for each group
+    assert len(blps) == len(angs) # Ditto, for angles
 
     # Check output type
-    nt.assert_equal(isinstance(blps[0][0], (np.int, int)), True)
+    assert isinstance(blps[0][0], (np.int, int))
 
     # Check that number of grouped blps = total no. of blps
     num_blps = 0
     for grp in blps:
         for blp in grp:
             num_blps += 1
-    nt.assert_equal(num_blps, np.unique(uvp.blpair_array).size)
+    assert num_blps == np.unique(uvp.blpair_array).size
 
 
 def test_polpair_int2tuple():
@@ -181,14 +181,14 @@ def test_polpair_int2tuple():
     # Test converting to int and then back again
     pol_pairs_returned = uvputils.polpair_int2tuple(pol_ints, pol_strings=True)
     for i in range(len(polpairs)):
-        nt.assert_equal(polpairs[i], pol_pairs_returned[i])
+        assert polpairs[i] == pol_pairs_returned[i]
 
     # Check that errors are raised appropriately
-    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, ('xx','xx'))
-    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, 'xx')
-    nt.assert_raises(AssertionError, uvputils.polpair_int2tuple, 'pI')
-    nt.assert_raises(ValueError, uvputils.polpair_int2tuple, 999)
-    nt.assert_raises(ValueError, uvputils.polpair_int2tuple, [999,])
+    pytest.raises(AssertionError, uvputils.polpair_int2tuple, ('xx','xx'))
+    pytest.raises(AssertionError, uvputils.polpair_int2tuple, 'xx')
+    pytest.raises(AssertionError, uvputils.polpair_int2tuple, 'pI')
+    pytest.raises(ValueError, uvputils.polpair_int2tuple, 999)
+    pytest.raises(ValueError, uvputils.polpair_int2tuple, [999,])
 
 
 def test_subtract_uvp():
@@ -206,35 +206,35 @@ def test_subtract_uvp():
 
     # test execution
     uvs = uvputils.subtract_uvp(uvp, uvp, run_check=True)
-    nt.assert_true(isinstance(uvs, UVPSpec))
-    nt.assert_true(hasattr(uvs, "stats_array"))
-    nt.assert_true(hasattr(uvs, "cov_array_real"))
+    assert isinstance(uvs, UVPSpec)
+    assert hasattr(uvs, "stats_array")
+    assert hasattr(uvs, "cov_array_real")
 
     # we subtracted uvp from itself, so data_array should be zero
-    nt.assert_true(np.isclose(uvs.data_array[0], 0.0).all())
+    assert np.isclose(uvs.data_array[0], 0.0).all()
 
     # check stats_array is np.sqrt(2)
-    nt.assert_true(np.isclose(uvs.stats_array['mystat'][0], np.sqrt(2)).all())
+    assert np.isclose(uvs.stats_array['mystat'][0], np.sqrt(2)).all()
 
 
 def test_conj_blpair_int():
     conj_blpair = uvputils._conj_blpair_int(101102103104)
-    nt.assert_equal(conj_blpair, 103104101102)
+    assert conj_blpair == 103104101102
 
 
 def test_conj_bl_int():
     conj_bl = uvputils._conj_bl_int(101102)
-    nt.assert_equal(conj_bl, 102101)
+    assert conj_bl == 102101
 
 
 def test_conj_blpair():
     blpair = uvputils._conj_blpair(101102103104, which='first')
-    nt.assert_equal(blpair, 102101103104)
+    assert blpair == 102101103104
     blpair = uvputils._conj_blpair(101102103104, which='second')
-    nt.assert_equal(blpair, 101102104103)
+    assert blpair == 101102104103
     blpair = uvputils._conj_blpair(101102103104, which='both')
-    nt.assert_equal(blpair, 102101104103)
-    nt.assert_raises(ValueError, uvputils._conj_blpair, 102101103104, which='foo')
+    assert blpair == 102101104103
+    pytest.raises(ValueError, uvputils._conj_blpair, 102101103104, which='foo')
 
 
 def test_fast_is_in():
@@ -246,7 +246,7 @@ def test_fast_is_in():
               0.1, 0.15, 0.3, 0.3, ]
     src_blpts = np.array(list(zip(blps, times)))
 
-    nt.assert_true(uvputils._fast_is_in(src_blpts, [(101102104103, 0.2)])[0])
+    assert uvputils._fast_is_in(src_blpts, [(101102104103, 0.2)])[0]
 
 
 def test_fast_lookup_blpairts():
@@ -285,18 +285,13 @@ def test_r_param_compression():
     rp = uvputils.decompress_r_params(rp_str_1)
     for rpk in rp:
         for rpfk in rp[rpk]:
-            nt.assert_true(rp[rpk][rpfk] == r_params[rpk][rpfk])
+            assert rp[rpk][rpfk] == r_params[rpk][rpfk]
     for rpk in r_params:
         for rpfk in r_params[rpk]:
-            nt.assert_true(r_params[rpk][rpfk] == rp[rpk][rpfk])
+            assert r_params[rpk][rpfk] == rp[rpk][rpfk]
 
     rp_str_2 = uvputils.compress_r_params(rp)
-    nt.assert_true(json.loads(rp_str_1) == json.loads(rp_str_2))
+    assert json.loads(rp_str_1) == json.loads(rp_str_2)
 
-    nt.assert_true(uvputils.compress_r_params({}) == '')
-    nt.assert_true(uvputils.decompress_r_params('') == {})
-
-    print("rp_str_1")
-    print(rp_str_1)
-    print("rp_str_2")
-    print(rp_str_2)
+    assert uvputils.compress_r_params({}) == ''
+    assert uvputils.decompress_r_params('') == {}

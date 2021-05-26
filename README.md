@@ -1,7 +1,7 @@
 # ``hera_pspec``: HERA delay spectrum estimation
 
 ![Run Tests](https://github.com/HERA-Team/hera_pspec/workflows/Run%20Tests/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/HERA-Team/hera_pspec/badge.svg?branch=master)](https://coveralls.io/github/HERA-Team/hera_pspec?branch=master)
+[![codecov](https://codecov.io/gh/HERA-Team/hera_pspec/branch/master/graph/badge.svg)](https://codecov.io/gh/HERA-Team/hera_pspec)
 [![Documentation](https://readthedocs.org/projects/hera-pspec/badge/?version=latest)](https://readthedocs.org/projects/hera-pspec/badge/?version=latest)
 
 The ``hera_pspec`` library provides all of the tools and data structures needed to perform a delay 
@@ -19,7 +19,7 @@ required dependencies. See below for manual dependency management.
 If you are using `conda`, you may wish to install the following dependencies manually
 to avoid them being installed automatically by `pip`::
 
-    $ conda install -c conda-forge "numpy>=1.15" "astropy>=2.0" "aipy>=3.0rc2" h5py pyuvdata scipy matplotlib pyyaml h5py scikit-learn
+    $ conda install -c conda-forge "numpy>=1.15" "astropy>=2.0" h5py pyuvdata scipy matplotlib pyyaml
     
 ### Developing
 If you are developing `hera_pspec`, it is preferred that you do so in a fresh `conda`
@@ -36,8 +36,8 @@ This will install extra dependencies required for testing/development as well as
 standard ones.
 
 ### Running Tests
-Uses the `nose` package to execute test suite.
-From the source `hera_pspec` directory run: `nosetests`.
+Uses the `pytest` package to execute test suite.
+From the source `hera_pspec` directory run: `pytest`.
 
 
 ## Running `hera_pspec`

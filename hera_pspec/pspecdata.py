@@ -3666,9 +3666,8 @@ class PSpecData(object):
         for dset in self.dsets:
             _dlst = np.median(np.diff(np.unique(dset.lst_array)))
             if not np.isclose(dlst, _dlst, atol=10**(-lst_tol) / dset.Ntimes):
-                print("not all datasets in self.dsets are on the same LST "
+                raise ValueError("Not all datasets in self.dsets are on the same LST "
                       "grid, cannot LST trim.")
-                return
 
         # get lst array of each dataset, turn into string and add to common_lsts
         lst_arrs = []

@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: [3.6, 3.7]
+        python-version: [3.8, 3.9]
       fail-fast: false
 
     steps:
@@ -52,4 +52,20 @@ jobs:
       run: |
         export PATH="$HOME/miniconda/bin:$PATH"
         source activate $ENV_NAME
-        nosetests -P hera_pspec --with-coverage --cover-package=hera_pspec --verbose
+        export MPLBACKEND=agg
+        #nosetests -P hera_pspec --with-coverage --cover-package=hera_pspec --verbose
+        pytest --cov=hera_pspec --cov-config="./.coveragerc" \
+               --cov-report xml:"./coverage.xml" --junitxml="./test-reports/xunit.xml"
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.xml
+        directory: ./coverage/reports/
+        flags: unittests
+        env_vars: OS,PYTHON
+        name: codecov-umbrella
+        fail_ci_if_error: true
+        path_to_write_report: ./coverage/codecov_report.txt
+        verbose: true
