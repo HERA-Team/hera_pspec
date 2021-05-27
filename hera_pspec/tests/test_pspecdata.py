@@ -2188,8 +2188,17 @@ def test_window_funcs():
 
 def test_get_argparser():
     args = pspecdata.get_pspec_run_argparser()
+    a = args.parse_args([['foo'], 'bar', '--dset_pairs', '0~0,1~1', '--pol_pairs', 'xx~xx,yy~yy',
+                         '--spw_ranges', '300~400, 600~800', '--blpairs', '24~25~24~25, 37~38~37~38'])
+    assert a.pol_pairs == [('xx', 'xx'), ('yy', 'yy')]
+    assert a.dset_pairs == [(0, 0), (1, 1)]
+    assert a.spw_ranges == [(300, 400), (600, 800)]
+    assert a.blpairs == [((24, 25), (24, 25)), ((37, 38), (37, 38))]
+
+def test_get_argparser_backwards_compatibility():
+    args = pspecdata.get_pspec_run_argparser()
     a = args.parse_args([['foo'], 'bar', '--dset_pairs', '0 0, 1 1', '--pol_pairs', 'xx xx, yy yy',
-                         '--spw_ranges', '300 400, 600 800', '--blpairs', '24 25 24 25, 37 38 37 38'])
+                        '--spw_ranges', '300 400, 600 800', '--blpairs', '24 25 24 25, 37 38 37 38'])
     assert a.pol_pairs == [('xx', 'xx'), ('yy', 'yy')]
     assert a.dset_pairs == [(0, 0), (1, 1)]
     assert a.spw_ranges == [(300, 400), (600, 800)]

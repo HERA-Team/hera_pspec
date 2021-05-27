@@ -10,7 +10,6 @@ from pyuvdata import UVData
 from hera_cal import redcal
 import copy
 
-
 class Test_grouping(unittest.TestCase):
 
     def setUp(self):
@@ -228,7 +227,6 @@ class Test_grouping(unittest.TestCase):
         uvp1, wgts = grouping.bootstrap_average_blpairs([self.uvp,],
                                                         blpair_groups,
                                                         time_avg=False)
-
         uvp2, wgts = grouping.bootstrap_average_blpairs([self.uvp,],
                                                         blpair_groups,
                                                         time_avg=True)
@@ -248,6 +246,7 @@ class Test_grouping(unittest.TestCase):
         # Reduce UVPSpec to only 3 blpairs and set them all to the same values
         _blpairs = list(np.unique(self.uvp.blpair_array)[:3])
         uvp3 = self.uvp.select(spws=0, inplace=False, blpairs=_blpairs)
+
         Nt = uvp3.Ntimes
         uvp3.data_array[0][Nt:2*Nt] = uvp3.data_array[0][:Nt]
         uvp3.data_array[0][2*Nt:] = uvp3.data_array[0][:Nt]

@@ -342,6 +342,16 @@ def test_get_blvec_reds():
      red_bl_tag) = utils.get_blvec_reds(uvp, bl_error_tol=1.0, match_bl_lens=True)
     assert len(red_bl_grp) == 1
 
+def test_uvp_noise_error_arser():
+    # test argparser for noise error bars.
+    ap = utils.uvp_noise_error_parser()
+    args=ap.parse_args(["container.hdf5", "autos.uvh5", "beam.uvbeam", "--groups", "dset0_dset1"])
+    assert args.pspec_container == "container.hdf5"
+    assert args.auto_file == "autos.uvh5"
+    assert args.beam == "beam.uvbeam"
+    assert args.groups == ["dset0_dset1"]
+    assert args.spectra is None
+
 def test_job_monitor():
     # open empty files
     datafiles = ["./{}".format(i) for i in ['a', 'b', 'c', 'd']]
