@@ -23,5 +23,5 @@ for p in args.pstokes:
     if pyuvdata.utils.polstr2num(p) not in uvd_output.polarization_array:
         uvd_output += pstokes.construct_pstokes(uvd, uvd, pstokes=p)
 
-# overwrite file.
+# write file.
 uvd_output.write_uvh5(args.outputdata, clobber=args.clobber)

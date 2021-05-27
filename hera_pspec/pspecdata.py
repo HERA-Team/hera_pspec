@@ -4234,6 +4234,10 @@ def get_pspec_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
     def list_of_int_tuples(v):
+        """Format for parsing lists of integer pairs for different OQE args.
+             Two acceptable formats are
+             Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and
+             Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]"""
         if '~' in v:
             v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
         else:
@@ -4241,6 +4245,10 @@ def get_pspec_run_argparser():
         return v
 
     def list_of_str_tuples(v):
+        """Lists of string 2-tuples for various OQE args (ex. Polarization pairs).
+           Two acceptable formats are
+           Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and
+           Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]"""
         if '~' in v:
             v = [tuple([str(_x) for _x in x.split('~')]) for x in v.split(",")]
         else:
@@ -4248,6 +4256,9 @@ def get_pspec_run_argparser():
         return v
 
     def list_of_tuple_tuples(v):
+        """List of tuple tuples for various OQE args (ex. baseline pair lists). Two acceptable formats are
+            Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and
+            Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...])"""
         if '~' in v:
             v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
         else:
