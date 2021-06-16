@@ -1439,15 +1439,7 @@ class PSpecData(object):
             H_ab = (1/2) Tr[R_1 Q_a^alt R_2 Q_b]
 
         (See HERA memo #44). As currently implemented, this approximates the
-        primary beam as frequency independent. Under this approximation, the
-        our H_ab is defined using the equation above *except* we have
-        Q^tapered rather than Q_b, where
-
-            \overline{Q}^{tapered,beta}
-            = e^{i 2pi eta_beta (nu_i - nu_j)} gamma(nu_i) gamma(nu_j)
-
-        where gamma is the tapering function. Again, see HERA memo #44 for
-        details.
+        primary beam as frequency independent.
 
         The sampling option determines whether one is assuming that the
         output points are integrals over k bins or samples at specific
@@ -2587,8 +2579,10 @@ class PSpecData(object):
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
         """
-        Computes an adjustment factor for the pspec scalar that is needed
-        when the number of delay bins is not equal to the number of
+        Computes an adjustment factor for the pspec scalar. There are 
+        two reasons why this might be needed:
+
+        1) When the number of delay bins is not equal to the number of
         frequency channels.
 
         This adjustment is necessary because
@@ -2602,6 +2596,14 @@ class PSpecData(object):
         If the data weighting is not equal to "identity" then
         we generally need a separate scalar adjustment for each
         alpha.
+
+        2) Even when the number of delay bins is equal to the number
+        of frequency channels, there is an extra adjustment necessary
+        to account for tapering functions. The reason for this is that
+        our current code accounts for the tapering function in the
+        normalization matrix M *and* accounts for it again in the
+        pspec scalar. The adjustment provided by this function
+        essentially cancels out one of these extra copies.
 
         This function uses the state of self.taper in constructing adjustment.
         See PSpecData.pspec for details.
