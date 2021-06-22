@@ -368,7 +368,7 @@ class UVPSpec(object):
         one entry per baseline.
 
         In a `UVPSpec` object, the dictionary is compressed so that a single
-        `r_param` entry correspondsto multiple baselines and is stored as a
+        `r_param` entry corresponds to multiple baselines and is stored as a
         JSON format string.
 
         This function reads the compressed string and returns the dictionary
