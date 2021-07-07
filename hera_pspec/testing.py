@@ -485,7 +485,7 @@ def sky_noise_sim(data, beam, cov_amp=1000, cov_length_scale=10, constant_per_bl
     autos = {}
     for key in bls:
         if key[0] == key[1] and key[2].upper() in AUTOVISPOLS:
-            J2K = hs.utils.jansky_to_kelvin(freqs/1e9, OmegaP[key[2]]) / 1e3
+            J2K = hs.utils.jansky_to_kelvin(freqs/1e9, OmegaP[key[2]])
             # handle stokespols
             if key[2].upper() in ['PQ', 'PU', 'PV']:
                 autos[key] = uvd.get_data(key[:2] + ('pI',)).real * J2K
