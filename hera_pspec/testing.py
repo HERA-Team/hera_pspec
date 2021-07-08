@@ -485,12 +485,11 @@ def sky_noise_sim(data, beam, cov_amp=1000, cov_length_scale=10, constant_per_bl
     autos = {}
     for key in bls:
         if key[0] == key[1] and key[2].upper() in AUTOVISPOLS:
-            J2K = hs.utils.jansky_to_kelvin(freqs/1e9, OmegaP[key[2]])
             # handle stokespols
             if key[2].upper() in ['PQ', 'PU', 'PV']:
-                autos[key] = uvd.get_data(key[:2] + ('pI',)).real * J2K
+                autos[key] = uvd.get_data(key[:2] + ('pI',)).real
             else:
-                autos[key] = uvd.get_data(key).real * J2K
+                autos[key] = uvd.get_data(key).real
 
     # get signal if constant across bl
     if constant_per_bl:
@@ -502,10 +501,10 @@ def sky_noise_sim(data, beam, cov_amp=1000, cov_length_scale=10, constant_per_bl
     np.random.seed(bl_loop_seed)
     for bl in crossbls:
         # get time and freq dependent Tsys for this baseline
-        Tsys = np.sqrt(autos[(bl[0], bl[0], bl[2])] * autos[(bl[1], bl[1], bl[2])])
+        Tsys_jy = np.sqrt(autos[(bl[0], bl[0], bl[2])] * autos[(bl[1], bl[1], bl[2])])
 
         # get raw thermal noise
-        n = hs.noise.sky_noise_jy(lsts, freqs/1e9,  autovis=Tsys, omega_p=OmegaP[bl[2]], integration_time=int_time)
+        n = hs.noise.sky_noise_jy(lsts, freqs/1e9,  autovis=Tsys_jy, omega_p=OmegaP[bl[2]], integration_time=int_time)
 
         # divide by nsamples: set nsample==0 to inf
         if divide_by_nsamp:
