@@ -22,4 +22,4 @@ dependencies:
     - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
     - git+https://github.com/HERA-Team/uvtools
     - git+https://github.com/HERA-Team/hera_cal
-    - git+https://github.com/HERA-Team/hera_sim
+    - git+https://github.com/HERA-Team/hera_sim.git@2005a45af50049c78e1f30b4bc0401b5ab3bf044
