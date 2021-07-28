@@ -210,10 +210,10 @@ class PSpecData(object):
         for dset, dset_std, cal in zip(dsets, dsets_std, cals):
             if cal is not None:
                 if dset is not None:
-                    uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag)
                     dset.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
                 if dset_std is not None:
-                    uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag)
                     dset_std.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
 
         # Append to list

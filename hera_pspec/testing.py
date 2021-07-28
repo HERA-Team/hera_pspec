@@ -545,7 +545,7 @@ def gauss_cov_fg(cov_amp, cov_length_scale, freqs, Ntimes=100, constant_in_time=
     return s
 
 
-def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, Trx=0.0):
+def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, channel_width=None, Trx=0.0):
     """Make a noise realization for a given auto-visibility level and beam.
 
     This is a simple replacement for ``hera_sim.noise.sky_noise_jy``.
@@ -558,9 +558,8 @@ def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, Trx=0.0)
         Frequencies at which to compute the sky noise, in Hz.
     autovis : float
         Autocorrelation visibility amplitude, in Jy.
-    omega_p : array_like or callable, optional
-        If callable, a function of frequency giving the integrated beam
-        area. If an array, same length as given frequencies.
+    omega_p : callable or array_like
+        A function of frequency giving the integrated beam area.
     integration_time : float, optional
         Integration time in seconds. By default, use the average difference
         between given LSTs.
@@ -575,13 +574,16 @@ def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, Trx=0.0)
         2D array of white noise in LST/freq.
     """
     # Beam solid angle
-    assert callable(omega_p), "omega_p must be a callable function"
-    omega_p = omega_p(freqs)
+    if callable(omega_p):
+        omega_p = omega_p(freqs)
+    
+    if channel_width is None:
+        channel_width = np.mean(np.diff(freqs))
 
     # Calculate Jansky to Kelvin conversion factor
     # The factor of 1e-26 converts from Jy to W/m^2/Hz.
     wavelengths = conversions.units.c / freqs  # meters
-    Jy2K = 1e-26 * wavelengths ** 2 / (2 * conversions.units.kB * omega_p)
+    Jy2K = 1e-26 * wavelengths ** 2 / (2 * conversions.units.kb * omega_p)
 
     # Use autocorrelation vsibility to set noise scale
     Tsky = autovis * Jy2K.reshape(1, -1)
@@ -707,7 +709,7 @@ def sky_noise_sim(
         # get raw thermal noise
         n = sky_noise_jy_autos(
             lsts,
-            freqs / 1e9,
+            freqs,
             autovis=Tsys_jy,
             omega_p=OmegaP[bl[2]],
             integration_time=int_time,
