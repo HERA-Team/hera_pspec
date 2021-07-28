@@ -98,6 +98,37 @@ def test_noise_sim():
     assert uvn.Npols == uvd.Npols
 
 
+def test_sky_noise_jy_autos():
+    
+    # Load data
+    uvd = UVData()
+    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    uvd.read_miriad(uvfile)
+    
+    # Get input arrays
+    lsts = np.unique(uvd.lst_array)
+    freqs = np.unique(uvd.freq_array)
+    int_time = np.median(uvd.integration_time)
+    channel_width = np.mean(np.diff(freqs))
+    
+    # Callable beam function
+    omega_p = lambda freq: 0.05 * (freq / 100.e6)**-1.
+    
+    # Call function
+    n = testing.sky_noise_jy_autos(
+            lsts,
+            freqs,
+            autovis=150.,
+            omega_p=omega_p,
+            integration_time=int_time,
+            channel_width=channel_width
+        )
+    
+    # Check that results are finite
+    assert np.all(~np.isnan(n))
+    assert np.all(~np.isinf(n))
+
+
 def test_sky_noise_sim():
     uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
