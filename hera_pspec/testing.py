@@ -5,7 +5,6 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
 from scipy import stats, interpolate
-import hera_sim as hs
 from astropy import constants
 
 from . import uvpspec, pspecdata, conversions, pspecbeam, utils, uvpspec_utils as uvputils
@@ -415,6 +414,57 @@ def gauss_cov_fg(cov_amp, cov_length_scale, freqs, Ntimes=100, constant_in_time=
     return s
 
 
+def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, Trx=0.):
+    """Make a noise realization for a given auto-visibility level and beam.
+    
+    This is a simple replacement for ``hera_sim.noise.sky_noise_jy``.
+    
+    Parameters
+    ----------
+    lsts : array_like
+        LSTs at which to compute the sky noise.
+    freqs : array_like
+        Frequencies at which to compute the sky noise, in Hz.
+    autovis : float
+        Autocorrelation visibility amplitude, in Jy.
+    omega_p : array_like or callable, optional
+        If callable, a function of frequency giving the integrated beam
+        area. If an array, same length as given frequencies.
+    integration_time : float, optional
+        Integration time in seconds. By default, use the average difference
+        between given LSTs.
+    channel_width : float, optional
+        Channel width in Hz, by default the mean difference between frequencies.
+    Trx : float, optional
+        Receiver temperature, in K.
+    
+    Returns
+    -------
+    noise : ndarray
+        2D array of white noise in LST/freq.
+    """
+    # Beam solid angle
+    assert callable(omega_p), "omega_p must be a callable function"
+    omega_p = omega_p(freqs)
+    
+    # Calculate Jansky to Kelvin conversion factor
+    # The factor of 1e-26 converts from Jy to W/m^2/Hz.
+    wavelengths = conversions.units.c / freqs  # meters
+    Jy2K = 1e-26 * wavelengths**2 / (2 * conversions.units.kB * omega_p)
+    
+    # Use autocorrelation vsibility to set noise scale
+    Tsky = autovis * Jy2K.reshape(1, -1)
+    Tsky += Trx # add in the receiver temperature
+
+    # Calculate noise visibility sts. dev. in Jy (assuming Tsky is in K)
+    vis = Tsky / np.sqrt(integration_time * channel_width) / Jy2K.reshape(1, -1)
+
+    # Make noise realization
+    x1 = np.random.normal(scale=1./np.sqrt(2), size=vis.shape)
+    x2 = np.random.normal(scale=1./np.sqrt(2), size=vis.shape)
+    return  (x1 + 1.j*x2) * vis
+
+
 def sky_noise_sim(data, beam, cov_amp=1000, cov_length_scale=10, constant_per_bl=True,
                   constant_in_time=True, bl_loop_seed=None, divide_by_nsamp=False):
     """
@@ -504,7 +554,7 @@ def sky_noise_sim(data, beam, cov_amp=1000, cov_length_scale=10, constant_per_bl
         Tsys_jy = np.sqrt(autos[(bl[0], bl[0], bl[2])] * autos[(bl[1], bl[1], bl[2])])
 
         # get raw thermal noise
-        n = hs.noise.sky_noise_jy(lsts, freqs/1e9,  autovis=Tsys_jy, omega_p=OmegaP[bl[2]], integration_time=int_time)
+        n = sky_noise_jy_autos(lsts, freqs/1e9,  autovis=Tsys_jy, omega_p=OmegaP[bl[2]], integration_time=int_time)
 
         # divide by nsamples: set nsample==0 to inf
         if divide_by_nsamp:
