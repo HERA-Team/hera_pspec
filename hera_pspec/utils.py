@@ -1389,8 +1389,9 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
 
     # get metadata if needed
     if precomp_P_N is None:
-        lsts = np.unique(auto_Tsys.lst_array)
-        freqs = auto_Tsys.freq_array[0]
+        lst_indices = np.unique(auto_Tsys.lst_array, return_index=True)[1]
+        lsts = auto_Tsys.lst_array[sorted(lst_indices)]
+        reqs = auto_Tsys.freq_array[0]
     # calculate scalars for spws and polpairs.
     scalar = {}
     for spw in uvp.spw_array:
