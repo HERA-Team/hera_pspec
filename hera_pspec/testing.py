@@ -576,7 +576,8 @@ def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, channel_
     # Beam solid angle
     if callable(omega_p):
         omega_p = omega_p(freqs)
-    
+    assert omega_p.size == freqs.size, "`omega_p` must have the same length as `freqs`"
+
     if channel_width is None:
         channel_width = np.mean(np.diff(freqs))
 
