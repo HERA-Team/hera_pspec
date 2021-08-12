@@ -45,8 +45,7 @@ setup_args = {
         'pyyaml',
         'h5py',
         'uvtools @ git+git://github.com/HERA-Team/uvtools',
-        'hera_cal @ git+git://github.com/HERA-Team/hera_cal',
-        'hera_sim @ git+git://github.com/HERA-Team/hera_sim'
+        'hera_cal @ git+git://github.com/HERA-Team/hera_cal'
     ],
     'include_package_data': True,
     'scripts': ['scripts/pspec_run.py', 'scripts/pspec_red.py',
