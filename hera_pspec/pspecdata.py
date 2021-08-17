@@ -210,10 +210,10 @@ class PSpecData(object):
         for dset, dset_std, cal in zip(dsets, dsets_std, cals):
             if cal is not None:
                 if dset is not None:
-                    uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag)
                     dset.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
                 if dset_std is not None:
-                    uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag, flag_missing=cal_flag)
+                    uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag)
                     dset_std.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
 
         # Append to list
@@ -1439,15 +1439,7 @@ class PSpecData(object):
             H_ab = (1/2) Tr[R_1 Q_a^alt R_2 Q_b]
 
         (See HERA memo #44). As currently implemented, this approximates the
-        primary beam as frequency independent. Under this approximation, the
-        our H_ab is defined using the equation above *except* we have
-        Q^tapered rather than Q_b, where
-
-            \overline{Q}^{tapered,beta}
-            = e^{i 2pi eta_beta (nu_i - nu_j)} gamma(nu_i) gamma(nu_j)
-
-        where gamma is the tapering function. Again, see HERA memo #44 for
-        details.
+        primary beam as frequency independent.
 
         The sampling option determines whether one is assuming that the
         output points are integrals over k bins or samples at specific
@@ -2587,8 +2579,10 @@ class PSpecData(object):
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
         """
-        Computes an adjustment factor for the pspec scalar that is needed
-        when the number of delay bins is not equal to the number of
+        Computes an adjustment factor for the pspec scalar. There are 
+        two reasons why this might be needed:
+
+        1) When the number of delay bins is not equal to the number of
         frequency channels.
 
         This adjustment is necessary because
@@ -2602,6 +2596,14 @@ class PSpecData(object):
         If the data weighting is not equal to "identity" then
         we generally need a separate scalar adjustment for each
         alpha.
+
+        2) Even when the number of delay bins is equal to the number
+        of frequency channels, there is an extra adjustment necessary
+        to account for tapering functions. The reason for this is that
+        our current code accounts for the tapering function in the
+        normalization matrix M *and* accounts for it again in the
+        pspec scalar. The adjustment provided by this function
+        essentially cancels out one of these extra copies.
 
         This function uses the state of self.taper in constructing adjustment.
         See PSpecData.pspec for details.
@@ -3973,6 +3975,14 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         Use an fft to compute q-hat.
         Default is False.
 
+    xant_flag_thresh : float, optional
+        fraction of waterfall that needs to be flagged for entire baseline to be
+        considered flagged and excluded from data. Default is 0.95
+
+    allow_fft : bool, optional
+        Use an fft to compute q-hat.
+        Default is False.
+
     Returns
     -------
     ds : PSpecData object
@@ -4015,7 +4025,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # Construct dataset pairs to operate on
     Ndsets = len(dsets)
     if dset_pairs is None:
-        # this fails silently if we only provided a single dset.
         if len(dsets) > 1:
             dset_pairs = list(itertools.combinations(range(Ndsets), 2))
         else:
@@ -4215,7 +4224,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # check bls lists aren't empty
         if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
             continue
-        print('calculating power spectrum')
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
@@ -4241,15 +4249,35 @@ def get_pspec_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
     def list_of_int_tuples(v):
-        v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        """Format for parsing lists of integer pairs for different OQE args.
+             Two acceptable formats are
+             Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and
+             Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]"""
+        if '~' in v:
+            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_str_tuples(v):
-        v = [tuple([str(_x) for _x in x.split('~')]) for x in v.split(",")]
+        """Lists of string 2-tuples for various OQE args (ex. Polarization pairs).
+           Two acceptable formats are
+           Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and
+           Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]"""
+        if '~' in v:
+            v = [tuple([str(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([str(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_tuple_tuples(v):
-        v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        """List of tuple tuples for various OQE args (ex. baseline pair lists). Two acceptable formats are
+            Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and
+            Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...])"""
+        if '~' in v:
+            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         v = [(x[:2], x[2:]) for x in v]
         return v
 
@@ -4257,12 +4285,20 @@ def get_pspec_run_argparser():
     a.add_argument("filename", type=str, help="Output filename of HDF5 container.")
     a.add_argument("--dsets_std", nargs='*', default=None, type=str, help="List of miriad filepaths to visibility standard deviations.")
     a.add_argument("--groupname", default=None, type=str, help="Groupname for the UVPSpec objects in the HDF5 container.")
-    a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE. Ex: '0~0,1~1' --> [(0, 0), (1, 1), ...]")
+    a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE. Two acceptable formats are "
+                                                                               "Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and "
+                                                                               "Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]")
     a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
-    a.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections. Ex: '200~300,500~650' --> [(200, 300), (500, 650), ...]")
+    a.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections. Two acceptable formats are "
+                                                                               "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
+                                                                               "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     a.add_argument("--n_dlys", default=None, type=int, nargs='+', help="List of integers specifying number of delays to use per spectral window selection.")
-    a.add_argument("--pol_pairs", default=None, type=list_of_str_tuples, help="List of pol-string pairs to use in OQE. Ex: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]")
-    a.add_argument("--blpairs", default=None, type=list_of_tuple_tuples, help="List of baseline-pair antenna integers to run OQE on. Ex: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]")
+    a.add_argument("--pol_pairs", default=None, type=list_of_str_tuples, help="List of pol-string pairs to use in OQE. Two acceptable formats are "
+                                                                              "Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and "
+                                                                              "Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]")
+    a.add_argument("--blpairs", default=None, type=list_of_tuple_tuples, help="List of baseline-pair antenna integers to run OQE on. Two acceptable formats are "
+                                                                              "Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and "
+                                                                              "Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]")
     a.add_argument("--input_data_weight", default='identity', type=str, help="Data weighting for OQE. See PSpecData.pspec for details.")
     a.add_argument("--norm", default='I', type=str, help='M-matrix normalization type for OQE. See PSpecData.pspec for details.')
     a.add_argument("--taper", default='none', type=str, help="Taper function to use in OQE delay transform. See PSpecData.pspec for details.")
