@@ -1428,12 +1428,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                         Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
                         Tflag = np.all(Tflag, axis=-1)
                         # interpolate to appropriate LST grid
-                        if np.count_nonzero(~Tflag) > 1:
-                            Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
-                        elif np.count_nonzero(~Tflag) == 1:
-                            Tsys = Tsys[~Tflag]
-                        else:
-                            Tsys = np.inf
+                        Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
 
                     # calculate P_N
                     P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real', scalar=scalar[(spw, polpair)])[blp_int]
