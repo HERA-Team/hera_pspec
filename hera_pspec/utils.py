@@ -1315,6 +1315,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
             raise ValueError("UVPSpec must have OmegaP and OmegaPP to make a beam")
     else:
         raise ValueError("beam must be a string, PSpecBeamBase subclass or UVPSpec object")
+
     # convert autos in Jy to Tsys in Kelvin
     J2K = {pol: beam.Jy_to_mK(uvd.freq_array[0], pol=pol)/1e3 for pol in pols}
     for blpol in uvd.get_antpairpols():
@@ -1329,7 +1330,6 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
         uvd.write_uvh5(Tsys_outfile, clobber=True)
 
     return uvd
-
 
 def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_correction=True,  num_steps_scalar=2000, little_h=True):
     """
@@ -1372,7 +1372,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     little_h : bool, optional
         Use little_h units in power spectrum.
         Default is True.
-        
+
     """
     from hera_pspec import uvpspec_utils
 
