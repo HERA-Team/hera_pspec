@@ -209,6 +209,22 @@ class Test_Utils(unittest.TestCase):
         pytest.raises(AssertionError, utils.calc_blpair_reds, uvd, uvd2)
         pytest.raises(AssertionError, utils.calc_blpair_reds, uvd, uvd, exclude_auto_bls=True, exclude_cross_bls=True)
 
+    def test_calc_blpair_reds_autos_only(self):
+        # test include_crosscorrs selection option being set to false.
+        fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
+        uvd = UVData()
+        uvd.read_miriad(fname)
+        # basic execution
+        (bls1, bls2, blps, xants1, xants2, rgrps, lens,
+         angs) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, extra_info=True,
+                                        exclude_auto_bls=False, exclude_permutations=True, include_crosscorrs=False,
+                                        include_autocorrs=True)
+        assert len(bls1) > 0
+        for bl1, bl2 in zip(bls1, bls2):
+            assert bl1[0] == bl1[1]
+            assert bl2[0] == bl2[1]
+
+
     def test_get_delays(self):
         utils.get_delays(np.linspace(100., 200., 50)*1e6)
 
@@ -252,6 +268,18 @@ class Test_Utils(unittest.TestCase):
 
         # Check errors when wrong types input
         pytest.raises(TypeError, utils.get_reds, [1., 2.])
+
+    def test_get_reds_autos_only(self):
+        fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
+        uvd = UVData()
+        uvd.read_miriad(fname, read_data=False)
+        antpos, ants = uvd.get_ENU_antpos()
+        antpos_d = dict(list(zip(ants, antpos)))
+        xants = [0, 1, 2]
+        r, l, a = utils.get_reds(fname, xants=xants, autos_only=True, add_autos=True)
+        assert len(r) == 1
+        for bl in r[0]:
+            assert bl[0] == bl[1]
 
     def test_config_pspec_blpairs(self):
         # test basic execution
