@@ -1342,7 +1342,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
         Power spectra to calculate thermal noise errors.
         If err_type == 'P_SN', uvp should not have any
         incoherent averaging applied.
-
+        
     auto_Tsys : UVData object, optional
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.

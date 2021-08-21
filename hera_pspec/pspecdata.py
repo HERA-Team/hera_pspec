@@ -2579,7 +2579,7 @@ class PSpecData(object):
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
         """
-        Computes an adjustment factor for the pspec scalar. There are 
+        Computes an adjustment factor for the pspec scalar. There are
         two reasons why this might be needed:
 
         1) When the number of delay bins is not equal to the number of
@@ -3967,13 +3967,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         If True, include power spectra of autocorrelation visibilities.
         Default is False.
 
-    xant_flag_thresh : float, optional
-        fraction of waterfall that needs to be flagged for entire baseline to be
-        considered flagged and excluded from data. Default is 0.95
-
-    allow_fft : bool, optional
-        Use an fft to compute q-hat.
-        Default is False.
+    include_crosscorrs: bool, optional
+        If True, include power spectra from crosscorrelation visibilities.
+        Default is True.
 
     xant_flag_thresh : float, optional
         fraction of waterfall that needs to be flagged for entire baseline to be
