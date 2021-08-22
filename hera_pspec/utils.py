@@ -233,7 +233,8 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                      exclude_cross_bls=False,
                      exclude_permutations=True, Nblps_per_group=None,
                      bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
-                     xants=None, extra_info=False):
+                     xants=None, include_autocorrs=False,
+                     include_crosscorrs=True, extra_info=False):
     """
     Use hera_cal.redcal to get matching, redundant baseline-pair groups from
     uvd1 and uvd2 within the specified baseline tolerance, not including
@@ -287,6 +288,16 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         len-2 tuple containing (minimum, maximum) baseline angle in degrees
         to keep in baseline selection
 
+    include_autocorrs : bool, optional
+        If True, include autocorrelation visibilities in their own redundant group.
+        If False, dont return any autocorrelation visibilities.
+        default is False.
+
+    include_crosscorrs : bool, optional
+        If True, include crosscorrelation visibilities. Set to False only if you
+        want to compute power spectra for autocorrelation visibilities only!
+        default is True.
+
     extra_info : bool, optional
         If True, return three extra arrays containing
         redundant baseline group indices, lengths and angles
@@ -335,8 +346,12 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
             # get antenna numbers
             antnums = uvd1.baseline_to_antnums(bl)
 
-            # continue if autocorr
-            if antnums[0] == antnums[1]: continue
+            # continue if autocorr and we dont want to include them
+            if not include_autocorrs:
+                if antnums[0] == antnums[1]: continue
+
+            if not include_crosscorrs:
+                if antnums[0] != antnums[1]: continue
 
             # work on xants1
             if bl in uvd1.baseline_array:
@@ -346,7 +361,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                 if np.sum(f1) < np.prod(f1.shape) * xant_flag_thresh:
                     if antnums[0] in xants1:
                         xants1.remove(antnums[0])
-                    if antnums[1] in xants2:
+                    if antnums[1] != antnums[0] and antnums[1] in xants1:
                         xants1.remove(antnums[1])
 
             # work on xants2
@@ -357,7 +372,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
                 if np.sum(f2) < np.prod(f2.shape) * xant_flag_thresh:
                     if antnums[0] in xants2:
                         xants2.remove(antnums[0])
-                    if antnums[1] in xants2:
+                    if antnums[1] != antnums[0] and antnums[1] in xants2:
                         xants2.remove(antnums[1])
 
         xants1 = sorted(xants1)
@@ -370,6 +385,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
     # construct redundant groups
     reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
+                                add_autos=include_autocorrs, autos_only=not(include_crosscorrs),
                                 bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
     # construct baseline pairs
     baselines1, baselines2, blpairs, red_groups = [], [], [], []
@@ -665,6 +681,7 @@ def flatten(nested_list):
 def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
                          exclude_permutations=True, bl_len_range=(0, 1e10),
                          bl_deg_range=(0, 180), xants=None, exclude_patterns=None,
+                         include_autocorrs=False,
                          file_type='miriad', verbose=True):
     """
     Given a list of glob-parseable file templates and selections for
@@ -718,6 +735,10 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
         files (after the templates have been filled-in). This currently
         just takes a list of strings, and does not recognize wildcards.
         Default: None.
+
+    include_autocorrs : bool, optional
+        If True, include autocorrelation visibilities
+        in the set of blpair groups calculated and returned.
 
     file_type : str, optional
         File type of the input files. Default: 'miriad'.
@@ -804,7 +825,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     (_bls1, _bls2, _, _,
      _) = calc_blpair_reds(uvd, uvd, filter_blpairs=False, exclude_auto_bls=exclude_auto_bls,
                     exclude_permutations=exclude_permutations, bl_len_range=bl_len_range,
-                    bl_deg_range=bl_deg_range)
+                    include_autocorrs=include_autocorrs, bl_deg_range=bl_deg_range)
 
     # take out xants if fed
     if xants is not None:
@@ -1060,7 +1081,8 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
 
 
 def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False, min_EW_cut=0,
+             bl_deg_range=(0, 180), xants=None, add_autos=False,
+             autos_only=False, min_EW_cut=0,
              file_type='miriad'):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
@@ -1094,6 +1116,10 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
 
     add_autos : bool
         If True, add into autocorrelation group to the redundant group list.
+
+    autos_only : bool, optional
+        If True, only include autocorrelations.
+        Default is False.
 
     min_EW_cut : float
         Baselines with a projected East-West absolute baseline length in meters
@@ -1153,6 +1179,11 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         reds = [list(zip(ants, ants))] + reds
         lens = np.insert(lens, 0, 0)
         angs = np.insert(angs, 0, 0)
+        if autos_only:
+            reds = reds[:1]
+            lens = lens[:1]
+            angs = angs[:1]
+
 
     # filter based on xants
     if xants is not None:
@@ -1300,7 +1331,6 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
 
     return uvd
 
-
 def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_correction=True,  num_steps_scalar=2000, little_h=True):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
@@ -1312,7 +1342,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
         Power spectra to calculate thermal noise errors.
         If err_type == 'P_SN', uvp should not have any
         incoherent averaging applied.
-
+        
     auto_Tsys : UVData object, optional
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.
@@ -1342,7 +1372,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     little_h : bool, optional
         Use little_h units in power spectrum.
         Default is True.
-        
+
     """
     from hera_pspec import uvpspec_utils
 

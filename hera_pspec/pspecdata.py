@@ -2579,7 +2579,7 @@ class PSpecData(object):
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
         """
-        Computes an adjustment factor for the pspec scalar. There are 
+        Computes an adjustment factor for the pspec scalar. There are
         two reasons why this might be needed:
 
         1) When the number of delay bins is not equal to the number of
@@ -3707,7 +3707,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
               history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical',
-              xant_flag_thresh=0.95, allow_fft=False):
+              include_autocorrs=False, include_crosscorrs=True, xant_flag_thresh=0.95, allow_fft=False):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -3963,6 +3963,13 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             - `filter_factors`: list of floats (or float) specifying how much
                                 power within each filter window is to be
                                 suppressed.
+    include_autocorrs : bool, optional
+        If True, include power spectra of autocorrelation visibilities.
+        Default is False.
+
+    include_crosscorrs: bool, optional
+        If True, include power spectra from crosscorrelation visibilities.
+        Default is True.
 
     xant_flag_thresh : float, optional
         fraction of waterfall that needs to be flagged for entire baseline to be
@@ -4178,6 +4185,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
                                       bl_deg_range=bl_deg_range,
+                                      include_autocorrs=include_autocorrs,
+                                      include_crosscorrs=include_crosscorrs,
                                       bl_tol=bl_error_tol,
                                       xant_flag_thresh=xant_flag_thresh)
             bls1_list.append(bls1)
@@ -4313,6 +4322,8 @@ def get_pspec_run_argparser():
     a.add_argument("--file_type", default="uvh5", help="filetypes of input UVData. Default is 'uvh5'")
     a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20~20,40~40' ->> [(20, 20), (40, 40), ...]")
     a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
+    a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include power spectra of autocorr visibilities.")
+    a.add_argument("--exclude_crosscorrs", default=False, action="store_true", help="If True, exclude cross-correlations from power spectra (autocorr power spectra only).")
     a.add_argument("--interleave_times", default=False, action="store_true", help="Cross multiply even/odd time intervals.")
     a.add_argument("--xant_flag_thresh", default=0.95, type=float, help="fraction of baseline waterfall that needs to be flagged for entire baseline to be flagged (and excluded from pspec)")
     a.add_argument("--store_window", default=False, action="store_true", help="store window function array.")
