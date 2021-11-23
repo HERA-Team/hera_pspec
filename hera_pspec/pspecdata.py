@@ -894,7 +894,7 @@ class PSpecData(object):
             cache. Keys are tuples with the following form
             `key = (dset_index, bl_ant_pair_pol_tuple, data_weighting, taper)`
             Example: `(0, (37, 38, 'xx'), 'bh')`
-            
+
             If data_weight == 'dayenu' then additional elements are appended:
             `key + (filter_extension, spw_Nfreqs, symmetric_taper)`
         """
@@ -1067,29 +1067,29 @@ class PSpecData(object):
 
         Parameters
         ----------
-        key: tuple 
+        key: tuple
             Key in the format: (dset, bl, [pol])
-            `dset` is the index of the dataset, `bl` is a 2-tuple, `pol` is a 
+            `dset` is the index of the dataset, `bl` is a 2-tuple, `pol` is a
             float or string specifying polarization.
 
         r_params: dict
-            Dict containing parameters for weighting matrix. Proper fields and 
+            Dict containing parameters for weighting matrix. Proper fields and
             formats depend on the mode of data_weighting.
-            
-            For `data_weighting` set to `dayenu`, this is a dictionary with the 
+
+            For `data_weighting` set to `dayenu`, this is a dictionary with the
             following fields:
-            
-            `filter_centers`, list of floats (or float) specifying the (delay) 
-            channel numbers at which to center filtering windows. Can specify 
+
+            `filter_centers`, list of floats (or float) specifying the (delay)
+            channel numbers at which to center filtering windows. Can specify
             fractional channel number.
-            
-            `filter_half_widths`, list of floats (or float) specifying the 
-            width of each filter window in (delay) channel numbers. Can specify 
+
+            `filter_half_widths`, list of floats (or float) specifying the
+            width of each filter window in (delay) channel numbers. Can specify
             fractional channel number.
-            
-            `filter_factors`, list of floats (or float) specifying how much 
+
+            `filter_factors`, list of floats (or float) specifying how much
             power within each filter window is to be suppressed.
-            
+
             Absence of an `r_params` dictionary will result in an error.
         """
         key = self.parse_blkey(key)
@@ -1439,15 +1439,7 @@ class PSpecData(object):
             H_ab = (1/2) Tr[R_1 Q_a^alt R_2 Q_b]
 
         (See HERA memo #44). As currently implemented, this approximates the
-        primary beam as frequency independent. Under this approximation, the
-        our H_ab is defined using the equation above *except* we have
-        Q^tapered rather than Q_b, where
-
-            \overline{Q}^{tapered,beta}
-            = e^{i 2pi eta_beta (nu_i - nu_j)} gamma(nu_i) gamma(nu_j)
-
-        where gamma is the tapering function. Again, see HERA memo #44 for
-        details.
+        primary beam as frequency independent.
 
         The sampling option determines whether one is assuming that the
         output points are integrals over k bins or samples at specific
@@ -1604,7 +1596,7 @@ class PSpecData(object):
         return 0.5 * E_matrices
 
 
-    def get_unnormed_V(self, key1, key2, model='empirical', exact_norm=False, 
+    def get_unnormed_V(self, key1, key2, model='empirical', exact_norm=False,
                        pol=False, time_index=None):
         """
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
@@ -1670,21 +1662,21 @@ class PSpecData(object):
             Used only if exact_norm is True.
 
         model : string, optional
-            Type of covariance model to calculate, if not cached. 
+            Type of covariance model to calculate, if not cached.
             Options=['empirical', 'dsets', 'autos']
             How the covariances of the input data should be estimated.
-            
+
             In 'dsets' mode, error bars are estimated from user-provided
-            per baseline and per channel standard deivations. 
-            
-            If 'empirical' is set, then error bars are estimated from the data 
-            by averaging the channel-channel covariance of each baseline over 
-            time and then applying the appropriate linear transformations to 
-            these frequency-domain covariances. 
-            
-            If 'autos' is set, the covariances of the input data over a 
-            baseline is estimated from the autocorrelations of the two antennas 
-            over channel bandwidth and integration time. 
+            per baseline and per channel standard deivations.
+
+            If 'empirical' is set, then error bars are estimated from the data
+            by averaging the channel-channel covariance of each baseline over
+            time and then applying the appropriate linear transformations to
+            these frequency-domain covariances.
+
+            If 'autos' is set, the covariances of the input data over a
+            baseline is estimated from the autocorrelations of the two antennas
+            over channel bandwidth and integration time.
 
         time_index : int, optional
             Compute covariance at specific time-step. Default: None.
@@ -1698,9 +1690,9 @@ class PSpecData(object):
         E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
         C1 = self.C_model(key1, model=model, time_index=time_index)
         C2 = self.C_model(key2, model=model, time_index=time_index)
-        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, 
+        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False,
                                      conj_2=False, time_index=time_index)
-        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, 
+        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True,
                                      conj_2=True, time_index=time_index)
 
         E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
@@ -1712,21 +1704,21 @@ class PSpecData(object):
 
         return auto_term + cross_term
 
-    def get_analytic_covariance(self, key1, key2, M=None, exact_norm=False, 
+    def get_analytic_covariance(self, key1, key2, M=None, exact_norm=False,
                                 pol=False, model='empirical', known_cov=None):
         """
         Calculates the auto-covariance matrix for both the real and imaginary
         parts of bandpowers (i.e., the q vectors and the p vectors).
 
         Define:
-        
+
             Real part of q_a = (1/2) (q_a + q_a^*)
             Imaginary part of q_a = (1/2i) (q_a - q_a^\dagger)
             Real part of p_a = (1/2) (p_a + p_a^\dagger)
             Imaginary part of p_a = (1/2i) (p_a - p_a^\dagger)
-        
+
         .. math ::
-        
+
             E^{12,a} = (1/2) R_1 Q^a R_2
             C^{12} = <x1 x2^\dagger> - <x1><x2^\dagger>
             P^{12} = <x1 x2> - <x1><x2>
@@ -1734,41 +1726,41 @@ class PSpecData(object):
             p_a = M_{ab} q_b
 
         Then:
-        
+
         The variance of (1/2) (q_a + q_a^\dagger):
-        
+
         .. math ::
-        
+
             (1/4){ (<q_a q_a> - <q_a><q_a>) + 2(<q_a q_a^\dagger> - <q_a><q_a^\dagger>)
             + (<q_a^\dagger q_a^\dagger> - <q_a^\dagger><q_a^\dagger>) }
 
         The variance of (1/2i) (q_a - q_a^\dagger):
-        
+
         .. math ::
-        
+
             (-1/4){ (<q_a q_a> - <q_a><q_a>) - 2(<q_a q_a^\dagger> - <q_a><q_a^\dagger>)
             + (<q_a^\dagger q_a^\dagger> - <q_a^\dagger><q_a^\dagger>) }
 
         The variance of (1/2) (p_a + p_a^\dagger):
-        
+
         .. math ::
-        
+
             (1/4) { M_{ab} M_{ac} (<q_b q_c> - <q_b><q_c>) +
             M_{ab} M_{ac}^* (<q_b q_c^\dagger> - <q_b><q_c^\dagger>) +
             M_{ab}^* M_{ac} (<q_b^\dagger q_c> - <q_b^\dagger><q_c>) +
             M_{ab}^* M_{ac}^* (<q_b^\dagger q_c^\dagger> - <q_b^\dagger><q_c^\dagger>) }
 
         The variance of (1/2i) (p_a - p_a^\dagger):
-        
+
         .. math ::
-        
+
             (-1/4) { M_{ab} M_{ac} (<q_b q_c> - <q_b><q_c>) -
             M_{ab} M_{ac}^* (<q_b q_c^\dagger> - <q_b><q_c^\dagger>) -
             M_{ab}^* M_{ac} (<q_b^\dagger q_c> - <q_b^\dagger><q_c>) +
             M_{ab}^* M_{ac}^* (<q_b^\dagger q_c^\dagger> - <q_b^\dagger><q_c^\dagger>) }
 
         where
-        
+
         .. math ::
             <q_a q_b> - <q_a><q_b> =
                         tr(E^{12,a} C^{21} E^{12,b} C^{21})
@@ -1783,7 +1775,7 @@ class PSpecData(object):
         Note that
 
         .. math ::
-        
+
             E^{12,a}_{ij}.conj = E^{21,a}_{ji}
 
         This function estimates C^1, C^2, P^{12}, and S^{12} empirically by
@@ -1819,46 +1811,46 @@ class PSpecData(object):
             Used only if exact_norm is True.
 
         model : string, optional
-            Type of covariance model to use. if not cached. 
-            Options=['empirical', 'dsets', 'autos', 'foreground_dependent', 
+            Type of covariance model to use. if not cached.
+            Options=['empirical', 'dsets', 'autos', 'foreground_dependent',
             (other model names in known_cov)].
-            
+
             In `dsets` mode, error bars are estimated from user-provided
             per baseline and per channel standard deivations.
-            
-            In `empirical` mode, error bars are estimated from the data by 
-            averaging the channel-channel covariance of each baseline over time 
+
+            In `empirical` mode, error bars are estimated from the data by
+            averaging the channel-channel covariance of each baseline over time
             and then applying the appropriate linear transformations to these
             frequency-domain covariances.
-            
-            In `autos` mode, the covariances of the input data over a baseline 
-            is estimated from the autocorrelations of the two antennas forming 
+
+            In `autos` mode, the covariances of the input data over a baseline
+            is estimated from the autocorrelations of the two antennas forming
             the baseline across channel bandwidth and integration time.
-            
-            In `foreground_dependent` mode, it involves using auto-correlation 
-            amplitudes to model the input noise covariance and visibility outer 
-            products to model the input systematics covariance. 
-            
-            When model is chosen as `autos` or `dsets`, only C^{11} and C^{22} 
-            are accepted as non-zero values, and the two matrices are also 
-            expected to be diagonal, thus only 
-            <q_a q_b^\dagger> - <q_a><q_b^\dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ] 
+
+            In `foreground_dependent` mode, it involves using auto-correlation
+            amplitudes to model the input noise covariance and visibility outer
+            products to model the input systematics covariance.
+
+            When model is chosen as `autos` or `dsets`, only C^{11} and C^{22}
+            are accepted as non-zero values, and the two matrices are also
+            expected to be diagonal, thus only
+            <q_a q_b^\dagger> - <q_a><q_b^\dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]
             exists in the covariance terms of q vectors.
-            
-            When model is chosen as `foreground_dependent`, we further include 
-            the signal-noise coupling term besides the noise in the output 
-            covariance. Still only <q_a q_b^\dagger> - <q_a><q_b^\dagger> is 
-            non-zero, while it takes a form of 
-            tr[ E^{12,a} Cn^{22} E^{21,b} Cn^{11} +  
-            E^{12,a} Cs^{22} E^{21,b} Cn^{11} + 
+
+            When model is chosen as `foreground_dependent`, we further include
+            the signal-noise coupling term besides the noise in the output
+            covariance. Still only <q_a q_b^\dagger> - <q_a><q_b^\dagger> is
+            non-zero, while it takes a form of
+            tr[ E^{12,a} Cn^{22} E^{21,b} Cn^{11} +
+            E^{12,a} Cs^{22} E^{21,b} Cn^{11} +
             E^{12,a} Cn^{22} E^{21,b} Cs^{11} ],
-            where Cn is just Cautos, the input noise covariance estimated by 
-            the auto-correlation amplitudes (by calling C_model(model='autos')), 
-            and Cs uses the outer product of input visibilities to model the 
+            where Cn is just Cautos, the input noise covariance estimated by
+            the auto-correlation amplitudes (by calling C_model(model='autos')),
+            and Cs uses the outer product of input visibilities to model the
             covariance on systematics.
-            
+
             To construct a symmetric and unbiased covariance matrix, we choose
-            Cs^{11}_{ij} = Cs^{22}_{ij} = 1/2 * [ x1_i x2_j^{*} + x2_i x1_j^{*} ], 
+            Cs^{11}_{ij} = Cs^{22}_{ij} = 1/2 * [ x1_i x2_j^{*} + x2_i x1_j^{*} ],
             which preserves the property Cs_{ij}^* = Cs_{ji}.
 
         known_cov : dicts of covariance matrices
@@ -2159,7 +2151,7 @@ class PSpecData(object):
             M = np.diag(1. / np.sum(G, axis=1))
             W_norm = np.diag(1. / np.sum(H, axis=1))
             W = np.dot(W_norm, H)
-        elif mode == 'L^-1':
+        else:
             raise NotImplementedError("Cholesky decomposition mode not currently supported.")
             # # Cholesky decomposition
             # order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
@@ -2180,8 +2172,6 @@ class PSpecData(object):
             # U,S,V = np.linalg.svd(L_o.conj())
             # M_o = np.dot(np.transpose(V), np.dot(np.diag(1./S), np.transpose(U)))
             # M = np.take(np.take(M_o, iorder, axis=0), iorder, axis=1)
-        else :
-            raise ValueError("User-input M matrix must be built outside of this function.")
 
         return M, W
 
@@ -2589,8 +2579,10 @@ class PSpecData(object):
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
         """
-        Computes an adjustment factor for the pspec scalar that is needed
-        when the number of delay bins is not equal to the number of
+        Computes an adjustment factor for the pspec scalar. There are
+        two reasons why this might be needed:
+
+        1) When the number of delay bins is not equal to the number of
         frequency channels.
 
         This adjustment is necessary because
@@ -2604,6 +2596,14 @@ class PSpecData(object):
         If the data weighting is not equal to "identity" then
         we generally need a separate scalar adjustment for each
         alpha.
+
+        2) Even when the number of delay bins is equal to the number
+        of frequency channels, there is an extra adjustment necessary
+        to account for tapering functions. The reason for this is that
+        our current code accounts for the tapering function in the
+        normalization matrix M *and* accounts for it again in the
+        pspec scalar. The adjustment provided by this function
+        essentially cancels out one of these extra copies.
 
         This function uses the state of self.taper in constructing adjustment.
         See PSpecData.pspec for details.
@@ -2725,10 +2725,10 @@ class PSpecData(object):
     def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
-              baseline_tol=1.0, store_cov=False, store_cov_diag=False, 
+              baseline_tol=1.0, store_cov=False, store_cov_diag=False,
               return_q=False, store_window=True, verbose=True,
               filter_extensions=None, exact_norm=False, history='', r_params=None,
-              cov_model='empirical', known_cov=None):
+              cov_model='empirical', known_cov=None, allow_fft=False):
         """
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -2821,13 +2821,13 @@ class PSpecData(object):
             in the UVPSpec object.
 
         store_cov_diag : bool, optional
-            If True, store the square root of the diagonal of the output 
-            covariance matrix calculated by using get_analytic_covariance(). 
-            The error bars will be stored in the form of: 
+            If True, store the square root of the diagonal of the output
+            covariance matrix calculated by using get_analytic_covariance().
+            The error bars will be stored in the form of:
             `sqrt(diag(cov_array_real)) + 1.j*sqrt(diag(cov_array_imag))`.
-            It's a way to save the disk space since the whole cov_array data 
-            with a size of Ndlys x Ndlys x Ntimes x Nblpairs x Nspws is too 
-            large. 
+            It's a way to save the disk space since the whole cov_array data
+            with a size of Ndlys x Ndlys x Ntimes x Nblpairs x Nspws is too
+            large.
 
         return_q : bool, optional
             If True, return the results (delay spectra and covariance
@@ -2838,42 +2838,42 @@ class PSpecData(object):
             Default: True
 
         cov_model : string, optional
-            Type of covariance model to calculate, if not cached. 
-            
+            Type of covariance model to calculate, if not cached.
+
             Options=['empirical', 'dsets', 'autos', 'foreground_dependent',
             (other model names in known_cov)]
-            
-            In 'dsets' mode, error bars are estimated from user-provided per 
-            baseline and per channel standard deivations. 
-            
-            In 'empirical' mode, error bars are estimated from the data by 
-            averaging the channel-channel covariance of each baseline over 
-            time and then applying the appropriate linear transformations to 
+
+            In 'dsets' mode, error bars are estimated from user-provided per
+            baseline and per channel standard deivations.
+
+            In 'empirical' mode, error bars are estimated from the data by
+            averaging the channel-channel covariance of each baseline over
+            time and then applying the appropriate linear transformations to
             these frequency-domain covariances.
-            
-            In 'autos' mode, the covariances of the input data over a baseline 
-            is estimated from the autocorrelations of the two antennas forming 
+
+            In 'autos' mode, the covariances of the input data over a baseline
+            is estimated from the autocorrelations of the two antennas forming
             the baseline across channel bandwidth and integration time.
-            
-            In 'foreground_dependent' mode, it involves using auto-correlation 
-            amplitudes to model the input noise covariance and visibility 
-            outer products to model the input systematics covariance. 
-            
+
+            In 'foreground_dependent' mode, it involves using auto-correlation
+            amplitudes to model the input noise covariance and visibility
+            outer products to model the input systematics covariance.
+
             For more details see ds.get_analytic_covariance().
 
         known_cov : dicts of input covariance matrices
-            `known_cov` has a type {Ckey:covariance}, which is the same as 
-            ds._C. The matrices stored in known_cov are constructed outside 
-            the PSpecData object, unlike those in ds._C which are constructed 
+            `known_cov` has a type {Ckey:covariance}, which is the same as
+            ds._C. The matrices stored in known_cov are constructed outside
+            the PSpecData object, unlike those in ds._C which are constructed
             internally.
-            
+
             The Ckey should conform to:
             `(dset_pair_index, blpair_int, model, time_index, conj_1, conj_2)`,
             e.g.
             `((0, 1), ((25,37,"xx"), (25, 37, "xx")), 'empirical', False, True)`,
             while covariance are ndarrays with shape (Nfreqs, Nfreqs).
-            
-            Also see PSpecData.set_C() for more details. 
+
+            Also see PSpecData.set_C() for more details.
 
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
@@ -2892,22 +2892,26 @@ class PSpecData(object):
 
         r_params: dictionary with parameters for weighting matrix.
             Proper fields and formats depend on the mode of data_weighting.
-            
-            For `data_weighting` set to 'dayenu', `r_params` should be a dict 
+
+            For `data_weighting` set to 'dayenu', `r_params` should be a dict
             with the following fields:
-            
-            `filter_centers`, a list of floats (or float) specifying the 
-            (delay) channel numbers at which to center filtering windows. Can 
+
+            `filter_centers`, a list of floats (or float) specifying the
+            (delay) channel numbers at which to center filtering windows. Can
             specify fractional channel number.
-            
-            `filter_half_widths`, a list of floats (or float) specifying the 
-            width of each filter window in (delay) channel numbers. Can specify 
+
+            `filter_half_widths`, a list of floats (or float) specifying the
+            width of each filter window in (delay) channel numbers. Can specify
             fractional channel number.
-            
-            `filter_factors`, list of floats (or float) specifying how much 
+
+            `filter_factors`, list of floats (or float) specifying how much
             power within each filter window is to be suppressed.
-            
+
             Absence of an `r_params` dictionary will result in an error.
+
+        allow_fft : bool, optional
+            Use an fft to compute q-hat.
+            Default is False.
 
         Returns
         -------
@@ -2969,10 +2973,6 @@ class PSpecData(object):
                                   "if the tapering AND non-identity "
                                   "weighting matrices are both used.",
                                   verbose=verbose)
-        # # check normalisation matrix if user-input
-        # assert isinstance(norm,dict) or norm in ['I','H^-1','V^-1/2'], \
-        #     "Must give M matrix as a dictionary, for each spectral range and polarisation"\
-        #     "or choose between 'I','H^-1','V^-1/2'"
 
         # get datasets
         assert isinstance(dsets, (list, tuple)), \
@@ -3247,28 +3247,17 @@ class PSpecData(object):
                         if verbose: print("  Building G...")
                         Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
                         Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
+
                     # Calculate unnormalized bandpowers
                     if verbose: print("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol)
+                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
 
                     if verbose: print("  Normalizing power spectrum...")
                     if norm == 'V^-1/2':
                         V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol)
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
-                    # elif isinstance(norm,dict):
-                    elif isinstance(norm,np.ndarray):
-                        # Mv = norm[i][:,:,j] #take ith spectral window and j th polarisation but matrix identical for all baselines and times
-                        # Mv = np.copy(norm[spws,spws])
-                        # print('Copying normalisation matrix')
-                        Mv = np.copy(norm)
-                        Wv = np.dot(Mv,Hv) #already normalised
-                        # W_norm = np.diag(1/np.sum(Wv,axis=1))
-                        # print('Normalising WF')
-                        # Wv = (Wv.T / np.sum(Wv,axis=1)).T
-                        # Wv = Wv * W_norm
                     else:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
-                    # print(Mv[12,54],Wv[12,54])
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
@@ -3278,7 +3267,7 @@ class PSpecData(object):
 
                     # Wide bin adjustment of scalar, which is only needed for
                     # the diagonal norm matrix mode (i.e., norm = 'I')
-                    if ((norm == 'I') or isinstance(norm,np.ndarray)) and not(exact_norm):
+                    if norm == 'I' and not(exact_norm):
                         sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
                         if isinstance(sa, (np.float, float)):
                             pv *= sa
@@ -3299,7 +3288,7 @@ class PSpecData(object):
                             cov_real = cov_real * (scalar)**2.
                             cov_imag = cov_imag * (scalar)**2.
 
-                        if ((norm == 'I') or isinstance(norm,np.ndarray)) and not(exact_norm):
+                        if norm == 'I' and not(exact_norm):
                             if isinstance(sa, (np.float, float)):
                                 cov_real = cov_real * (sa)**2.
                                 cov_imag = cov_imag * (sa)**2.
@@ -3683,9 +3672,8 @@ class PSpecData(object):
         for dset in self.dsets:
             _dlst = np.median(np.diff(np.unique(dset.lst_array)))
             if not np.isclose(dlst, _dlst, atol=10**(-lst_tol) / dset.Ntimes):
-                print("not all datasets in self.dsets are on the same LST "
+                raise ValueError("Not all datasets in self.dsets are on the same LST "
                       "grid, cannot LST trim.")
-                return
 
         # get lst array of each dataset, turn into string and add to common_lsts
         lst_arrs = []
@@ -3718,7 +3706,8 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
               file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
-              history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical'):
+              history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical',
+              include_autocorrs=False, include_crosscorrs=True, xant_flag_thresh=0.95, allow_fft=False):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -3974,6 +3963,21 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             - `filter_factors`: list of floats (or float) specifying how much
                                 power within each filter window is to be
                                 suppressed.
+    include_autocorrs : bool, optional
+        If True, include power spectra of autocorrelation visibilities.
+        Default is False.
+
+    include_crosscorrs: bool, optional
+        If True, include power spectra from crosscorrelation visibilities.
+        Default is True.
+
+    xant_flag_thresh : float, optional
+        fraction of waterfall that needs to be flagged for entire baseline to be
+        considered flagged and excluded from data. Default is 0.95
+
+    allow_fft : bool, optional
+        Use an fft to compute q-hat.
+        Default is False.
 
     Returns
     -------
@@ -4017,7 +4021,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # Construct dataset pairs to operate on
     Ndsets = len(dsets)
     if dset_pairs is None:
-        dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+        if len(dsets) > 1:
+            dset_pairs = list(itertools.combinations(range(Ndsets), 2))
+        else:
+            dset_pairs = [(0, 0)]
 
     if dset_labels is None:
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
@@ -4178,7 +4185,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                                       Nblps_per_group=Nblps_per_group,
                                       bl_len_range=bl_len_range,
                                       bl_deg_range=bl_deg_range,
-                                      bl_tol=bl_error_tol)
+                                      include_autocorrs=include_autocorrs,
+                                      include_crosscorrs=include_crosscorrs,
+                                      bl_tol=bl_error_tol,
+                                      xant_flag_thresh=xant_flag_thresh)
             bls1_list.append(bls1)
             bls2_list.append(bls2)
 
@@ -4210,7 +4220,6 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         # check bls lists aren't empty
         if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
             continue
-
         # Run OQE
         uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
                        spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
@@ -4236,15 +4245,35 @@ def get_pspec_run_argparser():
     a = argparse.ArgumentParser(description="argument parser for pspecdata.pspec_run()")
 
     def list_of_int_tuples(v):
-        v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
+        """Format for parsing lists of integer pairs for different OQE args.
+             Two acceptable formats are
+             Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and
+             Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]"""
+        if '~' in v:
+            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_str_tuples(v):
-        v = [tuple([str(_x) for _x in x.split()]) for x in v.split(",")]
+        """Lists of string 2-tuples for various OQE args (ex. Polarization pairs).
+           Two acceptable formats are
+           Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and
+           Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]"""
+        if '~' in v:
+            v = [tuple([str(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([str(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_tuple_tuples(v):
-        v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
+        """List of tuple tuples for various OQE args (ex. baseline pair lists). Two acceptable formats are
+            Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and
+            Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...])"""
+        if '~' in v:
+            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        else:
+            v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         v = [(x[:2], x[2:]) for x in v]
         return v
 
@@ -4252,12 +4281,20 @@ def get_pspec_run_argparser():
     a.add_argument("filename", type=str, help="Output filename of HDF5 container.")
     a.add_argument("--dsets_std", nargs='*', default=None, type=str, help="List of miriad filepaths to visibility standard deviations.")
     a.add_argument("--groupname", default=None, type=str, help="Groupname for the UVPSpec objects in the HDF5 container.")
-    a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE wrapped in quotes. Ex: '0 0, 1 1' --> [(0, 0), (1, 1), ...]")
+    a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE. Two acceptable formats are "
+                                                                               "Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and "
+                                                                               "Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]")
     a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
-    a.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections wrapped in quotes. Ex: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
+    a.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections. Two acceptable formats are "
+                                                                               "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
+                                                                               "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
     a.add_argument("--n_dlys", default=None, type=int, nargs='+', help="List of integers specifying number of delays to use per spectral window selection.")
-    a.add_argument("--pol_pairs", default=None, type=list_of_str_tuples, help="List of pol-string pairs to use in OQE wrapped in quotes. Ex: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]")
-    a.add_argument("--blpairs", default=None, type=list_of_tuple_tuples, help="List of baseline-pair antenna integers to run OQE on. Ex: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]")
+    a.add_argument("--pol_pairs", default=None, type=list_of_str_tuples, help="List of pol-string pairs to use in OQE. Two acceptable formats are "
+                                                                              "Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and "
+                                                                              "Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]")
+    a.add_argument("--blpairs", default=None, type=list_of_tuple_tuples, help="List of baseline-pair antenna integers to run OQE on. Two acceptable formats are "
+                                                                              "Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and "
+                                                                              "Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]")
     a.add_argument("--input_data_weight", default='identity', type=str, help="Data weighting for OQE. See PSpecData.pspec for details.")
     a.add_argument("--norm", default='I', type=str, help='M-matrix normalization type for OQE. See PSpecData.pspec for details.')
     a.add_argument("--taper", default='none', type=str, help="Taper function to use in OQE delay transform. See PSpecData.pspec for details.")
@@ -4282,8 +4319,15 @@ def get_pspec_run_argparser():
     a.add_argument("--cov_model", default='empirical', type=str, help="Model for computing covariance, currently supports empirical or dsets")
     a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
     a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
-    a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20 20, 40 40' ->> [(20, 20), (40, 40), ...]")
+    a.add_argument("--file_type", default="uvh5", help="filetypes of input UVData. Default is 'uvh5'")
+    a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20~20,40~40' ->> [(20, 20), (40, 40), ...]")
     a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
+    a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include power spectra of autocorr visibilities.")
+    a.add_argument("--exclude_crosscorrs", default=False, action="store_true", help="If True, exclude cross-correlations from power spectra (autocorr power spectra only).")
+    a.add_argument("--interleave_times", default=False, action="store_true", help="Cross multiply even/odd time intervals.")
+    a.add_argument("--xant_flag_thresh", default=0.95, type=float, help="fraction of baseline waterfall that needs to be flagged for entire baseline to be flagged (and excluded from pspec)")
+    a.add_argument("--store_window", default=False, action="store_true", help="store window function array.")
+    a.add_argument("--allow_fft", default=False, action="store_true", help="use an FFT to comptue q-hat.")
     return a
 
 
