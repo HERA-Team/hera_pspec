@@ -8,7 +8,8 @@ from scipy.interpolate import interp2d
 
 from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_utils as uvputils
 
-HERA_bw=np.linspace(1.,2.,1024,endpoint=False)*1e8
+chan_nb = 1024
+HERA_bw=np.linspace(1.,2.,chan_nb,endpoint=False)*1e8
 
 #k-bins
 
@@ -55,6 +56,15 @@ class UVWindow(object):
         self.pol = None
 
     def set_spw_range(self,spw_range):
+        """
+        Sets the spectral range considered to compute the window functions.
+
+        Parameters
+        ----------
+        spw_range : tuple
+            In (start_chan, end_chan). Must be between 0 and 1024 (HERA bandwidth).
+
+        """
 
         assert len(spw_range)==2, "spw_range must be fed as a tuple of frequency indices between 0 and 1024"
 
@@ -66,10 +76,35 @@ class UVWindow(object):
         self.avg_z = self.cosmo.f2z(self.avg_nu)
 
     def set_polarisation(self,pol):
+        """
+        Sets the polarisation considered for the beam to compute the window functions.
+
+        Parameters
+        ----------
+        pol : str
+            Can be pseudo-Stokes or power: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
+        
+        """
 
         self.pol = pol 
 
     def get_FT(self):
+        """
+        Loads the Fourier transform (FT) of the beam from different attributes: 
+            - self.pol
+            - self.spw_range
+        Note that the array has no physical coordinates, they will be later 
+        attributed by kperp4bl_freq.
+
+        Returns
+        ----------
+        Atilde : array_like
+            Real part of the Fourier transform of the beam along the spectral
+            window considered. Has dimensions (Nfreqs,ngrid,ngrid).
+        mapsize : float
+            Size of the flat map the beam was projected onto. 
+            Only used for internal calculations.
+        """
 
         f = h5py.File(self.ft_file, "r") 
         mapsize = f['parameters']['mapsize'][0]
@@ -79,6 +114,30 @@ class UVWindow(object):
         return Atilde, mapsize
 
     def get_kgrid(self, bl_len, mapsize):
+        """
+        Computes the kperp-array the FT of the beam will be interpolated over.
+        Must include all the kperp covered by the spectral window for the 
+        baseline considered.
+
+        Parameters
+        ----------
+        bl_len : float
+            Length of the baseline considered, in meters.
+        mapsize : int
+            Size of the flat map the beam was projected onto. 
+            Only used for internal calculations.
+
+        Returns
+        ----------
+        kgrid : array_like
+            (kperp_x,kperp_y) grid corresponding to a given baseline.
+            Two-dimensional.
+        kperp_norm : array_like
+            Array of kperp vector norms corresponding to kgrid.
+            Two-dimensionsal.
+            Computed as sqrt(kperp_x**2+kperp_y**2).
+
+        """
 
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
         dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h)/(2.*mapsize)
@@ -87,7 +146,29 @@ class UVWindow(object):
         return kgrid, kperp_norm
 
     def kperp4bl_freq(self,freq,bl_len, ngrid, mapsize):    
+        """
+        Computes the range of kperp corresponding to a given
+        baseline-freq pair. It will be assigned to the FT of the beam.
 
+        Parameters
+        ----------
+        freq : float
+            Frequency (in Hz) considered along the spectral window.
+        bl_len : float
+            Length of the baseline considered (in meters).
+        ngrid : int
+            Number of pixels in the FT beam array. 
+            Internal use only. Do not modify.
+        mapsize : float
+            Size of the flat map the beam was projected onto.
+            Internal use only. Do not modify.
+
+        Returns
+        ----------
+        k : array_like  
+            Array of k_perp values to match to the FT of the beam.
+
+        """
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
         q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
@@ -96,7 +177,30 @@ class UVWindow(object):
         return k
 
     def interpolate_FT_beam(self, bl_len, Atilde, mapsize):
+        """
+        Interpolate the FT of the beam on a regular (kperp,kperp) grid.
 
+        Parameters
+        ----------
+        bl_len : float
+            Length of the baseline considered, in meters.
+        Atilde : array_like
+            Array made of the FT of the beam along the spectral window.
+            Must have dimensions (Nfreqs, N, N).
+        mapsize : float
+            Size of the flat map the beam was projected onto.
+            Internal use only. Do not modify.
+
+        Returns
+        ----------
+        Atilde_cube : array_like
+            FT of the beam, interpolated over a regular (kperp_x,kperp_y) grid.
+            Has dimensions (Nfreqs, N, N).
+        kperp_norm : array_like
+            Norm of the kperp vectors throughout the grid.
+            Has dimensions (N,N).
+
+        """
         kgrid, kperp_norm = self.get_kgrid(bl_len, mapsize)
 
         ngrid = Atilde.shape[-1]
@@ -110,6 +214,25 @@ class UVWindow(object):
         return Atilde_cube, kperp_norm
 
     def take_freq_FT(self, Atilde_cube,delta_nu):
+        """
+        Take the Fourier transform along frequency of the beam.
+        Applies taper before taking the FT if appropriate.
+
+        Parameters
+        ----------
+        Atilde_cube : array_like
+            FT of the beam, interpolated over a regular (kperp_x,kperp_y) grid.
+            Has dimensions (Nfreqs, N, N).
+        delta_nu : float
+            Frequency resolution (Channel width) in Hz
+            along the spectral window.
+
+        Returns
+        ----------
+        fnu : array_like
+            Fourier transform of the beam in sky plane and in frequency.
+            Has dimensions (Nfreqs, N, N)
+        """
 
         if self.taper is not None:
             tf = dspec.gen_window(self.taper, self.Nfreqs)
@@ -119,9 +242,37 @@ class UVWindow(object):
 
         return fnu 
 
-    def get_cylindrical_wf(self, bl_len, pol):
+    def get_cylindrical_wf(self, bl_len, pol, Atilde, mapsize):
+        """
+        Get the cylindrical window function i.e. in (kperp,kpara) space
+        for a given baseline and polarisation, along the spectral window.
 
-        Atilde, mapsize = self.get_FT()
+        Parameters
+        ----------
+        bl_len : float
+            Length of the baseline considered, in meters.
+        pol : str
+            Polarisation of the beam. 
+            Can be chosen among 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'.
+
+        Returns
+        ----------
+        wf_array : array_like
+            Window function as a function of (kperp,kpara).
+            Axis 0 is the array of delays considered (self.dly_array).
+            Axis 1 is kperp (kperp_bins defined as global variable).
+            Axis 2 is kparallel (kpara_bins defined as global variable).
+        kperp : array_like
+            Values of kperp corresponding to the axis=1 of wf_array.
+            Note: these values are weighted by their number of counts 
+            in the cylindrical binning.
+        kpara : array_like
+            Values of kpara corresponding to the axis=2 of wf_array.
+            Note: these values are weighted by their number of counts 
+            in the cylindrical binning.
+
+        """
+
         Atilde_cube, kperp_norm = self.interpolate_FT_beam(bl_len, Atilde, mapsize)
         delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
         fnu = self.take_freq_FT(Atilde_cube,delta_nu)
@@ -166,39 +317,74 @@ class UVWindow(object):
 
         return kperp, kpara, self.wf_array
 
-    def get_spherical_wf(self,lens,spw_range,pol,kbins,bl_tol=0.1):
+    def get_spherical_wf(self,bl_groups,bl_lens,spw_range,pol,kbins):
+        """
+        Get spherical window functions for a set of baselines, polarisation,
+        along a given spectral range, and for a set of kbins used for averaging.
 
+        Parameters
+        ----------
+        bl_groups : embedded lists.
+            List of groups of baselines gathered by lengths
+            (can be redundant groups from utils.get_reds).
+        bl_lens : list.
+            List of lengths corresponding to each group
+            (can be redundant groups from utils.get_reds).
+            Must have same length as bl_groups.
+            
+        spw_range : tuple of ints
+            In (start_chan, end_chan). Must be between 0 and 1024 (HERA bandwidth).
+        pol : str
+            Can be pseudo-Stokes or power: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
+        kbins : array_like
+            1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
+            Make sure the values are consistent with self.little_h.
+
+        """
+
+        assert len(bl_groups)==len(bl_lens), "bl_groups and bl_lens must have same length"
+        nbls = len(bl_groups)
+        bl_lens = np.array(bl_lens)
+        red_nb = np.array([len(l) for l in bl_groups])
+
+        if not (isinstance(spw_range[0],int) and isinstance(spw_range[1],int)):
+            raise Warning('spw indices given are not integers... taking their floor value')
+            spw_range = (int(np.floor(spw_range[0])),int(np.floor(spw_range[1])))
+        assert min(spw_range)>=0 and max(spw_range)<chan_nb, \
+                "spw_range must be integers within the HERA frequency channels"
+        assert spw_range[1]-spw_range[0]>0, "Require non-zero spectral range."
+        self.set_spw_range(spw_range)
+        
+        assert len(kbins)>1, "must feed array of k bins for spherical averasge"                                                  
         kbins = np.array(kbins)
         nbinsk = kbins.size
         dk = np.diff(kbins).mean()
         krange = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
 
-        self.set_spw_range(spw_range)
+        assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], \
+                "Wrong polarisation string."
         self.set_polarisation(pol)
 
-        lens = np.round(lens,decimals=abs(int(np.log10(bl_tol))))
-        bl_lens, red_nb = np.unique(lens,return_counts=True)
-        nbls = bl_lens.size
-
+        # get FT of the beam from file
+        Atilde, mapsize = self.get_FT()
+        # get cylindrical window functions for each baseline length considered
+        # as a function of (kperp, kpara)
+        # the kperp and kpara bins are given as global parameters
         kperp_array, kpar_array = np.zeros((nbls,nbins_kperp)),np.zeros((nbls,nbins_kpara))
         wf_array = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
-        for ib, bl_len in enumerate(bl_lens):
-            if self.verbose: print('Computing for bl %i of %i...' %(ib+1,nbls))
-            kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_len,pol)
-
-        ktot_instru = np.zeros((nbls,self.Nfreqs))
         for ib in range(nbls):
-            for it in range(self.Nfreqs):
-                kp1 = bl_lens[ib] * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)
-                kp2 = self.dly_array[it] * self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h)
-                kp1 = kp1/np.sqrt(2.)
-                ktot_instru[ib,it] = np.sqrt(kp1**2+kp2**2)
+            if self.verbose: print('Computing for bl %i of %i...' %(ib+1,nbls))
+            kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,Atilde,mapsize)
 
+        # construct array giving the k probed by each baseline-tau pair
+        kperps = bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) / np.sqrt(2.)
+        kparas = self.dly_array * self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) 
+        kmags = np.sqrt(kperps[:,None]**2+kparas**2)
 
         wf_spherical = np.zeros((nbinsk,nbinsk))
         count = np.zeros(nbinsk,dtype=int)
         for m1 in range(nbinsk):
-            mask2 = (krange[m1]<=ktot_instru) & (ktot_instru<krange[m1+1]).astype(int)
+            mask2 = (krange[m1]<=kmags) & (kmags<krange[m1+1]).astype(int)
             mask2 = mask2*red_nb[:,None] #account for redundancy
             count[m1] = np.sum(mask2) 
             wf_temp = np.sum(wf_array*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
