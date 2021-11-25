@@ -242,7 +242,35 @@ class UVWindow(object):
 
         return fnu 
 
-    def get_wf_for_tau(self,tau,alpha,q,wf_array1):
+    def get_wf_for_tau(self,tau,wf_array1):
+        """
+        Get the cylindrical window function for a given delay
+        after binning on the sky plane.
+
+        Parameters
+        ----------
+        tau : float
+            Delay, in secs.      
+        wf_array1: array_like
+            Window function after cylindrical average on kperp plane.
+            Dimensions: (nbins_kperp,nfreq).
+
+        Returns
+        ----------
+        wf_array : array_like
+            Window function as a function of (kperp,kpara).
+            Axis 0 is kperp (kperp_bins defined as global variable).
+            Axis 1 is kparallel (kpara_bins defined as global variable)
+        kpara : array_like
+            Values of kpara corresponding to the axis=2 of wf_array.
+            Note: these values are weighted by their number of counts 
+            in the cylindrical binning.
+        
+        """
+
+        #### get kparallel grid
+        alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
+        q = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs),axes=-1)/delta_nu #unit 1: FT along theta
 
         wf_array = np.zeros((nbins_kperp,nbins_kpara))
         kpara = np.zeros(nbins_kpara)
@@ -307,21 +335,14 @@ class UVWindow(object):
                     kperp[m] = np.mean(kperp_norm[mask])
         t3 = time.time()
         # in frequency direction    
-        #### get kparallel grid
-        alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
-        q = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs),axes=-1)/delta_nu #unit 1: FT along theta
         # binning
+        kpara, wf0 = self.get_wf_for_tau(self.dly_array[0],wf_array1)
         wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
-        kpara = np.zeros(nbins_kpara)
-        for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
-            kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,alpha,q,wf_array1)
-            # kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
-            # for j in range(nbins_kperp):
-            #     for m in range(nbins_kpara):
-            #         mask= (kpara_range[m]<=kpar_norm) & (kpar_norm<kpara_range[m+1])
-            #         if np.any(mask): #cannot compute mean if zero elements
-            #             wf_array[it,j,m]=np.mean(wf_array1[j,mask])
-            #             kpara[m] = np.mean(kpar_norm[mask])
+        for it,tau in enumerate(delay_arr[:nfreq//2+1]):
+            wf_array[it,:,:]=np.roll(wf0,-it,axis=1)
+        # kpara = np.zeros(nbins_kpara)
+        # for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
+        #     kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,wf_array1)
         #fill by symmetry for tau = -tau
         if (self.Nfreqs%2==0):
             wf_array[self.Nfreqs//2+1:,:,:]=np.flip(wf_array,axis=0)[self.Nfreqs//2:-1]
