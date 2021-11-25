@@ -82,7 +82,6 @@ class UVWindow(object):
 
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
         dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h)/(2.*mapsize)
-        print(kp_centre,dk)
         kgrid = np.arange(kp_centre-0.020,kp_centre+0.020,step=dk)# np.arange(kmin,kmax+dk,step=dk)
         kperp_norm = np.sqrt(np.power(kgrid,2)[:, None] + np.power(kgrid,2))
         return kgrid, kperp_norm
@@ -105,7 +104,6 @@ class UVWindow(object):
         for i in range(self.Nfreqs):
             q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
             k = self.kperp4bl_freq(self.freq_array[i],bl_len, ngrid=ngrid, mapsize = mapsize)
-            print(kgrid)
             A_real = interp2d(k,k,Atilde[i,:,:],bounds_error=False,fill_value=0.)
             Atilde_cube[:,:,i] = A_real(kgrid,kgrid) 
 
@@ -136,7 +134,7 @@ class UVWindow(object):
         kperp, count1 = np.zeros(nbins_kperp), np.zeros(nbins_kperp)
         for i in range(self.Nfreqs):
             for m in range(nbins_kperp):
-                mask= (kperp_bins[m]<=kperp_norm) & (kperp_norm<kperp_bins[m+1])
+                mask= (kperp_range[m]<=kperp_norm) & (kperp_norm<kperp_range[m+1])
                 if np.any(mask): #cannot compute mean if zero elements
                     wf_array1[m,i]=np.mean(np.abs(fnu[mask,i])**2)
                     count1[m] = np.sum(mask)
@@ -153,7 +151,7 @@ class UVWindow(object):
             kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
             for j in range(nbins_kperp):
                 for m in range(nbins_kpara):
-                    mask= (kpar_bins[m]<=kpar_norm) & (kpar_norm<kpar_bins[m+1])
+                    mask= (kpara_range[m]<=kpar_norm) & (kpar_norm<kpara_range[m+1])
                     if np.any(mask): #cannot compute mean if zero elements
                         self.wf_array[it,j,m]=np.mean(wf_array1[j,mask])
                         count2[m] = np.sum(mask)
