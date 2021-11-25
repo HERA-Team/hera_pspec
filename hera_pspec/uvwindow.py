@@ -3,7 +3,7 @@ import uvtools.dspec as dspec
 import h5py
 import warnings
 import numpy as np
-import sys, os
+import sys, os, time
 from scipy.interpolate import interp2d
 
 from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_utils as uvputils
@@ -273,10 +273,12 @@ class UVWindow(object):
 
         """
 
+        t0 = time.time()
         Atilde_cube, kperp_norm = self.interpolate_FT_beam(bl_len, Atilde, mapsize)
+        t1 = time.time()
         delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
         fnu = self.take_freq_FT(Atilde_cube,delta_nu)
-
+        t2 = time.time()
         ##### cylindrical average
 
         # on sky plane
@@ -289,7 +291,7 @@ class UVWindow(object):
                     wf_array1[m,i]=np.mean(np.abs(fnu[mask,i])**2)
                     count1[m] = np.sum(mask)
                     kperp[m] = np.mean(kperp_norm[mask])
-
+        t3 = time.time()
         # in frequency direction    
         #### get kparallel grid
         alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
@@ -314,7 +316,8 @@ class UVWindow(object):
 
         # ### normalisation of window functions
         self.wf_array /= np.sum(self.wf_array,axis=(1,2))[:,None,None]
-
+        t4 = time.time()
+        print(t1-t0,t2-t1,t3-t2,t4-t3)
         return kperp, kpara, self.wf_array
 
     def get_spherical_wf(self,bl_groups,bl_lens,spw_range,pol,kbins):
