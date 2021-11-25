@@ -104,6 +104,9 @@ class UVWindow(object):
         for i in range(self.Nfreqs):
             q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
             k = self.kperp4bl_freq(self.freq_array[i],bl_len, ngrid=ngrid, mapsize = mapsize)
+            print(k)
+            print(Atilde[i,:,12])
+            print(kgrid)
             A_real = interp2d(k,k,Atilde[i,:,:],bounds_error=False,fill_value=0.)
             Atilde_cube[:,:,i] = A_real(kgrid,kgrid) 
 
