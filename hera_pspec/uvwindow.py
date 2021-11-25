@@ -29,7 +29,7 @@ class UVWindow(object):
     An object for storing window functions copmuted without the delay approximation
     """
 
-    def __init__(self, ftbeam, cosmo=None, little_h=True,verbose=False):
+    def __init__(self, ftbeam, cosmo=None, little_h=True,verbose=False,taper='blackman-harris'):
 
         # Summary attributes
         if isinstance(ftbeam, str):
@@ -44,6 +44,7 @@ class UVWindow(object):
         self.cosmo = cosmo
         self.little_h = little_h
         self.verbose = verbose
+        self.taper = taper
 
         self.freq_array = None
         self.Nfreqs = None
