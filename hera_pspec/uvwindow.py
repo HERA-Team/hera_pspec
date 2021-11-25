@@ -245,6 +245,7 @@ class UVWindow(object):
     def get_wf_for_tau(self,tau,alpha,q,wf_array1):
 
         wf_array = np.zeros((nbins_kperp,nbins_kpara))
+        kpara = np.zeros(nbins_kpara)
         kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
         for j in range(nbins_kperp):
             for m in range(nbins_kpara):
