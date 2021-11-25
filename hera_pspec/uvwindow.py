@@ -270,6 +270,7 @@ class UVWindow(object):
 
         #### get kparallel grid
         alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
+        delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
         q = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs),axes=-1)/delta_nu #unit 1: FT along theta
 
         wf_array = np.zeros((nbins_kperp,nbins_kpara))
