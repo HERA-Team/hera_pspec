@@ -82,6 +82,7 @@ class UVWindow(object):
 
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
         dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.freq_array.max(), little_h=self.little_h)/(2.*mapsize)
+        print(kp_centre,dk)
         kgrid = np.arange(kp_centre-0.020,kp_centre+0.020,step=dk)# np.arange(kmin,kmax+dk,step=dk)
         kperp_norm = np.sqrt(np.power(kgrid,2)[:, None] + np.power(kgrid,2))
         return kgrid, kperp_norm
@@ -104,8 +105,6 @@ class UVWindow(object):
         for i in range(self.Nfreqs):
             q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
             k = self.kperp4bl_freq(self.freq_array[i],bl_len, ngrid=ngrid, mapsize = mapsize)
-            print(k)
-            print(Atilde[i,:,12])
             print(kgrid)
             A_real = interp2d(k,k,Atilde[i,:,:],bounds_error=False,fill_value=0.)
             Atilde_cube[:,:,i] = A_real(kgrid,kgrid) 
