@@ -127,7 +127,6 @@ class UVWindow(object):
         fnu = self.take_freq_FT(Atilde_cube,delta_nu)
 
         ##### cylindrical average
-        if self.verbose: print('Taking cylindrical average...')
 
         # on sky plane
         wf_array1 = np.zeros((nbins_kperp,self.Nfreqs))
@@ -184,7 +183,7 @@ class UVWindow(object):
         kperp_array, kpar_array = np.zeros((nbls,nbins_kperp)),np.zeros((nbls,nbins_kpara))
         wf_array = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
         for ib, bl_len in enumerate(bl_lens):
-            if self.verbose: sys.stdout.write('\r Computing for bl %i of %i...' %(ib,nbls))
+            if self.verbose: print('Computing for bl %i of %i...' %(ib+1,nbls))
             kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_len,pol)
 
         ktot_instru = np.zeros((nbls,self.Nfreqs))
