@@ -81,7 +81,7 @@ class UVWindow(object):
     def get_kgrid(self, bl_len, mapsize):
 
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
-        dk = 2.*np.pi/cosmo.dRperp_dtheta(self.freq_array.max(), little_h=self.little_h)/(2.*mapsize)
+        dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.freq_array.max(), little_h=self.little_h)/(2.*mapsize)
         kgrid = np.arange(kp_centre-0.020,kp_centre+0.020,step=dk)# np.arange(kmin,kmax+dk,step=dk)
         kperp_norm = np.sqrt(np.power(kgrid,2)[:, None] + np.power(kgrid,2))
         return kgrid, kperp_norm
