@@ -91,7 +91,7 @@ class UVWindow(object):
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
         q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
-        k = 2.*np.pi/R*(freq*bl_len/hp.conversions.units.c-q)
+        k = 2.*np.pi/R*(freq*bl_len/conversions.units.c-q)
         k = np.flip(k)
         return k
 
