@@ -337,13 +337,12 @@ class UVWindow(object):
         t3 = time.time()
         # in frequency direction    
         # binning
-        kpara, wf0 = self.get_wf_for_tau(self.dly_array[0],wf_array1)
         wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
-        for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
-            wf_array[it,:,:]=np.roll(wf0,-it,axis=1)
-        # kpara = np.zeros(nbins_kpara)
+        # kpara, wf0 = self.get_wf_for_tau(self.dly_array[0],wf_array1)
         # for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
-        #     kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,wf_array1)
+            # wf_array[it,:,:]=np.roll(wf0,-it,axis=1)
+        for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
+            kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,wf_array1)
         #fill by symmetry for tau = -tau
         if (self.Nfreqs%2==0):
             wf_array[self.Nfreqs//2+1:,:,:]=np.flip(wf_array,axis=0)[self.Nfreqs//2:-1]
