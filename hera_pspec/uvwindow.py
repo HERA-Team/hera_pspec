@@ -176,7 +176,7 @@ class UVWindow(object):
         wf_array = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
         for ib, bl_len in enumerate(bl_lens):
             if self.verbose: sys.stdout.write('\r Computing for bl %i of %i...' %(ib,nbls))
-            kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_len)
+            kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_len,pol)
 
         ktot_instru = np.zeros((nbls,self.Nfreqs))
         for ib in range(nbls):
