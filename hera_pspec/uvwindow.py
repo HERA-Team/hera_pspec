@@ -242,6 +242,19 @@ class UVWindow(object):
 
         return fnu 
 
+    def get_wf_for_tau(self,tau,alpha,q)
+
+        wf_array = np.zeros((nbins_kperp,nbins_kpara))
+        kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
+        for j in range(nbins_kperp):
+            for m in range(nbins_kpara):
+                mask= (kpara_range[m]<=kpar_norm) & (kpar_norm<kpara_range[m+1])
+                if np.any(mask): #cannot compute mean if zero elements
+                    wf_array[j,m]=np.mean(wf_array1[j,mask])
+                    kpara[m] = np.mean(kpar_norm[mask])
+
+        return kpara, wf_array
+
     def get_cylindrical_wf(self, bl_len, pol, Atilde, mapsize):
         """
         Get the cylindrical window function i.e. in (kperp,kpara) space
@@ -297,28 +310,28 @@ class UVWindow(object):
         alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
         q = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs),axes=-1)/delta_nu #unit 1: FT along theta
         # binning
-        self.wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
-        kpara, count2 = np.zeros(nbins_kpara), np.zeros(nbins_kpara)
+        wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
+        kpara = np.zeros(nbins_kpara)
         for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
-            kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
-            for j in range(nbins_kperp):
-                for m in range(nbins_kpara):
-                    mask= (kpara_range[m]<=kpar_norm) & (kpar_norm<kpara_range[m+1])
-                    if np.any(mask): #cannot compute mean if zero elements
-                        self.wf_array[it,j,m]=np.mean(wf_array1[j,mask])
-                        count2[m] = np.sum(mask)
-                        kpara[m] = np.mean(kpar_norm[mask])
+            kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,alpha,q)
+            # kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
+            # for j in range(nbins_kperp):
+            #     for m in range(nbins_kpara):
+            #         mask= (kpara_range[m]<=kpar_norm) & (kpar_norm<kpara_range[m+1])
+            #         if np.any(mask): #cannot compute mean if zero elements
+            #             wf_array[it,j,m]=np.mean(wf_array1[j,mask])
+            #             kpara[m] = np.mean(kpar_norm[mask])
         #fill by symmetry for tau = -tau
         if (self.Nfreqs%2==0):
-            self.wf_array[self.Nfreqs//2+1:,:,:]=np.flip(self.wf_array,axis=0)[self.Nfreqs//2:-1]
+            wf_array[self.Nfreqs//2+1:,:,:]=np.flip(wf_array,axis=0)[self.Nfreqs//2:-1]
         else:
-            self.wf_array[self.Nfreqs//2+1:,:,:]=np.flip(self.wf_array,axis=0)[self.Nfreqs//2+1:]
+            wf_array[self.Nfreqs//2+1:,:,:]=np.flip(wf_array,axis=0)[self.Nfreqs//2+1:]
 
         # ### normalisation of window functions
-        self.wf_array /= np.sum(self.wf_array,axis=(1,2))[:,None,None]
+        wf_array /= np.sum(wf_array,axis=(1,2))[:,None,None]
         t4 = time.time()
         print(t1-t0,t2-t1,t3-t2,t4-t3)
-        return kperp, kpara, self.wf_array
+        return kperp, kpara, wf_array
 
     def get_spherical_wf(self,bl_groups,bl_lens,spw_range,pol,kbins):
         """
