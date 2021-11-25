@@ -86,6 +86,15 @@ class UVWindow(object):
         kperp_norm = np.sqrt(np.power(kgrid,2)[:, None] + np.power(kgrid,2))
         return kgrid, kperp_norm
 
+    def kperp4bl_freq(self,freq,bl_len, ngrid, mapsize):    
+
+        z = self.cosmo.f2z(freq)
+        R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
+        q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
+        k = 2.*np.pi/R*(freq*bl_len/hp.conversions.units.c-q)
+        k = np.flip(k)
+        return k
+
     def interpolate_FT_beam(self, bl_len, Atilde, mapsize):
 
         kgrid, kperp_norm = self.get_kgrid(bl_len, mapsize)
@@ -94,7 +103,7 @@ class UVWindow(object):
         Atilde_cube = np.zeros((kgrid.size,kgrid.size,self.Nfreqs))
         for i in range(self.Nfreqs):
             q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
-            k = kperp_for_bl_freq(self.freq_array[i],bl_len, ngrid=ngrid, mapsize = mapsize,cosmo=self.cosmo)
+            k = self.kperp_for_bl_freq(self.freq_array[i],bl_len, ngrid=ngrid, mapsize = mapsize,cosmo=self.cosmo)
             A_real = interp2d(k,k,Atilde[i,:,:],bounds_error=False,fill_value=0.)
             Atilde_cube[:,:,i] = A_real(kgrid,kgrid) 
 
