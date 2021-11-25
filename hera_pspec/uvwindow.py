@@ -56,7 +56,7 @@ class UVWindow(object):
 
     def set_spw_range(self,spw_range):
 
-        assert len(spw_range==2), "spw_range must be fed as a tuple of frequency indices between 0 and 1024"
+        assert len(spw_range)==2, "spw_range must be fed as a tuple of frequency indices between 0 and 1024"
 
         self.spw_range = tuple(spw_range)
         self.freq_array = HERA_bw[spw_range[0]:spw_range[-1]]
