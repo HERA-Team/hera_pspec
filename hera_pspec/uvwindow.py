@@ -14,7 +14,7 @@ HERA_bw=np.linspace(1.,2.,1024,endpoint=False)*1e8
 
 kpara_max, dk_para = 2., 0.043/2
 kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
-nbins_kpar = kpara_range.size -1
+nbins_kpara = kpara_range.size -1
 kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
 
 kperp_max, dk_perp = 0.11, .5e-3
@@ -136,12 +136,12 @@ class UVWindow(object):
         alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
         q = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs),axes=-1)/delta_nu #unit 1: FT along theta
         # binning
-        self.wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpar))
-        kpara, count2 = np.zeros(nbins_kpar), np.zeros(nbins_kpar)
+        self.wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
+        kpara, count2 = np.zeros(nbins_kpara), np.zeros(nbins_kpara)
         for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
             kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
             for j in range(nbins_kperp):
-                for m in range(nbins_kpar):
+                for m in range(nbins_kpara):
                     mask= (kpar_bins[m]<=kpar_norm) & (kpar_norm<kpar_bins[m+1])
                     if np.any(mask): #cannot compute mean if zero elements
                         self.wf_array[it,j,m]=np.mean(wf_array1[j,mask])
