@@ -40,7 +40,7 @@ class UVWindow(object):
             raise Warning('No input FT beam, will compute all window functions from scratch... Will take a few hours.')
             ##### to be coded up
 
-        if cosmo is None: cosmo = uvputils.Cosmo_Conversions()
+        if cosmo is None: cosmo = conversions.Cosmo_Conversions()
         self.cosmo = cosmo
         self.little_h = little_h
         self.verbose = verbose
@@ -60,7 +60,7 @@ class UVWindow(object):
         self.spw_range = tuple(spw_range)
         self.freq_array = HERA_bw[spw_range[0]:spw_range[-1]]
         self.Nfreqs = len(self.freq_array)
-        self.dly_array = uvputils.get_delays(self.freq_array,n_dlys=len(self.freq_array))
+        self.dly_array = utils.get_delays(self.freq_array,n_dlys=len(self.freq_array))
         self.avg_nu = np.mean(self.freq_array)
         self.avg_z = self.cosmo.f2z(self.avg_nu)
 
