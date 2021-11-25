@@ -339,7 +339,7 @@ class UVWindow(object):
         # binning
         kpara, wf0 = self.get_wf_for_tau(self.dly_array[0],wf_array1)
         wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
-        for it,tau in enumerate(delay_arr[:nfreq//2+1]):
+        for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
             wf_array[it,:,:]=np.roll(wf0,-it,axis=1)
         # kpara = np.zeros(nbins_kpara)
         # for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
