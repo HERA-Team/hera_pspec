@@ -242,7 +242,7 @@ class UVWindow(object):
 
         return fnu 
 
-    def get_wf_for_tau(self,tau,alpha,q):
+    def get_wf_for_tau(self,tau,alpha,q,wf_array1):
 
         wf_array = np.zeros((nbins_kperp,nbins_kpara))
         kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
@@ -313,7 +313,7 @@ class UVWindow(object):
         wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
         kpara = np.zeros(nbins_kpara)
         for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
-            kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,alpha,q)
+            kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,alpha,q,wf_array1)
             # kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
             # for j in range(nbins_kperp):
             #     for m in range(nbins_kpara):
