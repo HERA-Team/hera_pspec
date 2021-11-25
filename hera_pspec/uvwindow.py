@@ -109,13 +109,12 @@ class UVWindow(object):
 
         return Atilde_cube, kperp_norm
 
-    def take_freq_FT(self, Atilde_cube):
+    def take_freq_FT(self, Atilde_cube,delta_nu):
 
         if self.taper is not None:
             tf = dspec.gen_window(self.taper, self.Nfreqs)
             Atilde_cube = Atilde_cube*tf[None,None,:]
 
-        delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
         fnu = np.fft.fftshift(np.fft.fft(np.fft.fftshift(Atilde_cube,axes=-1),axis=-1,norm='ortho')*delta_nu**0.5,axes=-1)
 
         return fnu 
@@ -124,7 +123,8 @@ class UVWindow(object):
 
         Atilde, mapsize = self.get_FT()
         Atilde_cube, kperp_norm = self.interpolate_FT_beam(bl_len, Atilde, mapsize)
-        fnu = self.take_freq_FT(Atilde_cube)
+        delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
+        fnu = self.take_freq_FT(Atilde_cube,delta_nu)
 
         ##### cylindrical average
         if self.verbose: print('Taking cylindrical average...')
