@@ -13,7 +13,7 @@ HERA_bw=np.linspace(1.,2.,chan_nb,endpoint=False)*1e8
 
 #k-bins
 
-kpara_max, dk_para = 2., 0.043/2
+kpara_max, dk_para = 3., 0.043/2
 kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
 nbins_kpara = kpara_range.size -1
 kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
@@ -326,13 +326,12 @@ class UVWindow(object):
 
         # on sky plane
         wf_array1 = np.zeros((nbins_kperp,self.Nfreqs))
-        kperp, count1 = np.zeros(nbins_kperp), np.zeros(nbins_kperp)
+        kperp = np.zeros(nbins_kperp)
         for i in range(self.Nfreqs):
             for m in range(nbins_kperp):
                 mask= (kperp_range[m]<=kperp_norm) & (kperp_norm<kperp_range[m+1])
                 if np.any(mask): #cannot compute mean if zero elements
                     wf_array1[m,i]=np.mean(np.abs(fnu[mask,i])**2)
-                    count1[m] = np.sum(mask)
                     kperp[m] = np.mean(kperp_norm[mask])
         t3 = time.time()
         # in frequency direction    
