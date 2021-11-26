@@ -13,7 +13,7 @@ HERA_bw=np.linspace(1.,2.,chan_nb,endpoint=False)*1e8
 
 #k-bins
 
-kpara_max, dk_para = 3., 0.043/2
+kpara_max, dk_para = 3.5, 0.043
 kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
 nbins_kpara = kpara_range.size -1
 kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
