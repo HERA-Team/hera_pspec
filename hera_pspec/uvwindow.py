@@ -11,20 +11,6 @@ from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_u
 chan_nb = 1024
 HERA_bw=np.linspace(1.,2.,chan_nb,endpoint=False)*1e8
 
-#k-bins
-
-kpara_max, dk_para = 3.5, 0.043
-kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
-nbins_kpara = kpara_range.size -1
-kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
-
-kperp_max, dk_perp = 0.11, .5e-3
-kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
-nbins_kperp = kperp_range.size -1
-kperp_bins = (kperp_range[1:]+kperp_range[:-1])/2
-
-ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
-
 class UVWindow(object):
     """
     An object for storing window functions copmuted without the delay approximation
@@ -285,7 +271,8 @@ class UVWindow(object):
 
         return kpara, wf_array
 
-    def get_cylindrical_wf(self, bl_len, pol, Atilde, mapsize):
+    def get_cylindrical_wf(self, bl_len, pol, Atilde, mapsize,
+                            kperp_bins,kpara_bins):
         """
         Get the cylindrical window function i.e. in (kperp,kpara) space
         for a given baseline and polarisation, along the spectral window.
@@ -297,6 +284,14 @@ class UVWindow(object):
         pol : str
             Polarisation of the beam. 
             Can be chosen among 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'.
+        kperp_bins : array_like
+            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
+            Used for cylindrical binning,
+            Make sure the values are consistent with self.little_h.
+        kpara_bins : array_like
+            1D float array of ascending k_parallel bin centers in [h] Mpc^-1 units.
+            Used for cylindrical binning.
+            Make sure the values are consistent with self.little_h.
 
         Returns
         ----------
@@ -354,7 +349,8 @@ class UVWindow(object):
         print(t1-t0,t2-t1,t3-t2,t4-t3)
         return kperp, kpara, wf_array
 
-    def get_spherical_wf(self,bl_groups,bl_lens,spw_range,pol,kbins):
+    def get_spherical_wf(self,bl_groups,bl_lens,spw_range,pol,
+                            kbins, kperp_bins=[], kpara_bins=[]):
         """
         Get spherical window functions for a set of baselines, polarisation,
         along a given spectral range, and for a set of kbins used for averaging.
@@ -375,6 +371,15 @@ class UVWindow(object):
             Can be pseudo-Stokes or power: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
         kbins : array_like
             1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
+            Using for spherical binning.
+            Make sure the values are consistent with self.little_h.
+        kperp_bins : array_like
+            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
+            Used for cylindrical binning,
+            Make sure the values are consistent with self.little_h.
+        kpara_bins : array_like
+            1D float array of ascending k_parallel bin centers in [h] Mpc^-1 units.
+            Used for cylindrical binning.
             Make sure the values are consistent with self.little_h.
 
         """
@@ -392,6 +397,7 @@ class UVWindow(object):
         assert spw_range[1]-spw_range[0]>0, "Require non-zero spectral range."
         self.set_spw_range(spw_range)
         
+        # k-bins for spherical binning
         assert len(kbins)>1, "must feed array of k bins for spherical averasge"                                                  
         kbins = np.array(kbins)
         nbinsk = kbins.size
@@ -402,6 +408,32 @@ class UVWindow(object):
                 "Wrong polarisation string."
         self.set_polarisation(pol)
 
+        #k-bins for cylindrical binning
+        if np.size(kperp_bins)==0 or kperp_bins is None:
+            kperp_max, dk_perp = 0.11, .5e-3
+            kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
+            nbins_kperp = kperp_range.size -1
+            kperp_bins = (kperp_range[1:]+kperp_range[:-1])/2
+        else:
+            kperp_bins = np.array(kperp_bins)
+            nbins_kperp = kperp_bins.size
+            dkperp = np.diff(kperp_bins).mean()
+            kperp_range = np.arange(kperp_bins.min()-dkperp/2,kperp_bins.max()+dkperp,step=dkperp)
+
+        if np.size(kpara_bins)==0 or kpara_bins is None:
+            kpara_max, dk_para = 3.5, 0.043
+            kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
+            nbins_kpara = kpara_range.size -1
+            kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
+        else:                                              
+            kpara_bins = np.array(kpara_bins)
+            nbins_kpara = kpara_bins.size
+            dkpara = np.diff(kpara_bins).mean()
+            kpara_range = np.arange(kpara_bins.min()-dkpara/2,kpara_bins.max()+dkpara,step=dkpara)
+
+        ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
+
+
         # get FT of the beam from file
         Atilde, mapsize = self.get_FT()
         # get cylindrical window functions for each baseline length considered
@@ -411,7 +443,9 @@ class UVWindow(object):
         wf_array = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
         for ib in range(nbls):
             if self.verbose: print('Computing for bl %i of %i...' %(ib+1,nbls))
-            kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,Atilde,mapsize)
+            kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,
+                                                                        Atilde, mapsize, 
+                                                                        kperp_bins, kpara_bins)
 
         # construct array giving the k probed by each baseline-tau pair
         kperps = bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) / np.sqrt(2.)
