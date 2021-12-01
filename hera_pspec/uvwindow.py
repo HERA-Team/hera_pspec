@@ -508,7 +508,6 @@ class UVWindow(object):
                                 verbose=self.verbose)
 
         ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
-        print(nbins_kperp,nbins_kpara)
         if (nbins_kperp>200) or (nbins_kpara>200):
             raise_warning('Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
                             verbose=self.verbose)
@@ -557,7 +556,7 @@ class UVWindow(object):
 
         return wf_spherical, count
 
-    def raise_warning(warning, verbose=True):
+def raise_warning(warning, verbose=True):
     """
     Warning function.
     """
