@@ -370,7 +370,7 @@ class UVWindow(object):
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
             if (kpara_range.max()<=kpara_centre+10*dk_para) or (kpara_range.min()>=kpara_centre-10.*dk_para):
                 raise_warning('The bin centre is not incuded in the array of kpara bins given as input.',
-                    verbose=self.verbose)
+                                verbose=self.verbose)
 
         t0 = time.time()
         interp_FT_beam, kperp_norm = self.interpolate_FT_beam(bl_len, FT_beam, mapsize)
@@ -456,7 +456,7 @@ class UVWindow(object):
 
         if not (isinstance(spw_range[0],int) and isinstance(spw_range[1],int)):
             raise_warning('spw indices given are not integers... taking their floor value',
-                verbose=self.verbose)
+                            verbose=self.verbose)
             spw_range = (int(np.floor(spw_range[0])),int(np.floor(spw_range[1])))
         assert min(spw_range)>=0 and max(spw_range)<chan_nb, \
                 "spw_range must be integers within the HERA frequency channels"
@@ -486,10 +486,10 @@ class UVWindow(object):
             kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             if (kperp_range.max()<=kperp_max): 
                 raise_warning('Max kperp bin centre not included in binning array',
-                    verbose=self.verbose)
+                                verbose=self.verbose)
             if (kperp_range.min()>=kperp_min): 
                 raise_warning('Min kperp bin centre not included in binning array',
-                    verbose=self.verbose)
+                                verbose=self.verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
@@ -505,12 +505,12 @@ class UVWindow(object):
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
             if (kpara_range.max()<=kpara_centre+10*dk_para) or (kpara_range.min()>=kpara_centre-10.*dk_para):
                 raise_warning('The bin centre is not incuded in the array of kpara bins given as input.',
-                    verbose=self.verbose)
+                                verbose=self.verbose)
 
         ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
         if (nbins_kperp>200) or (nbins_kpara>200):
             raise_warning('Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
-                verbose=self.verbose)
+                            verbose=self.verbose)
 
         # k-bins for spherical binning
         assert len(kbins)>1, "must feed array of k bins for spherical averasge"                                                  
@@ -520,10 +520,10 @@ class UVWindow(object):
         krange = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
         if (krange.max()<=ktot.max()): 
             raise_warning('Max spherical k probed is not included in bins.',
-                verbose=self.verbose)
+                            verbose=self.verbose)
         if (krange.min()>=ktot.min()): 
             raise_warning('Min spherical k probed is not included in bins.',
-                verbose=self.verbose)
+                            verbose=self.verbose)
 
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
