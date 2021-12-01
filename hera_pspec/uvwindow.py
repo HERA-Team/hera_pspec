@@ -293,7 +293,8 @@ class UVWindow(object):
         return kpara, wf_array
 
     def get_cylindrical_wf(self, bl_len, pol, Atilde, mapsize,
-                            kperp_bins=[],kpara_bins=[]):
+                            kperp_bins=[],kpara_bins=[],
+                            return_bins='unweighted'):
         """
         Get the cylindrical window function i.e. in (kperp,kpara) space
         for a given baseline and polarisation, along the spectral window.
@@ -314,6 +315,9 @@ class UVWindow(object):
             1D float array of ascending k_parallel bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning.
             Make sure the values are consistent with self.little_h.
+        return_bins : str
+            If 'weighted', return bins weighted by the actual modes inside of bin.
+            If 'unweighted', return bins used to build the histogram.
 
         Returns
         ----------
@@ -396,6 +400,10 @@ class UVWindow(object):
         wf_array /= np.sum(wf_array,axis=(1,2))[:,None,None]
         t4 = time.time()
         print(t1-t0,t2-t1,t3-t2,t4-t3)
+
+        if (return_bins=='unweighted'):
+            kperp, kpara = kperp_bins, kpara_bins
+            
         return kperp, kpara, wf_array
 
     def get_spherical_wf(self,bl_groups,bl_lens,spw_range,pol,
