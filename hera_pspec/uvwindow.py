@@ -443,11 +443,11 @@ class UVWindow(object):
 
         # get FT of the beam from file
         Atilde, mapsize = self.get_FT()
-        
+
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
             dk_perp = np.diff(self.get_kgrid(np.min(bl_lens), mapsize)[1]).mean()*5
-            kperp_max = cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 2.*dk_perp
+            kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 2.*dk_perp
             kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
             nbins_kperp = kperp_range.size -1
             kperp_bins = (kperp_range[1:]+kperp_range[:-1])/2
@@ -458,8 +458,8 @@ class UVWindow(object):
             kperp_range = np.arange(kperp_bins.min()-dkperp/2,kperp_bins.max()+dkperp,step=dkperp)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
-            dk_para = cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
-            kpara_max = cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+2.*dk_para
+            dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
+            kpara_max = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+2.*dk_para
             kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
             nbins_kpara = kpara_range.size -1
             kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
