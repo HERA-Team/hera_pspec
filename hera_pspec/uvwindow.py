@@ -68,7 +68,7 @@ class UVWindow(object):
         elif ftbeam is '':
             raise_warning('No input FT beam, will compute all window functions from scratch... Will take a few hours.',
                             verbose=self.verbose)
-        else:
+        # else:
             ##### to be coded up
 
         if cosmo is None: cosmo = conversions.Cosmo_Conversions()
