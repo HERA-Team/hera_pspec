@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import sys, os, time
 from scipy.interpolate import interp2d
+from pyuvdata import UVBeam, UVData 
 
 from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_utils as uvputils
 
@@ -16,16 +17,58 @@ class UVWindow(object):
     An object for storing window functions copmuted without the delay approximation
     """
 
-    def __init__(self, ftbeam, cosmo=None, little_h=True,verbose=False,taper='blackman-harris'):
+    def __init__(self, ftbeam, uvdata='',taper='blackman-harris', 
+                    cosmo=None, little_h=True,verbose=False):
+        """
+        Class for UVWindow objects. Provides get_spherical_wf() and
+        get_cylindrical_wf() to obtain accurate window functions for a 
+        given set of baselines and spectral range.
+
+        Parameters
+        ----------
+        ftbeam : str
+            Definition of the beam Fourier transform to be used.
+            Options include;
+                - Root name of the file to use, without the polarisation
+                Ex : FT_beam_HERA_dipole (+ path)
+                - 'default' for computation with default dipole file
+                - '' for computation from beam simulations (slow)
+        uvdata : str, optional
+            Data file to be used to read baselines.
+            Not used if set to ''.
+        taper : str
+            Type of data tapering. See uvtools.dspec.gen_window for options.
+        cosmo : conversions.Cosmo_Conversions object, optional
+            Cosmology object. Uses the default cosmology object if not
+            specified. Default: None.
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc.
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
+        
+        """
 
         # Summary attributes
+
+        
+        if len(self.uvdata)>0
+            self.uvdata = True
+            self.uvdatafile = uvdata
+            uvd = UVData()
+            uvd.read(self.uvdatafile, read_data=False)
+            assert uvd.Nfreqs==chan_nb, "Data file does not have %i frequency channels" %chan_nb
+        else:
+            self.uvdata = False
+
         if isinstance(ftbeam, str):
             self.ft_file = ftbeam
         elif ftbeam=='default':
-            self.ft_file = 'blabla'#to define
-        else:
+            self.ft_file = '/lustre/aoc/projects/hera/agorce/wf_hera/delay_wf/FT_beam_HERA_dipole' #default file
+        elif ftbeam is '':
             raise_warning('No input FT beam, will compute all window functions from scratch... Will take a few hours.',
                             verbose=self.verbose)
+        else:
             ##### to be coded up
 
         if cosmo is None: cosmo = conversions.Cosmo_Conversions()
@@ -41,6 +84,18 @@ class UVWindow(object):
         self.avg_nu = None
         self.avg_z = None
         self.pol = None
+
+    def set_taper(self, taper):
+        """
+        Set data tapering type.
+
+        Parameters
+        ----------
+        taper : str
+            Type of data tapering. See uvtools.dspec.gen_window for options.
+        """
+        self.taper = taper
+
 
     def set_spw_range(self,spw_range):
         """
@@ -415,22 +470,15 @@ class UVWindow(object):
 
         return kperp, kpara, wf_array
 
-    def get_spherical_wf(self,bl_groups,bl_lens,spw_range,pol,
-                            kbins, kperp_bins=[], kpara_bins=[]):
+    def get_spherical_wf(self,spw_range,pol,
+                            kbins, kperp_bins=[], kpara_bins=[],
+                            bl_groups=[],bl_lens=[]):
         """
         Get spherical window functions for a set of baselines, polarisation,
         along a given spectral range, and for a set of kbins used for averaging.
 
         Parameters
         ----------
-        bl_groups : embedded lists.
-            List of groups of baselines gathered by lengths
-            (can be redundant groups from utils.get_reds).
-        bl_lens : list.
-            List of lengths corresponding to each group
-            (can be redundant groups from utils.get_reds).
-            Must have same length as bl_groups.
-            
         spw_range : tuple of ints
             In (start_chan, end_chan). Must be between 0 and 1024 (HERA bandwidth).
         pol : str
@@ -439,21 +487,43 @@ class UVWindow(object):
             1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
             Using for spherical binning.
             Make sure the values are consistent with self.little_h.
-        kperp_bins : array_like
+        kperp_bins : array_like, optional.
             1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning,
             Make sure the values are consistent with self.little_h.
-        kpara_bins : array_like
+        kpara_bins : array_like, optional.
             1D float array of ascending k_parallel bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning.
             Make sure the values are consistent with self.little_h.
+        bl_groups : embedded lists, optional.
+            List of groups of baselines gathered by lengths
+            (can be redundant groups from utils.get_reds).
+            Can be optional if self.uvdata was given.
+        bl_lens : list, optional.
+            List of lengths corresponding to each group
+            (can be redundant groups from utils.get_reds).
+            Must have same length as bl_groups.
+            Can be optional if self.uvdata was given.
 
         """
 
+        if self.uvdata:
+            uvd = UVData()
+            uvd.read(self.uvdatafile, read_data=False)
+            if len(bl_groups)==0:
+                bl_groups, bl_lens, _ = utils.get_reds(uvd,bl_error_tol=1.0,pick_data_ants=True)
+            else:
+                # check baselines given as input are in data file
+                baselines_in_file = [uvd.baseline_to_antnums(bl) for bl in uvd.baseline_array]
+                assert np.any([bl in baselines_in_file for bl in sum(bl_groups, [])]), "Baselines \
+                        given as input are not in data file."
+        else:
+            assert len(bl_groups)>0, "Must give list of baselines as input"
+
         assert len(bl_groups)==len(bl_lens), "bl_groups and bl_lens must have same length"
-        nbls = len(bl_groups)
+        nbls = len(bl_groups) # number of redudant groups
         bl_lens = np.array(bl_lens)
-        red_nb = np.array([len(l) for l in bl_groups])
+        red_nb = np.array([len(l) for l in bl_groups]) #number of occurences of one bl length
 
         if not (isinstance(spw_range[0],int) and isinstance(spw_range[1],int)):
             raise_warning('spw indices given are not integers... taking their floor value',
