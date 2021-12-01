@@ -52,7 +52,7 @@ class UVWindow(object):
         # Summary attributes
 
         
-        if len(self.uvdata)>0
+        if len(self.uvdata)>0:
             self.uvdata = True
             self.uvdatafile = uvdata
             uvd = UVData()
