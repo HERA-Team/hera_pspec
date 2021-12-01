@@ -93,7 +93,7 @@ class UVWindow(object):
             Only used for internal calculations.
         """
 
-        filename = '%s_%s' %(self.ft_file,self.pol)
+        filename = '%s_%s.hdf5' %(self.ft_file,self.pol)
         f = h5py.File(filename, "r") 
         mapsize = f['parameters']['mapsize'][0]
         FT_beam = f['data'][self.pol][self.spw_range[0]:self.spw_range[1],:,:]
