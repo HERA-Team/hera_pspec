@@ -309,6 +309,7 @@ class UVWindow(object):
             1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning,
             Make sure the values are consistent with self.little_h.
+            If computing for different baselines, make sure to input identical arrays.
         kpara_bins : array_like
             1D float array of ascending k_parallel bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning.
@@ -332,16 +333,31 @@ class UVWindow(object):
 
         """
 
-        # read kperp bins
-        kperp_bins = np.array(kperp_bins)
-        nbins_kperp = kperp_bins.size
-        dkperp = np.diff(kperp_bins).mean()
-        kperp_range = np.arange(kperp_bins.min()-dkperp/2,kperp_bins.max()+dkperp,step=dkperp)
-        # read kpara bins
-        kpara_bins = np.array(kpara_bins)
-        nbins_kpara = kpara_bins.size
-        dkpara = np.diff(kpara_bins).mean()
-        kpara_range = np.arange(kpara_bins.min()-dkpara/2,kpara_bins.max()+dkpara,step=dkpara)
+
+        #k-bins for cylindrical binning
+        if np.size(kperp_bins)==0 or kperp_bins is None:
+            dk_perp = np.diff(self.get_kgrid(bl_len, mapsize)[1]).mean()*5
+            kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)+ 2.*dk_perp
+            kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
+            nbins_kperp = kperp_range.size -1
+            kperp_bins = (kperp_range[1:]+kperp_range[:-1])/2
+        else:
+            kperp_bins = np.array(kperp_bins)
+            nbins_kperp = kperp_bins.size
+            dkperp = np.diff(kperp_bins).mean()
+            kperp_range = np.arange(kperp_bins.min()-dkperp/2,kperp_bins.max()+dkperp,step=dkperp)
+
+        if np.size(kpara_bins)==0 or kpara_bins is None:
+            dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
+            kpara_max = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+2.*dk_para
+            kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
+            nbins_kpara = kpara_range.size -1
+            kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
+        else:                                              
+            kpara_bins = np.array(kpara_bins)
+            nbins_kpara = kpara_bins.size
+            dkpara = np.diff(kpara_bins).mean()
+            kpara_range = np.arange(kpara_bins.min()-dkpara/2,kpara_bins.max()+dkpara,step=dkpara)
 
 
         t0 = time.time()
