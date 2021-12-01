@@ -240,6 +240,15 @@ class UVWindow(object):
         wf_array1: array_like
             Window function after cylindrical average on kperp plane.
             Dimensions: (nbins_kperp,nfreq).
+        kperp_bins : array_like
+            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
+            Used for cylindrical binning,
+            Make sure the values are consistent with self.little_h.
+        kpara_bins : array_like
+            1D float array of ascending k_parallel bin centers in [h] Mpc^-1 units.
+            Used for cylindrical binning.
+            Make sure the values are consistent with self.little_h.
+
 
         Returns
         ----------
@@ -253,6 +262,18 @@ class UVWindow(object):
             in the cylindrical binning.
         
         """
+
+        # read kperp bins
+        kperp_bins = np.array(kperp_bins)
+        nbins_kperp = kperp_bins.size
+        dkperp = np.diff(kperp_bins).mean()
+        kperp_range = np.arange(kperp_bins.min()-dkperp/2,kperp_bins.max()+dkperp,step=dkperp)
+        # read kpara bins
+        kpara_bins = np.array(kpara_bins)
+        nbins_kpara = kpara_bins.size
+        dkpara = np.diff(kpara_bins).mean()
+        kpara_range = np.arange(kpara_bins.min()-dkpara/2,kpara_bins.max()+dkpara,step=dkpara)
+
 
         #### get kparallel grid
         alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
@@ -348,7 +369,7 @@ class UVWindow(object):
         # for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
             # wf_array[it,:,:]=np.roll(wf0,-it,axis=1)
         for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
-            kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,wf_array1)
+            kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,wf_array1,kperp_bins,kpara_bins)
         #fill by symmetry for tau = -tau
         if (self.Nfreqs%2==0):
             wf_array[self.Nfreqs//2+1:,:,:]=np.flip(wf_array,axis=0)[self.Nfreqs//2:-1]
