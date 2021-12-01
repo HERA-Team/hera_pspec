@@ -228,7 +228,7 @@ class UVWindow(object):
 
         return fnu 
 
-    def get_wf_for_tau(self,tau,wf_array1):
+    def get_wf_for_tau(self,tau,wf_array1,kperp_bins,kpara_bins):
         """
         Get the cylindrical window function for a given delay
         after binning on the sky plane.
