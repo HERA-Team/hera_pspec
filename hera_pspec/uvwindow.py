@@ -441,10 +441,13 @@ class UVWindow(object):
                 "Wrong polarisation string."
         self.set_polarisation(pol)
 
+        # get FT of the beam from file
+        Atilde, mapsize = self.get_FT()
+        
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
-            dk_perp = np.diff(self.get_kgrid(np.min(lens), mapsize)[1]).mean()*5
-            kperp_max = cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(lens)*np.sqrt(2)+ 2.*dk_perp
+            dk_perp = np.diff(self.get_kgrid(np.min(bl_lens), mapsize)[1]).mean()*5
+            kperp_max = cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 2.*dk_perp
             kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
             nbins_kperp = kperp_range.size -1
             kperp_bins = (kperp_range[1:]+kperp_range[:-1])/2
@@ -470,8 +473,6 @@ class UVWindow(object):
         if (nbins_kperp>200) or (nbins_kpara>200):
             raise Warning('Large number of kperp/kpara bins. Risk of overresolving and slow computing.')
 
-        # get FT of the beam from file
-        Atilde, mapsize = self.get_FT()
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
         # the kperp and kpara bins are given as global parameters
