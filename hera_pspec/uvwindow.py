@@ -355,7 +355,6 @@ class UVWindow(object):
             if (kperp_range.max()<kperp_centre+9.*dk_perp) or (kperp_range.min()>kperp_centre-9.*dk_perp):
                 raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.',
                                 verbose=self.verbose)
-                print(bl_len,kperp_centre,dk_perp)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
