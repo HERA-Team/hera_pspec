@@ -95,8 +95,8 @@ class UVWindow(object):
 
         filename = '%s_%s.hdf5' %(self.ft_file,self.pol)
         f = h5py.File(filename, "r") 
-        mapsize = f['parameters']['mapsize'][0]
-        FT_beam = f['data'][self.pol][self.spw_range[0]:self.spw_range[1],:,:]
+        mapsize = f['mapsize'][0]
+        FT_beam = f['FT_beam'][self.spw_range[0]:self.spw_range[1],:,:]
         f.close()
 
         return FT_beam, mapsize
