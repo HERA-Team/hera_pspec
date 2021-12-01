@@ -353,7 +353,7 @@ class UVWindow(object):
             kperp_range = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
             kperp_centre = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)
             if (kperp_range.max()<=kperp_centre+10*dk_perp) or (kperp_range.min()>=kperp_centre-10.*dk_perp):
-                raise_warning('The bin centre is not incuded in the array of kperp bins given as input.',
+                raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.',
                                 verbose=self.verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
@@ -369,7 +369,7 @@ class UVWindow(object):
             kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
             if (kpara_range.max()<=kpara_centre+10*dk_para) or (kpara_range.min()>=kpara_centre-10.*dk_para):
-                raise_warning('The bin centre is not incuded in the array of kpara bins given as input.',
+                raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kpara bins given as input.',
                                 verbose=self.verbose)
 
         t0 = time.time()
@@ -485,10 +485,10 @@ class UVWindow(object):
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             if (kperp_range.max()<=kperp_max): 
-                raise_warning('Max kperp bin centre not included in binning array',
+                raise_warning('get_spherical_wf: Max kperp bin centre not included in binning array',
                                 verbose=self.verbose)
             if (kperp_range.min()>=kperp_min): 
-                raise_warning('Min kperp bin centre not included in binning array',
+                raise_warning('get_spherical_wf: Min kperp bin centre not included in binning array',
                                 verbose=self.verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
@@ -503,13 +503,13 @@ class UVWindow(object):
             dk_para = np.diff(kpara_bins).mean()
             kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
-            if (kpara_range.max()<=kpara_centre+10*dk_para) or (kpara_range.min()>=kpara_centre-10.*dk_para):
-                raise_warning('The bin centre is not incuded in the array of kpara bins given as input.',
+            if (kpara_range.max()<=kpara_centre+5*dk_para) or (kpara_range.min()>=kpara_centre-5.*dk_para):
+                raise_warning('get_spherical_wf: The bin centre is not included in the array of kpara bins given as input.',
                                 verbose=self.verbose)
 
         ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
         if (nbins_kperp>200) or (nbins_kpara>200):
-            raise_warning('Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
+            raise_warning('get_spherical_wf: Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
                             verbose=self.verbose)
 
         # k-bins for spherical binning
