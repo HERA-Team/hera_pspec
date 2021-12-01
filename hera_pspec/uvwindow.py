@@ -561,5 +561,5 @@ def raise_warning(warning, verbose=True):
     Warning function.
     """
     if verbose:
-        print(warning)
+        print('Warning: %s' %warning)
 
