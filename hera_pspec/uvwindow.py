@@ -293,7 +293,7 @@ class UVWindow(object):
         return kpara, wf_array
 
     def get_cylindrical_wf(self, bl_len, pol, Atilde, mapsize,
-                            kperp_bins,kpara_bins):
+                            kperp_bins=[],kpara_bins=[]):
         """
         Get the cylindrical window function i.e. in (kperp,kpara) space
         for a given baseline and polarisation, along the spectral window.
