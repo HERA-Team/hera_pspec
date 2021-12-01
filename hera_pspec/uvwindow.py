@@ -84,7 +84,7 @@ class UVWindow(object):
 
         Returns
         ----------
-        Atilde : array_like
+        FT_beam : array_like
             Real part of the Fourier transform of the beam along the spectral
             window considered. Has dimensions (Nfreqs,ngrid,ngrid).
         mapsize : float
@@ -94,10 +94,10 @@ class UVWindow(object):
 
         f = h5py.File(self.ft_file, "r") 
         mapsize = f['parameters']['mapsize'][0]
-        Atilde = f['data'][self.pol][self.spw_range[0]:self.spw_range[1],:,:]
+        FT_beam = f['data'][self.pol][self.spw_range[0]:self.spw_range[1],:,:]
         f.close()
 
-        return Atilde, mapsize
+        return FT_beam, mapsize
 
     def get_kgrid(self, bl_len, mapsize):
         """
@@ -162,7 +162,7 @@ class UVWindow(object):
         k = np.flip(k)
         return k
 
-    def interpolate_FT_beam(self, bl_len, Atilde, mapsize):
+    def interpolate_FT_beam(self, bl_len, FT_beam, mapsize):
         """
         Interpolate the FT of the beam on a regular (kperp,kperp) grid.
 
@@ -170,7 +170,7 @@ class UVWindow(object):
         ----------
         bl_len : float
             Length of the baseline considered, in meters.
-        Atilde : array_like
+        FT_beam : array_like
             Array made of the FT of the beam along the spectral window.
             Must have dimensions (Nfreqs, N, N).
         mapsize : float
@@ -179,7 +179,7 @@ class UVWindow(object):
 
         Returns
         ----------
-        Atilde_cube : array_like
+        interp_FT_beam : array_like
             FT of the beam, interpolated over a regular (kperp_x,kperp_y) grid.
             Has dimensions (Nfreqs, N, N).
         kperp_norm : array_like
@@ -189,24 +189,24 @@ class UVWindow(object):
         """
         kgrid, kperp_norm = self.get_kgrid(bl_len, mapsize)
 
-        ngrid = Atilde.shape[-1]
-        Atilde_cube = np.zeros((kgrid.size,kgrid.size,self.Nfreqs))
+        ngrid = FT_beam.shape[-1]
+        interp_FT_beam = np.zeros((kgrid.size,kgrid.size,self.Nfreqs))
         for i in range(self.Nfreqs):
             q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
             k = self.kperp4bl_freq(self.freq_array[i],bl_len, ngrid=ngrid, mapsize = mapsize)
-            A_real = interp2d(k,k,Atilde[i,:,:],bounds_error=False,fill_value=0.)
-            Atilde_cube[:,:,i] = A_real(kgrid,kgrid) 
+            A_real = interp2d(k,k,FT_beam[i,:,:],bounds_error=False,fill_value=0.)
+            interp_FT_beam[:,:,i] = A_real(kgrid,kgrid) 
 
-        return Atilde_cube, kperp_norm
+        return interp_FT_beam, kperp_norm
 
-    def take_freq_FT(self, Atilde_cube,delta_nu):
+    def take_freq_FT(self, interp_FT_beam,delta_nu):
         """
         Take the Fourier transform along frequency of the beam.
         Applies taper before taking the FT if appropriate.
 
         Parameters
         ----------
-        Atilde_cube : array_like
+        interp_FT_beam : array_like
             FT of the beam, interpolated over a regular (kperp_x,kperp_y) grid.
             Has dimensions (Nfreqs, N, N).
         delta_nu : float
@@ -222,9 +222,9 @@ class UVWindow(object):
 
         if self.taper is not None:
             tf = dspec.gen_window(self.taper, self.Nfreqs)
-            Atilde_cube = Atilde_cube*tf[None,None,:]
+            interp_FT_beam = interp_FT_beam*tf[None,None,:]
 
-        fnu = np.fft.fftshift(np.fft.fft(np.fft.fftshift(Atilde_cube,axes=-1),axis=-1,norm='ortho')*delta_nu**0.5,axes=-1)
+        fnu = np.fft.fftshift(np.fft.fft(np.fft.fftshift(interp_FT_beam,axes=-1),axis=-1,norm='ortho')*delta_nu**0.5,axes=-1)
 
         return fnu 
 
@@ -292,7 +292,7 @@ class UVWindow(object):
 
         return kpara, wf_array
 
-    def get_cylindrical_wf(self, bl_len, pol, Atilde, mapsize,
+    def get_cylindrical_wf(self, bl_len, pol, FT_beam, mapsize,
                             kperp_bins=[],kpara_bins=[],
                             return_bins='unweighted'):
         """
@@ -365,10 +365,10 @@ class UVWindow(object):
 
 
         t0 = time.time()
-        Atilde_cube, kperp_norm = self.interpolate_FT_beam(bl_len, Atilde, mapsize)
+        interp_FT_beam, kperp_norm = self.interpolate_FT_beam(bl_len, FT_beam, mapsize)
         t1 = time.time()
         delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
-        fnu = self.take_freq_FT(Atilde_cube,delta_nu)
+        fnu = self.take_freq_FT(interp_FT_beam,delta_nu)
         t2 = time.time()
         ##### cylindrical average
 
@@ -466,7 +466,7 @@ class UVWindow(object):
         self.set_polarisation(pol)
 
         # get FT of the beam from file
-        Atilde, mapsize = self.get_FT()
+        FT_beam, mapsize = self.get_FT()
 
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
@@ -505,7 +505,7 @@ class UVWindow(object):
         for ib in range(nbls):
             if self.verbose: print('Computing for bl %i of %i...' %(ib+1,nbls))
             kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,
-                                                                        Atilde, mapsize, 
+                                                                        FT_beam, mapsize, 
                                                                         kperp_bins, kpara_bins)
 
         # construct array giving the k probed by each baseline-tau pair
