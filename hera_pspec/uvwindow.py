@@ -352,7 +352,7 @@ class UVWindow(object):
             dk_perp = np.diff(kperp_bins).mean()
             kperp_range = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
             kperp_centre = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)
-            if (kperp_range.max()<=kperp_centre+10*dk_perp) or (kperp_range.min()>=kperp_centre-10.*dk_perp):
+            if (kperp_range.max()<kperp_centre+10*dk_perp) or (kperp_range.min()>kperp_centre-10.*dk_perp):
                 raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.',
                                 verbose=self.verbose)
 
@@ -368,7 +368,7 @@ class UVWindow(object):
             dk_para = np.diff(kpara_bins).mean()
             kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
-            if (kpara_range.max()<=kpara_centre+10*dk_para) or (kpara_range.min()>=kpara_centre-10.*dk_para):
+            if (kpara_range.max()<kpara_centre+10*dk_para) or (kpara_range.min()>kpara_centre-10.*dk_para):
                 raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kpara bins given as input.',
                                 verbose=self.verbose)
 
