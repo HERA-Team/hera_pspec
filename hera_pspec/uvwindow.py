@@ -266,13 +266,13 @@ class UVWindow(object):
         # read kperp bins
         kperp_bins = np.array(kperp_bins)
         nbins_kperp = kperp_bins.size
-        dkperp = np.diff(kperp_bins).mean()
-        kperp_range = np.arange(kperp_bins.min()-dkperp/2,kperp_bins.max()+dkperp,step=dkperp)
+        dk_perp = np.diff(kperp_bins).mean()
+        kperp_range = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
         # read kpara bins
         kpara_bins = np.array(kpara_bins)
         nbins_kpara = kpara_bins.size
-        dkpara = np.diff(kpara_bins).mean()
-        kpara_range = np.arange(kpara_bins.min()-dkpara/2,kpara_bins.max()+dkpara,step=dkpara)
+        dk_para = np.diff(kpara_bins).mean()
+        kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
 
 
         #### get kparallel grid
@@ -348,8 +348,11 @@ class UVWindow(object):
         else:
             kperp_bins = np.array(kperp_bins)
             nbins_kperp = kperp_bins.size
-            dkperp = np.diff(kperp_bins).mean()
-            kperp_range = np.arange(kperp_bins.min()-dkperp/2,kperp_bins.max()+dkperp,step=dkperp)
+            dk_perp = np.diff(kperp_bins).mean()
+            kperp_range = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
+            kperp_centre = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)
+            if (kperp_range.max()<=kperp_centre+10*dk_perp) or (kperp_range.min()>=kperp_centre-10.*dk_perp):
+                raise Warning('The bin centre is not incuded in the array of kperp bins given as input.')
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
@@ -360,9 +363,11 @@ class UVWindow(object):
         else:                                              
             kpara_bins = np.array(kpara_bins)
             nbins_kpara = kpara_bins.size
-            dkpara = np.diff(kpara_bins).mean()
-            kpara_range = np.arange(kpara_bins.min()-dkpara/2,kpara_bins.max()+dkpara,step=dkpara)
-
+            dk_para = np.diff(kpara_bins).mean()
+            kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
+            kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
+            if (kpara_range.max()<=kpara_centre+10*dk_para) or (kpara_range.min()>=kpara_centre-10.*dk_para):
+                raise Warning('The bin centre is not incuded in the array of kpara bins given as input.')
 
         t0 = time.time()
         interp_FT_beam, kperp_norm = self.interpolate_FT_beam(bl_len, FT_beam, mapsize)
@@ -454,13 +459,6 @@ class UVWindow(object):
         assert spw_range[1]-spw_range[0]>0, "Require non-zero spectral range."
         self.set_spw_range(spw_range)
         
-        # k-bins for spherical binning
-        assert len(kbins)>1, "must feed array of k bins for spherical averasge"                                                  
-        kbins = np.array(kbins)
-        nbinsk = kbins.size
-        dk = np.diff(kbins).mean()
-        krange = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
-
         assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], \
                 "Wrong polarisation string."
         self.set_polarisation(pol)
@@ -478,8 +476,12 @@ class UVWindow(object):
         else:
             kperp_bins = np.array(kperp_bins)
             nbins_kperp = kperp_bins.size
-            dkperp = np.diff(kperp_bins).mean()
-            kperp_range = np.arange(kperp_bins.min()-dkperp/2,kperp_bins.max()+dkperp,step=dkperp)
+            dk_perp = np.diff(kperp_bins).mean()
+            kperp_range = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
+            kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
+            kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(bl_lens)*np.sqrt(2)+ 10.*dk_perp
+            if (kperp_range.max()<=kperp_max): raise Warning('Max kperp bin centre not included in binning array')
+            if (kperp_range.min()>=kperp_min): raise Warning('Min kperp bin centre not included in binning array')
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
@@ -490,12 +492,26 @@ class UVWindow(object):
         else:                                              
             kpara_bins = np.array(kpara_bins)
             nbins_kpara = kpara_bins.size
-            dkpara = np.diff(kpara_bins).mean()
-            kpara_range = np.arange(kpara_bins.min()-dkpara/2,kpara_bins.max()+dkpara,step=dkpara)
+            dk_para = np.diff(kpara_bins).mean()
+            kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
+            kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
+            if (kpara_range.max()<=kpara_centre+10*dk_para) or (kpara_range.min()>=kpara_centre-10.*dk_para):
+                raise Warning('The bin centre is not incuded in the array of kpara bins given as input.')
 
         ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
         if (nbins_kperp>200) or (nbins_kpara>200):
             raise Warning('Large number of kperp/kpara bins. Risk of overresolving and slow computing.')
+
+        # k-bins for spherical binning
+        assert len(kbins)>1, "must feed array of k bins for spherical averasge"                                                  
+        kbins = np.array(kbins)
+        nbinsk = kbins.size
+        dk = np.diff(kbins).mean()
+        krange = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
+        if (krange.max()<=ktot.max()): 
+            raise Warning('Max spherical k probed is not included in bins.')
+        if (krange.min()>=ktot.min()): 
+            raise Warning('Min spherical k probed is not included in bins.')
 
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
