@@ -219,7 +219,7 @@ class UVWindow(object):
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
         # spacing of the numerical Fourier grid, in cosmological units
         dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h)/(2.*self.mapsize)
-        assert width>dk, 'kgrid must be over 2 pixels'.
+        assert width>dk, 'kgrid must be over 2 pixels.'
         # defines kgrid (kperp_x).
         kgrid = np.arange(kp_centre-width,kp_centre+width,step=dk)
         # array of kperp norms.
