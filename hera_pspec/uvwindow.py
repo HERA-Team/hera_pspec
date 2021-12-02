@@ -488,7 +488,7 @@ class UVWindow(object):
 
     def get_spherical_wf(self,spw_range,pol,
                             kbins, kperp_bins=[], kpara_bins=[],
-                            bl_groups=[],bl_lens=[]):
+                            bl_groups=[],bl_lens=[], verbose=None):
         """
         Get spherical window functions for a set of baselines, polarisation,
         along a given spectral range, and for a set of kbins used for averaging.
@@ -520,8 +520,14 @@ class UVWindow(object):
             (can be redundant groups from utils.get_reds).
             Must have same length as bl_groups.
             Can be optional if self.uvdata was given.
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
+            If None, value used is the class attribute.
 
         """
+
+        if verbose is None:
+            verbose = self.verbose
 
         if self.uvdata:
             uvd = UVData()
@@ -543,7 +549,7 @@ class UVWindow(object):
 
         if not (isinstance(spw_range[0],int) and isinstance(spw_range[1],int)):
             raise_warning('spw indices given are not integers... taking their floor value',
-                            verbose=self.verbose)
+                            verbose=verbose)
             spw_range = (int(np.floor(spw_range[0])),int(np.floor(spw_range[1])))
         assert spw_range[1]-spw_range[0]>0, "Require non-zero spectral range."
         self.set_spw_range(spw_range)
@@ -571,10 +577,10 @@ class UVWindow(object):
             kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             if (kperp_range.max()<=kperp_max): 
                 raise_warning('get_spherical_wf: Max kperp bin centre not included in binning array',
-                                verbose=self.verbose)
+                                verbose=verbose)
             if (kperp_range.min()>=kperp_min): 
                 raise_warning('get_spherical_wf: Min kperp bin centre not included in binning array',
-                                verbose=self.verbose)
+                                verbose=verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
@@ -590,12 +596,12 @@ class UVWindow(object):
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
             if (kpara_range.max()<=kpara_centre+5*dk_para) or (kpara_range.min()>=kpara_centre-5.*dk_para):
                 raise_warning('get_spherical_wf: The bin centre is not included in the array of kpara bins given as input.',
-                                verbose=self.verbose)
+                                verbose=verbose)
 
         ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
         if (nbins_kperp>200) or (nbins_kpara>200):
             raise_warning('get_spherical_wf: Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
-                            verbose=self.verbose)
+                            verbose=verbose)
 
         # k-bins for spherical binning
         assert len(kbins)>1, "must feed array of k bins for spherical averasge"                                                  
@@ -605,10 +611,10 @@ class UVWindow(object):
         krange = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
         if (krange.max()<=ktot.max()): 
             raise_warning('Max spherical k probed is not included in bins.',
-                            verbose=self.verbose)
+                            verbose=verbose)
         if (krange.min()>=ktot.min()): 
             raise_warning('Min spherical k probed is not included in bins.',
-                            verbose=self.verbose)
+                            verbose=verbose)
 
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
@@ -616,7 +622,7 @@ class UVWindow(object):
         kperp_array, kpar_array = np.zeros((nbls,nbins_kperp)),np.zeros((nbls,nbins_kpara))
         wf_array = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
         for ib in range(nbls):
-            if self.verbose: print('Computing for bl %i of %i...' %(ib+1,nbls))
+            if verbose: print('Computing for bl %i of %i...' %(ib+1,nbls))
             kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,
                                                                         FT_beam, mapsize, 
                                                                         kperp_bins, kpara_bins)
