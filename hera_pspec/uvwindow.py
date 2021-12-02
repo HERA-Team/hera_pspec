@@ -34,7 +34,8 @@ class UVWindow(object):
             Data file to be used to read baselines.
             Not used if set to ''.
         taper : str
-            Type of data tapering. See uvtools.dspec.gen_window for options.
+            Type of data tapering applied along bandwidtg. 
+            See uvtools.dspec.gen_window for options.
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not
             specified. Default: None.
@@ -224,6 +225,7 @@ class UVWindow(object):
         kgrid = np.arange(kp_centre-width,kp_centre+width,step=dk)
         # array of kperp norms.
         kperp_norm = np.sqrt(np.power(kgrid,2)[:, None] + np.power(kgrid,2))
+
         return kgrid, kperp_norm
 
     def kperp4bl_freq(self,freq,bl_len, ngrid):    
@@ -250,6 +252,7 @@ class UVWindow(object):
 
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
+        # Fourier dual of sky angle theta
         q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.mapsize)
         k = 2.*np.pi/R*(freq*bl_len/conversions.units.c-q)
         k = np.flip(k)
@@ -278,13 +281,20 @@ class UVWindow(object):
             Has dimensions (N,N).
 
         """
+
+        # regular kperp_x grid the FT of the beam will be interpolated over.
+        # kperp_norm is the corresponding total kperp:
+        # kperp = sqrt(kperp_x**2 + kperp_y**2)
         kgrid, kperp_norm = self.get_kgrid(bl_len)
 
+        # assign FT of beam to appropriate kperp grid for each frequency
+        # and given baseline length
         ngrid = FT_beam.shape[-1]
         interp_FT_beam = np.zeros((kgrid.size,kgrid.size,self.Nfreqs))
         for i in range(self.Nfreqs):
-            q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.mapsize)
+            # kperp values over frequency array for bl_len
             k = self.kperp4bl_freq(self.freq_array[i],bl_len, ngrid=ngrid)
+            # interpolate the FT beam over values onto regular kgrid
             A_real = interp2d(k,k,FT_beam[i,:,:],bounds_error=False,fill_value=0.)
             interp_FT_beam[:,:,i] = A_real(kgrid,kgrid) 
 
@@ -304,7 +314,8 @@ class UVWindow(object):
             Frequency resolution (Channel width) in Hz
             along the spectral window.
         taper : str
-            Type of data tapering. See uvtools.dspec.gen_window for options.
+            Type of data tapering applied along frequency direction. 
+            See uvtools.dspec.gen_window for options.
             If None, no taper is used.
             If '', self.taper is used.
 
@@ -315,11 +326,14 @@ class UVWindow(object):
             Has dimensions (Nfreqs, N, N)
         """
 
+        # apply taper along frequency direction
         if taper is not None:
             if len(taper)==0: taper = self.taper
             tf = dspec.gen_window(taper, self.Nfreqs)
             interp_FT_beam = interp_FT_beam*tf[None,None,:]
 
+        # take numerical FT along frequency axis
+        # normalise to appropriate units and recentre
         fnu = np.fft.fftshift(np.fft.fft(np.fft.fftshift(interp_FT_beam,axes=-1),axis=-1,norm='ortho')*delta_nu**0.5,axes=-1)
 
         return fnu 
@@ -344,7 +358,6 @@ class UVWindow(object):
             1D float array of ascending k_parallel bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning.
             Make sure the values are consistent with self.little_h.
-
 
         Returns
         ----------
@@ -372,13 +385,18 @@ class UVWindow(object):
 
 
         #### get kparallel grid
+        # conversion factor to cosmological units
         alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
+        # frequency resolution
         delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
-        q = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs),axes=-1)/delta_nu #unit 1: FT along theta
+        # Fourier dual of frequency
+        eta = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs),axes=-1)/delta_nu #unit 1: FT along theta
+        # construct array of |kpara| values for given delay tau
+        kpar_norm = np.abs(2.*np.pi/alpha*(eta+tau))
 
+        # perform binning along k_parallel
         wf_array = np.zeros((nbins_kperp,nbins_kpara))
         kpara = np.zeros(nbins_kpara)
-        kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
         for j in range(nbins_kperp):
             for m in range(nbins_kpara):
                 mask= (kpara_bin_edges[m]<=kpar_norm) & (kpar_norm<kpara_bin_edges[m+1])
@@ -436,6 +454,7 @@ class UVWindow(object):
 
         """
 
+        ##### INITIALISE PARAMETERS
 
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
@@ -470,12 +489,17 @@ class UVWindow(object):
                 raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kpara bins given as input.',
                                 verbose=self.verbose)
 
-        t0 = time.time()
+
+
+        ##### COMPUTE CYLINDRICAL WINDOW FUNCTIONS
+
+        # interpolate FT of beam onto regular grid of (kperp_x,kperp_y)
         interp_FT_beam, kperp_norm = self.interpolate_FT_beam(bl_len, FT_beam)
-        t1 = time.time()
+        # frequency resolution
         delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
+        # obtain FT along frequency 
         fnu = self.take_freq_FT(interp_FT_beam,delta_nu)
-        t2 = time.time()
+
         ##### cylindrical average
 
         # on sky plane
@@ -488,12 +512,9 @@ class UVWindow(object):
                     wf_array1[m,i]=np.mean(np.abs(fnu[mask,i])**2)
                     kperp[m] = np.mean(kperp_norm[mask])
         t3 = time.time()
+
         # in frequency direction    
-        # binning
         wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
-        # kpara, wf0 = self.get_wf_for_tau(self.dly_array[0],wf_array1)
-        # for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
-            # wf_array[it,:,:]=np.roll(wf0,-it,axis=1)
         for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
             kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,wf_array1,kperp_bins,kpara_bins)
         #fill by symmetry for tau = -tau
@@ -502,13 +523,14 @@ class UVWindow(object):
         else:
             wf_array[self.Nfreqs//2+1:,:,:]=np.flip(wf_array,axis=0)[self.Nfreqs//2+1:]
 
-        # ### normalisation of window functions
+        ### normalisation of window functions
         wf_array /= np.sum(wf_array,axis=(1,2))[:,None,None]
 
         if (return_bins=='unweighted'):
             kperp, kpara = kperp_bins, kpara_bins
 
         return kperp, kpara, wf_array
+
 
     def get_spherical_wf(self,spw_range,pol,
                             kbins, kperp_bins=[], kpara_bins=[],
@@ -550,9 +572,13 @@ class UVWindow(object):
 
         """
 
+
+        ##### INITIALISE PARAMETERS
+
         if verbose is None:
             verbose = self.verbose
 
+        # read baseline groups from data file if given
         if self.uvdata:
             uvd = UVData()
             uvd.read(self.uvdatafile, read_data=False)
@@ -566,37 +592,44 @@ class UVWindow(object):
         else:
             assert len(bl_groups)>0, "Must give list of baselines as input"
 
+        # check consistency of baseline-related inputs
         assert len(bl_groups)==len(bl_lens), "bl_groups and bl_lens must have same length"
         nbls = len(bl_groups) # number of redudant groups
         bl_lens = np.array(bl_lens)
         red_nb = np.array([len(l) for l in bl_groups]) #number of occurences of one bl length
 
+        # consistency checks for spw range given
         if not (isinstance(spw_range[0],int) and isinstance(spw_range[1],int)):
             raise_warning('spw indices given are not integers... taking their floor value',
                             verbose=verbose)
             spw_range = (int(np.floor(spw_range[0])),int(np.floor(spw_range[1])))
         assert spw_range[1]-spw_range[0]>0, "Require non-zero spectral range."
         self.set_spw_range(spw_range)
-        
+
+        # consistency cheks related to polarisation
         assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], \
                 "Wrong polarisation string."
         self.set_polarisation(pol)
 
-        # get FT of the beam from file
+        # get FT of the beam from file and set frequency_related attributed (such as avg_z...)
         FT_beam = self.get_FT()
 
         #k-bins for cylindrical binning
-        if np.size(kperp_bins)==0 or kperp_bins is None:
+        if (np.size(kperp_bins)==0) or (kperp_bins is None):
+            # define default kperp bins, making sure all values probed by bl_lens are
+            # included and there is no over-sampling
             dk_perp = np.diff(self.get_kgrid(np.min(bl_lens))[1]).mean()*5
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_bin_edges = np.arange(dk_perp,kperp_max,step=dk_perp)
             kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
             nbins_kperp = kperp_bins.size
         else:
+            # read from input
             kperp_bins = np.array(kperp_bins)
             nbins_kperp = kperp_bins.size
             dk_perp = np.diff(kperp_bins).mean()
             kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
+            # make sure proper kperp values are included in given bins, raise warning otherwise
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             if (kperp_bin_edges.max()<=kperp_max): 
@@ -607,6 +640,8 @@ class UVWindow(object):
                                 verbose=verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
+            # define default kperp bins, making sure all values probed by freq array are
+            # included and there is no over-sampling
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
             kpara_max = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+10.*dk_para
             kpara_bin_edges = np.arange(dk_para,kpara_max,step=dk_para)
@@ -618,27 +653,34 @@ class UVWindow(object):
             dk_para = np.diff(kpara_bins).mean()
             kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
+            # make sure proper kpara values are included in given bins, raise warning otherwise
             if (kpara_bin_edges.max()<=kpara_centre+5*dk_para) or (kpara_bin_edges.min()>=kpara_centre-5.*dk_para):
                 raise_warning('get_spherical_wf: The bin centre is not included in the array of kpara bins given as input.',
                                 verbose=verbose)
 
-        ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
         if (nbins_kperp>200) or (nbins_kpara>200):
             raise_warning('get_spherical_wf: Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
                             verbose=verbose)
+        # array of |k|=sqrt(kperp**2+kpara**2)
+        ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
+
 
         # k-bins for spherical binning
         assert len(kbins)>1, "must feed array of k bins for spherical averasge"                                                  
         kbins = np.array(kbins)
         nbinsk = kbins.size
         dk = np.diff(kbins).mean()
-        krange = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
-        if (krange.max()<=ktot.max()): 
+        kbin_edges = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
+        # make sure proper ktot values are included in given bins, raise warning otherwise
+        if (kbin_edges.max()<=ktot.max()): 
             raise_warning('Max spherical k probed is not included in bins.',
                             verbose=verbose)
-        if (krange.min()>=ktot.min()): 
+        if (kbin_edges.min()>=ktot.min()): 
             raise_warning('Min spherical k probed is not included in bins.',
                             verbose=verbose)
+
+
+        ##### COMPUTE THE WINDOW FUNCTIONS
 
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
@@ -657,18 +699,20 @@ class UVWindow(object):
         kparas = self.dly_array * self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) 
         kmags = np.sqrt(kperps[:,None]**2+kparas**2)
 
+        # perform spherical binning
         wf_spherical = np.zeros((nbinsk,nbinsk))
         count = np.zeros(nbinsk,dtype=int)
         for m1 in range(nbinsk):
-            mask2 = (krange[m1]<=kmags) & (kmags<krange[m1+1]).astype(int)
+            mask2 = (kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1]).astype(int)
             mask2 = mask2*red_nb[:,None] #account for redundancy
             count[m1] = np.sum(mask2) 
             wf_temp = np.sum(wf_array*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
             for m in range(nbinsk):
-                mask= (krange[m]<=ktot) & (ktot<krange[m+1])
+                mask= (kbin_edges[m]<=ktot) & (ktot<kbin_edges[m+1])
                 if np.any(mask): #cannot compute mean if zero elements
                     wf_spherical[m1,m]=np.mean(wf_temp[mask])
             wf_spherical[m1,:]/=np.sum(wf_spherical[m1,:])
+
 
         return wf_spherical, count
 
