@@ -623,7 +623,7 @@ class UVWindow(object):
         wf_array = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
         for ib in range(nbls):
             if verbose: 
-                sys.stdout('\rComputing for bl %i of %i...' %(ib+1,nbls))
+                sys.stdout.write('\rComputing for bl %i of %i...' %(ib+1,nbls))
             kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,
                                                                         FT_beam, mapsize, 
                                                                         kperp_bins, kpara_bins)
