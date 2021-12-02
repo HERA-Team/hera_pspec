@@ -59,7 +59,8 @@ class UVWindow(object):
             ##### to be coded up
         self.mapsize = None # Size of the flat map the beam was projected onto. 
                             # Only used for internal calculations.
-        # if data file is used, initialises related arguments        
+
+        # if data file is used, initialises related arguments.        
         if len(uvdata)>0:
             self.uvdata = True
             self.uvdatafile = uvdata
@@ -107,8 +108,7 @@ class UVWindow(object):
 
         """
 
-        assert len(spw_range)==2, "spw_range must be fed as a tuple of frequency indices between 0 and 1024"
-
+        assert len(spw_range)==2, "spw_range must be fed as a tuple of frequency indices."
         self.spw_range = tuple(spw_range)
 
     def set_spw_parameters(self,bandwidth):
@@ -124,7 +124,7 @@ class UVWindow(object):
 
         assert len(bandwidth)>0, "Must feed bandwidth as an array of frequencies."
         assert min(self.spw_range)>=0 and max(self.spw_range)<len(bandwidth), \
-                "spw_range must be integers within the HERA frequency channels"
+                "spw_range must be integers within the given bandwith."
 
         self.freq_array = bandwidth[self.spw_range[0]:self.spw_range[-1]]
         self.Nfreqs = len(self.freq_array)
@@ -134,7 +134,7 @@ class UVWindow(object):
         if self.uvdata:
             uvd = UVData()
             uvd.read(self.uvdatafile, read_data=False)
-            assert uvd.Nfreqs==len(bandwidth), "Data file does share bandwidth with FT beam file"
+            assert uvd.Nfreqs==len(bandwidth), "Data file does share bandwidth with FT beam file."
 
     def set_polarisation(self,pol):
         """
@@ -183,11 +183,12 @@ class UVWindow(object):
         HERA_bw = f['freq'][...]
         f.close()
 
+        # Set spw parameters such as frequency range and average redshift.
         self.set_spw_parameters(HERA_bw)
 
         return FT_beam
 
-    def get_kgrid(self, bl_len):
+    def get_kgrid(self, bl_len, width=0.020):
         """
         Computes the kperp-array the FT of the beam will be interpolated over.
         Must include all the kperp covered by the spectral window for the 
@@ -197,12 +198,16 @@ class UVWindow(object):
         ----------
         bl_len : float
             Length of the baseline considered, in meters.
+        width : float
+            Distance between central kperp for given bl_len
+            and edge of the kgrid.
+            Increasing it will slow down the computation.
 
         Returns
         ----------
         kgrid : array_like
-            (kperp_x,kperp_y) grid corresponding to a given baseline.
-            Two-dimensional.
+            (kperp_x) grid corresponding to a given baseline.
+            One-dimensional.
         kperp_norm : array_like
             Array of kperp vector norms corresponding to kgrid.
             Two-dimensionsal.
@@ -210,9 +215,14 @@ class UVWindow(object):
 
         """
 
+        # central kperp for given baseline (i.e. 2pi*b*nu/c/R) 
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
+        # spacing of the numerical Fourier grid, in cosmological units
         dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h)/(2.*self.mapsize)
-        kgrid = np.arange(kp_centre-0.020,kp_centre+0.020,step=dk)# np.arange(kmin,kmax+dk,step=dk)
+        assert width>dk, 'kgrid must be over 2 pixels'.
+        # defines kgrid (kperp_x).
+        kgrid = np.arange(kp_centre-width,kp_centre+width,step=dk)
+        # array of kperp norms.
         kperp_norm = np.sqrt(np.power(kgrid,2)[:, None] + np.power(kgrid,2))
         return kgrid, kperp_norm
 
@@ -237,11 +247,13 @@ class UVWindow(object):
             Array of k_perp values to match to the FT of the beam.
 
         """
+
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
         q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.mapsize)
         k = 2.*np.pi/R*(freq*bl_len/conversions.units.c-q)
         k = np.flip(k)
+
         return k
 
     def interpolate_FT_beam(self, bl_len, FT_beam):
@@ -278,7 +290,7 @@ class UVWindow(object):
 
         return interp_FT_beam, kperp_norm
 
-    def take_freq_FT(self, interp_FT_beam,delta_nu):
+    def take_freq_FT(self, interp_FT_beam,delta_nu, taper=''):
         """
         Take the Fourier transform along frequency of the beam.
         Applies taper before taking the FT if appropriate.
@@ -291,6 +303,10 @@ class UVWindow(object):
         delta_nu : float
             Frequency resolution (Channel width) in Hz
             along the spectral window.
+        taper : str
+            Type of data tapering. See uvtools.dspec.gen_window for options.
+            If None, no taper is used.
+            If '', self.taper is used.
 
         Returns
         ----------
@@ -299,8 +315,9 @@ class UVWindow(object):
             Has dimensions (Nfreqs, N, N)
         """
 
-        if self.taper is not None:
-            tf = dspec.gen_window(self.taper, self.Nfreqs)
+        if taper is not None:
+            if len(taper)==0: taper = self.taper
+            tf = dspec.gen_window(taper, self.Nfreqs)
             interp_FT_beam = interp_FT_beam*tf[None,None,:]
 
         fnu = np.fft.fftshift(np.fft.fft(np.fft.fftshift(interp_FT_beam,axes=-1),axis=-1,norm='ortho')*delta_nu**0.5,axes=-1)
@@ -385,6 +402,9 @@ class UVWindow(object):
         pol : str
             Polarisation of the beam. 
             Can be chosen among 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'.
+        FT_beam : array_like
+            Array made of the FT of the beam along the spectral window.
+            Must have dimensions (Nfreqs, N, N).
         kperp_bins : array_like
             1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning,
@@ -407,12 +427,12 @@ class UVWindow(object):
             Axis 2 is kparallel (kpara_bins defined as global variable).
         kperp : array_like
             Values of kperp corresponding to the axis=1 of wf_array.
-            Note: these values are weighted by their number of counts 
-            in the cylindrical binning.
+            Note: if return_bins='weighted', these values are weighted 
+            by their number of counts in the cylindrical binning.
         kpara : array_like
             Values of kpara corresponding to the axis=2 of wf_array.
-            Note: these values are weighted by their number of counts 
-            in the cylindrical binning.
+            Note: if return_bins='weighted', these values are weighted 
+            by their number of counts in the cylindrical binning.
 
         """
 
