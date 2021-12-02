@@ -149,7 +149,7 @@ class UVWindow(object):
 
         self.pol = pol 
 
-    def get_FT(self):
+    def get_FT(self,file=''):
         """
         Loads the Fourier transform (FT) of the beam from different attributes: 
             - self.pol
@@ -158,6 +158,14 @@ class UVWindow(object):
         Note that the array has no physical coordinates, they will be later 
         attributed by kperp4bl_freq.
 
+        Parameters
+        ----------
+        file : str
+            Path to FT beam file.
+            Root name of the file to use, without the polarisation
+                Ex : FT_beam_HERA_dipole (+ path)
+            If '', then the object ft_file attribute is used.
+
         Returns
         ----------
         FT_beam : array_like
@@ -165,7 +173,10 @@ class UVWindow(object):
             window considered. Has dimensions (Nfreqs,ngrid,ngrid).
         """
 
-        filename = '%s_%s.hdf5' %(self.ft_file,self.pol)
+        if len(file)==0:
+            file = self.ft_file
+
+        filename = '%s_%s.hdf5' %(file,self.pol)
         f = h5py.File(filename, "r") 
         self.mapsize = f['mapsize'][0] 
         FT_beam = f['FT_beam'][self.spw_range[0]:self.spw_range[1],:,:]
