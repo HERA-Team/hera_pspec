@@ -9,9 +9,6 @@ from pyuvdata import UVBeam, UVData
 
 from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_utils as uvputils
 
-chan_nb = 1024
-HERA_bw=np.linspace(1.,2.,chan_nb,endpoint=False)*1e8
-
 class UVWindow(object):
     """
     An object for storing window functions copmuted without the delay approximation
@@ -54,10 +51,7 @@ class UVWindow(object):
         
         if len(uvdata)>0:
             self.uvdata = True
-            self.uvdatafile = uvdata
-            uvd = UVData()
-            uvd.read(self.uvdatafile, read_data=False)
-            assert uvd.Nfreqs==chan_nb, "Data file does not have %i frequency channels" %chan_nb
+            self.uvdatafile = uvdata=
         else:
             self.uvdata = False
 
@@ -111,11 +105,31 @@ class UVWindow(object):
         assert len(spw_range)==2, "spw_range must be fed as a tuple of frequency indices between 0 and 1024"
 
         self.spw_range = tuple(spw_range)
-        self.freq_array = HERA_bw[spw_range[0]:spw_range[-1]]
+
+    def get_spw(self,bandwidth):
+        """
+        Sets the parameters related to the spectral window considered.
+
+        Parameters
+        ----------
+        bandwidth : array of floats
+            List of frequencies covered by the instrument, in Hz.
+
+        """
+
+        assert len(bandwidth)>0, "Must feed bandwidth as an array of frequencies."
+        assert min(self.spw_range)>=0 and max(self.spw_range)<len(bandwidth), \
+                "spw_range must be integers within the HERA frequency channels"
+
+        self.freq_array = bandwidth[self.spw_range[0]:self.spw_range[-1]]
         self.Nfreqs = len(self.freq_array)
         self.dly_array = utils.get_delays(self.freq_array,n_dlys=len(self.freq_array))
         self.avg_nu = np.mean(self.freq_array)
-        self.avg_z = self.cosmo.f2z(self.avg_nu)
+        self.avg_z = self.cosmo.f2z(self.avg_nu)        
+        if self.uvdata:
+            uvd = UVData()
+            uvd.read(self.uvdatafile, read_data=False)
+            assert uvd.Nfreqs==len(bandwidth), "Data file does share bandwidth with FT beam file"
 
     def set_polarisation(self,pol):
         """
@@ -135,6 +149,7 @@ class UVWindow(object):
         Loads the Fourier transform (FT) of the beam from different attributes: 
             - self.pol
             - self.spw_range
+        and initialises freqncy array from the latter.
         Note that the array has no physical coordinates, they will be later 
         attributed by kperp4bl_freq.
 
@@ -152,7 +167,10 @@ class UVWindow(object):
         f = h5py.File(filename, "r") 
         mapsize = f['mapsize'][0]
         FT_beam = f['FT_beam'][self.spw_range[0]:self.spw_range[1],:,:]
+        HERA_bw = f['freq'][...]
         f.close()
+
+        self.get_spw(HERA_bw)
 
         return FT_beam, mapsize
 
@@ -462,8 +480,6 @@ class UVWindow(object):
 
         # ### normalisation of window functions
         wf_array /= np.sum(wf_array,axis=(1,2))[:,None,None]
-        t4 = time.time()
-        print(t1-t0,t2-t1,t3-t2,t4-t3)
 
         if (return_bins=='unweighted'):
             kperp, kpara = kperp_bins, kpara_bins
@@ -529,8 +545,6 @@ class UVWindow(object):
             raise_warning('spw indices given are not integers... taking their floor value',
                             verbose=self.verbose)
             spw_range = (int(np.floor(spw_range[0])),int(np.floor(spw_range[1])))
-        assert min(spw_range)>=0 and max(spw_range)<chan_nb, \
-                "spw_range must be integers within the HERA frequency channels"
         assert spw_range[1]-spw_range[0]>0, "Require non-zero spectral range."
         self.set_spw_range(spw_range)
         
