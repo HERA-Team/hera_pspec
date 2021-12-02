@@ -51,7 +51,7 @@ class UVWindow(object):
         
         if len(uvdata)>0:
             self.uvdata = True
-            self.uvdatafile = uvdata=
+            self.uvdatafile = uvdata
         else:
             self.uvdata = False
 
