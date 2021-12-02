@@ -556,7 +556,7 @@ class UVWindow(object):
 
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
-            dk_perp = np.diff(self.get_kgrid(np.min(bl_lens), self.mapsize)[1]).mean()*5
+            dk_perp = np.diff(self.get_kgrid(np.min(bl_lens))[1]).mean()*5
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
             nbins_kperp = kperp_range.size -1
