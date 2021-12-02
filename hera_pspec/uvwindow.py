@@ -11,7 +11,7 @@ from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_u
 
 class UVWindow(object):
     """
-    An object for storing window functions copmuted without the delay approximation
+    An object for storing window functions copmuted without the delay approximation.
     """
 
     def __init__(self, ftbeam, uvdata='',taper='blackman-harris', 
@@ -48,13 +48,7 @@ class UVWindow(object):
 
         # Summary attributes
 
-        
-        if len(uvdata)>0:
-            self.uvdata = True
-            self.uvdatafile = uvdata
-        else:
-            self.uvdata = False
-
+        # check if path the FT beam file has been given
         if isinstance(ftbeam, str):
             self.ft_file = ftbeam
         elif ftbeam=='default':
@@ -62,15 +56,26 @@ class UVWindow(object):
         elif ftbeam is '':
             raise_warning('No input FT beam, will compute all window functions from scratch... Will take a few hours.',
                             verbose=self.verbose)
-        # else:
             ##### to be coded up
+        self.mapsize = None # Size of the flat map the beam was projected onto. 
+                            # Only used for internal calculations.
+        # if data file is used, initialises related arguments        
+        if len(uvdata)>0:
+            self.uvdata = True
+            self.uvdatafile = uvdata
+        else:
+            self.uvdata = False
 
+        # initialises other attributes
         if cosmo is None: cosmo = conversions.Cosmo_Conversions()
         self.cosmo = cosmo
         self.little_h = little_h
         self.verbose = verbose
         self.taper = taper
 
+        # Analysis-related attributes. 
+        # Will be set with set_spw_range andd set_spw_parameters
+        # once one of the get_wf functions is called.
         self.freq_array = None
         self.Nfreqs = None
         self.dly_array = None
@@ -106,7 +111,7 @@ class UVWindow(object):
 
         self.spw_range = tuple(spw_range)
 
-    def get_spw(self,bandwidth):
+    def set_spw_parameters(self,bandwidth):
         """
         Sets the parameters related to the spectral window considered.
 
@@ -158,23 +163,20 @@ class UVWindow(object):
         FT_beam : array_like
             Real part of the Fourier transform of the beam along the spectral
             window considered. Has dimensions (Nfreqs,ngrid,ngrid).
-        mapsize : float
-            Size of the flat map the beam was projected onto. 
-            Only used for internal calculations.
         """
 
         filename = '%s_%s.hdf5' %(self.ft_file,self.pol)
         f = h5py.File(filename, "r") 
-        mapsize = f['mapsize'][0]
+        self.mapsize = f['mapsize'][0] 
         FT_beam = f['FT_beam'][self.spw_range[0]:self.spw_range[1],:,:]
         HERA_bw = f['freq'][...]
         f.close()
 
-        self.get_spw(HERA_bw)
+        self.set_spw_parameters(HERA_bw)
 
-        return FT_beam, mapsize
+        return FT_beam
 
-    def get_kgrid(self, bl_len, mapsize):
+    def get_kgrid(self, bl_len):
         """
         Computes the kperp-array the FT of the beam will be interpolated over.
         Must include all the kperp covered by the spectral window for the 
@@ -184,9 +186,6 @@ class UVWindow(object):
         ----------
         bl_len : float
             Length of the baseline considered, in meters.
-        mapsize : int
-            Size of the flat map the beam was projected onto. 
-            Only used for internal calculations.
 
         Returns
         ----------
@@ -201,12 +200,12 @@ class UVWindow(object):
         """
 
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
-        dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h)/(2.*mapsize)
+        dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h)/(2.*self.mapsize)
         kgrid = np.arange(kp_centre-0.020,kp_centre+0.020,step=dk)# np.arange(kmin,kmax+dk,step=dk)
         kperp_norm = np.sqrt(np.power(kgrid,2)[:, None] + np.power(kgrid,2))
         return kgrid, kperp_norm
 
-    def kperp4bl_freq(self,freq,bl_len, ngrid, mapsize):    
+    def kperp4bl_freq(self,freq,bl_len, ngrid):    
         """
         Computes the range of kperp corresponding to a given
         baseline-freq pair. It will be assigned to the FT of the beam.
@@ -220,9 +219,6 @@ class UVWindow(object):
         ngrid : int
             Number of pixels in the FT beam array. 
             Internal use only. Do not modify.
-        mapsize : float
-            Size of the flat map the beam was projected onto.
-            Internal use only. Do not modify.
 
         Returns
         ----------
@@ -232,12 +228,12 @@ class UVWindow(object):
         """
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
-        q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
+        q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.mapsize)
         k = 2.*np.pi/R*(freq*bl_len/conversions.units.c-q)
         k = np.flip(k)
         return k
 
-    def interpolate_FT_beam(self, bl_len, FT_beam, mapsize):
+    def interpolate_FT_beam(self, bl_len, FT_beam):
         """
         Interpolate the FT of the beam on a regular (kperp,kperp) grid.
 
@@ -248,9 +244,6 @@ class UVWindow(object):
         FT_beam : array_like
             Array made of the FT of the beam along the spectral window.
             Must have dimensions (Nfreqs, N, N).
-        mapsize : float
-            Size of the flat map the beam was projected onto.
-            Internal use only. Do not modify.
 
         Returns
         ----------
@@ -262,13 +255,13 @@ class UVWindow(object):
             Has dimensions (N,N).
 
         """
-        kgrid, kperp_norm = self.get_kgrid(bl_len, mapsize)
+        kgrid, kperp_norm = self.get_kgrid(bl_len)
 
         ngrid = FT_beam.shape[-1]
         interp_FT_beam = np.zeros((kgrid.size,kgrid.size,self.Nfreqs))
         for i in range(self.Nfreqs):
-            q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*mapsize)
-            k = self.kperp4bl_freq(self.freq_array[i],bl_len, ngrid=ngrid, mapsize = mapsize)
+            q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.mapsize)
+            k = self.kperp4bl_freq(self.freq_array[i],bl_len, ngrid=ngrid)
             A_real = interp2d(k,k,FT_beam[i,:,:],bounds_error=False,fill_value=0.)
             interp_FT_beam[:,:,i] = A_real(kgrid,kgrid) 
 
@@ -367,7 +360,7 @@ class UVWindow(object):
 
         return kpara, wf_array
 
-    def get_cylindrical_wf(self, bl_len, pol, FT_beam, mapsize,
+    def get_cylindrical_wf(self, bl_len, pol, FT_beam,
                             kperp_bins=[],kpara_bins=[],
                             return_bins='unweighted'):
         """
@@ -415,7 +408,7 @@ class UVWindow(object):
 
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
-            dk_perp = np.diff(self.get_kgrid(bl_len, mapsize)[1]).mean()*5
+            dk_perp = np.diff(self.get_kgrid(bl_len)[1]).mean()*5
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)+ 9.*dk_perp
             kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
             nbins_kperp = kperp_range.size -1
@@ -447,7 +440,7 @@ class UVWindow(object):
                                 verbose=self.verbose)
 
         t0 = time.time()
-        interp_FT_beam, kperp_norm = self.interpolate_FT_beam(bl_len, FT_beam, mapsize)
+        interp_FT_beam, kperp_norm = self.interpolate_FT_beam(bl_len, FT_beam)
         t1 = time.time()
         delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
         fnu = self.take_freq_FT(interp_FT_beam,delta_nu)
@@ -559,11 +552,11 @@ class UVWindow(object):
         self.set_polarisation(pol)
 
         # get FT of the beam from file
-        FT_beam, mapsize = self.get_FT()
+        FT_beam = self.get_FT()
 
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
-            dk_perp = np.diff(self.get_kgrid(np.min(bl_lens), mapsize)[1]).mean()*5
+            dk_perp = np.diff(self.get_kgrid(np.min(bl_lens), self.mapsize)[1]).mean()*5
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
             nbins_kperp = kperp_range.size -1
@@ -625,7 +618,7 @@ class UVWindow(object):
             if verbose: 
                 sys.stdout.write('\rComputing for bl %i of %i...' %(ib+1,nbls))
             kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,
-                                                                        FT_beam, mapsize, 
+                                                                        FT_beam,
                                                                         kperp_bins, kpara_bins)
 
         # construct array giving the k probed by each baseline-tau pair
