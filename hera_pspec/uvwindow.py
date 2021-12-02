@@ -290,7 +290,7 @@ class UVWindow(object):
 
         return interp_FT_beam, kperp_norm
 
-    def take_freq_FT(self, interp_FT_beam,delta_nu, taper=''):
+    def take_freq_FT(self, interp_FT_beam, delta_nu, taper=''):
         """
         Take the Fourier transform along frequency of the beam.
         Applies taper before taking the FT if appropriate.
@@ -359,16 +359,16 @@ class UVWindow(object):
         
         """
 
-        # read kperp bins
+        # read kperp bins and find bin_edges
         kperp_bins = np.array(kperp_bins)
         nbins_kperp = kperp_bins.size
         dk_perp = np.diff(kperp_bins).mean()
-        kperp_range = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
+        kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
         # read kpara bins
         kpara_bins = np.array(kpara_bins)
         nbins_kpara = kpara_bins.size
         dk_para = np.diff(kpara_bins).mean()
-        kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
+        kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
 
 
         #### get kparallel grid
@@ -381,7 +381,7 @@ class UVWindow(object):
         kpar_norm = np.abs(2.*np.pi/alpha*(q+tau))
         for j in range(nbins_kperp):
             for m in range(nbins_kpara):
-                mask= (kpara_range[m]<=kpar_norm) & (kpar_norm<kpara_range[m+1])
+                mask= (kpara_bin_edges[m]<=kpar_norm) & (kpar_norm<kpara_bin_edges[m+1])
                 if np.any(mask): #cannot compute mean if zero elements
                     wf_array[j,m]=np.mean(wf_array1[j,mask])
                     kpara[m] = np.mean(kpar_norm[mask])
@@ -441,32 +441,32 @@ class UVWindow(object):
         if np.size(kperp_bins)==0 or kperp_bins is None:
             dk_perp = np.diff(self.get_kgrid(bl_len)[1]).mean()*5
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)+ 9.*dk_perp
-            kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
-            nbins_kperp = kperp_range.size -1
-            kperp_bins = (kperp_range[1:]+kperp_range[:-1])/2
+            kperp_bin_edges = np.arange(dk_perp,kperp_max,step=dk_perp)
+            kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
+            nbins_kperp = kperp_bins.size
         else:
             kperp_bins = np.array(kperp_bins)
             nbins_kperp = kperp_bins.size
             dk_perp = np.diff(kperp_bins).mean()
-            kperp_range = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
+            kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
             kperp_centre = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)
-            if (kperp_range.max()<kperp_centre+9.*dk_perp) or (kperp_range.min()>kperp_centre-9.*dk_perp):
+            if (kperp_bin_edges.max()<kperp_centre+9.*dk_perp) or (kperp_bin_edges.min()>kperp_centre-9.*dk_perp):
                 raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.',
                                 verbose=self.verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
             kpara_max = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+9.*dk_para
-            kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
-            nbins_kpara = kpara_range.size -1
-            kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
+            kpara_bin_edges = np.arange(dk_para,kpara_max,step=dk_para)
+            kpara_bins = (kpara_bin_edges[1:]+kpara_bin_edges[:-1])/2
+            nbins_kpara = kpara_bins.size
         else:                                              
             kpara_bins = np.array(kpara_bins)
             nbins_kpara = kpara_bins.size
             dk_para = np.diff(kpara_bins).mean()
-            kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
+            kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
-            if (kpara_range.max()<kpara_centre+9*dk_para) or (kpara_range.min()>kpara_centre-9.*dk_para):
+            if (kpara_bin_edges.max()<kpara_centre+9*dk_para) or (kpara_bin_edges.min()>kpara_centre-9.*dk_para):
                 raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kpara bins given as input.',
                                 verbose=self.verbose)
 
@@ -483,7 +483,7 @@ class UVWindow(object):
         kperp = np.zeros(nbins_kperp)
         for i in range(self.Nfreqs):
             for m in range(nbins_kperp):
-                mask= (kperp_range[m]<=kperp_norm) & (kperp_norm<kperp_range[m+1])
+                mask= (kperp_bin_edges[m]<=kperp_norm) & (kperp_norm<kperp_bin_edges[m+1])
                 if np.any(mask): #cannot compute mean if zero elements
                     wf_array1[m,i]=np.mean(np.abs(fnu[mask,i])**2)
                     kperp[m] = np.mean(kperp_norm[mask])
@@ -589,36 +589,36 @@ class UVWindow(object):
         if np.size(kperp_bins)==0 or kperp_bins is None:
             dk_perp = np.diff(self.get_kgrid(np.min(bl_lens))[1]).mean()*5
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
-            kperp_range = np.arange(dk_perp,kperp_max,step=dk_perp)
-            nbins_kperp = kperp_range.size -1
-            kperp_bins = (kperp_range[1:]+kperp_range[:-1])/2
+            kperp_bin_edges = np.arange(dk_perp,kperp_max,step=dk_perp)
+            kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
+            nbins_kperp = kperp_bins.size
         else:
             kperp_bins = np.array(kperp_bins)
             nbins_kperp = kperp_bins.size
             dk_perp = np.diff(kperp_bins).mean()
-            kperp_range = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
+            kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(bl_lens)*np.sqrt(2)+ 10.*dk_perp
-            if (kperp_range.max()<=kperp_max): 
+            if (kperp_bin_edges.max()<=kperp_max): 
                 raise_warning('get_spherical_wf: Max kperp bin centre not included in binning array',
                                 verbose=verbose)
-            if (kperp_range.min()>=kperp_min): 
+            if (kperp_bin_edges.min()>=kperp_min): 
                 raise_warning('get_spherical_wf: Min kperp bin centre not included in binning array',
                                 verbose=verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
             kpara_max = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+10.*dk_para
-            kpara_range = np.arange(dk_para,kpara_max,step=dk_para)
-            nbins_kpara = kpara_range.size -1
-            kpara_bins = (kpara_range[1:]+kpara_range[:-1])/2
+            kpara_bin_edges = np.arange(dk_para,kpara_max,step=dk_para)
+            kpara_bins = (kpara_bin_edges[1:]+kpara_bin_edges[:-1])/2
+            nbins_kpara = kpara_bins.size
         else:                                              
             kpara_bins = np.array(kpara_bins)
             nbins_kpara = kpara_bins.size
             dk_para = np.diff(kpara_bins).mean()
-            kpara_range = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
+            kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
-            if (kpara_range.max()<=kpara_centre+5*dk_para) or (kpara_range.min()>=kpara_centre-5.*dk_para):
+            if (kpara_bin_edges.max()<=kpara_centre+5*dk_para) or (kpara_bin_edges.min()>=kpara_centre-5.*dk_para):
                 raise_warning('get_spherical_wf: The bin centre is not included in the array of kpara bins given as input.',
                                 verbose=verbose)
 
