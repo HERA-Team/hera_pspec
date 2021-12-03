@@ -64,13 +64,13 @@ class UVWindow(object):
         self.mapsize = None # Size of the flat map the beam was projected onto. 
                             # Only used for internal calculations.
 
-        # if data file is used, initialises related arguments.        
-        if isinstance(uvdata, str):
+        # if data file is used, initialises related arguments.   
+        if (uvdata == ''):
+            self.is_uvdata = False     
+        elif isinstance(uvdata, str):
             self.is_uvdata = True
             self.uvdata = UVData()
             self.uvdata.read(uvdata, read_data=False)
-        elif (uvdata == ''):
-            self.is_uvdata = False
         else:
             self.is_uvdata = True
             self.uvdata = uvdata
