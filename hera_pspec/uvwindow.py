@@ -93,7 +93,7 @@ class UVWindow(object):
         self.kperp_bins = []
         self.cyl_wf = []
         self.bl_lens = []
-        self.bl_weigths = []
+        self.bl_weights = []
 
     def set_taper(self, taper):
         """
@@ -544,7 +544,8 @@ class UVWindow(object):
     def get_spherical_wf(self,spw_range,pol,
                             kbins, kperp_bins=[], kpara_bins=[],
                             bl_groups=[],bl_lens=[], 
-                            save_cyl_wf = False, verbose=None):
+                            save_cyl_wf = False, return_weights=False,
+                            verbose=None):
         """
         Get spherical window functions for a set of baselines, polarisation,
         along a given spectral range, and for a set of kbins used for averaging.
@@ -578,6 +579,11 @@ class UVWindow(object):
             Can be optional if self.uvdata was given.
         save_cyl_wf : bool, optional
             Bool to choose if the cylindrical window functions get saved or not.
+            Default is False.
+        return_weights : bool, optional
+            Save the weights associated with the different kbins when spherically
+            binning the window functions.
+            Default is False.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
             If None, value used is the class attribute.
@@ -608,7 +614,7 @@ class UVWindow(object):
         assert len(bl_groups)==len(bl_lens), "bl_groups and bl_lens must have same length"
         nbls = len(bl_groups) # number of redudant groups
         self.bl_lens = np.array(bl_lens)
-        self.bl_weigths = np.array([len(l) for l in bl_groups]) #number of occurences of one bl length
+        self.bl_weights = np.array([len(l) for l in bl_groups]) #number of occurences of one bl length
 
         # consistency checks for spw range given
         if not (isinstance(spw_range[0],int) and isinstance(spw_range[1],int)):
@@ -717,11 +723,11 @@ class UVWindow(object):
 
         # perform spherical binning
         wf_spherical = np.zeros((nbinsk,nbinsk))
-        count = np.zeros(nbinsk,dtype=int)
+        kweights = np.zeros(nbinsk,dtype=int)
         for m1 in range(nbinsk):
             mask2 = (kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1]).astype(int)
-            mask2 = mask2*self.bl_weigths[:,None] #account for redundancy
-            count[m1] = np.sum(mask2) 
+            mask2 = mask2*self.bl_weights[:,None] #ackweights for redundancy
+            kweights[m1] = np.sum(mask2) 
             wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
             for m in range(nbinsk):
                 mask= (kbin_edges[m]<=ktot) & (ktot<kbin_edges[m+1])
@@ -729,8 +735,10 @@ class UVWindow(object):
                     wf_spherical[m1,m]=np.mean(wf_temp[mask])
             wf_spherical[m1,:]/=np.sum(wf_spherical[m1,:])
 
-
-        return wf_spherical, count
+        if return_weights:
+            return wf_spherical, kweights
+        else:
+            return wf_spherical
 
 
     def clear_cache(self,clear_cyl_bins=True):
