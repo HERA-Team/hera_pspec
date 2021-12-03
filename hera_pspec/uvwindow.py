@@ -14,7 +14,7 @@ class UVWindow(object):
     An object for storing window functions copmuted without the delay approximation.
     """
 
-    def __init__(self, ftbeam, uvdata='',taper='blackman-harris', 
+    def __init__(self, ftbeam, uvdata='',taper='none', 
                     cosmo=None, little_h=True,verbose=False):
         """
         Class for UVWindow objects. Provides get_spherical_wf() and
@@ -34,7 +34,8 @@ class UVWindow(object):
             Data file to be used to read baselines.
             Not used if set to ''.
         taper : str
-            Type of data tapering applied along bandwidtg. 
+            Type of data tapering applied along bandwidth.
+            If 'none', no taper is applied. 
             See uvtools.dspec.gen_window for options.
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not
@@ -325,7 +326,7 @@ class UVWindow(object):
         taper : str
             Type of data tapering applied along frequency direction. 
             See uvtools.dspec.gen_window for options.
-            If None, no taper is used.
+            If 'none', no taper is used.
             If '', self.taper is used.
 
         Returns
@@ -336,7 +337,7 @@ class UVWindow(object):
         """
 
         # apply taper along frequency direction
-        if taper is not None:
+        if not (taper =='none'):
             if len(taper)==0: taper = self.taper
             tf = dspec.gen_window(taper, self.Nfreqs)
             interp_FT_beam = interp_FT_beam*tf[None,None,:]
