@@ -68,7 +68,7 @@ class UVWindow(object):
         if isinstance(uvdata, str):
             self.is_uvdata = True
             self.uvdata = UVData()
-            self.uvdata.read(uvdata read_data=False)
+            self.uvdata.read(uvdata, read_data=False)
         elif (uvdata == ''):
             self.is_uvdata = False
         else:
