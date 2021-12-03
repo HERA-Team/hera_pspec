@@ -656,7 +656,7 @@ class UVWindow(object):
             kpara_max = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+10.*dk_para
             kpara_bin_edges = np.arange(dk_para,kpara_max,step=dk_para)
             self.kpara_bins = (kpara_bin_edges[1:]+kpara_bin_edges[:-1])/2
-            nbins_kpara = kpara_bins.size
+            nbins_kpara = self.kpara_bins.size
         else:                                              
             self.kpara_bins = np.array(kpara_bins)
             nbins_kpara = self.kpara_bins.size
@@ -733,7 +733,13 @@ class UVWindow(object):
 
     def clear_cache(self,clear_cyl_bins=True):
         """
-        Clear stored window function arrays.
+        Clear stored window function arrays (and cylindrical bins).
+
+        Parameters
+        ----------
+        clear_cyl_bins : bool, optional
+            Set to True if you want to clear arrays of (kperp,kparallel)
+            bins used for cylindrical binning of the window functions.
 
         """
         self.cyl_wf = []
