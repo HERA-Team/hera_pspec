@@ -86,6 +86,13 @@ class UVWindow(object):
         self.avg_z = None
         self.pol = None
 
+        # Initialise empty arrays for values potentially
+        # stored later (see get_spherical_wf)
+        self.kbins = []
+        self.kpara_bins = []
+        self.kperp_bins = []
+        self.cyl_wf = []
+
     def set_taper(self, taper):
         """
         Set data tapering type.
@@ -361,12 +368,12 @@ class UVWindow(object):
 
         Returns
         ----------
-        wf_array : array_like
+        cyl_wf : array_like
             Window function as a function of (kperp,kpara).
             Axis 0 is kperp (kperp_bins defined as global variable).
             Axis 1 is kparallel (kpara_bins defined as global variable)
         kpara : array_like
-            Values of kpara corresponding to the axis=2 of wf_array.
+            Values of kpara corresponding to the axis=2 of cyl_wf.
             Note: these values are weighted by their number of counts 
             in the cylindrical binning.
         
@@ -395,16 +402,16 @@ class UVWindow(object):
         kpar_norm = np.abs(2.*np.pi/alpha*(eta+tau))
 
         # perform binning along k_parallel
-        wf_array = np.zeros((nbins_kperp,nbins_kpara))
+        cyl_wf = np.zeros((nbins_kperp,nbins_kpara))
         kpara = np.zeros(nbins_kpara)
         for j in range(nbins_kperp):
             for m in range(nbins_kpara):
                 mask= (kpara_bin_edges[m]<=kpar_norm) & (kpar_norm<kpara_bin_edges[m+1])
                 if np.any(mask): #cannot compute mean if zero elements
-                    wf_array[j,m]=np.mean(wf_array1[j,mask])
+                    cyl_wf[j,m]=np.mean(wf_array1[j,mask])
                     kpara[m] = np.mean(kpar_norm[mask])
 
-        return kpara, wf_array
+        return kpara, cyl_wf
 
     def get_cylindrical_wf(self, bl_len, pol, FT_beam,
                             kperp_bins=[],kpara_bins=[],
@@ -438,17 +445,17 @@ class UVWindow(object):
 
         Returns
         ----------
-        wf_array : array_like
+        cyl_wf : array_like
             Window function as a function of (kperp,kpara).
             Axis 0 is the array of delays considered (self.dly_array).
             Axis 1 is kperp (kperp_bins defined as global variable).
             Axis 2 is kparallel (kpara_bins defined as global variable).
         kperp : array_like
-            Values of kperp corresponding to the axis=1 of wf_array.
+            Values of kperp corresponding to the axis=1 of cyl_wf.
             Note: if return_bins='weighted', these values are weighted 
             by their number of counts in the cylindrical binning.
         kpara : array_like
-            Values of kpara corresponding to the axis=2 of wf_array.
+            Values of kpara corresponding to the axis=2 of cyl_wf.
             Note: if return_bins='weighted', these values are weighted 
             by their number of counts in the cylindrical binning.
 
@@ -514,27 +521,28 @@ class UVWindow(object):
         t3 = time.time()
 
         # in frequency direction    
-        wf_array = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
+        cyl_wf = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
         for it,tau in enumerate(self.dly_array[:self.Nfreqs//2+1]):
-            kpara, wf_array[it,:,:] = self.get_wf_for_tau(tau,wf_array1,kperp_bins,kpara_bins)
+            kpara, cyl_wf[it,:,:] = self.get_wf_for_tau(tau,wf_array1,kperp_bins,kpara_bins)
         #fill by symmetry for tau = -tau
         if (self.Nfreqs%2==0):
-            wf_array[self.Nfreqs//2+1:,:,:]=np.flip(wf_array,axis=0)[self.Nfreqs//2:-1]
+            cyl_wf[self.Nfreqs//2+1:,:,:]=np.flip(cyl_wf,axis=0)[self.Nfreqs//2:-1]
         else:
-            wf_array[self.Nfreqs//2+1:,:,:]=np.flip(wf_array,axis=0)[self.Nfreqs//2+1:]
+            cyl_wf[self.Nfreqs//2+1:,:,:]=np.flip(cyl_wf,axis=0)[self.Nfreqs//2+1:]
 
         ### normalisation of window functions
-        wf_array /= np.sum(wf_array,axis=(1,2))[:,None,None]
+        cyl_wf /= np.sum(cyl_wf,axis=(1,2))[:,None,None]
 
         if (return_bins=='unweighted'):
             kperp, kpara = kperp_bins, kpara_bins
 
-        return kperp, kpara, wf_array
+        return kperp, kpara, cyl_wf
 
 
     def get_spherical_wf(self,spw_range,pol,
                             kbins, kperp_bins=[], kpara_bins=[],
-                            bl_groups=[],bl_lens=[], verbose=None):
+                            bl_groups=[],bl_lens=[], 
+                            save_cyl_wf = False, verbose=None):
         """
         Get spherical window functions for a set of baselines, polarisation,
         along a given spectral range, and for a set of kbins used for averaging.
@@ -566,6 +574,8 @@ class UVWindow(object):
             (can be redundant groups from utils.get_reds).
             Must have same length as bl_groups.
             Can be optional if self.uvdata was given.
+        save_cyl_wf : bool, optional
+            Bool to choose if the cylindrical window functions get saved or not.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
             If None, value used is the class attribute.
@@ -621,14 +631,14 @@ class UVWindow(object):
             dk_perp = np.diff(self.get_kgrid(np.min(bl_lens))[1]).mean()*5
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_bin_edges = np.arange(dk_perp,kperp_max,step=dk_perp)
-            kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
-            nbins_kperp = kperp_bins.size
+            self.kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
+            nbins_kperp = self.kperp_bins.size
         else:
             # read from input
-            kperp_bins = np.array(kperp_bins)
-            nbins_kperp = kperp_bins.size
-            dk_perp = np.diff(kperp_bins).mean()
-            kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
+            self.kperp_bins = np.array(kperp_bins)
+            nbins_kperp = self.kperp_bins.size
+            dk_perp = np.diff(self.kperp_bins).mean()
+            kperp_bin_edges = np.arange(self.kperp_bins.min()-dk_perp/2,self.kperp_bins.max()+dk_perp,step=dk_perp)
             # make sure proper kperp values are included in given bins, raise warning otherwise
             kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(bl_lens)*np.sqrt(2)+ 10.*dk_perp
@@ -645,13 +655,13 @@ class UVWindow(object):
             dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
             kpara_max = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+10.*dk_para
             kpara_bin_edges = np.arange(dk_para,kpara_max,step=dk_para)
-            kpara_bins = (kpara_bin_edges[1:]+kpara_bin_edges[:-1])/2
+            self.kpara_bins = (kpara_bin_edges[1:]+kpara_bin_edges[:-1])/2
             nbins_kpara = kpara_bins.size
         else:                                              
-            kpara_bins = np.array(kpara_bins)
-            nbins_kpara = kpara_bins.size
-            dk_para = np.diff(kpara_bins).mean()
-            kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
+            self.kpara_bins = np.array(kpara_bins)
+            nbins_kpara = self.kpara_bins.size
+            dk_para = np.diff(self.kpara_bins).mean()
+            kpara_bin_edges = np.arange(self.kpara_bins.min()-dk_para/2,self.kpara_bins.max()+dk_para,step=dk_para)
             kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
             # make sure proper kpara values are included in given bins, raise warning otherwise
             if (kpara_bin_edges.max()<=kpara_centre+5*dk_para) or (kpara_bin_edges.min()>=kpara_centre-5.*dk_para):
@@ -662,15 +672,15 @@ class UVWindow(object):
             raise_warning('get_spherical_wf: Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
                             verbose=verbose)
         # array of |k|=sqrt(kperp**2+kpara**2)
-        ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
+        ktot = np.sqrt(self.kperp_bins[:,None]**2+self.kpara_bins**2)
 
 
         # k-bins for spherical binning
         assert len(kbins)>1, "must feed array of k bins for spherical averasge"                                                  
-        kbins = np.array(kbins)
-        nbinsk = kbins.size
-        dk = np.diff(kbins).mean()
-        kbin_edges = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
+        self.kbins = np.array(kbins)
+        nbinsk = self.kbins.size
+        dk = np.diff(self.kbins).mean()
+        kbin_edges = np.arange(self.kbins.min()-dk/2,self.kbins.max()+dk,step=dk)
         # make sure proper ktot values are included in given bins, raise warning otherwise
         if (kbin_edges.max()<=ktot.max()): 
             raise_warning('Max spherical k probed is not included in bins.',
@@ -686,13 +696,17 @@ class UVWindow(object):
         # as a function of (kperp, kpara)
         # the kperp and kpara bins are given as global parameters
         kperp_array, kpar_array = np.zeros((nbls,nbins_kperp)),np.zeros((nbls,nbins_kpara))
-        wf_array = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
+        cyl_wf = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
         for ib in range(nbls):
             if verbose: 
                 sys.stdout.write('\rComputing for bl %i of %i...' %(ib+1,nbls))
-            kperp_array[ib,:], kpar_array[ib,:], wf_array[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,
+            kperp_array[ib,:], kpar_array[ib,:], cyl_wf[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,
                                                                         FT_beam,
-                                                                        kperp_bins, kpara_bins)
+                                                                        self.kperp_bins, self.kpara_bins)
+
+        if save_cyl_wf: 
+            if verbose: print('Saving cylindrical window functions...')
+            self.cyl_wf = cyl_wf
 
         # construct array giving the k probed by each baseline-tau pair
         kperps = bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) / np.sqrt(2.)
@@ -706,7 +720,7 @@ class UVWindow(object):
             mask2 = (kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1]).astype(int)
             mask2 = mask2*red_nb[:,None] #account for redundancy
             count[m1] = np.sum(mask2) 
-            wf_temp = np.sum(wf_array*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
+            wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
             for m in range(nbinsk):
                 mask= (kbin_edges[m]<=ktot) & (ktot<kbin_edges[m+1])
                 if np.any(mask): #cannot compute mean if zero elements
@@ -715,6 +729,17 @@ class UVWindow(object):
 
 
         return wf_spherical, count
+
+
+    def clear_cache(self,clear_cyl_bins=True):
+        """
+        Clear stored window function arrays.
+
+        """
+        self.cyl_wf = []
+        if clear_cyl_bins:
+            self.kperp_bins, self.kpara_bins = [], []
+
 
 def raise_warning(warning, verbose=True):
     """
