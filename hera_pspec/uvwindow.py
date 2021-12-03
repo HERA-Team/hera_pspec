@@ -92,6 +92,8 @@ class UVWindow(object):
         self.kpara_bins = []
         self.kperp_bins = []
         self.cyl_wf = []
+        self.bl_lens = []
+        self.bl_weigths = []
 
     def set_taper(self, taper):
         """
@@ -605,8 +607,8 @@ class UVWindow(object):
         # check consistency of baseline-related inputs
         assert len(bl_groups)==len(bl_lens), "bl_groups and bl_lens must have same length"
         nbls = len(bl_groups) # number of redudant groups
-        bl_lens = np.array(bl_lens)
-        red_nb = np.array([len(l) for l in bl_groups]) #number of occurences of one bl length
+        self.bl_lens = np.array(bl_lens)
+        self.bl_weigths = np.array([len(l) for l in bl_groups]) #number of occurences of one bl length
 
         # consistency checks for spw range given
         if not (isinstance(spw_range[0],int) and isinstance(spw_range[1],int)):
@@ -628,8 +630,8 @@ class UVWindow(object):
         if (np.size(kperp_bins)==0) or (kperp_bins is None):
             # define default kperp bins, making sure all values probed by bl_lens are
             # included and there is no over-sampling
-            dk_perp = np.diff(self.get_kgrid(np.min(bl_lens))[1]).mean()*5
-            kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
+            dk_perp = np.diff(self.get_kgrid(np.min(self.bl_lens))[1]).mean()*5
+            kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
             kperp_bin_edges = np.arange(dk_perp,kperp_max,step=dk_perp)
             self.kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
             nbins_kperp = self.kperp_bins.size
@@ -640,8 +642,8 @@ class UVWindow(object):
             dk_perp = np.diff(self.kperp_bins).mean()
             kperp_bin_edges = np.arange(self.kperp_bins.min()-dk_perp/2,self.kperp_bins.max()+dk_perp,step=dk_perp)
             # make sure proper kperp values are included in given bins, raise warning otherwise
-            kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
-            kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(bl_lens)*np.sqrt(2)+ 10.*dk_perp
+            kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
+            kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
             if (kperp_bin_edges.max()<=kperp_max): 
                 raise_warning('get_spherical_wf: Max kperp bin centre not included in binning array',
                                 verbose=verbose)
@@ -700,16 +702,16 @@ class UVWindow(object):
         for ib in range(nbls):
             if verbose: 
                 sys.stdout.write('\rComputing for bl %i of %i...' %(ib+1,nbls))
-            kperp_array[ib,:], kpar_array[ib,:], cyl_wf[ib,:,:,:] = self.get_cylindrical_wf(bl_lens[ib],pol,
+            kperp_array[ib,:], kpar_array[ib,:], cyl_wf[ib,:,:,:] = self.get_cylindrical_wf(self.bl_lens[ib],pol,
                                                                         FT_beam,
                                                                         self.kperp_bins, self.kpara_bins)
-
+        if verbose: sys.stdout.write('\rComputing for bl %i of %i... \n' %(nbls,nbls))
         if save_cyl_wf: 
             if verbose: print('Saving cylindrical window functions...')
             self.cyl_wf = cyl_wf
 
         # construct array giving the k probed by each baseline-tau pair
-        kperps = bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) / np.sqrt(2.)
+        kperps = self.bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) / np.sqrt(2.)
         kparas = self.dly_array * self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) 
         kmags = np.sqrt(kperps[:,None]**2+kparas**2)
 
@@ -718,7 +720,7 @@ class UVWindow(object):
         count = np.zeros(nbinsk,dtype=int)
         for m1 in range(nbinsk):
             mask2 = (kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1]).astype(int)
-            mask2 = mask2*red_nb[:,None] #account for redundancy
+            mask2 = mask2*self.bl_weigths[:,None] #account for redundancy
             count[m1] = np.sum(mask2) 
             wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
             for m in range(nbinsk):
