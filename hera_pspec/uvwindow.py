@@ -14,7 +14,7 @@ class UVWindow(object):
     An object for storing window functions copmuted without the delay approximation.
     """
 
-    def __init__(self, ftbeam, uvdata='',taper='none', 
+    def __init__(self, ftbeam='default', uvdata='',taper='none', 
                     cosmo=None, little_h=True,verbose=False):
         """
         Class for UVWindow objects. Provides get_spherical_wf() and
@@ -31,7 +31,7 @@ class UVWindow(object):
                 - 'default' for computation with default dipole file
                 - '' for computation from beam simulations (slow)
         uvdata : str, optional
-            Data file to be used to read baselines.
+            Data file or UVDats object to be used to read baselines.
             Not used if set to ''.
         taper : str
             Type of data tapering applied along bandwidth.
@@ -51,29 +51,42 @@ class UVWindow(object):
         # Summary attributes
 
         # check if path the FT beam file has been given
-        if isinstance(ftbeam, str):
-            self.ft_file = ftbeam
-        elif ftbeam=='default':
+        if ftbeam=='default':
             self.ft_file = '/lustre/aoc/projects/hera/agorce/wf_hera/delay_wf/FT_beam_HERA_dipole' #default file
         elif ftbeam is '':
             raise_warning('No input FT beam, will compute all window functions from scratch... Will take a few hours.',
                             verbose=self.verbose)
             ##### to be coded up
+        elif isinstance(ftbeam, str):
+            self.ft_file = ftbeam
+        else:
+            raise ValueError('Wrong ftbeam input. See docstring.')
         self.mapsize = None # Size of the flat map the beam was projected onto. 
                             # Only used for internal calculations.
 
         # if data file is used, initialises related arguments.        
-        if len(uvdata)>0:
-            self.uvdata = True
-            self.uvdatafile = uvdata
+        if isinstance(uvdata, str):
+            self.is_uvdata = True
+            self.uvdata = UVData()
+            self.uvdata.read(uvdata read_data=False)
+        elif (uvdata == ''):
+            self.is_uvdata = False
         else:
-            self.uvdata = False
+            self.is_uvdata = True
+            self.uvdata = uvdata
+
 
         # initialises other attributes
         if cosmo is None: cosmo = conversions.Cosmo_Conversions()
         self.cosmo = cosmo
+
+        assert isinstance(little_h, bool), "little_h must be boolean"
         self.little_h = little_h
+
+        assert isinstance(verbose, bool), "verbose must be boolean"
         self.verbose = verbose
+
+        assert isinstance(taper, str), "taper must be string of taper name"
         self.taper = taper
 
         # Analysis-related attributes. 
@@ -142,10 +155,8 @@ class UVWindow(object):
         self.dly_array = utils.get_delays(self.freq_array,n_dlys=len(self.freq_array))
         self.avg_nu = np.mean(self.freq_array)
         self.avg_z = self.cosmo.f2z(self.avg_nu)        
-        if self.uvdata:
-            uvd = UVData()
-            uvd.read(self.uvdatafile, read_data=False)
-            assert uvd.Nfreqs==len(bandwidth), "Data file does share bandwidth with FT beam file."
+        if self.is_uvdata:
+            assert self.uvdata.Nfreqs==len(bandwidth), "Data file does share bandwidth with FT beam file."
 
     def set_polarisation(self,pol):
         """
@@ -572,12 +583,12 @@ class UVWindow(object):
         bl_groups : embedded lists, optional.
             List of groups of baselines gathered by lengths
             (can be redundant groups from utils.get_reds).
-            Can be optional if self.uvdata was given.
+            Can be optional if self.is_uvdata was given.
         bl_lens : list, optional.
             List of lengths corresponding to each group
             (can be redundant groups from utils.get_reds).
             Must have same length as bl_groups.
-            Can be optional if self.uvdata was given.
+            Can be optional if self.is_uvdata was given.
         save_cyl_wf : bool, optional
             Bool to choose if the cylindrical window functions get saved or not.
             Default is False.
@@ -598,11 +609,9 @@ class UVWindow(object):
             verbose = self.verbose
 
         # read baseline groups from data file if given
-        if self.uvdata:
-            uvd = UVData()
-            uvd.read(self.uvdatafile, read_data=False)
+        if self.is_uvdata:
             if len(bl_groups)==0:
-                bl_groups, bl_lens, _ = utils.get_reds(uvd,bl_error_tol=1.0,pick_data_ants=True)
+                bl_groups, bl_lens, _ = utils.get_reds(self.uvdata,bl_error_tol=1.0,pick_data_ants=True)
             else:
                 # check baselines given as input are in data file
                 baselines_in_file = [uvd.baseline_to_antnums(bl) for bl in uvd.baseline_array]
