@@ -26,9 +26,9 @@ class Test_UVWindow(unittest.TestCase):
         self.spw_range = (175,334)
 
         # set parameters
-        test.set_spw_range(spw_range=self.spw_range)
-        test.set_spw_parameters(bandwidth=HERA_bw)
-        FT_beam = test.get_FT()
+        self.uvw.set_spw_range(spw_range=self.spw_range)
+        self.uvw.set_spw_parameters(bandwidth=HERA_bw)
+        FT_beam = self.uvw.get_FT()
         self.freq_array = test.freq_array
         self.ngrid = FT_beam.shape[-1]
 
