@@ -14,12 +14,6 @@ from .. import conversions, noise, version, pspecbeam, grouping, utils, uvwindow
 
 # Data files to use in tests
 dfile = 'zen.2458116.30448.HH.uvh5'
-
-# List of tapering function to use in tests
-taper_selection = ['none', 'bh7',]
-#taper_selection = ['blackman', 'blackman-harris', 'gaussian0.4', 'kaiser2',
-#                   'kaiser3', 'hamming', 'hanning', 'parzen']
-
 ftfile = '/lustre/aoc/projects/hera/agorce/wf_hera/delay_wf/FT_beam_HERA_dipole'
 
 class Test_UVWindow(unittest.TestCase):
@@ -31,14 +25,9 @@ class Test_UVWindow(unittest.TestCase):
         self.pol = 'xx'
         self.spw_range = (175,334)
 
-        # Load datafiles
-        # self.d = []
-        # for dfile in dfiles:
-        #     _d = UVData()
-        #     _d.read_miriad(os.path.join(DATA_PATH, dfile))
-        #     self.d.append(_d)
+        # Load datafile
         self.uvd = UVData()
-        self.uvd.read_miriad(os.path.join(DATA_PATH, dfile))
+        self.uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
         self.reds, self.lens, _ = utils.get_reds(self.uvd,bl_error_tol=1.0,pick_data_ants=False)
 
     def tearDown(self):
