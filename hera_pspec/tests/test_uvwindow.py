@@ -104,6 +104,7 @@ class Test_UVWindow(unittest.TestCase):
         pytest.raises(AssertionError, test.set_spw_parameters, bandwidth=HERA_bw)
         # test for comparison of bandwifth in UVData and in bandwidth
         test = uvwindow.UVWindow(uvdata = os.path.join(DATA_PATH, dfile))
+        test.set_spw_range(spw_range=self.spw_range)
         test.set_spw_parameters(bandwidth=HERA_bw)
 
     def test_set_polarisation(self):
@@ -215,6 +216,7 @@ class Test_UVWindow(unittest.TestCase):
         kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len, FT_beam,
                                 kperp_bins=[],kpara_bins=[],
                                 return_bins='unweighted') 
+        print(np.sum(cyl_wf,axis=(1,2)),cyl_wf.shape,test.Nfreqs,kperp.size,kpara.size)
         assert np.all(np.sum(cyl_wf,axis=(1,2))==1.)
         assert kperp.size == cyl_wf.shape[1]
         assert kpara.size == cyl_wf.shape[2]
