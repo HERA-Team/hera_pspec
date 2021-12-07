@@ -237,11 +237,6 @@ class Test_UVWindow(unittest.TestCase):
         assert np.all(cyl_wf3==cyl_wf)
         assert np.all(kpara==kpara3)
 
-        kperp4, kpara4, cyl_wf4 = test.get_cylindrical_wf(bl_len, FT_beam,
-                                kperp_bins=kpara,kpara_bins=kperp,
-                                return_bins='weighted') 
-        assert np.any(kperp4!=kperp)
-
     def test_get_spherical_wf(self):
 
         bl_len = self.lens[12]
