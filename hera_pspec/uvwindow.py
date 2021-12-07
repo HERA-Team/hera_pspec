@@ -14,7 +14,7 @@ class UVWindow(object):
     An object for storing window functions copmuted without the delay approximation.
     """
 
-    def __init__(self, ftbeam='default', uvdata='',taper='none', 
+    def __init__(self, ftbeam='', uvdata='',taper='none', 
                     cosmo=None, little_h=True,verbose=False):
         """
         Class for UVWindow objects. Provides get_spherical_wf() and
@@ -51,14 +51,13 @@ class UVWindow(object):
         # Summary attributes
 
         # check if path the FT beam file has been given
-        if ftbeam=='default':
-            self.ft_file = '/lustre/aoc/projects/hera/agorce/wf_hera/delay_wf/FT_beam_HERA_dipole' #default file
-        elif ftbeam is '':
-            raise_warning('No input FT beam, will compute all window functions from scratch... Will take a few hours.',
-                            verbose=self.verbose)
-            ##### to be coded up
-        elif isinstance(ftbeam, str):
-            self.ft_file = ftbeam
+        if isinstance(ftbeam, str):
+            if (len(ftbeam)<1):
+                raise_warning('No input FT beam, will compute all window functions from scratch... Will take a few hours.',
+                                verbose=self.verbose)
+                ##### to be coded up
+            else:  
+                self.ft_file = ftbeam
         else:
             raise ValueError('Wrong ftbeam input. See docstring.')
         self.mapsize = None # Size of the flat map the beam was projected onto. 
@@ -109,7 +108,7 @@ class UVWindow(object):
         self.bl_lens = []
         self.bl_weights = []
 
-    def set_taper(self, taper):
+    def set_taper(self, taper, clear_cache = True):
         """
         Set data tapering type.
 
@@ -117,8 +116,15 @@ class UVWindow(object):
         ----------
         taper : str
             Type of data tapering. See uvtools.dspec.gen_window for options.
+        clear_cache : bool, optional
+            Clear saved window functions if existing
+            (in case they were computed with another taper)
         """
         self.taper = taper
+        if (len(self.cyl_wf)>0):
+            raise_warning('New taper set but window functions have not been updated.')
+            if clear_cache:
+                self.clear_cache(clear_cyl_bins=False)
 
 
     def set_spw_range(self,spw_range):
@@ -127,11 +133,12 @@ class UVWindow(object):
 
         Parameters
         ----------
-        spw_range : tuple
+        spw_range : tuple or array
             In (start_chan, end_chan). Must be between 0 and 1024 (HERA bandwidth).
 
         """
 
+        spw_range = np.array(spw_range)
         assert len(spw_range)==2, "spw_range must be fed as a tuple of frequency indices."
         self.spw_range = tuple(spw_range)
 
