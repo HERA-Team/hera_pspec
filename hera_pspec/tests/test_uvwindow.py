@@ -26,7 +26,7 @@ class Test_UVWindow(unittest.TestCase):
         self.spw_range = (175,334)
 
         # set parameters
-        self.uvw..set_polarisation(pol=self.pol)
+        self.uvw.set_polarisation(pol=self.pol)
         self.uvw.set_spw_range(spw_range=self.spw_range)
         FT_beam = self.uvw.get_FT()
         self.freq_array = self.uvw.freq_array
