@@ -25,6 +25,13 @@ class Test_UVWindow(unittest.TestCase):
         self.pol = 'xx'
         self.spw_range = (175,334)
 
+        # set parameters
+        test.set_spw_range(spw_range=self.spw_range)
+        test.set_spw_parameters(bandwidth=HERA_bw)
+        FT_beam = test.get_FT()
+        self.freq_array = test.freq_array
+        self.ngrid = FT_beam.shape[-1]
+
         # Load datafile
         self.uvd = UVData()
         self.uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
@@ -91,10 +98,10 @@ class Test_UVWindow(unittest.TestCase):
         test.set_spw_range(spw_range=self.spw_range)
         test.set_spw_parameters(bandwidth=HERA_bw)
         # test for wrong input: len(bandwidth)<2
-        pytest.raises(AssertionError, test.set_spw_parameters, bandwith=12)
+        pytest.raises(AssertionError, test.set_spw_parameters, bandwidth=12)
         # test for spw range not compatible with bandwidth
         test.set_spw_range(spw_range=(1059,2314))
-        pytest.raises(AssertionError, test.set_spw_parameters, bandwith=HERA_bw)
+        pytest.raises(AssertionError, test.set_spw_parameters, bandwidth=HERA_bw)
         # test for comparison of bandwifth in UVData and in bandwidth
         test = uvwindow.UVWindow(uvdata = os.path.join(DATA_PATH, dfile))
         test.set_spw_parameters(bandwidth=HERA_bw)
@@ -152,7 +159,7 @@ class Test_UVWindow(unittest.TestCase):
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         # test with FT parameters not initialised
-        pytest.raises(AssertionError, test.kperp4bl_freq, freq=test.freq_array[12],bl_len=bl_len,ngrid = 12)
+        pytest.raises(AssertionError, test.kperp4bl_freq, freq=self.freq_array[12],bl_len=bl_len,ngrid = self.ngrid)
         FTbeam = test.get_FT()
         # test for correct input parameters
         k = test.kperp4bl_freq(freq=test.freq_array[12],bl_len=bl_len,ngrid = FT_beam.shape[-1])
@@ -208,7 +215,7 @@ class Test_UVWindow(unittest.TestCase):
         kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len, FTbeam,
                                 kperp_bins=[],kpara_bins=[],
                                 return_bins='unweighted') 
-        assert (np.sum(cyl_wf,axis=(1,2))==1.)
+        assert np.all(np.sum(cyl_wf,axis=(2,3))==1.)
         assert kperp.size == cyl_wf.shape[1]
         assert kpara.size == cyl_wf.shape[2]
         assert test.Nfreqs == cyl_wf.shape[0]
