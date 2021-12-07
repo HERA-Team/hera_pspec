@@ -777,6 +777,7 @@ class UVWindow(object):
         kweights = np.zeros(nbinsk,dtype=int)
         for m1 in range(nbinsk):
             mask2 = (kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1]).astype(int)
+            if (np.sum(mask2)==0): continue
             mask2 = mask2*self.bl_weights[:,None] #ackweights for redundancy
             kweights[m1] = np.sum(mask2) 
             wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
@@ -785,6 +786,9 @@ class UVWindow(object):
                 if np.any(mask): #cannot compute mean if zero elements
                     wf_spherical[m1,m]=np.mean(wf_temp[mask])
             wf_spherical[m1,:]/=np.sum(wf_spherical[m1,:])
+            
+        if np.any(kweights==0.) and self.verbose:
+            raise_warning('Some spherical bins are empty. Add baselines or expand spectral window.')
 
         if return_weights:
             return wf_spherical, kweights
