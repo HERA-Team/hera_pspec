@@ -383,7 +383,7 @@ class UVWindow(object):
 
         interp_FT_beam = np.array(interp_FT_beam)
         assert interp_FT_beam.ndim==3, "interp_FT_beam must be dimension 3."
-        assert FT_beam.shape[-1]==self.Nfreqs, "interp_FT_beam must have shape (N,N,Nfreqs)"
+        assert interp_FT_beam.shape[-1]==self.Nfreqs, "interp_FT_beam must have shape (N,N,Nfreqs)"
 
 
         # apply taper along frequency direction
