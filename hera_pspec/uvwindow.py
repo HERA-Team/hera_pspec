@@ -760,8 +760,7 @@ class UVWindow(object):
         for ib in range(nbls):
             if verbose: 
                 sys.stdout.write('\rComputing for bl %i of %i...' %(ib+1,nbls))
-            kperp_array[ib,:], kpar_array[ib,:], cyl_wf[ib,:,:,:] = self.get_cylindrical_wf(self.bl_lens[ib],pol,
-                                                                        FT_beam,
+            kperp_array[ib,:], kpar_array[ib,:], cyl_wf[ib,:,:,:] = self.get_cylindrical_wf(self.bl_lens[ib], FT_beam,
                                                                         self.kperp_bins, self.kpara_bins)
         if verbose: sys.stdout.write('\rComputing for bl %i of %i... \n' %(nbls,nbls))
         if save_cyl_wf: 
