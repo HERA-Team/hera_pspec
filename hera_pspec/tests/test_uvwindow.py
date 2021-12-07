@@ -131,10 +131,10 @@ class Test_UVWindow(unittest.TestCase):
         pytest.raises(AssertionError, test.get_FT)
         test.set_spw_range(spw_range=self.spw_range)
         # import FT of beam from self.ft_file attribute
-        FTbeam = test.get_FT()
+        FT_beam = test.get_FT()
         # import FT beam from other file
-        FTbeam2 = test.get_FT(file=ftfile)
-        assert np.all(FTbeam==FTbeam2)
+        FT_beam2 = test.get_FT(file=ftfile)
+        assert np.all(FT_beam==FT_beam2)
         # check if spw parameters have been properly set
         assert test.avg_z is not None
 
@@ -146,7 +146,7 @@ class Test_UVWindow(unittest.TestCase):
         test = uvwindow.UVWindow(ftbeam=ftfile)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
-        FTbeam = test.get_FT()
+        FT_beam = test.get_FT()
         kgrid, kperp_norm = test.get_kgrid(bl_len)
         pytest.raises(AssertionError, test.get_kgrid, bl_len=bl_len, width=0.0004)
 
@@ -160,7 +160,7 @@ class Test_UVWindow(unittest.TestCase):
         test.set_spw_range(spw_range=self.spw_range)
         # test with FT parameters not initialised
         pytest.raises(AssertionError, test.kperp4bl_freq, freq=self.freq_array[12],bl_len=bl_len,ngrid = self.ngrid)
-        FTbeam = test.get_FT()
+        FT_beam = test.get_FT()
         # test for correct input parameters
         k = test.kperp4bl_freq(freq=test.freq_array[12],bl_len=bl_len,ngrid = FT_beam.shape[-1])
         # test for frequency outside of spectral window
@@ -176,11 +176,11 @@ class Test_UVWindow(unittest.TestCase):
         test = uvwindow.UVWindow(ftbeam=ftfile)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
-        FTbeam = test.get_FT()     
-        interp_FT_beam, kperp_norm = test.interpolate_FT_beam(bl_len, FTbeam)   
+        FT_beam = test.get_FT()     
+        interp_FT_beam, kperp_norm = test.interpolate_FT_beam(bl_len, FT_beam)   
 
-        # test for FT_bbeam of wrong dimensions
-        pytest.raises(AssertionError, test.interpolate_FT_beam, bl_len=bl_len, FT_beam=FTbeam[0,:,:])
+        # test for FT_beam of wrong dimensions
+        pytest.raises(AssertionError, test.interpolate_FT_beam, bl_len=bl_len, FT_beam=FT_beam[0,:,:])
 
     def test_take_freq_FT(self):
 
@@ -190,8 +190,8 @@ class Test_UVWindow(unittest.TestCase):
         test = uvwindow.UVWindow(ftbeam=ftfile)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
-        FTbeam = test.get_FT()     
-        interp_FT_beam, kperp_norm = test.interpolate_FT_beam(bl_len, FTbeam)   
+        FT_beam = test.get_FT()     
+        interp_FT_beam, kperp_norm = test.interpolate_FT_beam(bl_len, FT_beam)   
         # frequency resolution
         delta_nu = abs(test.freq_array[-1]-test.freq_array[0])/test.Nfreqs
         fnu = test.take_freq_FT(interp_FT_beam, delta_nu, taper=test.taper)
@@ -210,12 +210,12 @@ class Test_UVWindow(unittest.TestCase):
         test = uvwindow.UVWindow(ftbeam=ftfile)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
-        FTbeam = test.get_FT()     
+        FT_beam = test.get_FT()     
 
-        kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len, FTbeam,
+        kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len, FT_beam,
                                 kperp_bins=[],kpara_bins=[],
                                 return_bins='unweighted') 
-        assert np.all(np.sum(cyl_wf,axis=(2,3))==1.)
+        assert np.all(np.sum(cyl_wf,axis=(1,2))==1.)
         assert kperp.size == cyl_wf.shape[1]
         assert kpara.size == cyl_wf.shape[2]
         assert test.Nfreqs == cyl_wf.shape[0]
@@ -223,19 +223,19 @@ class Test_UVWindow(unittest.TestCase):
         #### test different key words
 
         # kperp bins
-        kperp2, _, cyl_wf2 = test.get_cylindrical_wf(bl_len, FTbeam,
+        kperp2, _, cyl_wf2 = test.get_cylindrical_wf(bl_len, FT_beam,
                                 kperp_bins=kperp,kpara_bins=[],
                                 return_bins='unweighted') 
         assert np.all(cyl_wf2==cyl_wf)
         assert np.all(kperp2==kperp) #unweighted option to return_bins
         # kpara bins
-        _, kpara3, cyl_wf3 = test.get_cylindrical_wf(bl_len, FTbeam,
+        _, kpara3, cyl_wf3 = test.get_cylindrical_wf(bl_len, FT_beam,
                                 kperp_bins=[],kpara_bins=kpara,
                                 return_bins='unweighted') 
         assert np.all(cyl_wf3==cyl_wf)
         assert np.all(kpara==kpara3)
 
-        kperp4, kpara4, cyl_wf4 = test.get_cylindrical_wf(bl_len, FTbeam,
+        kperp4, kpara4, cyl_wf4 = test.get_cylindrical_wf(bl_len, FT_beam,
                                 kperp_bins=kpara,kpara_bins=kperp,
                                 return_bins='weighted') 
         assert np.any(kperp4,kperp)
@@ -248,7 +248,7 @@ class Test_UVWindow(unittest.TestCase):
         test = uvwindow.UVWindow(ftbeam=ftfile)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
-        FTbeam = test.get_FT()     
+        FT_beam = test.get_FT()     
 
         kmax, dk = 1., 0.128/2
         krange = np.arange(dk*1.5,kmax,step=dk)
@@ -268,7 +268,7 @@ class Test_UVWindow(unittest.TestCase):
         test = uvwindow.UVWindow(ftbeam=ftfile, uvdata = self.uvd)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
-        FTbeam = test.get_FT()     
+        FT_beam = test.get_FT()     
         WF = test.get_spherical_wf(spw_range=self.spw_range,pol=self.pol,
                             kbins=kbins, kperp_bins=kperp_bins, kpara_bins=kpara_bins,
                             bl_groups=[],bl_lens=[], 

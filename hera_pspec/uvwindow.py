@@ -156,7 +156,8 @@ class UVWindow(object):
 
         """
 
-        assert len(bandwidth)>1, "Must feed bandwidth as an array of frequencies."
+        bandwidth = np.array(bandwidth)
+        assert bandwidth.size>1, "Must feed bandwidth as an array of frequencies."
         assert min(self.spw_range)>=0 and max(self.spw_range)<len(bandwidth), \
                 "spw_range must be integers within the given bandwith."
 
