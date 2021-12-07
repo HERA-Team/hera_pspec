@@ -141,6 +141,9 @@ class UVWindow(object):
         spw_range = np.array(spw_range)
         assert len(spw_range)==2, "spw_range must be fed as a tuple of frequency indices."
         self.spw_range = tuple(spw_range)
+        if self.is_uvdata:
+            # Set spw parameters such as frequency range and average redshift.
+            self.set_spw_parameters(self.uvdata.freq_array[0])
 
     def set_spw_parameters(self,bandwidth):
         """
@@ -153,7 +156,7 @@ class UVWindow(object):
 
         """
 
-        assert len(bandwidth)>0, "Must feed bandwidth as an array of frequencies."
+        assert len(bandwidth)>1, "Must feed bandwidth as an array of frequencies."
         assert min(self.spw_range)>=0 and max(self.spw_range)<len(bandwidth), \
                 "spw_range must be integers within the given bandwith."
 
@@ -165,17 +168,26 @@ class UVWindow(object):
         if self.is_uvdata:
             assert self.uvdata.Nfreqs==len(bandwidth), "Data file does share bandwidth with FT beam file."
 
-    def set_polarisation(self,pol):
+    def set_polarisation(self,pol,x_orientation=None):
         """
         Sets the polarisation considered for the beam to compute the window functions.
 
         Parameters
         ----------
-        pol : str
-            Can be pseudo-Stokes or power: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
-        
+        pol : str or int
+            Can be pseudo-Stokes or power: 
+             in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
+             in number form: 1, 2, 4, 3, -5, -6, -7, -8
         """
 
+        if isinstance(pol, str):
+            assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], "Wrong polarisation"
+        elif isinstance(pol,int):
+            assert pol in [1, 2, 4, 3, -5, -6, -7, -8], "Wrong polarisation"
+            # convert pol number to str according to AIPS Memo 117.
+            pol = uvutils.polnum2str(pol,x_orientation=x_orientation)
+        else:
+            raise TypeError("Must feed pol as str or int.")
         self.pol = pol 
 
     def get_FT(self,file=''):
@@ -204,6 +216,8 @@ class UVWindow(object):
 
         if len(file)==0:
             file = self.ft_file
+        assert self.pol is not None, "Need to set polarisation first."
+        assert self.spw_range is not None, "Need to set spectral window first."
 
         filename = '%s_%s.hdf5' %(file,self.pol)
         f = h5py.File(filename, "r") 
@@ -244,6 +258,7 @@ class UVWindow(object):
 
         """
 
+        assert self.freq_array is not None, "Need to set spw_parameters with uvdata file or get_FT()."
         # central kperp for given baseline (i.e. 2pi*b*nu/c/R) 
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
         # spacing of the numerical Fourier grid, in cosmological units
