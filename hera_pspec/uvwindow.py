@@ -33,6 +33,7 @@ class UVWindow(object):
         uvdata : str, optional
             Data file or UVDats object to be used to read baselines.
             Not used if set to ''.
+            Must have all HERA frequencies in meta_data.
         taper : str
             Type of data tapering applied along bandwidth.
             If 'none', no taper is applied. 
@@ -184,6 +185,7 @@ class UVWindow(object):
             assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], "Wrong polarisation"
         elif isinstance(pol,int):
             assert pol in [1, 2, 4, 3, -5, -6, -7, -8], "Wrong polarisation"
+            if self.is_uvdata: assert pol in self.uvdata.polarization_array, "Polarisation not in data file."
             # convert pol number to str according to AIPS Memo 117.
             pol = uvutils.polnum2str(pol,x_orientation=x_orientation)
         else:
@@ -258,12 +260,12 @@ class UVWindow(object):
 
         """
 
-        assert self.freq_array is not None, "Need to set spw_parameters with uvdata file or get_FT()."
+        assert self.mapsize is not None, "Need to set spw and FT parameters with get_FT()."
         # central kperp for given baseline (i.e. 2pi*b*nu/c/R) 
         kp_centre=self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
         # spacing of the numerical Fourier grid, in cosmological units
         dk = 2.*np.pi/self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h)/(2.*self.mapsize)
-        assert width>dk, 'kgrid must be over 2 pixels.'
+        assert width>dk, 'Change width to resolve full window function (dk=%.2e).' %dk
         # defines kgrid (kperp_x).
         kgrid = np.arange(kp_centre-width,kp_centre+width,step=dk)
         # array of kperp norms.
@@ -292,6 +294,11 @@ class UVWindow(object):
             Array of k_perp values to match to the FT of the beam.
 
         """
+
+        assert self.mapsize is not None, "Need to set spw and FT parameters with get_FT()."
+        assert (freq<=self.freq_array.max()) and (freq>=self.freq_array.min()), "Choose \
+                frequency within spectral window."
+        assert (freq/1e6>=1.), "Frequency must be given in Hz."
 
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
@@ -324,6 +331,11 @@ class UVWindow(object):
             Has dimensions (N,N).
 
         """
+
+        FT_beam = np.array(FT_beam)
+        assert FT_beam.ndim==3, "FT_beam must be dimension 3."
+        assert FT_beam.shape[0]==self.Nfreqs, "FT_beam must have shape (Nfreqs,N,N)"
+        assert FT_beam.shape[2]==FT_beam.shape[1], "FT beam must be square in sky plane"
 
         # regular kperp_x grid the FT of the beam will be interpolated over.
         # kperp_norm is the corresponding total kperp:
@@ -369,11 +381,23 @@ class UVWindow(object):
             Has dimensions (Nfreqs, N, N)
         """
 
+        interp_FT_beam = np.array(interp_FT_beam)
+        assert interp_FT_beam.ndim==3, "interp_FT_beam must be dimension 3."
+        assert FT_beam.shape[-1]==self.Nfreqs, "interp_FT_beam must have shape (N,N,Nfreqs)"
+
+
         # apply taper along frequency direction
         if not (taper =='none'):
-            if len(taper)==0: taper = self.taper
+            if len(taper)==0: 
+                taper = self.taper    
+            else:
+                # set taper to new value
+                self.set_taper(taper)                 
             tf = dspec.gen_window(taper, self.Nfreqs)
             interp_FT_beam = interp_FT_beam*tf[None,None,:]
+        else: 
+            # set taper to new value
+            self.set_taper(taper)  
 
         # take numerical FT along frequency axis
         # normalise to appropriate units and recentre
@@ -449,7 +473,7 @@ class UVWindow(object):
 
         return kpara, cyl_wf
 
-    def get_cylindrical_wf(self, bl_len, pol, FT_beam,
+    def get_cylindrical_wf(self, bl_len, FT_beam,
                             kperp_bins=[],kpara_bins=[],
                             return_bins='unweighted'):
         """
@@ -460,9 +484,6 @@ class UVWindow(object):
         ----------
         bl_len : float
             Length of the baseline considered, in meters.
-        pol : str
-            Polarisation of the beam. 
-            Can be chosen among 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'.
         FT_beam : array_like
             Array made of the FT of the beam along the spectral window.
             Must have dimensions (Nfreqs, N, N).
@@ -554,7 +575,6 @@ class UVWindow(object):
                 if np.any(mask): #cannot compute mean if zero elements
                     wf_array1[m,i]=np.mean(np.abs(fnu[mask,i])**2)
                     kperp[m] = np.mean(kperp_norm[mask])
-        t3 = time.time()
 
         # in frequency direction    
         cyl_wf = np.zeros((self.Nfreqs,nbins_kperp,nbins_kpara))
