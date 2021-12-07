@@ -51,6 +51,19 @@ class UVWindow(object):
 
         # Summary attributes
 
+        # initialises other attributes
+        if cosmo is None: cosmo = conversions.Cosmo_Conversions()
+        self.cosmo = cosmo
+
+        assert isinstance(little_h, bool), "little_h must be boolean"
+        self.little_h = little_h
+
+        assert isinstance(verbose, bool), "verbose must be boolean"
+        self.verbose = verbose
+
+        assert isinstance(taper, str), "taper must be string of taper name"
+        self.taper = taper
+
         # check if path the FT beam file has been given
         if isinstance(ftbeam, str):
             if (len(ftbeam)<1):
@@ -74,20 +87,6 @@ class UVWindow(object):
         else:
             self.is_uvdata = True
             self.uvdata = uvdata
-
-
-        # initialises other attributes
-        if cosmo is None: cosmo = conversions.Cosmo_Conversions()
-        self.cosmo = cosmo
-
-        assert isinstance(little_h, bool), "little_h must be boolean"
-        self.little_h = little_h
-
-        assert isinstance(verbose, bool), "verbose must be boolean"
-        self.verbose = verbose
-
-        assert isinstance(taper, str), "taper must be string of taper name"
-        self.taper = taper
 
         # Analysis-related attributes. 
         # Will be set with set_spw_range andd set_spw_parameters

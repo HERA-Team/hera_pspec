@@ -112,7 +112,7 @@ class Test_UVWindow(unittest.TestCase):
         test = uvwindow.UVWindow(ftbeam=ftfile, uvdata = self.uvd)
         test.set_polarisation(pol=self.pol)
         # test if pol asked is in data file
-        pytest.raises(AssertionError, test.set_polarisation, pol=-6)
+        pytest.raises(AssertionError, test.set_polarisation, pol=2)
 
     def test_get_FT(self):
 
@@ -152,7 +152,7 @@ class Test_UVWindow(unittest.TestCase):
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         # test with FT parameters not initialised
-        pytest.raises(AssertionError, test.kperp4bl_freq, freq=test.freq_array[12],bl_len=bl_len,ngrid = FT_beam.shape[-1])
+        pytest.raises(AssertionError, test.kperp4bl_freq, freq=test.freq_array[12],bl_len=bl_len,ngrid = 12)
         FTbeam = test.get_FT()
         # test for correct input parameters
         k = test.kperp4bl_freq(freq=test.freq_array[12],bl_len=bl_len,ngrid = FT_beam.shape[-1])
@@ -205,7 +205,7 @@ class Test_UVWindow(unittest.TestCase):
         test.set_spw_range(spw_range=self.spw_range)
         FTbeam = test.get_FT()     
 
-        kperp, kpara, cyl_wf = test.get_cylindrical_wf(self, bl_len, FTbeam,
+        kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len, FTbeam,
                                 kperp_bins=[],kpara_bins=[],
                                 return_bins='unweighted') 
         assert (np.sum(cyl_wf,axis=(1,2))==1.)
@@ -216,19 +216,19 @@ class Test_UVWindow(unittest.TestCase):
         #### test different key words
 
         # kperp bins
-        kperp2, _, cyl_wf2 = test.get_cylindrical_wf(self, bl_len, FTbeam,
+        kperp2, _, cyl_wf2 = test.get_cylindrical_wf(bl_len, FTbeam,
                                 kperp_bins=kperp,kpara_bins=[],
                                 return_bins='unweighted') 
         assert np.all(cyl_wf2==cyl_wf)
         assert np.all(kperp2==kperp) #unweighted option to return_bins
         # kpara bins
-        _, kpara3, cyl_wf3 = test.get_cylindrical_wf(self, bl_len, FTbeam,
+        _, kpara3, cyl_wf3 = test.get_cylindrical_wf(bl_len, FTbeam,
                                 kperp_bins=[],kpara_bins=kpara,
                                 return_bins='unweighted') 
         assert np.all(cyl_wf3==cyl_wf)
         assert np.all(kpara==kpara3)
 
-        kperp4, kpara4, cyl_wf4 = test.get_cylindrical_wf(self, bl_len, FTbeam,
+        kperp4, kpara4, cyl_wf4 = test.get_cylindrical_wf(bl_len, FTbeam,
                                 kperp_bins=kpara,kpara_bins=kperp,
                                 return_bins='weighted') 
         assert np.any(kperp4,kperp)
