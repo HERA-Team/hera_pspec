@@ -140,7 +140,7 @@ class UVWindow(object):
         """
 
         spw_range = np.array(spw_range)
-        assert len(spw_range)==2, "spw_range must be fed as a tuple of frequency indices."
+        assert spw_range.size==2, "spw_range must be fed as a tuple of frequency indices."
         self.spw_range = tuple(spw_range)
         if self.is_uvdata:
             # Set spw parameters such as frequency range and average redshift.
