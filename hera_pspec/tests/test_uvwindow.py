@@ -216,7 +216,7 @@ class Test_UVWindow(unittest.TestCase):
         kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len, FT_beam,
                                 kperp_bins=[],kpara_bins=[],
                                 return_bins='unweighted') 
-        print(np.isclose(np.sum(cyl_wf,axis=(1,2)),1.,atol=1e-3))
+        # check normalisation
         assert np.all(np.isclose(np.sum(cyl_wf,axis=(1,2)),1.,atol=1e-3))
         assert kperp.size == cyl_wf.shape[1]
         assert kpara.size == cyl_wf.shape[2]
@@ -240,7 +240,7 @@ class Test_UVWindow(unittest.TestCase):
         kperp4, kpara4, cyl_wf4 = test.get_cylindrical_wf(bl_len, FT_beam,
                                 kperp_bins=kpara,kpara_bins=kperp,
                                 return_bins='weighted') 
-        assert np.any(kperp4,kperp)
+        assert np.any(kperp4!=kperp)
 
     def test_get_spherical_wf(self):
 
