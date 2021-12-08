@@ -473,7 +473,7 @@ class UVWindow(object):
 
         return kpara, cyl_wf
 
-    def get_cylindrical_wf(self, bl_len, FT_beam,
+    def get_cylindrical_wf(self, bl_len, FT_beam=[],
                             kperp_bins=[],kpara_bins=[],
                             return_bins='unweighted'):
         """
@@ -487,6 +487,7 @@ class UVWindow(object):
         FT_beam : array_like
             Array made of the FT of the beam along the spectral window.
             Must have dimensions (Nfreqs, N, N).
+            If empty array, FT_beam called from self.get_FT().
         kperp_bins : array_like
             1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning,
@@ -556,6 +557,11 @@ class UVWindow(object):
 
 
         ##### COMPUTE CYLINDRICAL WINDOW FUNCTIONS
+
+        FT_beam = np.array(FT_beam)
+        if (len(FT_beam)==0): 
+            # get FT of the beam from file and set frequency_related attributed (such as avg_z...)
+            FT_beam = self.get_FT()
 
         # interpolate FT of beam onto regular grid of (kperp_x,kperp_y)
         interp_FT_beam, kperp_norm = self.interpolate_FT_beam(bl_len, FT_beam)
