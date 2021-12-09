@@ -90,6 +90,8 @@ class Test_UVWindow(unittest.TestCase):
         # test wrong inputs: len(taper)!=2 
         pytest.raises(AssertionError, test.set_spw_range, spw_range=(12))
         pytest.raises(AssertionError, test.set_spw_range, spw_range=2)
+        # test for spw range not compatible with bandwidth
+        pytest.raises(AssertionError, test.set_spw_range, spw_range=(1059,2314))
 
 
     def test_set_spw_parameters(self):
@@ -104,11 +106,9 @@ class Test_UVWindow(unittest.TestCase):
         test.set_spw_parameters(bandwidth=HERA_bw)
         # test for wrong input: len(bandwidth)<2
         pytest.raises(AssertionError, test.set_spw_parameters, bandwidth=12)
-        # test for spw range not compatible with bandwidth
-        test.set_spw_range(spw_range=(1059,2314))
-        pytest.raises(AssertionError, test.set_spw_parameters, bandwidth=HERA_bw)
         # test for comparison of bandwifth in UVData and in bandwidth
         test = uvwindow.UVWindow(uvdata = os.path.join(DATA_PATH, dfile))
+        test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         test.set_spw_parameters(bandwidth=HERA_bw)
 
