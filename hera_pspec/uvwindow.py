@@ -107,6 +107,35 @@ class UVWindow(object):
         self.bl_lens = []
         self.bl_weights = []
 
+    def get_bandwidth(self,file):
+        """
+        Read FT file to extract bandwidth it was computed along.
+
+        Parameters
+        ----------
+        file : str
+            Path to FT beam file.
+            Root name of the file to use, without the polarisation
+                Ex : FT_beam_HERA_dipole (+ path)
+            If '', then the object ft_file attribute is used.
+
+        Returns
+        ----------
+        bandwidth : array of floats
+            List of frequencies covered by the instrument, in Hz.
+        """
+
+        assert self.pol is not None, "Need to set polarisation first."
+        if len(file)==0:
+            file = self.ft_file
+
+        filename = '%s_%s.hdf5' %(file,self.pol)
+        f = h5py.File(filename, "r") 
+        HERA_bw = f['freq'][...]
+        f.close()
+
+        return HERA_bw
+        
     def set_taper(self, taper, clear_cache = True):
         """
         Set data tapering type.
@@ -194,33 +223,6 @@ class UVWindow(object):
             raise TypeError("Must feed pol as str or int.")
         self.pol = pol 
 
-    def get_bandwidth(self,file):
-        """
-        Read FT file to extract bandwidth it was computed along.
-
-        Parameters
-        ----------
-        file : str
-            Path to FT beam file.
-            Root name of the file to use, without the polarisation
-                Ex : FT_beam_HERA_dipole (+ path)
-            If '', then the object ft_file attribute is used.
-
-        Returns
-        ----------
-        bandwidth : array of floats
-            List of frequencies covered by the instrument, in Hz.
-        """
-
-        if len(file)==0:
-            file = self.ft_file
-
-        filename = '%s_%s.hdf5' %(file,self.pol)
-        f = h5py.File(filename, "r") 
-        HERA_bw = f['freq'][...]
-        f.close()
-
-        return HERA_bw
 
     def get_FT(self,file=''):
         """
@@ -869,12 +871,11 @@ class UVWindow(object):
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
         # the kperp and kpara bins are given as global parameters
-        kperp_array, kpar_array = np.zeros((nbls,nbins_kperp)),np.zeros((nbls,nbins_kpara))
         cyl_wf = np.zeros((nbls,self.Nfreqs,nbins_kperp,nbins_kpara))
         for ib in range(nbls):
             if verbose: 
                 sys.stdout.write('\rComputing for bl %i of %i...' %(ib+1,nbls))
-            kperp_array[ib,:], kpar_array[ib,:], cyl_wf[ib,:,:,:] = self.get_cylindrical_wf(self.bl_lens[ib], FT_beam,
+            cyl_wf[ib,:,:,:] = self.get_cylindrical_wf(self.bl_lens[ib], FT_beam,
                                                                         self.kperp_bins, self.kpara_bins)
         if verbose: sys.stdout.write('\rComputing for bl %i of %i... \n' %(nbls,nbls))
         if save_cyl_wf: 

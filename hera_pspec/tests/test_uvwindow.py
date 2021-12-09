@@ -95,6 +95,8 @@ class Test_UVWindow(unittest.TestCase):
         HERA_bw = np.linspace(1,2,1024,endpoint=False)*1e8
 
         test = uvwindow.UVWindow(ftbeam=ftfile)
+        pytest.raises(AssertionError, test.set_spw_range, spw_range=self.spw_range)
+        test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         test.set_spw_parameters(bandwidth=HERA_bw)
         # test for wrong input: len(bandwidth)<2
