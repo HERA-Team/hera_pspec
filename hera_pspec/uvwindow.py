@@ -143,6 +143,9 @@ class UVWindow(object):
         if self.is_uvdata:
             # Set spw parameters such as frequency range and average redshift.
             self.set_spw_parameters(self.uvdata.freq_array[0])
+        else:
+            HERA_bw = self.get_bandwidth(file=self.ft_file)
+            self.set_spw_parameters(HERA_bw)
 
     def set_spw_parameters(self,bandwidth):
         """
@@ -190,6 +193,34 @@ class UVWindow(object):
         else:
             raise TypeError("Must feed pol as str or int.")
         self.pol = pol 
+
+    def get_bandwidth(self,file):
+        """
+        Read FT file to extract bandwidth it was computed along.
+
+        Parameters
+        ----------
+        file : str
+            Path to FT beam file.
+            Root name of the file to use, without the polarisation
+                Ex : FT_beam_HERA_dipole (+ path)
+            If '', then the object ft_file attribute is used.
+
+        Returns
+        ----------
+        bandwidth : array of floats
+            List of frequencies covered by the instrument, in Hz.
+        """
+
+        if len(file)==0:
+            file = self.ft_file
+
+        filename = '%s_%s.hdf5' %(file,self.pol)
+        f = h5py.File(filename, "r") 
+        HERA_bw = f['freq'][...]
+        f.close()
+
+        return HERA_bw
 
     def get_FT(self,file=''):
         """
@@ -586,27 +617,29 @@ class UVWindow(object):
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
             kperp_bins = self.get_kperp_bins([bl_len])
+            nbins_kperp = kperp_bins.size
         else:
             kperp_bins = np.array(kperp_bins)
-        nbins_kperp = kperp_bins.size
-        dk_perp = np.diff(kperp_bins).mean()
-        kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
-        kperp_centre = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)
-        if (kperp_bin_edges.max()<kperp_centre+9.*dk_perp) or (kperp_bin_edges.min()>kperp_centre-9.*dk_perp):
-            raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.',
-                            verbose=self.verbose)
+            nbins_kperp = kperp_bins.size
+            dk_perp = np.diff(kperp_bins).mean()
+            kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
+            kperp_centre = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)
+            if (kperp_bin_edges.max()<kperp_centre+9.*dk_perp) or (kperp_bin_edges.min()>kperp_centre-9.*dk_perp):
+                raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.',
+                                verbose=self.verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             kpara_bins = self.get_kpara_bins()
+            nbins_kpara = kpara_bins.size
         else:                                              
             kpara_bins = np.array(kpara_bins)
-        nbins_kpara = kpara_bins.size
-        dk_para = np.diff(kpara_bins).mean()
-        kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
-        kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
-        if (kpara_bin_edges.max()<kpara_centre+9*dk_para) or (kpara_bin_edges.min()>kpara_centre-9.*dk_para):
-            raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kpara bins given as input.',
-                            verbose=self.verbose)
+            nbins_kpara = kpara_bins.size
+            dk_para = np.diff(kpara_bins).mean()
+            kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,kpara_bins.max()+dk_para,step=dk_para)
+            kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
+            if (kpara_bin_edges.max()<kpara_centre+9*dk_para) or (kpara_bin_edges.min()>kpara_centre-9.*dk_para):
+                raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kpara bins given as input.',
+                                verbose=self.verbose)
 
 
         ##### COMPUTE CYLINDRICAL WINDOW FUNCTIONS
@@ -758,38 +791,38 @@ class UVWindow(object):
             # define default kperp bins, making sure all values probed by bl_lens are
             # included and there is no over-sampling
             self.kperp_bins = self.get_kperp_bins(self.bl_lens)
+            nbins_kperp = self.kperp_bins.size
         else:
             # read from input
             self.kperp_bins = np.array(kperp_bins)
-           
-        nbins_kperp = self.kperp_bins.size
-        dk_perp = np.diff(self.kperp_bins).mean()
-        kperp_bin_edges = np.arange(self.kperp_bins.min()-dk_perp/2,self.kperp_bins.max()+dk_perp,step=dk_perp)
-        # make sure proper kperp values are included in given bins, raise warning otherwise
-        kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
-        kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
-        if (kperp_bin_edges.max()<=kperp_max): 
-            raise_warning('get_spherical_wf: Max kperp bin centre not included in binning array',
-                            verbose=verbose)
-        if (kperp_bin_edges.min()>=kperp_min): 
-            raise_warning('get_spherical_wf: Min kperp bin centre not included in binning array',
-                            verbose=verbose)
+            nbins_kperp = self.kperp_bins.size
+            dk_perp = np.diff(self.kperp_bins).mean()
+            kperp_bin_edges = np.arange(self.kperp_bins.min()-dk_perp/2,self.kperp_bins.max()+dk_perp,step=dk_perp)
+            # make sure proper kperp values are included in given bins, raise warning otherwise
+            kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
+            kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
+            if (kperp_bin_edges.max()<=kperp_max): 
+                raise_warning('get_spherical_wf: Max kperp bin centre not included in binning array',
+                                verbose=verbose)
+            if (kperp_bin_edges.min()>=kperp_min): 
+                raise_warning('get_spherical_wf: Min kperp bin centre not included in binning array',
+                                verbose=verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
             # define default kperp bins, making sure all values probed by freq array are
             # included and there is no over-sampling
             self.kpara_bins = self.get_kpara_bins()
+            nbins_kpara = self.kpara_bins.size
         else:                                              
             self.kpara_bins = np.array(kpara_bins)
-            
-        nbins_kpara = self.kpara_bins.size
-        dk_para = np.diff(self.kpara_bins).mean()
-        kpara_bin_edges = np.arange(self.kpara_bins.min()-dk_para/2,self.kpara_bins.max()+dk_para,step=dk_para)
-        kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
-        # make sure proper kpara values are included in given bins, raise warning otherwise
-        if (kpara_bin_edges.max()<=kpara_centre+5*dk_para) or (kpara_bin_edges.min()>=kpara_centre-5.*dk_para):
-            raise_warning('get_spherical_wf: The bin centre is not included in the array of kpara bins given as input.',
-                            verbose=verbose)
+            nbins_kpara = self.kpara_bins.size
+            dk_para = np.diff(self.kpara_bins).mean()
+            kpara_bin_edges = np.arange(self.kpara_bins.min()-dk_para/2,self.kpara_bins.max()+dk_para,step=dk_para)
+            kpara_centre = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()
+            # make sure proper kpara values are included in given bins, raise warning otherwise
+            if (kpara_bin_edges.max()<=kpara_centre+5*dk_para) or (kpara_bin_edges.min()>=kpara_centre-5.*dk_para):
+                raise_warning('get_spherical_wf: The bin centre is not included in the array of kpara bins given as input.',
+                                verbose=verbose)
 
         # array of |k|=sqrt(kperp**2+kpara**2)
         ktot = np.sqrt(self.kperp_bins[:,None]**2+self.kpara_bins**2)
