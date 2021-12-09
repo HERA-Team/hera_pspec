@@ -78,6 +78,9 @@ class Test_UVWindow(unittest.TestCase):
     def test_set_spw_range(self):
 
         test = uvwindow.UVWindow(ftbeam=ftfile)
+        # test need to set polarisation first
+        pytest.raises(AssertionError, test.set_spw_range, spw_range=self.spw_range)
+        test.set_polarisation(pol=self.pol)
         # test input as tuple
         test.set_spw_range(spw_range=self.spw_range)
         assert test.spw_range == (175,334)
