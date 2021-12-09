@@ -126,14 +126,14 @@ class UVWindow(object):
         """
 
         assert self.pol is not None, "Need to set polarisation first."
-        if len(file)==0:
-            file = self.ft_file
 
         filename = '%s_%s.hdf5' %(file,self.pol)
         assert os.path.isfile(filename), "Cannot find FT beam file: %s." %filename
         f = h5py.File(filename, "r") 
         HERA_bw = f['freq'][...]
         f.close()
+
+        assert len(HERA_bw)>1, "Error reading file, empty bandwidth."
 
         return HERA_bw
 
@@ -528,9 +528,12 @@ class UVWindow(object):
     
         """
 
-        bl_lens = np.array(bl_lens)
+        # FT beam file must have been read to call get_kgrid
+        assert self.mapsize is not None, "Need to set FT parameters with get_FT()."
 
-        # define default kperp bins
+        bl_lens = np.array(bl_lens)
+        assert bl_lens.size>0, "get_kperp_bins() requires array of baseline lengths."
+        
         dk_perp = np.diff(self.get_kgrid(np.min(bl_lens))[1]).mean()*5
         kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
         kperp_bin_edges = np.arange(dk_perp,kperp_max,step=dk_perp)

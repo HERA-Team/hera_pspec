@@ -33,6 +33,12 @@ class Test_UVWindow(unittest.TestCase):
         self.freq_array = self.uvw.freq_array
         self.ngrid = FT_beam.shape[-1]
 
+        # define spherical kbins
+        kmax, dk = 1., 0.128/2
+        krange = np.arange(dk*1.5,kmax,step=dk)
+        nbinsk = krange.size -1
+        self.kbins = (krange[1:]+krange[:-1])/2
+
         # Load datafile
         self.uvd = UVData()
         self.uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
@@ -66,6 +72,16 @@ class Test_UVWindow(unittest.TestCase):
         pytest.raises(AssertionError, uvwindow.UVWindow, verbose=2)
         pytest.raises(AssertionError, uvwindow.UVWindow, little_h=2)
         pytest.raises(AssertionError, uvwindow.UVWindow, taper=2)
+
+    def test_get_bandwidth(self):
+
+        # initialise object 
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
+        # raise error if polarisation not set
+        pytest.raises(AssertionError, test.get_bandwidth,file=self.ft_file)
+        test.set_polarisation(pol=self.pol)
+        # raise error if file does not exist
+        pytest.raises(AssertionError, test.get_bandwidth,file=ftfile)
 
 
     def test_set_taper(self):
@@ -129,7 +145,6 @@ class Test_UVWindow(unittest.TestCase):
         pytest.raises(AssertionError, test.set_polarisation, pol=2)
 
     def test_get_FT(self):
-
 
         test = uvwindow.UVWindow(ftbeam=self.ft_file)
         # need to set polarisation before calling the function
@@ -212,6 +227,34 @@ class Test_UVWindow(unittest.TestCase):
         fnu = test.take_freq_FT(interp_FT_beam, delta_nu, taper='none')
         assert test.taper == 'none'
 
+    def test_get_kperp_bins(self):
+
+        # initialise object
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
+        test.set_polarisation(pol=self.pol)
+        # raise error if get_FT has not been called
+        pytest.raises(AssertionError, test.get_kperp_bins, bl_lens=self.lens)
+        test.set_spw_range(spw_range=self.spw_range)
+        _ = test.get_FT()
+        # raise error if empty baseline array
+        pytest.raises(AssertionError, test.get_kperp_bins, bl_lens=[])
+        # test for unique baseline length
+        _ = test.get_kperp_bins(self.lens[12])
+        # test for array of baseline lengths
+        _ = test.get_kperp_bins(self.lens)
+
+    def test_get_kpara_bins(self):
+
+        # initialise object
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
+        test.set_polarisation(pol=self.pol)
+        test.set_spw_range(spw_range=self.spw_range)
+        # raise error if empty freq array or length 1
+        pytest.raises(AssertionError, test.get_kpara_bins, freq_array=self.freq_array[2])
+        # test for correct input
+        _ = test.get_kpara_bins(self.freq_array, little_h=test.little_h, cosmo=test.cosmo)
+
+
     def test_get_cylindrical_wf(self):
 
         bl_len = self.lens[12]
@@ -230,6 +273,9 @@ class Test_UVWindow(unittest.TestCase):
         assert kperp.size == cyl_wf.shape[1]
         assert kpara.size == cyl_wf.shape[2]
         assert test.Nfreqs == cyl_wf.shape[0]
+        # test the bins are recovered by get_kperp_bins and get_kpara_bins
+        assert np.all(kperp == test.get_kperp_bins(bl_len))
+        assert np.all(kpara == test.get_kpara_bins(test.freq_array,test.little_h,test.cosmo))
 
         #### test different key words
 
@@ -256,13 +302,8 @@ class Test_UVWindow(unittest.TestCase):
         test.set_spw_range(spw_range=self.spw_range)
         FT_beam = test.get_FT()     
 
-        kmax, dk = 1., 0.128/2
-        krange = np.arange(dk*1.5,kmax,step=dk)
-        nbinsk = krange.size -1
-        kbins = (krange[1:]+krange[:-1])/2
-
         WF, counts = test.get_spherical_wf(spw_range=self.spw_range,pol=self.pol,
-                            kbins=kbins, kperp_bins=[], kpara_bins=[],
+                            kbins=self.kbins, kperp_bins=[], kpara_bins=[],
                             bl_groups=self.reds[:1],bl_lens=self.lens[:1], 
                             save_cyl_wf = False, return_weights=True,
                             verbose=False)
@@ -271,17 +312,12 @@ class Test_UVWindow(unittest.TestCase):
         kpara_bins = test.kpara_bins
 
         WF = test.get_spherical_wf(spw_range=self.spw_range,pol=self.pol,
-                            kbins=kbins, kperp_bins=kperp_bins, kpara_bins=kpara_bins,
+                            kbins=self.kbins, kperp_bins=kperp_bins, kpara_bins=kpara_bins,
                             bl_groups=self.reds[:1],bl_lens=self.lens[:1], 
                             save_cyl_wf = True, return_weights=False,
                             verbose=False)
         assert len(test.cyl_wf)>0
         assert np.all(test.kperp_bins==kperp_bins)
-        # test clear_cache effectively delete wf arrays
-        test.clear_cache(clear_cyl_bins=False)
-        assert len(test.kperp_bins)>0
-        test.clear_cache(clear_cyl_bins=True)
-        assert len(test.kperp_bins)==0
 
         # initialise object from keywords
         test2 = uvwindow.UVWindow(ftbeam=self.ft_file, uvdata = self.uvd)
@@ -292,6 +328,26 @@ class Test_UVWindow(unittest.TestCase):
         # data file bandwidth != FT file bandwidth
         pytest.raises(AssertionError, test2.get_FT)
 
+
+    def test_clear_cache(self):
+
+        # initialise object
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
+        test.set_polarisation(pol=self.pol)
+        test.set_spw_range(spw_range=self.spw_range)
+
+        WF = test.get_spherical_wf(spw_range=self.spw_range,pol=self.pol,
+                            kbins=self.kbins, kperp_bins=[], kpara_bins=[],
+                            bl_groups=self.reds[:1],bl_lens=self.lens[:1], 
+                            save_cyl_wf = True, return_weights=False,
+                            verbose=False)
+        # test clear_cache effectively delete wf arrays and cylindrical bins arrays
+        assert len(test.cyl_wf)>0
+        test.clear_cache(clear_cyl_bins=False)
+        assert len(test.cyl_wf)==0
+        assert len(test.kperp_bins)>0
+        test.clear_cache(clear_cyl_bins=True)
+        assert len(test.kperp_bins)==0
 
 
 if __name__ == "__main__":
