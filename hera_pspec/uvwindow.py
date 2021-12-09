@@ -569,7 +569,7 @@ class UVWindow(object):
         if cosmo is None: cosmo = conversions.Cosmo_Conversions()
 
         freq_array = np.array(freq_array)
-        assert freq_array>1, "Must feed list of frequencies."
+        assert freq_array.size>1, "Must feed list of frequencies."
 
         dly_array = utils.get_delays(freq_array,n_dlys=len(freq_array))
         avg_z = cosmo.f2z(np.mean(freq_array))                    
