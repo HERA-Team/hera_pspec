@@ -538,13 +538,25 @@ class UVWindow(object):
 
         return kperp_bins
 
-    def get_kpara_bins(self):
+    def get_kpara_bins(self, freq_array, little_h=True, cosmo=None):
 
 
         """
         Get spherical k_para bins for a given spectra window initialisaed
         with set_spw_range and set_spw_parameters, making sure all values 
         probed by freq array are included and there is no over-sampling
+
+        Parameters
+        ----------
+        freq_array : array 
+            List of frequencies you want to compute window functions over.
+            In Hz.
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc.
+        cosmo : conversions.Cosmo_Conversions object, optional
+            Cosmology object. Uses the default cosmology object if not
+            specified. Default: None.
 
         Returns
         ----------
@@ -553,9 +565,18 @@ class UVWindow(object):
 
     
         """
+
+        if cosmo is None: cosmo = conversions.Cosmo_Conversions()
+
+        freq_array = np.array(freq_array)
+        assert freq_array>1, "Must feed list of frequencies."
+
+        dly_array = utils.get_delays(freq_array,n_dlys=len(freq_array))
+        avg_z = cosmo.f2z(np.mean(freq_array))                    
+
         # define default kperp bins,
-        dk_para = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)/(abs(self.freq_array[-1]-self.freq_array[0]))
-        kpara_max = self.cosmo.tau_to_kpara(self.avg_z,little_h=self.little_h)*abs(self.dly_array).max()+10.*dk_para
+        dk_para = cosmo.tau_to_kpara(avg_z,little_h=little_h)/(abs(freq_array[-1]-freq_array[0]))
+        kpara_max = cosmo.tau_to_kpara(avg_z,little_h=little_h)*abs(dly_array).max()+10.*dk_para
         kpara_bin_edges = np.arange(dk_para,kpara_max,step=dk_para)
         kpara_bins = (kpara_bin_edges[1:]+kpara_bin_edges[:-1])/2
         nbins_kpara = kpara_bins.size
@@ -629,7 +650,7 @@ class UVWindow(object):
                                 verbose=self.verbose)
 
         if np.size(kpara_bins)==0 or kpara_bins is None:
-            kpara_bins = self.get_kpara_bins()
+            kpara_bins = self.get_kpara_bins(self.freq_array,self.little_h,self.cosmo)
             nbins_kpara = kpara_bins.size
         else:                                              
             kpara_bins = np.array(kpara_bins)
@@ -811,7 +832,7 @@ class UVWindow(object):
         if np.size(kpara_bins)==0 or kpara_bins is None:
             # define default kperp bins, making sure all values probed by freq array are
             # included and there is no over-sampling
-            self.kpara_bins = self.get_kpara_bins()
+            self.kpara_bins = self.get_kpara_bins(self.freq_array,self.little_h,self.cosmo)
             nbins_kpara = self.kpara_bins.size
         else:                                              
             self.kpara_bins = np.array(kpara_bins)
