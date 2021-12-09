@@ -589,7 +589,7 @@ class UVWindow(object):
 
     def get_cylindrical_wf(self, bl_len, FT_beam=[],
                             kperp_bins=[],kpara_bins=[],
-                            return_bins='unweighted'):
+                            return_bins='none'):
         """
         Get the cylindrical window function i.e. in (kperp,kpara) space
         for a given baseline and polarisation, along the spectral window.
@@ -614,6 +614,8 @@ class UVWindow(object):
         return_bins : str
             If 'weighted', return bins weighted by the actual modes inside of bin.
             If 'unweighted', return bins used to build the histogram.
+            If 'none', does not return anything. Bins can later be retrieved with 
+            get_kperp_bins() and get_kpara_bins().
 
         Returns
         ----------
@@ -701,9 +703,11 @@ class UVWindow(object):
         cyl_wf /= np.sum(cyl_wf,axis=(1,2))[:,None,None]
 
         if (return_bins=='unweighted'):
-            kperp, kpara = kperp_bins, kpara_bins
-
-        return kperp, kpara, cyl_wf
+            return kperp_bins, kpara_bins, cyl_wf
+        elif (return_bins=='weighted'):
+            return kperp, kpara, cyl_wf
+        else:
+            return cyl_wf
 
 
     def get_spherical_wf(self,spw_range,pol,
