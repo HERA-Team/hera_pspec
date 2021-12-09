@@ -14,16 +14,17 @@ from .. import conversions, noise, version, pspecbeam, grouping, utils, uvwindow
 
 # Data files to use in tests
 dfile = 'zen.2458116.30448.HH.uvh5'
-ftfile = '/lustre/aoc/projects/hera/agorce/wf_hera/delay_wf/FT_beam_HERA_dipole'
+ftfile = 'FT_beam_HERA_dipole_test'
 
 class Test_UVWindow(unittest.TestCase):
 
     def setUp(self):
 
         # Instantiate UVWindow()
-        self.uvw = uvwindow.UVWindow(ftbeam=ftfile)
+        self.ft_file = os.path.join(DATA_PATH, ftfile)
+        self.uvw = uvwindow.UVWindow(ftbeam=self.ft_file)
         self.pol = 'xx'
-        self.spw_range = (175,334)
+        self.spw_range = (5,25)
 
         # set parameters
         self.uvw.set_polarisation(pol=self.pol)
@@ -47,8 +48,8 @@ class Test_UVWindow(unittest.TestCase):
 
         # test different options for ftbeam param
         test = uvwindow.UVWindow(ftbeam='')
-        test = uvwindow.UVWindow(ftbeam=ftfile)
-        assert test.ft_file == ftfile
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
+        assert test.ft_file == self.ft_file
         pytest.raises(ValueError, uvwindow.UVWindow, ftbeam=2)
 
         # test different options for uvdata
@@ -70,23 +71,23 @@ class Test_UVWindow(unittest.TestCase):
     def test_set_taper(self):
 
         # test for different input tapers
-        test = uvwindow.UVWindow(ftbeam=ftfile,taper='none')
+        test = uvwindow.UVWindow(ftbeam=self.ft_file,taper='none')
         taper = 'blackman-harris'
         test.set_taper(taper=taper,clear_cache=True)
         assert test.taper == taper
 
     def test_set_spw_range(self):
 
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         # test need to set polarisation first
         pytest.raises(AssertionError, test.set_spw_range, spw_range=self.spw_range)
         test.set_polarisation(pol=self.pol)
         # test input as tuple
         test.set_spw_range(spw_range=self.spw_range)
-        assert test.spw_range == (175,334)
+        assert test.spw_range == self.spw_range
         # test input as array
-        test.set_spw_range(spw_range=[175,334])
-        assert test.spw_range == (175,334)
+        test.set_spw_range(spw_range=np.array(self.spw_range))
+        assert test.spw_range == self.spw_range
         # test wrong inputs: len(taper)!=2 
         pytest.raises(AssertionError, test.set_spw_range, spw_range=(12))
         pytest.raises(AssertionError, test.set_spw_range, spw_range=2)
@@ -96,10 +97,10 @@ class Test_UVWindow(unittest.TestCase):
 
     def test_set_spw_parameters(self):
 
-        # initialise HERA bandwidth, normally read in ftfile
+        # initialise HERA bandwidth, normally read in self.ft_file
         HERA_bw = np.linspace(1,2,1024,endpoint=False)*1e8
 
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         pytest.raises(AssertionError, test.set_spw_range, spw_range=self.spw_range)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
@@ -115,31 +116,34 @@ class Test_UVWindow(unittest.TestCase):
     def test_set_polarisation(self):
 
         # initialise object from keywords
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         test.set_polarisation(pol=self.pol)
         pytest.raises(AssertionError, test.set_polarisation, pol='ii')
         pytest.raises(AssertionError, test.set_polarisation, pol=12)
         pytest.raises(TypeError, test.set_polarisation, pol=(3,4))
 
         # initialise object from data file
-        test = uvwindow.UVWindow(ftbeam=ftfile, uvdata = self.uvd)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file, uvdata = self.uvd)
         test.set_polarisation(pol=self.pol)
         # test if pol asked is in data file
         pytest.raises(AssertionError, test.set_polarisation, pol=2)
 
     def test_get_FT(self):
 
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         # need to set polarisation before calling the function
         pytest.raises(AssertionError, test.get_FT)
         test.set_polarisation(pol=self.pol)
         # need to set spectral window before calling the function
         pytest.raises(AssertionError, test.get_FT)
         test.set_spw_range(spw_range=self.spw_range)
+        # test error is raised if file does not exist
+        pytest.raises(AssertionError, test.get_FT, file=ftfile)
         # import FT of beam from self.ft_file attribute
         FT_beam = test.get_FT()
         # import FT beam from other file
-        FT_beam2 = test.get_FT(file=ftfile)
+        FT_beam2 = test.get_FT(file=self.ft_file)
         assert np.all(FT_beam==FT_beam2)
         # check if spw parameters have been properly set
         assert test.avg_z is not None
@@ -149,7 +153,7 @@ class Test_UVWindow(unittest.TestCase):
         bl_len = self.lens[12]
 
         # initialise object
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         FT_beam = test.get_FT()
@@ -161,7 +165,7 @@ class Test_UVWindow(unittest.TestCase):
         bl_len = self.lens[12]
 
         # initialise object
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         # test with FT parameters not initialised
@@ -179,7 +183,7 @@ class Test_UVWindow(unittest.TestCase):
         bl_len = self.lens[12]
 
         # initialise object
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         FT_beam = test.get_FT()     
@@ -193,7 +197,7 @@ class Test_UVWindow(unittest.TestCase):
         bl_len = self.lens[12]
 
         # initialise object
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         FT_beam = test.get_FT()     
@@ -213,7 +217,7 @@ class Test_UVWindow(unittest.TestCase):
         bl_len = self.lens[12]
 
         # initialise object
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         FT_beam = test.get_FT()     
@@ -247,7 +251,7 @@ class Test_UVWindow(unittest.TestCase):
         bl_len = self.lens[12]
 
         # initialise object from keywords
-        test = uvwindow.UVWindow(ftbeam=ftfile)
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
         FT_beam = test.get_FT()     
@@ -266,22 +270,27 @@ class Test_UVWindow(unittest.TestCase):
         kperp_bins = test.kperp_bins
         kpara_bins = test.kpara_bins
 
-        # initialise object from keywords
-        test = uvwindow.UVWindow(ftbeam=ftfile, uvdata = self.uvd)
-        test.set_polarisation(pol=self.pol)
-        test.set_spw_range(spw_range=self.spw_range)
-        FT_beam = test.get_FT()     
         WF = test.get_spherical_wf(spw_range=self.spw_range,pol=self.pol,
                             kbins=kbins, kperp_bins=kperp_bins, kpara_bins=kpara_bins,
-                            bl_groups=[],bl_lens=[], 
+                            bl_groups=self.reds[:1],bl_lens=self.lens[:1], 
                             save_cyl_wf = True, return_weights=False,
                             verbose=False)
         assert len(test.cyl_wf)>0
         assert np.all(test.kperp_bins==kperp_bins)
+        # test clear_cache effectively delete wf arrays
         test.clear_cache(clear_cyl_bins=False)
         assert len(test.kperp_bins)>0
         test.clear_cache(clear_cyl_bins=True)
         assert len(test.kperp_bins)==0
+
+        # initialise object from keywords
+        test2 = uvwindow.UVWindow(ftbeam=self.ft_file, uvdata = self.uvd)
+        test2.set_polarisation(pol=self.pol)
+        test2.set_spw_range(spw_range=self.spw_range)
+        # test file for UVWindow has small bandwidth to limit file size
+        # so initialisation with data file will raise error as
+        # data file bandwidth != FT file bandwidth
+        pytest.raises(AssertionError, test2.get_FT)
 
 
 

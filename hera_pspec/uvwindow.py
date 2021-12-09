@@ -130,12 +130,13 @@ class UVWindow(object):
             file = self.ft_file
 
         filename = '%s_%s.hdf5' %(file,self.pol)
+        assert os.path.isfile(filename), "Cannot find FT beam file: %s." %filename
         f = h5py.File(filename, "r") 
         HERA_bw = f['freq'][...]
         f.close()
 
         return HERA_bw
-        
+
     def set_taper(self, taper, clear_cache = True):
         """
         Set data tapering type.
@@ -254,6 +255,7 @@ class UVWindow(object):
         assert self.spw_range is not None, "Need to set spectral window first."
 
         filename = '%s_%s.hdf5' %(file,self.pol)
+        assert os.path.isfile(filename), "Cannot find FT beam file: %s." %filename
         f = h5py.File(filename, "r") 
         self.mapsize = f['mapsize'][0] 
         FT_beam = f['FT_beam'][self.spw_range[0]:self.spw_range[1],:,:]
