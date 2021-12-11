@@ -77,12 +77,13 @@ class UVWindow(object):
                             # Only used for internal calculations.
 
         # if data file is used, initialises related arguments.   
-        if (uvdata == ''):
-            self.is_uvdata = False     
-        elif isinstance(uvdata, str):
-            self.is_uvdata = True
-            self.uvdata = UVData()
-            self.uvdata.read(uvdata, read_data=False)
+        if isinstance(uvdata, str):
+            if (uvdata == ''):
+                self.is_uvdata = False  
+            else: 
+                self.is_uvdata = True
+                self.uvdata = UVData()
+                self.uvdata.read(uvdata, read_data=False)
         else:
             self.is_uvdata = True
             self.uvdata = uvdata
@@ -153,7 +154,7 @@ class UVWindow(object):
         if (len(self.cyl_wf)>0):
             raise_warning('New taper set but window functions have not been updated.')
             if clear_cache:
-                self.clear_cache(clear_cyl_bins=False)
+                self.clear_cache(clear_cyl_bins=True)
 
 
     def set_spw_range(self,spw_range):
@@ -167,9 +168,11 @@ class UVWindow(object):
 
         """
 
-        spw_range = np.array(spw_range)
+        spw_range = np.array(spw_range,dtype=int)
         assert spw_range.size==2, "spw_range must be fed as a tuple of frequency indices."
+        assert spw_range[1]-spw_range[0]>0, "Require non-zero spectral range."
         self.spw_range = tuple(spw_range)
+
         if self.is_uvdata:
             # Set spw parameters such as frequency range and average redshift.
             self.set_spw_parameters(self.uvdata.freq_array[0])
@@ -540,8 +543,8 @@ class UVWindow(object):
         kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
         nbins_kperp = kperp_bins.size        
         if (nbins_kperp>200):
-            raise_warning('get_spherical_wf: Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
-                            verbose=verbose)
+            raise_warning('get_kperp_bins: Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
+                            verbose=self.verbose)
 
         return kperp_bins
 
@@ -589,8 +592,8 @@ class UVWindow(object):
         nbins_kpara = kpara_bins.size
 
         if (nbins_kpara>200):
-            raise_warning('get_spherical_wf: Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
-                            verbose=verbose)
+            raise_warning('get_kpara_bins: Large number of kperp/kpara bins. Risk of overresolving and slow computing.',
+                            verbose=self.verbose)
 
         return kpara_bins
 
@@ -644,6 +647,11 @@ class UVWindow(object):
 
         ##### INITIALISE PARAMETERS
 
+        FT_beam = np.array(FT_beam)
+        if (len(FT_beam)==0): 
+            # get FT of the beam from file and set frequency_related attributed (such as avg_z...)
+            FT_beam = self.get_FT()
+
         #k-bins for cylindrical binning
         if np.size(kperp_bins)==0 or kperp_bins is None:
             kperp_bins = self.get_kperp_bins([bl_len])
@@ -671,11 +679,6 @@ class UVWindow(object):
 
 
         ##### COMPUTE CYLINDRICAL WINDOW FUNCTIONS
-
-        FT_beam = np.array(FT_beam)
-        if (len(FT_beam)==0): 
-            # get FT of the beam from file and set frequency_related attributed (such as avg_z...)
-            FT_beam = self.get_FT()
 
         # interpolate FT of beam onto regular grid of (kperp_x,kperp_y)
         interp_FT_beam, kperp_norm = self.interpolate_FT_beam(bl_len, FT_beam)
@@ -707,7 +710,8 @@ class UVWindow(object):
             cyl_wf[self.Nfreqs//2+1:,:,:]=np.flip(cyl_wf,axis=0)[self.Nfreqs//2+1:]
 
         ### normalisation of window functions
-        cyl_wf /= np.sum(cyl_wf,axis=(1,2))[:,None,None]
+        sum_per_bin = np.sum(cyl_wf,axis=(1,2))[:,None,None]
+        cyl_wf = np.divide(cyl_wf,sum_per_bin,where=sum_per_bin!=0)
 
         if (return_bins=='unweighted'):
             return kperp_bins, kpara_bins, cyl_wf
@@ -782,30 +786,29 @@ class UVWindow(object):
         if verbose is None:
             verbose = self.verbose
 
-        # read baseline groups from data file if given
-        if self.is_uvdata:
-            if len(bl_groups)==0:
-                bl_groups, bl_lens, _ = utils.get_reds(self.uvdata,bl_error_tol=1.0,pick_data_ants=True)
-            else:
-                # check baselines given as input are in data file
-                baselines_in_file = [uvd.baseline_to_antnums(bl) for bl in uvd.baseline_array]
-                assert np.any([bl in baselines_in_file for bl in sum(bl_groups, [])]), "Baselines \
-                        given as input are not in data file."
-        else:
-            assert len(bl_groups)>0, "Must give list of baselines as input"
-
+        # check if bl_groups is nested list
+        if not any(isinstance(i, list) for i in bl_groups):
+            bl_groups = [bl_groups]
         # check consistency of baseline-related inputs
         assert len(bl_groups)==len(bl_lens), "bl_groups and bl_lens must have same length"
         nbls = len(bl_groups) # number of redudant groups
         self.bl_lens = np.array(bl_lens)
         self.bl_weights = np.array([len(l) for l in bl_groups]) #number of occurences of one bl length
 
+        # read baseline groups from data file if given
+        if self.is_uvdata:
+            if len(bl_groups)==0:
+                bl_groups, bl_lens, _ = utils.get_reds(self.uvdata,bl_error_tol=1.0,pick_data_ants=True)
+            else:
+                # check baselines given as input are in data file
+                baselines_in_file = [self.uvdata.baseline_to_antnums(bl) for bl in self.uvdata.baseline_array]
+                assert np.all([bl in baselines_in_file for bl in sum(bl_groups, [])]), \
+                        "Baselines given as input are not in data file."
+        else:
+            assert len(bl_groups)>0, "Must give list of baselines as input"
+
+
         # consistency checks for spw range given
-        if not (isinstance(spw_range[0],int) and isinstance(spw_range[1],int)):
-            raise_warning('spw indices given are not integers... taking their floor value',
-                            verbose=verbose)
-            spw_range = (int(np.floor(spw_range[0])),int(np.floor(spw_range[1])))
-        assert spw_range[1]-spw_range[0]>0, "Require non-zero spectral range."
         self.set_spw_range(spw_range)
 
         # consistency cheks related to polarisation
@@ -905,7 +908,9 @@ class UVWindow(object):
                 mask= (kbin_edges[m]<=ktot) & (ktot<kbin_edges[m+1])
                 if np.any(mask): #cannot compute mean if zero elements
                     wf_spherical[m1,m]=np.mean(wf_temp[mask])
-            wf_spherical[m1,:]/=np.sum(wf_spherical[m1,:])
+            # normalisation
+            wf_spherical[m1,:] = np.divide(wf_spherical[m1,:],np.sum(wf_spherical[m1,:]),
+                                    where = np.sum(wf_spherical[m1,:])!=0)
             
         if np.any(kweights==0.) and self.verbose:
             raise_warning('Some spherical bins are empty. Add baselines or expand spectral window.')
