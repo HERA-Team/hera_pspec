@@ -32,6 +32,8 @@ class Test_UVWindow(unittest.TestCase):
         FT_beam = self.uvw.get_FT()
         self.freq_array = self.uvw.freq_array
         self.ngrid = FT_beam.shape[-1]
+        # HERA bandwidth
+        self.HERA_bw = np.linspace(1,2,1024,endpoint=False)*1e8
 
         # define spherical kbins
         kmax, dk = 1., 0.128/2
@@ -42,6 +44,7 @@ class Test_UVWindow(unittest.TestCase):
         # Load datafile
         self.uvd = UVData()
         self.uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
+        self.uvd.select(frequencies=self.uvw.get_bandwidth(self.ft_file)) #reduce bandwidth of datafile to match FT_beam test file
         self.reds, self.lens, _ = utils.get_reds(self.uvd,bl_error_tol=1.0,pick_data_ants=False)
 
     def tearDown(self):
@@ -92,6 +95,12 @@ class Test_UVWindow(unittest.TestCase):
         test.set_taper(taper=taper,clear_cache=True)
         assert test.taper == taper
 
+        # test warning if updating taper after computation of wf
+        test.set_polarisation(pol=self.pol)
+        test.set_spw_range(spw_range=self.spw_range)
+        cyl_wf = test.get_cylindrical_wf(self.lens[12]) 
+        test.set_taper(taper='none',clear_cache=True)
+        
     def test_set_spw_range(self):
 
         test = uvwindow.UVWindow(ftbeam=self.ft_file)
@@ -109,31 +118,61 @@ class Test_UVWindow(unittest.TestCase):
         pytest.raises(AssertionError, test.set_spw_range, spw_range=2)
         # test for spw range not compatible with bandwidth
         pytest.raises(AssertionError, test.set_spw_range, spw_range=(1059,2314))
+        # test for spw range not increasing
+        pytest.raises(AssertionError, test.set_spw_range, spw_range=(20,10))
 
+        # test when initialising UVWindow with UVData object
+        test = uvwindow.UVWindow(uvdata = self.uvd)
+        test.set_polarisation(pol=self.pol)
+        test.set_spw_range(spw_range=self.spw_range)
+
+
+    def test_set_freq_range(self):
+
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)        
+        test.set_polarisation(pol=self.pol)
+        # test if given freq_array of wrong length
+        pytest.raises(AssertionError, test.set_freq_range, freq_array=[12.])
+        # test for appropriate input
+        test.set_freq_range(freq_array=self.freq_array)
+        assert test.spw_range == self.spw_range
+
+        # test for freq array outside of bandwidth
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)        
+        test.set_polarisation(pol=self.pol)
+        pytest.raises(AssertionError, test.set_freq_range, freq_array=np.arange(1,5,.5)*1e5)
+
+        # test when initialising UVWindow with UVData object
+        test = uvwindow.UVWindow(uvdata = self.uvd)
+        test.set_polarisation(pol=self.pol)
+        test.set_freq_range(freq_array=self.freq_array)
+        assert test.spw_range == self.spw_range
 
     def test_set_spw_parameters(self):
 
         # initialise HERA bandwidth, normally read in self.ft_file
-        HERA_bw = np.linspace(1,2,1024,endpoint=False)*1e8
-
         test = uvwindow.UVWindow(ftbeam=self.ft_file)
         pytest.raises(AssertionError, test.set_spw_range, spw_range=self.spw_range)
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
-        test.set_spw_parameters(bandwidth=HERA_bw)
+        test.set_spw_parameters(bandwidth=self.HERA_bw)
         # test for wrong input: len(bandwidth)<2
         pytest.raises(AssertionError, test.set_spw_parameters, bandwidth=12)
         # test for comparison of bandwifth in UVData and in bandwidth
         test = uvwindow.UVWindow(uvdata = os.path.join(DATA_PATH, dfile))
         test.set_polarisation(pol=self.pol)
         test.set_spw_range(spw_range=self.spw_range)
-        test.set_spw_parameters(bandwidth=HERA_bw)
+        test.set_spw_parameters(bandwidth=self.HERA_bw)
 
     def test_set_polarisation(self):
 
         # initialise object from keywords
         test = uvwindow.UVWindow(ftbeam=self.ft_file)
+        # test with string polarisation
         test.set_polarisation(pol=self.pol)
+        # test with int polarisation
+        test.set_polarisation(pol=-5)
+        # test with wrong polarisation
         pytest.raises(AssertionError, test.set_polarisation, pol='ii')
         pytest.raises(AssertionError, test.set_polarisation, pol=12)
         pytest.raises(TypeError, test.set_polarisation, pol=(3,4))
@@ -223,6 +262,8 @@ class Test_UVWindow(unittest.TestCase):
         # taper = '' should use test.taper
         fnu2 = test.take_freq_FT(interp_FT_beam, delta_nu, taper='')
         assert np.all(fnu==fnu2)
+        # other input taper
+        fnu = test.take_freq_FT(interp_FT_beam, delta_nu, taper='blackman-harris')
         # taper = 'none'
         fnu = test.take_freq_FT(interp_FT_beam, delta_nu, taper='none')
         assert test.taper == 'none'
@@ -242,6 +283,8 @@ class Test_UVWindow(unittest.TestCase):
         _ = test.get_kperp_bins(self.lens[12])
         # test for array of baseline lengths
         _ = test.get_kperp_bins(self.lens)
+        # test for warning if large number of bins (> 200)
+        _ = test.get_kperp_bins(np.r_[1.,self.lens])
 
     def test_get_kpara_bins(self):
 
@@ -253,6 +296,8 @@ class Test_UVWindow(unittest.TestCase):
         pytest.raises(AssertionError, test.get_kpara_bins, freq_array=self.freq_array[2])
         # test for correct input
         _ = test.get_kpara_bins(self.freq_array, little_h=test.little_h, cosmo=test.cosmo)
+        # test for warning if large number of bins (> 200)
+        _ = test.get_kpara_bins(self.HERA_bw, little_h=test.little_h, cosmo=test.cosmo)
 
 
     def test_get_cylindrical_wf(self):
@@ -277,6 +322,9 @@ class Test_UVWindow(unittest.TestCase):
         assert np.all(kperp == test.get_kperp_bins(bl_len))
         assert np.all(kpara == test.get_kpara_bins(test.freq_array,test.little_h,test.cosmo))
 
+        # test if error is raised when baseline is too short (auto-baseline)
+        pytest.raises(AssertionError, test.get_cylindrical_wf, bl_len=0.5, FT_beam=FT_beam)
+
         #### test different key words
 
         # kperp bins
@@ -292,6 +340,14 @@ class Test_UVWindow(unittest.TestCase):
         assert np.all(cyl_wf3==cyl_wf)
         assert np.all(kpara==kpara3)
 
+        # test filling array by delay symmetry for odd number of delays
+        test = uvwindow.UVWindow(ftbeam=self.ft_file)
+        test.set_polarisation(pol=self.pol)
+        test.set_spw_range(spw_range=(self.spw_range[0],self.spw_range[1]-1))
+        kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len,
+                                return_bins='weighted') 
+
+
     def test_get_spherical_wf(self):
 
         bl_len = self.lens[12]
@@ -306,7 +362,7 @@ class Test_UVWindow(unittest.TestCase):
                             kbins=self.kbins, kperp_bins=[], kpara_bins=[],
                             bl_groups=self.reds[:1],bl_lens=self.lens[:1], 
                             save_cyl_wf = False, return_weights=True,
-                            verbose=False)
+                            verbose=True)
         assert len(test.cyl_wf)==0
         kperp_bins = test.kperp_bins
         kpara_bins = test.kpara_bins
@@ -315,18 +371,39 @@ class Test_UVWindow(unittest.TestCase):
                             kbins=self.kbins, kperp_bins=kperp_bins, kpara_bins=kpara_bins,
                             bl_groups=self.reds[:1],bl_lens=self.lens[:1], 
                             save_cyl_wf = True, return_weights=False,
-                            verbose=False)
+                            verbose=None)
         assert len(test.cyl_wf)>0
         assert np.all(test.kperp_bins==kperp_bins)
 
         # initialise object from keywords
-        test2 = uvwindow.UVWindow(ftbeam=self.ft_file, uvdata = self.uvd)
+        uvd = UVData()
+        uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
+        test2 = uvwindow.UVWindow(ftbeam=self.ft_file, uvdata = uvd)
         test2.set_polarisation(pol=self.pol)
         test2.set_spw_range(spw_range=self.spw_range)
         # test file for UVWindow has small bandwidth to limit file size
         # so initialisation with data file will raise error as
         # data file bandwidth != FT file bandwidth
         pytest.raises(AssertionError, test2.get_FT)
+        # test for no bl input
+        pytest.raises(AssertionError, test2.get_spherical_wf,spw_range=self.spw_range,
+                            pol=self.pol, kbins=self.kbins)
+        # test for accuraste bl_groups input
+        pytest.raises(AssertionError, test2.get_spherical_wf,spw_range=self.spw_range,
+                            pol=self.pol, kbins=self.kbins, 
+                            bl_groups = [(23, 23)], bl_lens = [14.01])
+        # test for wrong bl_groups input (bls not in dat file)
+        pytest.raises(AssertionError, test2.get_spherical_wf,spw_range=self.spw_range,
+                            pol=self.pol, kbins=self.kbins, 
+                            bl_groups = [(37, 37)], bl_lens = [14.01])
+
+        # test kpara bins not outside of spectral window
+        # will print warning
+        kpara_centre = test.cosmo.tau_to_kpara(test.avg_z,little_h=test.little_h)*abs(test.dly_array).max()
+        WF = test.get_spherical_wf(spw_range=self.spw_range,pol=self.pol,
+                            kbins=self.kbins, kperp_bins=kperp_bins, 
+                            kpara_bins=np.arange(2.*kpara_centre,10*kpara_centre,step=kpara_centre),
+                            bl_groups=self.reds[:1],bl_lens=self.lens[:1])
 
 
     def test_clear_cache(self):
@@ -348,6 +425,10 @@ class Test_UVWindow(unittest.TestCase):
         assert len(test.kperp_bins)>0
         test.clear_cache(clear_cyl_bins=True)
         assert len(test.kperp_bins)==0
+
+    def test_raise_warning(self):
+
+        uvwindow.raise_warning('test',verbose=False)
 
 
 if __name__ == "__main__":

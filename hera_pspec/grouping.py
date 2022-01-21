@@ -8,6 +8,7 @@ import os
 
 from . import utils, version, uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
+from .uvwindow import UVWindow
 
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
@@ -100,8 +101,9 @@ def sample_baselines(bls, seed=None):
 
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     blpair_weights=None, error_field=None,
-                    error_weights=None,
+                    error_weights=None, exact_windows=False,
                     normalize_weights=True, inplace=True,
+                    ftbeam_file = '',
                     add_to_history=''):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
@@ -165,6 +167,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
          then it also gets appended to error_field as a list.
          Default: None
 
+    exact_windows: bool, optional
+        If True, compute exact window functions given the set of 
+        baseline lengths in blpair_groups.
+        Requires blpair_groups. Assume blpair groups are made of
+        redundant baselines correlated within a redundant group.
+
     normalize_weights: bool, optional
         Whether to normalize the baseline-pair weights so that:
            Sum(blpair_weights) = N_blpairs
@@ -173,6 +181,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     inplace : bool, optional
         If True, edit data in self, else make a copy and return. Default:
         True.
+
+    ftbeam_file : str, optional
+        Definition of the beam Fourier transform to be used.
+        Options include;
+            - Root name of the file to use, without the polarisation
+            Ex : FT_beam_HERA_dipole (+ path)
+            - '' for computation from beam simulations (slow)
 
     add_to_history : str, optional
         Added text to add to file history.
@@ -207,12 +222,31 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             new_blpair_grps = [[uvp.antnums_to_blpair(blp) for blp in blpg]
                                for blpg in blpair_groups]
             blpair_groups = new_blpair_grps
+        # Get all baseline pairs in uvp object (in integer form)
+        uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
+        blvecs_groups = []
+        for group in blpair_groups:
+            blvecs_groups.append(uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])])
+        # get baseline length for each group of baseline pairs
+        # assuming only redundant baselines are paired together
+        blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.)
     else:
         # If not, each baseline pair is its own group
-        blpair_groups = [[blp] for blp in _ordered_unique(uvp.blpair_array)]
+        _, idx = np.unique(uvp.blpair_array, return_index=True)
+        blpair_groups = [[blp] for blp in uvp.blpair_array[np.sort(idx)]]
+        # get baseline length for each group of baseline pairs
+        # assuming only redundant baselines are paired together
+        blpair_lens = [blv for blv in uvp.get_blpair_seps()[np.sort(idx)]]
         assert blpair_weights is None, "Cannot specify blpair_weights if "\
                                        "blpair_groups is None."
-        blpair_weights = [[1.,] for blp in _ordered_unique(uvp.blpair_array)]
+        blpair_weights = [[1.,] for blp in blpair_groups]
+
+    if exact_windows:
+        store_window = True
+        # initialise UVWindow object
+        uvw = UVWindow(ftbeam=ftbeam_file, taper = uvp.taper,
+                        cosmo= uvp.cosmo,little_h='h^-3' in uvp.norm_units)
+
 
     # Print warning if a blpair appears more than once in all of blpair_groups
     all_blpairs = [item for sublist in blpair_groups for item in sublist]
@@ -273,9 +307,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         cov_array_imag = odict()
 
     # same for window function
-    store_window = hasattr(uvp, 'window_function_array')
+    store_window = hasattr(uvp, 'window_function_array') or exact_windows
     if store_window:
         window_function_array = odict()
+        window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
 
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
@@ -283,6 +318,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         spw_stats = odict([[stat, []] for stat in stat_l])
         if store_window:
             spw_window_function = []
+            spw_wf_kperp_bins, spw_wf_kpara_bins = [], []
         if store_cov:
             spw_cov_real = []
             spw_cov_imag = []
@@ -295,6 +331,19 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             if store_cov:
                 pol_cov_real = []
                 pol_cov_imag = []
+
+            if exact_windows:
+                # initialise UVWindow object with polarization and spectral window
+                uvw.clear_cache()
+                polpair = uvputils.polpair_int2tuple(p)
+                assert polpair[0]==polpair[1], "Does not handle cross-polarisation spectra."
+                uvw.set_polarisation(polpair[0])
+                uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
+                uvw.get_FT(return_FT=False)
+                # extract kperp bins the window functions corresponding to the baseline 
+                # lengths given as input
+                kperp_bins = uvw.get_kperp_bins(blpair_lens)
+                kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,uvp.cosmo)
 
             # Iterate over baseline-pair groups
             for j, blpg in enumerate(blpair_groups):
@@ -321,6 +370,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 else:
                     blpg_wgts = np.ones(len(blpg))
 
+                if exact_windows:
+                    # window functions identical for all times
+                    window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
+                                                kperp_bins = kperp_bins, kpara_bins = kpara_bins,
+                                                return_bins='none')
+                    # shape of window_function: (Ndlys, Nkperp, Nkpara)
+
                 # Iterate within a baseline-pair group and get weighted data
                 for k, blp in enumerate(blpg):
                     # Get no. samples and construct integration weight
@@ -333,7 +389,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     ints = uvp.get_integrations((spw, blp, p))[:, None]
                     # shape of ints: (Ntimes, 1)
                     if store_window:
-                        window_function = uvp.get_window_function((spw, blp, p))
+                        if exact_windows:
+                            window_function = np.copy(window_function_blg)
+                        else:
+                            window_function = uvp.get_window_function((spw, blp, p))
                         # shape of window_function: (Ntimes, Ndlys, Ndlys)
                     if store_cov:
                         cov_real = uvp.get_cov((spw, blp, p), component="real")
@@ -355,7 +414,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
                     # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
                     # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
-                        stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy()
+                        stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy() #shape (Ntimes, Ndlys)
                         np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
                         w = np.real(1. / stat_val.clip(1e-40, np.inf))
                         # shape of w: (Ntimes, Ndlys)
@@ -382,8 +441,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                                 / wsum)[None]
                         nsmp = np.sum(nsmp, axis=0)[None]
                         if store_window:
-                            window_function = (np.sum(window_function * w[:, :, None], axis=0) \
-                                               / (wsum)[:, None])[None]
+                            if exact_windows:
+                                window_function = np.repeat(window_function[None],uvp.blpair_to_indices(blp).size,axis=0)
+                                window_function =  (np.sum(window_function*w[:,:,None,None],axis=0)\
+                                                    / (wsum)[:, None,None])[None]
+                            else:
+                                window_function = (np.sum(window_function * w[:, :, None], axis=0) \
+                                                   / (wsum)[:, None])[None]
                         if store_cov:
                             cov_real = (np.sum(cov_real * w[:, :, None] * w[:, None, :], axis=0) \
                                    / wsum[:, None] / wsum[None, :])[None]
@@ -412,7 +476,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                             # clip errws for same reason above
                             bpg_stats[stat].append(errws[stat].clip(0, 1e40) * w**2)
                         if store_window:
-                            bpg_window_function.append(window_function * w[:, :, None])
+                            if exact_windows:
+                                bpg_window_function.append(window_function * w[:, :, None, None])
+                            else:
+                                bpg_window_function.append(window_function * w[:, :, None])
                         if store_cov:
                             bpg_cov_real.append(cov_real * w[:, :, None] * w[:, None, :])
                             bpg_cov_imag.append(cov_imag * w[:, :, None] * w[:, None, :])
@@ -434,7 +501,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # take sqrt to get back to stat units
                     bpg_stats[stat] = np.sqrt(stat_avg)
                 if store_window:
-                    bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None]
+                    if exact_windows:
+                        bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
+                    else:
+                        bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None]
                 # Append to lists (polarization)
                 pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
                 pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
@@ -445,7 +515,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 if store_cov:
                     pol_cov_real.extend(bpg_cov_real)
                     pol_cov_imag.extend(bpg_cov_imag)
-
             # Append to lists (spectral window)
             spw_data.append(pol_data); spw_wgts.append(pol_wgts)
             spw_ints.append(pol_ints); spw_nsmp.append(pol_nsmp)
@@ -453,6 +522,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 spw_stats[stat].append(pol_stats[stat])
             if store_window:
                 spw_window_function.append(pol_window_function)
+                if exact_windows:
+                    spw_wf_kperp_bins.append(kperp_bins)
+                    spw_wf_kpara_bins.append(kpara_bins)
             if store_cov:
                 spw_cov_real.append(pol_cov_real)
                 spw_cov_imag.append(pol_cov_imag)
@@ -466,6 +538,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             stats_array[stat][spw] = np.moveaxis(spw_stats[stat], 0, -1)
         if store_window:
             window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
+            if exact_windows:
+                window_function_kperp_bins[spw] = np.moveaxis(spw_wf_kperp_bins, 0, -1)
+                window_function_kpara_bins[spw] = np.moveaxis(spw_wf_kpara_bins, 0, -1)
         if store_cov:
             cov_array_real[spw] = np.moveaxis(np.array(spw_cov_real), 0, -1)
             cov_array_imag[spw] = np.moveaxis(np.array(spw_cov_imag), 0, -1)
@@ -532,6 +607,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     uvp.nsample_array = nsmp_array
     if store_window:
         uvp.window_function_array = window_function_array
+        if exact_windows:
+            uvp.window_function_kperp_bins = window_function_kperp_bins
+            uvp.window_function_kpara_bins = window_function_kpara_bins
     if store_cov:
         uvp.cov_array_real = cov_array_real
         uvp.cov_array_imag = cov_array_imag
@@ -551,8 +629,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
 
 def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
-                      weight_by_cov=False, error_weights=None, add_to_history='', little_h=True, A={},
-                      run_check=True):
+                      weight_by_cov=False, error_weights=None, exact_windows=False, ftbeam_file = '',
+                      add_to_history='', little_h=True, A={}, run_check=True):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
     Use UVPSpec.set_stats_slice to downweight regions of k_perp and k_para grid before averaging.
@@ -585,6 +663,19 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     error_weights : str, optional
         Error field to use as weights in averaging. Weight is 1/err^2.
         If not specified, perform a uniform average.
+
+    exact_windows: bool, optional
+        If True, compute exact window functions given the set of 
+        baseline lengths in blpair_groups.
+        Requires blpair_groups. Assume blpair groups are made of
+        redundant baselines correlated within a redundant group.
+
+    ftbeam_file : str, optional
+        Definition of the beam Fourier transform to be used.
+        Options include;
+            - Root name of the file to use, without the polarisation
+            Ex : FT_beam_HERA_dipole (+ path)
+            - '' for computation from beam simulations (slow)
 
     add_to_history : str, optional
         String to append to object history
@@ -635,11 +726,33 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     # copy input
     uvp = copy.deepcopy(uvp_in)
 
+    # if exact windows but no blpair groups, choose redundant groups
+    if exact_windows:
+        window_function_array = odict()
+        if (blpair_groups is None):
+            blpair_groups, blpair_lens, _ = uvp.get_red_bls()
+        else: # get blpair_lens
+            # Enforce shape of blpair_groups
+            assert isinstance(blpair_groups[0], (list, np.ndarray)), \
+                      "blpair_groups must be fed as a list of baseline-pair lists. " \
+                      "See docstring."
+            # Get all baseline pairs in uvp object (in integer form)
+            uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
+            blvecs_groups = []
+            for group in blpair_groups:
+                blvecs_groups.append(uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])])
+            # get baseline length for each group of baseline pairs
+            # assuming only redundant baselines are paired together
+            blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.)
+
+
     # perform time and cylindrical averaging upfront if requested
-    if blpair_groups is not None or time_avg:
+    if (blpair_groups is not None) or time_avg:
         uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg,
                             blpair_weights=blpair_weights, error_weights=error_weights,
+                            exact_windows=exact_windows, ftbeam_file=ftbeam_file,
                             inplace=True)
+        # also returns exact window functions as new attribute of uvp
 
     # initialize blank arrays and dicts
     Nk = len(kbins)
@@ -647,7 +760,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     data_array, wgt_array, integration_array, nsample_array = odict(), odict(), odict(), odict()
     store_stats = hasattr(uvp, 'stats_array')
     store_cov = hasattr(uvp, "cov_array_real")
-    store_window = hasattr(uvp, 'window_function_array')
+    store_window = hasattr(uvp, 'window_function_array') or exact_windows
     if store_cov:
         cov_array_real = odict()
         cov_array_imag = odict()
@@ -664,6 +777,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     # iterate over spectral windows
     spw_ranges = uvp.get_spw_ranges()
+    spw_window_function = []
     for spw in uvp.spw_array:
         # setup non delay-based arrays for this spw
         spw_range = spw_ranges[spw]
@@ -681,7 +795,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         if store_stats:
             for stat in uvp.stats_array.keys():
                 stats_array[stat][spw] = np.zeros((uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128)
-        if store_window:
+        if store_window and not exact_windows:
             window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
 
         # setup the design matrix: P_cyl = A P_sph
@@ -731,7 +845,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # store data
             data_array[spw][:, dslice] = uvp.data_array[spw][blpt_inds]
 
-            if store_window:
+            if store_window and not exact_windows:
                 window_function_array[spw][:, dslice, dslice] = uvp.window_function_array[spw][blpt_inds]
 
             if store_stats:
@@ -811,7 +925,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         dm = (Ht @ dm[:, :, :, None])[:, :, :, 0]
         data_array[spw] = np.moveaxis(dm, 0, -1)
 
-        if store_window:
+        if store_window and not exact_windows:
             # bin window function: W_sph = H.T W_cyl A
             # wm shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
             wm = np.moveaxis(window_function_array[spw], -1, 0)
@@ -838,6 +952,28 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             cm = Ht @ cm.clip(-1e40, 1e40) @ H  # clip infs
             cov_array_real[spw] = np.moveaxis(cm, 0, -1)
             cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
+
+        if exact_windows:
+            # initialise UVWindow object
+            uvw = UVWindow(ftbeam=ftbeam_file, taper = uvp.taper,
+                            cosmo= uvp.cosmo,little_h='h^-3' in uvp.norm_units,
+                            verbose=False)
+            spw_window_function = []
+            for ip, polpair in enumerate(uvp.polpair_array):
+                uvw.clear_cache()
+                polpair = uvputils.polpair_int2tuple(polpair)
+                assert polpair[0]==polpair[1], "Does not handle cross-polarisation spectra."
+                uvw.set_polarisation(polpair[0])
+                uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
+                uvw.set_bl_lens(np.array(blpair_lens))
+                # kperp, kpara bins
+                kperp_bins = uvp.window_function_kperp_bins[spw][:,ip]
+                kpara_bins = uvp.window_function_kpara_bins[spw][:,ip]
+                ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
+                cyl_wf = uvp.window_function_array[spw][:,:,:,:,ip]
+                pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf,kbins,ktot,blpair_weights)
+                spw_window_function.append(pol_window_function)
+            window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)[None]
 
     # handle data arrays
     uvp.data_array = data_array

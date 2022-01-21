@@ -3447,6 +3447,7 @@ class PSpecData(object):
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width  # all dsets validated to agree
         uvp.weighting = input_data_weight
+        uvp.exact_windows = False
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
         filename1 = json.loads(dset1.extra_keywords.get('filename', '""'))
