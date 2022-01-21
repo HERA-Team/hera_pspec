@@ -814,7 +814,7 @@ class PSpecData(object):
             C = self.C_model(key, model=model, time_index=time_index)
             #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if np.linalg.cond(C) >= 1e9:
-                warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
+                warnings.warn("Poorly conditioned covariance. Computing Pseudo-Inverse")
                 ic = np.linalg.pinv(C)
             else:
                 ic = np.linalg.inv(C)

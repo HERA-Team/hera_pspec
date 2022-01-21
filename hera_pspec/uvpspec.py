@@ -2811,7 +2811,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     # ensure static metadata agree between all objects
     static_meta = ['channel_width', 'telescope_location', 'weighting',
                    'OmegaP', 'beam_freqs', 'OmegaPP', 'beamfile', 'norm',
-                   'taper', 'vis_units', 'norm_units', 'folded', 'cosmo']
+                   'taper', 'vis_units', 'norm_units', 'folded', 'cosmo', 'exact_windows']
     for m in static_meta:
         for u in uvps[1:]:
             if hasattr(uvps[0], m) and hasattr(u, m):
