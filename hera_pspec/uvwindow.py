@@ -951,9 +951,10 @@ class UVWindow(object):
         else:
             assert len(bl_groups)>0, "Must give list of baselines as input"
 
-
         # sets basic properties of UVWindow object
         self.set_bl_lens(np.array(bl_lens))
+
+        # consistency checks for spw range given
         self.set_spw_range(spw_range)
         assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], \
                 "Wrong polarisation string."
