@@ -730,7 +730,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if exact_windows:
         window_function_array = odict()
         if (blpair_groups is None):
-            blpair_groups, blpair_lens, _ = uvp.get_red_bls()
+            blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
         else: # get blpair_lens
             # Enforce shape of blpair_groups
             assert isinstance(blpair_groups[0], (list, np.ndarray)), \
