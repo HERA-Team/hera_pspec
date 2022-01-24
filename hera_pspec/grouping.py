@@ -312,6 +312,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         window_function_array = odict()
         window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
 
+    print(blpair_groups,blpair_lens)
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
         spw_data, spw_wgts, spw_ints, spw_nsmp = [], [], [], []
