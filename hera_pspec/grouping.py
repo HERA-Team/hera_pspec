@@ -241,13 +241,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                                        "blpair_groups is None."
         blpair_weights = [[1.,] for blp in blpair_groups]
 
-
     # Print warning if a blpair appears more than once in all of blpair_groups
     all_blpairs = [item for sublist in blpair_groups for item in sublist]
     if len(set(all_blpairs)) < len(all_blpairs):
         print("Warning: some baseline-pairs are repeated between blpair "\
               "averaging groups.")
-
 
     if exact_windows:
         store_window = True
@@ -259,7 +257,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
         blpair_groups += [[blp] for blp in extra_blpairs]
         blpair_weights += [[1.,] for blp in extra_blpairs]
-
 
     # Create baseline-pair weights list if not specified
     if blpair_weights is None:
@@ -297,6 +294,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         if hasattr(uvp, "stats_array"):
             if stat not in uvp.stats_array.keys():
                 raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
+
+    if not exact_windows:
+        # For baseline pairs not in blpair_groups, add them as their own group
+        extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
+        blpair_groups += [[blp] for blp in extra_blpairs]
+        blpair_weights += [[1.,] for blp in extra_blpairs]
 
     # Create new data arrays
     data_array, wgts_array = odict(), odict()
