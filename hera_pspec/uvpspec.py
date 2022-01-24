@@ -1624,7 +1624,8 @@ class UVPSpec(object):
 
     def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None, ftbeam_file='',
                                         error_weights=None, blpair_weights=None, normalize_weights=True,
-                                        error_field=None, add_to_history=''):
+                                        error_field=None, spw=None,
+                                        add_to_history=''):
         """
 
         Parameters
@@ -1671,6 +1672,9 @@ class UVPSpec(object):
              integration time as weights. If error_weights is specified,
              then it also gets appended to error_field as a list.
              Default: None
+
+        spw : int 
+            Spectral window index.
 
         normalize_weights: bool, optional
             Whether to normalize the baseline-pair weights so that:
@@ -1739,6 +1743,16 @@ class UVPSpec(object):
                 if stat not in self.stats_array.keys():
                     raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
 
+        # check spw input and create array of spws to loop over
+        if spw is None:
+            # if no spw specified, use attribute
+            spws = np.arange(self.Nspws)
+        else:
+            # check if spw given is in uvp
+            assert spw in self.spw_array, "input spw is not in UVPSpec.spw_array."
+            # use spw given
+            spws = np.array([spw])
+
         # Create new window function array
         window_function_array = odict()
         window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
@@ -1748,7 +1762,7 @@ class UVPSpec(object):
                         cosmo= self.cosmo, little_h='h^-3' in self.norm_units)
 
         # Iterate over spectral windows
-        for spw in range(self.Nspws):
+        for spw in spws:
 
             spw_window_function = []
             spw_wf_kperp_bins, spw_wf_kpara_bins = [], []
