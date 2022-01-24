@@ -252,11 +252,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         # initialise UVWindow object
         uvw = UVWindow(ftbeam=ftbeam_file, taper = uvp.taper,
                         cosmo= uvp.cosmo,little_h='h^-3' in uvp.norm_units)
-    else:
-        # For baseline pairs not in blpair_groups, add them as their own group
-        extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
-        blpair_groups += [[blp] for blp in extra_blpairs]
-        blpair_weights += [[1.,] for blp in extra_blpairs]
+
 
     # Create baseline-pair weights list if not specified
     if blpair_weights is None:
