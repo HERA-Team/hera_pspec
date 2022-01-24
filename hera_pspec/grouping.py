@@ -725,7 +725,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
 
     # copy input
-    uvp = copy.deepcopy(uvp_in)
+    uvp = copy.deepcopy(uvp_in) 
 
     # if exact windows but no blpair groups, choose redundant groups
     if exact_windows:
