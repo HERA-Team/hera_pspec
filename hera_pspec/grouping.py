@@ -371,6 +371,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     blpg_wgts = np.ones(len(blpg))
 
                 if exact_windows:
+                    print(j,blpair_lens[j])
                     # window functions identical for all times
                     window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
                                                 kperp_bins = kperp_bins, kpara_bins = kpara_bins,
