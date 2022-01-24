@@ -1739,11 +1739,6 @@ class UVPSpec(object):
                 if stat not in self.stats_array.keys():
                     raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
 
-        # For baseline pairs not in blpair_groups, add them as their own group
-        extra_blpairs = set(self.blpair_array) - set(all_blpairs)
-        blpair_groups += [[blp] for blp in extra_blpairs]
-        blpair_weights += [[1.,] for blp in extra_blpairs]
-
         # Create new window function array
         window_function_array = odict()
         window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
