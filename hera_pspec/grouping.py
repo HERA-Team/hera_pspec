@@ -241,6 +241,14 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                                        "blpair_groups is None."
         blpair_weights = [[1.,] for blp in blpair_groups]
 
+
+    # Print warning if a blpair appears more than once in all of blpair_groups
+    all_blpairs = [item for sublist in blpair_groups for item in sublist]
+    if len(set(all_blpairs)) < len(all_blpairs):
+        print("Warning: some baseline-pairs are repeated between blpair "\
+              "averaging groups.")
+
+
     if exact_windows:
         store_window = True
         # initialise UVWindow object
@@ -252,12 +260,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         blpair_groups += [[blp] for blp in extra_blpairs]
         blpair_weights += [[1.,] for blp in extra_blpairs]
 
-
-    # Print warning if a blpair appears more than once in all of blpair_groups
-    all_blpairs = [item for sublist in blpair_groups for item in sublist]
-    if len(set(all_blpairs)) < len(all_blpairs):
-        print("Warning: some baseline-pairs are repeated between blpair "\
-              "averaging groups.")
 
     # Create baseline-pair weights list if not specified
     if blpair_weights is None:
