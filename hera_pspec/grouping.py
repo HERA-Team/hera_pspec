@@ -982,7 +982,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                                                                kperp_bins=kperp_bins,kpara_bins=kpara_bins,
                                                                bl_groups = blpair_groups, bl_lens = blpair_lens,
                                                                save_cyl_wf = False, return_weights = False)
-                print(pol_window_function.shape)
                 spw_window_function.append(pol_window_function)
             window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)[None]
 
