@@ -967,6 +967,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 assert polpair[0]==polpair[1], "Does not handle cross-polarisation spectra."
                 uvw.set_polarisation(polpair[0])
                 uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
+                uvw.get_FT(return_FT=False)
                 # uvw.set_bl_lens(np.array(blpair_lens))
                 # # kperp, kpara bins
                 # extract kperp bins the window functions corresponding to the baseline 
