@@ -956,8 +956,6 @@ class UVWindow(object):
 
         # consistency checks for spw range given
         self.set_spw_range(spw_range)
-        assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], \
-                "Wrong polarisation string."
         self.set_polarisation(pol)
         # get FT of the beam from file and set frequency_related attributed (such as avg_z...)
         FT_beam = self.get_FT()
