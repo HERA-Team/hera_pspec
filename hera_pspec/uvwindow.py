@@ -1052,3 +1052,11 @@ class UVWindow(object):
             self.kperp_bins, self.kpara_bins = [], []
 
 
+def raise_warning(warning, verbose=True):
+    """
+    Warning function.
+    """
+    if verbose:
+        print('Warning: %s' %warning)
+
+
