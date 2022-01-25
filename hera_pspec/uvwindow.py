@@ -830,7 +830,7 @@ class UVWindow(object):
         for m1 in range(nbinsk):
             mask2 = (kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1]).astype(int)
             if (np.sum(mask2)==0): continue
-            print(mask.shape,bl_weights.shape)
+            print(mask2.shape,bl_weights.shape)
             mask2 = mask2*bl_weights[:,None] #add weights for redundancy
             kweights[m1] = np.sum(mask2) 
             wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
