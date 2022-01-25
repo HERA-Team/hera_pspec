@@ -777,8 +777,11 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         if store_stats:
             for stat in uvp.stats_array.keys():
                 stats_array[stat][spw] = np.zeros((uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128)
-        if store_window and not exact_windows:
-            window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
+        if store_window:
+            if exact_windows:
+                window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
+            else:
+                window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
 
         # setup the design matrix: P_cyl = A P_sph
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
@@ -937,7 +940,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
         if exact_windows:
 
-            window_function_array = odict()
+            # window_function_array = odict()
 
             # find redundant groups
             if (blpair_groups is None):
