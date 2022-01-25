@@ -969,8 +969,10 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
                 # uvw.set_bl_lens(np.array(blpair_lens))
                 # # kperp, kpara bins
-                kperp_bins = uvp.window_function_kperp_bins[spw][:,ip]
-                kpara_bins = uvp.window_function_kpara_bins[spw][:,ip]
+                # extract kperp bins the window functions corresponding to the baseline 
+                # lengths given as input
+                kperp_bins = uvw.get_kperp_bins(blpair_lens)
+                kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,uvp.cosmo)
                 # ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
                 # cyl_wf = uvp.window_function_array[spw][:,:,:,:,ip]
                 # pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf,kbins,ktot,blpair_weights)
