@@ -1156,16 +1156,20 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         kbins = kbins / uvp.cosmo.h
         bin_widths = bin_widths / uvp.cosmo.h
 
+    # initialise UVWindow object
+    uvw = UVWindow(ftbeam=ftbeam_file, taper = uvp.taper,
+                    cosmo= uvp.cosmo,little_h='h^-3' in uvp.norm_units,
+                    verbose=verbose)
+
     # iterate over spectral windows
     for spw in spws:
 
         # setup arrays 
         window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
 
-        # initialise UVWindow object
-        uvw = UVWindow(ftbeam=ftbeam_file, taper = uvp.taper,
-                        cosmo= uvp.cosmo,little_h='h^-3' in uvp.norm_units,
-                        verbose=verbose)
+        if not uvp.exact_windows:
+            uvp.get_exact_window_functions(blpair_groups,blpair_lens,ftbeam_file,
+                                            error_weights=error_weights, spw=spw)
 
         # iterate over polarisation
         spw_window_function = []
@@ -1175,15 +1179,22 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             assert polpair[0]==polpair[1], "Does not handle cross-polarisation spectra."
             uvw.set_polarisation(polpair[0])
             uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
-            uvw.get_FT(return_FT=False)
-            kperp_bins = uvw.get_kperp_bins(blpair_lens)
-            kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,uvp.cosmo)
-            pol_window_function = uvw.get_spherical_wf(spw_range=uvw.spw_range,pol=uvw.pol,
-                                                           kbins=kbins,
-                                                           kperp_bins=kperp_bins,kpara_bins=kpara_bins,
-                                                           bl_groups = blpair_groups, bl_lens = blpair_lens,
-                                                           blpair_weights = blpair_weights,
-                                                           save_cyl_wf = False, return_weights = False)
+            uvw.set_bl_lens(np.array(blpair_lens))
+            # kperp, kpara bins
+            kperp_bins = uvp.window_function_kperp_bins[spw][:,ip]
+            kpara_bins = uvp.window_function_kpara_bins[spw][:,ip]
+            ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
+            cyl_wf = uvp.window_function_array[spw][:,:,:,:,ip]
+            pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf,kbins,ktot,blpair_weights)
+            # uvw.get_FT(return_FT=False)
+            # kperp_bins = uvw.get_kperp_bins(blpair_lens)
+            # kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,uvp.cosmo)
+            # pol_window_function = uvw.get_spherical_wf(spw_range=uvw.spw_range,pol=uvw.pol,
+            #                                                kbins=kbins,
+            #                                                kperp_bins=kperp_bins,kpara_bins=kpara_bins,
+            #                                                bl_groups = blpair_groups, bl_lens = blpair_lens,
+            #                                                blpair_weights = blpair_weights,
+            #                                                save_cyl_wf = False, return_weights = False)
             spw_window_function.append(pol_window_function)
         window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)[None]
 
