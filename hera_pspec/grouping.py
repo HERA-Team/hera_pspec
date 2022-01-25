@@ -1124,7 +1124,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # ensure consistency between inputs
     assert len(blpair_groups)==len(blpair_lens)
     if blpair_weights is None:
-        blpair_weights = [[1] for blp in blpair_groups]
+        blpair_weights = [1 for blp in blpair_groups]
     else:
         assert len(blpair_weights)==len(blpair_groups)
 
