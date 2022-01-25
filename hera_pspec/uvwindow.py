@@ -931,12 +931,8 @@ class UVWindow(object):
             self.bl_weights = np.array([len(l) for l in bl_groups])
         else:
             # Check that blpair_weights has the same shape as blpair_groups
-            for i, grp in enumerate(bl_groups):
-                try:
-                    len(blpair_weights[i]) == len(grp)
-                except:
-                    raise IndexError("blpair_weights must have the same shape as "
-                                     "blpair_groups")
+            assert len(blpair_weights) == len(bl_groups), raise_warning("blpair_weights must \
+                                                                            have the same shape as blpair_groups")
             self.bl_weights = blpair_weights
 
         # read baseline groups from data file if given
@@ -1055,11 +1051,4 @@ class UVWindow(object):
         if clear_cyl_bins:
             self.kperp_bins, self.kpara_bins = [], []
 
-
-def raise_warning(warning, verbose=True):
-    """
-    Warning function.
-    """
-    if verbose:
-        print('Warning: %s' %warning)
 
