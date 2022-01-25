@@ -1136,7 +1136,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # check spw input and create array of spws to loop over
     if spw is None:
         # if no spw specified, use attribute
-        spws = np.arange(uvp_in_.Nspws)
+        spws = np.arange(uvp_in.Nspws)
     else:
         # check if spw given is in uvp
         assert spw in  uvp_in.spw_array, "input spw is not in UVPSpec.spw_array."
