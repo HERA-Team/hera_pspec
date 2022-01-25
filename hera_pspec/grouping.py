@@ -940,8 +940,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
         if exact_windows:
 
-            # window_function_array = odict()
-
             # find redundant groups
             if (blpair_groups is None):
                 blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
@@ -959,34 +957,43 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 # assuming only redundant baselines are paired together
                 blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.)
 
-            # initialise UVWindow object
-            uvw = UVWindow(ftbeam=ftbeam_file, taper = uvp.taper,
-                            cosmo= uvp.cosmo,little_h='h^-3' in uvp.norm_units,
-                            verbose=True)
-            spw_window_function = []
-            for ip, polpair in enumerate(uvp.polpair_array):
-                uvw.clear_cache()
-                polpair = uvputils.polpair_int2tuple(polpair)
-                assert polpair[0]==polpair[1], "Does not handle cross-polarisation spectra."
-                uvw.set_polarisation(polpair[0])
-                uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
-                uvw.get_FT(return_FT=False)
-                # uvw.set_bl_lens(np.array(blpair_lens))
-                # # kperp, kpara bins
-                # extract kperp bins the window functions corresponding to the baseline 
-                # lengths given as input
-                kperp_bins = uvw.get_kperp_bins(blpair_lens)
-                kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,uvp.cosmo)
-                # ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
-                # cyl_wf = uvp.window_function_array[spw][:,:,:,:,ip]
-                # pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf,kbins,ktot,blpair_weights)
-                pol_window_function = uvw.get_spherical_wf(spw_range=uvw.spw_range,pol=polpair[0],
-                                                               kbins=kbins,
-                                                               kperp_bins=kperp_bins,kpara_bins=kpara_bins,
-                                                               bl_groups = blpair_groups, bl_lens = blpair_lens,
-                                                               save_cyl_wf = False, return_weights = False)
-                spw_window_function.append(pol_window_function)
-            window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)[None]
+
+            window_function_array[spw] = spherical_wf_from_uvp(uvp, kbins, bin_widths, 
+                                blpair_groups=blpair_groups, blpair_lens=blpair_lens, blpair_weights=blpair_weights,
+                                error_weights=error_weights, ftbeam_file = ftbeam_file, spw=spw,
+                                little_h=little_h, verbose=True)
+
+            # window_function_array = odict()
+
+
+            # # initialise UVWindow object
+            # uvw = UVWindow(ftbeam=ftbeam_file, taper = uvp.taper,
+            #                 cosmo= uvp.cosmo,little_h='h^-3' in uvp.norm_units,
+            #                 verbose=True)
+            # spw_window_function = []
+            # for ip, polpair in enumerate(uvp.polpair_array):
+            #     uvw.clear_cache()
+            #     polpair = uvputils.polpair_int2tuple(polpair)
+            #     assert polpair[0]==polpair[1], "Does not handle cross-polarisation spectra."
+            #     uvw.set_polarisation(polpair[0])
+            #     uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
+            #     uvw.get_FT(return_FT=False)
+            #     # uvw.set_bl_lens(np.array(blpair_lens))
+            #     # # kperp, kpara bins
+            #     # extract kperp bins the window functions corresponding to the baseline 
+            #     # lengths given as input
+            #     kperp_bins = uvw.get_kperp_bins(blpair_lens)
+            #     kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,uvp.cosmo)
+            #     # ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
+            #     # cyl_wf = uvp.window_function_array[spw][:,:,:,:,ip]
+            #     # pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf,kbins,ktot,blpair_weights)
+            #     pol_window_function = uvw.get_spherical_wf(spw_range=uvw.spw_range,pol=polpair[0],
+            #                                                    kbins=kbins,
+            #                                                    kperp_bins=kperp_bins,kpara_bins=kpara_bins,
+            #                                                    bl_groups = blpair_groups, bl_lens = blpair_lens,
+            #                                                    save_cyl_wf = False, return_weights = False)
+            #     spw_window_function.append(pol_window_function)
+            # window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)[None]
 
     # handle data arrays
     uvp.data_array = data_array
@@ -1040,6 +1047,147 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         uvp.check()
 
     return uvp
+
+
+def spherical_wf_from_uvp(uvp_in, kbins, bin_widths, 
+                                blpair_groups, blpair_lens, blpair_weights=None,
+                                error_weights=None, ftbeam_file = '', spw=None,
+                                little_h=True, verbose=False):
+    
+    """
+    Obtains exact spherical window functions from an UVPspec object,
+    given a set of baseline-pair groups, their associated lengths, and 
+    a set of spherical k-bins.
+
+    Parameters
+    ----------
+    uvp_in : UVPSpec object
+        Input UVPSpec to average
+
+    kbins : array-like
+        1D float array of ascending |k| bin centers in [h] Mpc^-1 units
+        (h included if little_h is True)
+
+    bin_widths : array-like
+        1D float array of kbin widths for each element in kbins
+
+    blpair_groups : list of tuples,
+        blpair_groups to average if fed (cylindrical binning)
+
+    blpair_weights : list
+        relative weights of blpairs in blpair averaging (used for bootstrapping)
+    
+    blpair_lens : list 
+        lengths of blpairs in blpair_groups
+
+    error_weights : str, optional
+        Error field to use as weights in averaging. Weight is 1/err^2.
+        If not specified, perform a uniform average.
+
+    ftbeam_file : str, optional
+        Definition of the beam Fourier transform to be used.
+        Options include;
+            - Root name of the file to use, without the polarisation
+            Ex : FT_beam_HERA_dipole (+ path)
+            - '' for computation from beam simulations (slow)
+
+    spw : int 
+        Spectral window index.
+
+    little_h : bool, optional
+        If True, kgrid is in h Mpc^-1 units, otherwise just Mpc^-1 units.
+        If False, user must ensure adopted h is consistent with uvp_in.cosmo
+
+    verbose : bool, optional
+        If True, print progress, warnings and debugging info to stdout.
+        If None, value used is the class attribute.
+
+    Returns
+    --------
+    wf_spherical : array
+        Array of spherical window functions.
+        Shape (nbinsk, nbinsk).
+
+    """
+
+    # input checks
+
+    if isinstance(bin_widths, (float, int)):
+        bin_widths = np.ones_like(kbins) * bin_widths
+
+    # ensure bins don't overlap
+    assert len(kbins) == len(bin_widths)
+    kbin_left = kbins - bin_widths / 2
+    kbin_right = kbins + bin_widths / 2
+    assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
+
+    # ensure consistency between inputs
+    assert len(blpair_groups)==len(blpair_lens)
+    if blpair_weights is None:
+        blpair_weights = [[1] for blp in blpair_groups]
+    else:
+        assert len(blpair_weights)==len(blpair_groups)
+
+    # Enforce shape of blpair_groups
+    assert isinstance(blpair_groups[0], (list, np.ndarray)), \
+              "blpair_groups must be fed as a list of baseline-pair lists. " \
+              "See docstring."
+
+    # check spw input and create array of spws to loop over
+    if spw is None:
+        # if no spw specified, use attribute
+        spws = np.arange(uvp_in_.Nspws)
+    else:
+        # check if spw given is in uvp
+        assert spw in  uvp_in.spw_array, "input spw is not in UVPSpec.spw_array."
+        # use spw given
+        spws = np.array([spw])
+
+
+    # copy input
+    uvp = copy.deepcopy(uvp_in) 
+
+    # initialize blank arrays and dicts
+    Nk = len(kbins)
+    window_function_array = odict()
+
+    # transform kgrid to little_h units
+    if not little_h:
+        kbins = kbins / uvp.cosmo.h
+        bin_widths = bin_widths / uvp.cosmo.h
+
+    # iterate over spectral windows
+    for spw in spws:
+
+        # setup arrays 
+        window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
+
+        # initialise UVWindow object
+        uvw = UVWindow(ftbeam=ftbeam_file, taper = uvp.taper,
+                        cosmo= uvp.cosmo,little_h='h^-3' in uvp.norm_units,
+                        verbose=verbose)
+
+        # iterate over polarisation
+        spw_window_function = []
+        for ip, polpair in enumerate(uvp.polpair_array):
+            uvw.clear_cache()
+            polpair = uvputils.polpair_int2tuple(polpair)
+            assert polpair[0]==polpair[1], "Does not handle cross-polarisation spectra."
+            uvw.set_polarisation(polpair[0])
+            uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
+            uvw.get_FT(return_FT=False)
+            kperp_bins = uvw.get_kperp_bins(blpair_lens)
+            kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,uvp.cosmo)
+            pol_window_function = uvw.get_spherical_wf(spw_range=uvw.spw_range,pol=uvw.pol,
+                                                           kbins=kbins,
+                                                           kperp_bins=kperp_bins,kpara_bins=kpara_bins,
+                                                           bl_groups = blpair_groups, bl_lens = blpair_lens,
+                                                           blpair_weights = blpair_weights,
+                                                           save_cyl_wf = False, return_weights = False)
+            spw_window_function.append(pol_window_function)
+        window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)[None]
+
+    return window_function_array
 
 
 def fold_spectra(uvp):
