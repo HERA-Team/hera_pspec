@@ -1123,10 +1123,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
     # ensure consistency between inputs
     assert len(blpair_groups)==len(blpair_lens)
-    if blpair_weights is None:
-        blpair_weights = [1 for blp in blpair_groups]
-    else:
-        assert len(blpair_weights)==len(blpair_groups)
 
     # Enforce shape of blpair_groups
     assert isinstance(blpair_groups[0], (list, np.ndarray)), \
@@ -1185,7 +1181,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             kpara_bins = uvp.window_function_kpara_bins[spw][:,ip]
             ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
             cyl_wf = uvp.window_function_array[spw][:,:,:,:,ip]
-            print(cyl_wf.shape,blpair_weights.shape)
+            print(cyl_wf.shape)
             pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf,kbins,ktot,blpair_weights)
             # uvw.get_FT(return_FT=False)
             # kperp_bins = uvw.get_kperp_bins(blpair_lens)
