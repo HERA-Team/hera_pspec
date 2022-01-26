@@ -1875,7 +1875,9 @@ class UVPSpec(object):
 
                     # normalize sum: clip to deal with w_list_sum == 0
                     w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
-                    if not apply_weights:
+                    if apply_weights:
+                        bpg_window_function = np.sum(bpg_window_function, axis=0)
+                    else:
                         bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
                     pol_window_function.extend(bpg_window_function)
 
