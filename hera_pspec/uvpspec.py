@@ -1828,6 +1828,8 @@ class UVPSpec(object):
                         # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
                         # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
                             stat_val = self.get_stats(error_weights, (spw, blp, p)).copy() #shape (Ntimes, Ndlys)
+                            #corrects for potential nan values
+                            stat_val = np.nan_to_num(stat_val,copy=False,nan=np.inf,posinf=np.inf)
                             np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
                             w = np.real(1. / stat_val.clip(1e-40, np.inf))
                             # shape of w: (Ntimes, Ndlys)
