@@ -1154,7 +1154,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # initialize blank arrays and dicts
     Nk = len(kbins)
     window_function_array = odict()
-    cyl_wf = odict()
+    cyl_windows = odict()
 
     # transform kgrid to little_h units
     if not little_h:
