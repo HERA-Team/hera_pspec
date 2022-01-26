@@ -1154,6 +1154,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # initialize blank arrays and dicts
     Nk = len(kbins)
     window_function_array = odict()
+    cyl_wf = odict()
 
     # transform kgrid to little_h units
     if not little_h:
@@ -1168,9 +1169,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # iterate over spectral windows
     for spw in spws:
 
-        # setup arrays 
-        window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
-
         if not uvp.exact_windows:
             kperp_bins, kpara_bins, cyl_wf = uvp.get_exact_window_functions(blpair_groups,blpair_lens,ftbeam_file,
                                             error_weights=error_weights, this_spw=spw, normalize_wf=False,
@@ -1179,6 +1177,10 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             kperp_bins = uvp.window_function_kperp_bins[spw]
             kpara_bins = uvp.window_function_kpara_bins[spw]
             cyl_wf = uvp.window_function_array[spw]
+
+        # setup arrays 
+        window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
+        cyl_windows[spw] = cyl_wf
 
         # iterate over polarisation
         spw_window_function = []
@@ -1205,7 +1207,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             spw_window_function.append(pol_window_function)
         window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)[None]
 
-    return window_function_array
+    return cyl_wf, window_function_array
 
 
 def fold_spectra(uvp):
