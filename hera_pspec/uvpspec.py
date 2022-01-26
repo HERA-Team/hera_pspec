@@ -1819,6 +1819,7 @@ class UVPSpec(object):
                 # lengths given as input
                 kperp_bins = uvw.get_kperp_bins(blpair_lens)
                 kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,self.cosmo)
+                print(kpara_bins.shape,kperp_bins.shape)
 
                 # Iterate over baseline-pair groups
                 for j, blpg in enumerate(blpair_groups):
