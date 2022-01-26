@@ -1690,6 +1690,12 @@ class UVPSpec(object):
         blpair_groups = copy.deepcopy(blpair_groups)
         blpair_weights = copy.deepcopy(blpair_weights)
 
+        # sets attribute exact_windows to False if not defined
+        # (UVPspec object created with older versions of hera_pspec)
+        try: 
+            self.exact_windows
+        except AttributeError:
+            self.exact_windows = False
         if self.exact_windows:
             raise AttributeError("Exact window functions already computed.")
 
