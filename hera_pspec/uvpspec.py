@@ -1633,7 +1633,7 @@ class UVPSpec(object):
     def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None, ftbeam_file='',
                                         error_weights=None, blpair_weights=None, normalize_weights=True,
                                         error_field=None, spw=None, 
-                                        verbose=False, inplace=True, apply_weights=False,
+                                        verbose=False, inplace=True,
                                         add_to_history=''):
         """
 
@@ -1695,10 +1695,6 @@ class UVPSpec(object):
             values computed in the function, and window_function_kperp_bins and
             window_function_kpara_bins array are added as attributed.
             It False, returns kperp_bins, kpara_bins and window functions computed.
-
-        apply_weights : bool, optional
-            If True, the window functions are not renormalised after applying 
-            error_weights. Default is False.
 
         add_to_history : str, optional
             Added text to add to file history.
@@ -1875,10 +1871,7 @@ class UVPSpec(object):
 
                     # normalize sum: clip to deal with w_list_sum == 0
                     w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
-                    if apply_weights:
-                        bpg_window_function = np.sum(bpg_window_function, axis=0)
-                    else:
-                        bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
+                    bpg_window_function = np.sum(bpg_window_function, axis=0)
                     pol_window_function.extend(bpg_window_function)
 
                 # Append to lists (spectral window)
