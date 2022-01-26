@@ -1207,7 +1207,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             spw_window_function.append(pol_window_function)
         window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)[None]
 
-    return cyl_wf, window_function_array
+    return cyl_windows, window_function_array
 
 
 def fold_spectra(uvp):
