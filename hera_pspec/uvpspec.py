@@ -1722,8 +1722,8 @@ class UVPSpec(object):
             assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups \
                         are inconsistent with baseline lengths"
             if len(sum(blpair_groups,[]))!=self.Nblpairs:
-                warnings.warn('inplace set to False because you are not considering \
-                                all baseline pairs in object.')
+                warnings.warn('inplace set to False because you are not considering', \
+                                'all baseline pairs in object.')
                 inplace = False
 
         # Print warning if a blpair appears more than once in all of blpair_groups
@@ -1779,8 +1779,8 @@ class UVPSpec(object):
             assert this_spw in self.spw_array, "input spw is not in UVPSpec.spw_array."
             # set inplace to False
             inplace = False
-            warnings.warn('inplace set to False because you are not considering \
-                            all baseline pairs in object.')
+            warnings.warn('inplace set to False because you are not considering', \
+                            'all baseline pairs in object.')
             # use spw given
             spws = np.array([this_spw])
 
