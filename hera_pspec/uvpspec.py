@@ -1888,7 +1888,7 @@ class UVPSpec(object):
                     if normalize_wf:
                         bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
                     else:
-                        bpg_window_function = np.sum(bpg_window_function, axis=0)[None]
+                        bpg_window_function = np.sum(bpg_window_function, axis=0)
                     pol_window_function.extend(bpg_window_function)
 
                 # Append to lists (spectral window)
