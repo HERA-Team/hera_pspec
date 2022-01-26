@@ -419,7 +419,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
                         stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy() #shape (Ntimes, Ndlys)
                         np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
-                        if np.any(np.isnan(stat_val)): print("{} leads to nans in stats_array.imag".format((spw, blp, p)))
+                        # if np.any(np.isnan(stat_val)): print("{} leads to nans in stats_array.imag".format((spw, blp, p)))
                         w = np.real(1. / stat_val.clip(1e-40, np.inf))
                         # shape of w: (Ntimes, Ndlys)
                     else:
@@ -1172,9 +1172,9 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
 
         if not uvp.exact_windows:
-            uvp.get_exact_window_functions(blpair_groups,blpair_lens,ftbeam_file,
-                                            error_weights=error_weights, spw=spw,
-                                            verbose=verbose)
+            kperp_bins, kpara_bins, cyl_wf = uvp.get_exact_window_functions(blpair_groups,blpair_lens,ftbeam_file,
+                                            error_weights=error_weights, spw=spw, normalize_wf=False,
+                                            verbose=verbose, inplace=False)
         # iterate over polarisation
         spw_window_function = []
         for ip, polpair in enumerate(uvp.polpair_array):
@@ -1185,11 +1185,8 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
             uvw.set_bl_lens(np.array(blpair_lens))
             # kperp, kpara bins
-            kperp_bins = uvp.window_function_kperp_bins[spw][:,ip]
-            kpara_bins = uvp.window_function_kpara_bins[spw][:,ip]
-            ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
-            cyl_wf = uvp.window_function_array[spw][:,:,:,:,ip]
-            pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf,kbins,ktot,blpair_weights)
+            ktot = np.sqrt(kperp_bins[:,ip,None]**2+kpara_bins[:,ip]**2)
+            pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf[spw][:,:,:,:,ip],kbins,ktot,blpair_weights)
             # uvw.get_FT(return_FT=False)
             # kperp_bins = uvw.get_kperp_bins(blpair_lens)
             # kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,uvp.cosmo)
