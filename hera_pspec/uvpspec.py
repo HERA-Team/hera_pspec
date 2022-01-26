@@ -1827,21 +1827,6 @@ class UVPSpec(object):
                                                 kperp_bins = kperp_bins, kpara_bins = kpara_bins)
                     # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
-                    # Sum over all weights within this baseline group to get
-                    # normalization (if weights specified). The normalization is
-                    # calculated so that Sum (blpair wgts) = no. baselines.
-                    if blpair_weights is not None:
-                        blpg_wgts = np.array(blpair_weights[j])
-                        norm = np.sum(blpg_wgts) if normalize_weights else 1.
-
-                        if norm <= 0.:
-                            raise ValueError("Sum of baseline-pair weights in "
-                                             "group %d is <= 0." % j)
-                        blpg_wgts = blpg_wgts * float(blpg_wgts.size) / norm # Apply normalization
-                    else:
-                        blpg_wgts = np.ones(len(blpg))
-
-
                     # Iterate within a baseline-pair group and get weighted data
                     for k, blp in enumerate(blpg):
                         # Get no. samples and construct integration weight
@@ -1849,7 +1834,7 @@ class UVPSpec(object):
                         # shape of wgts: (Ntimes, Nfreqs, 2)
                         ints = self.get_integrations((spw, blp, p))[:, None]
                         # shape of ints: (Ntimes, 1)
-                        wgts = uvp.get_wgts((spw, blp, p))
+                        wgts = self.get_wgts((spw, blp, p))
                         # shape of wgts: (Ntimes, Nfreqs, 2)
                         window_function = np.copy(window_function_blg)
 
