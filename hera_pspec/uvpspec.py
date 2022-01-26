@@ -248,6 +248,14 @@ class UVPSpec(object):
         data : complex ndarray
             Shape (Ntimes, Ndlys, Ndlys)
         """
+
+        # sets attribute exact_windows to False if not defined
+        # (UVPspec object created with older versions of hera_pspec)
+        try: 
+            self.exact_windows
+        except AttributeError:
+            self.exact_windows = False
+                    
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
 
         if self.exact_windows:
