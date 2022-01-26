@@ -1624,7 +1624,7 @@ class UVPSpec(object):
 
     def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None, ftbeam_file='',
                                         error_weights=None, blpair_weights=None, normalize_weights=True,
-                                        error_field=None, spw=None,
+                                        error_field=None, spw=None, verbose=False,
                                         add_to_history=''):
         """
 
@@ -1759,7 +1759,8 @@ class UVPSpec(object):
 
         # initialise UVWindow object
         uvw = UVWindow(ftbeam=ftbeam_file, taper = self.taper,
-                        cosmo= self.cosmo, little_h='h^-3' in self.norm_units)
+                        cosmo= self.cosmo, little_h='h^-3' in self.norm_units,
+                        verbose=verbose)
 
         # Iterate over spectral windows
         for spw in spws:
