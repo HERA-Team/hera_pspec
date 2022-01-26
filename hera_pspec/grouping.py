@@ -1166,7 +1166,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         if not uvp.exact_windows:
             uvp.get_exact_window_functions(blpair_groups,blpair_lens,ftbeam_file,
                                             error_weights=error_weights, spw=spw)
-
+        print(uvp.window_function_array)
         # iterate over polarisation
         spw_window_function = []
         for ip, polpair in enumerate(uvp.polpair_array):
@@ -1181,7 +1181,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             kpara_bins = uvp.window_function_kpara_bins[spw][:,ip]
             ktot = np.sqrt(kperp_bins[:,None]**2+kpara_bins**2)
             cyl_wf = uvp.window_function_array[spw][:,:,:,:,ip]
-            print(cyl_wf.shape)
             pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf,kbins,ktot,blpair_weights)
             # uvw.get_FT(return_FT=False)
             # kperp_bins = uvw.get_kperp_bins(blpair_lens)
