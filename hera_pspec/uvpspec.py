@@ -1633,7 +1633,7 @@ class UVPSpec(object):
     def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None, ftbeam_file='',
                                         error_weights=None, blpair_weights=None, normalize_weights=True,
                                         error_field=None, this_spw=None, 
-                                        verbose=False, inplace=True,
+                                        verbose=False, inplace=True, normalize_wf=True,
                                         add_to_history=''):
         """
 
@@ -1698,6 +1698,10 @@ class UVPSpec(object):
             Automatically set to False if blpair_groups is not None (that is,
             if the window functions are not computed on all the blpairs).
 
+        normalize_wf : bool, optional
+            If True, return normalized window functions (default).
+            If False, return window functions including error_weights.
+
         add_to_history : str, optional
             Added text to add to file history.
         
@@ -1719,11 +1723,11 @@ class UVPSpec(object):
         if blpair_groups is None:
             blpair_groups, blpair_lens, _ = self.get_red_bls()
         else:
-            assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups \
-                        are inconsistent with baseline lengths"
+            assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
+                        " are inconsistent with baseline lengths"
             if len(sum(blpair_groups,[]))!=self.Nblpairs:
                 warnings.warn('inplace set to False because you are not considering' \
-                                'all baseline pairs in object.')
+                                ' all baseline pairs in object.')
                 inplace = False
 
         # Print warning if a blpair appears more than once in all of blpair_groups
@@ -1780,7 +1784,7 @@ class UVPSpec(object):
             # set inplace to False
             inplace = False
             warnings.warn('inplace set to False because you are not considering' \
-                            'all baseline pairs in object.')
+                            ' all baseline pairs in object.')
             # use spw given
             spws = np.array([this_spw])
 
@@ -1881,7 +1885,10 @@ class UVPSpec(object):
 
                     # normalize sum: clip to deal with w_list_sum == 0
                     w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
-                    bpg_window_function = np.sum(bpg_window_function, axis=0)
+                    if normalize_wf:
+                        bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
+                    else:
+                        bpg_window_function = np.sum(bpg_window_function, axis=0)[None]
                     pol_window_function.extend(bpg_window_function)
 
                 # Append to lists (spectral window)
