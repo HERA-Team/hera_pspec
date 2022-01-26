@@ -1863,7 +1863,7 @@ class UVPSpec(object):
         self.window_function_array = window_function_array
         self.window_function_kperp_bins = window_function_kperp_bins
         self.window_function_kpara_bins = window_function_kpara_bins
-        self.exact_windows = True
+        if spw is None: self.exact_windows = True
         # Add to history
         self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, self.history)
         # Validity check

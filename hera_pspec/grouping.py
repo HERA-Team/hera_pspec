@@ -1166,7 +1166,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         if not uvp.exact_windows:
             uvp.get_exact_window_functions(blpair_groups,blpair_lens,ftbeam_file,
                                             error_weights=error_weights, spw=spw)
-        print(uvp.window_function_array)
         # iterate over polarisation
         spw_window_function = []
         for ip, polpair in enumerate(uvp.polpair_array):
