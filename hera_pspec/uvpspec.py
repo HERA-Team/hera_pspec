@@ -1695,6 +1695,8 @@ class UVPSpec(object):
             values computed in the function, and window_function_kperp_bins and
             window_function_kpara_bins array are added as attributed.
             It False, returns kperp_bins, kpara_bins and window functions computed.
+            Automatically set to False if blpair_groups is not None (that is,
+            if the window functions are not computed on all the blpairs).
 
         add_to_history : str, optional
             Added text to add to file history.
@@ -1719,6 +1721,10 @@ class UVPSpec(object):
         else:
             assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups \
                         are inconsistent with baseline lengths"
+            if len(sum(blpair_groups,[]))!=self.Nblpairs:
+                raise Warning('inplace set to False because you are not considering \
+                                all baseline pairs in object.')
+                inplace = False
 
         # Print warning if a blpair appears more than once in all of blpair_groups
         all_blpairs = [item for sublist in blpair_groups for item in sublist]
