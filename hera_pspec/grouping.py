@@ -1173,7 +1173,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
         if not uvp.exact_windows:
             kperp_bins, kpara_bins, cyl_wf = uvp.get_exact_window_functions(blpair_groups,blpair_lens,ftbeam_file,
-                                            error_weights=error_weights, spw=spw, normalize_wf=False,
+                                            error_weights=error_weights, this_spw=spw, normalize_wf=False,
                                             verbose=verbose, inplace=False)
         # iterate over polarisation
         spw_window_function = []
