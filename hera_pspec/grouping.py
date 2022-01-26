@@ -1180,7 +1180,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
         # setup arrays 
         window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
-        cyl_windows[spw] = cyl_wf
+        cyl_windows[spw] = cyl_wf[spw]
 
         # iterate over polarisation
         spw_window_function = []
