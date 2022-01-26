@@ -255,7 +255,7 @@ class UVPSpec(object):
             self.exact_windows
         except AttributeError:
             self.exact_windows = False
-                    
+
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
 
         if self.exact_windows:
@@ -1770,6 +1770,7 @@ class UVPSpec(object):
         # Create new window function array
         window_function_array = odict()
         window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
+        wgts_array = odict()
 
         # initialise UVWindow object
         uvw = UVWindow(ftbeam=ftbeam_file, taper = self.taper,
@@ -1779,12 +1780,14 @@ class UVPSpec(object):
         # Iterate over spectral windows
         for spw in spws:
 
+            spw_wgts = []
             spw_window_function = []
             spw_wf_kperp_bins, spw_wf_kpara_bins = [], []
 
             # Iterate over polarizations
             for i, p in enumerate(self.polpair_array):
 
+                pol_wgts = []
                 pol_window_function = []
                 # initialise UVWindow object with polarization and spectral window
                 uvw.clear_cache()
@@ -1800,8 +1803,24 @@ class UVPSpec(object):
 
                 # Iterate over baseline-pair groups
                 for j, blpg in enumerate(blpair_groups):
+
+                    bpg_wgts = []
                     bpg_window_function = []
                     w_list = []
+
+                    # Sum over all weights within this baseline group to get
+                    # normalization (if weights specified). The normalization is
+                    # calculated so that Sum (blpair wgts) = no. baselines.
+                    if blpair_weights is not None:
+                        blpg_wgts = np.array(blpair_weights[j])
+                        norm = np.sum(blpg_wgts) if normalize_weights else 1.
+
+                        if norm <= 0.:
+                            raise ValueError("Sum of baseline-pair weights in "
+                                             "group %d is <= 0." % j)
+                        blpg_wgts = blpg_wgts * float(blpg_wgts.size) / norm # Apply normalization
+                    else:
+                        blpg_wgts = np.ones(len(blpg))
 
                     # window functions identical for all times
                     window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
@@ -1830,6 +1849,8 @@ class UVPSpec(object):
                         # shape of wgts: (Ntimes, Nfreqs, 2)
                         ints = self.get_integrations((spw, blp, p))[:, None]
                         # shape of ints: (Ntimes, 1)
+                        wgts = uvp.get_wgts((spw, blp, p))
+                        # shape of wgts: (Ntimes, Nfreqs, 2)
                         window_function = np.copy(window_function_blg)
 
                         if use_error_weights:
@@ -1859,25 +1880,32 @@ class UVPSpec(object):
                         # to the weighting/multiplicity;
                         # while multiple copies are only added when bootstrap resampling
                         for m in range(int(blpg_wgts[k])):
+                            bpg_wgts.append(wgts * w[:, :1, None])
                             bpg_window_function.append(window_function * w[:, :, None, None])
                             w_list.append(w)
 
                     # normalize sum: clip to deal with w_list_sum == 0
                     w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
                     bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
+                    bpg_wgts = np.sum(bpg_wgts, axis=0) / w_list_sum[:,:1, None]
+                    
                     pol_window_function.extend(bpg_window_function)
+                    pol_wgts.extend(bpg_wgts)
 
                 # Append to lists (spectral window)
                 spw_window_function.append(pol_window_function)
+                spw_wgts.append(pol_wgts)
                 spw_wf_kperp_bins.append(kperp_bins)
                 spw_wf_kpara_bins.append(kpara_bins)
 
             # Append to dictionaries
             window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
+            wgts_array[spw] = np.moveaxis(spw_wgts, 0, -1)
             window_function_kperp_bins[spw] = np.moveaxis(spw_wf_kperp_bins, 0, -1)
             window_function_kpara_bins[spw] = np.moveaxis(spw_wf_kpara_bins, 0, -1)
 
         self.window_function_array = window_function_array
+        self.wgt_array = wgts_array
         self.window_function_kperp_bins = window_function_kperp_bins
         self.window_function_kpara_bins = window_function_kpara_bins
         if spw is None: self.exact_windows = True
