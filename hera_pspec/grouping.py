@@ -1144,6 +1144,13 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # copy input
     uvp = copy.deepcopy(uvp_in) 
 
+    # sets attribute exact_windows to False if not defined
+    # (UVPspec object created with older versions of hera_pspec)
+    try: 
+        uvp.exact_windows
+    except AttributeError:
+        uvp.exact_windows = False
+
     # initialize blank arrays and dicts
     Nk = len(kbins)
     window_function_array = odict()
