@@ -1632,7 +1632,8 @@ class UVPSpec(object):
 
     def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None, ftbeam_file='',
                                         error_weights=None, blpair_weights=None, normalize_weights=True,
-                                        error_field=None, spw=None, verbose=False,
+                                        error_field=None, spw=None, 
+                                        verbose=False, inplace=True, apply_weights=False,
                                         add_to_history=''):
         """
 
@@ -1656,21 +1657,6 @@ class UVPSpec(object):
                 Ex : FT_beam_HERA_dipole (+ path)
                 - '' for computation from beam simulations (slow)
 
-
-        blpair_weights : list of weights (float or int), optional
-            Relative weight of each baseline-pair when performing the average. This
-            is useful for bootstrapping. This should have the same shape as
-            blpair_groups if specified. The weights are automatically normalized
-            within each baseline-pair group. Default: None (all baseline pairs have
-            unity weights).
-
-        error_field: string or list, optional
-            If errorbars have been entered into stats_array, will do a weighted
-            sum to shrink the error bars down to the size of the averaged
-            data_array. Error_field strings be keys of stats_array. If list,
-            does this for every specified key. Every stats_array key that is
-            not specified is thrown out of the new averaged object.
-
         error_weights: string, optional
              error_weights specify which kind of errors we use for weights
              during averaging power spectra.
@@ -1681,13 +1667,38 @@ class UVPSpec(object):
              then it also gets appended to error_field as a list.
              Default: None
 
-        spw : int 
-            Spectral window index.
+        blpair_weights : list of weights (float or int), optional
+            Relative weight of each baseline-pair when performing the average. This
+            is useful for bootstrapping. This should have the same shape as
+            blpair_groups if specified. The weights are automatically normalized
+            within each baseline-pair group. Default: None (all baseline pairs have
+            unity weights).
 
         normalize_weights: bool, optional
             Whether to normalize the baseline-pair weights so that:
                Sum(blpair_weights) = N_blpairs
             If False, no normalization is applied to the weights. Default: True.
+
+        error_field: string or list, optional
+            If errorbars have been entered into stats_array, will do a weighted
+            sum to shrink the error bars down to the size of the averaged
+            data_array. Error_field strings be keys of stats_array. If list,
+            does this for every specified key. Every stats_array key that is
+            not specified is thrown out of the new averaged object.
+
+        spw : int, optional
+            Spectral window index. If None, the window functions are computed on 
+            all the uvp.spw_ranges, successively.
+
+        inplace : bool, optional
+            If True (default value), the UVPspec attribute window_function_array is filled with the
+            values computed in the function, and window_function_kperp_bins and
+            window_function_kpara_bins array are added as attributed.
+            It False, returns kperp_bins, kpara_bins and window functions computed.
+
+        apply_weights : bool, optional
+            If True, the window functions are not renormalised after applying 
+            error_weights. Default is False.
 
         add_to_history : str, optional
             Added text to add to file history.
@@ -1770,7 +1781,6 @@ class UVPSpec(object):
         # Create new window function array
         window_function_array = odict()
         window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
-        wgts_array = odict()
 
         # initialise UVWindow object
         uvw = UVWindow(ftbeam=ftbeam_file, taper = self.taper,
@@ -1780,14 +1790,12 @@ class UVPSpec(object):
         # Iterate over spectral windows
         for spw in spws:
 
-            spw_wgts = []
             spw_window_function = []
             spw_wf_kperp_bins, spw_wf_kpara_bins = [], []
 
             # Iterate over polarizations
             for i, p in enumerate(self.polpair_array):
 
-                pol_wgts = []
                 pol_window_function = []
                 # initialise UVWindow object with polarization and spectral window
                 uvw.clear_cache()
@@ -1803,10 +1811,13 @@ class UVPSpec(object):
 
                 # Iterate over baseline-pair groups
                 for j, blpg in enumerate(blpair_groups):
-
-                    bpg_wgts = []
                     bpg_window_function = []
                     w_list = []
+
+                    # window functions identical for all times
+                    window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
+                                                kperp_bins = kperp_bins, kpara_bins = kpara_bins)
+                    # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
                     # Sum over all weights within this baseline group to get
                     # normalization (if weights specified). The normalization is
@@ -1822,10 +1833,6 @@ class UVPSpec(object):
                     else:
                         blpg_wgts = np.ones(len(blpg))
 
-                    # window functions identical for all times
-                    window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
-                                                kperp_bins = kperp_bins, kpara_bins = kpara_bins)
-                    # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
                     # Iterate within a baseline-pair group and get weighted data
                     for k, blp in enumerate(blpg):
@@ -1834,8 +1841,6 @@ class UVPSpec(object):
                         # shape of wgts: (Ntimes, Nfreqs, 2)
                         ints = self.get_integrations((spw, blp, p))[:, None]
                         # shape of ints: (Ntimes, 1)
-                        wgts = self.get_wgts((spw, blp, p))
-                        # shape of wgts: (Ntimes, Nfreqs, 2)
                         window_function = np.copy(window_function_blg)
 
                         if use_error_weights:
@@ -1865,39 +1870,36 @@ class UVPSpec(object):
                         # to the weighting/multiplicity;
                         # while multiple copies are only added when bootstrap resampling
                         for m in range(int(blpg_wgts[k])):
-                            bpg_wgts.append(wgts * w[:, :1, None])
                             bpg_window_function.append(window_function * w[:, :, None, None])
                             w_list.append(w)
 
                     # normalize sum: clip to deal with w_list_sum == 0
                     w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
-                    bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
-                    bpg_wgts = np.sum(bpg_wgts, axis=0) / w_list_sum[:,:1, None]
-                    
+                    if not apply_weights:
+                        bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
                     pol_window_function.extend(bpg_window_function)
-                    pol_wgts.extend(bpg_wgts)
 
                 # Append to lists (spectral window)
                 spw_window_function.append(pol_window_function)
-                spw_wgts.append(pol_wgts)
                 spw_wf_kperp_bins.append(kperp_bins)
                 spw_wf_kpara_bins.append(kpara_bins)
 
             # Append to dictionaries
             window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
-            wgts_array[spw] = np.moveaxis(spw_wgts, 0, -1)
             window_function_kperp_bins[spw] = np.moveaxis(spw_wf_kperp_bins, 0, -1)
             window_function_kpara_bins[spw] = np.moveaxis(spw_wf_kpara_bins, 0, -1)
 
-        self.window_function_array = window_function_array
-        self.wgt_array = wgts_array
-        self.window_function_kperp_bins = window_function_kperp_bins
-        self.window_function_kpara_bins = window_function_kpara_bins
-        if spw is None: self.exact_windows = True
-        # Add to history
-        self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, self.history)
-        # Validity check
-        self.check()
+        if inplace:
+            self.window_function_array = window_function_array
+            self.window_function_kperp_bins = window_function_kperp_bins
+            self.window_function_kpara_bins = window_function_kpara_bins
+            if spw is None: self.exact_windows = True
+            # Add to history
+            self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, self.history)
+            # Validity check
+            self.check()
+        else:
+            return window_function_kperp_bins, window_function_kpara_bins, window_function_array
 
 
     def check(self, just_meta=False):
