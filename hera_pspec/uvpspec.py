@@ -1632,7 +1632,7 @@ class UVPSpec(object):
 
     def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None, ftbeam_file='',
                                         error_weights=None, blpair_weights=None, normalize_weights=True,
-                                        error_field=None, spw=None, 
+                                        error_field=None, this_spw=None, 
                                         verbose=False, inplace=True,
                                         add_to_history=''):
         """
@@ -1686,7 +1686,7 @@ class UVPSpec(object):
             does this for every specified key. Every stats_array key that is
             not specified is thrown out of the new averaged object.
 
-        spw : int, optional
+        this_spw : int, optional
             Spectral window index. If None, the window functions are computed on 
             all the uvp.spw_ranges, successively.
 
@@ -1765,14 +1765,14 @@ class UVPSpec(object):
                     raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
 
         # check spw input and create array of spws to loop over
-        if spw is None:
+        if this_spw is None:
             # if no spw specified, use attribute
             spws = np.arange(self.Nspws)
         else:
             # check if spw given is in uvp
-            assert spw in self.spw_array, "input spw is not in UVPSpec.spw_array."
+            assert this_spw in self.spw_array, "input spw is not in UVPSpec.spw_array."
             # use spw given
-            spws = np.array([spw])
+            spws = np.array([this_spw])
 
         # Create new window function array
         window_function_array = odict()
@@ -1888,7 +1888,7 @@ class UVPSpec(object):
             self.window_function_array = window_function_array
             self.window_function_kperp_bins = window_function_kperp_bins
             self.window_function_kpara_bins = window_function_kpara_bins
-            if spw is None: self.exact_windows = True
+            if this_spw is None: self.exact_windows = True
             # Add to history
             self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, self.history)
             # Validity check
