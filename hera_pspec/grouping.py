@@ -419,7 +419,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
                         stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy() #shape (Ntimes, Ndlys)
                         np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
-                        if np.any(np.isnan(stat_val)): print("{} leads to nans in stats_array.imag".format((spw, blp, p)))
+                        #corrects for potential nan values
+                        stat_val = np.nan_to_num(stat_val,copy=False,nan=np.inf,posinf=np.inf)
+                        # if np.any(np.isnan(stat_val)): print("{} leads to nans in stats_array.imag".format((spw, blp, p)))
                         w = np.real(1. / stat_val.clip(1e-40, np.inf))
                         # shape of w: (Ntimes, Ndlys)
                     else:
