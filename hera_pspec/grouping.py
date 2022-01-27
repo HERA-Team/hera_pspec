@@ -1192,7 +1192,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             uvw.set_freq_range(freq_array=uvp.freq_array[uvp.spw_to_freq_indices(spw)])
             uvw.set_bl_lens(np.array(blpair_lens))
             # kperp, kpara bins
-            print(kperp_bins[spw].shape,kpara_bins[spw].shape)
             ktot = np.sqrt(kperp_bins[spw][:,ip,None]**2+kpara_bins[spw][:,ip]**2)
             pol_window_function, _ = uvw.cylindrical2spherical(cyl_wf[spw][:,:,:,:,ip],kbins,ktot,blpair_weights)
             # uvw.get_FT(return_FT=False)
