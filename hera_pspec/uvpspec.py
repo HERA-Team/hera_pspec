@@ -1825,7 +1825,7 @@ class UVPSpec(object):
                 for j, blpg in enumerate(blpair_groups):
                     bpg_window_function = []
                     w_list = []
-                    if verbose: sys.stdout.write('\rComputing for bl group %i of %i...' %(j+1,len(blpair_groups)))
+                    if verbose: sys.stdout.write('\rComputing for bl group {} of {}...'.format(j+1,len(blpair_groups)))
 
                     # window functions identical for all times
                     window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
@@ -1894,7 +1894,7 @@ class UVPSpec(object):
                         bpg_window_function = np.sum(bpg_window_function, axis=0)
                     pol_window_function.extend(bpg_window_function)
 
-                if verbose: sys.stdout.write('\rComputing for bl %i of %i... \n' %(len(blpair_groups),len(blpair_groups)))
+                if verbose: sys.stdout.write('\rComputed wf for bl {} of {}...     \n'.format(len(blpair_groups),len(blpair_groups)))
 
                 # Append to lists (spectral window)
                 spw_window_function.append(pol_window_function)
