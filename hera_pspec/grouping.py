@@ -1125,7 +1125,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
 
     if blpair_groups is None:
-        blpair_groups, blpair_lens, _ = self.get_red_blpairs()
+        blpair_groups, blpair_lens, _ = uvp_in.get_red_blpairs()
     else:
         # ensure consistency between inputs
         assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
