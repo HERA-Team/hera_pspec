@@ -1053,7 +1053,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
 
 def spherical_wf_from_uvp(uvp_in, kbins, bin_widths, 
-                                blpair_groups, blpair_lens, blpair_weights=None,
+                                blpair_groups=None, blpair_lens=None, blpair_weights=None,
                                 error_weights=None, ftbeam_file = '', spw=None,
                                 little_h=True, verbose=False):
     
@@ -1124,13 +1124,16 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     kbin_right = kbins + bin_widths / 2
     assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
 
-    # ensure consistency between inputs
-    assert len(blpair_groups)==len(blpair_lens)
-
-    # Enforce shape of blpair_groups
-    assert isinstance(blpair_groups[0], (list, np.ndarray)), \
-              "blpair_groups must be fed as a list of baseline-pair lists. " \
-              "See docstring."
+    if blpair_groups is None:
+        blpair_groups, blpair_lens, _ = self.get_red_blpairs()
+    else:
+        # ensure consistency between inputs
+        assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
+                    " are inconsistent with baseline lengths"
+        # Enforce shape of blpair_groups
+        assert isinstance(blpair_groups[0], (list, np.ndarray)), \
+                  "blpair_groups must be fed as a list of baseline-pair lists. " \
+                  "See docstring."
 
     # check spw input and create array of spws to loop over
     if spw is None:
