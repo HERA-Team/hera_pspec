@@ -4,7 +4,7 @@ import random
 import copy
 import argparse
 from astropy import stats as astats
-import os
+import os, sys
 
 from . import utils, version, uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
