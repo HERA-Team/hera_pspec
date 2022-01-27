@@ -1894,7 +1894,7 @@ class UVPSpec(object):
                         bpg_window_function = np.sum(bpg_window_function, axis=0)
                     pol_window_function.extend(bpg_window_function)
 
-                if verbose: sys.stdout.write('\rComputed wf for bl {} of {}...     \n'.format(len(blpair_groups),len(blpair_groups)))
+                if verbose: sys.stdout.write('\rComputed wf for baseline-pair groups {} of {}.\n'.format(len(blpair_groups),len(blpair_groups)))
 
                 # Append to lists (spectral window)
                 spw_window_function.append(pol_window_function)
