@@ -1801,6 +1801,7 @@ class UVPSpec(object):
         # Iterate over spectral windows
         for spw in spws:
 
+            if verbose: print('spw = {}'.format(spw))
             spw_window_function = []
             spw_wf_kperp_bins, spw_wf_kpara_bins = [], []
 
@@ -1824,6 +1825,7 @@ class UVPSpec(object):
                 for j, blpg in enumerate(blpair_groups):
                     bpg_window_function = []
                     w_list = []
+                    if verbose: sys.stdout.write('\rComputing for bl group %i of %i...' %(j+1,len(blpair_groups)))
 
                     # window functions identical for all times
                     window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
@@ -1891,6 +1893,8 @@ class UVPSpec(object):
                     else:
                         bpg_window_function = np.sum(bpg_window_function, axis=0)
                     pol_window_function.extend(bpg_window_function)
+
+                if verbose: sys.stdout.write('\rComputing for bl %i of %i... \n' %(len(blpair_groups,len(blpair_groups)))
 
                 # Append to lists (spectral window)
                 spw_window_function.append(pol_window_function)
