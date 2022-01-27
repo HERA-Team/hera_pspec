@@ -1722,6 +1722,7 @@ class UVPSpec(object):
 
         if blpair_groups is None:
             blpair_groups, blpair_lens, _ = self.get_red_blpairs()
+            print(blpair_groups)
         else:
             assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
                         " are inconsistent with baseline lengths"
