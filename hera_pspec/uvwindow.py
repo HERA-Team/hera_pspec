@@ -25,7 +25,8 @@ class FTBeam():
         Given a polarisation pair and a spectral window,
         uses beam simulations to get the Fourier transform of the instrument
         beam in the sky plane for all the frequencies in the spectral
-        window.
+        window. Output is an array of (kperpx, kperpy, freq).
+        Corresponds to Fourier transform performed in equation 10 of memo.
 
         Parameters
         ----------
@@ -185,8 +186,8 @@ class UVWindow():
     for a given set of baselines and spectral range.
     """
 
-    def __init__(self, ft_beam_obj, spw_range=None,
-                 taper=None, cosmo=None,
+    def __init__(self, pol, spw_range=None, ftfile=None,
+                 taper=None, cosmo=None, ftbeam_obj=None,
                  little_h=True, verbose=False):
         """
         Class for :class:`UVWindow` objects.
@@ -197,19 +198,32 @@ class UVWindow():
 
         Parameters
         ----------
-        ft_beam_obj : FTBeam() object
-            Object containing the spatial Fourier transform of the beam
-            for a given polarisation and over a given bandwidth.
+        pol : str or int
+            Can be pseudo-Stokes or power:
+             in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
+             in number form: 1, 2, 4, 3, -5, -6, -7, -8
         spw_range : tuple or array
             In (start_chan, end_chan). Must be between 0 and 1024 (HERA
             bandwidth).
             If None, the whole bandwidth of the FTBeam object is used.
+        ftfile : str
+            Access to the Fourier transform of the beam on the sky plane
+            (Eq. 10 in Memo)
+            Options are;
+                - Load from file. Then input is the root name of the file
+                to use, without the polarisation
+                Ex : ft_beam_HERA_dipole (+ path)
+                - (default) Computation from beam simulations (slow).
+                Not yet implemented.
         taper : str
             Type of data tapering applied along bandwidth.
             See :func:`uvtools.dspec.gen_window` for options.
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not
             specified. Default: None.
+        ftbeam_obj : FTBeam object 
+            FTBeam object with appropriate polarisation. Can be fed instead of 
+            ftfile to avoid repeated computations.
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc.
@@ -247,32 +261,121 @@ class UVWindow():
                              " for options.")
         self.taper = taper
 
-        # check ft_beam_obj
-        assert ft_beam_obj.check(), \
-            "There is an issue with the ft_beam object."
-        # if so, import meta data
-        self.ft_beam_obj = ft_beam_obj
-        self.pol = ft_beam_obj.pol
-        if spw_range is None:
-            self.freq_array = np.copy(ft_beam_obj.freq_array)
-            self.spw_range = (0, self.freq_array.size)
-            # self.ft_beam = np.copy(ft_beam_obj.ft_beam)
+        # polarisation
+        if isinstance(pol, str):
+            assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], \
+                "Wrong polarisation"
+        elif isinstance(pol, int):
+            assert pol in [1, 2, 4, 3, -5, -6, -7, -8], "Wrong polarisation"
+            # convert pol number to str according to AIPS Memo 117.
+            pol = uvutils.polnum2str(pol, x_orientation=None)
         else:
+            raise TypeError("Must feed pol as str or int.")
+        self.pol = pol
+
+        # spw range
+        if spw_range is not None:
             spw_range = np.array(spw_range, dtype=int)
             assert spw_range.size == 2, "spw_range must be fed as a tuple of "\
                                         "frequency indices."
-            assert spw_range[1]-spw_range[0] > 0, \
+            assert spw_range[1]-spw_range[0] > 0 and min(spw_range) >= 0,\
                 "Require non-zero spectral range."
-            assert min(spw_range) >= 0 and max(spw_range) < len(ft_beam_obj.freq_array), \
-                "spw_range must be integers within the given bandwith."
-            self.freq_array = np.copy(ft_beam_obj.freq_array[spw_range[0]:spw_range[-1]])
-            self.spw_range = tuple(spw_range)
-            # self.ft_beam = np.copy(ft_beam_obj.ft_beam[spw_range[0]:spw_range[-1], :, :])
+
+        if ftbeam_obj is None:
+            # create ftbeam_obj
+            self.ftbeam_obj = FTBeam(self.pol, ftfile=ftfile, spw_range=spw_range,
+                                      verbose=verbose)
+        else:
+            if ftfile is not None:
+                warnings.warn('Fed ftfile value will be overriden by input ftbeam_obj')
+                assert ftfile == ftbeam_obj.ft_file,\
+                    "FT file of ftbeam_obj does not match ftfile of UVWindow"
+            assert ftbeam_obj.pol == self.pol,\
+                "Polarisation of ftbeam_obj does not match polarisation of UVWindow"
+            if spw_range is not None:
+                assert ftbeam_obj.spw_range == tuple(spw_range),\
+                    "ftbeam_obj fed must have same spectral window as UVWindow"
+            self.ftbeam_obj = ftbeam_obj
+
+        assert self.ftbeam_obj.check(), \
+            "There is an issue with the ft_beam object."
+        self.freq_array = np.copy(self.ftbeam_obj.freq_array)
+
         self.Nfreqs = len(self.freq_array)
         self.dly_array = utils.get_delays(self.freq_array,
                                           n_dlys=len(self.freq_array))
         self.avg_nu = np.mean(self.freq_array)
         self.avg_z = self.cosmo.f2z(self.avg_nu)
+
+    @classmethod
+    def __from_uvpspec__(cls, uvp, ftfile=None, ipol=0, spw=0,
+                         verbose=False):
+
+        """
+        Method for :class:`UVWindow` objects.
+
+        Initialises UVWindow object from UVPSpec object.
+
+        Parameters
+        ----------
+        ftbeam_obj : FTBeam() object
+            Object containing the spatial Fourier transform of the beam
+            for a given polarisation and over a given bandwidth.
+        uvp : UVPSPec object
+            UVPSpec object containing at least one polpair, one spw_range
+        ftfile : str
+            Access to the Fourier transform of the beam on the sky plane
+            (Eq. 10 in Memo)
+            Options are;
+                - Load from file. Then input is the root name of the file
+                to use, without the polarisation
+                Ex : ft_beam_HERA_dipole (+ path)
+                - (default) Computation from beam simulations (slow).
+                Not yet implemented.
+        spw : int
+            Choice of spectral window
+        taper : str
+            Type of data tapering applied along bandwidth.
+            See :func:`uvtools.dspec.gen_window` for options.
+        cosmo : conversions.Cosmo_Conversions object, optional
+            Cosmology object. Uses the default cosmology object if not
+            specified. Default: None.
+        little_h : boolean, optional
+                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Default: h^-1 Mpc.
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
+
+        """
+        # Summary attributes
+
+        # initialise attributes from UVPSpec object
+
+        assert hasattr(uvp, 'cosmo'), \
+            "self.cosmo must exist to form cosmological " \
+            "wave-vectors. See uvp.set_cosmology()"
+
+        little_h = 'h^-3' in uvp.norm_units
+
+        assert spw < uvp.Nspws,\
+            "Input spw must be smaller or equal to uvp.Nspws"
+        freq_array = uvp.freq_array[uvp.spw_to_freq_indices(spw)]
+
+        polpair = uvputils.polpair_int2tuple(uvp.polpair_array[ipol])
+        assert polpair[0] == polpair[1],\
+            "Does not handle cross-polarisation spectra."
+        pol = polpair[0]
+
+        # obtain spw_range from bandwidth
+        ftbeam_obj = FTBeam(pol, ftfile=ftfile, spw_range=None,
+                                  verbose=verbose)
+        bandwidth = ftbeam_obj.freq_array
+        spw_range = (np.argmin(abs(bandwidth-np.min(freq_array))),
+                     np.argmin(abs(bandwidth-np.max(freq_array)))+1)
+
+        return cls(pol=pol, spw_range=spw_range, ftfile=ftfile, 
+                   taper=uvp.taper, cosmo=uvp.cosmo, ftbeam_obj=None,
+                   little_h=little_h, verbose=verbose)
 
     def _get_kgrid(self, bl_len, width=0.020):
         """
@@ -305,7 +408,7 @@ class UVWindow():
         kp_centre = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
             * bl_len
         # spacing of the numerical Fourier grid, in cosmological units
-        dk = 2.*np.pi/(2.*self.ft_beam_obj.mapsize)\
+        dk = 2.*np.pi/(2.*self.ftbeam_obj.mapsize)\
             / self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()),
                                        little_h=self.little_h)
         assert width > dk, 'Change width to resolve full window function '\
@@ -346,7 +449,7 @@ class UVWindow():
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h)  # Mpc
         # Fourier dual of sky angle theta
-        q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.ft_beam_obj.mapsize)
+        q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.ftbeam_obj.mapsize)
         k = 2.*np.pi/R*(freq*bl_len/conversions.units.c-q)
         k = np.flip(k)
 
@@ -645,7 +748,7 @@ class UVWindow():
 
         """
         # INITIALISE PARAMETERS
-        ft_beam = np.copy(self.ft_beam_obj.ft_beam[self.spw_range[0]:self.spw_range[-1], :, :])
+        ft_beam = np.copy(self.ftbeam_obj.ft_beam)
 
         # k-bins for cylindrical binning
         if kperp_bins is None:
@@ -730,7 +833,8 @@ class UVWindow():
         else:
             return cyl_wf
 
-    def cylindrical2spherical(self, cyl_wf, kbins, ktot, bl_lens, bl_weights=None):
+    def cylindrical2spherical(self, cyl_wf, kbins, ktot, bl_lens,
+                              bl_weights=None):
         """
         Take spherical average of cylindrical window functions.
 
@@ -786,7 +890,7 @@ class UVWindow():
 
         # construct array giving the k probed by each baseline-tau pair
         kperps = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) \
-            * bl_lens / np.sqrt(2.)
+            * np.array(bl_lens) / np.sqrt(2.)
         kparas = self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) \
             * self.dly_array
         kmags = np.sqrt(kperps[:, None]**2+kparas**2)
@@ -962,7 +1066,7 @@ class UVWindow():
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
         # the kperp and kpara bins are given as global parameters
-        ft_beam = np.copy(self.ft_beam_obj.ft_beam[self.spw_range[0]:self.spw_range[-1], :, :])
+        ft_beam = np.copy(self.ftbeam_obj.ft_beam)
         cyl_wf = np.zeros((nbls, self.Nfreqs, nbins_kperp, nbins_kpara))
         for ib in range(nbls):
             if verbose:
