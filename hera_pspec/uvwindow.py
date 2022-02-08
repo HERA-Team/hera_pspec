@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 import sys
 import os
+import copy
 import time
 from scipy.interpolate import interp2d
 from pyuvdata import UVBeam, UVData
@@ -18,7 +19,7 @@ class FTBeam():
     """Class for :class:`FTBeam` objects."""
 
     def __init__(self, pol, spw_range=None, ftfile=None,
-                 verbose=False):
+                 verbose=False, x_orientation=None):
         """
         Obtain FT of beam in sky plane for a set of given frenquencies.
 
@@ -50,6 +51,12 @@ class FTBeam():
                 Ex : ft_beam_HERA_dipole (+ path)
                 - (default) Computation from beam simulations (slow).
                 Not yet implemented.
+        x_orientation: str, optional
+            Orientation in cardinal direction east or north of X dipole.
+            Default keeps polarization in X and Y basis.
+            Used to convert polstr to polnum and convertly.
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
 
         """
         try:
@@ -65,7 +72,7 @@ class FTBeam():
         elif isinstance(pol, int):
             assert pol in [1, 2, 4, 3, -5, -6, -7, -8], "Wrong polarisation"
             # convert pol number to str according to AIPS Memo 117.
-            pol = uvutils.polnum2str(pol, x_orientation=None)
+            pol = uvutils.polnum2str(pol, x_orientation=x_orientation)
         else:
             raise TypeError("Must feed pol as str or int.")
         self.pol = pol
@@ -157,6 +164,33 @@ class FTBeam():
 
         return mapsize, ft_beam
 
+    def update_spw(self, spw_range):
+        """
+        Function to extract spw from FTBeam defined on whole bandwidth.
+
+        Extract a section of the previously computed Fourier
+        transform of the beam.
+
+        Parameters
+        ----------
+        spw_range : tuple or array
+            In (start_chan, end_chan). Must be between 0 and 1024 (HERA
+            bandwidth).
+        """
+        # checks on input
+        spw_range = np.array(spw_range, dtype=int)
+        assert spw_range.size == 2, "spw_range must be fed as a tuple of "\
+                                    "frequency indices."
+        assert spw_range[1]-spw_range[0] > 0, \
+            "Require non-zero spectral range."
+        assert min(spw_range) >= 0 and max(spw_range) < self.freq_array.size,\
+            "spw_range must be integers within the given bandwith."
+        assert self.ft_beam is not None,\
+            "The FT of the beam needs to have already been read or computed"
+        self.spw_range = tuple(spw_range)
+        self.freq_array = self.freq_array[self.spw_range[0]:self.spw_range[-1]]
+        self.ft_beam = self.ft_beam[self.spw_range[0]:self.spw_range[-1], :, :]
+
     def check(self):
         """
         Run checks on FTBeam object.
@@ -186,9 +220,10 @@ class UVWindow():
     for a given set of baselines and spectral range.
     """
 
-    def __init__(self, pol, spw_range=None, ftfile=None,
+    def __init__(self, pols, spw_range=None, ftfile=None,
                  taper=None, cosmo=None, ftbeam_obj=None,
-                 little_h=True, verbose=False):
+                 little_h=True, x_orientation=None,
+                 verbose=False):
         """
         Class for :class:`UVWindow` objects.
 
@@ -198,10 +233,12 @@ class UVWindow():
 
         Parameters
         ----------
-        pol : str or int
-            Can be pseudo-Stokes or power:
-             in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
-             in number form: 1, 2, 4, 3, -5, -6, -7, -8
+        pols : tuple of polarizations or polarization pair integer
+            Contains polarization pairs to use in forming window functions
+            e.g. ('XX','XX') or 1212.
+            Individual strings are also supported, and will
+            be expanded into a matching pair of polarizations, e.g. 'xx'
+            becomes ('xx', 'xx').
         spw_range : tuple or array
             In (start_chan, end_chan). Must be between 0 and 1024 (HERA
             bandwidth).
@@ -227,6 +264,10 @@ class UVWindow():
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc.
+        x_orientation: str, optional
+            Orientation in cardinal direction east or north of X dipole.
+            Default keeps polarization in X and Y basis.
+            Used to convert pol str to num and convertly.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -262,16 +303,31 @@ class UVWindow():
         self.taper = taper
 
         # polarisation
-        if isinstance(pol, str):
-            assert pol in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'], \
+        if isinstance(pols, str):
+            assert pols in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'],\
                 "Wrong polarisation"
-        elif isinstance(pol, int):
-            assert pol in [1, 2, 4, 3, -5, -6, -7, -8], "Wrong polarisation"
-            # convert pol number to str according to AIPS Memo 117.
-            pol = uvutils.polnum2str(pol, x_orientation=None)
+            pols = (pols, pols)
+        elif isinstance(pols, int):
+            if len(str(pols)) <= 2:
+                # if unique polarisation integer
+                assert pols in [1, 2, 4, 3, -5, -6, -7, -8], "Wrong polarisation"
+                # convert pol number to str according to AIPS Memo 117.
+                pols = (uvputils.polnum2str(pols, x_orientation=x_orientation),
+                        uvputils.polnum2str(pols, x_orientation=x_orientation))      
+            else:
+                # if polarisation pair integer
+                pols = uvputils.polpair_int2tuple(pols, pol_strings=True)
+        elif isinstance(pols[0], str):
+            assert pols[0] and pols[1] in ['pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'],\
+                "Wrong polarisation"
+        elif isinstance(pols[0], int):
+            assert pols[0] and pols[1] in [1, 2, 4, 3, -5, -6, -7, -8],\
+                "Wrong polarisation"
+            pols = (uvutils.polnum2str(pols[0], x_orientation=x_orientation),
+                    uvutils.polnum2str(pols[0], x_orientation=x_orientation))
         else:
-            raise TypeError("Must feed pol as str or int.")
-        self.pol = pol
+            raise TypeError("Must feed pols as (tuple of) str or int.")
+        self.pols = pols
 
         # spw range
         if spw_range is not None:
@@ -281,26 +337,42 @@ class UVWindow():
             assert spw_range[1]-spw_range[0] > 0 and min(spw_range) >= 0,\
                 "Require non-zero spectral range."
 
+        # create list of FTBeam objects for each polarisation channel
+        self.ftbeam_obj_pol = []
         if ftbeam_obj is None:
-            # create ftbeam_obj
-            self.ftbeam_obj = FTBeam(self.pol, ftfile=ftfile, spw_range=spw_range,
-                                      verbose=verbose)
+            # create ftbeam_obj for each pol in the pair
+            self.ftbeam_obj_pol.append(FTBeam(self.pols[0], ftfile=ftfile, spw_range=spw_range,
+                                              verbose=verbose))
+            if self.pols[0] == self.pols[1]:
+                self.ftbeam_obj_pol.append(copy.deepcopy(self.ftbeam_obj_pol[0]))
+            else:
+                self.ftbeam_obj_pol.append(FTBeam(self.pols[1], ftfile=ftfile, spw_range=spw_range,
+                                                  verbose=verbose))
         else:
+            ftbeam_obj = ftbeam_obj if isinstance(ftbeam_obj, (list, tuple, np.ndarray)) else [ftbeam_obj, ftbeam_obj]
+            if len(ftbeam_obj) == 1:
+                assert ftbeam_obj.pol == self.pols[0] and ftbeam_obj.pol == self.pols[1],\
+                    'If feeding only one ftbeam_obj, polarisations in pair must be identical'
             if ftfile is not None:
                 warnings.warn('Fed ftfile value will be overriden by input ftbeam_obj')
-                assert ftfile == ftbeam_obj.ft_file,\
+                assert ftfile == ftbeam_obj[0].ft_file and ftfile == ftbeam_obj[1].ft_file,\
                     "FT file of ftbeam_obj does not match ftfile of UVWindow"
-            assert ftbeam_obj.pol == self.pol,\
-                "Polarisation of ftbeam_obj does not match polarisation of UVWindow"
-            if spw_range is not None:
-                assert ftbeam_obj.spw_range == tuple(spw_range),\
-                    "ftbeam_obj fed must have same spectral window as UVWindow"
-            self.ftbeam_obj = ftbeam_obj
+            for ib, ftbeam in enumerate(ftbeam_obj):
+                ftbeam = copy.deepcopy(ftbeam)
+                # assert properties of ftbeam object fed are consistent with other inputs
+                assert ftbeam.check(), "There is an issue with the ft_beam object."
+                assert ftbeam.pol == self.pols[ib],\
+                    "Polarisation of ftbeam_obj does not match polarisation of UVWindow"
+                if spw_range is not None and ftbeam.spw_range != tuple(spw_range):
+                    ftbeam.update_spw(spw_range)
+                self.ftbeam_obj_pol.append(ftbeam)
+            # assert different elements in lists have same properties
+            assert np.unique([ft.mapsize for ft in self.ftbeam_obj_pol]).size == 1,\
+                'FTBeam objects fed have different properties'
+            assert np.all(self.ftbeam_obj_pol[0].freq_array == self.ftbeam_obj_pol[1].freq_array),\
+                'FTBeam objects fed have different bandwidths'
 
-        assert self.ftbeam_obj.check(), \
-            "There is an issue with the ft_beam object."
-        self.freq_array = np.copy(self.ftbeam_obj.freq_array)
-
+        self.freq_array = np.copy(self.ftbeam_obj_pol[0].freq_array)
         self.Nfreqs = len(self.freq_array)
         self.dly_array = utils.get_delays(self.freq_array,
                                           n_dlys=len(self.freq_array))
@@ -309,6 +381,7 @@ class UVWindow():
 
     @classmethod
     def __from_uvpspec__(cls, uvp, ftfile=None, ipol=0, spw=0,
+                         ftbeam_obj=None, x_orientation=None,
                          verbose=False):
 
         """
@@ -318,9 +391,6 @@ class UVWindow():
 
         Parameters
         ----------
-        ftbeam_obj : FTBeam() object
-            Object containing the spatial Fourier transform of the beam
-            for a given polarisation and over a given bandwidth.
         uvp : UVPSPec object
             UVPSpec object containing at least one polpair, one spw_range
         ftfile : str
@@ -343,6 +413,14 @@ class UVWindow():
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc.
+        ftbeam_obj : list of FTBeam() objects, for each pol in polpair[ip]
+            Each object contains the spatial Fourier transform of the beam
+            for a given polarisation and over a given bandwidth.
+            If only one element is given, it is duplicated.
+        x_orientation: str, optional
+            Orientation in cardinal direction east or north of X dipole.
+            Default keeps polarization in X and Y basis.
+            Used to convert pol str to num and convertly.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -361,21 +439,28 @@ class UVWindow():
             "Input spw must be smaller or equal to uvp.Nspws"
         freq_array = uvp.freq_array[uvp.spw_to_freq_indices(spw)]
 
-        polpair = uvputils.polpair_int2tuple(uvp.polpair_array[ipol])
-        assert polpair[0] == polpair[1],\
-            "Does not handle cross-polarisation spectra."
-        pol = polpair[0]
+        polpair = uvputils.polpair_int2tuple(uvp.polpair_array[ipol], pol_strings=True)
 
-        # obtain spw_range from bandwidth
-        ftbeam_obj = FTBeam(pol, ftfile=ftfile, spw_range=None,
-                                  verbose=verbose)
-        bandwidth = ftbeam_obj.freq_array
+        # obtain spw_range from bandwidth of FTBeam object
+        # read ftbeam_obj if fed in list
+        if ftbeam_obj is None:
+            temp_ftbeam_obj = FTBeam(polpair[0], ftfile=ftfile, spw_range=None,
+                                      verbose=verbose)
+        else:
+            temp_ftbeam_obj = ftbeam_obj[0] if isinstance(ftbeam_obj, (list, tuple, np.ndarray)) else ftbeam_obj
+            assert temp_ftbeam_obj.spw_range == (0, temp_ftbeam_obj.freq_array.size),\
+                "FTBeam object fed must have no spw_range"
+            assert temp_ftbeam_obj.check(), "There is an issue with the ft_beam object."
+        
+        # read spw_range
+        bandwidth = temp_ftbeam_obj.freq_array
         spw_range = (np.argmin(abs(bandwidth-np.min(freq_array))),
                      np.argmin(abs(bandwidth-np.max(freq_array)))+1)
 
-        return cls(pol=pol, spw_range=spw_range, ftfile=ftfile, 
-                   taper=uvp.taper, cosmo=uvp.cosmo, ftbeam_obj=None,
-                   little_h=little_h, verbose=verbose)
+        return cls(pols=polpair, spw_range=spw_range, ftfile=ftfile, 
+                   taper=uvp.taper, cosmo=uvp.cosmo, ftbeam_obj=ftbeam_obj,
+                   little_h=little_h, x_orientation=x_orientation,
+                   verbose=verbose)
 
     def _get_kgrid(self, bl_len, width=0.020):
         """
@@ -408,7 +493,7 @@ class UVWindow():
         kp_centre = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
             * bl_len
         # spacing of the numerical Fourier grid, in cosmological units
-        dk = 2.*np.pi/(2.*self.ftbeam_obj.mapsize)\
+        dk = 2.*np.pi/(2.*self.ftbeam_obj_pol[0].mapsize)\
             / self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()),
                                        little_h=self.little_h)
         assert width > dk, 'Change width to resolve full window function '\
@@ -449,7 +534,7 @@ class UVWindow():
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h)  # Mpc
         # Fourier dual of sky angle theta
-        q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.ftbeam_obj.mapsize)
+        q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.ftbeam_obj_pol[0].mapsize)
         k = 2.*np.pi/R*(freq*bl_len/conversions.units.c-q)
         k = np.flip(k)
 
@@ -748,7 +833,6 @@ class UVWindow():
 
         """
         # INITIALISE PARAMETERS
-        ft_beam = np.copy(self.ftbeam_obj.ft_beam)
 
         # k-bins for cylindrical binning
         if kperp_bins is None:
@@ -790,12 +874,16 @@ class UVWindow():
 
         # COMPUTE CYLINDRICAL WINDOW FUNCTIONS
 
-        # interpolate FT of beam onto regular grid of (kperp_x,kperp_y)
-        interp_ft_beam, kperp_norm = self._interpolate_ft_beam(bl_len, ft_beam)
-        # frequency resolution
-        delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
-        # obtain FT along frequency
-        fnu = self._take_freq_FT(interp_ft_beam, delta_nu)
+        # take fourier transform along frequency for each polarisation channel
+        fnu = []
+        for ip in range(len(self.pols)):
+            ft_beam = np.copy(self.ftbeam_obj_pol[ip].ft_beam)
+            # interpolate FT of beam onto regular grid of (kperp_x,kperp_y)
+            interp_ft_beam, kperp_norm = self._interpolate_ft_beam(bl_len, ft_beam)
+            # frequency resolution
+            delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
+            # obtain FT along frequency
+            fnu.append(self._take_freq_FT(interp_ft_beam, delta_nu))
 
         # cylindrical average
 
@@ -807,7 +895,7 @@ class UVWindow():
                 mask = (kperp_bin_edges[m] <= kperp_norm)\
                        & (kperp_norm < kperp_bin_edges[m+1])
                 if np.any(mask):  # cannot compute mean if zero elements
-                    wf_array1[m, i] = np.mean(np.abs(fnu[mask, i])**2)
+                    wf_array1[m, i] = np.mean(np.conj(fnu[1][mask, i])*fnu[0][mask, i]).real
                     kperp[m] = np.mean(kperp_norm[mask])
 
         # in frequency direction
@@ -1066,7 +1154,6 @@ class UVWindow():
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
         # the kperp and kpara bins are given as global parameters
-        ft_beam = np.copy(self.ftbeam_obj.ft_beam)
         cyl_wf = np.zeros((nbls, self.Nfreqs, nbins_kperp, nbins_kpara))
         for ib in range(nbls):
             if verbose:
@@ -1087,6 +1174,104 @@ class UVWindow():
         else:
             return wf_spherical
 
+    def run_and_write(self, filepath,
+                      bl_groups, bl_lens, overwrite=False,
+                      kperp_bins=None, kpara_bins=None):
+        """
+        Write a UVPSpec object to HDF5 file.
+
+        Parameters
+        ----------
+        filepath : str
+            Filepath for output file.
+        bl_groups : embedded lists, optional.
+            List of groups of baselines gathered by lengths
+            (can be redundant groups from utils.get_reds).
+        bl_lens : list, optional.
+            List of lengths corresponding to each group
+            (can be redundant groups from utils.get_reds).
+            Must have same length as bl_groups.
+        overwrite : bool, optional
+            Whether to overwrite output file if it exists. Default: False.
+        kperp_bins : array_like, optional.
+            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
+            Used for cylindrical binning,
+            Make sure the values are consistent with :attr:`little_h`.
+        kpara_bins : array_like, optional.
+            1D float array of ascending k_parallel bin centers.
+            Used for cylindrical binning.
+            Make sure the values are consistent with :attr:`little_h`.
+        """
+        # Check output
+        if os.path.exists(filepath) and overwrite is False:
+            raise IOError("{} exists, not overwriting...".format(filepath))
+        elif os.path.exists(filepath) and overwrite is True:
+            print("{} exists, overwriting...".format(filepath))
+            os.remove(filepath)
+
+        # if bl_groups is given, then bl_lens must be too
+        assert bl_lens is not None and bl_groups is not None, \
+            "bl_lens and bl_groups are required"
+        # check if bl_groups is nested list
+        if not any(isinstance(i, list) for i in bl_groups):
+            bl_groups = [bl_groups]
+        # check consistency of baseline-related inputs
+        assert len(bl_groups) == len(bl_lens), "bl_groups and bl_lens "\
+                                               "must have same length"
+        nbls = len(bl_groups)  # number of redudant groups
+        bl_lens = np.array(bl_lens)
+        # number of occurences of one bl length
+        bl_weights = np.array([len(blg) for blg in bl_groups])
+
+        # k-bins for cylindrical binning
+        if kperp_bins is None or len(kperp_bins) == 0:
+            # define default kperp bins, making sure all values probed by
+            # bl_lens are included and there is no over-sampling
+            kperp_bins = self.get_kperp_bins(bl_lens)
+        else:
+            self.check_kunits(kperp_bins)
+        kperp_bins = np.array(kperp_bins.value)
+        nbins_kperp = kperp_bins.size
+
+        if kpara_bins is None or len(kpara_bins) == 0:
+            # define default kperp bins, making sure all values probed by freq
+            # array are included and there is no over-sampling
+            kpara_bins = self.get_kpara_bins(self.freq_array,
+                                             self.little_h, self.cosmo)
+        else:
+            self.check_kunits(kpara_bins)
+        kpara_bins = np.array(kpara_bins.value)
+        nbins_kpara = kpara_bins.size
+
+        # COMPUTE THE WINDOW FUNCTIONS
+
+        # get cylindrical window functions for each baseline length considered
+        # as a function of (kperp, kpara)
+        # the kperp and kpara bins are given as global parameters
+        cyl_wf = np.zeros((nbls, self.Nfreqs, nbins_kperp, nbins_kpara))
+        for ib in range(nbls):
+            cyl_wf[ib, :, :, :] = self.get_cylindrical_wf(bl_lens[ib],
+                                                          kperp_bins*self.kunits,
+                                                          kpara_bins*self.kunits)
+
+        # Write file
+        with h5py.File(filepath, 'w') as f:
+            group = f.create_group('parameters')
+            group.create_dataset('avg_nu',shape=(1,),data=self.avg_nu,dtype=float)
+            group.create_dataset('avg_z',shape=(1,),data=self.avg_z,dtype=float)
+            group.create_dataset('nfreqs',shape=(1,),data=self.Nfreqs,dtype=int)
+            group.create_dataset('little_h',shape=(1,),data=self.little_h,dtype=bool)
+            group.create_dataset('polpair',shape=(1,),data=uvputils.polpair_tuple2int(self.pols),dtype=int)
+            ascii_taper= [n.encode("ascii", "ignore") for n in self.taper]
+            group.create_dataset('taper',(len(ascii_taper),),'S10',ascii_taper)
+            dset = f.create_group('window_functions')
+            dset.create_dataset('kperp_bins',shape=(nbins_kperp,),data=kperp_bins,dtype=float)
+            dset.create_dataset('kpara_bins',shape=(nbins_kpara,),data=kpara_bins,dtype=float)
+            dset.create_dataset('bl_lens',shape=(nbls,),data=bl_lens,dtype=float)
+            dset.create_dataset('bl_weights',shape=(nbls,),data=bl_weights,dtype=float)
+            dset.create_dataset('dly_array',shape=(self.Nfreqs,),data=self.dly_array,dtype=float)
+            dset.create_dataset('cyl_wf',shape=(nbls,self.Nfreqs,nbins_kperp,nbins_kpara),data=cyl_wf,dtype=float)
+            
     def check_kunits(self, karray):
         """
         Check unit consistency between k's throughout code.
