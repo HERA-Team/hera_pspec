@@ -947,23 +947,20 @@ class UVWindow():
             Axis 1 is the array of delays considered (self.dly_array).
             Axis 2 is kperp.
             Axis 3 is kparallel.
-        kbins : array_like
+            If only one bl_lens is given, then axis 0 can be omitted.
+        kbins : array-like astropy.quantity with units
             1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
-            Using for spherical binning.
-            Make sure the values are consistent with self.little_h.
+            Used for spherical binning.
         ktot : array_like
             2-dimensional array giving the magnitude of k corresponding to
             kperp and kpara in cyl_wf.
-        bl_lens : list, optional.
-            List of lengths corresponding to each group
-            (can be redundant groups from utils.get_reds).
-            Must have same length as bl_groups.
+        bl_lens : list.
+            List of baseline lengths used to compute cyl_wf.
+            Must have same length as same size as cyl_wf.shape[0].
         bl_weights : list of weights (float or int), optional
-            Relative weight of each baseline-pair when performing the average.
-            This is useful for bootstrapping. This should have the same shape
-            as blpair_groups if specified. The weights are automatically
-            normalized within each baseline-pair group. Default: None (all
-            baseline pairs have unity weights).
+            Relative weight of each baseline-length when performing 
+            the average. This should have the same shape as bl_lens.
+            Default: None (all baseline pairs have unity weights).
 
         Returns
         ----------
@@ -974,28 +971,44 @@ class UVWindow():
             Returns number of k-modes per k-bin.
 
         """
+        # check bl_lens and bl_weights are consistent
+        bl_lens = bl_lens if isinstance(bl_lens, (list, tuple, np.ndarray)) else [bl_lens]
+        bl_lens = np.array(bl_lens)
+        if bl_weights is None:
+            # assign weight of one to each baseline length
+            bl_weights = np.ones(bl_lens.size)
+        else:
+            bl_weights = np.array(bl_weights)
+            assert bl_weights.size == bl_lens.size, \
+                "Blpair weights and lengths do not match"
+
+        # if cyl_wf were computed only for one baseline length
+        if cyl_wf.ndim == 3:
+            assert bl_lens.size == 1, "If only one bl_lens is given,"\
+                "cyl_wf must be of dimensions (ndlys,nkperp,nkpara)"
+            cyl_wf = cyl_wf[None]
+        # check shapes are consistent
+        assert bl_lens.size == cyl_wf.shape[0]
         assert (ktot.shape == cyl_wf.shape[2:]), \
             "k magnitude grid does not match (kperp,kpara) grid in cyl_wf"
+
+        # k-bins for spherical binning
         assert len(kbins) > 1, \
             "must feed array of k bins for spherical average"
-
-        if bl_weights is None:
-            bl_weights = np.ones(cyl_wf.shape[0])
-        else:
-            assert len(bl_weights) == cyl_wf.shape[0], \
-                "Blpair weights and cylindrical window functions do not match"
-
+        self.check_kunits(kbins)  # check k units
+        kbins = np.array(kbins.value)
         nbinsk = kbins.size
         dk = np.diff(kbins).mean()
         kbin_edges = np.arange(kbins.min()-dk/2, kbins.max()+dk, step=dk)
 
         # construct array giving the k probed by each baseline-tau pair
         kperps = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) \
-            * np.array(bl_lens) / np.sqrt(2.)
+            * bl_lens / np.sqrt(2.)
         kparas = self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) \
             * self.dly_array
         kmags = np.sqrt(kperps[:, None]**2+kparas**2)
 
+        # take average
         wf_spherical = np.zeros((nbinsk, nbinsk))
         kweights = np.zeros(nbinsk, dtype=int)
         for m1 in range(nbinsk):
@@ -1020,7 +1033,7 @@ class UVWindow():
 
         return wf_spherical, kweights
 
-    def get_spherical_wf(self, kbins, bl_groups, bl_lens,
+    def get_spherical_wf(self, kbins, bl_lens, bl_weights=None,
                          kperp_bins=None, kpara_bins=None,
                          return_weights=False,
                          verbose=None):
@@ -1036,21 +1049,22 @@ class UVWindow():
             1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
             Using for spherical binning.
             Make sure the values are consistent with :attr:`little_h`.
-        kperp_bins : array_like, optional.
+        bl_lens : list.
+            List of lengths corresponding to each group
+            (can be redundant groups from utils.get_reds).
+            Must have same length as bl_weights.
+        bl_weights : list, optional.
+            List baselines weights. Must have same length as bl_lens.
+            If None, a weight of 1 is attributed to 
+            each bl_len.
+        kperp_bins : array-like astropy.quantity with units, optional.
             1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning,
             Make sure the values are consistent with :attr:`little_h`.
-        kpara_bins : array_like, optional.
+        kpara_bins : array-like astropy.quantity with units, optional.
             1D float array of ascending k_parallel bin centers.
             Used for cylindrical binning.
             Make sure the values are consistent with :attr:`little_h`.
-        bl_groups : embedded lists, optional.
-            List of groups of baselines gathered by lengths
-            (can be redundant groups from utils.get_reds).
-        bl_lens : list, optional.
-            List of lengths corresponding to each group
-            (can be redundant groups from utils.get_reds).
-            Must have same length as bl_groups.
         return_weights : bool, optional
             Save the weights associated with the different kbins when
             spherically binning the window functions.
@@ -1074,19 +1088,16 @@ class UVWindow():
         if verbose is None:
             verbose = self.verbose
 
-        # if bl_groups is given, then bl_lens must be too
-        assert bl_lens is not None and bl_groups is not None, \
-            "bl_lens and bl_groups are required"
-        # check if bl_groups is nested list
-        if not any(isinstance(i, list) for i in bl_groups):
-            bl_groups = [bl_groups]
-        # check consistency of baseline-related inputs
-        assert len(bl_groups) == len(bl_lens), "bl_groups and bl_lens "\
-                                               "must have same length"
-        nbls = len(bl_groups)  # number of redudant groups
+        nbls = len(bl_lens)  # number of redudant groups
         bl_lens = np.array(bl_lens)
-        # number of occurences of one bl length
-        bl_weights = np.array([len(blg) for blg in bl_groups])
+        if bl_weights is not None:
+            # check consistency of baseline-related inputs
+            assert len(bl_weights) == nbls, "bl_weights and bl_lens "\
+                                            "must have same length"
+            bl_weights = np.array(bl_weights)
+        else:
+            # each baseline length has weight one
+            bl_weights = np.ones(nbls)
 
         # k-bins for cylindrical binning
         if kperp_bins is None or len(kperp_bins) == 0:
@@ -1145,13 +1156,12 @@ class UVWindow():
 
         # k-bins for spherical binning
         self.check_kunits(kbins)  # check k units
-        kbins = np.array(kbins.value)
-        assert kbins.size > 1, \
+        assert kbins.value.size > 1, \
             "must feed array of k bins for spherical average"
-        nbinsk = kbins.size
-        dk = np.diff(kbins).mean()
-        kbin_edges = np.arange(kbins.min()-dk/2,
-                               kbins.max()+dk,
+        nbinsk = kbins.value.size
+        dk = np.diff(kbins.value).mean()
+        kbin_edges = np.arange(kbins.value.min()-dk/2,
+                               kbins.value.max()+dk,
                                step=dk)
         # make sure proper ktot values are included in given bins
         # raise warning otherwise
@@ -1187,8 +1197,7 @@ class UVWindow():
         else:
             return wf_spherical
 
-    def run_and_write(self, filepath,
-                      bl_groups, bl_lens,
+    def run_and_write(self, filepath, bl_lens, bl_weights=None,
                       kperp_bins=None, kpara_bins=None,
                       overwrite=False):
         """
@@ -1198,18 +1207,19 @@ class UVWindow():
         ----------
         filepath : str
             Filepath for output file.
-        bl_groups : embedded lists, optional.
-            List of groups of baselines gathered by lengths
-            (can be redundant groups from utils.get_reds).
         bl_lens : list, optional.
             List of lengths corresponding to each group
             (can be redundant groups from utils.get_reds).
-            Must have same length as bl_groups.
-        kperp_bins : array_like, optional.
+            Must have same length as bl_weights.
+        bl_weights : list, optional.
+            List baselines weights. Must have same length as bl_lens.
+            If None, a weight of 1 is attributed to 
+            each bl_len.
+        kperp_bins : array-like astropy.quantity with unit, optional.
             1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
             Used for cylindrical binning,
             Make sure the values are consistent with :attr:`little_h`.
-        kpara_bins : array_like, optional.
+        kpara_bins : array-like astropy.quantity with units, optional.
             1D float array of ascending k_parallel bin centers.
             Used for cylindrical binning.
             Make sure the values are consistent with :attr:`little_h`.
@@ -1223,19 +1233,16 @@ class UVWindow():
             print("{} exists, overwriting...".format(filepath))
             os.remove(filepath)
 
-        # if bl_groups is given, then bl_lens must be too
-        assert bl_lens is not None and bl_groups is not None, \
-            "bl_lens and bl_groups are required"
-        # check if bl_groups is nested list
-        if not any(isinstance(i, list) for i in bl_groups):
-            bl_groups = [bl_groups]
-        # check consistency of baseline-related inputs
-        assert len(bl_groups) == len(bl_lens), "bl_groups and bl_lens "\
-                                               "must have same length"
-        nbls = len(bl_groups)  # number of redudant groups
+        nbls = len(bl_lens)  # number of redudant groups
         bl_lens = np.array(bl_lens)
-        # number of occurences of one bl length
-        bl_weights = np.array([len(blg) for blg in bl_groups])
+        if bl_weights is not None:
+            # check consistency of baseline-related inputs
+            assert len(bl_weights) == nbls, "bl_weights and bl_lens "\
+                                            "must have same length"
+            bl_weights = np.array(bl_weights)
+        else:
+            # each baseline length has weight one
+            bl_weights = np.ones(nbls)
 
         # k-bins for cylindrical binning
         if kperp_bins is None or len(kperp_bins) == 0:
@@ -1266,7 +1273,7 @@ class UVWindow():
         for ib in range(nbls):
             cyl_wf[ib, :, :, :] = self.get_cylindrical_wf(bl_lens[ib],
                                                           kperp_bins*self.kunits,
-                                                          kpara_bins*self.kunits)
+                                                          kpara_bins*self.kunits)*bl_weights[ib]
 
         # Write file
         with h5py.File(filepath, 'w') as f:

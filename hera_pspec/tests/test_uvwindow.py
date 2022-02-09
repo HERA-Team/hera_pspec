@@ -557,6 +557,59 @@ class Test_UVWindow(unittest.TestCase):
         kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len,
                                                        return_bins='unweighted')
 
+    def test_cylindrical2spherical(self):
+
+        bl_len = self.lens[12]
+
+        # initialise object from keywords
+        test = uvwindow.UVWindow(pols=self.polpair,
+                                 spw_range=self.spw_range,
+                                 ftfile=self.ft_file,
+                                 cosmo=self.cosmo,
+                                 taper=self.taper,
+                                 little_h=self.little_h,
+                                 verbose=self.verbose)
+        kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len,
+                                                       kperp_bins=None,
+                                                       kpara_bins=None,
+                                                       return_bins='unweighted')
+        ktot = np.sqrt(kperp[:, None]**2+kpara**2)
+        
+        # proper usage
+        sph_wf, kweights = test.cylindrical2spherical(cyl_wf=cyl_wf, 
+                                                      kbins=self.kbins, 
+                                                      ktot=ktot, 
+                                                      bl_lens=bl_len,
+                                                      bl_weights=[2.])
+        sph_wf, kweights = test.cylindrical2spherical(cyl_wf=cyl_wf[None], 
+                                                      kbins=self.kbins, 
+                                                      ktot=ktot, 
+                                                      bl_lens=bl_len,
+                                                      bl_weights=None)
+
+        # ktot has shape different from cyl_wf
+        pytest.raises(AssertionError, test.cylindrical2spherical, cyl_wf=cyl_wf,
+                      kbins=self.kbins, ktot=np.sqrt(kperp[:-2, None]**2+kpara**2),
+                      bl_lens=bl_len)
+        # only one k-bin
+        pytest.raises(AssertionError, test.cylindrical2spherical, cyl_wf=cyl_wf,
+                      kbins=self.kbins[:1], ktot=ktot, bl_lens=bl_len)
+        # weights have shape different from bl_lens
+        pytest.raises(AssertionError, test.cylindrical2spherical, cyl_wf=cyl_wf,
+                      kbins=self.kbins, ktot=ktot, bl_lens=bl_len,
+                      bl_weights=[1.,2.])
+        # bl_lens has different size to cyl_wf.shape[0]
+        pytest.raises(AssertionError, test.cylindrical2spherical, cyl_wf=cyl_wf[None],
+                      kbins=self.kbins, ktot=ktot, bl_lens=self.lens[:2],
+                      bl_weights=[1.,2.])
+        # raise warning if empty bins
+        kbins_test = np.arange(2,5,step=.5)*test.kunits
+        test.verbose = True
+        sph_wf, kweights = test.cylindrical2spherical(cyl_wf=cyl_wf, 
+                                                      kbins=kbins_test, 
+                                                      ktot=ktot, 
+                                                      bl_lens=bl_len)        
+
     def test_get_spherical_wf(self):
 
         bl_len = self.lens[12]
@@ -571,8 +624,8 @@ class Test_UVWindow(unittest.TestCase):
                                  verbose=self.verbose)
 
         WF, counts = test.get_spherical_wf(kbins=self.kbins,
-                                           bl_groups=self.reds[:1],
                                            bl_lens=self.lens[:1],
+                                           bl_weights=[1],
                                            kperp_bins=None,
                                            kpara_bins=None,
                                            return_weights=True,
@@ -584,21 +637,19 @@ class Test_UVWindow(unittest.TestCase):
         WF = test.get_spherical_wf(kbins=self.kbins,
                                    kperp_bins=kperp_bins,
                                    kpara_bins=kpara_bins,
-                                   bl_groups=self.reds[:1],
                                    bl_lens=self.lens[:1],
+                                   bl_weights=None,
                                    return_weights=False,
                                    verbose=None)
 
         # check inputs
-        pytest.raises(AssertionError, test.get_spherical_wf, kbins=self.kbins,
-                      bl_groups=self.reds[:1], bl_lens=self.lens[:2])
         pytest.raises(AttributeError, test.get_spherical_wf, kbins=self.kbins.value,
-                      bl_groups=self.reds[:2], bl_lens=self.lens[:2])
+                      bl_lens=self.lens[:2])
         pytest.raises(AssertionError, test.get_spherical_wf, kbins=self.kbins,
-                      bl_groups=None, bl_lens=self.lens[:2])
+                      bl_lens=self.lens[:2], bl_weights=[1.])
         pytest.raises(AssertionError, test.get_spherical_wf,
                       kbins=self.kbins.value[2]*test.kunits,
-                      bl_groups=self.reds[:1], bl_lens=self.lens[:1])
+                      bl_lens=self.lens[:1])
 
         # test kpara bins not outside of spectral window
         # will print warning
@@ -610,7 +661,6 @@ class Test_UVWindow(unittest.TestCase):
                                                         10*kpara_centre,
                                                         step=kpara_centre)
                                    * test.kunits,
-                                   bl_groups=self.reds[:1],
                                    bl_lens=self.lens[:1])
 
     def test_check_kunits(self):
@@ -641,7 +691,6 @@ class Test_UVWindow(unittest.TestCase):
                                          test.cosmo)
         # proper usage
         test.run_and_write(filepath=filepath,
-                           bl_groups=self.reds[:1],
                            bl_lens=self.lens[:1],
                            kperp_bins=kperp_bins,
                            kpara_bins=kpara_bins,
@@ -649,26 +698,22 @@ class Test_UVWindow(unittest.TestCase):
 
         # raise error if file already exists and overwrite is False
         pytest.raises(IOError, test.run_and_write, filepath=filepath,
-                      bl_groups=self.reds[:1], bl_lens=self.lens[:1],
+                      bl_lens=self.lens[:1],
                       overwrite=False)
         # does not if overwrite is True
         test.run_and_write(filepath=filepath,
-                           bl_groups=[self.reds[:1]], bl_lens=[self.lens[:1]],
+                           bl_lens=[self.lens[:1]],
                            kperp_bins=None, kpara_bins=None,
                            overwrite=True)
 
         # check inputs
         pytest.raises(AssertionError, test.run_and_write, filepath=filepath,
-                      bl_groups=None, bl_lens=self.lens[:1], overwrite=True)
-        pytest.raises(AssertionError, test.run_and_write, filepath=filepath,
-                      bl_groups=self.reds[:1], bl_lens=None, overwrite=True)
-        pytest.raises(AssertionError, test.run_and_write, filepath=filepath,
-                      bl_groups=self.reds[:1], bl_lens=self.lens[:2], overwrite=True)
+                      bl_lens=self.lens[:1], bl_weights=[1.,1.], overwrite=True)
         pytest.raises(AttributeError, test.run_and_write, filepath=filepath,
-                      bl_groups=self.reds[:1], bl_lens=self.lens[:1],
+                      bl_lens=self.lens[:1],
                       kperp_bins=kperp_bins.value, overwrite=True)
         pytest.raises(AttributeError, test.run_and_write, filepath=filepath,
-                      bl_groups=self.reds[:1], bl_lens=self.lens[:1],
+                      bl_lens=self.lens[:1],
                       kpara_bins=kpara_bins.value, overwrite=True)
 
     def test_raise_warning(self):
