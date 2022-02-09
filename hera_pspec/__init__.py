@@ -5,7 +5,7 @@ from . import version, conversions, grouping, pspecbeam, plot, pstokes, testing,
 from . import uvpspec_utils as uvputils
 
 from .uvpspec import UVPSpec
-from .uvwindow import UVWindow
+from .uvwindow import UVWindow, FTBeam
 from .pspecdata import PSpecData
 from .container import PSpecContainer
 from .parameter import PSpecParam
