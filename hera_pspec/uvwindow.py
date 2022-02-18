@@ -828,18 +828,19 @@ class UVWindow(object):
         wf_spherical = np.zeros((nbinsk,nbinsk))
         kweights = np.zeros(nbinsk,dtype=int)
         for m1 in range(nbinsk):
-            mask2 = (kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1]).astype(int)
-            if (np.sum(mask2)==0): continue
-            mask2 = mask2*bl_weights[:,None] #add weights for redundancy
-            kweights[m1] = np.sum(mask2) 
-            wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
-            for m in range(nbinsk):
-                mask = (kbin_edges[m]<=ktot) & (ktot<kbin_edges[m+1])
-                if np.any(mask): #cannot compute mean if zero elements
-                    wf_spherical[m1,m]=np.mean(wf_temp[mask])
-            # normalisation
-            wf_spherical[m1,:] = np.divide(wf_spherical[m1,:],np.sum(wf_spherical[m1,:]),
-                                    where = np.sum(wf_spherical[m1,:])!=0)
+            mask2 = ((kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1])).astype(int)
+            if (np.sum(mask2)!=0):
+                mask2 = mask2*bl_weights[:,None] #add weights for redundancy
+                kweights[m1] = np.sum(mask2) 
+                wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
+                if np.sum(wf_temp) > 0.: 
+                    for m in range(nbinsk):
+                        mask = (kbin_edges[m]<=ktot) & (ktot<kbin_edges[m+1])
+                        if np.any(mask): #cannot compute mean if zero elements
+                            wf_spherical[m1,m]=np.mean(wf_temp[mask])
+                    # normalisation
+                    wf_spherical[m1,:] = np.divide(wf_spherical[m1,:],np.sum(wf_spherical[m1,:]),
+                                            where = np.sum(wf_spherical[m1,:])!=0)
             
         if np.any(kweights==0.) and self.verbose:
             raise_warning('Some spherical bins are empty. Add baselines or expand spectral window.')
@@ -919,8 +920,8 @@ class UVWindow(object):
             verbose = self.verbose
 
         # check if bl_groups is nested list
-        if not any(isinstance(i, list) for i in bl_groups):
-            bl_groups = [bl_groups]
+        # if not any(isinstance(i, list) for i in bl_groups):
+        #     bl_groups = [bl_groups]
         # check consistency of baseline-related inputs
         assert len(bl_groups)==len(bl_lens), "bl_groups and bl_lens must have same length"
         nbls = len(bl_groups) # number of redudant groups
