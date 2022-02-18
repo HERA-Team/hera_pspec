@@ -49,13 +49,12 @@ class FTBeam():
                 Ex : ft_beam_HERA_dipole (+ path)
                 - None (default). Computation from beam simulations (slow).
                 Not yet implemented.
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
         x_orientation: str, optional
             Orientation in cardinal direction east or north of X dipole.
             Default keeps polarization in X and Y basis.
             Used to convert polstr to polnum and convertly.
-        verbose : bool, optional
-            If True, print progress, warnings and debugging info to stdout.
-
         """
         # verbose
         try:
@@ -401,7 +400,6 @@ class UVWindow():
     def __from_uvpspec__(cls, uvp, ftfile=None, ipol=0, spw=0,
                          ftbeam_obj=None, x_orientation=None,
                          verbose=False):
-
         """
         Method for :class:`UVWindow` objects.
 
@@ -800,7 +798,7 @@ class UVWindow():
 
     def get_cylindrical_wf(self, bl_len,
                            kperp_bins=None, kpara_bins=None,
-                           return_bins=None):
+                           return_bins=None, verbose=None):
         """
         Get the cylindrical window function for a baseline length.
 
@@ -827,6 +825,9 @@ class UVWindow():
             If 'unweighted', return bins used to build the histogram.
             If None, does not return anything. Bins can later be retrieved with
             :meth:`get_kperp_bins` and :meth:`get_kpara_bins`.
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
+            If None, value used is the class attribute.
 
         Returns
         ----------
@@ -847,6 +848,9 @@ class UVWindow():
         """
         # INITIALISE PARAMETERS
 
+        if verbose is None:
+            verbose = self.verbose
+
         # k-bins for cylindrical binning
         if kperp_bins is None:
             kperp_bins = self.get_kperp_bins([bl_len])
@@ -860,11 +864,11 @@ class UVWindow():
                                     step=dk_perp)
         kperp_centre = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
             * bl_len*np.sqrt(2)
-        if (kperp_bin_edges.max() < kperp_centre+9.*dk_perp) or\
-           (kperp_bin_edges.min() > kperp_centre-9.*dk_perp):
+        if (kperp_bin_edges.max() < kperp_centre+3*dk_perp) or\
+           (kperp_bin_edges.min() > kperp_centre-3*dk_perp):
             raise_warning('get_cylindrical_wf: The bin centre is not included '
                           'in the array of kperp bins given as input.',
-                          verbose=self.verbose)
+                          verbose=verbose)
 
         if kpara_bins is None:
             kpara_bins = self.get_kpara_bins(self.freq_array, self.little_h,
@@ -879,11 +883,11 @@ class UVWindow():
                                     step=dk_para)
         kpara_centre = self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h)\
             * abs(self.dly_array).max()
-        if (kpara_bin_edges.max() < kpara_centre+9*dk_para) or \
-           (kpara_bin_edges.min() > kpara_centre-9.*dk_para):
+        if (kpara_bin_edges.max() < kpara_centre+3*dk_para) or \
+           (kpara_bin_edges.min() > kpara_centre-3*dk_para):
             raise_warning('get_cylindrical_wf: The bin centre is not included '
                           'in the array of kpara bins given as input.',
-                          verbose=self.verbose)
+                          verbose=verbose)
 
         # COMPUTE CYLINDRICAL WINDOW FUNCTIONS
 
@@ -1012,20 +1016,19 @@ class UVWindow():
         wf_spherical = np.zeros((nbinsk, nbinsk))
         kweights = np.zeros(nbinsk, dtype=int)
         for m1 in range(nbinsk):
-            mask2 = (kbin_edges[m1] <= kmags) & (kmags < kbin_edges[m1+1]).astype(int)
-            if (np.sum(mask2) == 0):
-                continue
-            mask2 = mask2*bl_weights[:, None]  # add weights for redundancy
-            kweights[m1] = np.sum(mask2)
-            wf_temp = np.sum(cyl_wf*mask2[:, :, None, None], axis=(0, 1))/np.sum(mask2)
-            for m in range(nbinsk):
-                mask = (kbin_edges[m] <= ktot) & (ktot < kbin_edges[m+1])
-                if np.any(mask):  # cannot compute mean if zero elements
-                    wf_spherical[m1, m] = np.mean(wf_temp[mask])
-            # normalisation
-            wf_spherical[m1, :] = np.divide(wf_spherical[m1, :],
-                                            np.sum(wf_spherical[m1, :]),
-                                            where=np.sum(wf_spherical[m1, :]) != 0)
+            mask2 = ((kbin_edges[m1] <= kmags) & (kmags < kbin_edges[m1+1])).astype(int)
+            if np.any(mask2):
+                mask2 = mask2*bl_weights[:, None] #add weights for redundancy
+                kweights[m1] = np.sum(mask2) 
+                wf_temp = np.sum(cyl_wf*mask2[:,:,None,None], axis=(0, 1))/np.sum(mask2)
+                if np.sum(wf_temp) > 0.: 
+                    for m in range(nbinsk):
+                        mask = (kbin_edges[m] <= ktot) & (ktot < kbin_edges[m+1])
+                        if np.any(mask): #cannot compute mean if zero elements
+                            wf_spherical[m1,m]=np.mean(wf_temp[mask])
+                    # normalisation
+                    wf_spherical[m1,:] = np.divide(wf_spherical[m1, :], np.sum(wf_spherical[m1, :]),
+                                                   where = np.sum(wf_spherical[m1,:]) != 0)
 
         if np.any(kweights == 0.) and self.verbose:
             raise_warning('Some spherical bins are empty. '
@@ -1145,8 +1148,8 @@ class UVWindow():
             * abs(self.dly_array).max()
         # make sure proper kpara values are included in given bins
         # raise warning otherwise
-        if (kpara_bin_edges.max() <= kpara_centre+5*dk_para) or\
-           (kpara_bin_edges.min() >= kpara_centre-5.*dk_para):
+        if (kpara_bin_edges.max() <= kpara_centre+3*dk_para) or\
+           (kpara_bin_edges.min() >= kpara_centre-3*dk_para):
             raise_warning('get_spherical_wf: The bin centre is not included '
                           'in the array of kpara bins given as input.',
                           verbose=verbose)
@@ -1181,9 +1184,10 @@ class UVWindow():
         for ib in range(nbls):
             if verbose:
                 sys.stdout.write('\rComputing for blg {:d} of {:d}...'.format(ib + 1, nbls))
-            cyl_wf[ib, :, :, :] = self.get_cylindrical_wf(bl_lens[ib],
-                                                          kperp_bins*self.kunits,
-                                                          kpara_bins*self.kunits)
+            cyl_wf[ib, :, :, :] = self.get_cylindrical_wf(bl_len=bl_lens[ib],
+                                                          kperp_bins=kperp_bins*self.kunits,
+                                                          kpara_bins=kpara_bins*self.kunits,
+                                                          verbose=verbose)
         if verbose:
             sys.stdout.write('\rComputing for blg {:d} of {:d}... \n'.format(nbls, nbls))
 
@@ -1283,7 +1287,7 @@ class UVWindow():
             group.create_dataset('nfreqs',shape=(1,),data=self.Nfreqs,dtype=int)
             group.create_dataset('little_h',shape=(1,),data=self.little_h,dtype=bool)
             group.create_dataset('polpair',shape=(1,),data=uvputils.polpair_tuple2int(self.pols),dtype=int)
-            ascii_taper= [n.encode("ascii", "ignore") for n in self.taper]
+            ascii_taper = [n.encode("ascii", "ignore") for n in self.taper]
             group.create_dataset('taper',(len(ascii_taper),),'S10',ascii_taper)
             dset = f.create_group('window_functions')
             dset.create_dataset('kperp_bins',shape=(nbins_kperp,),data=kperp_bins,dtype=float)

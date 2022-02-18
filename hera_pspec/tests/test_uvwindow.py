@@ -230,18 +230,18 @@ class Test_UVWindow(unittest.TestCase):
         # test on format of polarisations
         test = uvwindow.UVWindow(pols=self.pol, ftfile=self.ft_file,
                                  spw_range=None)
-        assert self.polpair == test.pols
+        assert np.all(self.polpair == test.pols)
         polint = uvputils.polstr2num(self.pol)
         test = uvwindow.UVWindow(pols=polint, ftfile=self.ft_file,
                                  spw_range=None)
-        assert self.pol == test.pols[0]
+        assert np.all(self.pol == test.pols[0])
         polpair_int = uvputils.polpair_tuple2int(self.polpair)
         test = uvwindow.UVWindow(pols=polpair_int, ftfile=self.ft_file,
                                  spw_range=None)
-        assert self.polpair== test.pols
+        assert np.all(self.polpair == test.pols)
         test = uvwindow.UVWindow(pols=(polint,polint), ftfile=self.ft_file,
                                  spw_range=None)
-        assert self.polpair== test.pols
+        assert np.all(self.polpair == test.pols)
         pytest.raises(AssertionError, uvwindow.UVWindow, pols=-9,
                       ftfile=self.ft_file)
         pytest.raises(AssertionError, uvwindow.UVWindow, pols=(-9, -9),
@@ -312,7 +312,7 @@ class Test_UVWindow(unittest.TestCase):
         baselines1, baselines2, blpairs = utils.construct_blpairs(baselines,exclude_permutations=False)
         # compute ps
         uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[self.polpair], 
-                       spw_ranges=self.spw_range, taper=self.taper,verbose=self.verbose)
+                       spw_ranges=(175,195), taper=self.taper,verbose=self.verbose)
         uvp_nocosmo = ds_nocosmo.pspec(baselines1, baselines2, dsets=(0, 1), pols=[self.polpair], 
                                        spw_ranges=self.spw_range, taper=self.taper,verbose=self.verbose)
 
