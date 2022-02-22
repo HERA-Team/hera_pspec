@@ -385,7 +385,7 @@ class UVWindow(object):
         R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
         # Fourier dual of sky angle theta
         q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.mapsize)
-        k = 2.*np.pi/R*(freq*bl_len/conversions.units.c-q)
+        k = 2.*np.pi/R*(freq*bl_len/conversions.units.c/np.sqrt(2.)-q)
         k = np.flip(k)
 
         return k
@@ -821,7 +821,7 @@ class UVWindow(object):
         kbin_edges = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
 
         # construct array giving the k probed by each baseline-tau pair
-        kperps = self.bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) / np.sqrt(2.)
+        kperps = self.bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)
         kparas = self.dly_array * self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) 
         kmags = np.sqrt(kperps[:,None]**2+kparas**2)
 
