@@ -1007,7 +1007,7 @@ class UVWindow():
 
         # construct array giving the k probed by each baseline-tau pair
         kperps = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) \
-            * bl_lens / np.sqrt(2.)
+            * bl_lens
         kparas = self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) \
             * self.dly_array
         kmags = np.sqrt(kperps[:, None]**2+kparas**2)
