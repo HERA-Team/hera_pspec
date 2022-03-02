@@ -43,7 +43,7 @@ class test_FTBeam(unittest.TestCase):
         self.data = self.ftbeam_obj.ft_beam
         self.mapsize = self.ftbeam_obj.mapsize
         self.freq_array = self.ftbeam_obj.freq_array
-        self.bandwidth = self.ftbeam_obj.get_bandwidth(self.ft_file)
+        self.bandwidth = uvwindow.FTBeam.get_bandwidth(self.ft_file)
 
     def tearDown(self):
         pass
@@ -129,10 +129,10 @@ class test_FTBeam(unittest.TestCase):
 
     def test_get_bandwidth(self):
 
-        test_bandwidth = self.ftbeam_obj.get_bandwidth(self.ft_file)
+        test_bandwidth = uvwindow.FTBeam.get_bandwidth(self.ft_file)
         assert np.all(test_bandwidth == self.bandwidth)
         # raise error is ft_file does not exist
-        pytest.raises(ValueError, self.ftbeam_obj.get_bandwidth, 
+        pytest.raises(ValueError, uvwindow.FTBeam.get_bandwidth, 
                       ftfile='whatever')
 
     def test_update_spw(self):
@@ -148,9 +148,6 @@ class test_FTBeam(unittest.TestCase):
         pytest.raises(AssertionError, test.update_spw, spw_range=(13))
         pytest.raises(AssertionError, test.update_spw, spw_range=(20, 10))
         pytest.raises(AssertionError, test.update_spw, spw_range=(1001, 1022))
-        # raise error if FT beam has not been already computed
-        test.ft_beam = None 
-        pytest.raises(AssertionError, test.update_spw, spw_range=self.spw_range)
 
 
 class Test_UVWindow(unittest.TestCase):

@@ -10,6 +10,7 @@ import time
 from scipy.interpolate import interp2d
 from pyuvdata import UVBeam, UVData
 from astropy import units
+from pathlib import Path
 
 from . import conversions, noise, version, pspecbeam, grouping, utils
 from . import uvpspec_utils as uvputils
@@ -139,13 +140,12 @@ class FTBeam:
             Used to convert polstr to polnum and conversely.
         """
         # check file path input
-        if not isinstance(ftfile, str):
-            raise TypeError('Wrong ftfile input. See docstring.')
-        if not os.path.isfile(ftfile):
-             raise ValueError("Cannot find FT beam file: {}.".format(ftfile))
+        ftfile = Path(ftfile)
+        if not (ftfile.exists() and ftfile.is_file() and h5py.is_hdf5(ftfile)) :
+            raise ValueError('Wrong ftfile input. See docstring.')
 
         # extract polarisation channel from filename
-        pol = str(ftfile.split('_')[-1].split('.')[0])
+        pol = str(ftfile).split('_')[-1].split('.')[0]
 
         # obtain bandwidth in file to define spectral window
         with h5py.File(ftfile, "r") as f:
@@ -168,7 +168,8 @@ class FTBeam:
         return cls(data=ft_beam, pol=pol, freq_array=freq_array,
                    mapsize=mapsize, verbose=verbose, x_orientation=x_orientation)
  
-    def get_bandwidth(self, ftfile):
+    @classmethod
+    def get_bandwidth(cls, ftfile):
         """
         Read FT file to extract bandwidth it was computed along.
 
@@ -186,8 +187,9 @@ class FTBeam:
         bandwidth : array of floats
             List of frequencies covered by the instrument, in Hz.
         """
-        if not os.path.isfile(ftfile):
-             raise ValueError("Cannot find FT beam file: {}.".format(ftfile))
+        ftfile = Path(ftfile)
+        if not (ftfile.exists() and ftfile.is_file() and h5py.is_hdf5(ftfile)) :
+            raise ValueError('Wrong ftfile input. See docstring.')
 
         with h5py.File(ftfile, "r") as f:
             bandwidth = np.array(f['freq'][...])
@@ -212,7 +214,6 @@ class FTBeam:
         # checks on inputs
         assert check_spw_range(spw_range, self.freq_array), \
             "Wrong spw range format, see dosctring."
-        assert self.ft_beam is not None, "No ft_beam attribute."
 
         # assign new attributes
         self.spw_range = tuple((int(spw_range[0]), int(spw_range[1])))
@@ -283,12 +284,12 @@ class UVWindow:
         # create list of FTBeam objects for each polarisation channel
         self.ftbeam_obj_pol = list(ftbeam_obj) if np.size(ftbeam_obj) > 1 else [ftbeam_obj, ftbeam_obj]
         assert isinstance(self.ftbeam_obj_pol[0], FTBeam) and isinstance(self.ftbeam_obj_pol[1], FTBeam), \
-            "Wronge input given in ftbeam_obj: must be (a list of) FTBeam object(s)"
+            "Wrong input given in ftbeam_obj: must be (a list of) FTBeam object(s)"
         # check if elements in list have same properties
         assert np.all(self.ftbeam_obj_pol[0].freq_array == self.ftbeam_obj_pol[1].freq_array), \
-            'Spectral ranges of the two FTBeam objects fed to not match'
+            'Spectral ranges of the two FTBeam objects do not match'
         assert self.ftbeam_obj_pol[0].mapsize == self.ftbeam_obj_pol[1].mapsize, \
-            'Physical properties of the two FTBeam objects fed to not match'
+            'Physical properties of the two FTBeam objects do not match'
 
         # extract attributes from FTBeam objects
         self.pols = (self.ftbeam_obj_pol[0].pol, self.ftbeam_obj_pol[1].pol)
@@ -353,25 +354,27 @@ class UVWindow:
         # create FTBeam objects
         ftbeam_obj_pol = []
         for ip, pol in enumerate(polpair):
-            if ftfile is None:
-                ftbeam_obj_pol.append(FTBeam.from_beam(beamfile='tbd',
-                                                       verbose=verbose,
-                                                       x_orientation=x_orientation))
-            else:
-                ftbeam_obj_pol.append(FTBeam.from_file('{}_{}.hdf5'.format(ftfile, pol),
-                                                       spw_range=None,
-                                                       verbose=verbose,
-                                                       x_orientation=x_orientation))
-            if pol[1] == pol[0]:
+            if (ip > 0) and (pol[ip] == pol[0]):
                 # do not recompute if two polarisations are identical
-                ftbeam_obj_pol.append(copy.deepcopy(ftbeam_obj_pol[0]))
-                continue
+                ftbeam_obj_pol.append(ftbeam_obj_pol[0])
+            else:
+                if ftfile is None:
+                    ftbeam_obj_pol.append(FTBeam.from_beam(beamfile='tbd',
+                                                           verbose=verbose,
+                                                           x_orientation=x_orientation))
+                else:
+                    ftbeam_obj_pol.append(FTBeam.from_file('{}_{}.hdf5'.format(ftfile, pol),
+                                                           spw_range=None,
+                                                           verbose=verbose,
+                                                           x_orientation=x_orientation))                
 
         # limit spectral window of FTBeam object to the one of the UVPSpec object
         bandwidth = ftbeam_obj_pol[0].freq_array
         spw_range = (np.argmin(abs(bandwidth-np.min(freq_array))),
                      np.argmin(abs(bandwidth-np.max(freq_array)))+1)
         for ip in range(2):
+            if (ip > 0) and (pol[ip] == pol[0]):
+                continue
             ftbeam_obj_pol[ip].update_spw(spw_range=spw_range)
 
         return cls(ftbeam_obj=ftbeam_obj_pol,
@@ -638,7 +641,7 @@ class UVWindow:
 
         dk_perp = np.diff(self._get_kgrid(np.min(bl_lens))[1]).mean()*5
         kperp_max = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
-            * np.max(bl_lens)*np.sqrt(2) + 10.*dk_perp
+            * np.max(bl_lens) + 10.*dk_perp
         kperp_bin_edges = np.arange(dk_perp, kperp_max, step=dk_perp)
         kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
         nbins_kperp = kperp_bins.size
@@ -757,8 +760,7 @@ class UVWindow:
         kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,
                                     kperp_bins.max() + dk_perp,
                                     step=dk_perp)
-        kperp_centre = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
-            * bl_len*np.sqrt(2)
+        kperp_centre = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * bl_len
         if (kperp_bin_edges.max() < kperp_centre+3*dk_perp) or\
            (kperp_bin_edges.min() > kperp_centre-3*dk_perp):
             warnings.warn('get_cylindrical_wf: The bin centre is not included '
@@ -1010,9 +1012,9 @@ class UVWindow:
         # make sure proper kperp values are included in given bins
         # raise warning otherwise
         kperp_max = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
-            * np.max(bl_lens)*np.sqrt(2) #+ 10.*dk_perp
+            * np.max(bl_lens) #+ 10.*dk_perp
         kperp_min = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
-            * np.min(bl_lens)*np.sqrt(2) #+ 10.*dk_perp
+            * np.min(bl_lens) #+ 10.*dk_perp
         if (kperp_bin_edges.max() <= kperp_max):
             warnings.warn('get_spherical_wf: Max kperp bin centre not '
                           'included in binning array')
@@ -1117,9 +1119,10 @@ class UVWindow:
             Whether to overwrite output file if it exists. Default: False.
         """
         # Check output
-        if os.path.exists(filepath) and clobber is False:
+        filepath = Path(filepath)
+        if filepath.exists() and clobber is False:
             raise IOError("{} exists, not overwriting...".format(filepath))
-        elif os.path.exists(filepath) and clobber is True:
+        elif filepath.exists() and clobber is True:
             print("{} exists, overwriting...".format(filepath))
             os.remove(filepath)
 
@@ -1163,18 +1166,21 @@ class UVWindow:
             cyl_wf[ib, :, :, :] = self.get_cylindrical_wf(bl_lens[ib],
                                                           kperp_bins*self.kunits,
                                                           kpara_bins*self.kunits)*bl_weights[ib]
-        # cannot write None to file
-        if self.taper is None:
-            self.taper = 'none'
 
         # Write file
         with h5py.File(filepath, 'w') as f:
+            # parameters
             f.attrs['avg_nu'] = self.avg_nu
             f.attrs['avg_z'] = self.avg_z
             f.attrs['nfreqs'] = self.Nfreqs
             f.attrs['little_h'] = self.little_h
             f.attrs['polpair'] = uvputils.polpair_tuple2int(self.pols)
-            f.attrs['taper'] = self.taper
+            # cannot write None to file
+            if self.taper is None:
+                f.attrs['taper'] = 'none'
+            else:
+                f.attrs['taper'] = self.taper
+            # arrays
             f.create_dataset('kperp_bins',shape=(nbins_kperp,),data=kperp_bins,dtype=float)
             f.create_dataset('kpara_bins',shape=(nbins_kpara,),data=kpara_bins,dtype=float)
             f.create_dataset('bl_lens',shape=(nbls,),data=bl_lens,dtype=float)
