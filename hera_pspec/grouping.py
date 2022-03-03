@@ -168,7 +168,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
          Default: None
 
     exact_windows: bool, optional
-        If True, compute exact window functions given the set of 
+        If True, compute exact window functions given the set of
         baseline lengths in blpair_groups.
         Requires blpair_groups. Assume blpair groups are made of
         redundant baselines correlated within a redundant group.

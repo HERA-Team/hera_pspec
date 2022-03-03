@@ -1630,11 +1630,12 @@ class UVPSpec(object):
         if "Mpc" not in self.norm_units:
             self.norm_units = "h^-3 Mpc^3"
 
-    def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None, ftbeam_file='',
-                                        error_weights=None, blpair_weights=None, normalize_weights=True,
-                                        error_field=None, this_spw=None, 
-                                        verbose=False, inplace=True, normalize_wf=True,
-                                        add_to_history=''):
+    def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None,
+                                   ftbeam_file='', blpair_weights=None,
+                                   error_weights=None, normalize_weights=True,
+                                   error_field=None, this_spw=None,
+                                   verbose=False, inplace=True,
+                                   normalize_wf=True, add_to_history=''):
         """
 
         Parameters
@@ -1704,16 +1705,14 @@ class UVPSpec(object):
 
         add_to_history : str, optional
             Added text to add to file history.
-        
         """
-
         # Copy these, so we don't modify the input lists
         blpair_groups = copy.deepcopy(blpair_groups)
         blpair_weights = copy.deepcopy(blpair_weights)
 
         # sets attribute exact_windows to False if not defined
         # (UVPspec object created with older versions of hera_pspec)
-        try: 
+        try:
             self.exact_windows
         except AttributeError:
             self.exact_windows = False
