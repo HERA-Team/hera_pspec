@@ -225,7 +225,7 @@ class UVWindow(object):
 
         self.freq_array = bandwidth[self.spw_range[0]:self.spw_range[-1]]
         self.Nfreqs = len(self.freq_array)
-        self.dly_array = utils.get_delays(self.freq_array,n_dlys=len(self.freq_array))
+        self.dly_array = utils.get_delays(self.freq_array, n_dlys=len(self.freq_array))
         self.avg_nu = np.mean(self.freq_array)
         self.avg_z = self.cosmo.f2z(self.avg_nu)        
         if self.is_uvdata:
@@ -385,7 +385,7 @@ class UVWindow(object):
         R = self.cosmo.DM(z, little_h=self.little_h) #Mpc
         # Fourier dual of sky angle theta
         q = np.fft.fftshift(np.fft.fftfreq(ngrid))*ngrid/(2.*self.mapsize)
-        k = 2.*np.pi/R*(freq*bl_len/conversions.units.c-q)
+        k = 2.*np.pi/R*(freq*bl_len/conversions.units.c/np.sqrt(2.)-q)
         k = np.flip(k)
 
         return k
@@ -582,7 +582,7 @@ class UVWindow(object):
         assert bl_lens.size>0, "get_kperp_bins() requires array of baseline lengths."
         
         dk_perp = np.diff(self.get_kgrid(np.min(bl_lens))[1]).mean()*5
-        kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens)*np.sqrt(2)+ 10.*dk_perp
+        kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(bl_lens) + 10.*dk_perp
         kperp_bin_edges = np.arange(dk_perp,kperp_max,step=dk_perp)
         kperp_bins = (kperp_bin_edges[1:]+kperp_bin_edges[:-1])/2
         nbins_kperp = kperp_bins.size        
@@ -707,7 +707,7 @@ class UVWindow(object):
         nbins_kperp = kperp_bins.size
         dk_perp = np.diff(kperp_bins).mean()
         kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,kperp_bins.max()+dk_perp,step=dk_perp)
-        kperp_centre = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len*np.sqrt(2)
+        kperp_centre = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*bl_len
         if (kperp_bin_edges.max()<kperp_centre+9.*dk_perp) or (kperp_bin_edges.min()>kperp_centre-9.*dk_perp):
             raise_warning('get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.',
                             verbose=self.verbose)
@@ -821,25 +821,26 @@ class UVWindow(object):
         kbin_edges = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
 
         # construct array giving the k probed by each baseline-tau pair
-        kperps = self.bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) / np.sqrt(2.)
+        kperps = self.bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) 
         kparas = self.dly_array * self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) 
         kmags = np.sqrt(kperps[:,None]**2+kparas**2)
 
         wf_spherical = np.zeros((nbinsk,nbinsk))
         kweights = np.zeros(nbinsk,dtype=int)
         for m1 in range(nbinsk):
-            mask2 = (kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1]).astype(int)
-            if (np.sum(mask2)==0): continue
-            mask2 = mask2*bl_weights[:,None] #add weights for redundancy
-            kweights[m1] = np.sum(mask2) 
-            wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
-            for m in range(nbinsk):
-                mask = (kbin_edges[m]<=ktot) & (ktot<kbin_edges[m+1])
-                if np.any(mask): #cannot compute mean if zero elements
-                    wf_spherical[m1,m]=np.mean(wf_temp[mask])
-            # normalisation
-            wf_spherical[m1,:] = np.divide(wf_spherical[m1,:],np.sum(wf_spherical[m1,:]),
-                                    where = np.sum(wf_spherical[m1,:])!=0)
+            mask2 = ((kbin_edges[m1]<=kmags) & (kmags<kbin_edges[m1+1])).astype(int)
+            if (np.sum(mask2)!=0):
+                mask2 = mask2*bl_weights[:,None] #add weights for redundancy
+                kweights[m1] = np.sum(mask2) 
+                wf_temp = np.sum(cyl_wf*mask2[:,:,None,None],axis=(0,1))/np.sum(mask2)
+                if np.sum(wf_temp) > 0.: 
+                    for m in range(nbinsk):
+                        mask = (kbin_edges[m]<=ktot) & (ktot<kbin_edges[m+1])
+                        if np.any(mask): #cannot compute mean if zero elements
+                            wf_spherical[m1,m]=np.mean(wf_temp[mask])
+                    # normalisation
+                    wf_spherical[m1,:] = np.divide(wf_spherical[m1,:],np.sum(wf_spherical[m1,:]),
+                                            where = np.sum(wf_spherical[m1,:])!=0)
             
         if np.any(kweights==0.) and self.verbose:
             raise_warning('Some spherical bins are empty. Add baselines or expand spectral window.')
@@ -968,8 +969,8 @@ class UVWindow(object):
         dk_perp = np.diff(self.kperp_bins).mean()
         kperp_bin_edges = np.arange(self.kperp_bins.min()-dk_perp/2,self.kperp_bins.max()+dk_perp,step=dk_perp)
         # make sure proper kperp values are included in given bins, raise warning otherwise
-        kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
-        kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(self.bl_lens)*np.sqrt(2)+ 10.*dk_perp
+        kperp_max = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.max(self.bl_lens) + 10.*dk_perp
+        kperp_min = self.cosmo.bl_to_kperp(self.avg_z,little_h=self.little_h)*np.min(self.bl_lens) + 10.*dk_perp
         if (kperp_bin_edges.max()<=kperp_max): 
             raise_warning('get_spherical_wf: Max kperp bin centre not included in binning array',
                             verbose=verbose)
