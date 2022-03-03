@@ -821,7 +821,7 @@ class UVWindow(object):
         kbin_edges = np.arange(kbins.min()-dk/2,kbins.max()+dk,step=dk)
 
         # construct array giving the k probed by each baseline-tau pair
-        kperps = self.bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) 
+        kperps = self.bl_lens * self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)
         kparas = self.dly_array * self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) 
         kmags = np.sqrt(kperps[:,None]**2+kparas**2)
 
@@ -920,8 +920,8 @@ class UVWindow(object):
             verbose = self.verbose
 
         # check if bl_groups is nested list
-        if not any(isinstance(i, list) for i in bl_groups):
-            bl_groups = [bl_groups]
+        # if not any(isinstance(i, list) for i in bl_groups):
+        #     bl_groups = [bl_groups]
         # check consistency of baseline-related inputs
         assert len(bl_groups)==len(bl_lens), "bl_groups and bl_lens must have same length"
         nbls = len(bl_groups) # number of redudant groups
