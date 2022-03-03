@@ -331,7 +331,6 @@ class UVWindow:
             Used to convert pol str to num and convertly.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
-
         """
         # Summary attributes: initialise attributes from UVPSpec object
 
@@ -867,7 +866,6 @@ class UVWindow:
             Shape (nbinsk, nbinsk).
         kweights : array
             Returns number of k-modes per k-bin.
-
         """
         # check bl_lens and bl_weights are consistent
         bl_lens = bl_lens if isinstance(bl_lens, (list, tuple, np.ndarray)) else [bl_lens]
@@ -1064,7 +1062,6 @@ class UVWindow:
             warnings.warn('Min spherical k probed is not included in bins.')
 
         # COMPUTE THE WINDOW FUNCTIONS
-
         # get cylindrical window functions for each baseline length considered
         # as a function of (kperp, kpara)
         # the kperp and kpara bins are given as global parameters
@@ -1240,6 +1237,7 @@ def check_spw_range(spw_range, bandwidth=None):
             return False
 
     return True
+
 
 
 
