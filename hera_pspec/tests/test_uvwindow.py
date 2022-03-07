@@ -18,8 +18,6 @@ from .. import conversions, noise, version, pspecbeam, grouping, utils
 from .. import uvwindow, pspecbeam, PSpecData
 from .. import uvpspec_utils as uvputils
 
-warnings.filterwarnings("ignore")
-
 # Data files to use in tests
 dfile = 'zen.2458116.31939.HH.uvh5'
 ftfile = 'FT_beam_HERA_dipole_test_xx.hdf5'
@@ -191,7 +189,7 @@ class Test_UVWindow(unittest.TestCase):
         uvd = UVData()
         uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
         self.reds, self.lens, _ = utils.get_reds(uvd, bl_error_tol=1.0,
-                                                 pick_data_ants=False)
+                             pick_data_ants=False)
 
     def tearDown(self):
         pass

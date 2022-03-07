@@ -814,7 +814,7 @@ class PSpecData(object):
             C = self.C_model(key, model=model, time_index=time_index)
             #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if np.linalg.cond(C) >= 1e9:
-                warnings.warn("Poorly conditioned covariance. Computing Psuedo-Inverse")
+                warnings.warn("Poorly conditioned covariance. Computing Pseudo-Inverse")
                 ic = np.linalg.pinv(C)
             else:
                 ic = np.linalg.inv(C)
@@ -3447,6 +3447,7 @@ class PSpecData(object):
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width  # all dsets validated to agree
         uvp.weighting = input_data_weight
+        uvp.exact_windows = False
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         uvp.telescope_location = dset1.telescope_location
         filename1 = json.loads(dset1.extra_keywords.get('filename', '""'))
