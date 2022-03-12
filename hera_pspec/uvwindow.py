@@ -834,7 +834,7 @@ class UVWindow:
             return cyl_wf
 
     def cylindrical_to_spherical(self, cyl_wf, kbins, ktot, bl_lens,
-                              bl_weights=None):
+                                 bl_weights=None):
         """
         Take spherical average of cylindrical window functions.
 

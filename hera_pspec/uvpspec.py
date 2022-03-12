@@ -1630,26 +1630,23 @@ class UVPSpec(object):
         if "Mpc" not in self.norm_units:
             self.norm_units = "h^-3 Mpc^3"
 
-    def get_exact_window_functions(self, blpair_groups=None, blpair_lens=None,
-                                   ftbeam_file='', blpair_weights=None,
-                                   error_weights=None, normalize_weights=True,
-                                   error_field=None, this_spw=None,
+    def get_exact_window_functions(self, ftbeam_file='',
+                                   # error_weights=None, error_field=None,
+                                   # blpair_weights=None, normalize_weights=True,
+                                   this_spw=None,
                                    verbose=False, inplace=True,
-                                   normalize_wf=True, add_to_history=''):
+                                   add_to_history='',
+                                   x_orientation=None):
         """
+        Obtain the exact window functions corresponding to UVPSpec object.
+
+        Depending on the format of the UVPSpec object given as input, the shape
+        of the output array will be different: (Nblpts, Ndlys, Nkperp, Nkpara, Npols).
+        Weights can be applied to the different baseline pairs to facilitate
+        spherical average later.
 
         Parameters
         ----------
-
-        blpair_groups : list of baseline-pair groups
-            List of list of tuples or integers. All power spectra in a
-            baseline-pair group are averaged together. If a baseline-pair
-            exists in more than one group, a warning is raised.
-            If None, redundant groups are used.
-
-            Ex: blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))],
-                                  [((4, 6), (4, 6))]]
-            or blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
 
         ftbeam_file : str, optional
             Definition of the beam Fourier transform to be used.
@@ -1680,16 +1677,9 @@ class UVPSpec(object):
                Sum(blpair_weights) = N_blpairs
             If False, no normalization is applied to the weights. Default: True.
 
-        error_field: string or list, optional
-            If errorbars have been entered into stats_array, will do a weighted
-            sum to shrink the error bars down to the size of the averaged
-            data_array. Error_field strings be keys of stats_array. If list,
-            does this for every specified key. Every stats_array key that is
-            not specified is thrown out of the new averaged object.
-
         this_spw : int, optional
             Spectral window index. If None, the window functions are computed on 
-            all the uvp.spw_ranges, successively.
+            all the uvp.spw_ranges, successively. Default: None.
 
         inplace : bool, optional
             If True (default value), the UVPspec attribute window_function_array is filled with the
@@ -1699,16 +1689,14 @@ class UVPSpec(object):
             Automatically set to False if blpair_groups is not None (that is,
             if the window functions are not computed on all the blpairs).
 
-        normalize_wf : bool, optional
-            If True, return normalized window functions (default).
-            If False, return window functions including error_weights.
-
         add_to_history : str, optional
             Added text to add to file history.
+
+        x_orientation: str, optional
+            Orientation in cardinal direction east or north of X dipole.
+            Default keeps polarization in X and Y basis.
+            Used to convert polstr to polnum and conversely. Default: None.
         """
-        # Copy these, so we don't modify the input lists
-        blpair_groups = copy.deepcopy(blpair_groups)
-        blpair_weights = copy.deepcopy(blpair_weights)
 
         # sets attribute exact_windows to False if not defined
         # (UVPspec object created with older versions of hera_pspec)
@@ -1716,18 +1704,10 @@ class UVPSpec(object):
             self.exact_windows
         except AttributeError:
             self.exact_windows = False
-        if self.exact_windows:
-            raise AttributeError("Exact window functions already computed.")
+        if self.exact_windows and inplace:
+            warnings.warn("Exact window functions already computed, overwriting...")
 
-        if blpair_groups is None:
-            blpair_groups, blpair_lens, _ = self.get_red_blpairs()
-        else:
-            assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
-                        " are inconsistent with baseline lengths"
-            if (len(sum(blpair_groups,[]))!=self.Nblpairs) and inplace:
-                warnings.warn('inplace set to False because you are not considering' \
-                                ' all baseline pairs in object.')
-                inplace = False
+        blpair_groups, blpair_lens, _ = self.get_red_blpairs()
 
         # Print warning if a blpair appears more than once in all of blpair_groups
         all_blpairs = [item for sublist in blpair_groups for item in sublist]
@@ -1736,42 +1716,27 @@ class UVPSpec(object):
                   "averaging groups.")
 
 
-        # Create baseline-pair weights list if not specified
-        if blpair_weights is None:
-            # Assign unity weights to baseline-pair groups that were specified
-            blpair_weights = [[1. for item in grp] for grp in blpair_groups]
-        else:
-            # Check that blpair_weights has the same shape as blpair_groups
-            for i, grp in enumerate(blpair_groups):
-                try:
-                    len(blpair_weights[i]) == len(grp)
-                except:
-                    raise IndexError("blpair_weights must have the same shape as "
-                                     "blpair_groups")
+        # # Create baseline-pair weights list if not specified
+        # if blpair_weights is None:
+        #     # Assign unity weights to baseline-pair groups that were specified
+        #     blpair_weights = [[1. for item in grp] for grp in blpair_groups]
+        # else:
+        #     # Check that blpair_weights has the same shape as blpair_groups
+        #     for i, grp in enumerate(blpair_groups):
+        #         try:
+        #             len(blpair_weights[i]) == len(grp)
+        #         except:
+        #             raise IndexError("blpair_weights must have the same shape as "
+        #                              "blpair_groups")
 
-        # pre-check for error_weights
-        if error_weights is None:
-            use_error_weights = False
-        else:
-            if hasattr(self, "stats_array"):
-                if error_weights not in self.stats_array.keys():
-                    raise KeyError("error_field \"%s\" not found in stats_array keys." % error_weights)
-            use_error_weights = True
-
-        # stat_l is a list of supplied error_fields, to sum over.
-        if isinstance(error_field, (list, tuple, np.ndarray)):
-            stat_l = list(error_field)
-        elif isinstance(error_field, (str, np.str)):
-            stat_l = [error_field]
-        else:
-            stat_l = []
-        if use_error_weights:
-            if error_weights not in stat_l:
-                stat_l.append(error_weights)
-        for stat in stat_l:
-            if hasattr(self, "stats_array"):
-                if stat not in self.stats_array.keys():
-                    raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
+        # # pre-check for error_weights
+        # if error_weights is None:
+        #     use_error_weights = False
+        # else:
+        #     if hasattr(self, "stats_array"):
+        #         if error_weights not in self.stats_array.keys():
+        #             raise KeyError("error_field \"%s\" not found in stats_array keys." % error_weights)
+        #     use_error_weights = True
 
         # check spw input and create array of spws to loop over
         if this_spw is None:
@@ -1792,11 +1757,6 @@ class UVPSpec(object):
         window_function_array = odict()
         window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
 
-        # initialise UVWindow object
-        uvw = UVWindow(ftbeam=ftbeam_file, taper = self.taper,
-                        cosmo= self.cosmo, little_h='h^-3' in self.norm_units,
-                        verbose=verbose)
-
         # Iterate over spectral windows
         for spw in spws:
 
@@ -1807,98 +1767,93 @@ class UVPSpec(object):
             # Iterate over polarizations
             for i, p in enumerate(self.polpair_array):
 
-                pol_window_function = []
-                # initialise UVWindow object with polarization and spectral window
-                uvw.clear_cache()
-                polpair = uvputils.polpair_int2tuple(p)
-                assert polpair[0]==polpair[1], "Does not handle cross-polarisation spectra."
-                uvw.set_polarisation(polpair[0])
-                uvw.set_freq_range(freq_array=self.freq_array[self.spw_to_freq_indices(spw)])
-                uvw.get_FT(return_FT=False)
+                # initialise UVWindow object
+                uvw = UVWindow.from_uvpspec(self, ipol=i, spw=spw, ftfile=ftbeam_file,
+                                            x_orientation=x_orientation, verbose=verbose)
+                
                 # extract kperp bins the window functions corresponding to the baseline 
                 # lengths given as input
                 kperp_bins = uvw.get_kperp_bins(blpair_lens)
-                kpara_bins = uvw.get_kpara_bins(uvw.freq_array,uvw.little_h,self.cosmo)
+                kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
+                pol_window_function = np.zeros((self.Nblpairts, self.get_dlys(spw).size, kperp_bins.size, kpara_bins.size))
 
                 # Iterate over baseline-pair groups
                 for j, blpg in enumerate(blpair_groups):
-                    bpg_window_function = []
-                    w_list = []
-                    if verbose: sys.stdout.write('\rComputing for bl group {} of {}...'.format(j+1,len(blpair_groups)))
+                    if verbose: 
+                        sys.stdout.write('\rComputing for bl group {} of {}...'.format(j+1,len(blpair_groups)))
 
                     # window functions identical for all times
                     window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
-                                                kperp_bins = kperp_bins, kpara_bins = kpara_bins)
+                                                                 kperp_bins = kperp_bins,
+                                                                 kpara_bins = kpara_bins)
                     # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
-                    # Sum over all weights within this baseline group to get
-                    # normalization (if weights specified). The normalization is
-                    # calculated so that Sum (blpair wgts) = no. baselines.
-                    if blpair_weights is not None:
-                        blpg_wgts = np.array(blpair_weights[j])
-                        norm = np.sum(blpg_wgts) if normalize_weights else 1.
+                    # # Sum over all weights within this baseline group to get
+                    # # normalization (if weights specified). The normalization is
+                    # # calculated so that Sum (blpair wgts) = no. baselines.
+                    # if blpair_weights is not None:
+                    #     blpg_wgts = np.array(blpair_weights[j])
+                    #     norm = np.sum(blpg_wgts) if normalize_weights else 1.
 
-                        if norm <= 0.:
-                            raise ValueError("Sum of baseline-pair weights in "
-                                             "group %d is <= 0." % j)
-                        blpg_wgts = blpg_wgts * float(blpg_wgts.size) / norm # Apply normalization
-                    else:
-                        blpg_wgts = np.ones(len(blpg))
-
+                    #     if norm <= 0.:
+                    #         raise ValueError("Sum of baseline-pair weights in "
+                    #                          "group %d is <= 0." % j)
+                    #     blpg_wgts = blpg_wgts * float(blpg_wgts.size) / norm # Apply normalization
+                    # else:
+                    #     blpg_wgts = np.ones(len(blpg))
 
                     # Iterate within a baseline-pair group and get weighted data
                     for k, blp in enumerate(blpg):
-                        # Get no. samples and construct integration weight
-                        nsmp = self.get_nsamples((spw, blp, p))[:, None]
-                        # shape of wgts: (Ntimes, Nfreqs, 2)
-                        ints = self.get_integrations((spw, blp, p))[:, None]
+                        # # Get no. samples and construct integration weight
+                        # nsmp = self.get_nsamples((spw, blp, p))[:, None]
+                        # # shape of wgts: (Ntimes, Nfreqs, 2)
+                        # ints = self.get_integrations((spw, blp, p))[:, None]
                         # shape of ints: (Ntimes, 1)
-                        window_function = np.copy(window_function_blg)
+                        # window_function = np.copy(window_function_blg)
 
-                        if use_error_weights:
-                        # If use_error_weights==True, all arrays are weighted by a specified kind of errors,
-                        # including the error_filed in stats_array and cov_array.
-                        # For each power spectrum P_i with error_weights sigma_i,
-                        # P_avg = \sum{ P_i / (sigma_i)^2 } / \sum{ 1 / (sigma_i)^2 }
-                        # while for other variance or covariance terms epsilon_i stored in stats_array and cov_array,
-                        # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
-                        # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
-                        # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
-                            stat_val = self.get_stats(error_weights, (spw, blp, p)).copy() #shape (Ntimes, Ndlys)
-                            #corrects for potential nan values
-                            stat_val = np.nan_to_num(stat_val,copy=False,nan=np.inf,posinf=np.inf)
-                            np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
-                            w = np.real(1. / stat_val.clip(1e-40, np.inf))
-                            # shape of w: (Ntimes, Ndlys)
-                        else:
-                        # Otherwise all arrays are averaged in a way weighted by the integration time,
-                        # including the error_filed in stats_array and cov_array.
-                        # Since P_N ~ Tsys^2 / sqrt{N_incoherent} t_int (see N. Kern, The Astrophysical Journal 888.2 (2020): 70, Equation 7),
-                        # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
-                            w = (ints * np.sqrt(nsmp))**2
-                            # shape of w: (Ntimes, 1)
+                        # if use_error_weights:
+                        #     # If use_error_weights==True, all arrays are weighted by a specified kind of errors,
+                        #     # including the error_filed in stats_array and cov_array.
+                        #     # For each power spectrum P_i with error_weights sigma_i,
+                        #     # P_avg = \sum{ P_i / (sigma_i)^2 } / \sum{ 1 / (sigma_i)^2 }
+                        #     # while for other variance or covariance terms epsilon_i stored in stats_array and cov_array,
+                        #     # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
+                        #     # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
+                        #     # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
+                        #     stat_val = self.get_stats(error_weights, (spw, blp, p)).copy() #shape (Ntimes, Ndlys)
+                        #     #corrects for potential nan values
+                        #     stat_val = np.nan_to_num(stat_val,copy=False,nan=np.inf,posinf=np.inf)
+                        #     np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
+                        #     w = np.real(1. / stat_val.clip(1e-40, np.inf))
+                        #     # shape of w: (Ntimes, Ndlys)
+                        # else:
+                        #     # Otherwise all arrays are averaged in a way weighted by the integration time,
+                        #     # including the error_filed in stats_array and cov_array.
+                        #     # Since P_N ~ Tsys^2 / sqrt{N_incoherent} t_int (see N. Kern, The Astrophysical Journal 888.2 (2020): 70, Equation 7),
+                        #     # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
+                        #     w = (ints * np.sqrt(nsmp))**2
+                        #     # shape of w: (Ntimes, 1)
 
                         # Add multiple copies of data for each baseline according
                         # to the weighting/multiplicity;
                         # while multiple copies are only added when bootstrap resampling
-                        for m in range(int(blpg_wgts[k])):
-                            bpg_window_function.append(window_function * w[:, :, None, None])
-                            w_list.append(w)
-
-                    # normalize sum: clip to deal with w_list_sum == 0
-                    w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
-                    if normalize_wf:
-                        bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None, None]
-                    else:
-                        bpg_window_function = np.sum(bpg_window_function, axis=0)
-                    pol_window_function.extend(bpg_window_function)
+                        # w_list = []
+                        # blp_window_function = []
+                        # for m in range(int(blpg_wgts[k])):
+                        #     blp_window_function.append(window_function * w[:, :, None, None])
+                        #     w_list.append(w)
+                        # # normalize sum: clip to deal with w_list_sum == 0
+                        # w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
+                        # blp_window_function = np.sum(blp_window_function, axis=0) / w_list_sum[:, :, None, None]
+                        for iblts in self.blpair_to_indices(blp):
+                            pol_window_function[iblts, :, :, :] = np.copy(window_function_blg)
 
                 if verbose: sys.stdout.write('\rComputed wf for baseline-pair groups {} of {}.\n'.format(len(blpair_groups),len(blpair_groups)))
 
                 # Append to lists (spectral window)
                 spw_window_function.append(pol_window_function)
-                spw_wf_kperp_bins.append(kperp_bins)
-                spw_wf_kpara_bins.append(kpara_bins)
+                spw_wf_kperp_bins.append(kperp_bins.value)
+                spw_wf_kpara_bins.append(kpara_bins.value)
 
             # Append to dictionaries
             window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
@@ -2217,7 +2172,6 @@ class UVPSpec(object):
 
     def average_spectra(self, blpair_groups=None, time_avg=False,
                         blpair_weights=None, error_field=None, error_weights=None,
-                        exact_windows=False, ftbeam_file='',
                         inplace=True, add_to_history=''):
         """
         Average power spectra across the baseline-pair-time axis, weighted by
@@ -2285,19 +2239,6 @@ class UVPSpec(object):
             then it also gets appended to `error_field` as a list.
             Default: None.
 
-        exact_windows: bool, optional
-            If True, compute exact window functions given the set of 
-            baseline lengths in blpair_groups.
-            Requires blpair_groups. Assume blpair groups are made of
-            redundant baselines correlated within a redundant group.
-
-        ftbeam_file : str, optional
-            Definition of the beam Fourier transform to be used.
-            Options include;
-                - Root name of the file to use, without the polarisation
-                Ex : FT_beam_HERA_dipole (+ path)
-                - '' for computation from beam simulations (slow)
-
         inplace : bool, optional
             If True, edit data in self, else make a copy and return.
             Default: True.
@@ -2314,23 +2255,23 @@ class UVPSpec(object):
         return multiple copies of their time_array.
         """
         if inplace:
-            grouping.average_spectra(self, blpair_groups=blpair_groups,
+            grouping.average_spectra(self,
+                                     blpair_groups=blpair_groups,
                                      time_avg=time_avg,
                                      error_field=error_field,
                                      error_weights=error_weights,
                                      blpair_weights=blpair_weights,
-                                     exact_windows=exact_windows, 
-                                     ftbeam_file = ftbeam_file,
-                                     inplace=True, add_to_history=add_to_history)
+                                     inplace=True,
+                                     add_to_history=add_to_history)
         else:
-            return grouping.average_spectra(self, blpair_groups=blpair_groups,
+            return grouping.average_spectra(self,
+                                            blpair_groups=blpair_groups,
                                             time_avg=time_avg,
                                             error_field=error_field,
                                             error_weights=error_weights,
                                             blpair_weights=blpair_weights,
-                                            exact_windows=exact_windows, 
-                                            ftbeam_file = ftbeam_file,
-                                            inplace=False, add_to_history=add_to_history)
+                                            inplace=False,
+                                            add_to_history=add_to_history)
 
     def fold_spectra(self):
         """
