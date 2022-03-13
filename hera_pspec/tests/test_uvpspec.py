@@ -13,7 +13,6 @@ from pyuvdata import UVData
 from hera_cal import redcal
 import json
 
-
 class Test_UVPSpec(unittest.TestCase):
 
     def setUp(self):
@@ -551,6 +550,50 @@ class Test_UVPSpec(unittest.TestCase):
         uvp.average_spectra(blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=True)
         assert uvp.Ntimes == 1
         assert uvp.Nblpairs == 1
+
+    def test_get_exact_window_functions(self):
+
+        basename = 'FT_beam_HERA_dipole_test'
+        # Instantiate UVWindow()
+        # obtain uvp object
+        datafile = os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5')
+        # read datafile
+        uvd = UVData()
+        uvd.read_uvh5(datafile)
+        # Create a new PSpecData objec
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        # choose baselines
+        baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
+                                                                  exclude_permutations=False,
+                                                                  exclude_auto_bls=True)
+        # compute ps
+        uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')], 
+                       spw_ranges=(175,195), taper='bh',verbose=False)
+        uvp.cosmo = conversions.Cosmo_Conversions() #uvp.set_cosmology not overwriting
+
+        # obtain exact_windows (fiducial usage)
+        uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
+                                       inplace=True)
+        assert uvp.exact_windows
+        assert uvp.window_function_array[0].shape[0] == uvp.Nblpairts
+        # if not exact window function, array dim is 4
+        assert uvp.window_function_array[0].ndim == 5
+
+        ## tests
+
+        # obtain exact window functions for one spw only
+        uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
+                                       this_spw=0, inplace=True, verbose=True)
+        # raise error if spw not in UVPSpec object
+        pytest.raises(AssertionError, uvp.get_exact_window_functions,
+                      ftbeam_file = os.path.join(DATA_PATH, basename),
+                      this_spw=2, inplace=True)
+
+        # output exact_window functions but does not make them attributes
+        kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
+                                                                          inplace=False)
+        # check if result is the same with and without inplace
+        assert np.all(wf_array[0]==uvp.window_function_array[0])
 
     def test_fold_spectra(self):
         uvp = copy.deepcopy(self.uvp)

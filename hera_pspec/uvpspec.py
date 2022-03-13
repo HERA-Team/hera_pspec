@@ -1630,12 +1630,8 @@ class UVPSpec(object):
         if "Mpc" not in self.norm_units:
             self.norm_units = "h^-3 Mpc^3"
 
-    def get_exact_window_functions(self, ftbeam_file='',
-                                   # error_weights=None, error_field=None,
-                                   # blpair_weights=None, normalize_weights=True,
-                                   this_spw=None,
-                                   verbose=False, inplace=True,
-                                   add_to_history='',
+    def get_exact_window_functions(self, ftbeam_file='', this_spw=None,
+                                   verbose=False, inplace=True, add_to_history='',
                                    x_orientation=None):
         """
         Obtain the exact window functions corresponding to UVPSpec object.
@@ -1655,31 +1651,12 @@ class UVPSpec(object):
                 Ex : FT_beam_HERA_dipole (+ path)
                 - '' for computation from beam simulations (slow)
 
-        error_weights: string, optional
-             error_weights specify which kind of errors we use for weights
-             during averaging power spectra.
-             The weights are defined as $w_i = 1/ sigma_i^2$,
-             where $sigma_i$ is taken from the relevant field of stats_array.
-             If `error_weight' is set to None, which means we just use the
-             integration time as weights. If error_weights is specified,
-             then it also gets appended to error_field as a list.
-             Default: None
-
-        blpair_weights : list of weights (float or int), optional
-            Relative weight of each baseline-pair when performing the average. This
-            is useful for bootstrapping. This should have the same shape as
-            blpair_groups if specified. The weights are automatically normalized
-            within each baseline-pair group. Default: None (all baseline pairs have
-            unity weights).
-
-        normalize_weights: bool, optional
-            Whether to normalize the baseline-pair weights so that:
-               Sum(blpair_weights) = N_blpairs
-            If False, no normalization is applied to the weights. Default: True.
-
         this_spw : int, optional
             Spectral window index. If None, the window functions are computed on 
             all the uvp.spw_ranges, successively. Default: None.
+
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
 
         inplace : bool, optional
             If True (default value), the UVPspec attribute window_function_array is filled with the
@@ -1708,35 +1685,6 @@ class UVPSpec(object):
             warnings.warn("Exact window functions already computed, overwriting...")
 
         blpair_groups, blpair_lens, _ = self.get_red_blpairs()
-
-        # Print warning if a blpair appears more than once in all of blpair_groups
-        all_blpairs = [item for sublist in blpair_groups for item in sublist]
-        if len(set(all_blpairs)) < len(all_blpairs):
-            print("Warning: some baseline-pairs are repeated between blpair "\
-                  "averaging groups.")
-
-
-        # # Create baseline-pair weights list if not specified
-        # if blpair_weights is None:
-        #     # Assign unity weights to baseline-pair groups that were specified
-        #     blpair_weights = [[1. for item in grp] for grp in blpair_groups]
-        # else:
-        #     # Check that blpair_weights has the same shape as blpair_groups
-        #     for i, grp in enumerate(blpair_groups):
-        #         try:
-        #             len(blpair_weights[i]) == len(grp)
-        #         except:
-        #             raise IndexError("blpair_weights must have the same shape as "
-        #                              "blpair_groups")
-
-        # # pre-check for error_weights
-        # if error_weights is None:
-        #     use_error_weights = False
-        # else:
-        #     if hasattr(self, "stats_array"):
-        #         if error_weights not in self.stats_array.keys():
-        #             raise KeyError("error_field \"%s\" not found in stats_array keys." % error_weights)
-        #     use_error_weights = True
 
         # check spw input and create array of spws to loop over
         if this_spw is None:
@@ -1788,63 +1736,9 @@ class UVPSpec(object):
                                                                  kpara_bins = kpara_bins)
                     # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
-                    # # Sum over all weights within this baseline group to get
-                    # # normalization (if weights specified). The normalization is
-                    # # calculated so that Sum (blpair wgts) = no. baselines.
-                    # if blpair_weights is not None:
-                    #     blpg_wgts = np.array(blpair_weights[j])
-                    #     norm = np.sum(blpg_wgts) if normalize_weights else 1.
-
-                    #     if norm <= 0.:
-                    #         raise ValueError("Sum of baseline-pair weights in "
-                    #                          "group %d is <= 0." % j)
-                    #     blpg_wgts = blpg_wgts * float(blpg_wgts.size) / norm # Apply normalization
-                    # else:
-                    #     blpg_wgts = np.ones(len(blpg))
-
-                    # Iterate within a baseline-pair group and get weighted data
+                    # Iterate within a baseline-pair group 
                     for k, blp in enumerate(blpg):
-                        # # Get no. samples and construct integration weight
-                        # nsmp = self.get_nsamples((spw, blp, p))[:, None]
-                        # # shape of wgts: (Ntimes, Nfreqs, 2)
-                        # ints = self.get_integrations((spw, blp, p))[:, None]
-                        # shape of ints: (Ntimes, 1)
-                        # window_function = np.copy(window_function_blg)
-
-                        # if use_error_weights:
-                        #     # If use_error_weights==True, all arrays are weighted by a specified kind of errors,
-                        #     # including the error_filed in stats_array and cov_array.
-                        #     # For each power spectrum P_i with error_weights sigma_i,
-                        #     # P_avg = \sum{ P_i / (sigma_i)^2 } / \sum{ 1 / (sigma_i)^2 }
-                        #     # while for other variance or covariance terms epsilon_i stored in stats_array and cov_array,
-                        #     # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
-                        #     # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
-                        #     # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
-                        #     stat_val = self.get_stats(error_weights, (spw, blp, p)).copy() #shape (Ntimes, Ndlys)
-                        #     #corrects for potential nan values
-                        #     stat_val = np.nan_to_num(stat_val,copy=False,nan=np.inf,posinf=np.inf)
-                        #     np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
-                        #     w = np.real(1. / stat_val.clip(1e-40, np.inf))
-                        #     # shape of w: (Ntimes, Ndlys)
-                        # else:
-                        #     # Otherwise all arrays are averaged in a way weighted by the integration time,
-                        #     # including the error_filed in stats_array and cov_array.
-                        #     # Since P_N ~ Tsys^2 / sqrt{N_incoherent} t_int (see N. Kern, The Astrophysical Journal 888.2 (2020): 70, Equation 7),
-                        #     # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
-                        #     w = (ints * np.sqrt(nsmp))**2
-                        #     # shape of w: (Ntimes, 1)
-
-                        # Add multiple copies of data for each baseline according
-                        # to the weighting/multiplicity;
-                        # while multiple copies are only added when bootstrap resampling
-                        # w_list = []
-                        # blp_window_function = []
-                        # for m in range(int(blpg_wgts[k])):
-                        #     blp_window_function.append(window_function * w[:, :, None, None])
-                        #     w_list.append(w)
-                        # # normalize sum: clip to deal with w_list_sum == 0
-                        # w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
-                        # blp_window_function = np.sum(blp_window_function, axis=0) / w_list_sum[:, :, None, None]
+                        # iterate over baselines within group, which all have the same window function
                         for iblts in self.blpair_to_indices(blp):
                             pol_window_function[iblts, :, :, :] = np.copy(window_function_blg)
 

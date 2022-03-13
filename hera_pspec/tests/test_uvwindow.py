@@ -257,8 +257,9 @@ class Test_UVWindow(unittest.TestCase):
         ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
         ds_nocosmo = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
         # choose baselines
-        baselines = [uvd.baseline_to_antnums(bl) for bl in [uvd.baseline_array[0]]]
-        baselines1, baselines2, blpairs = utils.construct_blpairs(baselines, exclude_permutations=False)
+        baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
+                                                                  exclude_permutations=False,
+                                                                  exclude_auto_bls=True)
         # compute ps
         uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[self.polpair], 
                        spw_ranges=(175,195), taper=self.taper,verbose=self.verbose)

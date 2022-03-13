@@ -227,7 +227,6 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         blpair_lens = [blv for blv in uvp.get_blpair_seps()[np.sort(idx)]]
         assert blpair_weights is None, "Cannot specify blpair_weights if "\
                                        "blpair_groups is None."
-        blpair_weights = [[1.,] for blp in blpair_groups]
 
     # Print warning if a blpair appears more than once in all of blpair_groups
     all_blpairs = [item for sublist in blpair_groups for item in sublist]
@@ -883,26 +882,8 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
         if uvp.exact_windows:
-
-            # find redundant groups
-            if (blpair_groups is not None):
-                # get blpair_lens
-                # Enforce shape of blpair_groups
-                assert isinstance(blpair_groups[0], (list, np.ndarray)), \
-                          "blpair_groups must be fed as a list of baseline-pair lists. " \
-                          "See docstring."
-                # Get all baseline pairs in uvp object (in integer form)
-                uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
-                blvecs_groups = []
-                for group in blpair_groups:
-                    blvecs_groups.append(uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])])
-                # get baseline length for each group of baseline pairs
-                # assuming only redundant baselines are paired together
-                blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.)
-
             window_function_array[spw] = spherical_wf_from_uvp(uvp, kbins, bin_widths,
                                                                blpair_groups=blpair_groups,
-                                                               blpair_lens=blpair_lens,
                                                                blpair_weights=blpair_weights,
                                                                time_avg=time_avg,
                                                                error_weights=error_weights,
@@ -1033,43 +1014,58 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
     Nk = len(kbins)
 
-    # transform kgrid to little_h units
-    if not little_h:
-        kbins = kbins / uvp.cosmo.h
-        bin_widths = bin_widths / uvp.cosmo.h
+    # copy input
+    uvp = copy.deepcopy(uvp_in) 
 
     if blpair_groups is None:
+        if blpair_lens is not None:
+            warnings.warn('blpair_lens given but blpair_groups is None... overriding blpair_lens.')
         blpair_groups, blpair_lens, _ = uvp_in.get_red_blpairs()
     else:
-        # ensure consistency between inputs
-        assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
-                    " are inconsistent with baseline lengths"
         # Enforce shape of blpair_groups
         assert isinstance(blpair_groups[0], (list, np.ndarray)), \
                   "blpair_groups must be fed as a list of baseline-pair lists. " \
                   "See docstring."
+        if blpair_lens is None:
+            # Get all baseline pairs in uvp object (in integer form)
+            uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
+            blvecs_groups = []
+            print(uvp_blpairs)
+            for group in blpair_groups:
+                print(group[0])
+                blvecs_groups.append(uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])])
+            # get baseline length for each group of baseline pairs
+            # assuming only redundant baselines are paired together
+            blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.)
+        else:     
+            # ensure consistency between inputs
+            assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
+                        " are inconsistent with baseline lengths"
+
     blpair_lens = np.array(blpair_lens)
 
     # check spw input and create array of spws to loop over
     if this_spw is None:
         # if no spw specified, use attribute
-        spws = np.arange(uvp_in.Nspws)
+        spws = np.arange(uvp.Nspws)
     else:
         # check if spw given is in uvp
-        assert this_spw in  uvp_in.spw_array, "input spw is not in UVPSpec.spw_array."
+        assert this_spw in uvp.spw_array, "input spw is not in UVPSpec.spw_array."
         # use spw given
         spws = np.array([this_spw])
 
     # sets attribute exact_windows to False if not defined
     # (UVPspec object created with older versions of hera_pspec)
     try: 
-        uvp_in.exact_windows
+        uvp.exact_windows
     except AttributeError:
-        uvp_in.exact_windows = False
-    assert uvp_in.exact_windows, "Need to compute exact window functions first."
+        uvp.exact_windows = False
+    assert uvp.exact_windows, "Need to compute exact window functions first."
 
-    # copy input
-    uvp = copy.deepcopy(uvp_in) 
+    if blpair_weights is None:
+        # assign weight of one to each baseline length
+        blpair_weights = [[1. for item in grp] for grp in blpair_groups]
+
     # perform redundant cylindrical averaging upfront
     # and apply weights to window functions
     uvp.average_spectra(blpair_groups=blpair_groups,
@@ -1078,13 +1074,10 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                         time_avg=time_avg,
                         inplace=True)
 
-    if blpair_weights is None:
-        # assign weight of one to each baseline length
-        blpair_weights = np.ones(blpair_lens.size)
-    else:
-        blpair_weights = np.array(blpair_weights)
-        assert blpair_weights.size == blpair_lens.size, \
-            "Blpair weights and lengths do not match"
+    # transform kgrid to little_h units
+    if not little_h:
+        kbins = kbins / uvp.cosmo.h
+        bin_widths = bin_widths / uvp.cosmo.h
 
     # initialize blank arrays and dicts
     window_function_array = odict()
@@ -1119,10 +1112,9 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             for it in range(uvp.Ntimes):
                 wf_spherical = np.zeros((Nk, Nk))
                 for m1 in range(Nk):
-                    mask1 = ((kbin_left[m1] <= kmags) & (kmags < kbin_right[m1])).astype(int)
+                    mask1 = (kbin_left[m1] <= kmags) & (kmags < kbin_right[m1])
                     if np.any(mask1):
-                        mask1 = mask1*blpair_weights[:, None] #add weights for redundancy
-                        wf_temp = np.sum(cyl_wf[it, :, :, :, :]*mask1[:, :, None, None], axis=(0, 1))/np.sum(mask1)
+                        wf_temp = np.sum(cyl_wf[it, :, :, :, :]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
                         if np.sum(wf_temp) > 0.: 
                             for m2 in range(Nk):
                                 mask2 = (kbin_left[m2] <= ktot) & (ktot < kbin_right[m2])
