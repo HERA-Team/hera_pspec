@@ -1030,9 +1030,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             # Get all baseline pairs in uvp object (in integer form)
             uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
             blvecs_groups = []
-            print(uvp_blpairs)
             for group in blpair_groups:
-                print(group[0])
                 blvecs_groups.append(uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])])
             # get baseline length for each group of baseline pairs
             # assuming only redundant baselines are paired together

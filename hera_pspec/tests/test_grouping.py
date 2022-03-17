@@ -502,7 +502,6 @@ def test_spherical_average():
     reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)
     reds = [r[:2] for r in reds]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo)
-    print(uvp.exact_windows)
     uvd.polarization_array[0] = -6
     uvp += testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo)
 
@@ -520,7 +519,6 @@ def test_spherical_average():
     Nk = len(kbins)
     bin_widths = 0.25
     A = {}
-    print(uvp.exact_windows)
     sph = grouping.spherical_average(uvp, kbins, bin_widths, add_to_history='checking 1 2 3', A=A)
 
     # metadata
