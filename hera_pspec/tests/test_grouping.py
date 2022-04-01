@@ -208,7 +208,7 @@ class Test_grouping(unittest.TestCase):
                        spw_ranges=(175,195), taper='bh',verbose=False)
         # get exact window functions
         uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test'),
-                                       this_spw=None, inplace=True, verbose=False)
+                                       spw_array=None, inplace=True, verbose=False)
 
         # time average
         uvp_time_avg = grouping.average_spectra(uvp,
@@ -608,7 +608,7 @@ def test_spherical_average():
                    spw_ranges=(175,195), taper='bh',verbose=False)
     # get exact window functions
     uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test'),
-                                       this_spw=None, inplace=True, verbose=False)
+                                       spw_array=None, inplace=True, verbose=False)
     # spherical window functions for redundant groups
     sph = grouping.spherical_average(uvp, kbins, bin_widths)
     # spherical average for input blpair groups
@@ -647,16 +647,16 @@ def test_spherical_wf_from_uvp():
                                    # blpair_weights=blpair_weights,
                                    # time_avg=time_avg,
                                    # error_weights=error_weights,
-                                   # this_spw=spw,
+                                   # spw_array=spw,
                                    # little_h=little_h,
                                    # verbose=True)[spw]
     # test different options
     # little_h
     wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, little_h=False)
-    # this_spw
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, this_spw=0)
+    # spw_array
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, spw_array=0)
     pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths,
-                  this_spw=2)
+                  spw_array=2)
      # blpair_groups
     blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
     wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,

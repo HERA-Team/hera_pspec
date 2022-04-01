@@ -887,7 +887,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                                                                blpair_weights=blpair_weights,
                                                                time_avg=time_avg,
                                                                error_weights=error_weights,
-                                                               this_spw=spw,
+                                                               spw_array=spw,
                                                                little_h=little_h,
                                                                verbose=True)[spw]
 
@@ -947,7 +947,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
 def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                         blpair_groups=None, blpair_lens=None, blpair_weights=None,
-                        error_weights=None, time_avg=False, this_spw=None,
+                        error_weights=None, time_avg=False, spw_array=None,
                         little_h=True, verbose=False):
     
     """
@@ -983,8 +983,8 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     time_avg : bool, optional
         Time average the power spectra before spherical average if True
 
-    this_spw : int 
-        Spectral window index.
+    spw_array : list of ints.
+        Spectral window indices.
 
     little_h : bool, optional
         If True, kgrid is in h Mpc^-1 units, otherwise just Mpc^-1 units.
@@ -1043,14 +1043,14 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     blpair_lens = np.array(blpair_lens)
 
     # check spw input and create array of spws to loop over
-    if this_spw is None:
+    if spw_array is None:
         # if no spw specified, use attribute
-        spws = np.arange(uvp.Nspws)
+        spw_array = uvp.spw_array
     else:
+        spw_array = spw_array if isinstance(spw_array, (list, tuple, np.ndarray)) else [int(spw_array)]
         # check if spw given is in uvp
-        assert this_spw in uvp.spw_array, "input spw is not in UVPSpec.spw_array."
-        # use spw given
-        spws = np.array([this_spw])
+        assert np.all([spw in uvp.spw_array for spw in spw_array]), \
+               "input spw is not in UVPSpec.spw_array."
 
     # sets attribute exact_windows to False if not defined
     # (UVPspec object created with older versions of hera_pspec)
@@ -1081,7 +1081,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     window_function_array = odict()
 
     # iterate over spectral windows
-    for spw in spws:
+    for spw in spw_array:
 
         avg_nu = (uvp.get_spw_ranges(spw)[0][1]+uvp.get_spw_ranges(spw)[0][0])/2
 

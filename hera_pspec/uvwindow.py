@@ -335,9 +335,11 @@ class UVWindow:
         # Summary attributes: initialise attributes from UVPSpec object
 
         # cosmology
-        assert hasattr(uvp, 'cosmo'), \
-            "self.cosmo must exist to form cosmological " \
-            "wave-vectors. See uvp.set_cosmology()"
+        if not hasattr(uvp, 'cosmo'):
+            cosmo = conversions.Cosmo_Conversions()
+            warnings.warn('uvp has no cosmo attribute. Using fiducial cosmology.')
+        else:
+            cosmo = uvp.cosmo
 
         # units
         little_h = 'h^-3' in uvp.norm_units
@@ -377,7 +379,7 @@ class UVWindow:
             ftbeam_obj_pol[ip].update_spw(spw_range=spw_range)
 
         return cls(ftbeam_obj=ftbeam_obj_pol,
-                   taper=uvp.taper, cosmo=uvp.cosmo,
+                   taper=uvp.taper, cosmo=cosmo,
                    little_h=little_h, verbose=verbose)
 
     def _get_kgrid(self, bl_len, width=0.020):

@@ -569,8 +569,6 @@ class Test_UVPSpec(unittest.TestCase):
         # compute ps
         uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')], 
                        spw_ranges=(175,195), taper='bh',verbose=False)
-        uvp.cosmo = conversions.Cosmo_Conversions() #uvp.set_cosmology not overwriting
-
         # obtain exact_windows (fiducial usage)
         uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
                                        inplace=True)
@@ -583,11 +581,11 @@ class Test_UVPSpec(unittest.TestCase):
 
         # obtain exact window functions for one spw only
         uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
-                                       this_spw=0, inplace=True, verbose=True)
+                                       spw_array=0, inplace=True, verbose=True)
         # raise error if spw not in UVPSpec object
         pytest.raises(AssertionError, uvp.get_exact_window_functions,
                       ftbeam_file = os.path.join(DATA_PATH, basename),
-                      this_spw=2, inplace=True)
+                      spw_array=2, inplace=True)
 
         # output exact_window functions but does not make them attributes
         kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),

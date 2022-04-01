@@ -249,13 +249,6 @@ class UVPSpec(object):
             Shape (Ntimes, Ndlys, Ndlys)
         """
 
-        # sets attribute exact_windows to False if not defined
-        # (UVPspec object created with older versions of hera_pspec)
-        try: 
-            self.exact_windows
-        except AttributeError:
-            self.exact_windows = False
-
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
 
         if self.exact_windows:
@@ -1367,6 +1360,10 @@ class UVPSpec(object):
             polpair_arr = [uvputils.polpair_tuple2int((p,p)) for p in pol_arr]
             setattr(self, 'polpair_array', np.array(polpair_arr))
 
+        # Backwards compatibility: exact_windows
+        if 'exact_windows' not in grp.attrs:
+            setattr(self, 'exact_windows', False)
+
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
             uvputils._select(self, spws=spws, bls=bls, lsts=lsts,
@@ -1630,7 +1627,7 @@ class UVPSpec(object):
         if "Mpc" not in self.norm_units:
             self.norm_units = "h^-3 Mpc^3"
 
-    def get_exact_window_functions(self, ftbeam_file='', this_spw=None,
+    def get_exact_window_functions(self, ftbeam_file=None, spw_array=None,
                                    verbose=False, inplace=True, add_to_history='',
                                    x_orientation=None):
         """
@@ -1651,8 +1648,8 @@ class UVPSpec(object):
                 Ex : FT_beam_HERA_dipole (+ path)
                 - '' for computation from beam simulations (slow)
 
-        this_spw : int, optional
-            Spectral window index. If None, the window functions are computed on 
+        spw_array : list of ints, optional
+            Spectral window indices. If None, the window functions are computed on 
             all the uvp.spw_ranges, successively. Default: None.
 
         verbose : bool, optional
@@ -1661,8 +1658,8 @@ class UVPSpec(object):
         inplace : bool, optional
             If True (default value), the UVPspec attribute window_function_array is filled with the
             values computed in the function, and window_function_kperp_bins and
-            window_function_kpara_bins array are added as attributed.
-            It False, returns kperp_bins, kpara_bins and window functions computed.
+            window_function_kpara_bins array are added as attributes.
+            If False, returns kperp_bins, kpara_bins and window functions computed.
             Automatically set to False if blpair_groups is not None (that is,
             if the window functions are not computed on all the blpairs).
 
@@ -1675,38 +1672,32 @@ class UVPSpec(object):
             Used to convert polstr to polnum and conversely. Default: None.
         """
 
-        # sets attribute exact_windows to False if not defined
-        # (UVPspec object created with older versions of hera_pspec)
-        try:
-            self.exact_windows
-        except AttributeError:
-            self.exact_windows = False
         if self.exact_windows and inplace:
             warnings.warn("Exact window functions already computed, overwriting...")
 
         blpair_groups, blpair_lens, _ = self.get_red_blpairs()
 
         # check spw input and create array of spws to loop over
-        if this_spw is None:
+        if spw_array is None:
             # if no spw specified, use attribute
-            spws = np.arange(self.Nspws)
+            spw_array = self.spw_array
         else:
+            spw_array = spw_array if isinstance(spw_array, (list, tuple, np.ndarray)) else [int(spw_array)]
             # check if spw given is in uvp
-            assert this_spw in self.spw_array, "input spw is not in UVPSpec.spw_array."
+            assert np.all([spw in self.spw_array for spw in spw_array]), \
+                   "input spw is not in UVPSpec.spw_array."
             if inplace:
                 # set inplace to False
                 inplace = False
                 warnings.warn('inplace set to False because you are not considering' \
-                                ' all baseline pairs in object.')
-            # use spw given
-            spws = np.array([this_spw])
+                                ' all spectral windows in object.')
 
         # Create new window function array
         window_function_array = odict()
         window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
 
         # Iterate over spectral windows
-        for spw in spws:
+        for spw in spw_array:
 
             if verbose: print('spw = {}'.format(spw))
             spw_window_function = []
@@ -1758,7 +1749,8 @@ class UVPSpec(object):
             self.window_function_array = window_function_array
             self.window_function_kperp_bins = window_function_kperp_bins
             self.window_function_kpara_bins = window_function_kpara_bins
-            if this_spw is None: self.exact_windows = True
+            if np.all(spw_array==self.spw_array): 
+                self.exact_windows = True
             # Add to history
             self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, self.history)
             # Validity check

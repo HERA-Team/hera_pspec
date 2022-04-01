@@ -275,13 +275,13 @@ class Test_UVWindow(unittest.TestCase):
         # if cross polarisation
         test = uvwindow.UVWindow.from_uvpspec(uvp_crosspol, ipol=0, spw=0, 
                                               ftfile=os.path.join(DATA_PATH, basename))
+        # if no cosmo, use default
+        uvw_ps = uvwindow.UVWindow.from_uvpspec(uvp_nocosmo, ipol=0, spw=0, verbose=True,
+                                                ftfile=os.path.join(DATA_PATH, basename))
 
         # raise error if no ftfile as option is not implemented yet
         pytest.raises(NotImplementedError, uvwindow.UVWindow.from_uvpspec, uvp=uvp,
                       ipol=0, spw=0, ftfile=None, verbose=False)
-        # raise error if no cosmo in uvp
-        pytest.raises(AssertionError, uvwindow.UVWindow.from_uvpspec, uvp=uvp_nocosmo,
-                      ipol=0, spw=0, ftfile=os.path.join(DATA_PATH, basename), verbose=False)
         # raise error if spw not within uvp.Nspws
         pytest.raises(AssertionError, uvwindow.UVWindow.from_uvpspec, uvp=uvp_nocosmo,
                       ipol=0, spw=2, ftfile=os.path.join(DATA_PATH, basename))

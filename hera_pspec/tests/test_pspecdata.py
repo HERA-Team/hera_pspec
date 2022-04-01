@@ -1454,7 +1454,7 @@ class Test_PSpecData(unittest.TestCase):
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None],beam=self.bm, labels=['red', 'blue'])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm, labels=['red', 'blue'])
 
         # check basic execution with baseline list
         bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
@@ -1464,6 +1464,7 @@ class Test_PSpecData(unittest.TestCase):
         assert (uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array)
         assert uvp.data_array[0].dtype == np.complex128
         assert uvp.data_array[0].shape == (240, 64, 1)
+        assert not uvp.exact_windows
 
         #test for different forms of input parameters
         ds.pspec(bls, bls, (0, 1), ('xx','xx'), spw_ranges=(10,20))
@@ -1667,6 +1668,25 @@ class Test_PSpecData(unittest.TestCase):
         assert len(ds._identity_Y) == 2
         assert ((0, 24, 25, 'xx'), (1, 24, 25, 'xx')) in ds._identity_Y.keys()
         assert ((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys()
+
+        # test for exact windows
+        print('window functions')
+        basename = 'FT_beam_HERA_dipole_test'
+        # Instantiate UVWindow()
+        # obtain uvp object
+        datafile = os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5')
+        # read datafile
+        uvd = UVData()
+        uvd.read_uvh5(datafile)
+        # Create a new PSpecData objec
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        # choose baselines
+        baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
+                                                                  exclude_permutations=False,
+                                                                  exclude_auto_bls=True)
+        uvp_w = ds.pspec(baselines1, baselines2, (0, 1), ('xx','xx'), spw_ranges=(175,195),
+                         exact_windows=True, ftbeam_file=os.path.join(DATA_PATH, basename))
+        assert uvp_w.exact_windows
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -2059,8 +2079,8 @@ def test_pspec_run():
     assert ds.dsets[1].flag_array.any()
     assert ds.dsets_std[0].flag_array.any()
     assert ds.dsets_std[1].flag_array.any()
-    assert ds.dsets[0].extra_keywords['filename'] is not '""'
-    assert ds.dsets[0].extra_keywords['calibration'] is not '""'
+    assert ds.dsets[0].extra_keywords['filename'] != '""'
+    assert ds.dsets[0].extra_keywords['calibration'] != '""'
     assert 'cal: /' in uvp.history
 
     # test w/ conjugated blpairs
