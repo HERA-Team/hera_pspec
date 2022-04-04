@@ -868,8 +868,8 @@ class UVWindow:
         wf_spherical : array
             Array of spherical window functions.
             Shape (nbinsk, nbinsk).
-        kweights : array
-            Returns number of k-modes per k-bin.
+        weighted_k : array
+            Returns weighted k-modes.
         """
         # check bl_lens and bl_weights are consistent
         bl_lens = bl_lens if isinstance(bl_lens, (list, tuple, np.ndarray)) else [bl_lens]
@@ -912,11 +912,12 @@ class UVWindow:
 
         # take average
         wf_spherical = np.zeros((nbinsk, nbinsk))
-        kweights = np.zeros(nbinsk, dtype=int)
+        kweights, weighted_k = np.zeros(nbinsk, dtype=int), np.zeros(nbinsk)
         for m1 in range(nbinsk):
-            mask2 = ((kbin_edges[m1] <= kmags) & (kmags < kbin_edges[m1+1])).astype(int)
+            mask2 = (kbin_edges[m1] <= kmags) & (kmags < kbin_edges[m1+1])
             if np.any(mask2):
-                mask2 = mask2*bl_weights[:, None] #add weights for redundancy
+                weighted_k[m1] = np.mean(kmags[mask2])
+                mask2 = mask2.astype(int)*bl_weights[:, None] #add weights for redundancy
                 kweights[m1] = np.sum(mask2) 
                 wf_temp = np.sum(cyl_wf*mask2[:,:,None,None], axis=(0, 1))/np.sum(mask2)
                 if np.sum(wf_temp) > 0.: 
@@ -932,11 +933,11 @@ class UVWindow:
             warnings.warn('Some spherical bins are empty. '
                           'Add baselines or expand spectral window.')
 
-        return wf_spherical, kweights
+        return wf_spherical, weighted_k
 
     def get_spherical_wf(self, kbins, bl_lens, bl_weights=None,
                          kperp_bins=None, kpara_bins=None,
-                         return_weights=False,
+                         return_weighted_k=False,
                          verbose=None):
         """
         Get spherical window functions for a UVWindow object.
@@ -966,9 +967,8 @@ class UVWindow:
             1D float array of ascending k_parallel bin centers.
             Used for cylindrical binning.
             Make sure the values are consistent with :attr:`little_h`.
-        return_weights : bool, optional
-            Save the weights associated with the different kbins when
-            spherically binning the window functions.
+        return_weighted_k : bool, optional
+            Return the weighted k-mode corresponding to each bin.
             Default is False.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
@@ -980,9 +980,9 @@ class UVWindow:
         wf_spherical : array
             Array of spherical window functions.
             Shape (nbinsk, nbinsk).
-        kweights : array
-            If return_weights is True.
-            Returns number of k-modes per k-bin.
+        weighted_k : array
+            If return_weighted_k is True.
+            Returns weighted k-modes corresponding to each k-bin.
         """
         # INITIALISE PARAMETERS
 
@@ -1088,12 +1088,12 @@ class UVWindow:
             sys.stdout.write('\rComputing for blg {:d} of {:d}... \n'.format(nbls, nbls))
 
         # perform spherical binning
-        wf_spherical, kweights = self.cylindrical_to_spherical(cyl_wf,
+        wf_spherical, weighted_k = self.cylindrical_to_spherical(cyl_wf,
                                                             kbins, ktot,
                                                             bl_lens, bl_weights)
 
-        if return_weights:
-            return wf_spherical, kweights
+        if return_weighted_k:
+            return wf_spherical, weighted_k
         else:
             return wf_spherical
 
