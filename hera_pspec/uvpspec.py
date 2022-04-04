@@ -48,6 +48,10 @@ class UVPSpec(object):
         self._cov_array_imag = PSpecParam("cov_array_imag", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Window function dictionary of bandpowers."
         self._window_function_array = PSpecParam("window_function_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        desc = "Dictionary of bandpowers given the kperp grid used to compute the window functions."
+        self._window_function_kperp = PSpecParam("window_function_kperp", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        desc = "Dictionary of bandpowers given the kparallel grid used to compute the window functions."
+        self._window_function_kpara = PSpecParam("window_function_kpara", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
@@ -139,6 +143,7 @@ class UVPSpec(object):
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
         self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array",
+                       "window_function_kperp", "window_function_kpara", 
                        "nsample_array", "cov_array_real", "cov_array_imag"]
         self._dicts_of_dicts = ["stats_array"]
 
@@ -1493,6 +1498,13 @@ class UVPSpec(object):
                 group.create_dataset("window_function_spw{}".format(i),
                                      data=self.window_function_array[i],
                                      dtype=np.float64)
+                if self.exact_windows:
+                    group.create_dataset("window_function_kperp_spw{}".format(i),
+                                         data=self.window_function_kperp[i],
+                                         dtype=np.float64)
+                    group.create_dataset("window_function_kpara_spw{}".format(i),
+                                         data=self.window_function_kpara[i],
+                                         dtype=np.float64)
             if hasattr(self, "cov_array_real"):
                 group.create_dataset("cov_real_spw{}".format(i),
                                      data=self.cov_array_real[i],
@@ -1694,7 +1706,7 @@ class UVPSpec(object):
 
         # Create new window function array
         window_function_array = odict()
-        window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
+        window_function_kperp, window_function_kpara = odict(), odict()
 
         # Iterate over spectral windows
         for spw in spw_array:
@@ -1742,13 +1754,13 @@ class UVPSpec(object):
 
             # Append to dictionaries
             window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
-            window_function_kperp_bins[spw] = np.moveaxis(spw_wf_kperp_bins, 0, -1)
-            window_function_kpara_bins[spw] = np.moveaxis(spw_wf_kpara_bins, 0, -1)
+            window_function_kperp[spw] = np.moveaxis(spw_wf_kperp_bins, 0, -1)
+            window_function_kpara[spw] = np.moveaxis(spw_wf_kpara_bins, 0, -1)
 
         if inplace:
             self.window_function_array = window_function_array
-            self.window_function_kperp_bins = window_function_kperp_bins
-            self.window_function_kpara_bins = window_function_kpara_bins
+            self.window_function_kperp = window_function_kperp
+            self.window_function_kpara = window_function_kpara
             if np.all(spw_array==self.spw_array): 
                 self.exact_windows = True
             # Add to history
@@ -1756,7 +1768,7 @@ class UVPSpec(object):
             # Validity check
             self.check()
         else:
-            return window_function_kperp_bins, window_function_kpara_bins, window_function_array
+            return window_function_kperp, window_function_kpara, window_function_array
 
 
     def check(self, just_meta=False):
@@ -1828,6 +1840,11 @@ class UVPSpec(object):
                                     raise AssertionError(err_msg)
         # check spw convention
         assert set(self.spw_array) == set(np.arange(self.Nspws)), "spw_array must be np.arange(Nspws)"
+
+        # check choice of window functions
+        if self.exact_windows:
+            assert hasattr(self, 'window_function_array') and hasattr(self, 'window_function_kperp'), \
+                   "Error with window functions: object has exact_windows=True but no related arrays stored."
 
 
     def _clear(self):

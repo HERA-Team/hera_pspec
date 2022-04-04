@@ -291,7 +291,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     store_window = hasattr(uvp, 'window_function_array')
     if store_window:
         window_function_array = odict()
-        window_function_kperp_bins, window_function_kpara_bins = odict(), odict()
+        window_function_kperp, window_function_kpara = odict(), odict()
 
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
@@ -484,8 +484,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             if store_window:
                 spw_window_function.append(pol_window_function)
                 if uvp.exact_windows:
-                    spw_wf_kperp_bins.append(uvp.window_function_kperp_bins[spw][:, i])
-                    spw_wf_kpara_bins.append(uvp.window_function_kpara_bins[spw][:, i])
+                    spw_wf_kperp_bins.append(uvp.window_function_kperp[spw][:, i])
+                    spw_wf_kpara_bins.append(uvp.window_function_kpara[spw][:, i])
             if store_cov:
                 spw_cov_real.append(pol_cov_real)
                 spw_cov_imag.append(pol_cov_imag)
@@ -500,8 +500,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         if store_window:
             window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
             if uvp.exact_windows:
-                window_function_kperp_bins[spw] = np.moveaxis(spw_wf_kperp_bins, 0, -1)
-                window_function_kpara_bins[spw] = np.moveaxis(spw_wf_kpara_bins, 0, -1)
+                window_function_kperp[spw] = np.moveaxis(spw_wf_kperp_bins, 0, -1)
+                window_function_kpara[spw] = np.moveaxis(spw_wf_kpara_bins, 0, -1)
         if store_cov:
             cov_array_real[spw] = np.moveaxis(np.array(spw_cov_real), 0, -1)
             cov_array_imag[spw] = np.moveaxis(np.array(spw_cov_imag), 0, -1)
@@ -569,8 +569,8 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     if store_window:
         uvp.window_function_array = window_function_array
         if uvp.exact_windows:
-            uvp.window_function_kperp_bins = window_function_kperp_bins
-            uvp.window_function_kpara_bins = window_function_kpara_bins
+            uvp.window_function_kperp = window_function_kperp
+            uvp.window_function_kpara = window_function_kpara
     if store_cov:
         uvp.cov_array_real = cov_array_real
         uvp.cov_array_imag = cov_array_imag
@@ -1098,8 +1098,8 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         for ip, polpair in enumerate(uvp.polpair_array):
 
             # grids used to compute the window functions
-            kperp_bins = uvp.window_function_kperp_bins[spw][:, ip]
-            kpara_bins = uvp.window_function_kpara_bins[spw][:, ip]
+            kperp_bins = uvp.window_function_kperp[spw][:, ip]
+            kpara_bins = uvp.window_function_kpara[spw][:, ip]
             ktot = np.sqrt(kperp_bins[:, None]**2 + kpara_bins**2)
 
             cyl_wf = uvp.window_function_array[spw][:, :, :, :, ip]
