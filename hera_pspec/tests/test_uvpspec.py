@@ -21,6 +21,24 @@ class Test_UVPSpec(unittest.TestCase):
         uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam)
         self.uvp = uvp
 
+        # setup for exact windows related tests
+        self.ft_file = os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test')
+        # Instantiate UVWindow()
+        # obtain uvp object
+        datafile = os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5')
+        # read datafile
+        uvd = UVData()
+        uvd.read_uvh5(datafile)
+        # Create a new PSpecData objec
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        # choose baselines
+        baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
+                                                                  exclude_permutations=False,
+                                                                  exclude_auto_bls=True)
+        # compute ps
+        self.uvp_wf = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')], 
+                               spw_ranges=(175,195), taper='bh',verbose=False)
+
     def tearDown(self):
         pass
 
@@ -446,6 +464,7 @@ class Test_UVPSpec(unittest.TestCase):
         assert r_params == uvp.get_r_params()
 
     def test_write_read_hdf5(self):
+
         # test basic write execution
         uvp = copy.deepcopy(self.uvp)
         if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
@@ -476,6 +495,20 @@ class Test_UVPSpec(unittest.TestCase):
         assert uvp.Nblpairs == 3
         assert hasattr(uvp, 'data_array') == False
         if os.path.exists('./ex.hdf5'): os.remove('./ex.hdf5')
+
+        # tests with exact windows
+        # test basic write execution
+        uvp = copy.deepcopy(self.uvp_wf)
+        uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
+                                       inplace=True)
+        if os.path.exists('./ex.hdf5'):
+            os.remove('./ex.hdf5')
+        uvp.write_hdf5('./ex.hdf5', overwrite=True)
+        assert os.path.exists('./ex.hdf5')
+        # test basic read
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5('./ex.hdf5')
+        assert uvp == uvp2
 
     def test_sense(self):
         uvp = copy.deepcopy(self.uvp)
@@ -553,24 +586,10 @@ class Test_UVPSpec(unittest.TestCase):
 
     def test_get_exact_window_functions(self):
 
-        basename = 'FT_beam_HERA_dipole_test'
-        # Instantiate UVWindow()
-        # obtain uvp object
-        datafile = os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5')
-        # read datafile
-        uvd = UVData()
-        uvd.read_uvh5(datafile)
-        # Create a new PSpecData objec
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
-        # choose baselines
-        baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
-                                                                  exclude_permutations=False,
-                                                                  exclude_auto_bls=True)
-        # compute ps
-        uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')], 
-                       spw_ranges=(175,195), taper='bh',verbose=False)
+        uvp = copy.deepcopy(self.uvp_wf)
+
         # obtain exact_windows (fiducial usage)
-        uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
+        uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
                                        inplace=True)
         assert uvp.exact_windows
         assert uvp.window_function_array[0].shape[0] == uvp.Nblpairts
@@ -580,15 +599,15 @@ class Test_UVPSpec(unittest.TestCase):
         ## tests
 
         # obtain exact window functions for one spw only
-        uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
+        uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
                                        spw_array=0, inplace=True, verbose=True)
         # raise error if spw not in UVPSpec object
         pytest.raises(AssertionError, uvp.get_exact_window_functions,
-                      ftbeam_file = os.path.join(DATA_PATH, basename),
+                      ftbeam_file = self.ft_file,
                       spw_array=2, inplace=True)
 
         # output exact_window functions but does not make them attributes
-        kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
+        kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
                                                                           inplace=False)
         # check if result is the same with and without inplace
         assert np.all(wf_array[0]==uvp.window_function_array[0])
