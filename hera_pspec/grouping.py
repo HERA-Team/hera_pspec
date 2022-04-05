@@ -373,11 +373,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
                         # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
                         # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
-                        stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy() #shape (Ntimes, Ndlys)
+                        stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy().real #shape (Ntimes, Ndlys)
                         np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
                         #corrects for potential nan values
-                        # stat_val = np.nan_to_num(stat_val,copy=False,nan=np.inf,posinf=np.inf)
-                        # if np.any(np.isnan(stat_val)): print("{} leads to nans in stats_array.imag".format((spw, blp, p)))
+                        stat_val = np.nan_to_num(stat_val, copy=False, nan=np.inf, posinf=np.inf)
                         w = np.real(1. / stat_val.clip(1e-40, np.inf))
                         # shape of w: (Ntimes, Ndlys)
                     else:
@@ -944,7 +943,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     return uvp
 
-
 def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                         blpair_groups=None, blpair_lens=None, blpair_weights=None,
                         error_weights=None, time_avg=False, spw_array=None,
@@ -1020,7 +1018,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     if blpair_groups is None:
         if blpair_lens is not None:
             warnings.warn('blpair_lens given but blpair_groups is None... overriding blpair_lens.')
-        blpair_groups, blpair_lens, _ = uvp_in.get_red_blpairs()
+        blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
     else:
         # Enforce shape of blpair_groups
         assert isinstance(blpair_groups[0], (list, np.ndarray)), \
@@ -1039,7 +1037,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             # ensure consistency between inputs
             assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
                         " are inconsistent with baseline lengths"
-
     blpair_lens = np.array(blpair_lens)
 
     # check spw input and create array of spws to loop over
@@ -1052,12 +1049,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         assert np.all([spw in uvp.spw_array for spw in spw_array]), \
                "input spw is not in UVPSpec.spw_array."
 
-    # sets attribute exact_windows to False if not defined
-    # (UVPspec object created with older versions of hera_pspec)
-    try: 
-        uvp.exact_windows
-    except AttributeError:
-        uvp.exact_windows = False
     assert uvp.exact_windows, "Need to compute exact window functions first."
 
     if blpair_weights is None:
