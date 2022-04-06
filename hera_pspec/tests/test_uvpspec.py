@@ -804,6 +804,14 @@ class Test_UVPSpec(unittest.TestCase):
         out = uvpspec.combine_uvpspec([uvp_a, uvp_b], verbose=False)
         assert hasattr(out, 'cov_array_real') is False
 
+        # for exact windows
+        # test basic write execution
+        uvp1 = copy.deepcopy(self.uvp_wf)
+        uvp1.get_exact_window_functions(ftbeam_file = self.ft_file, inplace=True)
+        uvp2 = copy.deepcopy(uvp1)
+        uvp2.polpair_array[0] = 1414
+        out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
+
     def test_combine_uvpspec_errors(self):
         # setup uvp build
         uvd = UVData()

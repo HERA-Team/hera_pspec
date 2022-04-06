@@ -1737,6 +1737,8 @@ class UVPSpec(object):
                     window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
                                                                  kperp_bins = kperp_bins,
                                                                  kpara_bins = kpara_bins)
+                    if np.isnan(window_function_blg).any():
+                        print(spw, i, j, blpair_lens[j])
                     # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
                     # Iterate within a baseline-pair group 
@@ -2324,6 +2326,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     # Store optional attrs only if all uvps have them
     store_cov = np.all([hasattr(uvp, 'cov_array_real') for uvp in uvps])
     store_window = np.all([hasattr(uvp, 'window_function_array') for uvp in uvps])
+    exact_windows = np.all([uvp.exact_windows for uvp in uvps])
     store_stats = np.all([hasattr(uvp, 'stats_array') for uvp in uvps])
     # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
@@ -2332,6 +2335,9 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.nsample_array = odict()
     if store_window:
         u.window_function_array = odict()
+        if exact_windows:
+            u.window_function_kperp = odict()
+            u.window_function_kpara = odict()
     if store_cov:
         # ensure cov model is the same for all uvps
         if len(set([uvp.cov_model for uvp in uvps])) > 1:
@@ -2366,7 +2372,12 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         # so needs to keep this shape)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if store_window:
-            u.window_function_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
+            if exact_windows:
+                Nkperp = uvps[0].window_function_kperp[i][:, 0].size
+                Nkpara = uvps[0].window_function_kpara[i][:, 0].size
+                u.window_function_array[i] = np.empty((Nblpairts, spw[3], Nkperp, Nkpara, Npols), np.float64)
+            else:
+                u.window_function_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
         if store_cov:
             u.cov_array_real[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
             u.cov_array_imag[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
@@ -2488,7 +2499,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                       u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][n, :, :, q]
                       u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][n, :, :, q]
                     if store_window:
-                        u.window_function_array[i][j,:,:,k] = uvps[l].window_function_array[m][n, :, :, q]
+                        if exact_windows:
+                            u.window_function_array[i][j,:, :, :,k] = uvps[l].window_function_array[m][n, :, :, :, q]
+                        else:
+                            u.window_function_array[i][j,:,:,k] = uvps[l].window_function_array[m][n, :, :, q]
                     if store_stats:
                         for stat in stored_stats:
                             u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][m][n, :, q]
@@ -2536,7 +2550,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
                     if store_window:
-                        u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
+                        if exact_windows:
+                            u.window_function_array[i][j, :, :, :, k] = uvps[l].window_function_array[m][n, :, :, :, q]
+                        else:
+                            u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
                     if store_cov:
                         u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][n, :, :, q]
                         u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][n, :, :, q]
@@ -2584,7 +2601,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     n = blpts_idxs[j]
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
                     if store_window:
-                        u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
+                        if exact_windows:
+                            u.window_function_array[i][j, :, :, :, k] = uvps[l].window_function_array[m][n, :, :, :, q]
+                        else:
+                            u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
                     if store_cov:
                       u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][n, :, :, q]
                       u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][n, :, :, q]
