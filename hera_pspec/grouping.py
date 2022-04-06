@@ -1211,16 +1211,21 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
             if hasattr(uvp, 'window_function_array'):
-                leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                             +leftright\
-                                                                             +rightleft\
-                                                                             +rightright)
-                uvp.window_function_array[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.window_function_array[spw][:, :, :Ndlys//2, : :] = 0.0
+                if uvp.exact_windows:
+                    left = uvp.window_function_array[spw][:, :Ndlys//2, ...][:, ::-1, ...]
+                    right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
+                    uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
+                else:
+                    leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
+                    uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
+                                                                                 +leftright\
+                                                                                 +rightleft\
+                                                                                 +rightright)
+                    uvp.window_function_array[spw][:, :, :Ndlys//2, :] = 0.0
+                uvp.window_function_array[spw][:, :Ndlys//2, ...] = 0.0
 
             # fold covariance array if it exists.
             if hasattr(uvp,'cov_array_real'):
