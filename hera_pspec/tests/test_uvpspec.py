@@ -652,6 +652,12 @@ class Test_UVPSpec(unittest.TestCase):
         uvp_folded_avg = uvp_folded.average_spectra(time_avg=True, inplace=False)
         assert(np.allclose(uvp_avg_folded.get_data((0, ((37, 38), (38, 39)), 'xx')), uvp_folded_avg.get_data((0, ((37, 38), (38, 39)), 'xx')), rtol=1e-5))
 
+        uvp = copy.deepcopy(self.uvp_wf)
+        # obtain exact_windows (fiducial usage)
+        uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
+                                       inplace=True)
+        uvp.fold_spectra()
+
     def test_str(self):
         a = str(self.uvp)
         assert(len(a) > 0)
