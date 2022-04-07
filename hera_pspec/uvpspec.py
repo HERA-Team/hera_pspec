@@ -1738,7 +1738,7 @@ class UVPSpec(object):
                                                                  kperp_bins = kperp_bins,
                                                                  kpara_bins = kpara_bins)
                     if np.isnan(window_function_blg).any():
-                        print(spw, i, j, blpair_lens[j])
+                        warnings.warn('nan values in the window functions at spw={}, blpair_lens={:.2f}'.format(spw, blpair_lens[j]))
                     # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
                     # Iterate within a baseline-pair group 
@@ -1747,7 +1747,8 @@ class UVPSpec(object):
                         for iblts in self.blpair_to_indices(blp):
                             pol_window_function[iblts, :, :, :] = np.copy(window_function_blg)
 
-                if verbose: sys.stdout.write('\rComputed wf for baseline-pair groups {} of {}.\n'.format(len(blpair_groups),len(blpair_groups)))
+                if verbose: 
+                    sys.stdout.write('\rComputed wf for baseline-pair groups {} of {}.\n'.format(len(blpair_groups),len(blpair_groups)))
 
                 # Append to lists (spectral window)
                 spw_window_function.append(pol_window_function)
