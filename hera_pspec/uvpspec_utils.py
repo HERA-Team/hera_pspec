@@ -772,12 +772,10 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 ints[s] = _ints[blp_select, polpair_select]
                 nsmp[s] = _nsmp[blp_select, polpair_select]
                 if store_window:
+                    window_function[s] = _window_function[blp_select, ..., polpair_select]
                     if exact_windows:
-                        window_function[s] = _window_function[blp_select, :, :, :, polpair_select]
                         window_function_kperp[s] = _window_function_kperp[:, polpair_select]
                         window_function_kpara[s] = _window_function_kpara[:, polpair_select]
-                    else:
-                        window_function[s] = _window_function[blp_select, :, :, polpair_select]
                 if store_cov:
                     cov_real[s] = _cov_real[blp_select, :, :, polpair_select]
                     cov_imag[s] = _cov_imag[blp_select, :, :, polpair_select]
