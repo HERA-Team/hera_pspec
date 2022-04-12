@@ -1,6 +1,6 @@
 import numpy as np
 from collections import OrderedDict as odict
-import os, copy, shutil, operator, ast, fnmatch
+import os, copy, shutil, operator, ast, fnmatch, sys
 from pyuvdata import utils as uvutils
 import h5py
 import warnings
@@ -8,6 +8,7 @@ import json
 
 from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_utils as uvputils
 from .parameter import PSpecParam
+from .uvwindow import UVWindow
 
 class UVPSpec(object):
     """
@@ -38,6 +39,8 @@ class UVPSpec(object):
         # Data attributes
         desc = "A string indicating the covariance model of cov_array. Options are ['dsets', 'empirical']. See PSpecData.pspec() for details."
         self._cov_model = PSpecParam("cov_model", description=desc, expected_type=str)
+        desc = "A boolean indicating if the window functions stored in window_function_array are exact or not."
+        self._exact_windows = PSpecParam("exact_windows", description=desc, expected_type=bool)
         desc = "Power spectrum data dictionary with spw integer as keys and values as complex ndarrays."
         self._data_array = PSpecParam("data_array", description=desc, expected_type=np.complex128, form="(Nblpairts, spw_Ndlys, Npols)")
         desc = "Power spectrum covariance dictionary with spw integer as keys and values as float ndarrays, stored separately for real and imaginary parts."
@@ -45,6 +48,10 @@ class UVPSpec(object):
         self._cov_array_imag = PSpecParam("cov_array_imag", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Window function dictionary of bandpowers."
         self._window_function_array = PSpecParam("window_function_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        desc = "Dictionary of bandpowers given the kperp grid used to compute the window functions."
+        self._window_function_kperp = PSpecParam("window_function_kperp", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
+        desc = "Dictionary of bandpowers given the kparallel grid used to compute the window functions."
+        self._window_function_kpara = PSpecParam("window_function_kpara", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Ndlys, spw_Ndlys, Npols)")
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam("wgt_array", description=desc, expected_type=np.float64, form="(Nblpairts, spw_Nfreqs, 2, Npols)")
         desc = "Integration time dictionary. This holds the average integration time [seconds] of each delay spectrum in the data. " \
@@ -126,7 +133,7 @@ class UVPSpec(object):
                             "history", "r_params", "cov_model",
                             "Nbls", "channel_width", "weighting", "vis_units",
                             "norm", "norm_units", "taper", "cosmo", "beamfile",
-                            'folded']
+                            'folded', 'exact_windows']
         self._ndarrays = ["spw_array", "freq_array", "dly_array",
                           "polpair_array", "lst_1_array", "lst_avg_array",
                           "time_avg_array",
@@ -136,6 +143,7 @@ class UVPSpec(object):
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
         self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array",
+                       "window_function_kperp", "window_function_kpara", 
                        "nsample_array", "cov_array_real", "cov_array_imag"]
         self._dicts_of_dicts = ["stats_array"]
 
@@ -245,7 +253,11 @@ class UVPSpec(object):
         data : complex ndarray
             Shape (Ntimes, Ndlys, Ndlys)
         """
+
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
+
+        if self.exact_windows:
+             return self.window_function_array[spw][blpairts, :, :, :, polpair]
 
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
@@ -1353,6 +1365,10 @@ class UVPSpec(object):
             polpair_arr = [uvputils.polpair_tuple2int((p,p)) for p in pol_arr]
             setattr(self, 'polpair_array', np.array(polpair_arr))
 
+        # Backwards compatibility: exact_windows
+        if 'exact_windows' not in grp.attrs:
+            setattr(self, 'exact_windows', False)
+
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
             uvputils._select(self, spws=spws, bls=bls, lsts=lsts,
@@ -1482,6 +1498,13 @@ class UVPSpec(object):
                 group.create_dataset("window_function_spw{}".format(i),
                                      data=self.window_function_array[i],
                                      dtype=np.float64)
+                if self.exact_windows:
+                    group.create_dataset("window_function_kperp_spw{}".format(i),
+                                         data=self.window_function_kperp[i],
+                                         dtype=np.float64)
+                    group.create_dataset("window_function_kpara_spw{}".format(i),
+                                         data=self.window_function_kpara[i],
+                                         dtype=np.float64)
             if hasattr(self, "cov_array_real"):
                 group.create_dataset("cov_real_spw{}".format(i),
                                      data=self.cov_array_real[i],
@@ -1616,6 +1639,140 @@ class UVPSpec(object):
         if "Mpc" not in self.norm_units:
             self.norm_units = "h^-3 Mpc^3"
 
+    def get_exact_window_functions(self, ftbeam_file=None, spw_array=None,
+                                   verbose=False, inplace=True, add_to_history='',
+                                   x_orientation=None):
+        """
+        Obtain the exact window functions corresponding to UVPSpec object.
+
+        Depending on the format of the UVPSpec object given as input, the shape
+        of the output array will be different: (Nblpts, Ndlys, Nkperp, Nkpara, Npols).
+        Weights can be applied to the different baseline pairs to facilitate
+        spherical average later.
+
+        Parameters
+        ----------
+
+        ftbeam_file : str, optional
+            Definition of the beam Fourier transform to be used.
+            Options include;
+                - Root name of the file to use, without the polarisation
+                Ex : FT_beam_HERA_dipole (+ path)
+                - '' for computation from beam simulations (slow)
+
+        spw_array : list of ints, optional
+            Spectral window indices. If None, the window functions are computed on 
+            all the uvp.spw_ranges, successively. Default: None.
+
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
+
+        inplace : bool, optional
+            If True (default value), the UVPspec attribute window_function_array is filled with the
+            values computed in the function, and window_function_kperp_bins and
+            window_function_kpara_bins array are added as attributes.
+            If False, returns kperp_bins, kpara_bins and window functions computed.
+            Automatically set to False if blpair_groups is not None (that is,
+            if the window functions are not computed on all the blpairs).
+
+        add_to_history : str, optional
+            Added text to add to file history.
+
+        x_orientation: str, optional
+            Orientation in cardinal direction east or north of X dipole.
+            Default keeps polarization in X and Y basis.
+            Used to convert polstr to polnum and conversely. Default: None.
+        """
+
+        if self.exact_windows and inplace:
+            warnings.warn("Exact window functions already computed, overwriting...")
+
+        blpair_groups, blpair_lens, _ = self.get_red_blpairs()
+
+        # check spw input and create array of spws to loop over
+        if spw_array is None:
+            # if no spw specified, use attribute
+            spw_array = self.spw_array
+        else:
+            spw_array = spw_array if isinstance(spw_array, (list, tuple, np.ndarray)) else [int(spw_array)]
+            # check if spw given is in uvp
+            assert np.all([spw in self.spw_array for spw in spw_array]), \
+                   "input spw is not in UVPSpec.spw_array."
+            if inplace:
+                # set inplace to False
+                inplace = False
+                warnings.warn('inplace set to False because you are not considering' \
+                                ' all spectral windows in object.')
+
+        # Create new window function array
+        window_function_array = odict()
+        window_function_kperp, window_function_kpara = odict(), odict()
+
+        # Iterate over spectral windows
+        for spw in spw_array:
+
+            if verbose: print('spw = {}'.format(spw))
+            spw_window_function = []
+            spw_wf_kperp_bins, spw_wf_kpara_bins = [], []
+
+            # Iterate over polarizations
+            for i, p in enumerate(self.polpair_array):
+
+                # initialise UVWindow object
+                uvw = UVWindow.from_uvpspec(self, ipol=i, spw=spw, ftfile=ftbeam_file,
+                                            x_orientation=x_orientation, verbose=verbose)
+                
+                # extract kperp bins the window functions corresponding to the baseline 
+                # lengths given as input
+                kperp_bins = uvw.get_kperp_bins(blpair_lens)
+                kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
+                pol_window_function = np.zeros((self.Nblpairts, self.get_dlys(spw).size, kperp_bins.size, kpara_bins.size))
+
+                # Iterate over baseline-pair groups
+                for j, blpg in enumerate(blpair_groups):
+                    if verbose: 
+                        sys.stdout.write('\rComputing for bl group {} of {}...'.format(j+1,len(blpair_groups)))
+
+                    # window functions identical for all times
+                    window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
+                                                                 kperp_bins = kperp_bins,
+                                                                 kpara_bins = kpara_bins)
+                    if np.isnan(window_function_blg).any():
+                        warnings.warn('nan values in the window functions at spw={}, blpair_lens={:.2f}'.format(spw, blpair_lens[j]))
+                    # shape of window_function: (Ndlys, Nkperp, Nkpara)
+
+                    # Iterate within a baseline-pair group 
+                    for k, blp in enumerate(blpg):
+                        # iterate over baselines within group, which all have the same window function
+                        for iblts in self.blpair_to_indices(blp):
+                            pol_window_function[iblts, :, :, :] = np.copy(window_function_blg)
+
+                if verbose: 
+                    sys.stdout.write('\rComputed wf for baseline-pair groups {} of {}.\n'.format(len(blpair_groups),len(blpair_groups)))
+
+                # Append to lists (spectral window)
+                spw_window_function.append(pol_window_function)
+                spw_wf_kperp_bins.append(kperp_bins.value)
+                spw_wf_kpara_bins.append(kpara_bins.value)
+
+            # Append to dictionaries
+            window_function_array[spw] = np.moveaxis(spw_window_function, 0, -1)
+            window_function_kperp[spw] = np.moveaxis(spw_wf_kperp_bins, 0, -1)
+            window_function_kpara[spw] = np.moveaxis(spw_wf_kpara_bins, 0, -1)
+
+        if inplace:
+            self.window_function_array = window_function_array
+            self.window_function_kperp = window_function_kperp
+            self.window_function_kpara = window_function_kpara
+            if np.all(spw_array==self.spw_array): 
+                self.exact_windows = True
+            # Add to history
+            self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, self.history)
+            # Validity check
+            self.check()
+        else:
+            return window_function_kperp, window_function_kpara, window_function_array
+
 
     def check(self, just_meta=False):
         """
@@ -1686,6 +1843,11 @@ class UVPSpec(object):
                                     raise AssertionError(err_msg)
         # check spw convention
         assert set(self.spw_array) == set(np.arange(self.Nspws)), "spw_array must be np.arange(Nspws)"
+
+        # check choice of window functions
+        if self.exact_windows:
+            assert hasattr(self, 'window_function_array') and hasattr(self, 'window_function_kperp'), \
+                   "Error with window functions: object has exact_windows=True but no related arrays stored."
 
 
     def _clear(self):
@@ -1999,19 +2161,23 @@ class UVPSpec(object):
         return multiple copies of their time_array.
         """
         if inplace:
-            grouping.average_spectra(self, blpair_groups=blpair_groups,
+            grouping.average_spectra(self,
+                                     blpair_groups=blpair_groups,
                                      time_avg=time_avg,
                                      error_field=error_field,
                                      error_weights=error_weights,
                                      blpair_weights=blpair_weights,
-                                     inplace=True, add_to_history=add_to_history)
+                                     inplace=True,
+                                     add_to_history=add_to_history)
         else:
-            return grouping.average_spectra(self, blpair_groups=blpair_groups,
+            return grouping.average_spectra(self,
+                                            blpair_groups=blpair_groups,
                                             time_avg=time_avg,
                                             error_field=error_field,
                                             error_weights=error_weights,
                                             blpair_weights=blpair_weights,
-                                            inplace=False, add_to_history=add_to_history)
+                                            inplace=False,
+                                            add_to_history=add_to_history)
 
     def fold_spectra(self):
         """
@@ -2161,6 +2327,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     # Store optional attrs only if all uvps have them
     store_cov = np.all([hasattr(uvp, 'cov_array_real') for uvp in uvps])
     store_window = np.all([hasattr(uvp, 'window_function_array') for uvp in uvps])
+    exact_windows = np.all([uvp.exact_windows for uvp in uvps])
     store_stats = np.all([hasattr(uvp, 'stats_array') for uvp in uvps])
     # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
@@ -2169,6 +2336,9 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.nsample_array = odict()
     if store_window:
         u.window_function_array = odict()
+        if exact_windows:
+            u.window_function_kperp = odict()
+            u.window_function_kpara = odict()
     if store_cov:
         # ensure cov model is the same for all uvps
         if len(set([uvp.cov_model for uvp in uvps])) > 1:
@@ -2203,7 +2373,12 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         # so needs to keep this shape)
         u.nsample_array[i] = np.empty((Nblpairts, Npols), np.float64)
         if store_window:
-            u.window_function_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
+            if exact_windows:
+                Nkperp = uvps[0].window_function_kperp[i][:, 0].size
+                Nkpara = uvps[0].window_function_kpara[i][:, 0].size
+                u.window_function_array[i] = np.empty((Nblpairts, spw[3], Nkperp, Nkpara, Npols), np.float64)
+            else:
+                u.window_function_array[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
         if store_cov:
             u.cov_array_real[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
             u.cov_array_imag[i] = np.empty((Nblpairts, spw[3], spw[3], Npols), np.float64)
@@ -2325,7 +2500,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                       u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][n, :, :, q]
                       u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][n, :, :, q]
                     if store_window:
-                        u.window_function_array[i][j,:,:,k] = uvps[l].window_function_array[m][n, :, :, q]
+                        if exact_windows:
+                            u.window_function_array[i][j,:, :, :,k] = uvps[l].window_function_array[m][n, :, :, :, q]
+                        else:
+                            u.window_function_array[i][j,:,:,k] = uvps[l].window_function_array[m][n, :, :, q]
                     if store_stats:
                         for stat in stored_stats:
                             u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][m][n, :, q]
@@ -2373,7 +2551,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
                     if store_window:
-                        u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
+                        if exact_windows:
+                            u.window_function_array[i][j, :, :, :, k] = uvps[l].window_function_array[m][n, :, :, :, q]
+                        else:
+                            u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
                     if store_cov:
                         u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][n, :, :, q]
                         u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][n, :, :, q]
@@ -2421,7 +2602,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     n = blpts_idxs[j]
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
                     if store_window:
-                        u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
+                        if exact_windows:
+                            u.window_function_array[i][j, :, :, :, k] = uvps[l].window_function_array[m][n, :, :, :, q]
+                        else:
+                            u.window_function_array[i][j, :, :, k] = uvps[l].window_function_array[m][n, :, :, q]
                     if store_cov:
                       u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][n, :, :, q]
                       u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][n, :, :, q]
@@ -2549,7 +2733,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     # ensure static metadata agree between all objects
     static_meta = ['channel_width', 'telescope_location', 'weighting',
                    'OmegaP', 'beam_freqs', 'OmegaPP', 'beamfile', 'norm',
-                   'taper', 'vis_units', 'norm_units', 'folded', 'cosmo']
+                   'taper', 'vis_units', 'norm_units', 'folded', 'cosmo', 'exact_windows']
     for m in static_meta:
         for u in uvps[1:]:
             if hasattr(uvps[0], m) and hasattr(u, m):
@@ -2647,6 +2831,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 def _ordered_unique(arr):
     """
     Get the unique elements of an array while preserving order.
+    
     """
     arr = np.asarray(arr)
     _, idx = np.unique(arr, return_index=True)

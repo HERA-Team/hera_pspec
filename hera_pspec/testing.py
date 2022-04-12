@@ -90,6 +90,7 @@ def build_vanilla_uvpspec(beam=None):
     label2 = "blue"
     r_params = ""
     cov_model = "dsets"
+    exact_windows = False
     labels = np.array([label1, label2])
     label_1_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 0
     label_2_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 1
@@ -196,6 +197,7 @@ def build_vanilla_uvpspec(beam=None):
         "spw_dly_array",
         "spw_freq_array",
         "cov_model",
+        "exact_windows",
     ]
 
     if beam is not None:

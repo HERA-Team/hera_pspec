@@ -689,6 +689,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         cov_imag = odict()
         stats = odict()
         window_function = odict()
+        window_function_kperp = odict()
+        window_function_kpara = odict()
 
         # determine if certain arrays are stored
         if h5file is not None:
@@ -697,9 +699,11 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 store_cov = False
                 warnings.warn("uvp.cov_array is no longer supported and will not be loaded. Please update this to be uvp.cov_array_real and uvp.cov_array_imag. See hera_pspec PR #181 for details.")
             store_window = 'window_function_spw0' in h5file
+            exact_windows = 'window_function_kperp_spw0' in h5file
         else:
             store_cov = hasattr(uvp, 'cov_array_real')
             store_window = hasattr(uvp, 'window_function_array')
+            exact_windows = hasattr(uvp, 'window_function_kperp')
 
         # get stats_array keys if h5file
         if h5file is not None:
@@ -725,6 +729,9 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 # assign non-required arrays
                 if store_window:
                     _window_function = h5file['window_function_spw{}'.format(s_old)]
+                    if exact_windows:
+                        _window_function_kperp = h5file['window_function_kperp_spw{}'.format(s_old)]
+                        _window_function_kpara = h5file['window_function_kpara_spw{}'.format(s_old)]
                 if store_cov:
                      _cov_real = h5file["cov_real_spw{}".format(s_old)]
                      _cov_imag = h5file["cov_imag_spw{}".format(s_old)]
@@ -744,6 +751,9 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 # assign non-required arrays
                 if store_window:
                     _window_function = uvp.window_function_array[s_old]
+                    if exact_windows:
+                        _window_function_kperp = uvp.window_function_kperp[s_old]
+                        _window_function_kpara = uvp.window_function_kpara[s_old]
                 if store_cov:
                     _cov_real = uvp.cov_array_real[s_old]
                     _cov_imag = uvp.cov_array_imag[s_old]
@@ -762,7 +772,10 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 ints[s] = _ints[blp_select, polpair_select]
                 nsmp[s] = _nsmp[blp_select, polpair_select]
                 if store_window:
-                    window_function[s] = _window_function[blp_select, :, :, polpair_select]
+                    window_function[s] = _window_function[blp_select, ..., polpair_select]
+                    if exact_windows:
+                        window_function_kperp[s] = _window_function_kperp[:, polpair_select]
+                        window_function_kpara[s] = _window_function_kpara[:, polpair_select]
                 if store_cov:
                     cov_real[s] = _cov_real[blp_select, :, :, polpair_select]
                     cov_imag[s] = _cov_imag[blp_select, :, :, polpair_select]
@@ -775,7 +788,12 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 ints[s] = _ints[blp_select, :][:, polpair_select]
                 nsmp[s] = _nsmp[blp_select, :][:, polpair_select]
                 if store_window:
-                    window_function[s] = _window_function[blp_select, :, :, :][:, :, :, polpair_select]
+                    if exact_windows:
+                        window_function[s] = _window_function[blp_select, :, :, :, :][:, :, :, :, polpair_select]
+                        window_function_kperp[s] = _window_function_kperp[:, polpair_select]
+                        window_function_kpara[s] = _window_function_kpara[:, polpair_select]
+                    else:
+                        window_function[s] = _window_function[blp_select, :, :, :][:, :, :, polpair_select]
                 if store_cov:
                     cov_real[s] = _cov_real[blp_select, :, :, :][:, :, :, polpair_select]
                     cov_imag[s] = _cov_imag[blp_select, :, :, :][:, :, :, polpair_select]
@@ -790,6 +808,9 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
         if store_window:
             uvp.window_function_array = window_function
+            if exact_windows:
+                uvp.window_function_kperp = window_function_kperp
+                uvp.window_function_kpara = window_function_kpara
         if len(stats) > 0:
             uvp.stats_array = stats
         if len(cov_real) > 0:

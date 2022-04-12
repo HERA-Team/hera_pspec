@@ -194,6 +194,67 @@ class Test_grouping(unittest.TestCase):
         assert np.isclose(final_stat[1:], initial_stat[1:] / np.sqrt(len(blpairs))).all()
         assert np.all(~np.isfinite(final_stat[0]))
 
+        # Tests related to exact_windows
+
+        # prep objects
+        uvd = UVData()
+        uvd.read_uvh5(os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'))
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
+        baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
+                                                                  exclude_permutations=False,
+                                                                  exclude_auto_bls=True)
+        # compute ps
+        uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx', 'xx')], 
+                       spw_ranges=(175,195), taper='bh',verbose=False)
+        # get exact window functions
+        uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test'),
+                                       spw_array=None, inplace=True, verbose=False)
+
+        # time average
+        uvp_time_avg = grouping.average_spectra(uvp,
+                                                blpair_groups=None,
+                                                time_avg=True,
+                                                blpair_weights=None,
+                                                error_field=None,
+                                                error_weights=None,
+                                                normalize_weights=True,
+                                                inplace=False,
+                                                add_to_history='')
+        assert uvp_time_avg.Nblpairts == uvp_time_avg.Nblpairs
+        assert uvp_time_avg.window_function_array[0].shape[0] == uvp_time_avg.Nblpairts
+        blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
+
+        # redundant average
+        uvp_red_avg = grouping.average_spectra(uvp,
+                                                blpair_groups=blpair_groups,
+                                                time_avg=False,
+                                                blpair_weights=None,
+                                                error_field=None,
+                                                error_weights=None,
+                                                normalize_weights=True,
+                                                inplace=False,
+                                                add_to_history='')
+        assert uvp_red_avg.Nblpairts == uvp_red_avg.Ntimes
+
+        # both + error_weights
+        keys = uvp.get_all_keys()
+        # Add the analytic noise to stat_array
+        Pn = uvp.generate_noise_spectra(0, 'xx', 220)
+        for key in keys:
+            blp = uvp.antnums_to_blpair(key[1])
+            error = Pn[blp]
+            uvp.set_stats("noise", key, error)
+        uvp_avg = grouping.average_spectra(uvp,
+                                            blpair_groups=blpair_groups,
+                                            time_avg=True,
+                                            blpair_weights=None,
+                                            error_field='noise',
+                                            error_weights=None,
+                                            normalize_weights=True,
+                                            inplace=False,
+                                            add_to_history='')
+
+
     def test_sample_baselines(self):
         """
         Test baseline sampling (with replacement) behavior.
@@ -534,6 +595,97 @@ def test_spherical_average():
 
     # exceptions
     pytest.raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)
+
+    # tests related to exact_windows
+    uvd = UVData()
+    uvd.read_uvh5(os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'))
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam)
+    baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
+                                                              exclude_permutations=False,
+                                                              exclude_auto_bls=True)
+    # compute ps
+    uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx', 'xx')], 
+                   spw_ranges=(175,195), taper='bh',verbose=False)
+    # get exact window functions
+    uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test'),
+                                       spw_array=None, inplace=True, verbose=False)
+    # spherical window functions for redundant groups
+    sph = grouping.spherical_average(uvp, kbins, bin_widths)
+    # spherical average for input blpair groups
+    blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
+    sph2 = grouping.spherical_average(uvp, kbins, bin_widths,
+                                      blpair_groups=blpair_groups)
+
+def test_spherical_wf_from_uvp():
+
+    # parameters
+    kbins = np.arange(0, 2.9, 0.25)
+    Nk = len(kbins)
+    bin_widths = 0.25
+
+    basename = 'FT_beam_HERA_dipole_test'
+    # obtain uvp object
+    uvd = UVData()
+    uvd.read_uvh5(os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'))
+    # Create a new PSpecData objec
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+    # choose baselines
+    baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
+                                                              exclude_permutations=False,
+                                                              exclude_auto_bls=True)
+    # compute ps
+    uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')], 
+                   spw_ranges=(175,195), taper='bh',verbose=False)
+    uvp.cosmo = conversions.Cosmo_Conversions() #uvp.set_cosmology not overwriting
+
+    # obtain exact_windows (fiducial usage)
+    uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
+                                   inplace=True)
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths)
+                                   #   blpair_groups=blpair_groups,
+                                   # blpair_lens=blpair_lens,
+                                   # blpair_weights=blpair_weights,
+                                   # time_avg=time_avg,
+                                   # error_weights=error_weights,
+                                   # spw_array=spw,
+                                   # little_h=little_h,
+                                   # verbose=True)[spw]
+    # test different options
+    # little_h
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, little_h=False)
+    # spw_array
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, spw_array=0)
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths,
+                  spw_array=2)
+     # blpair_groups
+    blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,
+                                              blpair_groups=blpair_groups,
+                                              blpair_lens=blpair_lens)
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths,
+                  blpair_groups=blpair_groups[0])
+
+    # raise warning or error if blpair_groups inconsistent with blpair_lens
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,
+                                              blpair_groups=None,
+                                              blpair_lens=blpair_lens)
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,
+                                              blpair_groups=blpair_groups,
+                                              blpair_lens=None)
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths,
+                  blpair_groups=blpair_groups, blpair_lens=[blpair_lens[0],blpair_lens[0]])
+    # error if overlapping bins
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, 1.0)
+    # blpair_weights
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,
+                                              blpair_groups=blpair_groups,
+                                              blpair_lens=blpair_lens,
+                                              blpair_weights=[[1. for item in grp] for grp in blpair_groups])
+
+    # raise error if uvp.exact_windows is False
+    uvp.exact_windows = False
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths)
+
 
 if __name__ == "__main__":
     unittest.main()
