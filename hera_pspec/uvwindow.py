@@ -410,8 +410,9 @@ class UVWindow:
 
         """
         # central kperp for given baseline (i.e. 2pi*b*nu/c/R)
+        # divided by sqrt(2) because 2 dimensions
         kp_centre = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
-            * bl_len
+                    * bl_len / np.sqrt(2.)
         # spacing of the numerical Fourier grid, in cosmological units
         dk = 2.*np.pi/(2.*self.ftbeam_obj_pol[0].mapsize)\
             / self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()),
@@ -823,6 +824,11 @@ class UVWindow:
             cyl_wf[self.Nfreqs//2+1:, :, :] = np.flip(cyl_wf, axis=0)[self.Nfreqs//2:-1]
         else:
             cyl_wf[self.Nfreqs//2+1:, :, :] = np.flip(cyl_wf, axis=0)[self.Nfreqs//2+1:]
+        # except for tau at 1/4 and 3/4 of the spectral window for symmetry reasons
+        _, cyl_wf[self.Nfreqs - self.Nfreqs//4, :, :] = self._get_wf_for_tau(-self.dly_array[self.Nfreqs//4],
+                                                                             wf_array1,
+                                                                             kperp_bins,
+                                                                             kpara_bins)
 
         # normalisation of window functions
         sum_per_bin = np.sum(cyl_wf, axis=(1, 2))[:, None, None]
