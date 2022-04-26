@@ -168,6 +168,78 @@ class FTBeam:
         return cls(data=ft_beam, pol=pol, freq_array=freq_array,
                    mapsize=mapsize, verbose=verbose, x_orientation=x_orientation)
  
+     @classmethod
+    def gaussian(cls, freq_array, widths, pol, 
+                 mapsize=1.0, npix=301,
+                 cosmo=conversions.Cosmo_Conversions(),
+                 verbose=False, x_orientation=None):
+        """
+        Read Fourier transform of beam in sky plane from file.
+
+        Initialise FTBeam object by reading file containing the 
+        Fourier transform of the  instrument beam in the sky plane 
+        for given frequencies. 
+
+        Parameters
+        ----------
+        freq_array : list or array of floats
+            List of frequencies (in Hz) to define the object on.
+        widths : list or array of floats
+            List of widths, in deg, to use for the Gaussian beam in the sky
+            plane. Can be length 1 if the same value is used for all the frequencies.
+            Otherwise, must have same length as freq_array
+        pol : str or int
+            Can be pseudo-Stokes or power: 
+            in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
+            in number form: 1, 2, 4, 3, -5, -6, -7, -8
+        mapsize : float
+            Half width of the map the beam is calculated on, in rad. Increase
+            if you want better k_perp resolution.
+        npix : int
+            Number of pixels to grid sky plane, along one direction.
+            Preferably an odd number.
+        cosmo : conversions.Cosmo_Conversions object, optional
+            Cosmology object. Uses the default cosmology object if not
+            specified. 
+        verbose : bool, optional
+            If True, print progress, warnings and debugging info to stdout.
+        x_orientation: str, optional
+            Orientation in cardinal direction east or north of X dipole.
+            Default keeps polarization in X and Y basis.
+            Used to convert polstr to polnum and conversely.
+        """
+
+        # Frequency-related parameters
+        freq_array = np.array(freq_array)
+        assert np.size(freq_array) > 2, \
+            "Must use at least three frequencies."
+
+        # Beam widths per frequency
+        if isinstance(widths, (float, int)):
+            widths = np.ones_like(freq_array) * widths
+        else:
+            assert np.shape(widths) == np.shape(freq_array), \
+                "There must be as many frequencies as widths."
+        # convert to radian
+        widths = np.array(widths) * np.pi / 180.
+        # convert widths to Fourier space
+        FT_widths = (1. / np.pi / widths) 
+
+        # grid in sky angle (deg)
+        x = np.linspace(-mapsize, mapsize, npix)
+        # corresponding grid in Fourier space
+        FT_x = np.fft.fftfreq(npix) * npix/2./mapsize
+        FT_x = np.fft.fftshift(FT_x)
+
+        # The Fourier transform of the beam is a Gaussian 
+        ft_beam = np.zeros((freq_array.size, npix, npix))
+        for ifreq in range(freq_array.size):
+            Gauss = np.exp(-1 * (FT_x  ** 2 + FT_x[:, None] ** 2) / (FT_widths[ifreq]**2))
+            ft_beam[ifreq] = Gauss * (np.pi/2./mapsize) * widths[ifreq]**2
+
+        return cls(data=ft_beam, pol=pol, freq_array=freq_array,
+                   mapsize=mapsize, verbose=verbose, x_orientation=x_orientation)
+
     @classmethod
     def get_bandwidth(cls, ftfile):
         """
