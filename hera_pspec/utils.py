@@ -1342,7 +1342,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
         Power spectra to calculate thermal noise errors.
         If err_type == 'P_SN', uvp should not have any
         incoherent averaging applied.
-        
+
     auto_Tsys : UVData object, optional
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.
@@ -1429,7 +1429,10 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                         Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
                         Tflag = np.all(Tflag, axis=-1)
                         # interpolate to appropriate LST grid
-                        Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+                        if len(lsts) > 1:
+                            Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+                        else:
+                            Tsys = Tsys[0]
 
                     # calculate P_N
                     P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real', scalar=scalar[(spw, polpair)])[blp_int]
