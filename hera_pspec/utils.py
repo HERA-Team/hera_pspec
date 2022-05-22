@@ -1514,5 +1514,6 @@ def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
         corr = 1 - (np.sqrt(1 / np.sqrt(np.pi) + 1) - 1) * p_n.real / p_sn.real.clip(1e-40, np.inf)
         corr[np.isclose(corr, 0)] = np.inf
         corr[corr < 0] = np.inf
+        corr[np.isnan(corr)] = np.inf
         # apply correction
         uvp.stats_array[P_SN][spw] *= corr
