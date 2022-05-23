@@ -168,7 +168,7 @@ class FTBeam:
         return cls(data=ft_beam, pol=pol, freq_array=freq_array,
                    mapsize=mapsize, verbose=verbose, x_orientation=x_orientation)
  
-     @classmethod
+    @classmethod
     def gaussian(cls, freq_array, widths, pol, 
                  mapsize=1.0, npix=301,
                  cosmo=conversions.Cosmo_Conversions(),
@@ -221,12 +221,12 @@ class FTBeam:
             assert np.shape(widths) == np.shape(freq_array), \
                 "There must be as many frequencies as widths."
         # convert to radian
+        if np.mean(widths) < 1:
+            warnings.warn('Small widths: make sure the input is in degrees.')
         widths = np.array(widths) * np.pi / 180.
         # convert widths to Fourier space
         FT_widths = (1. / np.pi / widths) 
 
-        # grid in sky angle (deg)
-        x = np.linspace(-mapsize, mapsize, npix)
         # corresponding grid in Fourier space
         FT_x = np.fft.fftfreq(npix) * npix/2./mapsize
         FT_x = np.fft.fftshift(FT_x)
