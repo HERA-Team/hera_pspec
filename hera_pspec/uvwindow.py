@@ -443,12 +443,14 @@ class UVWindow:
 
         # limit spectral window of FTBeam object to the one of the UVPSpec object
         bandwidth = ftbeam_obj_pol[0].freq_array
-        spw_range = (np.argmin(abs(bandwidth-np.min(freq_array))),
-                     np.argmin(abs(bandwidth-np.max(freq_array)))+1)
+        spw_range = [np.argmin(abs(bandwidth-np.min(freq_array))),
+                     np.argmin(abs(bandwidth-np.max(freq_array)))+1]
+        if np.max(freq_array)-bandwidth[spw_range[-1]-1] < 0:
+            spw_range[-1] = spw_range[-1]-1
         for ip in range(2):
             if (ip > 0) and (pol[ip] == pol[0]):
                 continue
-            ftbeam_obj_pol[ip].update_spw(spw_range=spw_range)
+            ftbeam_obj_pol[ip].update_spw(spw_range=tuple(spw_range))
 
         return cls(ftbeam_obj=ftbeam_obj_pol,
                    taper=uvp.taper, cosmo=cosmo,
