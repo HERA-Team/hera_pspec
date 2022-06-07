@@ -256,16 +256,13 @@ class UVPSpec(object):
 
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
 
-        if self.exact_windows:
-             return self.window_function_array[spw][blpairts, :, :, :, polpair]
-
         # Need to deal with folded data!
         # if data has been folded, return only positive delays
         if self.folded:
             Ndlys = np.count_nonzero(self.spw_dly_array == spw)
             return self.window_function_array[spw][blpairts, -(Ndlys-Ndlys//2-1):, -(Ndlys-Ndlys//2-1):, polpair]
         else:
-            return self.window_function_array[spw][blpairts, :, :, polpair]
+            return self.window_function_array[spw][blpairts, ..., polpair]
 
     def get_data(self, key, omit_flags=False):
         """
@@ -1721,17 +1718,15 @@ class UVPSpec(object):
                 # initialise UVWindow object
                 uvw = UVWindow.from_uvpspec(self, ipol=i, spw=spw, ftfile=ftbeam_file,
                                             x_orientation=x_orientation, verbose=verbose)
-                
                 # extract kperp bins the window functions corresponding to the baseline 
                 # lengths given as input
                 kperp_bins = uvw.get_kperp_bins(blpair_lens)
                 kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
                 pol_window_function = np.zeros((self.Nblpairts, self.get_dlys(spw).size, kperp_bins.size, kpara_bins.size))
-
                 # Iterate over baseline-pair groups
                 for j, blpg in enumerate(blpair_groups):
                     if verbose: 
-                        sys.stdout.write('\rComputing for bl group {} of {}...'.format(j+1,len(blpair_groups)))
+                        sys.stdout.write('\rComputing for bl group {} of {}...'.format(j+1, len(blpair_groups)))
 
                     # window functions identical for all times
                     window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],

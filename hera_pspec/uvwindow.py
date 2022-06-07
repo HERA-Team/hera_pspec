@@ -444,7 +444,7 @@ class UVWindow:
         # limit spectral window of FTBeam object to the one of the UVPSpec object
         # find spectral indices associated with spectral window
         bandwidth = ftbeam_obj_pol[0].freq_array
-        spw_range = np.array([0, freq_array.size]) + np.where(bandwidth<=np.min(freq_array))[0][-1]
+        spw_range = np.array([0, freq_array.size]) + np.where(bandwidth >= freq_array[0]-1e-9)[0][0]
         for ip in range(2):
             if (ip > 0) and (pol[ip] == pol[0]):
                 continue
@@ -827,8 +827,9 @@ class UVWindow:
         else:
             self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
-        if not np.isclose(np.diff(kperp_bins),np.diff(kperp_bins)[0]).all():
-            warnings.warn('kperp_bins must be linearly spaced.')
+        print(np.diff(kperp_bins))
+        if not np.isclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]).all():
+            warnings.warn('get_cylindrical_wf: kperp_bins must be linearly spaced.')
         nbins_kperp = kperp_bins.size
         dk_perp = np.diff(kperp_bins).mean()
         kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,
@@ -846,7 +847,7 @@ class UVWindow:
             self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
         if not np.isclose(np.diff(kpara_bins),np.diff(kpara_bins)[0]).all():
-            warnings.warn('kpara_bins must be linearly spaced.')
+            warnings.warn('get_cylindrical_wf: kpara_bins must be linearly spaced.')
         nbins_kpara = kpara_bins.size
         dk_para = np.diff(kpara_bins).mean()
         kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,
@@ -976,7 +977,7 @@ class UVWindow:
         self.check_kunits(kbins)  # check k units
         kbins = np.array(kbins.value)
         if not np.isclose(np.diff(kbins),np.diff(kbins)[0]).all():
-            warnings.warn('kbins must be linearly spaced.')
+            warnings.warn('cylindrical_to_spherical: kbins must be linearly spaced.')
         nbinsk = kbins.size
         dk = np.diff(kbins).mean()
         kbin_edges = np.arange(kbins.min()-dk/2, kbins.max()+dk, step=dk)
@@ -1087,7 +1088,7 @@ class UVWindow:
             self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
         if not np.isclose(np.diff(kperp_bins),np.diff(kperp_bins)[0]).all():
-            warnings.warn('kperp_bins must be linearly spaced.')
+            warnings.warn('get_spherical_wf: kperp_bins must be linearly spaced.')
         nbins_kperp = kperp_bins.size
         dk_perp = np.diff(kperp_bins).mean()
         kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,
@@ -1114,7 +1115,7 @@ class UVWindow:
             self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
         if not np.isclose(np.diff(kpara_bins),np.diff(kpara_bins)[0]).all():
-            warnings.warn('kpara_bins must be linearly spaced.')
+            warnings.warn('get_spherical_wf: kpara_bins must be linearly spaced.')
         nbins_kpara = kpara_bins.size
         dk_para = np.diff(kpara_bins).mean()
         kpara_bin_edges = np.arange(kpara_bins.min() - dk_para/2,
@@ -1139,7 +1140,7 @@ class UVWindow:
             "must feed array of k bins for spherical average"
         nbinsk = kbins.value.size
         if not np.isclose(np.diff(kbins),np.diff(kbins)[0]).all():
-            warnings.warn('kbins must be linearly spaced.')
+            warnings.warn('get_spherical_wf: kbins must be linearly spaced.')
         dk = np.diff(kbins.value).mean()
         kbin_edges = np.arange(kbins.value.min()-dk/2,
                                kbins.value.max()+dk,

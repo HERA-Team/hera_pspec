@@ -608,7 +608,7 @@ def test_spherical_average():
                    spw_ranges=(175,195), taper='bh',verbose=False)
     # get exact window functions
     uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test'),
-                                       spw_array=None, inplace=True, verbose=False)
+                                   spw_array=None, inplace=True, verbose=False)
     # spherical window functions for redundant groups
     sph = grouping.spherical_average(uvp, kbins, bin_widths)
     # spherical average for input blpair groups

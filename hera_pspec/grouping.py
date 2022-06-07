@@ -944,9 +944,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     return uvp
 
 def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
-                        blpair_groups=None, blpair_lens=None, blpair_weights=None,
-                        error_weights=None, time_avg=False, spw_array=None,
-                        little_h=True, verbose=False):
+                          blpair_groups=None, blpair_lens=None, blpair_weights=None,
+                          error_weights=None, time_avg=False, spw_array=None,
+                          little_h=True, verbose=False):
     
     """
     Obtains exact spherical window functions from an UVPspec object,
@@ -1079,7 +1079,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         # construct array giving the k probed by each baseline-tau pair
         kperps = uvp.cosmo.bl_to_kperp(uvp.cosmo.f2z(avg_nu), little_h=little_h) * blpair_lens
         kparas = uvp.cosmo.tau_to_kpara(uvp.cosmo.f2z(avg_nu), little_h=little_h) * uvp.get_dlys(spw)
-        kmags = np.sqrt(kperps[:, None]**2+kparas**2)
+        kmags = np.sqrt(kperps[:, None]**2 + kparas**2)
 
         # setup arrays 
         window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
@@ -1093,9 +1093,9 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             kpara_bins = uvp.window_function_kpara[spw][:, ip]
             ktot = np.sqrt(kperp_bins[:, None]**2 + kpara_bins**2)
 
-            cyl_wf = uvp.window_function_array[spw][:, :, :, :, ip]
+            cyl_wf = uvp.window_function_array[spw][..., ip]
             # separate baseline-time axis to iterate over times
-            cyl_wf = cyl_wf.reshape((uvp.Ntimes, uvp.Nblpairs, *cyl_wf.shape[1:] ))
+            cyl_wf = cyl_wf.reshape((uvp.Ntimes, uvp.Nblpairs, *cyl_wf.shape[1:]))
 
             # take average for each time
             for it in range(uvp.Ntimes):
@@ -1103,7 +1103,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                 for m1 in range(Nk):
                     mask1 = (kbin_left[m1] <= kmags) & (kmags < kbin_right[m1])
                     if np.any(mask1):
-                        wf_temp = np.sum(cyl_wf[it, :, :, :, :]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
+                        wf_temp = np.sum(cyl_wf[it, ...]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
                         if np.sum(wf_temp) > 0.: 
                             for m2 in range(Nk):
                                 mask2 = (kbin_left[m2] <= ktot) & (ktot < kbin_right[m2])
@@ -1114,7 +1114,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                                                            where = np.sum(wf_spherical[m1,:]) != 0)
                 spw_window_function.append(wf_spherical)
 
-            window_function_array[spw][:, :, :, ip] = np.copy(spw_window_function)
+            window_function_array[spw][..., ip] = np.copy(spw_window_function)
 
     return window_function_array
 

@@ -125,6 +125,30 @@ class test_FTBeam(unittest.TestCase):
         pytest.raises(AssertionError, uvwindow.FTBeam.from_file, spw_range=(1001, 1022),
                       ftfile=self.ft_file)
 
+    def test_gaussian(self):
+
+        # fiducial use
+        widths = -0.0343 * self.freq_array/1e6 + 11.30 
+        test = uvwindow.FTBeam.gaussian(freq_array=self.freq_array,
+                                        widths=widths,
+                                        pol=self.pol)
+        # if widths given as unique number, this value is used for all freqs
+        test2 = uvwindow.FTBeam.gaussian(freq_array=self.freq_array,
+                                        widths=np.mean(widths),
+                                        pol=self.pol)
+
+        # tests on freq_array consistency
+        pytest.raises(AssertionError, uvwindow.FTBeam.gaussian,
+                      freq_array=self.freq_array[:2], pol=self.pol,
+                      widths=np.mean(widths))
+        pytest.raises(AssertionError, uvwindow.FTBeam.gaussian,
+                      freq_array=self.freq_array, pol=self.pol,
+                      widths=widths[:10])
+
+        # make sure widths are given in degrees (raises warning)
+        test = uvwindow.FTBeam.gaussian(freq_array=self.freq_array,
+                                        pol=self.pol, widths=0.10)
+
     def test_get_bandwidth(self):
 
         test_bandwidth = uvwindow.FTBeam.get_bandwidth(self.ft_file)
@@ -530,6 +554,7 @@ class Test_UVWindow(unittest.TestCase):
                                            verbose=True)
         kperp_bins = test.get_kperp_bins(self.lens[:1])
         kpara_bins = test.get_kpara_bins(test.freq_array)
+        print(np.diff(kpara_bins), np.diff(kperp_bins))
 
         WF = test.get_spherical_wf(kbins=self.kbins,
                                    kperp_bins=kperp_bins,
