@@ -180,5 +180,14 @@ def test_analytic_noise():
     select = np.abs(dlys) > 3000
     assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nblpairts)
 
+    # test single time
+    uvp.select(times=uvp.time_avg_array[:1], inplace=True)
+    auto_Tsys.select(times=auto_Tsys.time_array[:1], inplace=True)
+    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=True)
+    frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
+    dlys = uvp.get_dlys(0) * 1e9
+    select = np.abs(dlys) > 3000
+    assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nblpairts)
+
     # clean up
     os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
