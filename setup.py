@@ -44,8 +44,8 @@ setup_args = {
         'astropy>=2.0',
         'pyyaml',
         'h5py',
-        'uvtools @ git+https://github.com/HERA-Team/uvtools',
-        'hera_cal @ git+https://github.com/HERA-Team/hera_cal'
+        'uvtools',
+        'hera-calibration'
     ],
     'include_package_data': True,
     'scripts': ['scripts/pspec_run.py', 'scripts/pspec_red.py',
