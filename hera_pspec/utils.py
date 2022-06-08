@@ -11,6 +11,8 @@ from scipy.interpolate import interp1d
 import uvtools as uvt
 import argparse
 from .conversions import Cosmo_Conversions
+import inspect
+from . import __version__
 
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
@@ -1517,3 +1519,21 @@ def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
         corr[np.isnan(corr)] = np.inf
         # apply correction
         uvp.stats_array[P_SN][spw] *= corr
+
+
+def history_string(notes=''):
+    """
+    Creates a standardized history string that all functions that write to
+    disk can use. Optionally add notes.
+    """
+    notes = f"""\n\nNotes:\n{notes}""" if notes else ""
+
+    stack = inspect.stack()[1]
+    history = f"""
+    ------------
+    This file was produced by the function {stack[3]}() in {stack[1]} using version {__version__}
+    {notes}
+    ------------
+    """
+    return history
+
