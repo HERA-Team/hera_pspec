@@ -9,8 +9,8 @@ from . import uvpspec, version, utils
 
 def transactional(fn):
     """
-    Handle 'transactional' operations on PSpecContainer, where the HDF5 file is 
-    opened and then closed again for every operation. This is done when 
+    Handle 'transactional' operations on PSpecContainer, where the HDF5 file is
+    opened and then closed again for every operation. This is done when
     keep_open = False.
 
     For calling a @transactional function within another @transactional function,
@@ -19,16 +19,17 @@ def transactional(fn):
     @transactional function exits, in which case it will close the container
     if keep_open = False.
     """
+
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        psc = args[0] # self object
-        
+        psc = args[0]  # self object
+
         # Open HDF5 file if needed
         if psc.data is None:
             psc._open()
 
         # if passed 'nested' kwarg get it
-        nested = kwargs.pop('nested', False)
+        nested = kwargs.pop("nested", False)
 
         # Run function
         try:
@@ -42,10 +43,10 @@ def transactional(fn):
         # Close HDF5 file if necessary
         if not psc.keep_open and not nested:
             psc._close()
-        
+
         # Return function result
         return f
-    
+
     return wrapper
 
 
@@ -53,8 +54,10 @@ class PSpecContainer(object):
     """
     Container class for managing multiple UVPSpec objects.
     """
-    def __init__(self, filename, mode='r', keep_open=True, swmr=False,
-                 tsleep=0.1, maxiter=1):
+
+    def __init__(
+        self, filename, mode="r", keep_open=True, swmr=False, tsleep=0.1, maxiter=1
+    ):
         """
         Manage a collection of UVPSpec objects that are stored in a structured
         HDF5 file.
@@ -72,16 +75,16 @@ class PSpecContainer(object):
             Whether to load the HDF5 file as read/write ('rw') or read-only
             ('r'). If 'rw' is specified and the file doesn't exist, an empty
             one will be created.
-        
+
         keep_open : bool, optional
-            Whether the HDF5 file should be kept open, or opened and then 
-            closed again each time an operation is performed. Setting 
+            Whether the HDF5 file should be kept open, or opened and then
+            closed again each time an operation is performed. Setting
             `keep_open=False` is helpful for multi-process access patterns.
             Default: True (keep file open).
 
         swmr : bool, optional
             Enable Single-Writer Multiple-Reader (SWMR) feature of HDF5.
-            Note that SWMR can only be used on POSIX-compliant 
+            Note that SWMR can only be used on POSIX-compliant
             filesystems, and so may not work on some network filesystems.
             Default: False (do not use SWMR)
 
@@ -89,7 +92,7 @@ class PSpecContainer(object):
             Time to wait in seconds after each attempt at opening the file.
 
         maxiter : int, optional
-            Maximum number of attempts to open file (useful for concurrent 
+            Maximum number of attempts to open file (useful for concurrent
             access when file may be locked temporarily by other processes).
         """
         self.filename = filename
@@ -98,7 +101,7 @@ class PSpecContainer(object):
         self.tsleep = tsleep
         self.maxiter = maxiter
         self.swmr = swmr
-        if mode not in ['r', 'rw']:
+        if mode not in ["r", "rw"]:
             raise ValueError("Must set mode to either 'r' or 'rw'.")
 
         # Open file ready for reading and/or writing (if not in transactional mode)
@@ -108,76 +111,78 @@ class PSpecContainer(object):
 
     def _open(self):
         """
-        Open HDF5 file ready for reading/writing. Does nothing if the file is 
+        Open HDF5 file ready for reading/writing. Does nothing if the file is
         already open.
-        
-        This method uses HDF5's single writer, multiple reader (swmr) mode, 
-        which allows multiple handles to exist for the same file at the same 
-        time, as long as only one is in rw mode. The rw instance should be the 
-        *first* one that is created; if a read-only instance is already open 
-        when a rw instance is created, an error will be raised by h5py. 
+
+        This method uses HDF5's single writer, multiple reader (swmr) mode,
+        which allows multiple handles to exist for the same file at the same
+        time, as long as only one is in rw mode. The rw instance should be the
+        *first* one that is created; if a read-only instance is already open
+        when a rw instance is created, an error will be raised by h5py.
         """
-        if self.data is not None: return
+        if self.data is not None:
+            return
 
         # Convert user-specified mode to a mode that HDF5 recognizes. We only
         # allow non-destructive operations!
-        if self.mode == 'rw':
-            mode = 'a'
+        if self.mode == "rw":
+            mode = "a"
         else:
-            mode = 'r'
-        if self.swmr and self.mode == 'r':
+            mode = "r"
+        if self.swmr and self.mode == "r":
             swmr = True
         else:
             swmr = False
 
         # check HDF5 version if swmr
         if swmr:
-            hdf5_v = float('.'.join(h5py.version.hdf5_version.split('.')[:2]))
+            hdf5_v = float(".".join(h5py.version.hdf5_version.split(".")[:2]))
             if hdf5_v < 1.1:
-                raise NotImplementedError("HDF5 version is {}: must "
-                                          "be >= 1.10 for SWMR".format(hdf5_v))
+                raise NotImplementedError(
+                    "HDF5 version is {}: must " "be >= 1.10 for SWMR".format(hdf5_v)
+                )
 
         # Try to open the file
         Ncount = 0
         while True:
             try:
-                self.data = h5py.File(self.filename, mode, libver='latest', 
-                                      swmr=swmr)
-                if self.mode == 'rw':
+                self.data = h5py.File(self.filename, mode, libver="latest", swmr=swmr)
+                if self.mode == "rw":
                     try:
-                        # Enable single writer, multiple reader mode on HDF5 file. 
-                        # This allows multiple handles to exist for the same file 
+                        # Enable single writer, multiple reader mode on HDF5 file.
+                        # This allows multiple handles to exist for the same file
                         # at the same time, as long as only one is in rw mode
                         if self.swmr:
                             self.data.swmr_mode = True
                     except ValueError:
                         pass
                 break
-            except (IOError, OSError):
+            except OSError:
                 # raise Exception if exceeded maxiter
                 if Ncount >= self.maxiter:
-                    if self.mode == 'rw':
+                    if self.mode == "rw":
                         raise OSError(
                             "Failed to open HDF5 file. Another process may "
                             "be holding it open; use \nkeep_open=False to "
                             "help prevent this from happening (single "
                             "process), or use the\nlock kwarg (multiple "
-                            "processes).")
+                            "processes)."
+                        )
                     else:
                         raise
-                
+
                 # sleep and try again
                 Ncount += 1
                 time.sleep(self.tsleep)
 
         # Update header info
-        if self.mode == 'rw':
+        if self.mode == "rw":
             # Update header
             self._update_header()
 
             # Denote as Container
-            if 'pspec_type' not in list(self.data.attrs.keys()):
-                self.data.attrs['pspec_type'] = self.__class__.__name__
+            if "pspec_type" not in list(self.data.attrs.keys()):
+                self.data.attrs["pspec_type"] = self.__class__.__name__
 
     def _close(self):
         """
@@ -187,7 +192,7 @@ class PSpecContainer(object):
             return
         self.data.close()
         self.data = None
-    
+
     def _store_pspec(self, pspec_group, uvp):
         """
         Store a UVPSpec object as group of datasets within the HDF5 file.
@@ -200,7 +205,7 @@ class PSpecContainer(object):
         uvp : UVPSpec
             Object containing power spectrum and related data.
         """
-        if self.mode == 'r':
+        if self.mode == "r":
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
 
         # Get data and attributes from UVPSpec object (stored in dicts)
@@ -218,7 +223,7 @@ class PSpecContainer(object):
         pspec_group : HDF5 group
             Group containing datasets that contain power spectrum and
             supporting information, in a standard format expected by UVPSpec.
-        
+
         kwargs : dict, optional
             UVPSpec.read_from_group partial IO keyword arguments
 
@@ -228,11 +233,12 @@ class PSpecContainer(object):
             Returns a UVPSpec object constructed from the input HDF5 group.
         """
         # Check that group is tagged as containing UVPSpec (pspec_type attribute)
-        if 'pspec_type' in list(pspec_group.attrs.keys()):
-            
+        if "pspec_type" in list(pspec_group.attrs.keys()):
+
             # Convert bytes -> str if needed
-            pspec_type = pspec_group.attrs['pspec_type']
-            if isinstance(pspec_type, bytes): pspec_type = pspec_type.decode()
+            pspec_type = pspec_group.attrs["pspec_type"]
+            if isinstance(pspec_type, bytes):
+                pspec_type = pspec_type.decode()
             if pspec_type != uvpspec.UVPSpec.__name__:
                 raise TypeError("HDF5 group is not tagged as a UVPSpec object.")
         else:
@@ -248,22 +254,24 @@ class PSpecContainer(object):
         Update the header in the HDF5 file with useful metadata, including the
         git version of hera_pspec.
         """
-        if 'header' not in list(self.data.keys()):
+        if "header" not in list(self.data.keys()):
             if not self.swmr:
-                hdr = self.data.create_group('header')
+                hdr = self.data.create_group("header")
             else:
                 raise ValueError("Cannot create a header group with SWMR")
         else:
-            hdr = self.data['header']
+            hdr = self.data["header"]
 
         # Check if versions of hera_pspec are the same
-        if 'hera_pspec.git_hash' in list(hdr.attrs.keys()):
-            if hdr.attrs['hera_pspec.git_hash'] != version.git_hash:
-                print("WARNING: HDF5 file was created by a different version "
-                      "of hera_pspec.")
+        if "hera_pspec.git_hash" in list(hdr.attrs.keys()):
+            if hdr.attrs["hera_pspec.git_hash"] != version.git_hash:
+                print(
+                    "WARNING: HDF5 file was created by a different version "
+                    "of hera_pspec."
+                )
         elif not self.swmr:
-            hdr.attrs['hera_pspec.git_hash'] = version.git_hash
-    
+            hdr.attrs["hera_pspec.git_hash"] = version.git_hash
+
     @transactional
     def set_pspec(self, group, psname, pspec, overwrite=False):
         """
@@ -284,7 +292,7 @@ class PSpecContainer(object):
             If the power spectrum already exists in the file, whether it should
             overwrite it or raise an error. Default: False (does not overwrite).
         """
-        if self.mode == 'r':
+        if self.mode == "r":
             raise IOError("HDF5 file was opened read-only; cannot write to file.")
 
         if isinstance(group, (tuple, list, dict)):
@@ -296,14 +304,16 @@ class PSpecContainer(object):
                 # Recursively call set_pspec() on each item of the list
                 for _psname, _pspec in zip(psname, pspec):
                     if not isinstance(_pspec, uvpspec.UVPSpec):
-                        raise TypeError("pspec lists must only contain UVPSpec "
-                                        "objects.")
+                        raise TypeError(
+                            "pspec lists must only contain UVPSpec " "objects."
+                        )
                     self.set_pspec(group, _psname, _pspec, overwrite=overwrite)
                 return
             else:
                 # Raise exception if psname is a list, but pspec is not
-                raise ValueError("If psname is a list, pspec must be a list of "
-                                 "the same length.")
+                raise ValueError(
+                    "If psname is a list, pspec must be a list of " "the same length."
+                )
         if isinstance(pspec, list) and not isinstance(psname, list):
             raise ValueError("If pspec is a list, psname must also be a list.")
         # No lists should pass beyond this point
@@ -339,14 +349,15 @@ class PSpecContainer(object):
                 psgrp = grp.create_group(key2)
             else:
                 raise AttributeError(
-                   "Power spectrum %s/%s already exists and overwrite=False." \
-                   % (key1, key2) )
+                    "Power spectrum %s/%s already exists and overwrite=False."
+                    % (key1, key2)
+                )
 
         # Add power spectrum to this group
         self._store_pspec(psgrp, pspec)
 
         # Store info about what kind of power spectra are in the group
-        psgrp.attrs['pspec_type'] = pspec.__class__.__name__
+        psgrp.attrs["pspec_type"] = pspec.__class__.__name__
 
     @transactional
     def get_pspec(self, group, psname=None, **kwargs):
@@ -361,7 +372,7 @@ class PSpecContainer(object):
         psname : str, optional
             The name of the power spectrum to return. If None, extract all
             available power spectra.
-        
+
         kwargs : dict
             UVPSpec.read_from_group partial IO keyword arguments
 
@@ -390,14 +401,15 @@ class PSpecContainer(object):
 
         # Otherwise, extract all available power spectra
         uvp = []
+
         def pspec_filter(n, obj):
-            if u'pspec_type' in list(obj.attrs.keys()):
+            if "pspec_type" in list(obj.attrs.keys()):
                 uvp.append(self._load_pspec(obj, **kwargs))
 
         # Traverse the entire set of groups/datasets looking for pspecs
-        grp.visititems(pspec_filter) # This adds power spectra to the uvp list
+        grp.visititems(pspec_filter)  # This adds power spectra to the uvp list
         return uvp
-    
+
     @transactional
     def spectra(self, group):
         """
@@ -422,8 +434,9 @@ class PSpecContainer(object):
 
         # Filter to look for pspec objects
         ps_list = []
+
         def pspec_filter(n, obj):
-            if u'pspec_type' in list(obj.attrs.keys()):
+            if "pspec_type" in list(obj.attrs.keys()):
                 ps_list.append(n)
 
         # Traverse the entire set of groups/datasets looking for pspecs
@@ -441,8 +454,8 @@ class PSpecContainer(object):
             List of group names.
         """
         groups = list(self.data.keys())
-        if u'header' in groups:
-            groups.remove(u'header')
+        if "header" in groups:
+            groups.remove("header")
         return groups
 
     @transactional
@@ -475,14 +488,14 @@ class PSpecContainer(object):
                 for pspec in tree[grp]:
                     s += "  |--%s\n" % pspec
             return s
-    
+
     @transactional
     def save(self):
         """
         Force HDF5 file to flush to disk.
         """
         self.data.flush()
-    
+
     def __del__(self):
         """
         Make sure that HDF5 file is closed on destruct.
@@ -490,14 +503,21 @@ class PSpecContainer(object):
         # Uses try-except construct just as a safeguard
         try:
             self.data.close()
-        except:
+        except Exception:
             pass
 
 
-def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_',
-                        merge_history=True, verbose=True, overwrite=False):
+def combine_psc_spectra(
+    psc,
+    groups=None,
+    dset_split_str="_x_",
+    ext_split_str="_",
+    merge_history=True,
+    verbose=True,
+    overwrite=False,
+):
     """
-    Iterate through a PSpecContainer and, within each specified group, combine 
+    Iterate through a PSpecContainer and, within each specified group, combine
     UVPSpec (i.e. spectra) of similar name but varying psname extension.
 
     Power spectra to-be-merged are assumed to follow the naming convention
@@ -505,15 +525,15 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
     dset1_x_dset2_ext1, dset1_x_dset2_ext2, ...
 
     where _x_ is the default dset_split_str, and _ is the default ext_split_str.
-    The spectra names are first split by dset_split_str, and then by 
-    ext_split_str. In this particular case, all instances of dset1_x_dset2* 
+    The spectra names are first split by dset_split_str, and then by
+    ext_split_str. In this particular case, all instances of dset1_x_dset2*
     will be merged together.
 
-    In order to merge spectra names with no dset distinction and only an 
-    extension, feed dset_split_str as '' or None. Example, to merge together: 
-    uvp_1, uvp_2, uvp_3, feed dset_split_str=None and ext_split_str='_'.
+    In order to merge spectra names with no dset distinction and only an
+    extension, feed dset_split_str as '' or None. Example, to merge together:
+    ``uvp_1, uvp_2, uvp_3, feed dset_split_str=None and ext_split_str='_'``.
 
-    Note this is a destructive and inplace operation, all of the *_ext1 objects 
+    Note this is a destructive and inplace operation, all of the *_ext1 objects
     are removed after merge.
 
     Parameters
@@ -541,10 +561,10 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
     """
     # Load container
     if isinstance(psc, (str, np.str)):
-        psc = PSpecContainer(psc, mode='rw')
+        psc = PSpecContainer(psc, mode="rw")
     else:
         assert isinstance(psc, PSpecContainer)
-    
+
     # Get groups
     _groups = psc.groups()
     if groups is None:
@@ -561,11 +581,12 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
         # Get unique spectra by splitting and then re-joining
         unique_spectra = []
         for spc in spectra:
-            if dset_split_str == '' or dset_split_str is None:
+            if dset_split_str == "" or dset_split_str is None:
                 sp = spc.split(ext_split_str)[0]
             else:
-                sp = utils.flatten([s.split(ext_split_str) 
-                                    for s in spc.split(dset_split_str)])[:2]
+                sp = utils.flatten(
+                    [s.split(ext_split_str) for s in spc.split(dset_split_str)]
+                )[:2]
                 sp = dset_split_str.join(sp)
             if sp not in unique_spectra:
                 unique_spectra.append(sp)
@@ -573,20 +594,25 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
         # Iterate over each unique spectra, and merge all spectra extensions
         for spc in unique_spectra:
             # check for overwrite
-            if spc in spectra and overwrite == False:
+            if spc in spectra and not overwrite:
                 if verbose:
-                    print("spectra {}/{} already exists and overwrite == False, "
-                          "skipping...".format(grp, spc))
+                    print(
+                        "spectra {}/{} already exists and overwrite == False, "
+                        "skipping...".format(grp, spc)
+                    )
                 continue
 
             # get merge list
-            to_merge = [spectra[i] for i in \
-                                np.where([spc in _sp for _sp in spectra])[0]]
+            to_merge = [
+                spectra[i] for i in np.where([spc in _sp for _sp in spectra])[0]
+            ]
             try:
                 # merge
                 uvps = [psc.get_pspec(grp, uvp) for uvp in to_merge]
                 if len(uvps) > 1:
-                    merged_uvp = uvpspec.combine_uvpspec(uvps, merge_history=merge_history, verbose=verbose)
+                    merged_uvp = uvpspec.combine_uvpspec(
+                        uvps, merge_history=merge_history, verbose=verbose
+                    )
                 else:
                     merged_uvp = uvps[0]
                 # write to file
@@ -598,25 +624,41 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
             except Exception as exc:
                 # merge failed, so continue
                 if verbose:
-                    print("uvp merge failed for spectra {}/{}, exception: " \
-                          "{}".format(grp, spc, exc))
-    
+                    print(
+                        "uvp merge failed for spectra {}/{}, exception: "
+                        "{}".format(grp, spc, exc)
+                    )
 
 
 def get_combine_psc_spectra_argparser():
     a = argparse.ArgumentParser(
-        description="argument parser for hera_pspec.container.combine_psc_spectra")
+        description="argument parser for hera_pspec.container.combine_psc_spectra"
+    )
 
     # Add list of arguments
-    a.add_argument("filename", type=str,
-                   help="Filename of HDF5 container (PSpecContainer) containing "
-                        "groups / input power spectra.")
-    a.add_argument("--dset_split_str", default='_x_', type=str, 
-                   help='The pattern used to split dset1 from dset2 in the '
-                        'psname.')
-    a.add_argument("--ext_split_str", default='_', type=str, 
-                   help='The pattern used to split the dset names from their '
-                        'extension in the psname (if it exists).')
-    a.add_argument("--verbose", default=False, action='store_true', 
-                   help='Report feedback to stdout.')
+    a.add_argument(
+        "filename",
+        type=str,
+        help="Filename of HDF5 container (PSpecContainer) containing "
+        "groups / input power spectra.",
+    )
+    a.add_argument(
+        "--dset_split_str",
+        default="_x_",
+        type=str,
+        help="The pattern used to split dset1 from dset2 in the " "psname.",
+    )
+    a.add_argument(
+        "--ext_split_str",
+        default="_",
+        type=str,
+        help="The pattern used to split the dset names from their "
+        "extension in the psname (if it exists).",
+    )
+    a.add_argument(
+        "--verbose",
+        default=False,
+        action="store_true",
+        help="Report feedback to stdout.",
+    )
     return a

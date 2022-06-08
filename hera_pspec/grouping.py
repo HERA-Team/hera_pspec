@@ -12,8 +12,7 @@ from .uvpspec import _ordered_unique
 from .uvwindow import UVWindow
 
 
-def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
-                    seed=None):
+def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False, seed=None):
     """
     Group baselines together into equal-sized sets.
 
@@ -49,25 +48,29 @@ def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
     grouped_bls : list of lists of tuples
         List of grouped baselines.
     """
-    Nbls = len(bls) # Total baselines
-    n = Nbls // Ngroups # Baselines per group
-    rem = Nbls - n*Ngroups
+    Nbls = len(bls)  # Total baselines
+    n = Nbls // Ngroups  # Baselines per group
+    rem = Nbls - n * Ngroups
 
     # Sanity check on number of groups
-    if Nbls < Ngroups: raise ValueError("Can't have more groups than baselines.")
+    if Nbls < Ngroups:
+        raise ValueError("Can't have more groups than baselines.")
 
     # Make sure only tuples were provided (can't have groups of groups)
-    for bl in bls: assert isinstance(bl, tuple)
+    for bl in bls:
+        assert isinstance(bl, tuple)
 
     # Randomize baseline order if requested
     if randomize:
-        if seed is not None: random.seed(seed)
+        if seed is not None:
+            random.seed(seed)
         bls = copy.deepcopy(bls)
         random.shuffle(bls)
 
     # Assign to groups sequentially
-    grouped_bls = [bls[i*n:(i+1)*n] for i in range(Ngroups)]
-    if keep_remainder and rem > 0: grouped_bls[-1] += bls[-rem:]
+    grouped_bls = [bls[i * n : (i + 1) * n] for i in range(Ngroups)]
+    if keep_remainder and rem > 0:
+        grouped_bls[-1] += bls[-rem:]
     return grouped_bls
 
 
@@ -94,16 +97,24 @@ def sample_baselines(bls, seed=None):
         Bootstrap-sampled set of baselines (will include multiple instances of
         some baselines).
     """
-    if seed is not None: random.seed(seed)
+    if seed is not None:
+        random.seed(seed)
 
     # Sample with replacement; return as many baselines/groups as were input
     return [random.choice(bls) for i in range(len(bls))]
 
 
-def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
-                    blpair_weights=None, error_field=None,
-                    error_weights=None, normalize_weights=True,
-                    inplace=True, add_to_history=''):
+def average_spectra(
+    uvp_in,
+    blpair_groups=None,
+    time_avg=False,
+    blpair_weights=None,
+    error_field=None,
+    error_weights=None,
+    normalize_weights=True,
+    inplace=True,
+    add_to_history="",
+):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
     each spectrum's integration time or a specified kind of error bars.
@@ -199,14 +210,16 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     if blpair_groups is not None:
 
         # Enforce shape of blpair_groups
-        assert isinstance(blpair_groups[0], (list, np.ndarray)), \
-              "blpair_groups must be fed as a list of baseline-pair lists. " \
-              "See docstring."
+        assert isinstance(blpair_groups[0], (list, np.ndarray)), (
+            "blpair_groups must be fed as a list of baseline-pair lists. "
+            "See docstring."
+        )
 
         # Convert blpair_groups to list of blpair group integers
         if isinstance(blpair_groups[0][0], tuple):
-            new_blpair_grps = [[uvp.antnums_to_blpair(blp) for blp in blpg]
-                               for blpg in blpair_groups]
+            new_blpair_grps = [
+                [uvp.antnums_to_blpair(blp) for blp in blpg] for blpg in blpair_groups
+            ]
             blpair_groups = new_blpair_grps
 
         # Get all baseline pairs in uvp object (in integer form)
@@ -216,7 +229,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             blvecs_groups.append(uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])])
         # get baseline length for each group of baseline pairs
         # assuming only redundant baselines are paired together
-        blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.)
+        blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.0)
 
     else:
         # If not, each baseline pair is its own group
@@ -225,27 +238,31 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         # get baseline length for each group of baseline pairs
         # assuming only redundant baselines are paired together
         blpair_lens = [blv for blv in uvp.get_blpair_seps()[np.sort(idx)]]
-        assert blpair_weights is None, "Cannot specify blpair_weights if "\
-                                       "blpair_groups is None."
+        assert blpair_weights is None, (
+            "Cannot specify blpair_weights if " "blpair_groups is None."
+        )
 
     # Print warning if a blpair appears more than once in all of blpair_groups
     all_blpairs = [item for sublist in blpair_groups for item in sublist]
     if len(set(all_blpairs)) < len(all_blpairs):
-        print("Warning: some baseline-pairs are repeated between blpair "\
-              "averaging groups.")
+        print(
+            "Warning: some baseline-pairs are repeated between blpair "
+            "averaging groups."
+        )
 
     # Create baseline-pair weights list if not specified
     if blpair_weights is None:
         # Assign unity weights to baseline-pair groups that were specified
-        blpair_weights = [[1. for item in grp] for grp in blpair_groups]
+        blpair_weights = [[1.0 for item in grp] for grp in blpair_groups]
     else:
         # Check that blpair_weights has the same shape as blpair_groups
         for i, grp in enumerate(blpair_groups):
             try:
                 len(blpair_weights[i]) == len(grp)
             except:
-                raise IndexError("blpair_weights must have the same shape as "
-                                 "blpair_groups")
+                raise IndexError(
+                    "blpair_weights must have the same shape as " "blpair_groups"
+                )
 
     # pre-check for error_weights
     if error_weights is None:
@@ -253,7 +270,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     else:
         if hasattr(uvp, "stats_array"):
             if error_weights not in uvp.stats_array.keys():
-                raise KeyError("error_field \"%s\" not found in stats_array keys." % error_weights)
+                raise KeyError(
+                    'error_field "%s" not found in stats_array keys.' % error_weights
+                )
         use_error_weights = True
 
     # stat_l is a list of supplied error_fields, to sum over.
@@ -269,13 +288,18 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     for stat in stat_l:
         if hasattr(uvp, "stats_array"):
             if stat not in uvp.stats_array.keys():
-                raise KeyError("error_field \"%s\" not found in stats_array keys." % stat)
+                raise KeyError('error_field "%s" not found in stats_array keys.' % stat)
 
     if not uvp.exact_windows:
         # For baseline pairs not in blpair_groups, add them as their own group
         extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
         blpair_groups += [[blp] for blp in extra_blpairs]
-        blpair_weights += [[1.,] for blp in extra_blpairs]
+        blpair_weights += [
+            [
+                1.0,
+            ]
+            for blp in extra_blpairs
+        ]
 
     # Create new data arrays
     data_array, wgts_array = odict(), odict()
@@ -288,7 +312,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         cov_array_imag = odict()
 
     # same for window function
-    store_window = hasattr(uvp, 'window_function_array')
+    store_window = hasattr(uvp, "window_function_array")
     if store_window:
         window_function_array = odict()
         window_function_kperp, window_function_kpara = odict(), odict()
@@ -329,12 +353,15 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                 # calculated so that Sum (blpair wgts) = no. baselines.
                 if blpair_weights is not None:
                     blpg_wgts = np.array(blpair_weights[j])
-                    norm = np.sum(blpg_wgts) if normalize_weights else 1.
+                    norm = np.sum(blpg_wgts) if normalize_weights else 1.0
 
-                    if norm <= 0.:
-                        raise ValueError("Sum of baseline-pair weights in "
-                                         "group %d is <= 0." % j)
-                    blpg_wgts = blpg_wgts * float(blpg_wgts.size) / norm # Apply normalization
+                    if norm <= 0.0:
+                        raise ValueError(
+                            "Sum of baseline-pair weights in " "group %d is <= 0." % j
+                        )
+                    blpg_wgts = (
+                        blpg_wgts * float(blpg_wgts.size) / norm
+                    )  # Apply normalization
                 else:
                     blpg_wgts = np.ones(len(blpg))
 
@@ -361,7 +388,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     errws = {}
                     for stat in stat_l:
                         errws[stat] = uvp.get_stats(stat, (spw, blp, p)).copy()
-                        np.square(errws[stat], out=errws[stat], where=np.isfinite(errws[stat]))
+                        np.square(
+                            errws[stat], out=errws[stat], where=np.isfinite(errws[stat])
+                        )
                         # shape of errs: (Ntimes, Ndlys)
 
                     if use_error_weights:
@@ -373,51 +402,67 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         # epsilon_avg = \sum{ (epsilon_i / (sigma_i)^4 } / ( \sum{ 1 / (sigma_i)^2 } )^2
                         # For reference: M. Tegmark 1997, The Astrophysical Journal Letters, 480, L87, Table 1, #3
                         # or J. Dillon 2014, Physical Review D, 89, 023002 , Equation 34.
-                        stat_val = uvp.get_stats(error_weights, (spw, blp, p)).copy().real #shape (Ntimes, Ndlys)
+                        stat_val = (
+                            uvp.get_stats(error_weights, (spw, blp, p)).copy().real
+                        )  # shape (Ntimes, Ndlys)
                         np.square(stat_val, out=stat_val, where=np.isfinite(stat_val))
-                        #corrects for potential nan values
-                        stat_val = np.nan_to_num(stat_val, copy=False, nan=np.inf, posinf=np.inf)
-                        w = np.real(1. / stat_val.clip(1e-40, np.inf))
+                        # corrects for potential nan values
+                        stat_val = np.nan_to_num(
+                            stat_val, copy=False, nan=np.inf, posinf=np.inf
+                        )
+                        w = np.real(1.0 / stat_val.clip(1e-40, np.inf))
                         # shape of w: (Ntimes, Ndlys)
                     else:
                         # Otherwise all arrays are averaged in a way weighted by the integration time,
                         # including the error_filed in stats_array and cov_array.
                         # Since P_N ~ Tsys^2 / sqrt{N_incoherent} t_int (see N. Kern, The Astrophysical Journal 888.2 (2020): 70, Equation 7),
                         # we choose w ~ P_N^{-2} ~ (ints * sqrt{nsmp})^2
-                        w = (ints * np.sqrt(nsmp))**2
+                        w = (ints * np.sqrt(nsmp)) ** 2
                         # shape of w: (Ntimes, 1)
 
                     # Take time average if desired
                     if time_avg:
                         wsum = np.sum(w, axis=0).clip(1e-40, np.inf)
-                        data = (np.sum(data * w, axis=0) \
-                                / wsum)[None]
-                        wgts = (np.sum(wgts * w[:, :1, None], axis=0) \
-                                / wsum[:1, None])[None]
+                        data = (np.sum(data * w, axis=0) / wsum)[None]
+                        wgts = (np.sum(wgts * w[:, :1, None], axis=0) / wsum[:1, None])[
+                            None
+                        ]
                         # wgts has a shape of (Ntimes, Nfreqs, 2), while
                         # w has a shape of (Ntimes, Ndlys) or (Ntimes, 1)
                         # To handle with the case  when Nfreqs != Ntimes,
                         # we choose to multiply wgts with w[:,:1,None].
-                        ints = (np.sum(ints * w, axis=0) \
-                                / wsum)[None]
+                        ints = (np.sum(ints * w, axis=0) / wsum)[None]
                         nsmp = np.sum(nsmp, axis=0)[None]
                         if store_window:
                             if uvp.exact_windows:
-                                window_function = (np.sum(window_function * w[:, :, None, None], axis=0)\
-                                                    / (wsum)[:, None, None])[None]
+                                window_function = (
+                                    np.sum(
+                                        window_function * w[:, :, None, None], axis=0
+                                    )
+                                    / (wsum)[:, None, None]
+                                )[None]
                             if not uvp.exact_windows:
-                                window_function = (np.sum(window_function * w[:, :, None], axis=0) \
-                                                   / (wsum)[:, None])[None]
+                                window_function = (
+                                    np.sum(window_function * w[:, :, None], axis=0)
+                                    / (wsum)[:, None]
+                                )[None]
                         if store_cov:
-                            cov_real = (np.sum(cov_real * w[:, :, None] * w[:, None, :], axis=0) \
-                                   / wsum[:, None] / wsum[None, :])[None]
-                            cov_imag = (np.sum(cov_imag * w[:, :, None] * w[:, None, :], axis=0) \
-                                   / wsum[:, None] / wsum[None, :])[None]
+                            cov_real = (
+                                np.sum(cov_real * w[:, :, None] * w[:, None, :], axis=0)
+                                / wsum[:, None]
+                                / wsum[None, :]
+                            )[None]
+                            cov_imag = (
+                                np.sum(cov_imag * w[:, :, None] * w[:, None, :], axis=0)
+                                / wsum[:, None]
+                                / wsum[None, :]
+                            )[None]
                         for stat in stat_l:
                             # clip errws to eliminate nan: inf * 0 yields nans
                             weighted_errws = errws[stat].clip(0, 1e40) * w**2
-                            errws[stat] = (np.sum(weighted_errws, axis=0) \
-                                           / wsum**2)[None]
+                            errws[stat] = (np.sum(weighted_errws, axis=0) / wsum**2)[
+                                None
+                            ]
                             # set near-zero errws to inf, as they should be
                             errws[stat][np.isclose(errws[stat], 0)] = np.inf
                         w = np.sum(w, axis=0)[None]
@@ -437,23 +482,39 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                             bpg_stats[stat].append(errws[stat].clip(0, 1e40) * w**2)
                         if store_window:
                             if uvp.exact_windows:
-                                bpg_window_function.append(window_function * w[:, :, None, None])
+                                bpg_window_function.append(
+                                    window_function * w[:, :, None, None]
+                                )
                             else:
-                                bpg_window_function.append(window_function * w[:, :, None])
+                                bpg_window_function.append(
+                                    window_function * w[:, :, None]
+                                )
                         if store_cov:
-                            bpg_cov_real.append(cov_real * w[:, :, None] * w[:, None, :])
-                            bpg_cov_imag.append(cov_imag * w[:, :, None] * w[:, None, :])
+                            bpg_cov_real.append(
+                                cov_real * w[:, :, None] * w[:, None, :]
+                            )
+                            bpg_cov_imag.append(
+                                cov_imag * w[:, :, None] * w[:, None, :]
+                            )
                         w_list.append(w)
 
                 # normalize sum: clip to deal with w_list_sum == 0
                 w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
                 bpg_data = np.sum(bpg_data, axis=0) / w_list_sum
-                bpg_wgts = np.sum(bpg_wgts, axis=0) / w_list_sum[:,:1, None]
+                bpg_wgts = np.sum(bpg_wgts, axis=0) / w_list_sum[:, :1, None]
                 bpg_nsmp = np.sum(bpg_nsmp, axis=0)
                 bpg_ints = np.sum(bpg_ints, axis=0) / w_list_sum
                 if store_cov:
-                    bpg_cov_real = np.sum(bpg_cov_real, axis=0) / w_list_sum[:, :, None] / w_list_sum[:, None, :]
-                    bpg_cov_imag = np.sum(bpg_cov_imag, axis=0) / w_list_sum[:, :, None] / w_list_sum[:, None, :]
+                    bpg_cov_real = (
+                        np.sum(bpg_cov_real, axis=0)
+                        / w_list_sum[:, :, None]
+                        / w_list_sum[:, None, :]
+                    )
+                    bpg_cov_imag = (
+                        np.sum(bpg_cov_imag, axis=0)
+                        / w_list_sum[:, :, None]
+                        / w_list_sum[:, None, :]
+                    )
                 for stat in stat_l:
                     stat_avg = np.sum(bpg_stats[stat], axis=0) / w_list_sum**2
                     # set near-zero stats to inf, as they should be
@@ -462,12 +523,18 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     bpg_stats[stat] = np.sqrt(stat_avg)
                 if store_window:
                     if uvp.exact_windows:
-                        bpg_window_function = np.sum(bpg_window_function, axis=0) # / w_list_sum[:, :, None, None]
+                        bpg_window_function = np.sum(
+                            bpg_window_function, axis=0
+                        )  # / w_list_sum[:, :, None, None]
                     else:
-                        bpg_window_function = np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None]
+                        bpg_window_function = (
+                            np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None]
+                        )
                 # Append to lists (polarization)
-                pol_data.extend(bpg_data); pol_wgts.extend(bpg_wgts)
-                pol_ints.extend(bpg_ints); pol_nsmp.extend(bpg_nsmp)
+                pol_data.extend(bpg_data)
+                pol_wgts.extend(bpg_wgts)
+                pol_ints.extend(bpg_ints)
+                pol_nsmp.extend(bpg_nsmp)
                 for stat in stat_l:
                     pol_stats[stat].extend(bpg_stats[stat])
                 if store_window:
@@ -476,8 +543,10 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     pol_cov_real.extend(bpg_cov_real)
                     pol_cov_imag.extend(bpg_cov_imag)
             # Append to lists (spectral window)
-            spw_data.append(pol_data); spw_wgts.append(pol_wgts)
-            spw_ints.append(pol_ints); spw_nsmp.append(pol_nsmp)
+            spw_data.append(pol_data)
+            spw_wgts.append(pol_wgts)
+            spw_ints.append(pol_ints)
+            spw_nsmp.append(pol_nsmp)
             for stat in stat_l:
                 spw_stats[stat].append(pol_stats[stat])
             if store_window:
@@ -506,7 +575,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             cov_array_imag[spw] = np.moveaxis(np.array(spw_cov_imag), 0, -1)
 
     # Iterate over blpair groups one more time to assign metadata
-    time_1, time_2, time_avg_arr  = [], [], []
+    time_1, time_2, time_avg_arr = [], [], []
     lst_1, lst_2, lst_avg_arr = [], [], []
     blpair_arr, bl_arr = [], []
 
@@ -522,9 +591,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             time_1.extend([np.mean(uvp.time_1_array[blpairts])])
             time_2.extend([np.mean(uvp.time_2_array[blpairts])])
             time_avg_arr.extend([np.mean(uvp.time_avg_array[blpairts])])
-            lst_1.extend([np.mean(np.unwrap(uvp.lst_1_array[blpairts]))%(2*np.pi)])
-            lst_2.extend([np.mean(np.unwrap(uvp.lst_2_array[blpairts]))%(2*np.pi)])
-            lst_avg_arr.extend([np.mean(np.unwrap(uvp.lst_avg_array[blpairts]))%(2*np.pi)])
+            lst_1.extend([np.mean(np.unwrap(uvp.lst_1_array[blpairts])) % (2 * np.pi)])
+            lst_2.extend([np.mean(np.unwrap(uvp.lst_2_array[blpairts])) % (2 * np.pi)])
+            lst_avg_arr.extend(
+                [np.mean(np.unwrap(uvp.lst_avg_array[blpairts])) % (2 * np.pi)]
+            )
         else:
             blpair_arr.extend(np.ones_like(blpairts, np.int) * blpg[0])
             time_1.extend(uvp.time_1_array[blpairts])
@@ -536,8 +607,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
     # Update arrays
     bl_arr = np.array(sorted(set(bl_arr)))
-    bl_vecs = np.array([uvp.bl_vecs[uvp.bl_array.tolist().index(bl)]
-                        for bl in bl_arr])
+    bl_vecs = np.array([uvp.bl_vecs[uvp.bl_array.tolist().index(bl)] for bl in bl_arr])
 
     # Assign arrays and metadata to UVPSpec object
     uvp.Ntimes = len(np.unique(time_avg_arr))
@@ -573,13 +643,15 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     if store_cov:
         uvp.cov_array_real = cov_array_real
         uvp.cov_array_imag = cov_array_imag
-    if len(stat_l) >=1 :
+    if len(stat_l) >= 1:
         uvp.stats_array = stats_array
     elif hasattr(uvp, "stats_array"):
         delattr(uvp, "stats_array")
 
     # Add to history
-    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
+    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(
+        version.git_hash[:15], add_to_history, "-" * 40, uvp.history
+    )
     # Validity check
     uvp.check()
 
@@ -588,9 +660,20 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         return uvp
 
 
-def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
-                      weight_by_cov=False, error_weights=None,
-                      add_to_history='', little_h=True, A={}, run_check=True):
+def spherical_average(
+    uvp_in,
+    kbins,
+    bin_widths,
+    blpair_groups=None,
+    time_avg=False,
+    blpair_weights=None,
+    weight_by_cov=False,
+    error_weights=None,
+    add_to_history="",
+    little_h=True,
+    A={},
+    run_check=True,
+):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
     Use UVPSpec.set_stats_slice to downweight regions of k_perp and k_para grid before averaging.
@@ -659,7 +742,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     """
     # input checks
     if weight_by_cov:
-        assert hasattr(uvp_in, 'cov_array_real'), "cannot weight by cov with no cov_array_real"
+        assert hasattr(
+            uvp_in, "cov_array_real"
+        ), "cannot weight by cov with no cov_array_real"
 
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
@@ -671,21 +756,30 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
 
     # copy input
-    uvp = copy.deepcopy(uvp_in) 
+    uvp = copy.deepcopy(uvp_in)
 
     # perform time and cylindrical averaging upfront if requested
     if not uvp.exact_windows and (blpair_groups is not None or time_avg):
-        uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg,
-                            blpair_weights=blpair_weights, error_weights=error_weights,
-                            inplace=True)
+        uvp.average_spectra(
+            blpair_groups=blpair_groups,
+            time_avg=time_avg,
+            blpair_weights=blpair_weights,
+            error_weights=error_weights,
+            inplace=True,
+        )
 
     # initialize blank arrays and dicts
     Nk = len(kbins)
     dlys_array, spw_dlys_array = [], []
-    data_array, wgt_array, integration_array, nsample_array = odict(), odict(), odict(), odict()
-    store_stats = hasattr(uvp, 'stats_array')
+    data_array, wgt_array, integration_array, nsample_array = (
+        odict(),
+        odict(),
+        odict(),
+        odict(),
+    )
+    store_stats = hasattr(uvp, "stats_array")
     store_cov = hasattr(uvp, "cov_array_real")
-    store_window = hasattr(uvp, 'window_function_array') or uvp.exact_windows
+    store_window = hasattr(uvp, "window_function_array") or uvp.exact_windows
     if store_cov:
         cov_array_real = odict()
         cov_array_imag = odict()
@@ -705,25 +799,39 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     for spw in uvp.spw_array:
         # setup non delay-based arrays for this spw
         spw_range = spw_ranges[spw]
-        wgt_array[spw] = np.zeros((uvp.Ntimes, spw_range[2], 2, uvp.Npols), dtype=np.float64)
+        wgt_array[spw] = np.zeros(
+            (uvp.Ntimes, spw_range[2], 2, uvp.Npols), dtype=np.float64
+        )
         integration_array[spw] = np.zeros((uvp.Ntimes, uvp.Npols), dtype=np.float64)
         nsample_array[spw] = np.zeros((uvp.Ntimes, uvp.Npols), dtype=np.float64)
 
         # setup arrays with delays in them
         Ndlys = spw_range[3]
         Ndlyblps = Ndlys * uvp.Nblpairs
-        data_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128)
+        data_array[spw] = np.zeros(
+            (uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128
+        )
         if store_cov:
-            cov_array_real[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
-            cov_array_imag[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
+            cov_array_real[spw] = np.zeros(
+                (uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64
+            )
+            cov_array_imag[spw] = np.zeros(
+                (uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64
+            )
         if store_stats:
             for stat in uvp.stats_array.keys():
-                stats_array[stat][spw] = np.zeros((uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128)
+                stats_array[stat][spw] = np.zeros(
+                    (uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128
+                )
         if store_window:
             if uvp.exact_windows:
-                window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
+                window_function_array[spw] = np.zeros(
+                    (uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64
+                )
             else:
-                window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
+                window_function_array[spw] = np.zeros(
+                    (uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64
+                )
 
         # setup the design matrix: P_cyl = A P_sph
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
@@ -731,7 +839,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         # setup weighting matrix: block diagonal for each Ndly x Ndly
         # we can represent the Ndlyblps x Ndlyblps block diagonal matrix as Ndlyblps x Ndlys
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
-
 
         # get kperps for this spw: shape (Nblpairts,)
         kperps = uvp.get_kperps(spw, little_h=True)
@@ -754,7 +861,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             blpt_inds = uvp.blpair_to_indices(blp)
 
             # get k magnitude of data: (Ndlys,)
-            kmags = np.sqrt(kperps[blpt_inds][0]**2 + kparas**2)
+            kmags = np.sqrt(kperps[blpt_inds][0] ** 2 + kparas**2)
 
             # shape of nsmap: (Ntimes, Npols)
             nsmp = uvp.nsample_array[spw][blpt_inds]
@@ -773,35 +880,51 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             data_array[spw][:, dslice] = uvp.data_array[spw][blpt_inds]
 
             if store_window and not uvp.exact_windows:
-                window_function_array[spw][:, dslice, dslice] = uvp.window_function_array[spw][blpt_inds]
+                window_function_array[spw][
+                    :, dslice, dslice
+                ] = uvp.window_function_array[spw][blpt_inds]
 
             if store_stats:
                 for stat in stats_array:
-                    stats_array[stat][spw][:, dslice] = uvp.stats_array[stat][spw][blpt_inds]
+                    stats_array[stat][spw][:, dslice] = uvp.stats_array[stat][spw][
+                        blpt_inds
+                    ]
 
             if store_cov:
-                cov_array_real[spw][:, dslice, dslice] = uvp.cov_array_real[spw][blpt_inds]
+                cov_array_real[spw][:, dslice, dslice] = uvp.cov_array_real[spw][
+                    blpt_inds
+                ]
 
             # fill weighting matrix E
             if weight_by_cov:
                 # weight by inverse (real) covariance
                 for p in range(uvp.Npols):
                     # the covariance is block diagonal assuming no correlations between baseline-pairs
-                    E[:, dslice, :, p] = np.linalg.pinv(cov_array_real[spw][:, dslice, dslice, p].real)
+                    E[:, dslice, :, p] = np.linalg.pinv(
+                        cov_array_real[spw][:, dslice, dslice, p].real
+                    )
 
             elif error_weights is not None:
                 # fill diagonal with by 1/stats_array^2 as weight
                 stat_weight = stats_array[error_weights][spw][:, dslice].real.copy()
                 np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
-                E[:, range(dstart, dstop), range(0, Ndlys)] = 1 / stat_weight.clip(1e-40, np.inf)
+                E[:, range(dstart, dstop), range(0, Ndlys)] = 1 / stat_weight.clip(
+                    1e-40, np.inf
+                )
 
             else:
                 E[:, range(dstart, dstop), range(0, Ndlys)] = 1.0
-                f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
-                E[:, range(dstart, dstop), range(0, Ndlys)] *= (~f[:, None, :])
+                f = np.isclose(
+                    uvp.integration_array[spw][blpt_inds]
+                    * uvp.nsample_array[spw][blpt_inds],
+                    0,
+                )
+                E[:, range(dstart, dstop), range(0, Ndlys)] *= ~f[:, None, :]
 
             # append to non-dly arrays
-            Emean = np.trace(E[:, dslice, :], axis1=1, axis2=2)  # use sum of E across delay as weight
+            Emean = np.trace(
+                E[:, dslice, :], axis1=1, axis2=2
+            )  # use sum of E across delay as weight
             wgt_array[spw] += wgts * Emean[:, None, None, :]
             integration_array[spw] += ints * Emean
             nsample_array[spw] += nsmp
@@ -821,7 +944,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 A[spw][:, i + Ndlys * b, kind, :] = 1.0
 
         # normalize metadata sums
-        wgt_array[spw] /= np.max(wgt_array[spw], axis=(2, 3), keepdims=True).clip(1e-40, np.inf)
+        wgt_array[spw] /= np.max(wgt_array[spw], axis=(2, 3), keepdims=True).clip(
+            1e-40, np.inf
+        )
         integration_array[spw] /= np.trace(E.real, axis1=1, axis2=2).clip(1e-40, np.inf)
 
         # project onto spherically binned space
@@ -866,7 +991,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 sq_stat = stats_array[stat][spw].copy()
                 np.square(sq_stat, out=sq_stat, where=np.isfinite(sq_stat))
                 # einsum is fast enough for this, and is more succinct than matmul
-                avg_stat = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, sq_stat.clip(0, 1e40), H))
+                avg_stat = np.sqrt(
+                    np.einsum("ptik,tip,ptik->tkp", H, sq_stat.clip(0, 1e40), H)
+                )
                 # set zeroed stats to large number
                 avg_stat[np.isclose(avg_stat, 0)] = 1e40
                 # update stats_array
@@ -881,14 +1008,18 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
         if uvp.exact_windows:
-            window_function_array[spw] = spherical_wf_from_uvp(uvp, kbins, bin_widths,
-                                                               blpair_groups=blpair_groups,
-                                                               blpair_weights=blpair_weights,
-                                                               time_avg=time_avg,
-                                                               error_weights=error_weights,
-                                                               spw_array=spw,
-                                                               little_h=little_h,
-                                                               verbose=True)[spw]
+            window_function_array[spw] = spherical_wf_from_uvp(
+                uvp,
+                kbins,
+                bin_widths,
+                blpair_groups=blpair_groups,
+                blpair_weights=blpair_weights,
+                time_avg=time_avg,
+                error_weights=error_weights,
+                spw_array=spw,
+                little_h=little_h,
+                verbose=True,
+            )[spw]
 
     # handle data arrays
     uvp.data_array = data_array
@@ -916,7 +1047,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.Nblpairts = uvp.Ntimes
     uvp.Nblpairs = 1
     bl_array = np.unique([uvp.antnums_to_bl(an) for an in uvp.blpair_to_antnums(blp)])
-    uvp.bl_vecs = np.asarray([uvp.bl_vecs[np.argmin(uvp.bl_array - bl)] for bl in bl_array])
+    uvp.bl_vecs = np.asarray(
+        [uvp.bl_vecs[np.argmin(uvp.bl_array - bl)] for bl in bl_array]
+    )
     uvp.bl_array = bl_array
     uvp.Nbls = len(bl_array)
     uvp.label_1_array = uvp.label_1_array[:, blp_inds]
@@ -935,7 +1068,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.lst_2_array = np.unique(uvp_in.lst_2_array)
 
     # Add to history
-    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
+    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(
+        version.git_hash[:15], add_to_history, "-" * 40, uvp.history
+    )
 
     # validity check
     if run_check:
@@ -943,14 +1078,24 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     return uvp
 
-def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
-                        blpair_groups=None, blpair_lens=None, blpair_weights=None,
-                        error_weights=None, time_avg=False, spw_array=None,
-                        little_h=True, verbose=False):
-    
+
+def spherical_wf_from_uvp(
+    uvp_in,
+    kbins,
+    bin_widths,
+    blpair_groups=None,
+    blpair_lens=None,
+    blpair_weights=None,
+    error_weights=None,
+    time_avg=False,
+    spw_array=None,
+    little_h=True,
+    verbose=False,
+):
+
     """
     Obtains exact spherical window functions from an UVPspec object,
-    given a set of baseline-pair groups, their associated lengths, and 
+    given a set of baseline-pair groups, their associated lengths, and
     a set of spherical k-bins.
 
     Parameters
@@ -970,8 +1115,8 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
     blpair_weights : list
         relative weights of blpairs in blpair averaging (used for bootstrapping)
-    
-    blpair_lens : list 
+
+    blpair_lens : list
         lengths of blpairs in blpair_groups
 
     error_weights : str, optional
@@ -1013,30 +1158,36 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     Nk = len(kbins)
 
     # copy input
-    uvp = copy.deepcopy(uvp_in) 
+    uvp = copy.deepcopy(uvp_in)
 
     if blpair_groups is None:
         if blpair_lens is not None:
-            warnings.warn('blpair_lens given but blpair_groups is None... overriding blpair_lens.')
+            warnings.warn(
+                "blpair_lens given but blpair_groups is None... overriding blpair_lens."
+            )
         blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
     else:
         # Enforce shape of blpair_groups
-        assert isinstance(blpair_groups[0], (list, np.ndarray)), \
-                  "blpair_groups must be fed as a list of baseline-pair lists. " \
-                  "See docstring."
+        assert isinstance(blpair_groups[0], (list, np.ndarray)), (
+            "blpair_groups must be fed as a list of baseline-pair lists. "
+            "See docstring."
+        )
         if blpair_lens is None:
             # Get all baseline pairs in uvp object (in integer form)
             uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
             blvecs_groups = []
             for group in blpair_groups:
-                blvecs_groups.append(uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])])
+                blvecs_groups.append(
+                    uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])]
+                )
             # get baseline length for each group of baseline pairs
             # assuming only redundant baselines are paired together
-            blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.)
-        else:     
+            blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.0)
+        else:
             # ensure consistency between inputs
-            assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
-                        " are inconsistent with baseline lengths"
+            assert len(blpair_groups) == len(blpair_lens), (
+                "Baseline-pair groups" " are inconsistent with baseline lengths"
+            )
     blpair_lens = np.array(blpair_lens)
 
     # check spw input and create array of spws to loop over
@@ -1044,24 +1195,31 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         # if no spw specified, use attribute
         spw_array = uvp.spw_array
     else:
-        spw_array = spw_array if isinstance(spw_array, (list, tuple, np.ndarray)) else [int(spw_array)]
+        spw_array = (
+            spw_array
+            if isinstance(spw_array, (list, tuple, np.ndarray))
+            else [int(spw_array)]
+        )
         # check if spw given is in uvp
-        assert np.all([spw in uvp.spw_array for spw in spw_array]), \
-               "input spw is not in UVPSpec.spw_array."
+        assert np.all(
+            [spw in uvp.spw_array for spw in spw_array]
+        ), "input spw is not in UVPSpec.spw_array."
 
     assert uvp.exact_windows, "Need to compute exact window functions first."
 
     if blpair_weights is None:
         # assign weight of one to each baseline length
-        blpair_weights = [[1. for item in grp] for grp in blpair_groups]
+        blpair_weights = [[1.0 for item in grp] for grp in blpair_groups]
 
     # perform redundant cylindrical averaging upfront
     # and apply weights to window functions
-    uvp.average_spectra(blpair_groups=blpair_groups,
-                        blpair_weights=blpair_weights,
-                        error_weights=error_weights,
-                        time_avg=time_avg,
-                        inplace=True)
+    uvp.average_spectra(
+        blpair_groups=blpair_groups,
+        blpair_weights=blpair_weights,
+        error_weights=error_weights,
+        time_avg=time_avg,
+        inplace=True,
+    )
 
     # transform kgrid to little_h units
     if not little_h:
@@ -1074,15 +1232,22 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # iterate over spectral windows
     for spw in spw_array:
 
-        avg_nu = (uvp.get_spw_ranges(spw)[0][1]+uvp.get_spw_ranges(spw)[0][0])/2
+        avg_nu = (uvp.get_spw_ranges(spw)[0][1] + uvp.get_spw_ranges(spw)[0][0]) / 2
 
         # construct array giving the k probed by each baseline-tau pair
-        kperps = uvp.cosmo.bl_to_kperp(uvp.cosmo.f2z(avg_nu), little_h=little_h) * blpair_lens
-        kparas = uvp.cosmo.tau_to_kpara(uvp.cosmo.f2z(avg_nu), little_h=little_h) * uvp.get_dlys(spw)
-        kmags = np.sqrt(kperps[:, None]**2+kparas**2)
+        kperps = (
+            uvp.cosmo.bl_to_kperp(uvp.cosmo.f2z(avg_nu), little_h=little_h)
+            * blpair_lens
+        )
+        kparas = uvp.cosmo.tau_to_kpara(
+            uvp.cosmo.f2z(avg_nu), little_h=little_h
+        ) * uvp.get_dlys(spw)
+        kmags = np.sqrt(kperps[:, None] ** 2 + kparas**2)
 
-        # setup arrays 
-        window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
+        # setup arrays
+        window_function_array[spw] = np.zeros(
+            (uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64
+        )
 
         # iterate over polarisation
         spw_window_function = []
@@ -1091,11 +1256,11 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             # grids used to compute the window functions
             kperp_bins = uvp.window_function_kperp[spw][:, ip]
             kpara_bins = uvp.window_function_kpara[spw][:, ip]
-            ktot = np.sqrt(kperp_bins[:, None]**2 + kpara_bins**2)
+            ktot = np.sqrt(kperp_bins[:, None] ** 2 + kpara_bins**2)
 
             cyl_wf = uvp.window_function_array[spw][:, :, :, :, ip]
             # separate baseline-time axis to iterate over times
-            cyl_wf = cyl_wf.reshape((uvp.Ntimes, uvp.Nblpairs, *cyl_wf.shape[1:] ))
+            cyl_wf = cyl_wf.reshape((uvp.Ntimes, uvp.Nblpairs, *cyl_wf.shape[1:]))
 
             # take average for each time
             for it in range(uvp.Ntimes):
@@ -1103,15 +1268,26 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                 for m1 in range(Nk):
                     mask1 = (kbin_left[m1] <= kmags) & (kmags < kbin_right[m1])
                     if np.any(mask1):
-                        wf_temp = np.sum(cyl_wf[it, :, :, :, :]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
-                        if np.sum(wf_temp) > 0.: 
+                        wf_temp = np.sum(
+                            cyl_wf[it, :, :, :, :]
+                            * mask1[:, :, None, None].astype(int),
+                            axis=(0, 1),
+                        ) / np.sum(mask1)
+                        if np.sum(wf_temp) > 0.0:
                             for m2 in range(Nk):
-                                mask2 = (kbin_left[m2] <= ktot) & (ktot < kbin_right[m2])
-                                if np.any(mask2): #cannot compute mean if zero elements
+                                mask2 = (kbin_left[m2] <= ktot) & (
+                                    ktot < kbin_right[m2]
+                                )
+                                if np.any(
+                                    mask2
+                                ):  # cannot compute mean if zero elements
                                     wf_spherical[m1, m2] = np.mean(wf_temp[mask2])
                             # normalisation
-                            wf_spherical[m1,:] = np.divide(wf_spherical[m1, :], np.sum(wf_spherical[m1, :]),
-                                                           where = np.sum(wf_spherical[m1,:]) != 0)
+                            wf_spherical[m1, :] = np.divide(
+                                wf_spherical[m1, :],
+                                np.sum(wf_spherical[m1, :]),
+                                where=np.sum(wf_spherical[m1, :]) != 0,
+                            )
                 spw_window_function.append(wf_spherical)
 
             window_function_array[spw][:, :, :, ip] = np.copy(spw_window_function)
@@ -1150,120 +1326,173 @@ def fold_spectra(uvp):
 
         if Ndlys % 2 == 0:
             # even number of dlys
-            left = uvp.data_array[spw][:, 1:Ndlys//2, :][:, ::-1, :]
-            right = uvp.data_array[spw][:, Ndlys//2+1:, :]
-            uvp.data_array[spw][:, Ndlys//2+1:, :] = np.mean([left, right], axis=0)
-            uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
+            left = uvp.data_array[spw][:, 1 : Ndlys // 2, :][:, ::-1, :]
+            right = uvp.data_array[spw][:, Ndlys // 2 + 1 :, :]
+            uvp.data_array[spw][:, Ndlys // 2 + 1 :, :] = np.mean([left, right], axis=0)
+            uvp.data_array[spw][:, : Ndlys // 2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
-            if hasattr(uvp, 'window_function_array'):
+            if hasattr(uvp, "window_function_array"):
                 if uvp.exact_windows:
-                    left = uvp.window_function_array[spw][:, 1:Ndlys//2, ...][:, ::-1, ...]
-                    right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
-                    uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
+                    left = uvp.window_function_array[spw][:, 1 : Ndlys // 2, ...][
+                        :, ::-1, ...
+                    ]
+                    right = uvp.window_function_array[spw][:, Ndlys // 2 + 1 :, ...]
+                    uvp.window_function_array[spw][:, Ndlys // 2 + 1 :, ...] = 0.50 * (
+                        left + right
+                    )
                 else:
-                    leftleft = uvp.window_function_array[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
-                    leftright = uvp.window_function_array[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
-                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                    uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                                     +leftright\
-                                                                                     +rightleft\
-                                                                                     +rightright)
-                    uvp.window_function_array[spw][:, :, :Ndlys//2, :] = 0.0
-                uvp.window_function_array[spw][:, :Ndlys//2, ...] = 0.0
+                    leftleft = uvp.window_function_array[spw][
+                        :, 1 : Ndlys // 2, 1 : Ndlys // 2, :
+                    ][:, ::-1, ::-1, :]
+                    leftright = uvp.window_function_array[spw][
+                        :, 1 : Ndlys // 2, Ndlys // 2 + 1 :, :
+                    ][:, ::-1, :, :]
+                    rightleft = uvp.window_function_array[spw][
+                        :, Ndlys // 2 + 1 :, 1 : Ndlys // 2, :
+                    ][:, :, ::-1, :]
+                    rightright = uvp.window_function_array[spw][
+                        :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                    ]
+                    uvp.window_function_array[spw][
+                        :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                    ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                    uvp.window_function_array[spw][:, :, : Ndlys // 2, :] = 0.0
+                uvp.window_function_array[spw][:, : Ndlys // 2, ...] = 0.0
             # fold covariance array if it exists.
-            if hasattr(uvp,'cov_array_real'):
-                leftleft = uvp.cov_array_real[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.cov_array_real[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-                uvp.cov_array_real[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_real[spw][:, :, :Ndlys//2, : :] = 0.0
+            if hasattr(uvp, "cov_array_real"):
+                leftleft = uvp.cov_array_real[spw][
+                    :, 1 : Ndlys // 2, 1 : Ndlys // 2, :
+                ][:, ::-1, ::-1, :]
+                leftright = uvp.cov_array_real[spw][
+                    :, 1 : Ndlys // 2, Ndlys // 2 + 1 :, :
+                ][:, ::-1, :, :]
+                rightleft = uvp.cov_array_real[spw][
+                    :, Ndlys // 2 + 1 :, 1 : Ndlys // 2, :
+                ][:, :, ::-1, :]
+                rightright = uvp.cov_array_real[spw][
+                    :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                ]
+                uvp.cov_array_real[spw][
+                    :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                uvp.cov_array_real[spw][:, : Ndlys // 2, :, :] = 0.0
+                uvp.cov_array_real[spw][:, :, : Ndlys // 2, ::] = 0.0
 
-                leftleft = uvp.cov_array_imag[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.cov_array_imag[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-                uvp.cov_array_imag[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_imag[spw][:, :, :Ndlys//2, : :] = 0.0
+                leftleft = uvp.cov_array_imag[spw][
+                    :, 1 : Ndlys // 2, 1 : Ndlys // 2, :
+                ][:, ::-1, ::-1, :]
+                leftright = uvp.cov_array_imag[spw][
+                    :, 1 : Ndlys // 2, Ndlys // 2 + 1 :, :
+                ][:, ::-1, :, :]
+                rightleft = uvp.cov_array_imag[spw][
+                    :, Ndlys // 2 + 1 :, 1 : Ndlys // 2, :
+                ][:, :, ::-1, :]
+                rightright = uvp.cov_array_imag[spw][
+                    :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                ]
+                uvp.cov_array_imag[spw][
+                    :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                uvp.cov_array_imag[spw][:, : Ndlys // 2, :, :] = 0.0
+                uvp.cov_array_imag[spw][:, :, : Ndlys // 2, ::] = 0.0
 
             # fold stats array if it exists: sum in inverse quadrature
-            if hasattr(uvp, 'stats_array'):
+            if hasattr(uvp, "stats_array"):
                 for stat in uvp.stats_array.keys():
-                    left = uvp.stats_array[stat][spw][:, 1:Ndlys//2, :][:, ::-1, :]
-                    right = uvp.stats_array[stat][spw][:, Ndlys//2+1:, :]
-                    uvp.stats_array[stat][spw][:, Ndlys//2+1:, :] = (np.sum([1./left**2.0, 1./right**2.0], axis=0))**(-0.5)
-                    uvp.data_array[spw][:, :Ndlys//2, :] = np.nan
+                    left = uvp.stats_array[stat][spw][:, 1 : Ndlys // 2, :][:, ::-1, :]
+                    right = uvp.stats_array[stat][spw][:, Ndlys // 2 + 1 :, :]
+                    uvp.stats_array[stat][spw][:, Ndlys // 2 + 1 :, :] = (
+                        np.sum([1.0 / left**2.0, 1.0 / right**2.0], axis=0)
+                    ) ** (-0.5)
+                    uvp.data_array[spw][:, : Ndlys // 2, :] = np.nan
 
         else:
             # odd number of dlys
-            left = uvp.data_array[spw][:, :Ndlys//2, :][:, ::-1, :]
-            right = uvp.data_array[spw][:, Ndlys//2+1:, :]
-            uvp.data_array[spw][:, Ndlys//2+1:, :] = np.mean([left, right], axis=0)
-            uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
+            left = uvp.data_array[spw][:, : Ndlys // 2, :][:, ::-1, :]
+            right = uvp.data_array[spw][:, Ndlys // 2 + 1 :, :]
+            uvp.data_array[spw][:, Ndlys // 2 + 1 :, :] = np.mean([left, right], axis=0)
+            uvp.data_array[spw][:, : Ndlys // 2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
-            if hasattr(uvp, 'window_function_array'):
+            if hasattr(uvp, "window_function_array"):
                 if uvp.exact_windows:
-                    left = uvp.window_function_array[spw][:, :Ndlys//2, ...][:, ::-1, ...]
-                    right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
-                    uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
+                    left = uvp.window_function_array[spw][:, : Ndlys // 2, ...][
+                        :, ::-1, ...
+                    ]
+                    right = uvp.window_function_array[spw][:, Ndlys // 2 + 1 :, ...]
+                    uvp.window_function_array[spw][:, Ndlys // 2 + 1 :, ...] = 0.50 * (
+                        left + right
+                    )
                 else:
-                    leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                    leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                    uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                                 +leftright\
-                                                                                 +rightleft\
-                                                                                 +rightright)
-                    uvp.window_function_array[spw][:, :, :Ndlys//2, :] = 0.0
-                uvp.window_function_array[spw][:, :Ndlys//2, ...] = 0.0
+                    leftleft = uvp.window_function_array[spw][
+                        :, : Ndlys // 2, : Ndlys // 2, :
+                    ][:, ::-1, ::-1, :]
+                    leftright = uvp.window_function_array[spw][
+                        :, : Ndlys // 2, Ndlys // 2 + 1 :, :
+                    ][:, ::-1, :, :]
+                    rightleft = uvp.window_function_array[spw][
+                        :, Ndlys // 2 + 1 :, : Ndlys // 2, :
+                    ][:, :, ::-1, :]
+                    rightright = uvp.window_function_array[spw][
+                        :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                    ]
+                    uvp.window_function_array[spw][
+                        :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                    ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                    uvp.window_function_array[spw][:, :, : Ndlys // 2, :] = 0.0
+                uvp.window_function_array[spw][:, : Ndlys // 2, ...] = 0.0
 
             # fold covariance array if it exists.
-            if hasattr(uvp,'cov_array_real'):
-                leftleft = uvp.cov_array_real[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.cov_array_real[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-                uvp.cov_array_real[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_real[spw][:, :, :Ndlys//2, : :] = 0.0
+            if hasattr(uvp, "cov_array_real"):
+                leftleft = uvp.cov_array_real[spw][:, : Ndlys // 2, : Ndlys // 2, :][
+                    :, ::-1, ::-1, :
+                ]
+                leftright = uvp.cov_array_real[spw][
+                    :, : Ndlys // 2, Ndlys // 2 + 1 :, :
+                ][:, ::-1, :, :]
+                rightleft = uvp.cov_array_real[spw][
+                    :, Ndlys // 2 + 1 :, : Ndlys // 2, :
+                ][:, :, ::-1, :]
+                rightright = uvp.cov_array_real[spw][
+                    :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                ]
+                uvp.cov_array_real[spw][
+                    :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                uvp.cov_array_real[spw][:, : Ndlys // 2, :, :] = 0.0
+                uvp.cov_array_real[spw][:, :, : Ndlys // 2, ::] = 0.0
 
-                leftleft = uvp.cov_array_imag[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                leftright = uvp.cov_array_imag[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
-                uvp.cov_array_imag[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_imag[spw][:, :, :Ndlys//2, : :] = 0.0
+                leftleft = uvp.cov_array_imag[spw][:, : Ndlys // 2, : Ndlys // 2, :][
+                    :, ::-1, ::-1, :
+                ]
+                leftright = uvp.cov_array_imag[spw][
+                    :, : Ndlys // 2, Ndlys // 2 + 1 :, :
+                ][:, ::-1, :, :]
+                rightleft = uvp.cov_array_imag[spw][
+                    :, Ndlys // 2 + 1 :, : Ndlys // 2, :
+                ][:, :, ::-1, :]
+                rightright = uvp.cov_array_imag[spw][
+                    :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                ]
+                uvp.cov_array_imag[spw][
+                    :, Ndlys // 2 + 1 :, Ndlys // 2 + 1 :, :
+                ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                uvp.cov_array_imag[spw][:, : Ndlys // 2, :, :] = 0.0
+                uvp.cov_array_imag[spw][:, :, : Ndlys // 2, ::] = 0.0
 
             # fold stats array if it exists: sum in inverse quadrature
-            if hasattr(uvp, 'stats_array'):
+            if hasattr(uvp, "stats_array"):
                 for stat in uvp.stats_array.keys():
-                    left = uvp.stats_array[stat][spw][:, :Ndlys//2, :][:, ::-1, :]
-                    right = uvp.stats_array[stat][spw][:, Ndlys//2+1:, :]
-                    uvp.stats_array[stat][spw][:, Ndlys//2+1:, :] = (np.sum([1./left**2.0, 1./right**2.0], axis=0))**(-0.5)
-                    uvp.data_array[spw][:, :Ndlys//2, :] = np.nan
+                    left = uvp.stats_array[stat][spw][:, : Ndlys // 2, :][:, ::-1, :]
+                    right = uvp.stats_array[stat][spw][:, Ndlys // 2 + 1 :, :]
+                    uvp.stats_array[stat][spw][:, Ndlys // 2 + 1 :, :] = (
+                        np.sum([1.0 / left**2.0, 1.0 / right**2.0], axis=0)
+                    ) ** (-0.5)
+                    uvp.data_array[spw][:, : Ndlys // 2, :] = np.nan
 
     uvp.folded = True
 
 
-def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
-                              seed=None):
+def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False, seed=None):
     """
     Generate a bootstrap-sampled average over a set of power spectra. The
     sampling is done over user-defined groups of baseline pairs (with
@@ -1318,59 +1547,72 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
     """
     # Validate input data
     from hera_pspec import UVPSpec
+
     single_uvp = False
     if isinstance(uvp_list, UVPSpec):
         single_uvp = True
-        uvp_list = [uvp_list,]
-    assert isinstance(uvp_list, list), \
-           "uvp_list must be a list of UVPSpec objects"
+        uvp_list = [
+            uvp_list,
+        ]
+    assert isinstance(uvp_list, list), "uvp_list must be a list of UVPSpec objects"
 
     # Check that uvp_list contains UVPSpec objects with the correct dimensions
-    assert np.all([isinstance(uvp, UVPSpec) for uvp in uvp_list]), \
-           "uvp_list must be a list of UVPSpec objects"
+    assert np.all(
+        [isinstance(uvp, UVPSpec) for uvp in uvp_list]
+    ), "uvp_list must be a list of UVPSpec objects"
 
     # Check for same length of time axis if no time averaging will be done
     if not time_avg:
         if np.unique([uvp.Ntimes for uvp in uvp_list]).size > 1:
-            raise IndexError("Input UVPSpec objects must have the same number "
-                             "of time samples if time_avg is False.")
+            raise IndexError(
+                "Input UVPSpec objects must have the same number "
+                "of time samples if time_avg is False."
+            )
 
     # Check that blpair_groups is a list of lists of groups
-    assert isinstance(blpair_groups, list), \
-        "blpair_groups must be a list of lists of baseline-pair tuples/integers"
+    assert isinstance(
+        blpair_groups, list
+    ), "blpair_groups must be a list of lists of baseline-pair tuples/integers"
     for grp in blpair_groups:
-        assert isinstance(grp, list), \
-        "blpair_groups must be a list of lists of baseline-pair tuples/integers"
+        assert isinstance(
+            grp, list
+        ), "blpair_groups must be a list of lists of baseline-pair tuples/integers"
 
     # Convert blpair tuples into blpair integers if necessary
     if isinstance(blpair_groups[0][0], tuple):
-        new_blp_grps = [[uvputils._antnums_to_blpair(blp) for blp in blpg]
-                        for blpg in blpair_groups]
+        new_blp_grps = [
+            [uvputils._antnums_to_blpair(blp) for blp in blpg] for blpg in blpair_groups
+        ]
         blpair_groups = new_blp_grps
 
     # Homogenise input UVPSpec objects in terms of available polarizations
     # and spectral windows
     if len(uvp_list) > 1:
-        uvp_list = uvpspec_utils.select_common(uvp_list, spws=True,
-                                               pols=True, inplace=False)
+        uvp_list = uvpspec_utils.select_common(
+            uvp_list, spws=True, pols=True, inplace=False
+        )
 
     # Loop over UVPSpec objects, looking for available blpairs in each
     avail_blpairs = [_ordered_unique(uvp.blpair_array) for uvp in uvp_list]
-    all_avail_blpairs = _ordered_unique([blp for blplist in avail_blpairs
-                                       for blp in blplist])
+    all_avail_blpairs = _ordered_unique(
+        [blp for blplist in avail_blpairs for blp in blplist]
+    )
 
     # Check that all requested blpairs exist in at least one UVPSpec object
     all_req_blpairs = _ordered_unique([blp for grp in blpair_groups for blp in grp])
     missing = []
     for blp in all_req_blpairs:
-        if blp not in all_avail_blpairs: missing.append(blp)
+        if blp not in all_avail_blpairs:
+            missing.append(blp)
     if len(missing) > 0:
-        raise KeyError("The following baseline-pairs were specified, but do "
-                       "not exist in any of the input UVPSpec objects: %s" \
-                       % str(missing))
+        raise KeyError(
+            "The following baseline-pairs were specified, but do "
+            "not exist in any of the input UVPSpec objects: %s" % str(missing)
+        )
 
     # Set random seed if specified
-    if seed is not None: np.random.seed(seed)
+    if seed is not None:
+        np.random.seed(seed)
 
     # Sample with replacement from the full list of available baseline-pairs
     # in each group, and create a blpair_group and blpair_weights entry for
@@ -1401,18 +1643,22 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
         j = 0
         for i in range(len(uvp_list)):
             n_blps = len(avail[i])
-            blpair_grps_list[i].append( list(avail[i]) )
-            _wgts = wgt[np.arange(j, j+n_blps)].astype(float) #+ 1e-4
-            blpair_wgts_list[i].append( list(_wgts) )
+            blpair_grps_list[i].append(list(avail[i]))
+            _wgts = wgt[np.arange(j, j + n_blps)].astype(float)  # + 1e-4
+            blpair_wgts_list[i].append(list(_wgts))
             j += n_blps
 
     # Loop over UVPSpec objects and calculate averages in each blpair group,
     # using the bootstrap-sampled blpair weights
     uvp_avg = []
     for i, uvp in enumerate(uvp_list):
-        _uvp = average_spectra(uvp, blpair_groups=blpair_grps_list[i],
-                               blpair_weights=blpair_wgts_list[i],
-                               time_avg=time_avg, inplace=False)
+        _uvp = average_spectra(
+            uvp,
+            blpair_groups=blpair_grps_list[i],
+            blpair_weights=blpair_wgts_list[i],
+            time_avg=time_avg,
+            inplace=False,
+        )
         uvp_avg.append(_uvp)
 
     # Return list of averaged spectra for now
@@ -1422,9 +1668,19 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
         return uvp_avg, blpair_wgts_list
 
 
-def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=1000, seed=None,
-                              normal_std=True, robust_std=False, cintervals=None, bl_error_tol=1.0,
-                              add_to_history='', verbose=False):
+def bootstrap_resampled_error(
+    uvp,
+    blpair_groups=None,
+    time_avg=False,
+    Nsamples=1000,
+    seed=None,
+    normal_std=True,
+    robust_std=False,
+    cintervals=None,
+    bl_error_tol=1.0,
+    add_to_history="",
+    verbose=False,
+):
     """
     Given a UVPSpec object, generate bootstrap resamples of its average
     and calculate their spread as an estimate of the errorbar on the
@@ -1477,8 +1733,11 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
         estimates calculated from the bootstrap resampling.
     """
     from hera_pspec import UVPSpec
+
     # type check
-    assert isinstance(uvp, (UVPSpec, str, np.str)), "uvp must be fed as a UVPSpec object or filepath"
+    assert isinstance(
+        uvp, (UVPSpec, str, np.str)
+    ), "uvp must be fed as a UVPSpec object or filepath"
     if isinstance(uvp, (str, np.str)):
         _uvp = UVPSpec()
         _uvp.read_hdf5(uvp)
@@ -1489,57 +1748,88 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
         blpair_groups, _, _, _ = utils.get_blvec_reds(uvp, bl_error_tol=bl_error_tol)
 
     # Uniform average
-    uvp_avg = average_spectra(uvp, blpair_groups=blpair_groups, time_avg=time_avg,
-                              inplace=False)
+    uvp_avg = average_spectra(
+        uvp, blpair_groups=blpair_groups, time_avg=time_avg, inplace=False
+    )
 
     # initialize a seed
-    if seed is not None: np.random.seed(seed)
+    if seed is not None:
+        np.random.seed(seed)
 
     # Iterate over Nsamples and create bootstrap resamples
     uvp_boots = []
     uvp_wgts = []
     for i in range(Nsamples):
         # resample
-        boot, wgt = bootstrap_average_blpairs(uvp, blpair_groups=blpair_groups, time_avg=time_avg, seed=None)
+        boot, wgt = bootstrap_average_blpairs(
+            uvp, blpair_groups=blpair_groups, time_avg=time_avg, seed=None
+        )
         uvp_boots.append(boot)
         uvp_wgts.append(wgt)
 
     # get all keys in uvp_avg and get data from each uvp_boot
     keys = uvp_avg.get_all_keys()
-    uvp_boot_data = odict([(k, np.array([u.get_data(k) for u in uvp_boots]))
-                           for k in keys])
+    uvp_boot_data = odict(
+        [(k, np.array([u.get_data(k) for u in uvp_boots])) for k in keys]
+    )
 
     # calculate various error estimates
     if normal_std:
         for k in keys:
-            nstd = np.std(uvp_boot_data[k].real, axis=0) \
-                 + 1j*np.std(uvp_boot_data[k].imag, axis=0)
+            nstd = np.std(uvp_boot_data[k].real, axis=0) + 1j * np.std(
+                uvp_boot_data[k].imag, axis=0
+            )
             uvp_avg.set_stats("bs_std", k, nstd)
 
     if robust_std:
         for k in keys:
-            rstd = np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].real, axis=0)) \
-                    + 1j*np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].imag, axis=0))
+            rstd = np.sqrt(
+                astats.biweight_midvariance(uvp_boot_data[k].real, axis=0)
+            ) + 1j * np.sqrt(astats.biweight_midvariance(uvp_boot_data[k].imag, axis=0))
             uvp_avg.set_stats("bs_robust_std", k, rstd)
 
     if cintervals is not None:
         for ci in cintervals:
             ci_tag = "bs_cinterval_{:05.2f}".format(ci)
             for k in keys:
-                cint = np.percentile(uvp_boot_data[k].real, ci, axis=0) \
-                        + 1j*np.percentile(uvp_boot_data[k].imag, ci, axis=0)
+                cint = np.percentile(
+                    uvp_boot_data[k].real, ci, axis=0
+                ) + 1j * np.percentile(uvp_boot_data[k].imag, ci, axis=0)
                 uvp_avg.set_stats(ci_tag, k, cint)
 
     # Update history
-    uvp_avg.history = "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}" \
-                      "".format(version.git_hash[:15], Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
+    uvp_avg.history = (
+        "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}"
+        "".format(
+            version.git_hash[:15],
+            Nsamples,
+            seed,
+            add_to_history,
+            "-" * 40,
+            uvp_avg.history,
+        )
+    )
 
     return uvp_avg, uvp_boots, uvp_wgts
 
 
-def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Nsamples=1000, seed=0,
-                  normal_std=True, robust_std=True, cintervals=None, keep_samples=False,
-                  bl_error_tol=1.0, overwrite=False, add_to_history='', verbose=True, maxiter=1):
+def bootstrap_run(
+    filename,
+    spectra=None,
+    blpair_groups=None,
+    time_avg=False,
+    Nsamples=1000,
+    seed=0,
+    normal_std=True,
+    robust_std=True,
+    cintervals=None,
+    keep_samples=False,
+    bl_error_tol=1.0,
+    overwrite=False,
+    add_to_history="",
+    verbose=True,
+    maxiter=1,
+):
     """
     Run bootstrap resampling on a PSpecContainer object to estimate errorbars.
     For each group/spectrum specified in the PSpecContainer, this function produces
@@ -1612,10 +1902,18 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     """
     from hera_pspec import uvpspec
     from hera_pspec import PSpecContainer
+
     # type check
     if isinstance(filename, (str, np.str)):
         # open in transactional mode
-        psc = PSpecContainer(filename, mode='rw', keep_open=False, swmr=False, tsleep=0.5, maxiter=maxiter)
+        psc = PSpecContainer(
+            filename,
+            mode="rw",
+            keep_open=False,
+            swmr=False,
+            tsleep=0.5,
+            maxiter=maxiter,
+        )
     elif isinstance(filename, PSpecContainer):
         psc = filename
         assert not psc.swmr, "PSpecContainer should not be in SWMR mode"
@@ -1627,9 +1925,9 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     assert len(groups) > 0, "No groups exist in PSpecContainer"
 
     # get spectra if not fed
-    all_spectra = utils.flatten([ [os.path.join(grp, s)
-                                   for s in psc.spectra(grp)]
-                                   for grp in groups])
+    all_spectra = utils.flatten(
+        [[os.path.join(grp, s) for s in psc.spectra(grp)] for grp in groups]
+    )
     if spectra is None:
         spectra = all_spectra
     else:
@@ -1639,64 +1937,131 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     # iterate over spectra
     for spc_name in spectra:
         # split group and spectra names
-        grp, spc = spc_name.split('/')
+        grp, spc = spc_name.split("/")
 
         # run boostrap_resampled_error
         uvp = psc.get_pspec(grp, spc)
-        (uvp_avg, uvp_boots,
-         uvp_wgts) = bootstrap_resampled_error(uvp, blpair_groups=blpair_groups,
-                                               time_avg=time_avg,
-                                               Nsamples=Nsamples, seed=seed,
-                                               normal_std=normal_std,
-                                               robust_std=robust_std,
-                                               cintervals=cintervals,
-                                               bl_error_tol=bl_error_tol,
-                                               add_to_history=add_to_history,
-                                               verbose=verbose)
+        (uvp_avg, uvp_boots, uvp_wgts) = bootstrap_resampled_error(
+            uvp,
+            blpair_groups=blpair_groups,
+            time_avg=time_avg,
+            Nsamples=Nsamples,
+            seed=seed,
+            normal_std=normal_std,
+            robust_std=robust_std,
+            cintervals=cintervals,
+            bl_error_tol=bl_error_tol,
+            add_to_history=add_to_history,
+            verbose=verbose,
+        )
 
         # set averaged uvp
-        psc.set_pspec(grp, spc+"_avg", uvp_avg, overwrite=overwrite)
+        psc.set_pspec(grp, spc + "_avg", uvp_avg, overwrite=overwrite)
 
         # if keep_samples write uvp_boots
         if keep_samples:
             for i, uvpb in enumerate(uvp_boots):
-                psc.set_pspec(grp, spc+"_bs{}".format(i), uvpb, overwrite=overwrite)
+                psc.set_pspec(grp, spc + "_bs{}".format(i), uvpb, overwrite=overwrite)
 
 
 def get_bootstrap_run_argparser():
     a = argparse.ArgumentParser(
-           description="argument parser for grouping.bootstrap_run()")
+        description="argument parser for grouping.bootstrap_run()"
+    )
 
     def list_of_lists_of_tuples(s):
-        s = [[int(_x) for _x in x.split()] for x in s.split(',')]
+        s = [[int(_x) for _x in x.split()] for x in s.split(",")]
         return s
 
     # Add list of arguments
-    a.add_argument("filename", type=str,
-                   help="Filename of HDF5 container (PSpecContainer) containing "
-                        "input power spectra.")
-    a.add_argument("--spectra", default=None, type=str, nargs='+',
-                   help="List of power spectra names (with group prefix) to bootstrap over.")
-    a.add_argument("--blpair_groups", default=None, type=list_of_lists_of_tuples,
-                   help="List of baseline-pair groups (must be space-delimited blpair integers) "
-                        "wrapped in quotes to use in resampling. Default is to solve for and use redundant groups (recommended)."
-                        "Ex: --blpair_groups '101102103104 102103014015, 101013102104' --> "
-                        "[ [((1, 2), (3, 4)), ((2, 3), (4, 5))], [((1, 3), (2, 4))], ...]")
-    a.add_argument("--time_avg", default=False, type=bool, help="Perform time-average in averaging step.")
-    a.add_argument("--Nsamples", default=100, type=int, help="Number of bootstrap resamples to generate.")
-    a.add_argument("--seed", default=0, type=int, help="random seed to initialize bootstrap resampling with.")
-    a.add_argument("--normal_std", default=True, type=bool,
-                    help="Whether to calculate a 'normal' standard deviation (np.std).")
-    a.add_argument("--robust_std", default=False, type=bool,
-                    help="Whether to calculate a 'robust' standard deviation (astropy.stats.biweight_midvariance).")
-    a.add_argument("--cintervals", default=None, type=float, nargs='+',
-                    help="Confidence intervals (precentage from 0 < ci < 100) to calculate.")
-    a.add_argument("--keep_samples", default=False, action='store_true',
-                    help="If True, store bootstrap resamples in PSpecContainer object with *_bs# extension.")
-    a.add_argument("--bl_error_tol", type=float, default=1.0,
-                    help="Baseline redudancy tolerance if calculating redundant groups.")
-    a.add_argument("--overwrite", default=False, action='store_true', help="overwrite outputs if they exist.")
-    a.add_argument("--add_to_history", default='', type=str, help="String to add to history of power spectra.")
-    a.add_argument("--verbose", default=False, action='store_true', help="report feedback to stdout.")
+    a.add_argument(
+        "filename",
+        type=str,
+        help="Filename of HDF5 container (PSpecContainer) containing "
+        "input power spectra.",
+    )
+    a.add_argument(
+        "--spectra",
+        default=None,
+        type=str,
+        nargs="+",
+        help="List of power spectra names (with group prefix) to bootstrap over.",
+    )
+    a.add_argument(
+        "--blpair_groups",
+        default=None,
+        type=list_of_lists_of_tuples,
+        help="List of baseline-pair groups (must be space-delimited blpair integers) "
+        "wrapped in quotes to use in resampling. Default is to solve for and use redundant groups (recommended)."
+        "Ex: --blpair_groups '101102103104 102103014015, 101013102104' --> "
+        "[ [((1, 2), (3, 4)), ((2, 3), (4, 5))], [((1, 3), (2, 4))], ...]",
+    )
+    a.add_argument(
+        "--time_avg",
+        default=False,
+        type=bool,
+        help="Perform time-average in averaging step.",
+    )
+    a.add_argument(
+        "--Nsamples",
+        default=100,
+        type=int,
+        help="Number of bootstrap resamples to generate.",
+    )
+    a.add_argument(
+        "--seed",
+        default=0,
+        type=int,
+        help="random seed to initialize bootstrap resampling with.",
+    )
+    a.add_argument(
+        "--normal_std",
+        default=True,
+        type=bool,
+        help="Whether to calculate a 'normal' standard deviation (np.std).",
+    )
+    a.add_argument(
+        "--robust_std",
+        default=False,
+        type=bool,
+        help="Whether to calculate a 'robust' standard deviation (astropy.stats.biweight_midvariance).",
+    )
+    a.add_argument(
+        "--cintervals",
+        default=None,
+        type=float,
+        nargs="+",
+        help="Confidence intervals (precentage from 0 < ci < 100) to calculate.",
+    )
+    a.add_argument(
+        "--keep_samples",
+        default=False,
+        action="store_true",
+        help="If True, store bootstrap resamples in PSpecContainer object with *_bs# extension.",
+    )
+    a.add_argument(
+        "--bl_error_tol",
+        type=float,
+        default=1.0,
+        help="Baseline redudancy tolerance if calculating redundant groups.",
+    )
+    a.add_argument(
+        "--overwrite",
+        default=False,
+        action="store_true",
+        help="overwrite outputs if they exist.",
+    )
+    a.add_argument(
+        "--add_to_history",
+        default="",
+        type=str,
+        help="String to add to history of power spectra.",
+    )
+    a.add_argument(
+        "--verbose",
+        default=False,
+        action="store_true",
+        help="report feedback to stdout.",
+    )
 
     return a

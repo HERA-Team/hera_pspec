@@ -11,11 +11,10 @@ from hera_pspec import uvpspec_utils as uvputils
 # Parse commandline args
 args = grouping.get_bootstrap_run_argparser()
 a = args.parse_args()
-kwargs = vars(a) # dict of args
+kwargs = vars(a)  # dict of args
 
 # Get arguments
-filename = kwargs.pop('filename')
+filename = kwargs.pop("filename")
 
 # Run bootstrap
 grouping.bootstrap_run(filename, **kwargs)
-

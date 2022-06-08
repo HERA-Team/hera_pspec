@@ -10,9 +10,17 @@ from collections import OrderedDict as odict
 from . import conversions as conversions, uvpspec_utils as uvputils
 
 
-def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
-                          num_steps=5000, taper='none', little_h=True,
-                          noise_scalar=False, exact_norm=False):
+def _compute_pspec_scalar(
+    cosmo,
+    beam_freqs,
+    omega_ratio,
+    pspec_freqs,
+    num_steps=5000,
+    taper="none",
+    little_h=True,
+    noise_scalar=False,
+    exact_norm=False,
+):
     """
     This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
@@ -67,9 +75,13 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     """
     # Get integration freqs
     df = np.median(np.diff(pspec_freqs))
-    integration_freqs = np.linspace(pspec_freqs.min(),
-                                    pspec_freqs.min() + df*len(pspec_freqs),
-                                    num_steps, endpoint=True, dtype=np.float)
+    integration_freqs = np.linspace(
+        pspec_freqs.min(),
+        pspec_freqs.min() + df * len(pspec_freqs),
+        num_steps,
+        endpoint=True,
+        dtype=np.float,
+    )
 
     # The interpolations are generally more stable in MHz
     integration_freqs_MHz = integration_freqs / 1e6
@@ -78,39 +90,44 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     redshifts = cosmo.f2z(integration_freqs).flatten()
     X2Y = np.array([cosmo.X2Y(z, little_h=little_h) for z in redshifts])
 
-    if exact_norm: #Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
-        scalar = integrate.trapz(X2Y, x=integration_freqs)/(np.abs(integration_freqs[-1]-integration_freqs[0]))
+    if (
+        exact_norm
+    ):  # Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
+        scalar = integrate.trapz(X2Y, x=integration_freqs) / (
+            np.abs(integration_freqs[-1] - integration_freqs[0])
+        )
         return scalar
 
     # Use linear interpolation to interpolate the frequency-dependent
     # quantities derived from the beam model to the same frequency grid as the
     # power spectrum estimation
     beam_model_freqs_MHz = beam_freqs / 1e6
-    dOpp_over_Op2_fit = interp1d(beam_model_freqs_MHz, omega_ratio,
-                                 kind='quadratic', fill_value='extrapolate')
+    dOpp_over_Op2_fit = interp1d(
+        beam_model_freqs_MHz, omega_ratio, kind="quadratic", fill_value="extrapolate"
+    )
     dOpp_over_Op2 = dOpp_over_Op2_fit(integration_freqs_MHz)
 
     # Get B_pp = \int dnu taper^2 and Bp = \int dnu
-    if taper == 'none':
+    if taper == "none":
         dBpp_over_BpSq = np.ones_like(integration_freqs, np.float)
     else:
-        dBpp_over_BpSq = dspec.gen_window(taper, len(pspec_freqs))**2.
-        dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest',
-                                  fill_value='extrapolate')(integration_freqs)
-    dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0])**2.
+        dBpp_over_BpSq = dspec.gen_window(taper, len(pspec_freqs)) ** 2.0
+        dBpp_over_BpSq = interp1d(
+            pspec_freqs, dBpp_over_BpSq, kind="nearest", fill_value="extrapolate"
+        )(integration_freqs)
+    dBpp_over_BpSq /= (integration_freqs[-1] - integration_freqs[0]) ** 2.0
 
     # Keep dBpp_over_BpSq term or not
     if noise_scalar:
-        dBpp_over_BpSq = 1. / (integration_freqs[-1] - integration_freqs[0])
+        dBpp_over_BpSq = 1.0 / (integration_freqs[-1] - integration_freqs[0])
 
     # Integrate to get scalar
     d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 / X2Y
-    scalar = 1. / integrate.trapz(d_inv_scalar, x=integration_freqs)
+    scalar = 1.0 / integrate.trapz(d_inv_scalar, x=integration_freqs)
     return scalar
 
 
 class PSpecBeamBase(object):
-
     def __init__(self, cosmo=None):
         """
         Base class for PSpecBeam objects. Provides compute_pspec_scalar()
@@ -128,9 +145,18 @@ class PSpecBeamBase(object):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-    def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs,
-                             num_steps=5000, pol='pI', taper='none',
-                             little_h=True, noise_scalar=False, exact_norm=False):
+    def compute_pspec_scalar(
+        self,
+        lower_freq,
+        upper_freq,
+        num_freqs,
+        num_steps=5000,
+        pol="pI",
+        taper="none",
+        little_h=True,
+        noise_scalar=False,
+        exact_norm=False,
+    ):
         """
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
@@ -188,22 +214,26 @@ class PSpecBeamBase(object):
             Units: h^-3 Mpc^3 or Mpc^3.
         """
         # Get pspec_freqs
-        pspec_freqs = np.linspace(lower_freq, upper_freq, num_freqs,
-                                  endpoint=False)
+        pspec_freqs = np.linspace(lower_freq, upper_freq, num_freqs, endpoint=False)
 
         # Get omega_ratio
-        omega_ratio = self.power_beam_sq_int(pol) \
-                      / self.power_beam_int(pol)**2
+        omega_ratio = self.power_beam_sq_int(pol) / self.power_beam_int(pol) ** 2
 
         # Get scalar
-        scalar = _compute_pspec_scalar(self.cosmo, self.beam_freqs,
-                                       omega_ratio, pspec_freqs,
-                                       num_steps=num_steps, taper=taper,
-                                       little_h=little_h,
-                                       noise_scalar=noise_scalar, exact_norm=exact_norm)
+        scalar = _compute_pspec_scalar(
+            self.cosmo,
+            self.beam_freqs,
+            omega_ratio,
+            pspec_freqs,
+            num_steps=num_steps,
+            taper=taper,
+            little_h=little_h,
+            noise_scalar=noise_scalar,
+            exact_norm=exact_norm,
+        )
         return scalar
 
-    def Jy_to_mK(self, freqs, pol='pI'):
+    def Jy_to_mK(self, freqs, pol="pI"):
         """
         Return the multiplicative factor [mK / Jy], to convert a visibility
         from Jy -> mK,
@@ -235,21 +265,39 @@ class PSpecBeamBase(object):
             freqs = np.array([freqs])
         elif not isinstance(freqs, np.ndarray):
             raise TypeError("freqs must be fed as a float ndarray")
-        elif isinstance(freqs, np.ndarray) \
-            and freqs.dtype not in (float, np.float, np.float64):
+        elif isinstance(freqs, np.ndarray) and freqs.dtype not in (
+            float,
+            np.float,
+            np.float64,
+        ):
             raise TypeError("freqs must be fed as a float ndarray")
 
         # Check frequency bounds
         if np.min(freqs) < self.beam_freqs.min():
-            print("Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(np.min(freqs)))
+            print(
+                "Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(
+                    np.min(freqs)
+                )
+            )
         if np.max(freqs) > self.beam_freqs.max():
-            print("Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(np.max(freqs)))
+            print(
+                "Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(
+                    np.max(freqs)
+                )
+            )
 
-        Op = interp1d(self.beam_freqs/1e6, self.power_beam_int(pol=pol),
-                      kind='quadratic', fill_value='extrapolate')(freqs/1e6)
+        Op = interp1d(
+            self.beam_freqs / 1e6,
+            self.power_beam_int(pol=pol),
+            kind="quadratic",
+            fill_value="extrapolate",
+        )(freqs / 1e6)
 
-        return 1e-20 * conversions.cgs_units.c**2 \
-               / (2 * conversions.cgs_units.kb * freqs**2 * Op)
+        return (
+            1e-20
+            * conversions.cgs_units.c**2
+            / (2 * conversions.cgs_units.kb * freqs**2 * Op)
+        )
 
     def get_Omegas(self, polpairs):
         """
@@ -272,14 +320,19 @@ class PSpecBeamBase(object):
         # Unpack polpairs into tuples
         if not isinstance(polpairs, (list, np.ndarray)):
             if isinstance(polpairs, (tuple, int, np.integer)):
-                polpairs = [polpairs,]
+                polpairs = [
+                    polpairs,
+                ]
             else:
                 raise TypeError("polpairs is not a list of integers or tuples")
 
         # Convert integers to tuples
-        polpairs = [uvputils.polpair_int2tuple(p)
-                        if isinstance(p, (int, np.integer, np.int32)) else p
-                        for p in polpairs]
+        polpairs = [
+            uvputils.polpair_int2tuple(p)
+            if isinstance(p, (int, np.integer, np.int32))
+            else p
+            for p in polpairs
+        ]
 
         # Calculate Omegas for each pol pair
         OmegaP, OmegaPP = [], []
@@ -292,9 +345,10 @@ class PSpecBeamBase(object):
             # Check for cross-pol; only same-pol calculation currently supported
             if pol1 != pol2:
                 raise NotImplementedError(
-                        "get_Omegas does not support cross-correlation between "
-                        "two different visibility polarizations yet. "
-                        "Could not calculate Omegas for (%s, %s)" % (pol1, pol2))
+                    "get_Omegas does not support cross-correlation between "
+                    "two different visibility polarizations yet. "
+                    "Could not calculate Omegas for (%s, %s)" % (pol1, pol2)
+                )
 
             # Calculate Omegas
             OmegaP.append(self.power_beam_int(pol=pol1))
@@ -306,7 +360,6 @@ class PSpecBeamBase(object):
 
 
 class PSpecBeamGauss(PSpecBeamBase):
-
     def __init__(self, fwhm, beam_freqs, cosmo=None):
         """
         Object to store a simple (frequency independent) Gaussian beam in a
@@ -332,7 +385,7 @@ class PSpecBeamGauss(PSpecBeamBase):
         else:
             self.cosmo = conversions.Cosmo_Conversions()
 
-    def power_beam_int(self, pol='pI'):
+    def power_beam_int(self, pol="pI"):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in sr). Uses analytic formula that the answer
@@ -356,10 +409,15 @@ class PSpecBeamGauss(PSpecBeamBase):
         primary_beam_area: float, array-like
             Primary beam area.
         """
-        return np.ones_like(self.beam_freqs) * 2. * np.pi * self.fwhm**2 \
-               / (8. * np.log(2.))
+        return (
+            np.ones_like(self.beam_freqs)
+            * 2.0
+            * np.pi
+            * self.fwhm**2
+            / (8.0 * np.log(2.0))
+        )
 
-    def power_beam_sq_int(self, pol='pI'):
+    def power_beam_sq_int(self, pol="pI"):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam area (in str). Uses analytic formula that the answer
@@ -383,12 +441,12 @@ class PSpecBeamGauss(PSpecBeamBase):
         primary_beam_area: float, array-like
             Primary beam area.
         """
-        return np.ones_like(self.beam_freqs) * np.pi * self.fwhm**2 \
-               / (8. * np.log(2.))
+        return (
+            np.ones_like(self.beam_freqs) * np.pi * self.fwhm**2 / (8.0 * np.log(2.0))
+        )
 
 
 class PSpecBeamUV(PSpecBeamBase):
-
     def __init__(self, uvbeam, cosmo=None):
         """
         Object to store the primary beam for a pspec observation.
@@ -428,11 +486,11 @@ class PSpecBeamUV(PSpecBeamBase):
 
         # setup primary power beam
         self.primary_beam = uvb
-        if uvb.beam_type == 'efield':
+        if uvb.beam_type == "efield":
             self.primary_beam.efield_to_power(inplace=True)
             self.primary_beam.peak_normalize()
 
-    def beam_normalized_response(self, pol='pI', freq=None, x_orientation=None):
+    def beam_normalized_response(self, pol="pI", freq=None, x_orientation=None):
         """
         Outputs beam response for given polarization as a function
         of pixels on the sky and input frequencies.
@@ -464,17 +522,19 @@ class PSpecBeamUV(PSpecBeamBase):
             used to compute resolution
         """
 
-        if self.primary_beam.beam_type != 'power':
-            raise ValueError('beam_type must be power')
+        if self.primary_beam.beam_type != "power":
+            raise ValueError("beam_type must be power")
         if self.primary_beam.Naxes_vec > 1:
-            raise ValueError('Expect scalar for power beam, found vector')
-        if self.primary_beam._data_normalization.value != 'peak':
-            raise ValueError('beam must be peak normalized')
-        if self.primary_beam.pixel_coordinate_system != 'healpix':
-            raise ValueError('Currently only healpix format supported')
+            raise ValueError("Expect scalar for power beam, found vector")
+        if self.primary_beam._data_normalization.value != "peak":
+            raise ValueError("beam must be peak normalized")
+        if self.primary_beam.pixel_coordinate_system != "healpix":
+            raise ValueError("Currently only healpix format supported")
 
         nside = self.primary_beam.nside
-        beam_res = self.primary_beam._interp_freq(freq) # interpolate beam in frequency, based on the data frequencies
+        beam_res = self.primary_beam._interp_freq(
+            freq
+        )  # interpolate beam in frequency, based on the data frequencies
         beam_res = beam_res[0]
 
         if isinstance(pol, (str, np.str)):
@@ -484,15 +544,19 @@ class PSpecBeamUV(PSpecBeamBase):
 
         if pol in pol_array:
             stokes_p_ind = np.where(np.isin(pol_array, pol))[0][0]
-            beam_res = beam_res[0, 0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
+            beam_res = beam_res[
+                0, 0, stokes_p_ind
+            ]  # extract the beam with the correct polarization, dim (nfreq X npix)
         else:
-            raise ValueError('Do not have the right polarization information')
+            raise ValueError("Do not have the right polarization information")
 
-        omega = np.sum(beam_res, axis=-1) * np.pi / (3. * nside**2) #compute beam solid angle as a function of frequency
+        omega = (
+            np.sum(beam_res, axis=-1) * np.pi / (3.0 * nside**2)
+        )  # compute beam solid angle as a function of frequency
 
         return beam_res, omega, nside
 
-    def power_beam_int(self, pol='pI'):
+    def power_beam_int(self, pol="pI"):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency. Uses function
@@ -513,12 +577,12 @@ class PSpecBeamUV(PSpecBeamBase):
         primary_beam_area: float, array-like
             Scalar integral over beam solid angle.
         """
-        if hasattr(self.primary_beam, 'get_beam_area'):
+        if hasattr(self.primary_beam, "get_beam_area"):
             return np.real(self.primary_beam.get_beam_area(pol))
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
 
-    def power_beam_sq_int(self, pol='pI'):
+    def power_beam_sq_int(self, pol="pI"):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam**2 area (in str) as a function of frequency. Uses function
@@ -538,14 +602,13 @@ class PSpecBeamUV(PSpecBeamBase):
         -------
         primary_beam_area: float, array-like
         """
-        if hasattr(self.primary_beam, 'get_beam_area'):
+        if hasattr(self.primary_beam, "get_beam_area"):
             return np.real(self.primary_beam.get_beam_sq_area(pol))
         else:
             raise NotImplementedError("Outdated version of pyuvdata.")
 
 
 class PSpecBeamFromArray(PSpecBeamBase):
-
     def __init__(self, OmegaP, OmegaPP, beam_freqs, cosmo=None, x_orientation=None):
         """
         Primary beam model built from user-defined arrays for the integrals
@@ -586,7 +649,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
             Orientation in cardinal direction east or north of X dipole.
             Default keeps polarization in X and Y basis.
         """
-        self.OmegaP = {}; self.OmegaPP = {}
+        self.OmegaP = {}
+        self.OmegaPP = {}
         self.x_orientation = x_orientation
         # these are allowed pols in AIPS polarization integer convention
         # see pyuvdata.utils.polstr2num() for details
@@ -602,16 +666,21 @@ class PSpecBeamFromArray(PSpecBeamBase):
 
         elif isinstance(OmegaP, np.ndarray) or isinstance(OmegaPP, np.ndarray):
             # Mixed dict and array types are not allowed
-            raise TypeError("OmegaP and OmegaPP must both be either dicts "
-                            "or arrays. Mixing dicts and arrays is not "
-                            "allowed.")
+            raise TypeError(
+                "OmegaP and OmegaPP must both be either dicts "
+                "or arrays. Mixing dicts and arrays is not "
+                "allowed."
+            )
         else:
             pass
 
         # Should now have two dicts if everything is OK
-        if not isinstance(OmegaP, (odict, dict)) or not isinstance(OmegaPP, (odict, dict)):
-            raise TypeError("OmegaP and OmegaPP must both be either dicts or "
-                            "arrays.")
+        if not isinstance(OmegaP, (odict, dict)) or not isinstance(
+            OmegaPP, (odict, dict)
+        ):
+            raise TypeError(
+                "OmegaP and OmegaPP must both be either dicts or " "arrays."
+            )
 
         # Check for disallowed polarizations
         for key in list(OmegaP.keys()):
@@ -622,7 +691,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
                 key = new_key
             # check its an allowed pol
             if key not in self.allowed_pols:
-              raise KeyError("Unrecognized polarization '%s' in OmegaP." % key)
+                raise KeyError("Unrecognized polarization '%s' in OmegaP." % key)
         for key in list(OmegaPP.keys()):
             # turn into pol integer if a pol string
             if isinstance(key, str):
@@ -631,14 +700,16 @@ class PSpecBeamFromArray(PSpecBeamBase):
                 key = new_key
             # check its an allowed pol
             if key not in self.allowed_pols:
-              raise KeyError("Unrecognized polarization '%s' in OmegaPP." % key)
+                raise KeyError("Unrecognized polarization '%s' in OmegaPP." % key)
 
         # Check for available polarizations
         for pol in self.allowed_pols:
             if pol in OmegaP.keys() or pol in OmegaPP.keys():
                 if pol not in OmegaP.keys() or pol not in OmegaPP.keys():
-                    raise KeyError("Polarization '%s' must be specified for"
-                                   " both OmegaP and OmegaPP." % pol)
+                    raise KeyError(
+                        "Polarization '%s' must be specified for"
+                        " both OmegaP and OmegaPP." % pol
+                    )
 
                 # Add arrays for this polarization
                 self.add_pol(pol, OmegaP[pol], OmegaPP[pol])
@@ -648,7 +719,6 @@ class PSpecBeamFromArray(PSpecBeamBase):
             self.cosmo = conversions.Cosmo_Conversions()
         else:
             self.cosmo = cosmo
-
 
     def add_pol(self, pol, OmegaP, OmegaPP):
         """
@@ -690,10 +760,13 @@ class PSpecBeamFromArray(PSpecBeamBase):
             raise TypeError("OmegaP and OmegaPP must both be array_like.")
 
         # Check that array dimensions are consistent
-        if OmegaP.shape != self.beam_freqs.shape \
-          or OmegaPP.shape != self.beam_freqs.shape:
-               raise ValueError("OmegaP and OmegaPP should both "
-                                "have the same shape as beam_freqs.")
+        if (
+            OmegaP.shape != self.beam_freqs.shape
+            or OmegaPP.shape != self.beam_freqs.shape
+        ):
+            raise ValueError(
+                "OmegaP and OmegaPP should both " "have the same shape as beam_freqs."
+            )
         # Store arrays
         self.OmegaP[pol] = OmegaP
         self.OmegaPP[pol] = OmegaPP
@@ -701,7 +774,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         # get available pols
         self.available_pols = ", ".join(map(uvutils.polnum2str, self.OmegaP.keys()))
 
-    def power_beam_int(self, pol='pI'):
+    def power_beam_int(self, pol="pI"):
         """
         Computes the integral of the beam over solid angle to give
         a beam area (in str) as a function of frequency.
@@ -726,11 +799,12 @@ class PSpecBeamFromArray(PSpecBeamBase):
         if pol in self.OmegaP.keys():
             return self.OmegaP[pol]
         else:
-            raise KeyError("OmegaP not specified for polarization '%s'. "
-                           "Available polarizations are: %s" \
-                           % (pol, self.available_pols))
+            raise KeyError(
+                "OmegaP not specified for polarization '%s'. "
+                "Available polarizations are: %s" % (pol, self.available_pols)
+            )
 
-    def power_beam_sq_int(self, pol='pI'):
+    def power_beam_sq_int(self, pol="pI"):
         """
         Computes the integral of the beam**2 over solid angle to give
         a beam**2 area (in str) as a function of frequency.
@@ -755,16 +829,19 @@ class PSpecBeamFromArray(PSpecBeamBase):
         if pol in self.OmegaPP.keys():
             return self.OmegaPP[pol]
         else:
-            raise KeyError("OmegaPP not specified for polarization '%s'. "
-                           "Available polarizations are: %s" \
-                           % (pol, self.available_pols))
+            raise KeyError(
+                "OmegaPP not specified for polarization '%s'. "
+                "Available polarizations are: %s" % (pol, self.available_pols)
+            )
 
     def __str__(self):
         """
         Return a string with useful information about this object.
         """
         s = "PSpecBeamFromArray object\n"
-        s += "\tFrequency range: Min. %4.4e Hz, Max. %4.4e Hz\n" \
-              % (np.min(self.beam_freqs), np.max(self.beam_freqs))
+        s += "\tFrequency range: Min. %4.4e Hz, Max. %4.4e Hz\n" % (
+            np.min(self.beam_freqs),
+            np.max(self.beam_freqs),
+        )
         s += "\tAvailable pols: %s" % (self.available_pols)
         return s

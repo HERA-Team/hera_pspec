@@ -50,19 +50,23 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     cov : array_like
         Covariance (or cross-variance) matrix of size (M,M)
     """
-    if d2 is None: d2,w2 = d1,w1
-    if not np.isreal(w1).all(): raise TypeError("Weight matrices must be real")
-    if not np.isreal(w2).all(): raise TypeError("Weight matrices must be real")
-    if np.less(w1, 0.).any() or np.less(w2, 0.).any():
+    if d2 is None:
+        d2, w2 = d1, w1
+    if not np.isreal(w1).all():
+        raise TypeError("Weight matrices must be real")
+    if not np.isreal(w2).all():
+        raise TypeError("Weight matrices must be real")
+    if np.less(w1, 0.0).any() or np.less(w2, 0.0).any():
         raise ValueError("Weight matrices must be positive")
-    d1sum,d1wgt = (w1*d1).sum(axis=1), w1.sum(axis=1)
-    d2sum,d2wgt = (w2*d2).sum(axis=1), w2.sum(axis=1)
+    d1sum, d1wgt = (w1 * d1).sum(axis=1), w1.sum(axis=1)
+    d2sum, d2wgt = (w2 * d2).sum(axis=1), w2.sum(axis=1)
     x1 = d1sum / np.where(d1wgt > 0, d1wgt, 1)
     x2 = d2sum / np.where(d2wgt > 0, d2wgt, 1)
-    x1.shape = (-1,1); x2.shape = (-1,1)
+    x1.shape = (-1, 1)
+    x2.shape = (-1, 1)
 
-    z1 = w1*d1
-    z2 = w2*d2
+    z1 = w1 * d1
+    z2 = w2 * d2
 
     if conj_1:
         z1 = z1.conj()
@@ -76,6 +80,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     C /= np.where(W > 0, W, 1)
     C -= np.outer(x1, x2)
     return C
+
 
 def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     """
@@ -103,13 +108,15 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     var : ndarray, (spw_Nfreqs,)
 
     """
-    assert isinstance(bl, tuple) and len(bl)==3, "bl must be fed as Length-3 tuple"
-    assert isinstance(spw_range, tuple) and len(spw_range)==2, "spw_range must be fed as Length-2 tuple"
+    assert isinstance(bl, tuple) and len(bl) == 3, "bl must be fed as Length-3 tuple"
+    assert (
+        isinstance(spw_range, tuple) and len(spw_range) == 2
+    ), "spw_range must be fed as Length-2 tuple"
     dt = np.median(uvd.integration_time)
     # Delta_t
     df = uvd.channel_width
     # B
-    bl1 = (bl[0],bl[0], bl[2])
+    bl1 = (bl[0], bl[0], bl[2])
     # baseline b_alpha
     bl2 = (bl[1], bl[1], bl[2])
     # baseline b_beta
@@ -117,14 +124,23 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     x_bl1 = uvd.get_data(bl1)[time_index, spw]
     x_bl2 = uvd.get_data(bl2)[time_index, spw]
     nsample_bl = uvd.get_nsamples(bl)[time_index, spw]
-    nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(uvd.nsample_array[:,:,spw,:]))
+    nsample_bl = np.where(
+        nsample_bl > 0, nsample_bl, np.median(uvd.nsample_array[:, :, spw, :])
+    )
     # some impainted data have zero nsample while is not flagged, and they will be assigned the median nsample within the spectral window.
-    var = np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl
+    var = np.abs(x_bl1 * x_bl2.conj()) / dt / df / nsample_bl
 
     return var
 
-def construct_blpairs(bls, exclude_auto_bls=False, exclude_cross_bls=False,
-                      exclude_permutations=False, group=False, Nblps_per_group=1):
+
+def construct_blpairs(
+    bls,
+    exclude_auto_bls=False,
+    exclude_cross_bls=False,
+    exclude_permutations=False,
+    group=False,
+    Nblps_per_group=1,
+):
     """
     Construct a list of baseline-pairs from a baseline-group. This function
     can be used to easily convert a single list of baselines into the input
@@ -176,10 +192,13 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_cross_bls=False,
         List of blpair tuples.
     """
     # assert form
-    assert isinstance(bls, (list, np.ndarray)) and isinstance(bls[0], tuple), \
-        "bls must be fed as list or ndarray of baseline antnum tuples. Use " \
+    assert isinstance(bls, (list, np.ndarray)) and isinstance(bls[0], tuple), (
+        "bls must be fed as list or ndarray of baseline antnum tuples. Use "
         "UVData.baseline_to_antnums() to convert baseline integers to tuples."
-    assert (not exclude_auto_bls) or (not exclude_cross_bls), "Can't exclude both auto and cross blpairs"
+    )
+    assert (not exclude_auto_bls) or (
+        not exclude_cross_bls
+    ), "Can't exclude both auto and cross blpairs"
 
     # form blpairs w/o explicitly forming auto blpairs
     # however, if there are repeated bl in bls, there will be auto bls in blpairs
@@ -219,9 +238,9 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_cross_bls=False,
         new_bls1 = []
         new_bls2 = []
         for i in range(Ngrps):
-            new_blps.append(blpairs[i*Nblps_per_group:(i+1)*Nblps_per_group])
-            new_bls1.append(bls1[i*Nblps_per_group:(i+1)*Nblps_per_group])
-            new_bls2.append(bls2[i*Nblps_per_group:(i+1)*Nblps_per_group])
+            new_blps.append(blpairs[i * Nblps_per_group : (i + 1) * Nblps_per_group])
+            new_bls1.append(bls1[i * Nblps_per_group : (i + 1) * Nblps_per_group])
+            new_bls2.append(bls2[i * Nblps_per_group : (i + 1) * Nblps_per_group])
 
         bls1 = new_bls1
         bls2 = new_bls2
@@ -230,13 +249,23 @@ def construct_blpairs(bls, exclude_auto_bls=False, exclude_cross_bls=False,
     return bls1, bls2, blpairs
 
 
-def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
-                     xant_flag_thresh=0.95, exclude_auto_bls=False,
-                     exclude_cross_bls=False,
-                     exclude_permutations=True, Nblps_per_group=None,
-                     bl_len_range=(0, 1e10), bl_deg_range=(0, 180),
-                     xants=None, include_autocorrs=False,
-                     include_crosscorrs=True, extra_info=False):
+def calc_blpair_reds(
+    uvd1,
+    uvd2,
+    bl_tol=1.0,
+    filter_blpairs=True,
+    xant_flag_thresh=0.95,
+    exclude_auto_bls=False,
+    exclude_cross_bls=False,
+    exclude_permutations=True,
+    Nblps_per_group=None,
+    bl_len_range=(0, 1e10),
+    bl_deg_range=(0, 180),
+    xants=None,
+    include_autocorrs=False,
+    include_crosscorrs=True,
+    extra_info=False,
+):
     """
     Use hera_cal.redcal to get matching, redundant baseline-pair groups from
     uvd1 and uvd2 within the specified baseline tolerance, not including
@@ -335,8 +364,10 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     # assert antenna positions match
     for a in set(antpos1).union(set(antpos2)):
         if a in antpos1 and a in antpos2:
-            msg = "antenna positions from uvd1 and uvd2 do not agree to within " \
-                  "tolerance of {} m".format(bl_tol)
+            msg = (
+                "antenna positions from uvd1 and uvd2 do not agree to within "
+                "tolerance of {} m".format(bl_tol)
+            )
             assert np.linalg.norm(antpos1[a] - antpos2[a]) < bl_tol, msg
 
     # calculate xants via flags if asked
@@ -350,10 +381,12 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
 
             # continue if autocorr and we dont want to include them
             if not include_autocorrs:
-                if antnums[0] == antnums[1]: continue
+                if antnums[0] == antnums[1]:
+                    continue
 
             if not include_crosscorrs:
-                if antnums[0] != antnums[1]: continue
+                if antnums[0] != antnums[1]:
+                    continue
 
             # work on xants1
             if bl in uvd1.baseline_array:
@@ -386,16 +419,25 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         xants2 += xants
 
     # construct redundant groups
-    reds, lens, angs = get_reds(antpos, bl_error_tol=bl_tol, xants=xants1+xants2,
-                                add_autos=include_autocorrs, autos_only=not(include_crosscorrs),
-                                bl_deg_range=bl_deg_range, bl_len_range=bl_len_range)
+    reds, lens, angs = get_reds(
+        antpos,
+        bl_error_tol=bl_tol,
+        xants=xants1 + xants2,
+        add_autos=include_autocorrs,
+        autos_only=not (include_crosscorrs),
+        bl_deg_range=bl_deg_range,
+        bl_len_range=bl_len_range,
+    )
     # construct baseline pairs
     baselines1, baselines2, blpairs, red_groups = [], [], [], []
     for j, r in enumerate(reds):
-        (bls1, bls2,
-         blps) = construct_blpairs(r, exclude_auto_bls=exclude_auto_bls,
-                                   exclude_cross_bls=exclude_cross_bls, group=False,
-                                   exclude_permutations=exclude_permutations)
+        (bls1, bls2, blps) = construct_blpairs(
+            r,
+            exclude_auto_bls=exclude_auto_bls,
+            exclude_cross_bls=exclude_cross_bls,
+            group=False,
+            exclude_permutations=exclude_permutations,
+        )
         if len(bls1) < 1:
             continue
 
@@ -407,8 +449,9 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
             for blp in blps:
                 bl1 = blp[0]
                 bl2 = blp[1]
-                if ((bl1 in uvd1_bls) or (bl1[::-1] in uvd1_bls)) \
-                    and ((bl2 in uvd2_bls) or (bl2[::-1] in uvd2_bls)):
+                if ((bl1 in uvd1_bls) or (bl1[::-1] in uvd1_bls)) and (
+                    (bl2 in uvd2_bls) or (bl2[::-1] in uvd2_bls)
+                ):
                     _bls1.append(bl1)
                     _bls2.append(bl2)
             bls1, bls2 = _bls1, _bls2
@@ -420,14 +463,22 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         # group if desired
         if Nblps_per_group is not None:
             Ngrps = int(np.ceil(float(len(blps)) / Nblps_per_group))
-            bls1 = [bls1[Nblps_per_group*i:Nblps_per_group*(i+1)]
-                    for i in range(Ngrps)]
-            bls2 = [bls2[Nblps_per_group*i:Nblps_per_group*(i+1)]
-                    for i in range(Ngrps)]
-            blps = [blps[Nblps_per_group*i:Nblps_per_group*(i+1)]
-                    for i in range(Ngrps)]
-            rinds = [rinds[Nblps_per_group*i:Nblps_per_group*(i+1)]
-                    for i in range(Ngrps)]
+            bls1 = [
+                bls1[Nblps_per_group * i : Nblps_per_group * (i + 1)]
+                for i in range(Ngrps)
+            ]
+            bls2 = [
+                bls2[Nblps_per_group * i : Nblps_per_group * (i + 1)]
+                for i in range(Ngrps)
+            ]
+            blps = [
+                blps[Nblps_per_group * i : Nblps_per_group * (i + 1)]
+                for i in range(Ngrps)
+            ]
+            rinds = [
+                rinds[Nblps_per_group * i : Nblps_per_group * (i + 1)]
+                for i in range(Ngrps)
+            ]
 
         baselines1.extend(bls1)
         baselines2.extend(bls2)
@@ -461,7 +512,7 @@ def get_delays(freqs, n_dlys=None):
     Delta_nu = np.median(np.diff(freqs))
     n_freqs = freqs.size
 
-    if n_dlys == None: # assume that n_dlys = n_freqs if not specified
+    if n_dlys == None:  # assume that n_dlys = n_freqs if not specified
         n_dlys = n_freqs
 
     # Calculate the delays
@@ -506,10 +557,11 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     try:
         freqs = data.freq_array
         if len(freqs.shape) == 2 and freqs.shape[0] == 1:
-            freqs = freqs.flatten() # Support UVData 2D freq_array
+            freqs = freqs.flatten()  # Support UVData 2D freq_array
         elif len(freqs.shape) > 2:
-            raise ValueError("data.freq_array has unsupported shape: %s" \
-                             % str(freqs.shape))
+            raise ValueError(
+                "data.freq_array has unsupported shape: %s" % str(freqs.shape)
+            )
     except:
         raise AttributeError("Object 'data' does not have a freq_array attribute.")
 
@@ -517,7 +569,9 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     is_tuple = False
     if isinstance(freq_range, tuple):
         is_tuple = True
-        freq_range = [freq_range,]
+        freq_range = [
+            freq_range,
+        ]
 
     # Make sure freq_range is now a list (of tuples)
     if not isinstance(freq_range, list):
@@ -528,18 +582,23 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     for frange in freq_range:
         fmin, fmax = frange
         if fmin > fmax:
-            raise ValueError("Upper bound of spectral window is less than "
-                             "the lower bound.")
+            raise ValueError(
+                "Upper bound of spectral window is less than " "the lower bound."
+            )
 
         # Check that this doesn't go beyond the available range of freqs
         if fmin < np.min(freqs) and bounds_error:
-            raise ValueError("Lower bound of spectral window is below the "
-                             "available frequency range. (Note: freqs should "
-                             "be in Hz)")
+            raise ValueError(
+                "Lower bound of spectral window is below the "
+                "available frequency range. (Note: freqs should "
+                "be in Hz)"
+            )
         if fmax > np.max(freqs) and bounds_error:
-            raise ValueError("Upper bound of spectral window is above the "
-                             "available frequency range. (Note: freqs should "
-                             "be in Hz)")
+            raise ValueError(
+                "Upper bound of spectral window is above the "
+                "available frequency range. (Note: freqs should "
+                "be in Hz)"
+            )
 
         # Get indices within this range
         idxs = np.where(np.logical_and(freqs >= fmin, freqs < fmax))[0]
@@ -547,7 +606,8 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
         spw_range.append(spw)
 
     # Unpack from list if only a single tuple was specified originally
-    if is_tuple: return spw_range[0]
+    if is_tuple:
+        return spw_range[0]
     return spw_range
 
 
@@ -586,21 +646,24 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
     is_tuple = False
     if isinstance(z_range, tuple):
         is_tuple = True
-        z_range = [z_range,]
+        z_range = [
+            z_range,
+        ]
 
     # Convert redshifts to frequencies (in Hz)
     freq_range = []
     for zrange in z_range:
         zmin, zmax = zrange
-        freq_range.append( (Cosmo_Conversions.z2f(zmax),
-                            Cosmo_Conversions.z2f(zmin)) )
+        freq_range.append((Cosmo_Conversions.z2f(zmax), Cosmo_Conversions.z2f(zmin)))
 
     # Use freq. function to get spectral window
-    spw_range = spw_range_from_freqs(data=data, freq_range=freq_range,
-                                     bounds_error=bounds_error)
+    spw_range = spw_range_from_freqs(
+        data=data, freq_range=freq_range, bounds_error=bounds_error
+    )
 
     # Unpack from list if only a single tuple was specified originally
-    if is_tuple: return spw_range[0]
+    if is_tuple:
+        return spw_range[0]
     return spw_range
 
 
@@ -629,10 +692,10 @@ def log(msg, f=None, lvl=0, tb=None, verbose=True):
     """
     # catch for traceback if provided
     if tb is not None:
-        msg += "\n{}".format('\n'.join(traceback.format_exception(*tb)))
+        msg += "\n{}".format("\n".join(traceback.format_exception(*tb)))
 
     # print
-    output = "%s%s" % ("  "*lvl, msg)
+    output = "%s%s" % ("  " * lvl, msg)
     if verbose:
         print(output)
 
@@ -653,19 +716,22 @@ def load_config(config_file):
         if isinstance(d, (dict, odict)):
             for k in d.keys():
                 # 'None' and '' turn into None
-                if d[k] == 'None': d[k] = None
+                if d[k] == "None":
+                    d[k] = None
                 # list of lists turn into lists of tuples
-                if isinstance(d[k], list) \
-                and np.all([isinstance(i, list) for i in d[k]]):
+                if isinstance(d[k], list) and np.all(
+                    [isinstance(i, list) for i in d[k]]
+                ):
                     d[k] = [tuple(i) for i in d[k]]
-                elif isinstance(d[k], (dict, odict)): replace(d[k])
+                elif isinstance(d[k], (dict, odict)):
+                    replace(d[k])
 
     # Open and read config file
-    with open(config_file, 'r') as cfile:
+    with open(config_file, "r") as cfile:
         try:
             cfg = yaml.load(cfile, Loader=yaml.FullLoader)
         except yaml.YAMLError as exc:
-            raise(exc)
+            raise (exc)
 
     # Replace entries
     replace(cfg)
@@ -680,11 +746,20 @@ def flatten(nested_list):
     return [item for sublist in nested_list for item in sublist]
 
 
-def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=False,
-                         exclude_permutations=True, bl_len_range=(0, 1e10),
-                         bl_deg_range=(0, 180), xants=None, exclude_patterns=None,
-                         include_autocorrs=False,
-                         file_type='miriad', verbose=True):
+def config_pspec_blpairs(
+    uv_templates,
+    pol_pairs,
+    group_pairs,
+    exclude_auto_bls=False,
+    exclude_permutations=True,
+    bl_len_range=(0, 1e10),
+    bl_deg_range=(0, 180),
+    xants=None,
+    exclude_patterns=None,
+    include_autocorrs=False,
+    file_type="miriad",
+    verbose=True,
+):
     """
     Given a list of glob-parseable file templates and selections for
     polarization and group labels, construct a master list of
@@ -763,8 +838,9 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     # type check
     if isinstance(uv_templates, (str, np.str)):
         uv_templates = [uv_templates]
-    assert len(pol_pairs) == len(group_pairs), "len(pol_pairs) must equal "\
-                                               "len(group_pairs)"
+    assert len(pol_pairs) == len(group_pairs), (
+        "len(pol_pairs) must equal " "len(group_pairs)"
+    )
 
     # get unique pols and groups
     pols = sorted(set([item for sublist in pol_pairs for item in sublist]))
@@ -783,8 +859,9 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                     pol_grps.append((pol, group))
                 # insert into unique_files with {pol} and {group} re-inserted
                 for _file in files:
-                    _unique_file = _file.replace(".{pol}.".format(pol=pol),
-                        ".{pol}.").replace(".{group}.".format(group=group), ".{group}.")
+                    _unique_file = _file.replace(
+                        ".{pol}.".format(pol=pol), ".{pol}."
+                    ).replace(".{group}.".format(group=group), ".{group}.")
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
     unique_files = sorted(unique_files)
@@ -800,8 +877,10 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
                 # Add to list of files to be excluded
                 if pattern in f:
                     if verbose:
-                        print("File matches pattern '%s' and will be excluded: %s" \
-                              % (pattern, f))
+                        print(
+                            "File matches pattern '%s' and will be excluded: %s"
+                            % (pattern, f)
+                        )
                     to_exclude.append(f)
                     continue
 
@@ -824,19 +903,27 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     uvd.read(_file, read_data=False, file_type=file_type)
 
     # get baseline pairs
-    (_bls1, _bls2, _, _,
-     _) = calc_blpair_reds(uvd, uvd, filter_blpairs=False, exclude_auto_bls=exclude_auto_bls,
-                    exclude_permutations=exclude_permutations, bl_len_range=bl_len_range,
-                    include_autocorrs=include_autocorrs, bl_deg_range=bl_deg_range)
+    (_bls1, _bls2, _, _, _) = calc_blpair_reds(
+        uvd,
+        uvd,
+        filter_blpairs=False,
+        exclude_auto_bls=exclude_auto_bls,
+        exclude_permutations=exclude_permutations,
+        bl_len_range=bl_len_range,
+        include_autocorrs=include_autocorrs,
+        bl_deg_range=bl_deg_range,
+    )
 
     # take out xants if fed
     if xants is not None:
         bls1, bls2 = [], []
         for bl1, bl2 in zip(_bls1, _bls2):
-            if bl1[0] not in xants \
-              and bl1[1] not in xants \
-              and bl2[0] not in xants \
-              and bl2[1] not in xants:
+            if (
+                bl1[0] not in xants
+                and bl1[1] not in xants
+                and bl2[0] not in xants
+                and bl2[1] not in xants
+            ):
                 bls1.append(bl1)
                 bls2.append(bl2)
     else:
@@ -848,7 +935,11 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     for pp, gp in zip(pol_pairs, group_pairs):
         if (pp[0], gp[0]) not in pol_grps or (pp[1], gp[1]) not in pol_grps:
             if verbose:
-                print("pol_pair {} and group_pair {} not found in data files".format(pp, gp))
+                print(
+                    "pol_pair {} and group_pair {} not found in data files".format(
+                        pp, gp
+                    )
+                )
             continue
         groupings[(tuple(gp), tuple(pp))] = blps
 
@@ -889,16 +980,17 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
         A list of baseline string tags denoting bl length and angle
     """
     from hera_pspec import UVPSpec
+
     # type check
-    assert isinstance(blvecs, (dict, odict, UVPSpec)), \
-        "blpairs must be fed as a dict or UVPSpec"
+    assert isinstance(
+        blvecs, (dict, odict, UVPSpec)
+    ), "blpairs must be fed as a dict or UVPSpec"
     if isinstance(blvecs, UVPSpec):
         # get baseline vectors
         uvp = blvecs
         bls = uvp.bl_array
         bl_vecs = uvp.get_ENU_bl_vecs()[:, :2]
-        blvecs = dict(list(zip( [uvp.bl_to_antnums(_bls) for _bls in bls],
-                                bl_vecs )))
+        blvecs = dict(list(zip([uvp.bl_to_antnums(_bls) for _bls in bls], bl_vecs)))
         # get baseline-pairs
         blpairs = uvp.get_blpairs()
         # form dictionary
@@ -906,7 +998,7 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
         for blp in blpairs:
             bl1 = blp[0]
             bl2 = blp[1]
-            _blvecs[blp] = (blvecs[bl1] + blvecs[bl2]) / 2.
+            _blvecs[blp] = (blvecs[bl1] + blvecs[bl2]) / 2.0
         blvecs = _blvecs
 
     # create empty lists
@@ -922,16 +1014,23 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
         bl_vec = blvecs[bl][:2]
         bl_len = np.linalg.norm(bl_vec)
         bl_ang = np.arctan2(*bl_vec[::-1]) * 180 / np.pi
-        if bl_ang < 0: bl_ang = (bl_ang + 180) % 360
+        if bl_ang < 0:
+            bl_ang = (bl_ang + 180) % 360
         bl_tag = "{:03.0f}_{:03.0f}".format(bl_len, bl_ang)
 
         # append to list if unique within tolerance
         if match_bl_lens:
             # match only on bl length
-            match = [np.all(np.isclose(bll, bl_len, rtol=0.0, atol=bl_error_tol)) for bll in red_bl_len]
+            match = [
+                np.all(np.isclose(bll, bl_len, rtol=0.0, atol=bl_error_tol))
+                for bll in red_bl_len
+            ]
         else:
             # match on full bl vector
-            match = [np.all(np.isclose(blv, bl_vec, rtol=0.0, atol=bl_error_tol)) for blv in red_bl_vec]
+            match = [
+                np.all(np.isclose(blv, bl_vec, rtol=0.0, atol=bl_error_tol))
+                for blv in red_bl_vec
+            ]
         if np.any(match):
             match_id = np.where(match)[0][0]
             red_bl_grp[match_id].append(bl)
@@ -954,8 +1053,9 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
     return red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag
 
 
-def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
-                verbose=True):
+def job_monitor(
+    run_func, iterator, action_name, M=map, lf=None, maxiter=1, verbose=True
+):
     """
     Job monitoring function, used to send elements of iterator through calls of
     run_func. Can be parallelized if the input M function is from the
@@ -1002,14 +1102,20 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
 
     # check for len-0
     if len(exit_codes) == 0:
-        raise ValueError("No output generated from run_func over iterator {}".format(iterator))
+        raise ValueError(
+            "No output generated from run_func over iterator {}".format(iterator)
+        )
 
     # inspect for failures
     if np.all(exit_codes != 0):
         # everything failed, raise error
-        log("\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format("-"*60,
-                                                action_name, exit_codes, tnow),
-            f=lf, verbose=verbose)
+        log(
+            "\n{}\nAll {} jobs failed w/ exit codes\n {}: {}\n".format(
+                "-" * 60, action_name, exit_codes, tnow
+            ),
+            f=lf,
+            verbose=verbose,
+        )
         raise ValueError("All {} jobs failed".format(action_name))
 
     # if not all failed, try re-run
@@ -1032,14 +1138,20 @@ def job_monitor(run_func, iterator, action_name, M=map, lf=None, maxiter=1,
 
     # print failures if they exist
     if len(failures) > 0:
-        log("\nSome {} jobs failed after {} tries:\n{}".format(action_name,
-                                                               maxiter,
-                                                               failures),
-            f=lf, verbose=verbose)
+        log(
+            "\nSome {} jobs failed after {} tries:\n{}".format(
+                action_name, maxiter, failures
+            ),
+            f=lf,
+            verbose=verbose,
+        )
     else:
         t_run = time.time() - t_start
-        log("\nAll {} jobs ran through ({:1.1f} sec)".format(action_name, t_run),
-            f=lf, verbose=verbose)
+        log(
+            "\nAll {} jobs ran through ({:1.1f} sec)".format(action_name, t_run),
+            f=lf,
+            verbose=verbose,
+        )
 
     return failures
 
@@ -1082,10 +1194,18 @@ def get_bl_lens_angs(blvecs, bl_error_tol=1.0):
     return lens, angs
 
 
-def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
-             bl_deg_range=(0, 180), xants=None, add_autos=False,
-             autos_only=False, min_EW_cut=0,
-             file_type='miriad'):
+def get_reds(
+    uvd,
+    bl_error_tol=1.0,
+    pick_data_ants=False,
+    bl_len_range=(0, 1e4),
+    bl_deg_range=(0, 180),
+    xants=None,
+    add_autos=False,
+    autos_only=False,
+    min_EW_cut=0,
+    file_type="miriad",
+):
     """
     Given a UVData object, a Miriad filepath or antenna position dictionary,
     calculate redundant baseline groups using hera_cal.redcal and optionally
@@ -1155,8 +1275,10 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         # use antenna position dictionary
         antpos_dict = uvd
     else:
-        raise TypeError("uvd must be a UVData object, filename string, or dict "
-                        "of antenna positions.")
+        raise TypeError(
+            "uvd must be a UVData object, filename string, or dict "
+            "of antenna positions."
+        )
     # get redundant baselines
     reds = redcal.get_pos_reds(antpos_dict, bl_error_tol=bl_error_tol)
 
@@ -1167,9 +1289,12 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
     # restrict baselines
     _reds, _lens, _angs = [], [], []
     for i, (l, a) in enumerate(zip(lens, angs)):
-        if l < bl_len_range[0] or l > bl_len_range[1]: continue
-        if a < bl_deg_range[0] or a > bl_deg_range[1]: continue
-        if np.abs(l * np.cos(a * np.pi / 180)) < min_EW_cut: continue
+        if l < bl_len_range[0] or l > bl_len_range[1]:
+            continue
+        if a < bl_deg_range[0] or a > bl_deg_range[1]:
+            continue
+        if np.abs(l * np.cos(a * np.pi / 180)) < min_EW_cut:
+            continue
         _reds.append(reds[i])
         _lens.append(lens[i])
         _angs.append(angs[i])
@@ -1185,7 +1310,6 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
             reds = reds[:1]
             lens = lens[:1]
             angs = angs[:1]
-
 
     # filter based on xants
     if xants is not None:
@@ -1221,6 +1345,7 @@ def pspecdata_time_difference(ds, time_diff):
     ds_td : PSpecData object
     """
     from hera_pspec.pspecdata import PSpecData
+
     uvd1 = ds.dsets[0]
     uvd2 = ds.dsets[1]
     uvd10 = uvd_time_difference(uvd1, time_diff)
@@ -1245,10 +1370,12 @@ def uvd_time_difference(uvd, time_diff):
     -------
     uvd_td : UVData object
     """
-    min_time_diff = np.mean(np.unique(uvd.time_array)[1:]-np.unique(uvd.time_array)[0:-1])
+    min_time_diff = np.mean(
+        np.unique(uvd.time_array)[1:] - np.unique(uvd.time_array)[0:-1]
+    )
     index_diff = int(time_diff / min_time_diff) + 1
-    if index_diff > len(np.unique(uvd.time_array))-2:
-        index_diff = len(np.unique(uvd.time_array))-2
+    if index_diff > len(np.unique(uvd.time_array)) - 2:
+        index_diff = len(np.unique(uvd.time_array)) - 2
 
     uvd0 = uvd.select(times=np.unique(uvd.time_array)[0:-1:index_diff], inplace=False)
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[1::index_diff], inplace=False)
@@ -1260,8 +1387,8 @@ def uvd_time_difference(uvd, time_diff):
     return uvd0
 
 
-AUTOVISPOLS = ['XX', 'YY', 'EE', 'NN']
-STOKPOLS = ['PI', 'PQ', 'PU', 'PV']
+AUTOVISPOLS = ["XX", "YY", "EE", "NN"]
+STOKPOLS = ["PI", "PQ", "PU", "PV"]
 AUTOPOLS = AUTOVISPOLS + STOKPOLS
 
 
@@ -1294,37 +1421,45 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
     # get uvd metadata
     pols = [pol for pol in uvd.get_pols() if pol.upper() in AUTOPOLS]
     # if pseudo Stokes pol in pols, substitute for pI
-    pols = sorted(set([pol if pol.upper() in AUTOVISPOLS else 'pI' for pol in pols]))
+    pols = sorted(set([pol if pol.upper() in AUTOVISPOLS else "pI" for pol in pols]))
     autobls = [bl for bl in uvd.get_antpairs() if bl[0] == bl[1]]
     uvd.select(bls=autobls, polarizations=pols)
 
     # construct beam
     from hera_pspec import pspecbeam
     from hera_pspec import uvpspec
+
     if isinstance(beam, str):
         beam = pspecbeam.PSpecBeamUV(beam)
     elif isinstance(beam, pspecbeam.PSpecBeamBase):
         pass
     elif isinstance(beam, uvpspec.UVPSpec):
         uvp = beam
-        if hasattr(uvp, 'OmegaP'):
+        if hasattr(uvp, "OmegaP"):
             # use first pol in each polpair
-            uvp_pols = [pp[0] if pp[0].upper() not in STOKPOLS else 'pI' for pp in uvp.get_polpairs()]
+            uvp_pols = [
+                pp[0] if pp[0].upper() not in STOKPOLS else "pI"
+                for pp in uvp.get_polpairs()
+            ]
             Op = {uvp_pol: uvp.OmegaP[:, ii] for ii, uvp_pol in enumerate(uvp_pols)}
             Opp = {uvp_pol: uvp.OmegaPP[:, ii] for ii, uvp_pol in enumerate(uvp_pols)}
-            beam = pspecbeam.PSpecBeamFromArray(Op, Opp, uvp.beam_freqs, cosmo=uvp.cosmo)
+            beam = pspecbeam.PSpecBeamFromArray(
+                Op, Opp, uvp.beam_freqs, cosmo=uvp.cosmo
+            )
         else:
             raise ValueError("UVPSpec must have OmegaP and OmegaPP to make a beam")
     else:
-        raise ValueError("beam must be a string, PSpecBeamBase subclass or UVPSpec object")
+        raise ValueError(
+            "beam must be a string, PSpecBeamBase subclass or UVPSpec object"
+        )
 
     # convert autos in Jy to Tsys in Kelvin
-    J2K = {pol: beam.Jy_to_mK(uvd.freq_array[0], pol=pol)/1e3 for pol in pols}
+    J2K = {pol: beam.Jy_to_mK(uvd.freq_array[0], pol=pol) / 1e3 for pol in pols}
     for blpol in uvd.get_antpairpols():
         bl, pol = blpol[:2], blpol[2]
         tinds = uvd.antpair2ind(bl)
         if pol.upper() in STOKPOLS:
-            pol = 'pI'
+            pol = "pI"
         pind = pols.index(pol)
         uvd.data_array[tinds, 0, :, pind] *= J2K[pol]
 
@@ -1333,7 +1468,16 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
 
     return uvd
 
-def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_correction=True,  num_steps_scalar=2000, little_h=True):
+
+def uvp_noise_error(
+    uvp,
+    auto_Tsys=None,
+    err_type="P_N",
+    precomp_P_N=None,
+    P_SN_correction=True,
+    num_steps_scalar=2000,
+    little_h=True,
+):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
     Adds to uvp.stats_array inplace.
@@ -1391,8 +1535,13 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     scalar = {}
     for spw in uvp.spw_array:
         for polpair in uvp.polpair_array:
-            scalar[(spw, polpair)] = uvp.compute_scalar(spw, polpair, num_steps=num_steps_scalar,
-                                        little_h=little_h, noise_scalar=True)
+            scalar[(spw, polpair)] = uvp.compute_scalar(
+                spw,
+                polpair,
+                num_steps=num_steps_scalar,
+                little_h=little_h,
+                noise_scalar=True,
+            )
     # iterate over spectral window
     for spw in uvp.spw_array:
         # get spw properties
@@ -1407,46 +1556,84 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
             # iterate over polarization
             for polpair in uvp.polpair_array:
                 pol = uvpspec_utils.polpair_int2tuple(polpair)[0]  # integer
-                polstr = uvutils.polnum2str(pol) # TODO: use uvp.x_orientation when attr is added
+                polstr = uvutils.polnum2str(
+                    pol
+                )  # TODO: use uvp.x_orientation when attr is added
                 if polstr.upper() in STOKPOLS:
-                    pol = 'pI'
+                    pol = "pI"
                 key = (spw, blp, polpair)
 
                 if precomp_P_N is None:
                     # take geometric mean of four antenna autocorrs and get OR'd flags
-                    Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
-                    Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
+                    Tsys = (
+                        auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[
+                            :, spw_start:spw_stop
+                        ].real
+                        * auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[
+                            :, spw_start:spw_stop
+                        ].real
+                        * auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[
+                            :, spw_start:spw_stop
+                        ].real
+                        * auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[
+                            :, spw_start:spw_stop
+                        ].real
+                    ) ** (1.0 / 4)
+                    Tflag = (
+                        auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[
+                            :, spw_start:spw_stop
+                        ]
+                        + auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[
+                            :, spw_start:spw_stop
+                        ]
+                        + auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[
+                            :, spw_start:spw_stop
+                        ]
+                        + auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[
+                            :, spw_start:spw_stop
+                        ]
+                    )
                     # average over frequency
                     if np.all(Tflag):
                         # fully flagged
                         Tsys = np.inf
                     else:
                         # get weights
-                        Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
+                        Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(
+                            ~Tflag * taper, axis=-1
+                        ).clip(1e-20, np.inf)
                         Tflag = np.all(Tflag, axis=-1)
                         # interpolate to appropriate LST grid
                         if np.count_nonzero(~Tflag) > 1:
-                            Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+                            Tsys = interp1d(
+                                lsts[~Tflag],
+                                Tsys[~Tflag],
+                                kind="nearest",
+                                bounds_error=False,
+                                fill_value="extrapolate",
+                            )(lst_avg)
                         else:
                             Tsys = Tsys[0]
 
                     # calculate P_N
-                    P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real', scalar=scalar[(spw, polpair)])[blp_int]
+                    P_N = uvp.generate_noise_spectra(
+                        spw,
+                        polpair,
+                        Tsys,
+                        blpairs=[blp],
+                        form="Pk",
+                        component="real",
+                        scalar=scalar[(spw, polpair)],
+                    )[blp_int]
 
                 else:
                     P_N = uvp.get_stats(precomp_P_N, key)
 
-                if 'P_N' in err_type:
+                if "P_N" in err_type:
                     # set stats
-                    uvp.set_stats('P_N', key, P_N)
+                    uvp.set_stats("P_N", key, P_N)
 
-                if 'P_SN' in err_type:
+                if "P_SN" in err_type:
                     # calculate P_SN: see Tan+2020 and
                     # H1C_IDR2/notebooks/validation/errorbars_with_systematics_and_noise.ipynb
                     # get signal proxy
@@ -1457,13 +1644,14 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                     # catch nans, set to inf
                     P_SN[np.isnan(P_SN)] = np.inf
                     # set stats
-                    uvp.set_stats('P_SN', key, P_SN)
+                    uvp.set_stats("P_SN", key, P_SN)
 
     # P_SN correction
     if P_SN_correction and "P_SN" in err_type:
         if precomp_P_N is None:
-            precomp_P_N = 'P_N'
-        apply_P_SN_correction(uvp, P_SN='P_SN', P_N=precomp_P_N)
+            precomp_P_N = "P_N"
+        apply_P_SN_correction(uvp, P_SN="P_SN", P_N=precomp_P_N)
+
 
 def uvp_noise_error_parser():
     """
@@ -1474,24 +1662,49 @@ def uvp_noise_error_parser():
     Returns:
         a: argparser object with arguments used in auto_noise_run.py.
     """
-    a = argparse.ArgumentParser(description="argument parser for computing "
-                                            "thermal noise error bars from "
-                                            "autocorrelations")
-    a.add_argument("pspec_container", type=str,
-                   help="Filename of HDF5 container (PSpecContainer) containing "
-                        "input power spectra.")
-    a.add_argument("auto_file", type=str, help="Filename of UVData object containing only autocorr baselines to use"
-                                                "in thermal noise error bar estimation.")
+    a = argparse.ArgumentParser(
+        description="argument parser for computing "
+        "thermal noise error bars from "
+        "autocorrelations"
+    )
+    a.add_argument(
+        "pspec_container",
+        type=str,
+        help="Filename of HDF5 container (PSpecContainer) containing "
+        "input power spectra.",
+    )
+    a.add_argument(
+        "auto_file",
+        type=str,
+        help="Filename of UVData object containing only autocorr baselines to use"
+        "in thermal noise error bar estimation.",
+    )
     a.add_argument("beam", type=str, help="Filename for UVBeam storing primary beam.")
-    a.add_argument("--groups", type=str, help="Name of power-spectrum group to compute noise for.", default=None, nargs="+")
-    a.add_argument("--spectra", default=None, type=str, nargs='+',
-                   help="List of power spectra names (with group prefix) to calculate noise for.")
-    a.add_argument("--err_type", default="P_N", type=str,
-                    nargs="+", help="Which components of noise error"
-                                    "to compute, 'P_N' or 'P_SN'")
+    a.add_argument(
+        "--groups",
+        type=str,
+        help="Name of power-spectrum group to compute noise for.",
+        default=None,
+        nargs="+",
+    )
+    a.add_argument(
+        "--spectra",
+        default=None,
+        type=str,
+        nargs="+",
+        help="List of power spectra names (with group prefix) to calculate noise for.",
+    )
+    a.add_argument(
+        "--err_type",
+        default="P_N",
+        type=str,
+        nargs="+",
+        help="Which components of noise error" "to compute, 'P_N' or 'P_SN'",
+    )
     return a
 
-def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
+
+def apply_P_SN_correction(uvp, P_SN="P_SN", P_N="P_N"):
     """
     Apply correction factor to P_SN errorbar in stats_array to account
     for double counting of noise by using data as proxy for signal.
@@ -1513,7 +1726,9 @@ def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
         p_n = uvp.stats_array[P_N][spw]
         p_sn = uvp.stats_array[P_SN][spw]
         # derive correction
-        corr = 1 - (np.sqrt(1 / np.sqrt(np.pi) + 1) - 1) * p_n.real / p_sn.real.clip(1e-40, np.inf)
+        corr = 1 - (np.sqrt(1 / np.sqrt(np.pi) + 1) - 1) * p_n.real / p_sn.real.clip(
+            1e-40, np.inf
+        )
         corr[np.isclose(corr, 0)] = np.inf
         corr[corr < 0] = np.inf
         corr[np.isnan(corr)] = np.inf
@@ -1521,7 +1736,7 @@ def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
         uvp.stats_array[P_SN][spw] *= corr
 
 
-def history_string(notes=''):
+def history_string(notes=""):
     """
     Creates a standardized history string that all functions that write to
     disk can use. Optionally add notes.
@@ -1536,4 +1751,3 @@ def history_string(notes=''):
     ------------
     """
     return history
-

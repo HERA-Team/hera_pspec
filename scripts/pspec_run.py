@@ -11,13 +11,13 @@ a = args.parse_args()
 kwargs = vars(a)
 
 # get arguments
-dsets = kwargs.pop('dsets')
-filename = kwargs.pop('filename')
+dsets = kwargs.pop("dsets")
+filename = kwargs.pop("filename")
 # we want to compute cross-corr power spectra by default so feed
 # the inverse of the include_autocorrs arg.
-kwargs['include_crosscorrs'] = not(kwargs.pop('exclude_crosscorrs'))
+kwargs["include_crosscorrs"] = not (kwargs.pop("exclude_crosscorrs"))
 # get special kwargs
-history = ' '.join(sys.argv)
+history = " ".join(sys.argv)
 
 # run pspec
 pspecdata.pspec_run(dsets, filename, history=history, **kwargs)

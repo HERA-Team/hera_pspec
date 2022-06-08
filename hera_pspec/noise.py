@@ -1,24 +1,31 @@
 import numpy as np
-import os
-import copy
 import ast
 from collections import OrderedDict as odict
 
-from . import conversions, pspecbeam
+from . import conversions
 
 
-def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, component='real'):
+def calc_P_N(
+    scalar,
+    Tsys,
+    t_int,
+    Ncoherent=1,
+    Nincoherent=None,
+    form="Pk",
+    k=None,
+    component="real",
+):
     """
     Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
     component of the power spectrum.
 
-    The noise power spectrum is written as 
+    The noise power spectrum is written as
 
     P_N = scalar * (Tsys * 1e3)^2 / (t_int * Ncoherent) / sqrt(Nincoherent)
 
     where scalar is a nomalization given by the cosmological model and beam response, i.e. X2Y * Omega_eff
-    Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec], 
-    Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the 
+    Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec],
+    Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the
     number of incoherent averages after squaring. If component is 'real' or 'imag' an additional factor
     of 1/sqrt(2) is multiplied.
     For an ensemble of power spectra with the same Tsys, this estimate should equal their RMS value.
@@ -42,33 +49,40 @@ def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=No
     if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
     """
     # assert form
-    assert form in ('Pk', 'DelSq'), "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
-    assert component in ['abs', 'real', 'imag'], "component must be one of 'real', 'imag', 'abs'"
+    assert form in (
+        "Pk",
+        "DelSq",
+    ), "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
+    assert component in [
+        "abs",
+        "real",
+        "imag",
+    ], "component must be one of 'real', 'imag', 'abs'"
 
     # construct prefactor in mK^2
-    P_N = scalar * (Tsys * 1e3)**2
+    P_N = scalar * (Tsys * 1e3) ** 2
 
     # Multiply in effective integration time
-    P_N /= (t_int * Ncoherent)
+    P_N /= t_int * Ncoherent
 
     # Mulitply in incoherent averaging
     if Nincoherent is not None:
         P_N /= np.sqrt(Nincoherent)
 
     # parse component
-    if component in ['real', 'imag']:
+    if component in ["real", "imag"]:
         P_N /= np.sqrt(2)
 
     # Convert to Delta Sq
-    if form == 'DelSq':
+    if form == "DelSq":
         assert k is not None, "if form == 'DelSq' then k must be fed"
-        P_N = P_N * k**3 / (2*np.pi**2)
+        P_N = P_N * k**3 / (2 * np.pi**2)
 
     return P_N
 
 
 class Sensitivity(object):
-    """ Power spectrum thermal sensitivity calculator """
+    """Power spectrum thermal sensitivity calculator"""
 
     def __init__(self, cosmo=None, beam=None):
         """
@@ -110,28 +124,30 @@ class Sensitivity(object):
         beam : pspecbeam.PSpecBeam instance
         """
         # ensure self.cosmo and beam.cosmo are consistent, if they both exist
-        if hasattr(beam, 'cosmo'):
-            if hasattr(self, 'cosmo'):
+        if hasattr(beam, "cosmo"):
+            if hasattr(self, "cosmo"):
                 # attach self.cosmo to beam if they both exist
                 beam.cosmo = self.cosmo
             else:
                 # attach beam.cosmo to self if self.cosmo doesn't exist
                 self.cosmo = beam.cosmo
         else:
-            if hasattr(self, 'cosmo'):
+            if hasattr(self, "cosmo"):
                 # attach self.cosmo to beam if beam.cosmo doesn't exist.
                 beam.cosmo = self.cosmo
             else:
                 # neither beam nor self have cosmo, raise AssertionError
-                raise AssertionError("neither self nor beam have a Cosmo_Conversions instance attached. "\
-                                     "See self.set_cosmology().")
+                raise AssertionError(
+                    "neither self nor beam have a Cosmo_Conversions instance attached. "
+                    "See self.set_cosmology()."
+                )
 
         self.beam = beam
 
     def calc_scalar(self, freqs, pol, num_steps=5000, little_h=True):
         """
         Calculate noise power spectrum prefactor from Eqn. (1) of Pober et al. 2014, ApJ 782, 66,
-        equal to 
+        equal to
 
         scalar = X2Y(z) * Omega_P^2 / Omega_PP
 
@@ -157,55 +173,89 @@ class Sensitivity(object):
         self.pol : str, polarization used to calculate self.scalar
         """
         # compute scalar
-        self.scalar = self.beam.compute_pspec_scalar(freqs.min(), freqs.max(), len(freqs), num_steps=num_steps, 
-                                                     pol=pol, little_h=little_h, noise_scalar=True)
+        self.scalar = self.beam.compute_pspec_scalar(
+            freqs.min(),
+            freqs.max(),
+            len(freqs),
+            num_steps=num_steps,
+            pol=pol,
+            little_h=little_h,
+            noise_scalar=True,
+        )
         self.subband = freqs
         self.pol = pol
 
-    def calc_P_N(self, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, component='real'):
+    def calc_P_N(
+        self,
+        Tsys,
+        t_int,
+        Ncoherent=1,
+        Nincoherent=None,
+        form="Pk",
+        k=None,
+        component="real",
+    ):
         """
         Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
         component of the power spectrum.
 
-        The noise power spectrum is written as 
+        The noise power spectrum is written as
 
         P_N = scalar * (Tsys * 1e3)^2 / (t_int * Ncoherent) / sqrt(Nincoherent)
 
         where scalar is a nomalization given by the cosmological model and beam response, i.e. X2Y * Omega_eff
-        Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec], 
-        Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the 
+        Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec],
+        Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the
         number of incoherent averages after squaring. If component is 'real' or 'imag' a factor of 1/sqrt(2)
         is multiplied.
 
         Parameters
         ----------
-        scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
-        Tsys : float, System temperature in Kelvin
-        t_int : float, integration time of power spectra in seconds
-        Ncoherent : int, number of coherent averages of visibility data with integration time t_int
+        scalar : float
+            Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
+        Tsys : float
+            System temperature in Kelvin
+        t_int : float
+            integration time of power spectra in seconds
+        Ncoherent : int
+            number of coherent averages of visibility data with integration time t_int
             Total integration time is t_int * Ncoherent
-        Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
-        form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
-        k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
+        Nincoherent : int
+            number of incoherent averages of pspectra (i.e. after squaring).
+        form : str
+            power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
+        k : float ndarray
+            cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
         component : str, options=['real', 'imag', 'abs']
             If component is real or imag, divide by an extra factor of sqrt(2)
 
-        Returns (P_N)
+        Returns
         -------
-        P_N : estimated noise power spectrum in units of mK^2 * h^-3 Mpc^3
-        if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
+        P_N
+            estimated noise power spectrum in units of mK^2 * h^-3 Mpc^3
+            if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
         """
         # assert scalar exists
-        assert hasattr(self, 'scalar'), "self.scalar must exist before one can calculate a noise spectrum, see self.calc_scalar()"
+        assert hasattr(
+            self, "scalar"
+        ), "self.scalar must exist before one can calculate a noise spectrum, see self.calc_scalar()"
 
         # assert form
-        assert form in ('Pk', 'DelSq'), "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
+        assert form in (
+            "Pk",
+            "DelSq",
+        ), "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
 
         # calculate P_N
-        P_N = calc_P_N(self.scalar, Tsys, t_int, Ncoherent=Ncoherent, Nincoherent=Nincoherent, form=form, 
-                       k=k, component=component)
+        P_N = calc_P_N(
+            self.scalar,
+            Tsys,
+            t_int,
+            Ncoherent=Ncoherent,
+            Nincoherent=Nincoherent,
+            form=form,
+            k=k,
+            component=component,
+        )
 
         return P_N
-
-
-

@@ -547,7 +547,9 @@ def gauss_cov_fg(cov_amp, cov_length_scale, freqs, Ntimes=100, constant_in_time=
     return s
 
 
-def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, channel_width=None, Trx=0.0):
+def sky_noise_jy_autos(
+    lsts, freqs, autovis, omega_p, integration_time, channel_width=None, Trx=0.0
+):
     """Make a noise realization for a given auto-visibility level and beam.
 
     This is a simple replacement for ``hera_sim.noise.sky_noise_jy``.
@@ -586,7 +588,7 @@ def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, channel_
     # Calculate Jansky to Kelvin conversion factor
     # The factor of 1e-26 converts from Jy to W/m^2/Hz.
     wavelengths = conversions.units.c / freqs  # meters
-    Jy2K = 1e-26 * wavelengths ** 2 / (2 * conversions.units.kb * omega_p)
+    Jy2K = 1e-26 * wavelengths**2 / (2 * conversions.units.kb * omega_p)
 
     # Use autocorrelation vsibility to set noise scale
     Tsky = autovis * Jy2K.reshape(1, -1)
@@ -621,7 +623,9 @@ def sky_noise_sim(
     Parameters
     ----------
     data : str or UVData object
+        The data
     beam : str or PSpecBeam object
+        The beam
     cov_amp : float
         Covariance amplitude. See gauss_cov_fg()
     cov_length_scale : float

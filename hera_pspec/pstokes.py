@@ -13,14 +13,16 @@ from . import version
 # See pyuvdata.utils.polstr2num for conversion between polarization string
 # and polarization integer. Ex. {'XX': -5, ...}
 pol_weights = {
-    1: odict([(-5, 1.), (-6, 1.)]),
-    2: odict([(-5, 1.), (-6, -1.)]),
-    3: odict([(-7, 1.), (-8, 1.)]),
-    4: odict([(-7, -1.j), (-8, 1.j)])
+    1: odict([(-5, 1.0), (-6, 1.0)]),
+    2: odict([(-5, 1.0), (-6, -1.0)]),
+    3: odict([(-7, 1.0), (-8, 1.0)]),
+    4: odict([(-7, -1.0j), (-8, 1.0j)]),
 }
 
-def miriad2pyuvdata(dset, antenna_nums=None, bls=None, polarizations=None,
-                    ant_str=None, time_range=None):
+
+def miriad2pyuvdata(
+    dset, antenna_nums=None, bls=None, polarizations=None, ant_str=None, time_range=None
+):
     """
     Reads-in a Miriad filepath to a UVData object
 
@@ -57,13 +59,18 @@ def miriad2pyuvdata(dset, antenna_nums=None, bls=None, polarizations=None,
     uvd : pyuvdata.UVData object
     """
     uvd = pyuvdata.UVData()
-    uvd.read_miriad(dset, antenna_nums=antenna_nums, bls=bls,
-                    polarizations=polarizations, ant_str=ant_str,
-                    time_range=time_range)
+    uvd.read_miriad(
+        dset,
+        antenna_nums=antenna_nums,
+        bls=bls,
+        polarizations=polarizations,
+        ant_str=ant_str,
+        time_range=time_range,
+    )
     return uvd
 
 
-def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
+def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes="pI", x_orientation=None):
     """
     Combines UVData visibilities to form the desired pseudo-stokes visibilities.
     It returns UVData object containing the pseudo-stokes visibilities
@@ -98,10 +105,8 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     -------
     uvdS : UVData object
     """
-    assert isinstance(uvd1, pyuvdata.UVData), \
-        "uvd1 must be a pyuvdata.UVData instance"
-    assert isinstance(uvd2, pyuvdata.UVData), \
-        "uvd2 must be a pyuvdata.UVData instance"
+    assert isinstance(uvd1, pyuvdata.UVData), "uvd1 must be a pyuvdata.UVData instance"
+    assert isinstance(uvd2, pyuvdata.UVData), "uvd2 must be a pyuvdata.UVData instance"
 
     # convert pol1 and/or pol2 to integer if fed as a string
     if isinstance(pol1, (str, np.str)):
@@ -130,33 +135,55 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     pstokes_str = pyuvdata.utils.polnum2str(pstokes)
 
     # assert pstokes in pol_weights, and pol1 and pol2 in pol_weights[pstokes]
-    assert pstokes in pol_weights, \
-        "unrecognized pstokes parameter {}".format(pstokes_str)
-    assert pol1 in pol_weights[pstokes], \
-        "pol1 {} not used in constructing pstokes {}".format(pol1_str, pstokes_str)
-    assert pol2 in pol_weights[pstokes], \
-        "pol2 {} not used in constructing pstokes {}".format(pol2_str, pstokes_str)
+    assert pstokes in pol_weights, "unrecognized pstokes parameter {}".format(
+        pstokes_str
+    )
+    assert (
+        pol1 in pol_weights[pstokes]
+    ), "pol1 {} not used in constructing pstokes {}".format(pol1_str, pstokes_str)
+    assert (
+        pol2 in pol_weights[pstokes]
+    ), "pol2 {} not used in constructing pstokes {}".format(pol2_str, pstokes_str)
 
     # constructing Stokes visibilities
-    stdata = 0.5 * (pol_weights[pstokes][pol1]*data1 + pol_weights[pstokes][pol2]*data2)
+    stdata = 0.5 * (
+        pol_weights[pstokes][pol1] * data1 + pol_weights[pstokes][pol2] * data2
+    )
 
     # assigning and writing data, flags and metadata to UVData object
     uvdS = copy.deepcopy(uvd1)
     uvdS.data_array = stdata  # pseudo-stokes data
     uvdS.flag_array = flag  # flag array
-    uvdS.polarization_array = np.array([pstokes], dtype=np.int) # polarization number
-    uvdS.nsample_array = uvd1.nsample_array + uvd2.nsample_array # nsamples
-    uvdS.history = "Merged into pseudo-stokes vis with hera_pspec version {} Git hash {}\n{}" \
-                    "{}{}{}{}\n".format(version.version, version.git_hash, "-"*20+'\n',
-                    'dset1 history:\n', uvd1.history, '\n'+'-'*20+'\ndset2 history:\n',
-                    uvd2.history)
+    uvdS.polarization_array = np.array([pstokes], dtype=np.int)  # polarization number
+    uvdS.nsample_array = uvd1.nsample_array + uvd2.nsample_array  # nsamples
+    uvdS.history = (
+        "Merged into pseudo-stokes vis with hera_pspec version {} Git hash {}\n{}"
+        "{}{}{}{}\n".format(
+            version.version,
+            version.git_hash,
+            "-" * 20 + "\n",
+            "dset1 history:\n",
+            uvd1.history,
+            "\n" + "-" * 20 + "\ndset2 history:\n",
+            uvd2.history,
+        )
+    )
 
     return uvdS
 
 
-def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=None,
-                      bls=None, polarizations=None, ant_str=None, time_range=None,
-                      history=''):
+def construct_pstokes(
+    dset1,
+    dset2,
+    pstokes="pI",
+    run_check=True,
+    antenna_nums=None,
+    bls=None,
+    polarizations=None,
+    ant_str=None,
+    time_range=None,
+    history="",
+):
     """
     Validates datasets required to construct desired visibilities and
     constructs desired pseudo-Stokes visibilities. These are formed
@@ -219,19 +246,31 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     """
     # convert dset1 and dset2 to UVData objects if they are miriad files
     if isinstance(dset1, pyuvdata.UVData) == False:
-        assert isinstance(dset1, (str, np.str)), \
-            "dset1 must be fed as a string or UVData object"
-        uvd1 = miriad2pyuvdata(dset1, antenna_nums=antenna_nums, bls=bls,
-                               polarizations=polarizations, ant_str=ant_str,
-                               time_range=time_range)
+        assert isinstance(
+            dset1, (str, np.str)
+        ), "dset1 must be fed as a string or UVData object"
+        uvd1 = miriad2pyuvdata(
+            dset1,
+            antenna_nums=antenna_nums,
+            bls=bls,
+            polarizations=polarizations,
+            ant_str=ant_str,
+            time_range=time_range,
+        )
     else:
         uvd1 = dset1
     if isinstance(dset2, pyuvdata.UVData) == False:
-        assert isinstance(dset2, (str, np.str)), \
-            "dset2 must be fed as a string or UVData object"
-        uvd2 = miriad2pyuvdata(dset2, antenna_nums=antenna_nums, bls=bls,
-                               polarizations=polarizations, ant_str=ant_str,
-                               time_range=time_range)
+        assert isinstance(
+            dset2, (str, np.str)
+        ), "dset2 must be fed as a string or UVData object"
+        uvd2 = miriad2pyuvdata(
+            dset2,
+            antenna_nums=antenna_nums,
+            bls=bls,
+            polarizations=polarizations,
+            ant_str=ant_str,
+            time_range=time_range,
+        )
     else:
         uvd2 = dset2
 
@@ -242,7 +281,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     # check if dset1 and dset2 habe the same spectral window
     spw1 = uvd1.spw_array
     spw2 = uvd2.spw_array
-    assert (spw1 == spw2), "dset1 and dset2 must have the same spectral windows."
+    assert spw1 == spw2, "dset1 and dset2 must have the same spectral windows."
 
     # check if dset1 and dset2 have the same frequencies
     freqs1 = uvd1.freq_array
@@ -271,19 +310,22 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     # check polarizations of UVData objects are consistent with the required
     # polarization to form the desired pseudo Stokes visibilities. If multiple
     # exist, downselect on polarization.
-    assert req_pol1 in uvd1.polarization_array, \
-        "Polarization {} not found in dset1 object".format(req_pol1)
+    assert (
+        req_pol1 in uvd1.polarization_array
+    ), "Polarization {} not found in dset1 object".format(req_pol1)
     if uvd1.Npols > 1:
         uvd1 = uvd1.select(polarizations=req_pol1, inplace=False)
 
-    assert req_pol2 in uvd2.polarization_array, \
-        "Polarization {} not found in dset2 object".format(req_pol2)
+    assert (
+        req_pol2 in uvd2.polarization_array
+    ), "Polarization {} not found in dset2 object".format(req_pol2)
     if uvd2.Npols > 1:
         uvd2 = uvd2.select(polarizations=req_pol2, inplace=False)
 
     # combining visibilities to form the desired Stokes visibilties
-    uvdS = _combine_pol(uvd1=uvd1, uvd2=uvd2, pol1=req_pol1, pol2=req_pol2,
-                        pstokes=pstokes)
+    uvdS = _combine_pol(
+        uvd1=uvd1, uvd2=uvd2, pol1=req_pol1, pol2=req_pol2, pstokes=pstokes
+    )
     uvdS.history += history
 
     if run_check:
@@ -316,29 +358,31 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
         to construct_pstokes to make the desired pseudo-Stokes visibility.
     """
     # type check
-    assert isinstance(dsets, list), \
-        "dsets must be fed as a list of UVData objects"
-    assert np.all(isinstance(d, UVData) for d in dsets), \
-        "dsets must be fed as a list of UVData objects"
+    assert isinstance(dsets, list), "dsets must be fed as a list of UVData objects"
+    assert np.all(
+        isinstance(d, UVData) for d in dsets
+    ), "dsets must be fed as a list of UVData objects"
 
     # get polarization of each dset
     pols = [d.polarization_array[0] for d in dsets]
 
     # convert pstokes to integer if a string
     if isinstance(pstokes, (str, np.str)):
-        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dsets[0].x_orientation)
-    assert pstokes in [1, 2, 3, 4], \
-        "pstokes must be fed as a pseudo-Stokes parameter"
+        pstokes = pyuvdata.utils.polstr2num(
+            pstokes, x_orientation=dsets[0].x_orientation
+        )
+    assert pstokes in [1, 2, 3, 4], "pstokes must be fed as a pseudo-Stokes parameter"
 
     # get two necessary dipole pols given pstokes
     desired_pols = list(pol_weights[pstokes].keys())
-    assert desired_pols[0] in pols and desired_pols[1] in pols, \
-        "necessary input pols {} and {} not found in dsets".format(*desired_pols)
+    assert (
+        desired_pols[0] in pols and desired_pols[1] in pols
+    ), "necessary input pols {} and {} not found in dsets".format(*desired_pols)
 
-    inp_dsets = [dsets[pols.index(desired_pols[0])],
-                 dsets[pols.index(desired_pols[1])]]
+    inp_dsets = [dsets[pols.index(desired_pols[0])], dsets[pols.index(desired_pols[1])]]
 
     return inp_dsets
+
 
 def generate_pstokes_argparser():
     """
@@ -349,15 +393,39 @@ def generate_pstokes_argparser():
     Returns:
         a: argparser object with arguments used in generate_pstokes_run.py
     """
-    a = argparse.ArgumentParser(description="argument parser for computing "
-                                            "pstokes from linpol files.")
-    a.add_argument("inputdata", type=str, help="Filename of UVData object with"
-                                               "linearly polarized data to add pstokes to.")
-    a.add_argument("--pstokes", type=str, help="list of pStokes you wish to calculate. Default is ['pI']",
-                   nargs="+", default="pI")
-    a.add_argument("--outputdata", type=str, help="Filename to write out data. Output includes original linear pols."
-                                                   "if no outputdata is provided, will use inputdata, appending"
-                                                   "pstokes to original linear pols.")
-    a.add_argument("--clobber", action="store_true", default=False, help="Overwrite outputdata or original linpol only file.")
-    a.add_argument("--keep_vispols", action="store_true", default=False, help="If inplace, keep the original linear polarizations in the input file. Default is False.")
+    a = argparse.ArgumentParser(
+        description="argument parser for computing " "pstokes from linpol files."
+    )
+    a.add_argument(
+        "inputdata",
+        type=str,
+        help="Filename of UVData object with"
+        "linearly polarized data to add pstokes to.",
+    )
+    a.add_argument(
+        "--pstokes",
+        type=str,
+        help="list of pStokes you wish to calculate. Default is ['pI']",
+        nargs="+",
+        default="pI",
+    )
+    a.add_argument(
+        "--outputdata",
+        type=str,
+        help="Filename to write out data. Output includes original linear pols."
+        "if no outputdata is provided, will use inputdata, appending"
+        "pstokes to original linear pols.",
+    )
+    a.add_argument(
+        "--clobber",
+        action="store_true",
+        default=False,
+        help="Overwrite outputdata or original linpol only file.",
+    )
+    a.add_argument(
+        "--keep_vispols",
+        action="store_true",
+        default=False,
+        help="If inplace, keep the original linear polarizations in the input file. Default is False.",
+    )
     return a

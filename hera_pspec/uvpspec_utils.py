@@ -1,5 +1,5 @@
 import numpy as np
-import copy, operator
+import copy
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 import json
@@ -37,15 +37,22 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
         A copy of uvp1 with uvp2.data_array subtracted.
     """
     # select out common parts
-    uvp1, uvp2 = select_common([uvp1, uvp2], spws=True, blpairs=True, lsts=True,
-                               polpairs=True, times=False, inplace=False,
-                               verbose=verbose)
+    uvp1, uvp2 = select_common(
+        [uvp1, uvp2],
+        spws=True,
+        blpairs=True,
+        lsts=True,
+        polpairs=True,
+        times=False,
+        inplace=False,
+        verbose=verbose,
+    )
 
     # get metadata
-    spws1 = [spw for spw in uvp1.get_spw_ranges()]
+    spws1 = list(spw for spw in uvp1.get_spw_ranges())
     polpairs1 = uvp1.polpair_array.tolist()
     blps1 = sorted(set(uvp1.blpair_array))
-    spws2 = [spw for spw in uvp2.get_spw_ranges()]
+    spws2 = list(uvp2.get_spw_ranges())
 
     # iterate over spws
     for i, spw in enumerate(spws1):
@@ -56,7 +63,7 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
         for j, polpair in enumerate(polpairs1):
 
             # iterate over blp
-            for k, blp in enumerate(blps1):
+            for blp in blps1:
 
                 # form keys
                 key1 = (i, blp, polpair)
@@ -67,55 +74,65 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                 uvp1.data_array[i][blp1_inds, :, j] -= uvp2.get_data(key2)
 
                 # add nsample inversely in quadrature
-                uvp1.nsample_array[i][blp1_inds, j] \
-                    = np.sqrt( 1. / (1./uvp1.get_nsamples(key1)**2
-                             + 1. / uvp2.get_nsamples(key2)**2) )
+                uvp1.nsample_array[i][blp1_inds, j] = np.sqrt(
+                    1.0
+                    / (
+                        1.0 / uvp1.get_nsamples(key1) ** 2
+                        + 1.0 / uvp2.get_nsamples(key2) ** 2
+                    )
+                )
 
                 # add integration inversely in quadrature
-                uvp1.integration_array[i][blp1_inds, j] \
-                    = np.sqrt(1. / (1./uvp1.get_integrations(key1)**2
-                            + 1. / uvp2.get_integrations(key2)**2))
+                uvp1.integration_array[i][blp1_inds, j] = np.sqrt(
+                    1.0
+                    / (
+                        1.0 / uvp1.get_integrations(key1) ** 2
+                        + 1.0 / uvp2.get_integrations(key2) ** 2
+                    )
+                )
 
                 # add wgts inversely in quadrature
-                uvp1.wgt_array[i][blp1_inds, :, :, j] \
-                    = np.sqrt(1. / (1./uvp1.get_wgts(key1)**2
-                            + 1. / uvp2.get_wgts(key2)**2))
-                uvp1.wgt_array[i][blp1_inds, :, :, j] /= \
-                    uvp1.wgt_array[i][blp1_inds, :, :, j].max()
+                uvp1.wgt_array[i][blp1_inds, :, :, j] = np.sqrt(
+                    1.0
+                    / (1.0 / uvp1.get_wgts(key1) ** 2 + 1.0 / uvp2.get_wgts(key2) ** 2)
+                )
+                uvp1.wgt_array[i][blp1_inds, :, :, j] /= uvp1.wgt_array[i][
+                    blp1_inds, :, :, j
+                ].max()
 
                 # add stats in quadrature: real imag separately
                 if hasattr(uvp1, "stats_array") and hasattr(uvp2, "stats_array"):
                     for s in uvp1.stats_array.keys():
                         stat1 = uvp1.get_stats(s, key1)
                         stat2 = uvp2.get_stats(s, key2)
-                        uvp1.stats_array[s][i][blp1_inds, :, j] \
-                            = np.sqrt(stat1.real**2 + stat2.real**2) \
-                            + 1j*np.sqrt(stat1.imag**2 + stat2.imag**2)
+                        uvp1.stats_array[s][i][blp1_inds, :, j] = np.sqrt(
+                            stat1.real**2 + stat2.real**2
+                        ) + 1j * np.sqrt(stat1.imag**2 + stat2.imag**2)
 
-                # add cov in quadrature: real and imag separately                
-                if hasattr(uvp1, "cov_array_real") \
-                  and hasattr(uvp2, "cov_array_real"):
+                # add cov in quadrature: real and imag separately
+                if hasattr(uvp1, "cov_array_real") and hasattr(uvp2, "cov_array_real"):
                     if uvp1.cov_model == uvp2.cov_model:
-                        cov1r = uvp1.get_cov(key1, component='real')
-                        cov2r = uvp2.get_cov(key2, component='real')
-                        uvp1.cov_array_real[i][blp1_inds, :, :, j] \
-                            = np.sqrt(cov1r.real**2 + cov2r.real**2) \
-                              + 1j*np.sqrt(cov1r.imag**2 + cov2r.imag**2)
-                        
-                        cov1i = uvp1.get_cov(key1, component='imag')
-                        cov2i = uvp2.get_cov(key2, component='imag')
-                        uvp1.cov_array_imag[i][blp1_inds, :, :, j] \
-                            = np.sqrt(cov1i.real**2 + cov2i.real**2) \
-                              + 1j*np.sqrt(cov1i.imag**2 + cov2i.imag**2)
+                        cov1r = uvp1.get_cov(key1, component="real")
+                        cov2r = uvp2.get_cov(key2, component="real")
+                        uvp1.cov_array_real[i][blp1_inds, :, :, j] = np.sqrt(
+                            cov1r.real**2 + cov2r.real**2
+                        ) + 1j * np.sqrt(cov1r.imag**2 + cov2r.imag**2)
+
+                        cov1i = uvp1.get_cov(key1, component="imag")
+                        cov2i = uvp2.get_cov(key2, component="imag")
+                        uvp1.cov_array_imag[i][blp1_inds, :, :, j] = np.sqrt(
+                            cov1i.real**2 + cov2i.real**2
+                        ) + 1j * np.sqrt(cov1i.imag**2 + cov2i.imag**2)
 
                 # same for window function
-                if (hasattr(uvp1, 'window_function_array') 
-                    and hasattr(uvp2, 'window_function_array')):
+                if hasattr(uvp1, "window_function_array") and hasattr(
+                    uvp2, "window_function_array"
+                ):
                     window1 = uvp1.get_window_function(key1)
                     window2 = uvp2.get_window_function(key2)
-                    uvp1.window_function_array[i][blp1_inds, :, :, j] \
-                        = np.sqrt(window1.real**2 + window2.real**2) \
-                        + 1j*np.sqrt(window1.imag**2 + window2.imag**2)
+                    uvp1.window_function_array[i][blp1_inds, :, :, j] = np.sqrt(
+                        window1.real**2 + window2.real**2
+                    ) + 1j * np.sqrt(window1.imag**2 + window2.imag**2)
 
     # run check
     if run_check:
@@ -130,43 +147,46 @@ def compress_r_params(r_params_dict):
 
     Parameters
     ----------
-    r_params_dict: Dictionary
-              dictionary with parameters for weighting matrix. Proper fields
-              and formats depend on the mode of data_weighting.
-              data_weighting == 'dayenu':
-                            dictionary with fields
-                            'filter_centers', list of floats (or float) specifying the (delay) channel numbers
-                                              at which to center filtering windows. Can specify fractional channel number.
-                            'filter_half_widths', list of floats (or float) specifying the width of each
-                                             filter window in (delay) channel numbers. Can specify fractional channel number.
-                            'filter_factors', list of floats (or float) specifying how much power within each filter window
-                                              is to be suppressed.
+    r_params_dict : dict
+        dictionary with parameters for weighting matrix. Proper fields
+        and formats depend on the mode of data_weighting.
+        data_weighting == 'dayenu':
+        * 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+          at which to center filtering windows. Can specify fractional channel number.
+        * 'filter_half_widths', list of floats (or float) specifying the width of each
+          filter window in (delay) channel numbers. Can specify fractional channel number.
+        * 'filter_factors', list of floats (or float) specifying how much power within each filter window
+          is to be suppressed.
+    
     Returns
     -------
     string containing r_params dictionary in json format and only containing one
     copy of each unique dictionary with a list of associated baselines.
     """
     if r_params_dict == {} or r_params_dict is None:
-        return ''
+        return ""
     else:
         r_params_unique = {}
         r_params_unique_bls = {}
         r_params_index = -1
         for rp in r_params_dict:
-            #do not include data set in tuple key
+            # do not include data set in tuple key
             already_in = False
             for rpu in r_params_unique:
                 if r_params_unique[rpu] == r_params_dict[rp]:
-                    r_params_unique_bls[rpu] += [rp,]
+                    r_params_unique_bls[rpu] += [
+                        rp,
+                    ]
                     already_in = True
             if not already_in:
                 r_params_index += 1
                 r_params_unique[r_params_index] = copy.copy(r_params_dict[rp])
-                r_params_unique_bls[r_params_index] = [rp,]
-
+                r_params_unique_bls[r_params_index] = [
+                    rp,
+                ]
 
         for rpi in r_params_unique:
-            r_params_unique[rpi]['baselines'] = r_params_unique_bls[rpi]
+            r_params_unique[rpi]["baselines"] = r_params_unique_bls[rpi]
         r_params_str = json.dumps(r_params_unique)
         return r_params_str
 
@@ -186,31 +206,38 @@ def decompress_r_params(r_params_str):
         Dictionary with parameters for weighting matrix. Proper fields
         and formats depend on the mode of data_weighting.
         data_weighting == 'dayenu':
-                      dictionary with fields
-                      'filter_centers', list of floats (or float) specifying the (delay) channel numbers
-                                        at which to center filtering windows. Can specify fractional channel number.
-                      'filter_half_widths', list of floats (or float) specifying the width of each
-                                       filter window in (delay) channel numbers. Can specify fractional channel number.
-                      'filter_factors', list of floats (or float) specifying how much power within each filter window
-                                        is to be suppressed.
+            * 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+              at which to center filtering windows. Can specify fractional channel number.
+            * 'filter_half_widths', list of floats (or float) specifying the width of each
+              filter window in (delay) channel numbers. Can specify fractional channel number.
+            * 'filter_factors', list of floats (or float) specifying how much power within each filter window
+              is to be suppressed.
     """
     decompressed_r_params = {}
-    if r_params_str != '' and not r_params_str is None:
+    if r_params_str != "" and r_params_str is not None:
         r_params = json.loads(r_params_str)
         for rpi in r_params:
             rp_dict = {}
             for r_field in r_params[rpi]:
-                if not r_field == 'baselines':
+                if not r_field == "baselines":
                     rp_dict[r_field] = r_params[rpi][r_field]
-            for blkey in r_params[rpi]['baselines']:
+            for blkey in r_params[rpi]["baselines"]:
                 decompressed_r_params[tuple(blkey)] = rp_dict
     else:
         decompressed_r_params = {}
     return decompressed_r_params
 
 
-def select_common(uvp_list, spws=True, blpairs=True, times=True, polpairs=True,
-                  lsts=False, inplace=False, verbose=False):
+def select_common(
+    uvp_list,
+    spws=True,
+    blpairs=True,
+    times=True,
+    polpairs=True,
+    lsts=False,
+    inplace=False,
+    verbose=False,
+):
     """
     Find spectral windows, baseline-pairs, times, and/or polarization-pairs
     that a set of UVPSpec objects have in common and return new UVPSpec objects
@@ -267,48 +294,54 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, polpairs=True,
     # Get times that are common to all UVPSpec objects in the list
     if times:
         common_times = np.unique(uvp_list[0].time_avg_array)
-        has_times = [np.isin(common_times, uvp.time_avg_array)
-                     for uvp in uvp_list]
+        has_times = [np.isin(common_times, uvp.time_avg_array) for uvp in uvp_list]
         common_times = common_times[np.all(has_times, axis=0)]
-        if verbose: print("common_times:", common_times)
+        if verbose:
+            print("common_times:", common_times)
 
     # Get lsts that are common to all UVPSpec objects in the list
     if lsts:
         common_lsts = np.unique(uvp_list[0].lst_avg_array)
-        has_lsts = [np.isin(common_lsts, uvp.lst_avg_array)
-                     for uvp in uvp_list]
+        has_lsts = [np.isin(common_lsts, uvp.lst_avg_array) for uvp in uvp_list]
         common_lsts = common_lsts[np.all(has_lsts, axis=0)]
-        if verbose: print("common_lsts:", common_lsts)
+        if verbose:
+            print("common_lsts:", common_lsts)
 
     # Get baseline-pairs that are common to all
     if blpairs:
         common_blpairs = np.unique(uvp_list[0].blpair_array)
-        has_blpairs = [np.isin(common_blpairs, uvp.blpair_array)
-                       for uvp in uvp_list]
+        has_blpairs = [np.isin(common_blpairs, uvp.blpair_array) for uvp in uvp_list]
         common_blpairs = common_blpairs[np.all(has_blpairs, axis=0)]
-        if verbose: print("common_blpairs:", common_blpairs)
+        if verbose:
+            print("common_blpairs:", common_blpairs)
 
     # Get polarization-pairs that are common to all
     if polpairs:
         common_polpairs = np.unique(uvp_list[0].polpair_array)
-        has_polpairs = [np.isin(common_polpairs, uvp.polpair_array)
-                        for uvp in uvp_list]
+        has_polpairs = [np.isin(common_polpairs, uvp.polpair_array) for uvp in uvp_list]
         common_polpairs = common_polpairs[np.all(has_polpairs, axis=0)]
-        if verbose: print("common_polpairs:", common_polpairs)
+        if verbose:
+            print("common_polpairs:", common_polpairs)
 
     # Get common spectral windows (the entire window must match)
     # Each row of common_spws is a list of that spw's index in each UVPSpec
     if spws:
         common_spws = uvp_list[0].get_spw_ranges()
-        has_spws = [[x in uvp.get_spw_ranges() for x in common_spws]
-                    for uvp in uvp_list]
-        common_spws = [common_spws[i] for i, f in enumerate(np.all(has_spws, axis=0)) if f]
-        if verbose: print("common_spws:", common_spws)
+        has_spws = [
+            [x in uvp.get_spw_ranges() for x in common_spws] for uvp in uvp_list
+        ]
+        common_spws = [
+            common_spws[i] for i, f in enumerate(np.all(has_spws, axis=0)) if f
+        ]
+        if verbose:
+            print("common_spws:", common_spws)
 
     # Check that this won't be an empty selection
     if spws and len(common_spws) == 0:
-        raise ValueError("No spectral windows were found that exist in all "
-                         "spectra (the entire spectral window must match).")
+        raise ValueError(
+            "No spectral windows were found that exist in all "
+            "spectra (the entire spectral window must match)."
+        )
 
     if blpairs and len(common_blpairs) == 0:
         raise ValueError("No baseline-pairs were found that exist in all spectra.")
@@ -324,22 +357,33 @@ def select_common(uvp_list, spws=True, blpairs=True, times=True, polpairs=True,
 
     # Apply selections
     out_list = []
-    for i, uvp in enumerate(uvp_list):
+    for uvp in uvp_list:
         _spws, _blpairs, _times, _lsts, _polpairs = None, None, None, None, None
 
         # Set indices of blpairs, times, and pols to keep
-        if blpairs: _blpairs = common_blpairs
-        if times: _times = common_times
-        if lsts: _lsts = common_lsts
-        if polpairs: _pols = common_polpairs
-        if spws: _spws = [uvp.get_spw_ranges().index(j) for j in common_spws]
+        if blpairs:
+            _blpairs = common_blpairs
+        if times:
+            _times = common_times
+        if lsts:
+            _lsts = common_lsts
+        if spws:
+            _spws = [uvp.get_spw_ranges().index(j) for j in common_spws]
 
-        _uvp = uvp.select(spws=_spws, blpairs=_blpairs, times=_times,
-                          polpairs=_polpairs, lsts=_lsts, inplace=inplace)
-        if not inplace: out_list.append(_uvp)
+        _uvp = uvp.select(
+            spws=_spws,
+            blpairs=_blpairs,
+            times=_times,
+            polpairs=_polpairs,
+            lsts=_lsts,
+            inplace=inplace,
+        )
+        if not inplace:
+            out_list.append(_uvp)
 
     # Return if not inplace
-    if not inplace: return out_list
+    if not inplace:
+        return out_list
 
 
 def polpair_int2tuple(polpair, pol_strings=False):
@@ -367,8 +411,9 @@ def polpair_int2tuple(polpair, pol_strings=False):
         return [polpair_int2tuple(p, pol_strings=pol_strings) for p in polpair]
 
     # Check for integer type
-    assert isinstance(polpair, (int, np.integer)), \
-        "polpair must be integer: %s" % type(polpair)
+    assert isinstance(polpair, (int, np.integer)), "polpair must be integer: %s" % type(
+        polpair
+    )
 
     # Split into pol1 and pol2 integers
     pol1 = int(str(polpair)[:-2]) - 20
@@ -376,9 +421,10 @@ def polpair_int2tuple(polpair, pol_strings=False):
 
     # Check that pol1 and pol2 are in the allowed range (-8, 4)
     if (pol1 < -8 or pol1 > 4) or (pol2 < -8 or pol2 > 4):
-        raise ValueError("polpair integer evaluates to an invalid "
-                         "polarization pair: (%d, %d)"
-                         % (pol1, pol2))
+        raise ValueError(
+            "polpair integer evaluates to an invalid "
+            "polarization pair: (%d, %d)" % (pol1, pol2)
+        )
     # Convert to strings if requested
     if pol_strings:
         return (polnum2str(pol1), polnum2str(pol2))
@@ -421,11 +467,13 @@ def polpair_tuple2int(polpair, x_orientation=None):
 
     # Convert strings to ints if necessary
     pol1, pol2 = polpair
-    if type(pol1) in (str, np.str): pol1 = polstr2num(pol1, x_orientation=x_orientation)
-    if type(pol2) in (str, np.str): pol2 = polstr2num(pol2, x_orientation=x_orientation)
+    if type(pol1) in (str, np.str):
+        pol1 = polstr2num(pol1, x_orientation=x_orientation)
+    if type(pol2) in (str, np.str):
+        pol2 = polstr2num(pol2, x_orientation=x_orientation)
 
     # Convert to polpair integer
-    ppint = (20 + pol1)*100 + (20 + pol2)
+    ppint = (20 + pol1) * 100 + (20 + pol2)
     return ppint
 
 
@@ -455,12 +503,13 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     """
     # get blpair baselines in integer form
     bl1 = np.floor(uvp.blpair_array / 1e6)
-    blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int32).T
+    blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1 * 1e6]).astype(np.int32).T
 
     # ensure bls is in integer form
     if isinstance(bls, tuple):
-        assert isinstance(bls[0], (int, np.integer)), \
-            "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
+        assert isinstance(
+            bls[0], (int, np.integer)
+        ), "bls must be fed as a list of baseline tuples Ex: [(1, 2), ...]"
         bls = [uvp.antnums_to_bl(bls)]
     elif isinstance(bls, list):
         if isinstance(bls[0], tuple):
@@ -470,17 +519,28 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
 
     # get indices
     if only_pairs_in_bls:
-        blp_select = np.array( [np.bool((blp[0] in bls) * (blp[1] in bls))
-                                for blp in blpair_bls] )
+        blp_select = np.array(
+            [np.bool((blp[0] in bls) * (blp[1] in bls)) for blp in blpair_bls]
+        )
     else:
-        blp_select = np.array( [np.bool((blp[0] in bls) + (blp[1] in bls))
-                                for blp in blpair_bls] )
+        blp_select = np.array(
+            [np.bool((blp[0] in bls) + (blp[1] in bls)) for blp in blpair_bls]
+        )
 
     return blp_select
 
 
-def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
-            times=None, lsts=None, polpairs=None, h5file=None):
+def _select(
+    uvp,
+    spws=None,
+    bls=None,
+    only_pairs_in_bls=False,
+    blpairs=None,
+    times=None,
+    lsts=None,
+    polpairs=None,
+    h5file=None,
+):
     """
     Select function for selecting out certain slices of the data, as well
     as loading in data from HDF5 file.
@@ -542,7 +602,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.Nspws = len(np.unique(uvp.spw_array))
         uvp.Nspwdlys = len(uvp.spw_dly_array)
         uvp.Nspwfreqs = len(uvp.spw_freq_array)
-        if hasattr(uvp, 'scalar_array'):
+        if hasattr(uvp, "scalar_array"):
             uvp.scalar_array = uvp.scalar_array[spw_select, :]
 
         # Down-convert spw indices such that spw_array == np.arange(Nspws)
@@ -560,30 +620,33 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
     if bls is not None:
         # get blpair baselines in integer form
         bl1 = np.floor(uvp.blpair_array / 1e6)
-        blpair_bls = np.vstack([bl1, uvp.blpair_array - bl1*1e6]).astype(np.int32).T
-        blp_select = _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=only_pairs_in_bls)
+        blp_select = _get_blpairs_from_bls(
+            uvp, bls, only_pairs_in_bls=only_pairs_in_bls
+        )
 
     if blpairs is not None:
         if bls is None:
             blp_select = np.zeros(uvp.Nblpairts, np.bool)
 
         # assert form
-        assert isinstance(blpairs[0], (tuple, int, np.integer)), \
-            "blpairs must be fed as a list of baseline-pair tuples or baseline-pair integers"
+        assert isinstance(
+            blpairs[0], (tuple, int, np.integer)
+        ), "blpairs must be fed as a list of baseline-pair tuples or baseline-pair integers"
 
         # if fed as list of tuples, convert to integers
         if isinstance(blpairs[0], tuple):
             blpairs = [uvp.antnums_to_blpair(blp) for blp in blpairs]
         blpair_select = np.logical_or.reduce(
-                                   [uvp.blpair_array == blp for blp in blpairs])
+            [uvp.blpair_array == blp for blp in blpairs]
+        )
         blp_select += blpair_select
 
     if times is not None:
         if bls is None and blpairs is None:
             blp_select = np.ones(uvp.Nblpairts, np.bool)
         time_select = np.logical_or.reduce(
-                               [np.isclose(uvp.time_avg_array, t, rtol=1e-16)
-                                for t in times])
+            [np.isclose(uvp.time_avg_array, t, rtol=1e-16) for t in times]
+        )
         blp_select *= time_select
 
     if lsts is not None:
@@ -591,25 +654,26 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         if bls is None and blpairs is None:
             blp_select = np.ones(uvp.Nblpairts, np.bool)
         lst_select = np.logical_or.reduce(
-                            [ np.isclose(uvp.lst_avg_array, t, rtol=1e-16)
-                              for t in lsts] )
+            [np.isclose(uvp.lst_avg_array, t, rtol=1e-16) for t in lsts]
+        )
         blp_select *= lst_select
 
     if bls is None and blpairs is None and times is None and lsts is None:
         blp_select = slice(None)
     else:
         # assert something was selected
-        assert blp_select.any(), \
-            "no selections provided matched any of the data... "
+        assert blp_select.any(), "no selections provided matched any of the data... "
 
         # turn blp_select into slice if possible
         blp_select = np.where(blp_select)[0]
         if len(set(np.diff(blp_select))) == 0:
             # its sliceable, turn into slice object
-            blp_select = slice(blp_select[0], blp_select[-1]+1)
+            blp_select = slice(blp_select[0], blp_select[-1] + 1)
         elif len(set(np.diff(blp_select))) == 1:
             # its sliceable, turn into slice object
-            blp_select = slice(blp_select[0], blp_select[-1]+1, np.diff(blp_select)[0])
+            blp_select = slice(
+                blp_select[0], blp_select[-1] + 1, np.diff(blp_select)[0]
+            )
 
         # index arrays
         uvp.blpair_array = uvp.blpair_array[blp_select]
@@ -626,7 +690,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         # Calculate unique baselines from new blpair_array
         new_blpairs = np.unique(uvp.blpair_array)
         bl1 = np.floor(new_blpairs / 1e6)
-        new_bls = np.unique([bl1, new_blpairs - bl1*1e6]).astype(np.int32)
+        new_bls = np.unique([bl1, new_blpairs - bl1 * 1e6]).astype(np.int32)
 
         # Set baseline attributes
         bl_select = [bl in new_bls for bl in uvp.bl_array]
@@ -636,22 +700,27 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
     if polpairs is not None:
         # assert form
-        assert isinstance(polpairs, (list, np.ndarray)), \
-            "polpairs must be passed as a list or ndarray"
-        assert isinstance(polpairs[0], (tuple, int, np.integer, str)), \
-            "polpairs must be fed as a list of tuples or pol integers/strings"
+        assert isinstance(
+            polpairs, (list, np.ndarray)
+        ), "polpairs must be passed as a list or ndarray"
+        assert isinstance(
+            polpairs[0], (tuple, int, np.integer, str)
+        ), "polpairs must be fed as a list of tuples or pol integers/strings"
 
         # convert str to polpair integers
-        polpairs = [polpair_tuple2int((p,p)) if isinstance(p, str)
-                    else p for p in polpairs]
+        polpairs = [
+            polpair_tuple2int((p, p)) if isinstance(p, str) else p for p in polpairs
+        ]
 
         # convert tuples to polpair integers
-        polpairs = [polpair_tuple2int(p) if isinstance(p, tuple)
-                    else p for p in polpairs]
+        polpairs = [
+            polpair_tuple2int(p) if isinstance(p, tuple) else p for p in polpairs
+        ]
 
         # create selection
-        polpair_select = np.logical_or.reduce( [uvp.polpair_array == p
-                                                for p in polpairs] )
+        polpair_select = np.logical_or.reduce(
+            [uvp.polpair_array == p for p in polpairs]
+        )
 
         # turn into slice object if possible
         polpair_select = np.where(polpair_select)[0]
@@ -660,14 +729,14 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
             polpair_select = slice(polpair_select[0], polpair_select[-1] + 1)
         elif len(set(np.diff(polpair_select))) == 1:
             # sliceable
-            polpair_select = slice(polpair_select[0],
-                                   polpair_select[-1] + 1,
-                                   np.diff(polpair_select)[0])
+            polpair_select = slice(
+                polpair_select[0], polpair_select[-1] + 1, np.diff(polpair_select)[0]
+            )
 
         # edit metadata
         uvp.polpair_array = uvp.polpair_array[polpair_select]
         uvp.Npols = len(uvp.polpair_array)
-        if hasattr(uvp, 'scalar_array'):
+        if hasattr(uvp, "scalar_array"):
             uvp.scalar_array = uvp.scalar_array[:, polpair_select]
     else:
         polpair_select = slice(None)
@@ -679,7 +748,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         sliceable = False
 
     # only load / select heavy data if data_array exists _or_ if h5file is passed
-    if h5file is not None or hasattr(uvp, 'data_array'):
+    if h5file is not None or hasattr(uvp, "data_array"):
         # select data arrays
         data = odict()
         wgts = odict()
@@ -694,22 +763,28 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
         # determine if certain arrays are stored
         if h5file is not None:
-            store_cov = 'cov_real_spw0' in h5file
-            if 'cov_array_spw0' in h5file:
+            store_cov = "cov_real_spw0" in h5file
+            if "cov_array_spw0" in h5file:
                 store_cov = False
-                warnings.warn("uvp.cov_array is no longer supported and will not be loaded. Please update this to be uvp.cov_array_real and uvp.cov_array_imag. See hera_pspec PR #181 for details.")
-            store_window = 'window_function_spw0' in h5file
-            exact_windows = 'window_function_kperp_spw0' in h5file
+                warnings.warn(
+                    "uvp.cov_array is no longer supported and will not be loaded. Please update this to be uvp.cov_array_real and uvp.cov_array_imag. See hera_pspec PR #181 for details."
+                )
+            store_window = "window_function_spw0" in h5file
+            exact_windows = "window_function_kperp_spw0" in h5file
         else:
-            store_cov = hasattr(uvp, 'cov_array_real')
-            store_window = hasattr(uvp, 'window_function_array')
-            exact_windows = hasattr(uvp, 'window_function_kperp')
+            store_cov = hasattr(uvp, "cov_array_real")
+            store_window = hasattr(uvp, "window_function_array")
+            exact_windows = hasattr(uvp, "window_function_kperp")
 
         # get stats_array keys if h5file
         if h5file is not None:
-            statnames = np.unique([f[f.find("_")+1: f.rfind("_")]
-                                    for f in h5file.keys()
-                                    if f.startswith("stats")])
+            statnames = np.unique(
+                [
+                    f[f.find("_") + 1 : f.rfind("_")]
+                    for f in h5file.keys()
+                    if f.startswith("stats")
+                ]
+            )
         else:
             if hasattr(uvp, "stats_array"):
                 statnames = uvp.stats_array.keys()
@@ -717,24 +792,29 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 statnames = []
 
         # iterate over spws
-        if spw_mapping is None: spw_mapping = uvp.spw_array
+        if spw_mapping is None:
+            spw_mapping = uvp.spw_array
         for s, s_old in zip(uvp.spw_array, spw_mapping):
             # if h5file is passed, default to loading in data
             if h5file is not None:
                 # assign data arrays
-                _data = h5file['data_spw{}'.format(s_old)]
-                _wgts = h5file['wgt_spw{}'.format(s_old)]
-                _ints = h5file['integration_spw{}'.format(s_old)]
-                _nsmp = h5file['nsample_spw{}'.format(s_old)]
+                _data = h5file["data_spw{}".format(s_old)]
+                _wgts = h5file["wgt_spw{}".format(s_old)]
+                _ints = h5file["integration_spw{}".format(s_old)]
+                _nsmp = h5file["nsample_spw{}".format(s_old)]
                 # assign non-required arrays
                 if store_window:
-                    _window_function = h5file['window_function_spw{}'.format(s_old)]
+                    _window_function = h5file["window_function_spw{}".format(s_old)]
                     if exact_windows:
-                        _window_function_kperp = h5file['window_function_kperp_spw{}'.format(s_old)]
-                        _window_function_kpara = h5file['window_function_kpara_spw{}'.format(s_old)]
+                        _window_function_kperp = h5file[
+                            "window_function_kperp_spw{}".format(s_old)
+                        ]
+                        _window_function_kpara = h5file[
+                            "window_function_kpara_spw{}".format(s_old)
+                        ]
                 if store_cov:
-                     _cov_real = h5file["cov_real_spw{}".format(s_old)]
-                     _cov_imag = h5file["cov_imag_spw{}".format(s_old)]
+                    _cov_real = h5file["cov_real_spw{}".format(s_old)]
+                    _cov_imag = h5file["cov_imag_spw{}".format(s_old)]
                 _stat = odict()
                 for statname in statnames:
                     if statname not in stats:
@@ -772,10 +852,16 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 ints[s] = _ints[blp_select, polpair_select]
                 nsmp[s] = _nsmp[blp_select, polpair_select]
                 if store_window:
-                    window_function[s] = _window_function[blp_select, ..., polpair_select]
+                    window_function[s] = _window_function[
+                        blp_select, ..., polpair_select
+                    ]
                     if exact_windows:
-                        window_function_kperp[s] = _window_function_kperp[:, polpair_select]
-                        window_function_kpara[s] = _window_function_kpara[:, polpair_select]
+                        window_function_kperp[s] = _window_function_kperp[
+                            :, polpair_select
+                        ]
+                        window_function_kpara[s] = _window_function_kpara[
+                            :, polpair_select
+                        ]
                 if store_cov:
                     cov_real[s] = _cov_real[blp_select, :, :, polpair_select]
                     cov_imag[s] = _cov_imag[blp_select, :, :, polpair_select]
@@ -789,16 +875,30 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
                 nsmp[s] = _nsmp[blp_select, :][:, polpair_select]
                 if store_window:
                     if exact_windows:
-                        window_function[s] = _window_function[blp_select, :, :, :, :][:, :, :, :, polpair_select]
-                        window_function_kperp[s] = _window_function_kperp[:, polpair_select]
-                        window_function_kpara[s] = _window_function_kpara[:, polpair_select]
+                        window_function[s] = _window_function[blp_select, :, :, :, :][
+                            :, :, :, :, polpair_select
+                        ]
+                        window_function_kperp[s] = _window_function_kperp[
+                            :, polpair_select
+                        ]
+                        window_function_kpara[s] = _window_function_kpara[
+                            :, polpair_select
+                        ]
                     else:
-                        window_function[s] = _window_function[blp_select, :, :, :][:, :, :, polpair_select]
+                        window_function[s] = _window_function[blp_select, :, :, :][
+                            :, :, :, polpair_select
+                        ]
                 if store_cov:
-                    cov_real[s] = _cov_real[blp_select, :, :, :][:, :, :, polpair_select]
-                    cov_imag[s] = _cov_imag[blp_select, :, :, :][:, :, :, polpair_select]
+                    cov_real[s] = _cov_real[blp_select, :, :, :][
+                        :, :, :, polpair_select
+                    ]
+                    cov_imag[s] = _cov_imag[blp_select, :, :, :][
+                        :, :, :, polpair_select
+                    ]
                 for statname in statnames:
-                    stats[statname][s] = _stat[statname][blp_select, :, :][:, :, polpair_select]
+                    stats[statname][s] = _stat[statname][blp_select, :, :][
+                        :, :, polpair_select
+                    ]
 
         # assign arrays to uvp
         uvp.data_array = data
@@ -818,7 +918,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
             uvp.cov_array_imag = cov_imag
 
         # downselect on other attrs
-        if hasattr(uvp, 'OmegaP'):
+        if hasattr(uvp, "OmegaP"):
             uvp.OmegaP = uvp.OmegaP[:, polpair_select]
             uvp.OmegaPP = uvp.OmegaPP[:, polpair_select]
 
@@ -828,12 +928,16 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         for blpkey in blp_keys:
             key1 = blpkey[1][0] + (blpkey[2][0],)
             key2 = blpkey[1][1] + (blpkey[2][1],)
-            if not key1 in blkeys:
-                blkeys += [key1,]
-            if not key2 in blkeys:
-                blkeys += [key2,]
+            if key1 not in blkeys:
+                blkeys += [
+                    key1,
+                ]
+            if key2 not in blkeys:
+                blkeys += [
+                    key2,
+                ]
         new_r_params = {}
-        if hasattr(uvp, 'r_params') and uvp.r_params != '':
+        if hasattr(uvp, "r_params") and uvp.r_params != "":
             r_params = uvp.get_r_params()
             for rpkey in r_params:
                 if rpkey in blkeys:
@@ -841,6 +945,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         else:
             new_r_params = {}
         uvp.r_params = compress_r_params(new_r_params)
+
 
 def _blpair_to_antnums(blpair):
     """
@@ -859,9 +964,9 @@ def _blpair_to_antnums(blpair):
     """
     # get antennas
     ant1 = int(np.floor(blpair / 1e9))
-    ant2 = int(np.floor(blpair / 1e6 - ant1*1e3))
-    ant3 = int(np.floor(blpair / 1e3 - ant1*1e6 - ant2*1e3))
-    ant4 = int(np.floor(blpair - ant1*1e9 - ant2*1e6 - ant3*1e3))
+    ant2 = int(np.floor(blpair / 1e6 - ant1 * 1e3))
+    ant3 = int(np.floor(blpair / 1e3 - ant1 * 1e6 - ant2 * 1e3))
+    ant4 = int(np.floor(blpair - ant1 * 1e9 - ant2 * 1e6 - ant3 * 1e3))
     ant1 -= 100
     ant2 -= 100
     ant3 -= 100
@@ -871,6 +976,7 @@ def _blpair_to_antnums(blpair):
     antnums = ((ant1, ant2), (ant3, ant4))
 
     return antnums
+
 
 def _antnums_to_blpair(antnums):
     """
@@ -897,7 +1003,7 @@ def _antnums_to_blpair(antnums):
     ant4 = antnums[1][1] + 100
 
     # form blpair
-    blpair = int(ant1*1e9 + ant2*1e6 + ant3*1e3 + ant4)
+    blpair = int(ant1 * 1e9 + ant2 * 1e6 + ant3 * 1e3 + ant4)
 
     return blpair
 
@@ -918,7 +1024,7 @@ def _bl_to_antnums(bl):
     """
     # get antennas
     ant1 = int(np.floor(bl / 1e3))
-    ant2 = int(np.floor(bl - ant1*1e3))
+    ant2 = int(np.floor(bl - ant1 * 1e3))
     ant1 -= 100
     ant2 -= 100
 
@@ -951,7 +1057,7 @@ def _antnums_to_bl(antnums):
     ant2 = antnums[1] + 100
 
     # form bl
-    bl = int(ant1*1e3 + ant2)
+    bl = int(ant1 * 1e3 + ant2)
 
     return bl
 
@@ -1016,7 +1122,7 @@ def _conj_bl_int(bl):
     return conj_bl
 
 
-def _conj_blpair(blpair, which='both'):
+def _conj_blpair(blpair, which="both"):
     """
     Conjugate one or both baseline(s) in a baseline-pair
     Ex. ((ant1, ant2), (ant3, ant4)) --> ((ant2, ant1), (ant4, ant3))
@@ -1035,11 +1141,11 @@ def _conj_blpair(blpair, which='both'):
         blpair with one or both baselines conjugated
     """
     antnums = _blpair_to_antnums(blpair)
-    if which == 'first':
+    if which == "first":
         conj_blpair = _antnums_to_blpair((antnums[0][::-1], antnums[1]))
-    elif which == 'second':
+    elif which == "second":
         conj_blpair = _antnums_to_blpair((antnums[0], antnums[1][::-1]))
-    elif which == 'both':
+    elif which == "both":
         conj_blpair = _antnums_to_blpair((antnums[0][::-1], antnums[1][::-1]))
     else:
         raise ValueError("didn't recognize {}".format(which))
@@ -1078,8 +1184,8 @@ def _fast_is_in(src_blpts, query_blpts, time_prec=8):
     query_blpts = np.asarray(query_blpts)
 
     # Slice to create complex array
-    src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
-    query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
+    src_blpts = src_blpts[:, 0] + 1.0j * np.around(src_blpts[:, 1], time_prec)
+    query_blpts = query_blpts[:, 0] + 1.0j * np.around(query_blpts[:, 1], time_prec)
 
     # see if q complex number is in src_blpts
     return [q in src_blpts for q in query_blpts]
@@ -1116,18 +1222,18 @@ def _fast_lookup_blpairts(src_blpts, query_blpts, time_prec=8):
     src_blpts = np.asarray(src_blpts)
     query_blpts = np.asarray(query_blpts)
 
-    src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
-    query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
+    src_blpts = src_blpts[:, 0] + 1.0j * np.around(src_blpts[:, 1], time_prec)
+    query_blpts = query_blpts[:, 0] + 1.0j * np.around(query_blpts[:, 1], time_prec)
     # Applies rounding to time values to ensure reliable float comparisons
 
     # Do np.where comparison for all new_blpts
     # (indices stored in second array returned by np.where)
-    blpts_idxs = np.where(src_blpts == query_blpts[:,np.newaxis])[1]
+    blpts_idxs = np.where(src_blpts == query_blpts[:, np.newaxis])[1]
 
     return blpts_idxs
 
 
-def _get_red_bls(uvp, bl_len_tol=1., bl_ang_tol=1.):
+def _get_red_bls(uvp, bl_len_tol=1.0, bl_ang_tol=1.0):
     """
     Get redundant baseline groups that are present in a UVPSpec object.
 
@@ -1168,7 +1274,9 @@ def _get_red_bls(uvp, bl_len_tol=1., bl_ang_tol=1.):
 
     # Baseline indices
     idxs = np.arange(len(lens)).astype(np.int)
-    grp_bls = []; grp_len = []; grp_ang = []
+    grp_bls = []
+    grp_len = []
+    grp_ang = []
 
     # Group baselines by length and angle
     max_loops = idxs.size
@@ -1177,9 +1285,11 @@ def _get_red_bls(uvp, bl_len_tol=1., bl_ang_tol=1.):
         nloops += 1
 
         # Match bls within some tolerance in length and angle
-        matches = np.where(np.logical_and(
-                            np.abs(lens - lens[0]) < bl_len_tol,
-                            np.abs(angs - angs[0]) < bl_ang_tol) )
+        matches = np.where(
+            np.logical_and(
+                np.abs(lens - lens[0]) < bl_len_tol, np.abs(angs - angs[0]) < bl_ang_tol
+            )
+        )
 
         # Save info about this group
         grp_bls.append(uvp.bl_array[idxs[matches]])
@@ -1194,7 +1304,7 @@ def _get_red_bls(uvp, bl_len_tol=1., bl_ang_tol=1.):
     return grp_bls, grp_len, grp_ang
 
 
-def _get_red_blpairs(uvp, bl_len_tol=1., bl_ang_tol=1.):
+def _get_red_blpairs(uvp, bl_len_tol=1.0, bl_ang_tol=1.0):
     """
     Group baseline-pairs from a UVPSpec object according to the
     redundant groups that their constituent baselines belong to.
@@ -1233,13 +1343,15 @@ def _get_red_blpairs(uvp, bl_len_tol=1., bl_ang_tol=1.):
         Average angle of the baselines in each group.
     """
     # Get redundant baseline groups
-    red_bls, red_lens, red_angs = _get_red_bls(uvp=uvp,
-                                               bl_len_tol=bl_len_tol,
-                                               bl_ang_tol=bl_ang_tol)
+    red_bls, red_lens, red_angs = _get_red_bls(
+        uvp=uvp, bl_len_tol=bl_len_tol, bl_ang_tol=bl_ang_tol
+    )
 
     # Get all available blpairs and convert to pairs of integers
-    blps = [(uvp.antnums_to_bl(blp[0]), uvp.antnums_to_bl(blp[1]))
-            for blp in uvp.get_blpairs()]
+    blps = [
+        (uvp.antnums_to_bl(blp[0]), uvp.antnums_to_bl(blp[1]))
+        for blp in uvp.get_blpairs()
+    ]
     bl1, bl2 = zip(*blps)
 
     # Build bl -> group index dict
@@ -1264,8 +1376,7 @@ def _get_red_blpairs(uvp, bl_len_tol=1., bl_ang_tol=1.):
         matches = np.where(np.logical_and(bl1_grp == i, bl2_grp == i))
 
         # Unpack into list of blpair integers
-        blpair_ints = [int("%d%d" % _blp)
-                       for _blp in zip(bl1[matches], bl2[matches])]
+        blpair_ints = [int("%d%d" % _blp) for _blp in zip(bl1[matches], bl2[matches])]
         red_grps.append(blpair_ints)
 
     return red_grps, red_lens, red_angs
