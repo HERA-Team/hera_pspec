@@ -355,7 +355,7 @@ class UVWindow:
 
         # create list of FTBeam objects for each polarisation channel
         self.ftbeam_obj_pol = list(ftbeam_obj) if np.size(ftbeam_obj) > 1 else [ftbeam_obj, ftbeam_obj]
-        assert isinstance(self.ftbeam_obj_pol[0], FTBeam) and isinstance(self.ftbeam_obj_pol[1], FTBeam), \
+        assert hasattr(self.ftbeam_obj_pol[0], 'mapsize') and hasattr(self.ftbeam_obj_pol[1], 'mapsize'), \
             "Wrong input given in ftbeam_obj: must be (a list of) FTBeam object(s)"
         # check if elements in list have same properties
         assert np.all(self.ftbeam_obj_pol[0].freq_array == self.ftbeam_obj_pol[1].freq_array), \
