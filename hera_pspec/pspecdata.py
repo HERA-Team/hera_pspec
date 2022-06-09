@@ -1,13 +1,13 @@
 import numpy as np
 from pyuvdata import UVData, UVCal
-import copy, operator, itertools, sys
+import copy
+import itertools
 from collections import OrderedDict as odict
 import hera_cal as hc
 from pyuvdata import utils as uvutils
 import datetime
 import time
 import argparse
-import ast
 import glob
 import warnings
 import json
@@ -16,10 +16,10 @@ import uvtools.dspec as dspec
 from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
 
 
-class PSpecData(object):
+class PSpecData:
     def __init__(
         self,
-        dsets=[],
+        dsets=None,
         wgts=None,
         dsets_std=None,
         labels=None,
@@ -65,6 +65,9 @@ class PSpecData(object):
             If True, propagate flags from calibration into data
         """
         self.clear_cache()  # clear matrix cache
+
+        dsets = dsets or []
+
         self.dsets = []
         self.wgts = []
         self.labels = []
@@ -85,10 +88,10 @@ class PSpecData(object):
         self.symmetric_taper = True
         # Set all weights to None if wgts=None
         if wgts is None:
-            wgts = [None for dset in dsets]
+            wgts = [None] * len(dsets)
 
         # set dsets_std to None if any are None.
-        if not dsets_std is None and None in dsets_std:
+        if dsets_std is not None and None in dsets_std:
             dsets_std = None
 
         # Store the input UVData objects if specified
@@ -147,19 +150,19 @@ class PSpecData(object):
             labels = list(dsets.keys())
 
             if wgts is None:
-                wgts = dict([(l, None) for l in labels])
+                wgts = {lbl: None for lbl in labels}
             elif not isinstance(wgts, dict):
                 raise TypeError("If 'dsets' is a dict, 'wgts' must also be " "a dict")
 
             if dsets_std is None:
-                dsets_std = dict([(l, None) for l in labels])
+                dsets_std = {lbl: None for lbl in labels}
             elif not isinstance(dsets_std, dict):
                 raise TypeError(
                     "If 'dsets' is a dict, 'dsets_std' must also be " "a dict"
                 )
 
             if cals is None:
-                cals = dict([(l, None) for l in labels])
+                cals = {lbl: None for lbl in labels}
             elif not isinstance(cals, dict):
                 raise TypeError("If 'cals' is a dict, 'cals' must also be " "a dict")
 
@@ -283,14 +286,14 @@ class PSpecData(object):
         self.labels += labels
 
         # Check for repeated labels, and make them unique
-        for i, l in enumerate(self.labels):
+        for i, lbl in enumerate(self.labels):
             ext = 1
             while ext < 1e5:
-                if l in self.labels[:i]:
-                    l = self.labels[i] + ".{:d}".format(ext)
+                if lbl in self.labels[:i]:
+                    lbl = self.labels[i] + ".{:d}".format(ext)
                     ext += 1
                 else:
-                    self.labels[i] = l
+                    self.labels[i] = lbl
                     break
 
         # Store no. frequencies and no. times
@@ -444,7 +447,7 @@ class PSpecData(object):
             key = (key,)
 
         # check key is a tuple
-        if isinstance(key, tuple) == False or len(key) not in (1, 2, 3):
+        if not isinstance(key, tuple) or len(key) not in (1, 2, 3):
             raise KeyError("key {} must be a length 1, 2 or 3 tuple".format(key))
 
         try:
@@ -925,7 +928,7 @@ class PSpecData(object):
 
         return covar
 
-    def I(self, key):
+    def I(self, key):  # noqa
         """
         Return identity covariance matrix.
 
@@ -1173,13 +1176,13 @@ class PSpecData(object):
 
             elif self.data_weighting == "dayenu":
                 r_param_key = (self.data_weighting,) + key
-                if not r_param_key in self.r_params:
+                if r_param_key not in self.r_params:
                     raise ValueError("r_param not set for %s!" % str(r_param_key))
                 r_params = self.r_params[r_param_key]
                 if (
-                    not "filter_centers" in r_params
-                    or not "filter_half_widths" in r_params
-                    or not "filter_factors" in r_params
+                    "filter_centers" not in r_params
+                    or "filter_half_widths" not in r_params
+                    or "filter_factors" not in r_params
                 ):
                     raise ValueError("filtering parameters not specified!")
                 # This line retrieves a the psuedo-inverse of a lazy covariance
@@ -1236,6 +1239,7 @@ class PSpecData(object):
 
         If set to false, then the R-matrix will implement the taper as
         R = sqrtT ** 2 K
+
         Parameters
         ----------
         use_taper : bool,
@@ -1387,7 +1391,7 @@ class PSpecData(object):
             bins equal to the number of frequency channels in the current spw
         """
 
-        if ndlys == None:
+        if ndlys is None:
             self.spw_Ndlys = self.spw_Nfreqs
         else:
             # Check that one is not trying to estimate more delay channels than there are frequencies
@@ -1406,7 +1410,7 @@ class PSpecData(object):
         pol=False,
         time_indices=None,
     ):
-        """
+        r"""
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
 
@@ -1457,7 +1461,7 @@ class PSpecData(object):
         """
         # type check
         if time_indices is None:
-            time_indices = [tind for tind in range(self.Ntimes)]
+            time_indices = list(range(self.Ntimes))
         elif isinstance(time_indices, (int, np.integer)):
             time_indices = [time_indices]
         if not isinstance(time_indices, list):
@@ -1505,13 +1509,13 @@ class PSpecData(object):
         return float(len(key1)) / output
 
     def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
-        """
+        r"""
 
         If exact_norm is False:
         Construct an unnormalized bandpower, q_hat, from a given pair of
         visibility vectors. Returns the following quantity:
 
-          \hat{q}_a = (1/2) conj(x_1) R_1 Q^alt_a R_2 x_2
+        .. math:: \hat{q}_a = (1/2) conj(x_1) R_1 Q^alt_a R_2 x_2
 
         Note that the R matrix need not be set to C^-1. This is something that
         is set by the user in the set_R method.
@@ -1668,7 +1672,7 @@ class PSpecData(object):
         G : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             raise ValueError(
                 "Number of delay bins should have been set"
                 "by now! Cannot be equal to None"
@@ -1712,15 +1716,15 @@ class PSpecData(object):
         return G / 2.0
 
     def get_H(self, key1, key2, sampling=False, exact_norm=False, pol=False):
-        """
+        r"""
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
 
-            <q_a> = \sum_b H_{ab} p_b
+        .. math:: <q_a> = \sum_b H_{ab} p_b
 
         This is given by
 
-            H_ab = (1/2) Tr[R_1 Q_a^alt R_2 Q_b]
+        .. math:: H_ab = (1/2) Tr[R_1 Q_a^alt R_2 Q_b]
 
         (See HERA memo #44). As currently implemented, this approximates the
         primary beam as frequency independent.
@@ -1730,7 +1734,7 @@ class PSpecData(object):
         k values. The effect is to add a dampening of widely separated
         frequency correlations with the addition of the term
 
-            sinc(pi \Delta eta (nu_i - nu_j))
+        .. math:: sinc(pi \Delta eta (nu_i - nu_j))
 
         Note that numpy uses the engineering definition of sinc, where
         sinc(x) = sin(pi x) / (pi x), whereas in the line above and in
@@ -1738,9 +1742,9 @@ class PSpecData(object):
         sinc(x) = sin(x) / x
 
         Note that in the limit that R_1 = R_2 = C^-1 and Q_a is used instead
-        of Q_a^alt, this reduces to the Fisher matrix
+        of Q_a^alt, this reduces to the Fisher matrix (arXiv:1502.06016, Eq. 17)
 
-            F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
+        .. math:: F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b]
 
         This function uses the state of self.taper in constructing H.
         See PSpecData.pspec for details.
@@ -1769,7 +1773,7 @@ class PSpecData(object):
         H : array_like, complex
             Dimensions (Nfreqs, Nfreqs).
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             raise ValueError(
                 "Number of delay bins should have been set"
                 "by now! Cannot be equal to None."
@@ -1863,7 +1867,7 @@ class PSpecData(object):
             Set of E matrices, with dimensions (Ndlys, Nfreqs, Nfreqs).
 
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             raise ValueError(
                 "Number of delay bins should have been set"
                 "by now! Cannot be equal to None"
@@ -1893,7 +1897,7 @@ class PSpecData(object):
         pol=False,
         time_index=None,
     ):
-        """
+        r"""
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
 
@@ -2011,7 +2015,7 @@ class PSpecData(object):
         model="empirical",
         known_cov=None,
     ):
-        """
+        r"""
         Calculates the auto-covariance matrix for both the real and imaginary
         parts of bandpowers (i.e., the q vectors and the p vectors).
 
@@ -2297,9 +2301,7 @@ class PSpecData(object):
                 )
                 # Apply zero clipping on the columns and rows containing negative diagonal elements
                 SN_cov[np.real(np.diag(SN_cov)) <= 0.0, :] = 0.0 + 1.0j * 0
-                SN_cov[:, np.real(np.diag(SN_cov)) <= 0.0,] = (
-                    0.0 + 1.0j * 0
-                )
+                SN_cov[:, np.real(np.diag(SN_cov)) <= 0.0] = 0.0 + 1.0j * 0
                 q_qdagger += SN_cov
             else:
                 # for general case (which is the slowest without simplification)
@@ -2512,7 +2514,7 @@ class PSpecData(object):
         return cov_q_real, cov_q_imag, cov_p_real, cov_p_imag
 
     def get_MW(self, G, H, mode="I", band_covar=None, exact_norm=False, rcond=1e-15):
-        """
+        r"""
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2572,8 +2574,8 @@ class PSpecData(object):
             Window function matrix, W. (If G was passed in as a dict, a dict of
             array_like will be returned.)
         """
-        ### Next few lines commented out because (while elegant), the situation
-        ### here where G is a distionary is not supported by the rest of the code.
+        # Next few lines commented out because (while elegant), the situation
+        # here where G is a dictionary is not supported by the rest of the code.
         # Recursive case, if many G's were specified at once
         # if type(G) is dict:
         #     M,W = {}, {}
@@ -2611,7 +2613,7 @@ class PSpecData(object):
             W = (W.T / W_norm).T
 
         elif mode == "V^-1/2":
-            if np.sum(band_covar) == None:
+            if np.sum(band_covar) is None:
                 raise ValueError("Covariance not supplied for V^-1/2 normalization")
             # First find the eigenvectors and eigenvalues of the unnormalizd covariance
             # Then use it to compute V^-1/2
@@ -2668,7 +2670,7 @@ class PSpecData(object):
         return M, W
 
     def get_Q_alt(self, mode, allow_fft=True, include_extension=False):
-        """
+        r"""
         Response of the covariance to a given bandpower, dC / dp_alpha,
         EXCEPT without the primary beam factors. This is Q_alt as defined
         in HERA memo #44, so it's not dC / dp_alpha, strictly, but is just
@@ -2697,16 +2699,17 @@ class PSpecData(object):
             the number of delay bins equals the number of delay channels.
             Default: True
 
-        include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
-        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
-        (spw_Nfreq x spw_Nfreq).
+        include_extension : bool
+            If True, return a matrix that is spw_Nfreq x spw_Nfreq
+            (required if using :math:`\partial C_{ij} / \partial p_\alpha`
+            since C_{ij} is (spw_Nfreq x spw_Nfreq).
 
         Return
         -------
         Q : array_like
             Response matrix for bandpower p_alpha.
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             self.set_Ndlys()
 
         if mode >= self.spw_Ndlys:
@@ -2720,7 +2723,7 @@ class PSpecData(object):
             phase_correction = self.filter_extension[0]
         else:
             phase_correction = 0.0
-        if (self.spw_Ndlys == nfreq) and (allow_fft == True):
+        if (self.spw_Ndlys == nfreq) and allow_fft:
             _m = np.zeros((nfreq,), dtype=np.complex)
             _m[mode] = 1.0  # delta function at specific delay mode
             # FFT to transform to frequency space
@@ -2800,7 +2803,7 @@ class PSpecData(object):
         Q_alt : array_like
             Exponential part of Q (HERA memo #44, Eq. 11).
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             self.set_Ndlys()
         if mode >= self.spw_Ndlys:
             raise IndexError(
@@ -2816,7 +2819,7 @@ class PSpecData(object):
         return Q_alt
 
     def p_hat(self, M, q):
-        """
+        r"""
         Optimal estimate of bandpower p_alpha, defined as p_hat = M q_hat.
 
         Parameters
@@ -2825,7 +2828,7 @@ class PSpecData(object):
             Normalization matrix, M.
 
         q : array_like
-            Unnormalized bandpowers, \hat{q}.
+            Unnormalized bandpowers, :math:`\hat{q}`.
 
         Returns
         -------
@@ -2923,7 +2926,6 @@ class PSpecData(object):
                         bl_inds = np.where(np.in1d(dset.baseline_array, bl))[0]
                         # get flag waterfall
                         flags = dset.flag_array[bl_inds, 0, :, i].copy()
-                        Ntimes = float(flags.shape[0])
                         Nfreqs = float(flags.shape[1])
                         # get time- and freq-continguous flags
                         freq_contig_flgs = np.sum(flags, axis=1) / Nfreqs > 0.999999
@@ -3023,7 +3025,7 @@ class PSpecData(object):
         taper_override="no_override",
         exact_norm=False,
     ):
-        """
+        r"""
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set
         spectral window.
@@ -3067,7 +3069,7 @@ class PSpecData(object):
         Returns
         -------
         scalar: float
-                [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
+            :math:`[\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1`
                 in h^-3 Mpc^3 or Mpc^3.
         """
         # make sure polarizations are the same
@@ -3100,7 +3102,7 @@ class PSpecData(object):
                 end,
                 len(freqs),
                 pol=pol,
-                taper=self.taper,
+                taper=taper,
                 little_h=little_h,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
@@ -3111,7 +3113,7 @@ class PSpecData(object):
                 end,
                 len(freqs),
                 pol=pol,
-                taper=self.taper,
+                taper=taper,
                 little_h=little_h,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
@@ -3121,7 +3123,7 @@ class PSpecData(object):
     def scalar_delay_adjustment(
         self, key1=None, key2=None, sampling=False, Gv=None, Hv=None
     ):
-        """
+        r"""
         Computes an adjustment factor for the pspec scalar. There are
         two reasons why this might be needed:
 
@@ -3187,9 +3189,9 @@ class PSpecData(object):
         ratio[np.isnan(ratio)] = 1.0
         ratio[np.isinf(ratio)] = 1.0
 
-        ## XXX: Adjustments like this are hacky and wouldn't be necessary
-        ## if we deprecate the incorrectly normalized
-        ## Q and M matrix definitions.
+        # TODO: Adjustments like this are hacky and wouldn't be necessary
+        #       if we deprecate the incorrectly normalized
+        #       Q and M matrix definitions.
         # In the future, we need to do our normalizations properly and
         # stop introducing arbitrary normalization factors.
         # if the input identity weighting is diagonal, then the
@@ -3426,9 +3428,10 @@ class PSpecData(object):
         ftbeam_file : str, optional
             Definition of the beam Fourier transform to be used.
             Options include;
-                - Root name of the file to use, without the polarisation
-                Ex : FT_beam_HERA_dipole (+ path)
-                - '' for computation from beam simulations (slow)
+
+            - Root name of the file to use, without the polarisation
+              Ex : FT_beam_HERA_dipole (+ path)
+            - '' for computation from beam simulations (slow)
 
         cov_model : string, optional
             Type of covariance model to calculate, if not cached.
@@ -3648,7 +3651,7 @@ class PSpecData(object):
 
         # if using the whole band in the dataset, then there should just be
         # one n_dly parameter specified
-        if spw_ranges is None and n_dlys != None:
+        if spw_ranges is None and n_dlys is not None:
             assert (
                 len(n_dlys) == 1
             ), "Only one spw, so cannot specify more than one n_dly value"
@@ -3808,7 +3811,7 @@ class PSpecData(object):
                 spw_scalar.append(scalar)
 
                 # Loop over baseline pairs
-                for k, blp in enumerate(bl_pairs):
+                for blp in bl_pairs:
                     # assign keys
                     if isinstance(blp, list):
                         # interpet blp as group of baseline-pairs
@@ -3847,12 +3850,12 @@ class PSpecData(object):
                     if input_data_weight == "dayenu":
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
-                        if not key1 in r_params:
+                        if key1 not in r_params:
                             raise ValueError(
                                 "No r_param dictionary supplied"
                                 " for baseline %s" % (str(key1))
                             )
-                        if not key2 in r_params:
+                        if key2 not in r_params:
                             raise ValueError(
                                 "No r_param dictionary supplied"
                                 " for baseline %s" % (str(key2))
@@ -3929,7 +3932,7 @@ class PSpecData(object):
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
-                    if self.primary_beam != None:
+                    if self.primary_beam is not None:
                         if verbose:
                             print("  Computing and multiplying scalar...")
                         pv *= scalar
@@ -3962,7 +3965,7 @@ class PSpecData(object):
                             known_cov=known_cov,
                         )
 
-                        if self.primary_beam != None:
+                        if self.primary_beam is not None:
                             cov_real = cov_real * (scalar) ** 2.0
                             cov_imag = cov_imag * (scalar) ** 2.0
 
@@ -4167,7 +4170,7 @@ class PSpecData(object):
         cal2 = json.loads(dset2.extra_keywords.get("calibration", '""'))
         label1 = self.labels[self.dset_idx(dsets[0])]
         label2 = self.labels[self.dset_idx(dsets[1])]
-        uvp.labels = sorted(set([label1, label2]))
+        uvp.labels = sorted({label1, label2})
         uvp.label_1_array = np.ones(
             (uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int
         ) * uvp.labels.index(label1)
@@ -4215,12 +4218,10 @@ class PSpecData(object):
         uvp.data_array = data_array
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
-        uvp.nsample_array = dict(
-            [
-                (k, np.ones_like(uvp.integration_array[k], np.float))
-                for k in uvp.integration_array.keys()
-            ]
-        )
+        uvp.nsample_array = {
+            k: np.ones_like(uvp.integration_array[k], np.float)
+            for k in uvp.integration_array.keys()
+        }
 
         # covariance
         if store_cov:
@@ -4444,7 +4445,7 @@ class PSpecData(object):
         # iterate through dsets and trim off integrations whose lst isn't
         # in common_lsts
         for i, dset in enumerate(self.dsets):
-            trim_inds = np.array([l not in common_lsts for l in lst_arrs[i]])
+            trim_inds = np.array([lst not in common_lsts for lst in lst_arrs[i]])
             if np.any(trim_inds):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
 
@@ -4633,9 +4634,10 @@ def pspec_run(
     ftbeam_file : str, optional
         Definition of the beam Fourier transform to be used.
         Options include;
-            - Root name of the file to use, without the polarisation
-              Ex : FT_beam_HERA_dipole (+ path)
-            - '' for computation from beam simulations (slow)
+
+        - Root name of the file to use, without the polarisation
+          Ex : FT_beam_HERA_dipole (+ path)
+        - '' for computation from beam simulations (slow)
 
     beam : PSpecBeam object, UVBeam object or string
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
@@ -5521,9 +5523,9 @@ def _load_dsets(
     list
         List of UVData objects
     """
-    ### TODO: data loading for cross-polarization power
-    ### spectra is sub-optimal: only dset1 pol1 and dset2 pol2
-    ### is needed instead of pol1 & pol2 for dset1 & dset2
+    # TODO: data loading for cross-polarization power
+    # spectra is sub-optimal: only dset1 pol1 and dset2 pol2
+    # is needed instead of pol1 & pol2 for dset1 & dset2
     dsets = []
     Ndsets = len(fnames)
     for i, dset in enumerate(fnames):

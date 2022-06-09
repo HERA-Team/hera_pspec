@@ -1,9 +1,7 @@
-import unittest
 import pytest
 import numpy as np
 from .. import uvpspec_utils as uvputils
 from .. import testing, pspecbeam, UVPSpec
-from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 import os
 import copy
@@ -22,7 +20,6 @@ def test_select_common():
     uvp1 = uvp.select(times=np.unique(uvp.time_avg_array)[:-1], inplace=False)
     uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[1:], inplace=False)
     uvp3 = uvp.select(blpairs=np.unique(uvp.blpair_array)[1:], inplace=False)
-    uvp4 = uvp.select(blpairs=np.unique(uvp.blpair_array)[:2], inplace=False)
     uvp5 = uvp.select(blpairs=np.unique(uvp.blpair_array)[:1], inplace=False)
     uvp6 = uvp.select(times=np.unique(uvp.time_avg_array)[:1], inplace=False)
 
@@ -59,7 +56,7 @@ def test_select_common():
 
     # Check that zero overlap in times does *not* raise a ValueError if
     # not selecting on times
-    uvp_new_3 = uvputils.select_common(
+    uvputils.select_common(
         [uvp2, uvp6], spws=True, blpairs=True, times=False, polpairs=True, inplace=False
     )
 
@@ -117,9 +114,9 @@ def test_get_blpairs_from_bls():
     uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
 
     # Check that bls can be specified in several different ways
-    blps = uvputils._get_blpairs_from_bls(uvp, bls=101102)
-    blps = uvputils._get_blpairs_from_bls(uvp, bls=(101, 102))
-    blps = uvputils._get_blpairs_from_bls(uvp, bls=[101102, 101103])
+    uvputils._get_blpairs_from_bls(uvp, bls=101102)
+    uvputils._get_blpairs_from_bls(uvp, bls=(101, 102))
+    uvputils._get_blpairs_from_bls(uvp, bls=[101102, 101103])
 
 
 def test_get_red_bls():
@@ -141,8 +138,7 @@ def test_get_red_bls():
     # Check that number of grouped baselines = total no. of baselines
     num_bls = 0
     for grp in bls:
-        for bl in grp:
-            num_bls += 1
+        num_bls += len(grp)
     assert num_bls == np.unique(uvp.bl_array).size
 
 
@@ -168,8 +164,7 @@ def test_get_red_blpairs():
     # Check that number of grouped blps = total no. of blps
     num_blps = 0
     for grp in blps:
-        for blp in grp:
-            num_blps += 1
+        num_blps += len(grp)
     assert num_blps == np.unique(uvp.blpair_array).size
 
 

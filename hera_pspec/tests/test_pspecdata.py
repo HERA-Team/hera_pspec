@@ -2,7 +2,8 @@ import unittest
 import pytest
 import numpy as np
 import pyuvdata as uv
-import os, copy
+import os
+import copy
 from scipy.integrate import trapz
 from .. import pspecdata, pspecbeam, conversions, container, utils, testing
 from hera_pspec.data import DATA_PATH
@@ -218,14 +219,13 @@ class Test_PSpecData(unittest.TestCase):
         """
         self.ds = pspecdata.PSpecData(dsets=self.d, wgts=self.w)
         Nfreq = self.ds.spw_Nfreqs
-        Ntime = self.ds.Ntimes
         Ndlys = Nfreq - 3
         self.ds.spw_Ndlys = Ndlys
 
         # Set baselines to use for tests
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-        
+
         rpk1 = {
             "filter_centers": [0.0],
             "filter_half_widths": [100e-9],
@@ -890,7 +890,7 @@ class Test_PSpecData(unittest.TestCase):
         # Set baselines to use for tests
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
-        
+
         rpk1 = {
             "filter_centers": [0.0],
             "filter_half_widths": [100e-9],
@@ -1536,7 +1536,7 @@ class Test_PSpecData(unittest.TestCase):
             bls2.extend(_bls2)
         # keep only 20 blpairs for speed (each with 40 independent time samples)
         bls1, bls2 = bls1[:20], bls2[:20]
-        
+
         # generate a sky and noise simulation: each bl has the same FG signal, constant in time
         # but has a different noise realization
         np.random.seed(0)

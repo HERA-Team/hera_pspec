@@ -1,15 +1,11 @@
 import unittest
-import pytest
 import numpy as np
 import os
-import sys
 import copy
-import h5py
-from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 from hera_pspec.data import DATA_PATH
-from .. import uvpspec, conversions, pspecdata, pspecbeam, noise, testing, utils
+from .. import conversions, pspecdata, pspecbeam, noise, testing, utils
 
 
 class Test_Sensitivity(unittest.TestCase):
@@ -222,7 +218,7 @@ def test_analytic_noise():
     frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
     assert np.abs(frac_ratio).mean() < 0.01
 
-    ## check P_SN consistency of 1-sigma standard dev. to 1%
+    # check P_SN consistency of 1-sigma standard dev. to 1%
     cov_diag = uvp_fg.cov_array_real[0][:, range(Nchan), range(Nchan)]
     stats_diag = uvp.stats_array["P_SN"][0]
     frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag

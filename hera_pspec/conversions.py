@@ -1,9 +1,5 @@
 """
-conversions.py
---------
-
-Cosmological and instrumental
-conversion functions for hera_pspec
+Cosmological and instrumental conversion functions for hera_pspec.
 """
 import numpy as np
 import scipy.integrate as integrate
@@ -12,7 +8,7 @@ try:
     from astropy.cosmology import LambdaCDM
 
     _astropy = True
-except:
+except ImportError:
     print("Could not import astropy")
     _astropy = False
 
@@ -114,7 +110,7 @@ class Cosmo_Conversions(object):
         if Om_k is None:
             Om_k = 1 - Om_L - Om_M
 
-        ### TODO add radiation component to class and to distance functions
+        # TODO: add radiation component to class and to distance functions
         self.Om_L = Om_L
         self.Om_b = Om_b
         self.Om_c = Om_c
@@ -132,7 +128,7 @@ class Cosmo_Conversions(object):
         """
         Return a dictionary with cosmological parameters.
         """
-        return dict([(p, getattr(self, p)) for p in self.params])
+        return {p: getattr(self, p) for p in self.params}
 
     def f2z(self, freq, ghz=False):
         """

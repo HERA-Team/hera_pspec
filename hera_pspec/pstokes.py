@@ -1,7 +1,7 @@
 """
 Module to construct pseudo-Stokes (I,Q,U,V) visibilities from miriad files or UVData objects
 """
-import numpy as np, os
+import numpy as np
 import pyuvdata
 import copy
 from collections import OrderedDict as odict
@@ -245,7 +245,7 @@ def construct_pstokes(
     uvdS : UVData object with pseudo-Stokes visibility
     """
     # convert dset1 and dset2 to UVData objects if they are miriad files
-    if isinstance(dset1, pyuvdata.UVData) == False:
+    if not isinstance(dset1, pyuvdata.UVData):
         assert isinstance(
             dset1, (str, np.str)
         ), "dset1 must be fed as a string or UVData object"
@@ -259,7 +259,7 @@ def construct_pstokes(
         )
     else:
         uvd1 = dset1
-    if isinstance(dset2, pyuvdata.UVData) == False:
+    if not isinstance(dset2, pyuvdata.UVData):
         assert isinstance(
             dset2, (str, np.str)
         ), "dset2 must be fed as a string or UVData object"
@@ -286,19 +286,19 @@ def construct_pstokes(
     # check if dset1 and dset2 have the same frequencies
     freqs1 = uvd1.freq_array
     freqs2 = uvd2.freq_array
-    if np.array_equal(freqs1, freqs2) == False:
+    if not np.array_equal(freqs1, freqs2):
         raise ValueError("dset1 and dset2 must have the same frequencies.")
 
     # check if dset1 and dset2 have the same timestamps
     times1 = uvd1.time_array
     times2 = uvd2.time_array
-    if np.array_equal(times1, times2) == False:
+    if not np.array_equal(times1, times2):
         raise ValueError("dset1 and dset2 must have the same timestamps.")
 
     # check if dset1 and dset2 have the same baselines
     bls1 = uvd1.baseline_array
     bls2 = uvd2.baseline_array
-    if np.array_equal(bls1, bls2) == False:
+    if not np.array_equal(bls1, bls2):
         raise ValueError("dset1 and dset2 must have the same baselines")
 
     # makes the Npol length==1 so that the UVData carries data for the
@@ -360,7 +360,7 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
     # type check
     assert isinstance(dsets, list), "dsets must be fed as a list of UVData objects"
     assert np.all(
-        isinstance(d, UVData) for d in dsets
+        isinstance(d, pyuvdata.UVData) for d in dsets
     ), "dsets must be fed as a list of UVData objects"
 
     # get polarization of each dset

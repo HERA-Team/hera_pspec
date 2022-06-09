@@ -49,7 +49,7 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     )
 
     # get metadata
-    spws1 = list(spw for spw in uvp1.get_spw_ranges())
+    spws1 = list(uvp1.get_spw_ranges())
     polpairs1 = uvp1.polpair_array.tolist()
     blps1 = sorted(set(uvp1.blpair_array))
     spws2 = list(uvp2.get_spw_ranges())
@@ -151,13 +151,14 @@ def compress_r_params(r_params_dict):
         dictionary with parameters for weighting matrix. Proper fields
         and formats depend on the mode of data_weighting.
         data_weighting == 'dayenu':
+
         * 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
           at which to center filtering windows. Can specify fractional channel number.
         * 'filter_half_widths', list of floats (or float) specifying the width of each
           filter window in (delay) channel numbers. Can specify fractional channel number.
         * 'filter_factors', list of floats (or float) specifying how much power within each filter window
           is to be suppressed.
-    
+
     Returns
     -------
     string containing r_params dictionary in json format and only containing one
@@ -206,12 +207,13 @@ def decompress_r_params(r_params_str):
         Dictionary with parameters for weighting matrix. Proper fields
         and formats depend on the mode of data_weighting.
         data_weighting == 'dayenu':
-            * 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
-              at which to center filtering windows. Can specify fractional channel number.
-            * 'filter_half_widths', list of floats (or float) specifying the width of each
-              filter window in (delay) channel numbers. Can specify fractional channel number.
-            * 'filter_factors', list of floats (or float) specifying how much power within each filter window
-              is to be suppressed.
+
+        * 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+          at which to center filtering windows. Can specify fractional channel number.
+        * 'filter_half_widths', list of floats (or float) specifying the width of each
+          filter window in (delay) channel numbers. Can specify fractional channel number.
+        * 'filter_factors', list of floats (or float) specifying how much power within each filter window
+          is to be suppressed.
     """
     decompressed_r_params = {}
     if r_params_str != "" and r_params_str is not None:

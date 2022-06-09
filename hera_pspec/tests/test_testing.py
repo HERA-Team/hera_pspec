@@ -1,8 +1,8 @@
 import pytest
 from hera_pspec.data import DATA_PATH
-from .. import testing, uvpspec, conversions, pspecbeam, utils
+from .. import testing, uvpspec, conversions, pspecbeam
 import os
-from pyuvdata import UVData, UVBeam
+from pyuvdata import UVData
 import numpy as np
 from hera_cal import redcal
 import copy
@@ -61,35 +61,19 @@ def test_uvpspec_from_data():
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
     reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
     uvp = testing.uvpspec_from_data(fname, reds[:3], beam=beam, spw_ranges=[(50, 100)])
+    # fmt: off
     assert (
         len(
             set(uvp.bl_array)
-            - set(
-                [
-                    137138,
-                    137151,
-                    137152,
-                    138139,
-                    138152,
-                    138153,
-                    139153,
-                    139154,
-                    151152,
-                    151167,
-                    152153,
-                    152167,
-                    152168,
-                    153154,
-                    153168,
-                    153169,
-                    154169,
-                    167168,
-                    168169,
-                ]
-            )
+            - {
+                137138, 137151, 137152, 138139, 138152, 138153, 139153, 139154, 151152,
+                151167, 152153, 152167, 152168, 153154, 153168, 153169, 154169, 167168,
+                168169,
+            }
         )
         == 0
     )
+    # fmt: on
     assert uvp.Nblpairs == 51
 
     # test exceptions
@@ -182,7 +166,8 @@ def test_sky_noise_jy_autos():
     channel_width = np.mean(np.diff(freqs))
 
     # Callable beam function
-    omega_p = lambda freq: 0.05 * (freq / 100.0e6) ** -1.0
+    def omega_p(freq):
+        0.05 * (freq / 100.0e6) ** -1.0
 
     # Call function
     n = testing.sky_noise_jy_autos(

@@ -5,11 +5,10 @@ import copy
 import warnings
 import argparse
 from astropy import stats as astats
-import os, sys
+import os
 
 from . import utils, version, uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
-from .uvwindow import UVWindow
 
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False, seed=None):
@@ -115,7 +114,7 @@ def average_spectra(
     inplace=True,
     add_to_history="",
 ):
-    """
+    r"""
     Average power spectra across the baseline-pair-time axis, weighted by
     each spectrum's integration time or a specified kind of error bars.
 
@@ -146,9 +145,13 @@ def average_spectra(
         baseline-pair group are averaged together. If a baseline-pair
         exists in more than one group, a warning is raised.
 
-        Ex: blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))],
-                              [((4, 6), (4, 6))]]
-        or blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
+        Ex::
+
+            blpair_groups = [ [((1, 2), (1, 2)), ((2, 3), (2, 3))], [((4, 6), (4, 6))]]
+
+        or::
+
+            blpair_groups = [ [1002001002, 2003002003], [4006004006] ]
 
     time_avg : bool, optional
         If True, average power spectra across the time axis. Default: False.
@@ -170,16 +173,16 @@ def average_spectra(
     error_weights: string, optional
          error_weights specify which kind of errors we use for weights
          during averaging power spectra.
-         The weights are defined as $w_i = 1/ sigma_i^2$,
-         where $sigma_i$ is taken from the relevant field of stats_array.
-         If `error_weight' is set to None, which means we just use the
+         The weights are defined as :math:`w_i = 1/ \sigma_i^2`,
+         where :math:`\sigma_i` is taken from the relevant field of stats_array.
+         If ``error_weight`` is set to None, which means we just use the
          integration time as weights. If error_weights is specified,
          then it also gets appended to error_field as a list.
          Default: None
 
     normalize_weights: bool, optional
         Whether to normalize the baseline-pair weights so that:
-           Sum(blpair_weights) = N_blpairs
+        ``Sum(blpair_weights) = N_blpairs``
         If False, no normalization is applied to the weights. Default: True.
 
     inplace : bool, optional
@@ -237,7 +240,6 @@ def average_spectra(
         blpair_groups = [[blp] for blp in uvp.blpair_array[np.sort(idx)]]
         # get baseline length for each group of baseline pairs
         # assuming only redundant baselines are paired together
-        blpair_lens = [blv for blv in uvp.get_blpair_seps()[np.sort(idx)]]
         assert blpair_weights is None, (
             "Cannot specify blpair_weights if " "blpair_groups is None."
         )
@@ -257,9 +259,7 @@ def average_spectra(
     else:
         # Check that blpair_weights has the same shape as blpair_groups
         for i, grp in enumerate(blpair_groups):
-            try:
-                len(blpair_weights[i]) == len(grp)
-            except:
+            if not len(blpair_weights[i]) == len(grp):
                 raise IndexError(
                     "blpair_weights must have the same shape as " "blpair_groups"
                 )
@@ -472,7 +472,7 @@ def average_spectra(
                     # Add multiple copies of data for each baseline according
                     # to the weighting/multiplicity;
                     # while multiple copies are only added when bootstrap resampling
-                    for m in range(int(blpg_wgts[k])):
+                    for _ in range(int(blpg_wgts[k])):
                         bpg_data.append(data * w)
                         bpg_wgts.append(wgts * w[:, :1, None])
                         bpg_ints.append(ints * w)
@@ -579,7 +579,7 @@ def average_spectra(
     lst_1, lst_2, lst_avg_arr = [], [], []
     blpair_arr, bl_arr = [], []
 
-    for i, blpg in enumerate(blpair_groups):
+    for blpg in blpair_groups:
 
         # Get blpairts indices for zeroth blpair in this group
         blpairts = uvp.blpair_to_indices(blpg[0])
@@ -656,7 +656,7 @@ def average_spectra(
     uvp.check()
 
     # Return
-    if inplace == False:
+    if not inplace:
         return uvp
 
 
@@ -671,12 +671,12 @@ def spherical_average(
     error_weights=None,
     add_to_history="",
     little_h=True,
-    A={},
+    A=None,
     run_check=True,
 ):
-    """
-    Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
-    Use UVPSpec.set_stats_slice to downweight regions of k_perp and k_para grid before averaging.
+    r"""
+    Perform a spherical average of a UVPSpec, mapping kperp & kpara onto a ``|k|`` grid.
+    Use UVPSpec.set_stats_slice to downweight regions of kperp and kpara grid before averaging.
 
     Parameters
     ----------
@@ -684,7 +684,7 @@ def spherical_average(
         Input UVPSpec to average
 
     kbins : array-like
-        1D float array of ascending |k| bin centers in [h] Mpc^-1 units
+        1D float array of ascending ``|k|`` bin centers in [h] Mpc^-1 units
         (h included if little_h is True)
 
     bin_widths : array-like
@@ -740,6 +740,8 @@ def spherical_average(
 
     3. For speed, it helps to perform cylindrical binning upfront by suppyling blpair_groups.
     """
+    A = A or {}
+
     # input checks
     if weight_by_cov:
         assert hasattr(
@@ -1104,7 +1106,7 @@ def spherical_wf_from_uvp(
         Input UVPSpec to average
 
     kbins : array-like
-        1D float array of ascending |k| bin centers in [h] Mpc^-1 units
+        1D float array of ascending ``|k|`` bin centers in [h] Mpc^-1 units
         (h included if little_h is True)
 
     bin_widths : array-like
@@ -1251,7 +1253,7 @@ def spherical_wf_from_uvp(
 
         # iterate over polarisation
         spw_window_function = []
-        for ip, polpair in enumerate(uvp.polpair_array):
+        for ip in range(len(uvp.polpair_array)):
 
             # grids used to compute the window functions
             kperp_bins = uvp.window_function_kperp[spw][:, ip]
@@ -1313,8 +1315,8 @@ def fold_spectra(uvp):
         UVPSpec object to be folded.
     """
     # assert folded is False
-    assert uvp.folded == False, "cannot fold power spectra if uvp.folded == True"
-    store_cov = hasattr(uvp, "cov_array_real")
+    assert not uvp.folded, "cannot fold power spectra if uvp.folded == True"
+
     # Iterate over spw
     for spw in range(uvp.Nspws):
 
@@ -1588,9 +1590,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False, seed=None
     # Homogenise input UVPSpec objects in terms of available polarizations
     # and spectral windows
     if len(uvp_list) > 1:
-        uvp_list = uvpspec_utils.select_common(
-            uvp_list, spws=True, pols=True, inplace=False
-        )
+        uvp_list = uvputils.select_common(uvp_list, spws=True, pols=True, inplace=False)
 
     # Loop over UVPSpec objects, looking for available blpairs in each
     avail_blpairs = [_ordered_unique(uvp.blpair_array) for uvp in uvp_list]
@@ -1759,7 +1759,7 @@ def bootstrap_resampled_error(
     # Iterate over Nsamples and create bootstrap resamples
     uvp_boots = []
     uvp_wgts = []
-    for i in range(Nsamples):
+    for _ in range(Nsamples):
         # resample
         boot, wgt = bootstrap_average_blpairs(
             uvp, blpair_groups=blpair_groups, time_avg=time_avg, seed=None
@@ -1833,12 +1833,13 @@ def bootstrap_run(
     """
     Run bootstrap resampling on a PSpecContainer object to estimate errorbars.
     For each group/spectrum specified in the PSpecContainer, this function produces
-        1. uniform average of UVPSpec objects in the group
-        2. various error estimates from the bootstrap resamples
-       (3.) series of bootstrap resamples of UVPSpec average (optional)
 
-    The output of 1. and 2. are placed in a *_avg spectrum, while the output of 3.
-    is placed in *_bs0, *_bs1, *_bs2 etc. objects.
+    1. uniform average of UVPSpec objects in the group
+    2. various error estimates from the bootstrap resamples
+    3. series of bootstrap resamples of UVPSpec average (optional)
+
+    The output of 1. and 2. are placed in a ``*_avg`` spectrum, while the output of 3.
+    is placed in ``*_bs0``, ``*_bs1``, ``*_bs2`` etc. objects.
 
     Note: PSpecContainers should not be opened in SWMR mode for this function.
 
@@ -1853,10 +1854,13 @@ def bootstrap_run(
 
     blpair_groups : list
         A list of baseline-pair groups to bootstrap over. Default is to solve for and use
-        redundant baseline groups. Ex: [ [((1, 2), (2, 3)), ((1, 2), (3, 4))],
-                                         [((1, 3), (2, 4)), ((1, 3), (3, 5))],
-                                         ...
-                                        ]
+        redundant baseline groups. Ex::
+
+            [
+              [((1, 2), (2, 3)), ((1, 2), (3, 4))],
+              [((1, 3), (2, 4)), ((1, 3), (3, 5))],
+              ...
+            ]
 
     time_avg : bool
         If True, perform time-average of power spectra in averaging step.
@@ -1881,7 +1885,7 @@ def bootstrap_run(
         object as "bs_cinterval_{:05.2f}".format(cinterval).
 
     keep_samples : bool
-        If True, store each bootstrap resample in PSpecContainer object with *_bs# suffix.
+        If True, store each bootstrap resample in PSpecContainer object with ``*_bs#`` suffix.
 
     bl_error_tol : float
         If calculating redundant baseline groups, this is the redundancy tolerance in meters.
@@ -1900,7 +1904,6 @@ def bootstrap_run(
         0.5 sec wait per attempt. Useful in the case of multiprocesses bootstrapping
         different groups of the same container.
     """
-    from hera_pspec import uvpspec
     from hera_pspec import PSpecContainer
 
     # type check

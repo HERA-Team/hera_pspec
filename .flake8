@@ -14,7 +14,7 @@ ignore =
     A002  # allow arguments to shadow python builtins
 max-line-length = 88
 # TODO: max-complexity should be 18!
-max-complexity = 60
+max-complexity = 75
 per-file-ignores =
     docs/conf.py:D,A
     */__init__.py:F401

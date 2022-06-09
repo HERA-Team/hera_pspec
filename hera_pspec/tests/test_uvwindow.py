@@ -8,7 +8,7 @@ from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 
 from .. import conversions, pspecbeam, utils
-from .. import uvwindow, pspecbeam, PSpecData
+from .. import uvwindow, PSpecData
 
 # Data files to use in tests
 dfile = "zen.2458116.31939.HH.uvh5"
@@ -330,7 +330,7 @@ class Test_UVWindow(unittest.TestCase):
 
         # proper usage
         # initialise with ftfile (read pre-computed FT of the beam in file)
-        uvw_ps = uvwindow.UVWindow.from_uvpspec(
+        uvwindow.UVWindow.from_uvpspec(
             uvp, ipol=0, spw=0, verbose=True, ftfile=os.path.join(DATA_PATH, basename)
         )
         # if cross polarisation
@@ -382,9 +382,7 @@ class Test_UVWindow(unittest.TestCase):
         # initialise object
         test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
         # test for correct input parameters
-        test._kperp4bl_freq(
-            freq=test.freq_array[12], bl_len=bl_len, ngrid=self.ngrid
-        )
+        test._kperp4bl_freq(freq=test.freq_array[12], bl_len=bl_len, ngrid=self.ngrid)
         # test for frequency outside of spectral window
         pytest.raises(
             AssertionError,
@@ -655,7 +653,7 @@ class Test_UVWindow(unittest.TestCase):
         kperp_bins = test.get_kperp_bins(self.lens[:1])
         kpara_bins = test.get_kpara_bins(test.freq_array)
 
-        WF = test.get_spherical_wf(
+        test.get_spherical_wf(
             kbins=self.kbins,
             kperp_bins=kperp_bins,
             kpara_bins=kpara_bins,

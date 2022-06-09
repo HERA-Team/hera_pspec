@@ -1,11 +1,9 @@
 #!/usr/bin/env python2
 import numpy as np
-import copy, operator, itertools
-from collections import OrderedDict as odict
+import copy
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
 from scipy import stats, interpolate
-from astropy import constants
 
 from . import (
     uvpspec,
@@ -13,7 +11,6 @@ from . import (
     conversions,
     pspecbeam,
     utils,
-    uvpspec_utils as uvputils,
 )
 
 
@@ -265,17 +262,17 @@ def uvpspec_from_data(
         Number of delay bins to use. Default: None (uses as many delay bins as
         frequency channels).
 
-    r_params: dictionary with parameters for weighting matrix.
-              Proper fields
-              and formats depend on the mode of data_weighting.
-            data_weighting == 'dayenu':
-                            dictionary with fields
-                            'filter_centers', list of floats (or float) specifying the (delay) channel numbers
-                                              at which to center filtering windows. Can specify fractional channel number.
-                            'filter_half_widths', list of floats (or float) specifying the width of each
-                                             filter window in (delay) channel numbers. Can specify fractional channel number.
-                            'filter_factors', list of floats (or float) specifying how much power within each filter window
-                                              is to be suppressed.
+    r_params : dict
+        dictionary with parameters for weighting matrix.Proper fields and formats depend
+        on the mode of data_weighting. ``data_weighting == 'dayenu'``:
+
+        * 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+          at which to center filtering windows. Can specify fractional channel number.
+        * 'filter_half_widths', list of floats (or float) specifying the width of each
+          filter window in (delay) channel numbers. Can specify fractional channel number.
+        * 'filter_factors', list of floats (or float) specifying how much power within each filter window
+          is to be suppressed.
+
     verbose : bool, optional
         if True, report feedback to standard output. Default: False.
 

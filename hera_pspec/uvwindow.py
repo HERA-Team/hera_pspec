@@ -338,11 +338,11 @@ class UVWindow:
             Access to the Fourier transform of the beam on the sky plane
             (Eq. 10 in Memo)
             Options are:
-                - Load from file. Then input is the root name of the file
-                  to use, without the polarisation
-                  Ex : ft_beam_HERA_dipole (+ path)
-                - None (default). Computation from beam simulations (slow).
-                  Not yet implemented..
+
+            - Load from file. Then input is the root name of the file
+              to use, without the polarisation, e.g. ``ft_beam_HERA_dipole (+ path)``
+            - None (default). Computation from beam simulations (slow).
+              Not yet implemented..
         x_orientation: str, optional
             Orientation in cardinal direction east or north of X dipole.
             Default keeps polarization in X and Y basis.
@@ -623,7 +623,7 @@ class UVWindow:
         # read kperp bins and find bin_edges
         kperp_bins = np.array(kperp_bins)
         nbins_kperp = kperp_bins.size
-        dk_perp = np.diff(kperp_bins).mean()
+
         # read kpara bins
         kpara_bins = np.array(kpara_bins)
         nbins_kpara = kpara_bins.size

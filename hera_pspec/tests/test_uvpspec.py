@@ -533,7 +533,7 @@ class Test_UVPSpec(unittest.TestCase):
     def test_clear(self):
         uvp = copy.deepcopy(self.uvp)
         uvp._clear()
-        assert hasattr(uvp, "Ntimes") == False
+        assert not hasattr(uvp, "Ntimes")
         assert not hasattr(uvp, "data_array")
 
     def test_get_r_params(self):
@@ -643,9 +643,10 @@ class Test_UVPSpec(unittest.TestCase):
                 500
                 * np.ones((uvp.Ntimes, uvp.Ndlys))
                 * np.linspace(1, 2, uvp.Ntimes)[:, None]
-            ) for k in uvp.get_blpairs()
+            )
+            for k in uvp.get_blpairs()
         }
-        
+
         P_N = uvp.generate_noise_spectra(
             0, 1515, Tsys, form="Pk", blpairs=blpairs, component="real"
         )
@@ -766,7 +767,7 @@ class Test_UVPSpec(unittest.TestCase):
             uvd, bls, data_std=uvd_std, spw_ranges=[(0, 17)], beam=beam
         )
         uvp1.fold_spectra()
-        
+
         # Test fold_spectra method is consistent with average_spectra()
         uvp = testing.uvpspec_from_data(
             uvd, bls, data_std=uvd_std, spw_ranges=[(0, 17)], beam=beam

@@ -1,9 +1,5 @@
 import unittest
-import pytest
 import numpy as np
-import os
-import sys
-from hera_pspec.data import DATA_PATH
 from .. import conversions
 
 

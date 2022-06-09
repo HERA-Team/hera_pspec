@@ -1,7 +1,9 @@
 import unittest
 import pytest
 import numpy as np
-import os, sys, copy
+import os
+import sys
+import copy
 from hera_pspec.data import DATA_PATH
 from .. import utils, testing
 from pyuvdata import UVData
@@ -497,7 +499,7 @@ def test_job_monitor():
             df = datafiles[i]
             with open(df, "a") as f:
                 f.write("Hello World")
-        except:
+        except Exception:
             return 1
 
         return 0

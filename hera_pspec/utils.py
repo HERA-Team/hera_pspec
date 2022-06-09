@@ -1,6 +1,8 @@
 import numpy as np
-import time, yaml
-import itertools, glob
+import time
+import yaml
+import itertools
+import glob
 import traceback
 from hera_cal import redcal
 from collections import OrderedDict as odict
@@ -29,7 +31,7 @@ def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     and conj_2 = False, then <d1 d2^t> is computed, whereas if conj_1 = True
     and conj_2 = True, then <d1^* d2^t*> is computed. (Minus the mean terms).
 
-    Parameters_
+    Parameters
     ----------
     d1 : array_like
         Data vector of size (M,N), where N is the length of the "averaging axis"
@@ -87,9 +89,10 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     Predict noise variance on a baseline from autocorrelation amplitudes on antennas.
     Pick a baseline $b=(alpha,beta)$ where $alpha$ and $beta$ are antennas,
     The way to estimate the covariance matrix $C$ from auto-visibility is:
-    $C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t},
-    where $b_alpha = (alpha,alpha)$ and $b_beta = (beta,beta)$.
-    With LST binned over days, we have $C_{ii}(b, LST) = |V(b_alpha,nu_i,t) V(b_beta, nu_i,t)| / {N_{samples} B Delta_t}$.
+    :math:`C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t}`,
+    where :math:`b_alpha = (alpha,alpha)$ and $b_beta = (beta,beta)`.
+    With LST binned over days, we have
+    :math:`C_{ii}(b, LST) = |V(b_alpha,nu_i,t) V(b_beta, nu_i,t)| / {N_{samples} B Delta_t}`.
 
     Parameters
     ----------
@@ -183,7 +186,7 @@ def construct_blpairs(
         Number of baseline-pairs to put into each sub-group if group = True.
         Default: 1.
 
-    Returns (bls1, bls2, blpairs)
+    Returns
     -------
     bls1, bls2 : list of tuples
         List of baseline tuples from the zeroth/first index of the blpair.
@@ -512,7 +515,7 @@ def get_delays(freqs, n_dlys=None):
     Delta_nu = np.median(np.diff(freqs))
     n_freqs = freqs.size
 
-    if n_dlys == None:  # assume that n_dlys = n_freqs if not specified
+    if n_dlys is None:  # assume that n_dlys = n_freqs if not specified
         n_dlys = n_freqs
 
     # Calculate the delays
@@ -562,7 +565,7 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
             raise ValueError(
                 "data.freq_array has unsupported shape: %s" % str(freqs.shape)
             )
-    except:
+    except AttributeError:
         raise AttributeError("Object 'data' does not have a freq_array attribute.")
 
     # Check for a single tuple input
@@ -768,11 +771,10 @@ def config_pspec_blpairs(
 
     A group is a fieldname in the visibility files that denotes the
     "type" of dataset. For example, the group field in the following files
-        zen.even.LST.1.01.xx.HH.uv
-        zen.odd.LST.1.01.xx.HH.uv
+    ``(zen.even.LST.1.01.xx.HH.uv, zen.odd.LST.1.01.xx.HH.uv)``
     are the "even" and "odd" fields, which specifies the two time-binning groups.
     To form cross spectra between these two files, one would feed a group_pair
-    of: group_pairs = [('even', 'odd')] and pol_pairs = [('xx', 'xx')].
+    of: ``group_pairs = [('even', 'odd')]`` and ``pol_pairs = [('xx', 'xx')]``.
 
     Parameters
     ----------
@@ -843,8 +845,8 @@ def config_pspec_blpairs(
     )
 
     # get unique pols and groups
-    pols = sorted(set([item for sublist in pol_pairs for item in sublist]))
-    groups = sorted(set([item for sublist in group_pairs for item in sublist]))
+    pols = sorted({item for sublist in pol_pairs for item in sublist})
+    groups = sorted({item for sublist in group_pairs for item in sublist})
 
     # parse wildcards in uv_templates to get wildcard-unique filenames
     unique_files = []
@@ -888,7 +890,7 @@ def config_pspec_blpairs(
         for f in to_exclude:
             try:
                 unique_files.remove(f)
-            except:
+            except Exception:
                 pass
 
         # Test for empty list and fail if found
@@ -1250,7 +1252,7 @@ def get_reds(
     file_type : str, optional
         File type of the input files. Default: 'miriad'.
 
-    Returns (reds, lens, angs)
+    Returns
     -------
     reds : list
         List of redundant baseline (antenna-pair) groups
@@ -1421,7 +1423,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
     # get uvd metadata
     pols = [pol for pol in uvd.get_pols() if pol.upper() in AUTOPOLS]
     # if pseudo Stokes pol in pols, substitute for pI
-    pols = sorted(set([pol if pol.upper() in AUTOVISPOLS else "pI" for pol in pols]))
+    pols = sorted({pol if pol.upper() in AUTOVISPOLS else "pI" for pol in pols})
     autobls = [bl for bl in uvd.get_antpairs() if bl[0] == bl[1]]
     uvd.select(bls=autobls, polarizations=pols)
 
@@ -1530,7 +1532,7 @@ def uvp_noise_error(
     if precomp_P_N is None:
         lst_indices = np.unique(auto_Tsys.lst_array, return_index=True)[1]
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
-        freqs = auto_Tsys.freq_array[0]
+
     # calculate scalars for spws and polpairs.
     scalar = {}
     for spw in uvp.spw_array:

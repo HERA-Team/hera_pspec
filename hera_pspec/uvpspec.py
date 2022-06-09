@@ -1,10 +1,13 @@
 import numpy as np
 from collections import OrderedDict as odict
-import os, copy, shutil, operator, ast, fnmatch, sys
+import os
+import copy
+import ast
+import fnmatch
+import sys
 from pyuvdata import utils as uvutils
 import h5py
 import warnings
-import json
 
 from . import (
     conversions,
@@ -12,7 +15,6 @@ from . import (
     version,
     pspecbeam,
     grouping,
-    utils,
     uvpspec_utils as uvputils,
 )
 from .parameter import PSpecParam
@@ -916,7 +918,7 @@ class UVPSpec(object):
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
 
-        Returns (k_perp, k_para)
+        Returns
         -------
         k_para : float ndarray
             Radial wave-vectors, shape=(Ndlys given spw)
@@ -1187,7 +1189,7 @@ class UVPSpec(object):
         # edit units
         uvp.norm_units += " k^3 / (2pi^2)"
 
-        if inplace == False:
+        if not inplace:
             return uvp
 
     def blpair_to_antnums(self, blpair):
@@ -1670,7 +1672,7 @@ class UVPSpec(object):
 
         if run_check:
             uvp.check()
-        if inplace == False:
+        if not inplace:
             return uvp
 
     def get_ENU_bl_vecs(self):
@@ -1773,11 +1775,11 @@ class UVPSpec(object):
 
             # Convert to polpair array
             polpair_arr = [uvputils.polpair_tuple2int((p, p)) for p in pol_arr]
-            setattr(self, "polpair_array", np.array(polpair_arr))
+            self.polpair_array = np.array(polpair_arr)
 
         # Backwards compatibility: exact_windows
         if "exact_windows" not in grp.attrs:
-            setattr(self, "exact_windows", False)
+            self.exact_windows = False
 
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
@@ -2040,8 +2042,8 @@ class UVPSpec(object):
         verbose : bool, optional
             If True, report feedback to stdout. Default: True.
         """
-        if hasattr(self, "cosmo") and overwrite == False:
-            print("self.cosmo exists and overwrite == False, not overwriting...")
+        if hasattr(self, "cosmo") and not overwrite:
+            print("self.cosmo exists and overwrite is False, not overwriting...")
             return
         else:
             if (
@@ -2117,9 +2119,10 @@ class UVPSpec(object):
         ftbeam_file : str, optional
             Definition of the beam Fourier transform to be used.
             Options include;
-                - Root name of the file to use, without the polarisation
-                Ex : FT_beam_HERA_dipole (+ path)
-                - '' for computation from beam simulations (slow)
+
+            - Root name of the file to use, without the polarisation
+              Ex : FT_beam_HERA_dipole (+ path)
+            - '' for computation from beam simulations (slow)
 
         spw_array : list of ints, optional
             Spectral window indices. If None, the window functions are computed on
@@ -2185,7 +2188,7 @@ class UVPSpec(object):
             spw_wf_kperp_bins, spw_wf_kpara_bins = [], []
 
             # Iterate over polarizations
-            for i, p in enumerate(self.polpair_array):
+            for i in range(len(self.polpair_array)):
 
                 # initialise UVWindow object
                 uvw = UVWindow.from_uvpspec(
@@ -2232,7 +2235,7 @@ class UVPSpec(object):
                     # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
                     # Iterate within a baseline-pair group
-                    for k, blp in enumerate(blpg):
+                    for blp in blpg:
                         # iterate over baselines within group, which all have the same window function
                         for iblts in self.blpair_to_indices(blp):
                             pol_window_function[iblts, :, :, :] = np.copy(
@@ -2314,7 +2317,7 @@ class UVPSpec(object):
                                 setattr(
                                     self, p, getattr(self, p).astype(a.expected_type)
                                 )
-                            except:
+                            except Exception:
                                 raise ValueError(err_msg)
                     # dicts
                     elif p in self._dicts:
@@ -2334,7 +2337,7 @@ class UVPSpec(object):
                         if not isinstance(getattr(self, p), a.expected_type):
                             try:
                                 setattr(self, p, a.expected_type(getattr(self, p)))
-                            except:
+                            except Exception:
                                 raise AssertionError(err_msg)
 
                     elif p in self._dicts_of_dicts:
@@ -2348,7 +2351,7 @@ class UVPSpec(object):
                                     getattr(self, p)[k][j] = a.expected_type(
                                         getattr(self, p)[k][j]
                                     )
-                                except:
+                                except Exception:
                                     raise AssertionError(err_msg)
         # check spw convention
         assert set(self.spw_array) == set(
@@ -2560,11 +2563,11 @@ class UVPSpec(object):
         if not isinstance(Tsys, (dict, odict)):
             if not isinstance(Tsys, np.ndarray):
                 Tsys = np.ones(self.Ntimes) * Tsys
-            Tsys = dict([(blp, Tsys) for blp in blpairs])
+            Tsys = {blp: Tsys for blp in blpairs}
 
         # Iterate over blpairs to get P_N
         P_N = odict()
-        for i, blp in enumerate(blpairs):
+        for blp in blpairs:
             # get indices
             inds = self.blpair_to_indices(blp)
             assert (
@@ -2866,7 +2869,6 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     (uvps, concat_ax, new_spws, new_blpts, new_polpairs, static_meta) = get_uvp_overlap(
         uvps, just_meta=False, verbose=verbose
     )
-    Nuvps = len(uvps)
 
     # Create a new uvp
     u = UVPSpec()
@@ -2896,7 +2898,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
             u.window_function_kpara = odict()
     if store_cov:
         # ensure cov model is the same for all uvps
-        if len(set([uvp.cov_model for uvp in uvps])) > 1:
+        if len({uvp.cov_model for uvp in uvps}) > 1:
             store_cov = False
         else:
             u.cov_array_real = odict()
@@ -3010,7 +3012,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     r_params = {}
     for _r_param in _r_params:
         for rkey in _r_param:
-            if not rkey in r_params:
+            if rkey not in r_params:
                 r_params[rkey] = _r_param[rkey]
             elif r_params[rkey] != _r_param[rkey]:
                 # For now, we won't support inconsistent weightings.
@@ -3029,65 +3031,65 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         # Concatenate spectral windows
         for i, spw in enumerate(new_spws):
             # get index of this new spw in uvps and its spw index
-            l = [spw in _u for _u in uvp_spws].index(True)
-            m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+            ell = [spw in _u for _u in uvp_spws].index(True)
+            m = [spw == _spw for _spw in uvp_spws[ell]].index(True)
 
             # freq metadata
-            spw_freq_inds = np.where(uvps[l].spw_freq_array == m)[0]
-            freq_array.extend(uvps[l].freq_array[spw_freq_inds])
+            spw_freq_inds = np.where(uvps[ell].spw_freq_array == m)[0]
+            freq_array.extend(uvps[ell].freq_array[spw_freq_inds])
             spw_freq_array.extend(np.ones(len(spw_freq_inds), dtype=np.int32) * i)
 
             # dly metadata
-            spw_dly_inds = np.where(uvps[l].spw_dly_array == m)[0]
-            dly_array.extend(uvps[l].dly_array[spw_dly_inds])
+            spw_dly_inds = np.where(uvps[ell].spw_dly_array == m)[0]
+            dly_array.extend(uvps[ell].dly_array[spw_dly_inds])
             spw_dly_array.extend(np.ones(len(spw_dly_inds), dtype=np.int32) * i)
 
             # Lookup indices of new_blpts in the uvp_blpts[l] array
-            blpts_idxs = uvputils._fast_lookup_blpairts(uvp_blpts[l], new_blpts)
+            blpts_idxs = uvputils._fast_lookup_blpairts(uvp_blpts[ell], new_blpts)
             if i == 0:
                 blpts_idxs0 = blpts_idxs.copy()
 
             # Loop over polarizations
             for k, p in enumerate(new_polpairs):
-                q = uvp_polpairs[l].index(p)
-                u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
+                q = uvp_polpairs[ell].index(p)
+                u.scalar_array[i, k] = uvps[ell].scalar_array[m, q]
 
                 # Loop over blpair-times
-                for j, blpt in enumerate(new_blpts):
+                for j in range(len(new_blpts)):
                     # get blpts indices
                     n = blpts_idxs[j]
 
                     # Data/weight/integration arrays
-                    u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
-                    u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
-                    u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
-                    u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
+                    u.data_array[i][j, :, k] = uvps[ell].data_array[m][n, :, q]
+                    u.wgt_array[i][j, :, :, k] = uvps[ell].wgt_array[m][n, :, :, q]
+                    u.integration_array[i][j, k] = uvps[ell].integration_array[m][n, q]
+                    u.nsample_array[i][j, k] = uvps[ell].nsample_array[m][n, q]
                     # Labels
-                    lbl1 = uvps[l].label_1_array[m, n, q]
-                    lbl2 = uvps[l].label_2_array[m, n, q]
-                    u.label_1_array[i, j, k] = u_lbls[uvps[l].labels[lbl1]]
-                    u.label_2_array[i, j, k] = u_lbls[uvps[l].labels[lbl2]]
+                    lbl1 = uvps[ell].label_1_array[m, n, q]
+                    lbl2 = uvps[ell].label_2_array[m, n, q]
+                    u.label_1_array[i, j, k] = u_lbls[uvps[ell].labels[lbl1]]
+                    u.label_2_array[i, j, k] = u_lbls[uvps[ell].labels[lbl2]]
                     if store_cov:
-                        u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][
+                        u.cov_array_real[i][j, :, :, k] = uvps[ell].cov_array_real[m][
                             n, :, :, q
                         ]
-                        u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][
+                        u.cov_array_imag[i][j, :, :, k] = uvps[ell].cov_array_imag[m][
                             n, :, :, q
                         ]
                     if store_window:
                         if exact_windows:
                             u.window_function_array[i][j, :, :, :, k] = uvps[
-                                l
+                                ell
                             ].window_function_array[m][n, :, :, :, q]
                         else:
                             u.window_function_array[i][j, :, :, k] = uvps[
-                                l
+                                ell
                             ].window_function_array[m][n, :, :, q]
                     if store_stats:
                         for stat in stored_stats:
-                            u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][
-                                m
-                            ][n, :, q]
+                            u.stats_array[stat][i][j, :, k] = uvps[ell].stats_array[
+                                stat
+                            ][m][n, :, q]
 
         u.freq_array = np.array(freq_array)
         u.dly_array = np.array(dly_array)
@@ -3099,7 +3101,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         u.Nspwdlys = len(u.spw_dly_array)
 
         # Populate new LST, time, and blpair arrays
-        for j, blpt in enumerate(new_blpts):
+        for j in range(len(new_blpts)):
             n = blpts_idxs0[j]
             u.time_1_array[j] = uvps[0].time_1_array[n]
             u.time_2_array[j] = uvps[0].time_2_array[n]
@@ -3115,115 +3117,115 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
 
         # Concatenate blpair-times
         for j, blpt in enumerate(new_blpts):
-            l = [isn[j] for isn in is_in].index(True)
-            n = uvp_blpts[l].index(blpt)
+            ell = [isn[j] for isn in is_in].index(True)
+            n = uvp_blpts[ell].index(blpt)
 
             # Loop over spectral windows
             for i, spw in enumerate(new_spws):
-                m = [spw == _spw for _spw in uvp_spws[l]].index(True)
+                m = [spw == _spw for _spw in uvp_spws[ell]].index(True)
 
                 # Loop over polarizations
                 for k, p in enumerate(new_polpairs):
-                    q = uvp_polpairs[l].index(p)
+                    q = uvp_polpairs[ell].index(p)
 
-                    u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
-                    u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
-                    u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
-                    u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
+                    u.data_array[i][j, :, k] = uvps[ell].data_array[m][n, :, q]
+                    u.wgt_array[i][j, :, :, k] = uvps[ell].wgt_array[m][n, :, :, q]
+                    u.integration_array[i][j, k] = uvps[ell].integration_array[m][n, q]
+                    u.nsample_array[i][j, k] = uvps[ell].nsample_array[m][n, q]
                     if store_window:
                         if exact_windows:
                             u.window_function_array[i][j, :, :, :, k] = uvps[
-                                l
+                                ell
                             ].window_function_array[m][n, :, :, :, q]
                         else:
                             u.window_function_array[i][j, :, :, k] = uvps[
-                                l
+                                ell
                             ].window_function_array[m][n, :, :, q]
                     if store_cov:
-                        u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][
+                        u.cov_array_real[i][j, :, :, k] = uvps[ell].cov_array_real[m][
                             n, :, :, q
                         ]
-                        u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][
+                        u.cov_array_imag[i][j, :, :, k] = uvps[ell].cov_array_imag[m][
                             n, :, :, q
                         ]
                     if store_stats:
                         for stat in stored_stats:
-                            u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][
-                                m
-                            ][n, :, q]
+                            u.stats_array[stat][i][j, :, k] = uvps[ell].stats_array[
+                                stat
+                            ][m][n, :, q]
                     # Labels
-                    lbl1 = uvps[l].label_1_array[m, n, q]
-                    lbl2 = uvps[l].label_2_array[m, n, q]
-                    u.label_1_array[i, j, k] = u_lbls[uvps[l].labels[lbl1]]
-                    u.label_2_array[i, j, k] = u_lbls[uvps[l].labels[lbl2]]
+                    lbl1 = uvps[ell].label_1_array[m, n, q]
+                    lbl2 = uvps[ell].label_2_array[m, n, q]
+                    u.label_1_array[i, j, k] = u_lbls[uvps[ell].labels[lbl1]]
+                    u.label_2_array[i, j, k] = u_lbls[uvps[ell].labels[lbl2]]
 
                     # scalar array, only do once per spw and pol
                     if j == 0:
-                        u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
+                        u.scalar_array[i, k] = uvps[ell].scalar_array[m, q]
 
             # Populate new LST, time, and blpair arrays
-            u.time_1_array[j] = uvps[l].time_1_array[n]
-            u.time_2_array[j] = uvps[l].time_2_array[n]
-            u.time_avg_array[j] = uvps[l].time_avg_array[n]
-            u.lst_1_array[j] = uvps[l].lst_1_array[n]
-            u.lst_2_array[j] = uvps[l].lst_2_array[n]
-            u.lst_avg_array[j] = uvps[l].lst_avg_array[n]
-            u.blpair_array[j] = uvps[l].blpair_array[n]
+            u.time_1_array[j] = uvps[ell].time_1_array[n]
+            u.time_2_array[j] = uvps[ell].time_2_array[n]
+            u.time_avg_array[j] = uvps[ell].time_avg_array[n]
+            u.lst_1_array[j] = uvps[ell].lst_1_array[n]
+            u.lst_2_array[j] = uvps[ell].lst_2_array[n]
+            u.lst_avg_array[j] = uvps[ell].lst_avg_array[n]
+            u.blpair_array[j] = uvps[ell].blpair_array[n]
 
     elif concat_ax == "polpairs":
 
         # Concatenate polarizations
         for k, p in enumerate(new_polpairs):
-            l = [p in _polpairs for _polpairs in uvp_polpairs].index(True)
-            q = uvp_polpairs[l].index(p)
+            ell = [p in _polpairs for _polpairs in uvp_polpairs].index(True)
+            q = uvp_polpairs[ell].index(p)
 
             # Get mapping of blpair-time indices between old UVPSpec objects
             # and the new one
-            blpts_idxs = uvputils._fast_lookup_blpairts(uvp_blpts[l], new_blpts)
+            blpts_idxs = uvputils._fast_lookup_blpairts(uvp_blpts[ell], new_blpts)
             if k == 0:
                 blpts_idxs0 = blpts_idxs.copy()
 
             # Loop over spectral windows
             for i, spw in enumerate(new_spws):
-                m = [spw == _spw for _spw in uvp_spws[l]].index(True)
-                u.scalar_array[i, k] = uvps[l].scalar_array[m, q]
+                m = [spw == _spw for _spw in uvp_spws[ell]].index(True)
+                u.scalar_array[i, k] = uvps[ell].scalar_array[m, q]
 
                 # Loop over blpair-times
-                for j, blpt in enumerate(new_blpts):
+                for j in range(len(new_blpts)):
                     n = blpts_idxs[j]
-                    u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
+                    u.data_array[i][j, :, k] = uvps[ell].data_array[m][n, :, q]
                     if store_window:
                         if exact_windows:
                             u.window_function_array[i][j, :, :, :, k] = uvps[
-                                l
+                                ell
                             ].window_function_array[m][n, :, :, :, q]
                         else:
                             u.window_function_array[i][j, :, :, k] = uvps[
-                                l
+                                ell
                             ].window_function_array[m][n, :, :, q]
                     if store_cov:
-                        u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][
+                        u.cov_array_real[i][j, :, :, k] = uvps[ell].cov_array_real[m][
                             n, :, :, q
                         ]
-                        u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][
+                        u.cov_array_imag[i][j, :, :, k] = uvps[ell].cov_array_imag[m][
                             n, :, :, q
                         ]
                     if store_stats:
                         for stat in stored_stats:
-                            u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][
-                                m
-                            ][n, :, q]
-                    u.wgt_array[i][j, :, :, k] = uvps[l].wgt_array[m][n, :, :, q]
-                    u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
-                    u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
+                            u.stats_array[stat][i][j, :, k] = uvps[ell].stats_array[
+                                stat
+                            ][m][n, :, q]
+                    u.wgt_array[i][j, :, :, k] = uvps[ell].wgt_array[m][n, :, :, q]
+                    u.integration_array[i][j, k] = uvps[ell].integration_array[m][n, q]
+                    u.nsample_array[i][j, k] = uvps[ell].nsample_array[m][n, q]
 
                     # Labels
-                    lbl1 = uvps[l].label_1_array[m, n, q]
-                    lbl2 = uvps[l].label_2_array[m, n, q]
-                    u.label_1_array[i, j, k] = u_lbls[uvps[l].labels[lbl1]]
-                    u.label_2_array[i, j, k] = u_lbls[uvps[l].labels[lbl2]]
+                    lbl1 = uvps[ell].label_1_array[m, n, q]
+                    lbl2 = uvps[ell].label_2_array[m, n, q]
+                    u.label_1_array[i, j, k] = u_lbls[uvps[ell].labels[lbl1]]
+                    u.label_2_array[i, j, k] = u_lbls[uvps[ell].labels[lbl2]]
 
-        for j, blpt in enumerate(new_blpts):
+        for j in range(len(new_blpts)):
             n = blpts_idxs0[j]
             u.time_1_array[j] = uvps[0].time_1_array[n]
             u.time_2_array[j] = uvps[0].time_2_array[n]
@@ -3244,10 +3246,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.bl_array = np.array(new_bls)
     u.Nbls = len(u.bl_array)
     u.bl_vecs = []
-    for b, bl in enumerate(new_bls):
-        l = [bl in _bls for _bls in uvp_bls].index(True)
-        h = [bl == _bl for _bl in uvp_bls[l]].index(True)
-        u.bl_vecs.append(uvps[l].bl_vecs[h])
+    for bl in new_bls:
+        ell = [bl in _bls for _bls in uvp_bls].index(True)
+        h = [bl == _bl for _bl in uvp_bls[ell]].index(True)
+        u.bl_vecs.append(uvps[ell].bl_vecs[h])
     u.bl_vecs = np.array(u.bl_vecs)
     u.Ntimes = len(np.unique(u.time_avg_array))
     if merge_history:
@@ -3279,10 +3281,9 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     an error is raised.
 
     All uvpspec objects must have certain attributes that agree exactly. These
-    include:
-        'channel_width', 'telescope_location', 'weighting', 'OmegaP',
-        'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 'taper', 'vis_units',
-        'norm_units', 'folded', 'cosmo', 'scalar'
+    include: ('channel_width', 'telescope_location', 'weighting', 'OmegaP','beam_freqs',
+    'OmegaPP', 'beamfile', 'norm', 'taper', 'vis_units', 'norm_units', 'folded',
+    'cosmo', 'scalar')
 
     Parameters
     ----------
@@ -3320,7 +3321,6 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     assert isinstance(
         uvps[0], (UVPSpec, str, np.str)
     ), "uvps must be fed as a list of UVPSpec objects or strings"
-    Nuvps = len(uvps)
 
     # load uvps if fed as strings
     if isinstance(uvps[0], (str, np.str)):

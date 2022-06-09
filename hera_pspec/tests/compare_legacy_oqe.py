@@ -12,7 +12,6 @@ def run_old_oqe(fname, key1, key2, freqrange):
     import capo
 
     legacy_read_files = capo.miriad.read_files
-    legacy_group_redundant_bls = capo.red.group_redundant_bls
     legacy_oqe = capo.oqe
 
     # (1) Read data from file

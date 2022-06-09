@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import scipy.integrate as integrate
 from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
@@ -21,7 +20,7 @@ def _compute_pspec_scalar(
     noise_scalar=False,
     exact_norm=False,
 ):
-    """
+    r"""
     This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
 
@@ -157,7 +156,7 @@ class PSpecBeamBase(object):
         noise_scalar=False,
         exact_norm=False,
     ):
-        """
+        r"""
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
 
@@ -210,7 +209,7 @@ class PSpecBeamBase(object):
         Returns
         -------
         scalar: float
-            [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
+            :math:`[\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1`
             Units: h^-3 Mpc^3 or Mpc^3.
         """
         # Get pspec_freqs
@@ -756,7 +755,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         try:
             OmegaP = np.array(OmegaP).astype(np.float)
             OmegaPP = np.array(OmegaPP).astype(np.float)
-        except:
+        except TypeError:
             raise TypeError("OmegaP and OmegaPP must both be array_like.")
 
         # Check that array dimensions are consistent
@@ -782,10 +781,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
         Parameters
         ----------
         pol: str, optional
-            Which polarization to compute the beam scalar for.
-                'pI', 'pQ', 'pU', 'pV',
-                'XX', 'YY', 'XY', 'YX'
-            Default: pI.
+            Which polarization to compute the beam scalar for. Options are
+            ('pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX')
 
         Returns
         -------
@@ -812,10 +809,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
         Parameters
         ----------
         pol: str, optional
-            Which polarization to compute the beam scalar for.
-              'pI', 'pQ', 'pU', 'pV',
-              'XX', 'YY', 'XY', 'YX'
-            Default: pI.
+            Which polarization to compute the beam scalar for: ('pI', 'pQ', 'pU', 'pV',
+            'XX', 'YY', 'XY', 'YX')
 
         Returns
         -------

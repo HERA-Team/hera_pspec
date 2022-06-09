@@ -533,7 +533,7 @@ def combine_psc_spectra(
     extension, feed dset_split_str as '' or None. Example, to merge together:
     ``uvp_1, uvp_2, uvp_3, feed dset_split_str=None and ext_split_str='_'``.
 
-    Note this is a destructive and inplace operation, all of the *_ext1 objects
+    Note this is a destructive and inplace operation, all of the ``*_ext1`` objects
     are removed after merge.
 
     Parameters

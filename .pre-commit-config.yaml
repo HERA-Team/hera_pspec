@@ -1,4 +1,4 @@
-exclude: 'setup.py|hera_pspec/data/'
+exclude: 'setup.py|hera_pspec/data/|pipelines/web_ui/w3.css'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

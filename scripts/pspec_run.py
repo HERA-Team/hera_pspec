@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import sys
-import os
 from hera_pspec import pspecdata
 
 # parse args

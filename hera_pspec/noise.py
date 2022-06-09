@@ -32,21 +32,29 @@ def calc_P_N(
 
     Parameters
     ----------
-    scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
-    Tsys : float, System temperature in Kelvin
-    t_int : float, integration time of power spectra in seconds
-    Ncoherent : int, number of coherent averages of visibility data with integration time t_int
+    scalar : float
+        Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
+    Tsys : float
+        System temperature in Kelvin
+    t_int : float
+        integration time of power spectra in seconds
+    Ncoherent : int,
+        number of coherent averages of visibility data with integration time t_int
         Total integration time is t_int * Ncoherent
-    Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
-    form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
-    k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
-    component : str, options=['real', 'imag', 'abs']
+    Nincoherent : int
+        number of incoherent averages of pspectra (i.e. after squaring).
+    form : str
+        power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
+    k : float ndarray
+        cosmological wave-vectors in h Mpc^-1, only needed if ``form == 'DelSq'``
+    component : {'real', 'imag', 'abs'}
         If component is real or imag, divide by an extra factor of sqrt(2)
 
-    Returns (P_N)
+    Returns
     -------
-    P_N : estimated noise power spectrum in units of mK^2 * h^-3 Mpc^3
-    if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
+    P_N :
+        estimated noise power spectrum in units of ``mK^2 * h^-3 Mpc^3``
+        if ``form == 'DelSq'``, then units include a factor of ``h^3 k^3 / (2pi^2)``
     """
     # assert form
     assert form in (

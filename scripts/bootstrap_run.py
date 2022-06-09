@@ -3,10 +3,7 @@
 Pipeline script to load a PSpecContainer and bootstrap over redundant baseline-
 pair groups to produce errorbars.
 """
-import sys
-import os
-from hera_pspec import pspecdata, grouping
-from hera_pspec import uvpspec_utils as uvputils
+from hera_pspec import grouping
 
 # Parse commandline args
 args = grouping.get_bootstrap_run_argparser()

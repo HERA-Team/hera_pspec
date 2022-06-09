@@ -1,7 +1,7 @@
-import unittest, os
+import unittest
+import os
 import pytest
 import numpy as np
-import pyuvdata as uv
 from .. import pspecbeam, conversions
 from hera_pspec.data import DATA_PATH
 

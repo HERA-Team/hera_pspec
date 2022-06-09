@@ -31,7 +31,7 @@ def delay_spectrum(
     plot_stats=None,
     **kwargs
 ):
-    """
+    r"""
     Plot a 1D delay spectrum (or spectra) for a group of baselines.
 
     Parameters
@@ -53,7 +53,7 @@ def delay_spectrum(
         If True, average spectra over the time axis. Default: False.
 
     fold : bool, optional
-        Whether to fold the power spectrum in :math:`|k_\parallel|`.
+        Whether to fold the power spectrum in :math:`|k_{||}|`.
         Default: False.
 
     plot_noise : bool, optional
@@ -121,7 +121,6 @@ def delay_spectrum(
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance.
     """
-    import matplotlib
     import matplotlib.pyplot as plt
 
     # Create new Axes if none specified
@@ -161,7 +160,7 @@ def delay_spectrum(
             uvp_plt.average_spectra(time_avg=True, inplace=True)
 
     # Check plot size
-    if uvp_plt.Ntimes * len(blpairs) > 100 and force_plot == False:
+    if uvp_plt.Ntimes * len(blpairs) > 100 and not force_plot:
         raise ValueError(
             "Trying to plot > 100 spectra... Set force_plot=True to continue."
         )
@@ -575,7 +574,7 @@ def delay_waterfall(
     if log:
         for k in waterfall:
             waterfall[k] = np.log10(np.abs(waterfall[k]))
-        logunits = "\log_{10}"
+        logunits = r"\log_{10}"
     else:
         logunits = ""
 
@@ -705,7 +704,7 @@ def delay_waterfall(
                     if delay:
                         ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
                     else:
-                        ax.set_xlabel("$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
+                        ax.set_xlabel(r"$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
             else:
                 ax.set_xticklabels([])
 
@@ -948,11 +947,11 @@ def delay_wedge(
         x_axis = _x_axis
 
     # Conigure Units
-    psunits = "({})^2\ {}".format(uvp.vis_units, uvp.norm_units)
+    psunits = r"({})^2\ {}".format(uvp.vis_units, uvp.norm_units)
     if "h^-1" in psunits:
-        psunits = psunits.replace(r"h^-1", "h^{-1}\ ")
+        psunits = psunits.replace(r"h^-1", r"h^{-1}\ ")
     if "h^-3" in psunits:
-        psunits = psunits.replace(r"h^-3", "h^{-3}\ ")
+        psunits = psunits.replace(r"h^-3", r"h^{-3}\ ")
     if "Hz" in psunits:
         psunits = psunits.replace(r"Hz", r"{\rm Hz}\ ")
     if "str" in psunits:

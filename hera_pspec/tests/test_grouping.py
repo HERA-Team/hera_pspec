@@ -275,7 +275,7 @@ class Test_grouping(unittest.TestCase):
             blp = uvp.antnums_to_blpair(key[1])
             error = Pn[blp]
             uvp.set_stats("noise", key, error)
-        uvp_avg = grouping.average_spectra(
+        grouping.average_spectra(
             uvp,
             blpair_groups=blpair_groups,
             time_avg=True,
@@ -386,7 +386,7 @@ class Test_grouping(unittest.TestCase):
             inplace=False,
         )
         blpair = uvp_avg.blpair_array[0]
-        for i in range(5):
+        for _ in range(5):
             # Generate multiple samples and make sure that they are all equal
             # to the regular average (for the cloned data in uvp3)
             uvp4, wgts = grouping.bootstrap_average_blpairs(
@@ -849,7 +849,7 @@ def test_spherical_wf_from_uvp():
     uvp.get_exact_window_functions(
         ftbeam_file=os.path.join(DATA_PATH, basename), inplace=True
     )
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths)
+    grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths)
     #   blpair_groups=blpair_groups,
     # blpair_lens=blpair_lens,
     # blpair_weights=blpair_weights,
@@ -860,9 +860,9 @@ def test_spherical_wf_from_uvp():
     # verbose=True)[spw]
     # test different options
     # little_h
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, little_h=False)
+    grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, little_h=False)
     # spw_array
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, spw_array=0)
+    grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, spw_array=0)
     pytest.raises(
         AssertionError,
         grouping.spherical_wf_from_uvp,
@@ -873,7 +873,7 @@ def test_spherical_wf_from_uvp():
     )
     # blpair_groups
     blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
-    wf_array = grouping.spherical_wf_from_uvp(
+    grouping.spherical_wf_from_uvp(
         uvp, kbins, bin_widths, blpair_groups=blpair_groups, blpair_lens=blpair_lens
     )
     pytest.raises(
@@ -886,10 +886,10 @@ def test_spherical_wf_from_uvp():
     )
 
     # raise warning or error if blpair_groups inconsistent with blpair_lens
-    wf_array = grouping.spherical_wf_from_uvp(
+    grouping.spherical_wf_from_uvp(
         uvp, kbins, bin_widths, blpair_groups=None, blpair_lens=blpair_lens
     )
-    wf_array = grouping.spherical_wf_from_uvp(
+    grouping.spherical_wf_from_uvp(
         uvp, kbins, bin_widths, blpair_groups=blpair_groups, blpair_lens=None
     )
     pytest.raises(
