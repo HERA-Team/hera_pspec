@@ -294,12 +294,7 @@ def average_spectra(
         # For baseline pairs not in blpair_groups, add them as their own group
         extra_blpairs = set(uvp.blpair_array) - set(all_blpairs)
         blpair_groups += [[blp] for blp in extra_blpairs]
-        blpair_weights += [
-            [
-                1.0,
-            ]
-            for blp in extra_blpairs
-        ]
+        blpair_weights += [1.0] * len(extra_blpairs)
 
     # Create new data arrays
     data_array, wgts_array = odict(), odict()
@@ -359,9 +354,8 @@ def average_spectra(
                         raise ValueError(
                             "Sum of baseline-pair weights in " "group %d is <= 0." % j
                         )
-                    blpg_wgts = (
-                        blpg_wgts * float(blpg_wgts.size) / norm
-                    )  # Apply normalization
+                    # Apply normalization
+                    blpg_wgts = blpg_wgts * float(blpg_wgts.size) / norm
                 else:
                     blpg_wgts = np.ones(len(blpg))
 
@@ -424,9 +418,10 @@ def average_spectra(
                     if time_avg:
                         wsum = np.sum(w, axis=0).clip(1e-40, np.inf)
                         data = (np.sum(data * w, axis=0) / wsum)[None]
-                        wgts = (np.sum(wgts * w[:, :1, None], axis=0) / wsum[:1, None])[
-                            None
-                        ]
+                        wgts = (
+                            (np.sum(wgts * w[:, :1, None], axis=0) 
+                            / wsum[:1, None])
+                        )[None]
                         # wgts has a shape of (Ntimes, Nfreqs, 2), while
                         # w has a shape of (Ntimes, Ndlys) or (Ntimes, 1)
                         # To handle with the case  when Nfreqs != Ntimes,
@@ -924,9 +919,8 @@ def spherical_average(
                 E[:, range(dstart, dstop), range(0, Ndlys)] *= ~f[:, None, :]
 
             # append to non-dly arrays
-            Emean = np.trace(
-                E[:, dslice, :], axis1=1, axis2=2
-            )  # use sum of E across delay as weight
+            # use sum of E across delay as weight
+            Emean = np.trace(E[:, dslice, :], axis1=1, axis2=2)
             wgt_array[spw] += wgts * Emean[:, None, None, :]
             integration_array[spw] += ints * Emean
             nsample_array[spw] += nsmp
@@ -1277,12 +1271,9 @@ def spherical_wf_from_uvp(
                         ) / np.sum(mask1)
                         if np.sum(wf_temp) > 0.0:
                             for m2 in range(Nk):
-                                mask2 = (kbin_left[m2] <= ktot) & (
-                                    ktot < kbin_right[m2]
-                                )
-                                if np.any(
-                                    mask2
-                                ):  # cannot compute mean if zero elements
+                                mask2 = (kbin_left[m2] <= ktot) & (ktot < kbin_right[m2])
+                                # cannot compute mean if zero elements
+                                if np.any(mask2):  
                                     wf_spherical[m1, m2] = np.mean(wf_temp[mask2])
                             # normalisation
                             wf_spherical[m1, :] = np.divide(
@@ -1553,9 +1544,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False, seed=None
     single_uvp = False
     if isinstance(uvp_list, UVPSpec):
         single_uvp = True
-        uvp_list = [
-            uvp_list,
-        ]
+        uvp_list = [uvp_list]
     assert isinstance(uvp_list, list), "uvp_list must be a list of UVPSpec objects"
 
     # Check that uvp_list contains UVPSpec objects with the correct dimensions
@@ -1799,15 +1788,9 @@ def bootstrap_resampled_error(
 
     # Update history
     uvp_avg.history = (
-        "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}"
-        "".format(
-            version.git_hash[:15],
-            Nsamples,
-            seed,
-            add_to_history,
-            "-" * 40,
-            uvp_avg.history,
-        )
+        f"Bootstrap errors estimated w/ hera_pspec [{version.git_hash[:15]}], "
+        f"{Nsamples} samples, {seed} seed\n{add_to_history}"
+        f"\n{'-'*40}\n{uvp_avg.history}"
     )
 
     return uvp_avg, uvp_boots, uvp_wgts

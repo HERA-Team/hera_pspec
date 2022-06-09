@@ -320,16 +320,12 @@ class Test_grouping(unittest.TestCase):
             list(np.unique(self.uvp.blpair_array)),
         ]
         uvp1, wgts = grouping.bootstrap_average_blpairs(
-            [
-                self.uvp,
-            ],
+            [self.uvp], 
             blpair_groups,
             time_avg=False,
         )
         uvp2, wgts = grouping.bootstrap_average_blpairs(
-            [
-                self.uvp,
-            ],
+            [self.uvp],
             blpair_groups,
             time_avg=True,
         )
@@ -344,23 +340,15 @@ class Test_grouping(unittest.TestCase):
         pytest.raises(
             AssertionError,
             grouping.bootstrap_average_blpairs,
-            [
-                np.arange(5),
-            ],
+            [np.arange(5)],
             blpair_groups,
             time_avg=False,
         )
         pytest.raises(
             KeyError,
             grouping.bootstrap_average_blpairs,
-            [
-                self.uvp,
-            ],
-            [
-                [
-                    200200200200,
-                ],
-            ],
+            [self.uvp],
+            [[200200200200]],
             time_avg=False,
         )
 
@@ -379,9 +367,7 @@ class Test_grouping(unittest.TestCase):
         # the same values for uvp3)
         np.random.seed(10)
         uvp_avg = uvp3.average_spectra(
-            blpair_groups=[
-                _blpairs,
-            ],
+            blpair_groups=[_blpairs],
             time_avg=True,
             inplace=False,
         )
@@ -390,12 +376,8 @@ class Test_grouping(unittest.TestCase):
             # Generate multiple samples and make sure that they are all equal
             # to the regular average (for the cloned data in uvp3)
             uvp4, wgts = grouping.bootstrap_average_blpairs(
-                [
-                    uvp3,
-                ],
-                blpair_groups=[
-                    _blpairs,
-                ],
+                [uvp3],
+                blpair_groups=[_blpairs],
                 time_avg=True,
             )
             try:

@@ -89,9 +89,9 @@ def _compute_pspec_scalar(
     redshifts = cosmo.f2z(integration_freqs).flatten()
     X2Y = np.array([cosmo.X2Y(z, little_h=little_h) for z in redshifts])
 
-    if (
-        exact_norm
-    ):  # Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
+    if exact_norm:  
+        # Beam and spectral tapering are already taken into account in normalization. 
+        # We only use averaged X2Y
         scalar = integrate.trapz(X2Y, x=integration_freqs) / (
             np.abs(integration_freqs[-1] - integration_freqs[0])
         )
@@ -274,15 +274,13 @@ class PSpecBeamBase(object):
         # Check frequency bounds
         if np.min(freqs) < self.beam_freqs.min():
             print(
-                "Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(
-                    np.min(freqs)
-                )
+                f"Warning: min freq {np.min(freqs)} < self.beam_freqs.min(), "
+                "extrapolating..."
             )
         if np.max(freqs) > self.beam_freqs.max():
             print(
-                "Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(
-                    np.max(freqs)
-                )
+                f"Warning: max freq {np.max(freqs)} > self.beam_freqs.max(), "
+                "extrapolating..."
             )
 
         Op = interp1d(

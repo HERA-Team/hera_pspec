@@ -348,8 +348,7 @@ class Cosmo_Conversions(object):
         """
         # Parsons 2012, Pober 2014, Kohn 2018
         bl2kpara = (
-            2
-            * np.pi
+            2 * np.pi
             / (self.dRperp_dtheta(z, little_h=little_h) * (units.c / self.z2f(z)))
         )
         return bl2kpara

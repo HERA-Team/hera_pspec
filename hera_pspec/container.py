@@ -305,14 +305,14 @@ class PSpecContainer(object):
                 for _psname, _pspec in zip(psname, pspec):
                     if not isinstance(_pspec, uvpspec.UVPSpec):
                         raise TypeError(
-                            "pspec lists must only contain UVPSpec " "objects."
+                            "pspec lists must only contain UVPSpec objects."
                         )
                     self.set_pspec(group, _psname, _pspec, overwrite=overwrite)
                 return
             else:
                 # Raise exception if psname is a list, but pspec is not
                 raise ValueError(
-                    "If psname is a list, pspec must be a list of " "the same length."
+                    "If psname is a list, pspec must be a list of the same length."
                 )
         if isinstance(pspec, list) and not isinstance(psname, list):
             raise ValueError("If pspec is a list, psname must also be a list.")

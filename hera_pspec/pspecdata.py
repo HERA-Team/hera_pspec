@@ -174,29 +174,17 @@ class PSpecData:
 
         # Convert input args to lists if possible
         if isinstance(dsets, UVData):
-            dsets = [
-                dsets,
-            ]
+            dsets = [dsets]
         if isinstance(wgts, UVData):
-            wgts = [
-                wgts,
-            ]
+            wgts = [wgts]
         if isinstance(labels, str):
-            labels = [
-                labels,
-            ]
+            labels = [labels]
         if isinstance(dsets_std, UVData):
-            dsets_std = [
-                dsets_std,
-            ]
+            dsets_std = [dsets_std]
         if isinstance(cals, UVCal):
-            cals = [
-                cals,
-            ]
+            cals = [cals]
         if wgts is None:
-            wgts = [
-                wgts,
-            ]
+            wgts = [wgts]
         if dsets_std is None:
             dsets_std = [dsets_std for m in range(len(dsets))]
         if cals is None:
@@ -320,20 +308,11 @@ class PSpecData:
         for i, d in enumerate(self.dsets):
             if self.labels[i] is None:
                 s += "  dset (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" % (
-                    i,
-                    d.Nbls,
-                    d.Nfreqs,
-                    d.Ntimes,
-                    d.Npols,
+                    i,d.Nbls, d.Nfreqs, d.Ntimes, d.Npols
                 )
             else:
                 s += "  dset '%s' (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" % (
-                    self.labels[i],
-                    i,
-                    d.Nbls,
-                    d.Nfreqs,
-                    d.Ntimes,
-                    d.Npols,
+                    self.labels[i], i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols
                 )
         return s
 
@@ -752,23 +731,13 @@ class PSpecData:
         dset, bl = self.parse_blkey(key)
         if model == "empirical":
             # add model to key
-            Ckey = ((dset, dset), (bl, bl),) + (
-                model,
-                None,
-                False,
-                True,
-            )
+            Ckey = ((dset, dset), (bl, bl),) + (model, None, False, True)
         else:
             assert isinstance(
                 time_index, int
             ), "time_index must be integer if cov-model=={}".format(model)
             # add model to key
-            Ckey = ((dset, dset), (bl, bl),) + (
-                model,
-                time_index,
-                False,
-                True,
-            )
+            Ckey = ((dset, dset), (bl, bl),) + (model, time_index, False, True)
 
         # Check if Ckey exists in known_cov. If so, just update self._C[Ckey] with known_cov.
         if known_cov is not None:
@@ -800,8 +769,7 @@ class PSpecData:
                                 * self.dx(key, include_extension=include_extension)[
                                     :, time_index
                                 ]
-                            )
-                            ** 2.0
+                            ) ** 2.0
                         )
                     }
                 )
@@ -913,12 +881,7 @@ class PSpecData:
             )
         # Check if model exists in known_cov. If so, just overwrite covar with known_cov.
         if known_cov is not None:
-            Ckey = ((dset1, dset2), (bl1, bl2),) + (
-                model,
-                time_index,
-                conj_1,
-                conj_2,
-            )
+            Ckey = ((dset1, dset2), (bl1, bl2),) + (model, time_index, conj_1, conj_2)
             if Ckey in known_cov.keys():
                 spw = slice(*self.get_spw(include_extension=include_extension))
                 covar = known_cov[Ckey][spw, spw]
@@ -989,12 +952,7 @@ class PSpecData:
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
 
-        Ckey = ((dset, dset), (bl, bl),) + (
-            model,
-            time_index,
-            False,
-            True,
-        )
+        Ckey = ((dset, dset), (bl, bl),) + (model, time_index, False, True)
 
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
@@ -1124,12 +1082,7 @@ class PSpecData:
         if self.data_weighting == "dayenu":
             # add extra dayenu params
             Rkey = (
-                Rkey
-                + tuple(
-                    self.filter_extension,
-                )
-                + (self.spw_Nfreqs,)
-                + (self.symmetric_taper,)
+                Rkey + (self.filter_extension, self.spw_Nfreqs, self.symmetric_taper)
             )
 
         if Rkey not in self._R:
@@ -1590,9 +1543,8 @@ class PSpecData:
         # multiplicatives to the exponentials, and sticking to quantities in
         # their physical units.
 
-        if (
-            exact_norm and allow_fft
-        ):  # exact_norm approach is meant to enable non-uniform binnning as well, where FFT is not
+        if (exact_norm and allow_fft):  
+            # exact_norm approach is meant to enable non-uniform binnning as well, where FFT is not
             # applicable. As of now, we are using uniform binning.
             raise NotImplementedError(
                 "Exact normalization does not support FFT approach at present"
@@ -1600,12 +1552,11 @@ class PSpecData:
 
         elif exact_norm and not (allow_fft):
             q = []
-            del_tau = (
-                np.median(np.diff(self.delays())) * 1e-9
-            )  # Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
-            integral_beam = self.get_integral_beam(
-                pol
-            )  # Integral of beam in Eq.11(a) (HERA memo #44)
+            # Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
+            del_tau = np.median(np.diff(self.delays())) * 1e-9
+             
+            # Integral of beam in Eq.11(a) (HERA memo #44)
+            integral_beam = self.get_integral_beam(pol)
 
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau and integral_beam should be part of get_Q. We use them here to
@@ -4178,26 +4129,14 @@ class PSpecData:
             (uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int
         ) * uvp.labels.index(label2)
         uvp.labels = np.array(uvp.labels, np.str)
-        uvp.history = (
-            "UVPSpec written on {} with hera_pspec git hash {}\n{}\n"
-            "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n"
-            "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n"
-            "".format(
-                datetime.datetime.utcnow(),
-                version.git_hash,
-                "-" * 20,
-                filename1,
-                label1,
-                cal1,
-                dset1.history,
-                "-" * 20,
-                filename2,
-                label2,
-                cal2,
-                dset2.history,
-                "-" * 20,
-            )
-        )
+        uvp.history = f"""UVPSpec written on {datetime.datetime.utcnow()} with hera_pspec git hash {version.git_hash}
+--------------------
+dataset1: filename: {filename1}, label: {label1}, cal: {cal1}, history:
+{dset1.history}
+--------------------
+dataset1: filename: {filename2}, label: {label2}, cal: {cal2}, history:
+{dset2.history}
+"""
         uvp.r_params = uvputils.compress_r_params(r_params)
         uvp.taper = taper
         if not return_q:

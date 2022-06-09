@@ -72,9 +72,7 @@ def run_new_oqe(fname, key1, key2, freqrange):
     d1.select(freq_chans=np.arange(fmin, fmax))
 
     # (1b) Build data and flagging lists
-    d = [
-        d1,
-    ]
+    d = [d1]
     w = [None for _d in d]  # Set weights (None => flags from UVData will be used)
     # print("Baseline keys:", d[0].get_antpairs())
 
