@@ -827,7 +827,6 @@ class UVWindow:
         else:
             self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
-        print(np.diff(kperp_bins))
         if not np.isclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]).all():
             warnings.warn('get_cylindrical_wf: kperp_bins must be linearly spaced.')
         nbins_kperp = kperp_bins.size
