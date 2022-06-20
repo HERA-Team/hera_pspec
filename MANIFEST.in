@@ -1,6 +1,0 @@
-include *.md
-include LICENSE
-include hera_pspec/VERSION
-include hera_pspec/GIT_INFO
-include pipelines/*/*.yaml
-
