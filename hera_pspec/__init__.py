@@ -6,7 +6,7 @@ try:
 except ImportError:
     from importlib_metadata import version, PackageNotFoundError
 
-from . import version, conversions, grouping, pspecbeam, plot, pstokes, testing, utils
+from . import conversions, grouping, pspecbeam, plot, pstokes, testing, utils
 from . import uvpspec_utils as uvputils
 
 from .uvpspec import UVPSpec

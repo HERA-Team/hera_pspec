@@ -6,3 +6,22 @@ build-backend = "setuptools.build_meta"
 write_to = "hera_pspec/_version.py"
 parentdir_prefix_version = "hera_pspec-"
 fallback_version  = "0.0.0"
+
+
+[tool.black]
+line-length = 88
+py36 = false
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''

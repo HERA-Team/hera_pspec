@@ -1,11 +1,9 @@
 #!/usr/bin/env python2
 import numpy as np
-import copy, operator, itertools
-from collections import OrderedDict as odict
+import copy
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
 from scipy import stats, interpolate
-from astropy import constants
 
 from . import (
     uvpspec,
@@ -13,7 +11,6 @@ from . import (
     conversions,
     pspecbeam,
     utils,
-    uvpspec_utils as uvputils,
 )
 
 
@@ -265,17 +262,17 @@ def uvpspec_from_data(
         Number of delay bins to use. Default: None (uses as many delay bins as
         frequency channels).
 
-    r_params: dictionary with parameters for weighting matrix.
-              Proper fields
-              and formats depend on the mode of data_weighting.
-            data_weighting == 'dayenu':
-                            dictionary with fields
-                            'filter_centers', list of floats (or float) specifying the (delay) channel numbers
-                                              at which to center filtering windows. Can specify fractional channel number.
-                            'filter_half_widths', list of floats (or float) specifying the width of each
-                                             filter window in (delay) channel numbers. Can specify fractional channel number.
-                            'filter_factors', list of floats (or float) specifying how much power within each filter window
-                                              is to be suppressed.
+    r_params : dict
+        dictionary with parameters for weighting matrix.Proper fields and formats depend
+        on the mode of data_weighting. ``data_weighting == 'dayenu'``:
+
+        * 'filter_centers', list of floats (or float) specifying the (delay) channel numbers
+          at which to center filtering windows. Can specify fractional channel number.
+        * 'filter_half_widths', list of floats (or float) specifying the width of each
+          filter window in (delay) channel numbers. Can specify fractional channel number.
+        * 'filter_factors', list of floats (or float) specifying how much power within each filter window
+          is to be suppressed.
+
     verbose : bool, optional
         if True, report feedback to standard output. Default: False.
 
@@ -547,7 +544,9 @@ def gauss_cov_fg(cov_amp, cov_length_scale, freqs, Ntimes=100, constant_in_time=
     return s
 
 
-def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, channel_width=None, Trx=0.0):
+def sky_noise_jy_autos(
+    lsts, freqs, autovis, omega_p, integration_time, channel_width=None, Trx=0.0
+):
     """Make a noise realization for a given auto-visibility level and beam.
 
     This is a simple replacement for ``hera_sim.noise.sky_noise_jy``.
@@ -586,7 +585,7 @@ def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, channel_
     # Calculate Jansky to Kelvin conversion factor
     # The factor of 1e-26 converts from Jy to W/m^2/Hz.
     wavelengths = conversions.units.c / freqs  # meters
-    Jy2K = 1e-26 * wavelengths ** 2 / (2 * conversions.units.kb * omega_p)
+    Jy2K = 1e-26 * wavelengths**2 / (2 * conversions.units.kb * omega_p)
 
     # Use autocorrelation vsibility to set noise scale
     Tsky = autovis * Jy2K.reshape(1, -1)
@@ -621,7 +620,9 @@ def sky_noise_sim(
     Parameters
     ----------
     data : str or UVData object
+        The data
     beam : str or PSpecBeam object
+        The beam
     cov_amp : float
         Covariance amplitude. See gauss_cov_fg()
     cov_length_scale : float

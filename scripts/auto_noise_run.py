@@ -15,7 +15,7 @@ uvd = UVData()
 uvd.read(args.auto_file)
 auto_Tsys = utils.uvd_to_Tsys(uvd, beam=args.beam)
 # load in pspec container.
-psc = PSpecContainer(args.pspec_container, keep_open=False, mode='rw', swmr=False)
+psc = PSpecContainer(args.pspec_container, keep_open=False, mode="rw", swmr=False)
 
 # get groups automatically if not provided.
 if args.groups is not None:
@@ -30,7 +30,6 @@ for group in groups:
         spectra = psc.spectra(group)
     for spec in spectra:
         uvp = psc.get_pspec(group, spec)
-        utils.uvp_noise_error(uvp, auto_Tsys,
-                              err_type=args.err_type)
+        utils.uvp_noise_error(uvp, auto_Tsys, err_type=args.err_type)
         psc.set_pspec(group, spec, uvp, overwrite=True)
 psc.save()
