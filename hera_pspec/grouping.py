@@ -664,14 +664,19 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
 
+    # copy input
+    uvp = copy.deepcopy(uvp_in) 
+
+    # transform kgrid to little_h units
+    if not little_h:
+        kbins = kbins / uvp.cosmo.h
+        bin_widths = bin_widths / uvp.cosmo.h
+
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
     kbin_left = kbins - bin_widths / 2
     kbin_right = kbins + bin_widths / 2
     assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
-
-    # copy input
-    uvp = copy.deepcopy(uvp_in) 
 
     # perform time and cylindrical averaging upfront if requested
     if not uvp.exact_windows and (blpair_groups is not None or time_avg):
@@ -695,10 +700,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if store_window:
         window_function_array = odict()
 
-    # transform kgrid to little_h units
-    if not little_h:
-        kbins = kbins / uvp.cosmo.h
-        bin_widths = bin_widths / uvp.cosmo.h
 
     # iterate over spectral windows
     spw_ranges = uvp.get_spw_ranges()
