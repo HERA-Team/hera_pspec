@@ -987,7 +987,8 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
     little_h : bool, optional
         If True, kgrid is in h Mpc^-1 units, otherwise just Mpc^-1 units.
-        If False, user must ensure adopted h is consistent with uvp_in.cosmo
+        The code ensures adopted h is consistent with uvp_in.cosmo. If not,
+        it modifies the unit of kbins.
 
     verbose : bool, optional
         If True, print progress, warnings and debugging info to stdout.
@@ -1005,6 +1006,21 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
+        
+    # if window functions have been computed without little h
+    # it is not possible to re adjust so kbins need to be in Mpc-1
+    # and reciprocally
+    if little_h != ('h^-3' in uvp_in.norm_units):
+        warnings.warn('Changed little_h units to make kbins consistent ' \
+                      'with uvp.window_function_array. Might be inconsistent ' \
+                      'with the power spectrum units.')
+        if little_h:
+            kbins *= uvp_in.cosmo.h 
+            bin_widths *= uvp_in.cosmo.h 
+        else:
+            kbins /= uvp_in.cosmo.h
+            bin_widths /= uvp_in.cosmo.h
+        little_h = 'h^-3' in uvp_in.norm_units
 
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
