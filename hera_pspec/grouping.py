@@ -1012,6 +1012,8 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # it is not possible to re adjust so kbins need to be in Mpc-1
     # and reciprocally
     if little_h != ('h^-3' in uvp_in.norm_units):
+        warnings.warn('Changed little_h units to make kbins consistent \
+                       with uvp.window_function_array')
         if little_h:
             kbins *= uvp_in.cosmo.h 
             bin_widths *= uvp_in.cosmo.h 
