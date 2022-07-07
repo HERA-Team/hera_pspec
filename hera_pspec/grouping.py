@@ -671,8 +671,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if not little_h:
         kbins = kbins / uvp.cosmo.h
         bin_widths = bin_widths / uvp.cosmo.h
-    if uvp.exact_windows and (little_h != ('h^-3' in uvp.norm_units)):
-        warnings.warn('Inconsistent little h unit between kbins and uvp.window_function_array')
 
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
