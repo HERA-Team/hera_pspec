@@ -1063,11 +1063,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                         time_avg=time_avg,
                         inplace=True)
 
-    # transform kgrid to little_h units
-    if not little_h:
-        kbins = kbins / uvp.cosmo.h
-        bin_widths = bin_widths / uvp.cosmo.h
-
     # initialize blank arrays and dicts
     window_function_array = odict()
 
