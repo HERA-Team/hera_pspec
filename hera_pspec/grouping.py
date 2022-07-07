@@ -663,7 +663,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     # copy input
     uvp = copy.deepcopy(uvp_in) 
-    
+
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
 
@@ -887,7 +887,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                                                                time_avg=time_avg,
                                                                error_weights=error_weights,
                                                                spw_array=spw,
-                                                               little_h=little_h,
+                                                               little_h=True,
                                                                verbose=True)[spw]
 
     # handle data arrays
