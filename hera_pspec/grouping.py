@@ -1014,8 +1014,10 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     if little_h != ('h^-3' in uvp_in.norm_units):
         if little_h:
             kbins *= uvp_in.cosmo.h 
+            bin_widths *= uvp_in.cosmo.h 
         else:
             kbins /= uvp_in.cosmo.h
+            bin_widths /= uvp_in.cosmo.h
 
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
