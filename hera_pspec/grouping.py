@@ -671,6 +671,8 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if not little_h:
         kbins = kbins / uvp.cosmo.h
         bin_widths = bin_widths / uvp.cosmo.h
+    if uvp.exact_windows and (little_h != ('h^-3' in uvp.norm_units)):
+        warnings.warn('Inconsistent little h unit between kbins and uvp.window_function_array')
 
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
@@ -985,8 +987,9 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         Spectral window indices.
 
     little_h : bool, optional
-        If True, kgrid is in h Mpc^-1 units, otherwise just Mpc^-1 units.
-        If False, user must ensure adopted h is consistent with uvp_in.cosmo
+        If True, kbins is in h Mpc^-1 units, otherwise just Mpc^-1 units.
+        The code ensures adopted h is consistent with uvp_in.cosmo. If not,
+        it modifies the unit of kbins.
 
     verbose : bool, optional
         If True, print progress, warnings and debugging info to stdout.
@@ -1004,6 +1007,15 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
+
+    # if window functions have been computed without little h
+    # it is not possible to re adjust so kbins need to be in Mpc-1
+    # and reciprocally
+    if little_h != ('h^-3' in uvp.norm_units):
+        if little_h:
+            kbins *= uvp.cosmo.h 
+        else:
+            kbins /= uvp.cosmo.h
 
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
