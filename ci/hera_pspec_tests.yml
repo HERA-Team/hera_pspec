@@ -1,7 +1,6 @@
 name: hera_pspec_tests
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - pip
   - astropy>=3.2.3
