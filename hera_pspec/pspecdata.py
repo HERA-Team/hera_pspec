@@ -13,7 +13,7 @@ import warnings
 import json
 import uvtools.dspec as dspec
 
-from . import uvpspec, utils, version, pspecbeam, container, uvpspec_utils as uvputils
+from . import uvpspec, utils, version, __version__, pspecbeam, container, uvpspec_utils as uvputils
 
 
 class PSpecData(object):
@@ -3478,18 +3478,25 @@ class PSpecData(object):
         uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int) \
                             * uvp.labels.index(label2)
         uvp.labels = np.array(uvp.labels, np.str)
-        uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
-                      "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
-                      "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
-                      "".format(datetime.datetime.utcnow(), version.git_hash, '-'*20,
-                                filename1, label1, cal1, dset1.history, '-'*20,
-                                filename2, label2, cal2, dset2.history, '-'*20)
         uvp.r_params = uvputils.compress_r_params(r_params)
         uvp.taper = taper
         if not return_q:
             uvp.norm = norm
         else:
             uvp.norm = 'Unnormalized'
+        # save version of hera_pspec with backward compatibility
+        try:
+            version.git_hash
+        except AttributeError:
+            hp_version = __version__
+        else:
+            hp_version = version.git_hash
+        uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
+                      "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
+                      "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
+                      "".format(datetime.datetime.utcnow(), hp_version, '-'*20,
+                                filename1, label1, cal1, dset1.history, '-'*20,
+                                filename2, label2, cal2, dset2.history, '-'*20)
 
         if self.primary_beam is not None:
             # attach cosmology

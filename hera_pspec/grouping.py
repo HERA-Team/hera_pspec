@@ -7,7 +7,7 @@ import argparse
 from astropy import stats as astats
 import os, sys
 
-from . import utils, version, uvpspec_utils as uvputils
+from . import utils, version, __version__, uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
 from .uvwindow import UVWindow
 
@@ -579,7 +579,13 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         delattr(uvp, "stats_array")
 
     # Add to history
-    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
+    try:
+        version.git_hash
+    except AttributeError:
+        hp_version = __version__
+    else:
+        hp_version = version.git_hash[:15]
+    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(hp_version, add_to_history, '-'*40, uvp.history)
     # Validity check
     uvp.check()
 
@@ -935,7 +941,13 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.lst_2_array = np.unique(uvp_in.lst_2_array)
 
     # Add to history
-    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
+    try:
+        version.git_hash
+    except AttributeError:
+        hp_version = __version__
+    else:
+        hp_version = version.git_hash[:15]
+    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(hp_version, add_to_history, '-'*40, uvp.history)
 
     # validity check
     if run_check:
@@ -1531,8 +1543,14 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
                 uvp_avg.set_stats(ci_tag, k, cint)
 
     # Update history
+    try:
+        version.git_hash
+    except AttributeError:
+        hp_version = __version__
+    else:
+        hp_version = version.git_hash[:15]
     uvp_avg.history = "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}" \
-                      "".format(version.git_hash[:15], Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
+                      "".format(hp_version, Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
 
     return uvp_avg, uvp_boots, uvp_wgts
 
