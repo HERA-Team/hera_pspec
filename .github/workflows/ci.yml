@@ -24,7 +24,12 @@ jobs:
     - uses: actions/checkout@main
       with:
         fetch-depth: 0
-
+    
+    - name: Additional libstdc++ dependency (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get install -y libstdc++6
+    
     - name: Get Miniconda (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: |
@@ -41,13 +46,6 @@ jobs:
       run: |
         export PATH="$HOME/miniconda/bin:$PATH"
         ./ci/install_conda.sh
-    
-    - name: Additional libstdc++ dependency (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        export PATH="$HOME/miniconda/bin:$PATH"
-        source activate ${ENV_NAME}
-        conda install -c anaconda libstdcxx-ng
 
     - name: Install
       run: |
