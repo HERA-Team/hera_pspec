@@ -6,7 +6,6 @@ dependencies:
   - pip
   - astropy>=3.2.3
   - h5py<=3.2
-  - gcc
   - numpy>=1.10
   - pytest
   - scipy
