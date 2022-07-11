@@ -7,7 +7,7 @@ dependencies:
   - h5py<=3.2
   - numpy>=1.10
   - pytest
-  - scipy
+  - scipy=1.7.3
   - mpi4py
   - pyyaml
   - psutil
