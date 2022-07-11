@@ -17,9 +17,6 @@ dependencies:
   - future
   - pytest-cov
   - coveralls
-  - pyuvdata
-  - uvtools
-  - hera)cal
 
   - pip:
     - pyuvdata
