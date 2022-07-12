@@ -7,7 +7,7 @@ import copy
 from collections import OrderedDict as odict
 import argparse
 
-from . import version
+from . import version, __version__
 
 # Weights used in forming Stokes visibilities.
 # See pyuvdata.utils.polstr2num for conversion between polarization string
@@ -146,8 +146,14 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     uvdS.flag_array = flag  # flag array
     uvdS.polarization_array = np.array([pstokes], dtype=np.int) # polarization number
     uvdS.nsample_array = uvd1.nsample_array + uvd2.nsample_array # nsamples
-    uvdS.history = "Merged into pseudo-stokes vis with hera_pspec version {} Git hash {}\n{}" \
-                    "{}{}{}{}\n".format(version.version, version.git_hash, "-"*20+'\n',
+    try:
+        version.git_hash
+    except AttributeError:
+        hp_version = __version__
+    else:
+        hp_version = version.git_hash
+    uvdS.history = "Merged into pseudo-stokes vis with hera_pspec version {}\n{}" \
+                    "{}{}{}{}\n".format(hp_version, "-"*20+'\n',
                     'dset1 history:\n', uvd1.history, '\n'+'-'*20+'\ndset2 history:\n',
                     uvd2.history)
 

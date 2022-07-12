@@ -4,7 +4,7 @@ import argparse
 import time
 from functools import wraps
 
-from . import uvpspec, version, utils
+from . import uvpspec, __version__, version, utils
 
 
 def transactional(fn):
@@ -246,7 +246,7 @@ class PSpecContainer(object):
     def _update_header(self):
         """
         Update the header in the HDF5 file with useful metadata, including the
-        git version of hera_pspec.
+        version of hera_pspec.
         """
         if 'header' not in list(self.data.keys()):
             if not self.swmr:
@@ -257,12 +257,23 @@ class PSpecContainer(object):
             hdr = self.data['header']
 
         # Check if versions of hera_pspec are the same
-        if 'hera_pspec.git_hash' in list(hdr.attrs.keys()):
-            if hdr.attrs['hera_pspec.git_hash'] != version.git_hash:
+        # with backward-compatibility if file generated 
+        # before version control was introduced
+        try:
+            version.git_hash
+        except AttributeError:
+            attr = 'hera_pspec.version'
+            hp_version = __version__
+        else:
+            attr = 'hera_pspec.git_hash'
+            hp_version = version.git_hash
+
+        if attr in list(hdr.attrs.keys()):
+            if hdr.attrs[attr] != hp_version:
                 print("WARNING: HDF5 file was created by a different version "
                       "of hera_pspec.")
-        elif not self.swmr:
-            hdr.attrs['hera_pspec.git_hash'] = version.git_hash
+            elif not self.swmr:
+                hdr.attrs[attr] = hp_version
     
     @transactional
     def set_pspec(self, group, psname, pspec, overwrite=False):

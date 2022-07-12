@@ -1,14 +1,13 @@
 name: hera_pspec_tests
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - pip
   - astropy>=3.2.3
   - h5py<=3.2
   - numpy>=1.10
   - pytest
-  - scipy
+  - scipy=1.7.3
   - mpi4py
   - pyyaml
   - psutil
@@ -17,9 +16,8 @@ dependencies:
   - future
   - pytest-cov
   - coveralls
-
   - pip:
-    - git+https://github.com/RadioAstronomySoftwareGroup/pyuvdata
-    - git+https://github.com/HERA-Team/uvtools
-    - git+https://github.com/HERA-Team/hera_cal
+    - pyuvdata
+    - uvtools
+    - hera_calibration
 
