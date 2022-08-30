@@ -579,13 +579,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         delattr(uvp, "stats_array")
 
     # Add to history
-    try:
-        version.git_hash
-    except AttributeError:
-        hp_version = __version__
-    else:
-        hp_version = version.git_hash[:15]
-    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(hp_version, add_to_history, '-'*40, uvp.history)
+    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(__version__, add_to_history, '-'*40, uvp.history)
     # Validity check
     uvp.check()
 
@@ -940,14 +934,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.lst_1_array = np.unique(uvp_in.lst_1_array)
     uvp.lst_2_array = np.unique(uvp_in.lst_2_array)
 
-    # Add to history
-    try:
-        version.git_hash
-    except AttributeError:
-        hp_version = __version__
-    else:
-        hp_version = version.git_hash[:15]
-    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(hp_version, add_to_history, '-'*40, uvp.history)
+    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(__version__, add_to_history, '-'*40, uvp.history)
 
     # validity check
     if run_check:
@@ -1543,14 +1530,8 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
                 uvp_avg.set_stats(ci_tag, k, cint)
 
     # Update history
-    try:
-        version.git_hash
-    except AttributeError:
-        hp_version = __version__
-    else:
-        hp_version = version.git_hash[:15]
     uvp_avg.history = "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}" \
-                      "".format(hp_version, Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
+                      "".format(__version__, Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
 
     return uvp_avg, uvp_boots, uvp_wgts
 
