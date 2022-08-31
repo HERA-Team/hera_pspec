@@ -421,8 +421,8 @@ def polpair_tuple2int(polpair, x_orientation=None):
 
     # Convert strings to ints if necessary
     pol1, pol2 = polpair
-    if type(pol1) in (str, np.str): pol1 = polstr2num(pol1, x_orientation=x_orientation)
-    if type(pol2) in (str, np.str): pol2 = polstr2num(pol2, x_orientation=x_orientation)
+    if type(pol1) is str: pol1 = polstr2num(pol1, x_orientation=x_orientation)
+    if type(pol2) is str: pol2 = polstr2num(pol2, x_orientation=x_orientation)
 
     # Convert to polpair integer
     ppint = (20 + pol1)*100 + (20 + pol2)
@@ -470,10 +470,10 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
 
     # get indices
     if only_pairs_in_bls:
-        blp_select = np.array( [np.bool((blp[0] in bls) * (blp[1] in bls))
+        blp_select = np.array( [bool((blp[0] in bls) * (blp[1] in bls))
                                 for blp in blpair_bls] )
     else:
-        blp_select = np.array( [np.bool((blp[0] in bls) + (blp[1] in bls))
+        blp_select = np.array( [bool((blp[0] in bls) + (blp[1] in bls))
                                 for blp in blpair_bls] )
 
     return blp_select
@@ -565,7 +565,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
     if blpairs is not None:
         if bls is None:
-            blp_select = np.zeros(uvp.Nblpairts, np.bool)
+            blp_select = np.zeros(uvp.Nblpairts, bool)
 
         # assert form
         assert isinstance(blpairs[0], (tuple, int, np.integer)), \
@@ -580,7 +580,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
     if times is not None:
         if bls is None and blpairs is None:
-            blp_select = np.ones(uvp.Nblpairts, np.bool)
+            blp_select = np.ones(uvp.Nblpairts, bool)
         time_select = np.logical_or.reduce(
                                [np.isclose(uvp.time_avg_array, t, rtol=1e-16)
                                 for t in times])
@@ -589,7 +589,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
     if lsts is not None:
         assert times is None, "Cannot select on lsts and times simultaneously."
         if bls is None and blpairs is None:
-            blp_select = np.ones(uvp.Nblpairts, np.bool)
+            blp_select = np.ones(uvp.Nblpairts, bool)
         lst_select = np.logical_or.reduce(
                             [ np.isclose(uvp.lst_avg_array, t, rtol=1e-16)
                               for t in lsts] )
@@ -1167,7 +1167,7 @@ def _get_red_bls(uvp, bl_len_tol=1., bl_ang_tol=1.):
     lens, angs = utils.get_bl_lens_angs(bl_vecs, bl_error_tol=bl_len_tol)
 
     # Baseline indices
-    idxs = np.arange(len(lens)).astype(np.int)
+    idxs = np.arange(len(lens)).astype(int)
     grp_bls = []; grp_len = []; grp_ang = []
 
     # Group baselines by length and angle

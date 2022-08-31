@@ -16,12 +16,12 @@ def test_cov():
 
     # test basic execution
     d1 = uvd.get_data(24, 25)
-    w1 = (~uvd.get_flags(24, 25)).astype(np.float)
+    w1 = (~uvd.get_flags(24, 25)).astype(float)
     cov = utils.cov(d1, w1)
     assert cov.shape == (60, 60)
     assert cov.dtype == np.complex
     d2 = uvd.get_data(37, 38)
-    w2 = (~uvd.get_flags(37, 38)).astype(np.float)
+    w2 = (~uvd.get_flags(37, 38)).astype(float)
     cov = utils.cov(d1, w2, d2=d2, w2=w2)
     assert cov.shape == (60, 60)
     assert cov.dtype == np.complex

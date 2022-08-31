@@ -629,7 +629,7 @@ class PSpecData(object):
         """
         # type check
         assert isinstance(key, tuple), "key must be fed as a tuple"
-        assert isinstance(model, (str, np.str)), "model must be a string"
+        assert isinstance(model, str), "model must be a string"
 
         # parse key
         dset, bl = self.parse_blkey(key)
@@ -720,7 +720,7 @@ class PSpecData(object):
         # type check
         assert isinstance(key1, tuple), "key1 must be fed as a tuple"
         assert isinstance(key2, tuple), "key2 must be fed as a tuple"
-        assert isinstance(model, (str, np.str)), "model must be a string"
+        assert isinstance(model, str), "model must be a string"
 
         # parse key
         dset1, bl1 = self.parse_blkey(key1)
@@ -1390,7 +1390,7 @@ class PSpecData(object):
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None")
 
-        G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+        G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
 
@@ -1489,7 +1489,7 @@ class PSpecData(object):
             raise ValueError("Number of delay bins should have been set"
                              "by now! Cannot be equal to None.")
 
-        H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=np.complex)
+        H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
         if not sampling:
@@ -1497,8 +1497,8 @@ class PSpecData(object):
             sinc_matrix = np.zeros((nfreq, nfreq))
             for i in range(nfreq):
                 for j in range(nfreq):
-                    sinc_matrix[i,j] = np.float(i - j)
-            sinc_matrix = np.sinc(sinc_matrix / np.float(nfreq))
+                    sinc_matrix[i,j] = float(i - j)
+            sinc_matrix = np.sinc(sinc_matrix / float(nfreq))
 
         iR1Q1, iR2Q2 = {}, {}
         if (exact_norm):
@@ -1582,7 +1582,7 @@ class PSpecData(object):
                              "by now! Cannot be equal to None")
         nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
         E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
-                               dtype=np.complex)
+                               dtype=complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
         if (exact_norm):
@@ -2227,7 +2227,7 @@ class PSpecData(object):
         else:
             phase_correction = 0.
         if (self.spw_Ndlys == nfreq) and (allow_fft == True):
-            _m = np.zeros((nfreq,), dtype=np.complex)
+            _m = np.zeros((nfreq,), dtype=complex)
             _m[mode] = 1. # delta function at specific delay mode
             # FFT to transform to frequency space
             m = np.fft.fft(np.fft.ifftshift(_m))
@@ -2426,9 +2426,9 @@ class PSpecData(object):
                         Nfreqs = float(flags.shape[1])
                         # get time- and freq-continguous flags
                         freq_contig_flgs = np.sum(flags, axis=1) / Nfreqs > 0.999999
-                        Ntimes_noncontig = np.sum(~freq_contig_flgs, dtype=np.float)
+                        Ntimes_noncontig = np.sum(~freq_contig_flgs, dtype=float)
                         # get freq channels where non-contiguous flags exceed threshold
-                        exceeds_thresh = np.sum(flags[~freq_contig_flgs], axis=0, dtype=np.float) / Ntimes_noncontig > time_thresh
+                        exceeds_thresh = np.sum(flags[~freq_contig_flgs], axis=0, dtype=float) / Ntimes_noncontig > time_thresh
                         # flag channels for all times that exceed time_thresh
                         dset.flag_array[bl_inds, :, np.where(exceeds_thresh)[0][:, None], i] = True
                         # for pixels that have flags but didn't meet broadcasting limit
@@ -2695,9 +2695,9 @@ class PSpecData(object):
         x_orientation = self.dsets[0].x_orientation
 
         # convert elements to integers if fed as strings
-        if isinstance(pol_pair[0], (str, np.str)):
+        if isinstance(pol_pair[0], str):
             pol_pair = (uvutils.polstr2num(pol_pair[0], x_orientation=x_orientation), pol_pair[1])
-        if isinstance(pol_pair[1], (str, np.str)):
+        if isinstance(pol_pair[1], str):
             pol_pair = (pol_pair[0], uvutils.polstr2num(pol_pair[1], x_orientation=x_orientation))
 
         assert isinstance(pol_pair[0], (int, np.integer)), err_msg
@@ -3081,9 +3081,9 @@ class PSpecData(object):
                 # Convert string to pol-integer pair
                 p = (uvutils.polstr2num(p, x_orientation=self.dsets[0].x_orientation),
                      uvutils.polstr2num(p, x_orientation=self.dsets[0].x_orientation))
-            if isinstance(p[0], (str, np.str)):
+            if isinstance(p[0], str):
                 p = (uvutils.polstr2num(p[0], x_orientation=self.dsets[0].x_orientation), p[1])
-            if isinstance(p[1], (str, np.str)):
+            if isinstance(p[1], str):
                 p = (p[0], uvutils.polstr2num(p[1], x_orientation=self.dsets[0].x_orientation))
             _pols.append(p)
         pols = _pols
@@ -3285,7 +3285,7 @@ class PSpecData(object):
                     # the diagonal norm matrix mode (i.e., norm = 'I')
                     if norm == 'I' and not(exact_norm):
                         sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
-                        if isinstance(sa, (np.float, float)):
+                        if isinstance(sa, float):
                             pv *= sa
                         else:
                             pv = np.atleast_2d(sa).T * pv
@@ -3305,7 +3305,7 @@ class PSpecData(object):
                             cov_imag = cov_imag * (scalar)**2.
 
                         if norm == 'I' and not(exact_norm):
-                            if isinstance(sa, (np.float, float)):
+                            if isinstance(sa, float):
                                 cov_real = cov_real * (sa)**2.
                                 cov_imag = cov_imag * (sa)**2.
                             else:
@@ -3386,7 +3386,7 @@ class PSpecData(object):
                         lst2.extend(dset2.lst_array[inds2])
 
                         # insert blpair info
-                        blp_arr.extend(np.ones_like(inds1, np.int) \
+                        blp_arr.extend(np.ones_like(inds1, int) \
                                        * uvputils._antnums_to_blpair(blp))
 
                 # insert into data and wgts integrations dictionaries
@@ -3458,7 +3458,7 @@ class PSpecData(object):
         uvp.Nspwdlys = len(uvp.spw_dly_array)
         uvp.Nspwfreqs = len(uvp.spw_freq_array)
         uvp.Nfreqs = len(np.unique(freqs))
-        uvp.polpair_array = np.array(spw_polpair, np.int)
+        uvp.polpair_array = np.array(spw_polpair, int)
         uvp.Npols = len(spw_polpair)
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = dset1.channel_width  # all dsets validated to agree
@@ -3473,11 +3473,11 @@ class PSpecData(object):
         label1 = self.labels[self.dset_idx(dsets[0])]
         label2 = self.labels[self.dset_idx(dsets[1])]
         uvp.labels = sorted(set([label1, label2]))
-        uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int) \
+        uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), int) \
                             * uvp.labels.index(label1)
-        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), np.int) \
+        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), int) \
                             * uvp.labels.index(label2)
-        uvp.labels = np.array(uvp.labels, np.str)
+        uvp.labels = np.array(uvp.labels, str)
         uvp.r_params = uvputils.compress_r_params(r_params)
         uvp.taper = taper
         if not return_q:
@@ -3513,7 +3513,7 @@ class PSpecData(object):
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(
-                        [ (k, np.ones_like(uvp.integration_array[k], np.float))
+                        [ (k, np.ones_like(uvp.integration_array[k], float))
                          for k in uvp.integration_array.keys() ] )
 
         # covariance
@@ -4036,7 +4036,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # parse psname
     if psname_ext is not None:
-        assert isinstance(psname_ext, (str, np.str))
+        assert isinstance(psname_ext, str)
     else:
         psname_ext = ''
 
@@ -4138,7 +4138,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     assert len(pol_pairs) > 0, "no pol_pairs specified"
 
     # load beam
-    if isinstance(beam, (str, np.str)):
+    if isinstance(beam, str):
         beam = pspecbeam.PSpecBeamUV(beam, cosmo=cosmo)
 
     # beam and cosmology check
@@ -4478,7 +4478,7 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
 
         # read data
         uvd = UVData()
-        if isinstance(dset, (str, np.str)):
+        if isinstance(dset, str):
             dfiles = glob.glob(dset)
         else:
             dfiles = dset
@@ -4516,7 +4516,7 @@ def _load_cals(cnames, logf=None, verbose=True):
 
         # read data
         uvc = UVCal()
-        if isinstance(cfile, (str, np.str)):
+        if isinstance(cfile, str):
             uvc.read_calfits(glob.glob(cfile))
         else:
             uvc.read_calfits(cfile)

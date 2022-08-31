@@ -761,7 +761,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     pol and group selections given pol_pairs and group_pairs.
     """
     # type check
-    if isinstance(uv_templates, (str, np.str)):
+    if isinstance(uv_templates, str):
         uv_templates = [uv_templates]
     assert len(pol_pairs) == len(group_pairs), "len(pol_pairs) must equal "\
                                                "len(group_pairs)"
@@ -1142,9 +1142,9 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         List of baseline angles [degrees ENU coords] of each group in reds
     """
     # handle string and UVData object
-    if isinstance(uvd, (str, np.str, UVData)):
+    if isinstance(uvd, (str, UVData)):
         # load filepath
-        if isinstance(uvd, (str, np.str)):
+        if isinstance(uvd, str):
             _uvd = UVData()
             _uvd.read(uvd, read_data=False, file_type=file_type)
             uvd = _uvd

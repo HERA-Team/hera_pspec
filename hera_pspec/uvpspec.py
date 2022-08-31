@@ -94,7 +94,7 @@ class UVPSpec(object):
         self._taper = PSpecParam("taper", description='Taper function applied to visibility data before FT. See uvtools.dspec.gen_window for options."', expected_type=str)
         self._vis_units = PSpecParam("vis_units", description="Units of the original visibility data used to form the power spectra.", expected_type=str)
         self._norm_units = PSpecParam("norm_units", description="Power spectra normalization units, i.e. telescope units [Hz str] or cosmological [(h^-3) Mpc^3].", expected_type=str)
-        self._labels = PSpecParam("labels", description="Array of dataset string labels.", expected_type=np.str)
+        self._labels = PSpecParam("labels", description="Array of dataset string labels.", expected_type=str)
         self._label_1_array = PSpecParam("label_1_array", description="Integer array w/ shape of data that indexes labels and gives label of dset1.", form="(Nspws, Nblpairts, Npols)", expected_type=np.int32)
         self._label_2_array = PSpecParam("label_2_array", description="Integer array w/ shape of data that indexes labels and gives label of dset2.", form="(Nspws, Nblpairts, Npols)", expected_type=np.int32)
         self._folded = PSpecParam("folded", description="if power spectra are folded (i.e. averaged) onto purely positive delay axis. Default is False", expected_type=bool)
@@ -459,7 +459,7 @@ class UVPSpec(object):
                            for bl in self.bl_array])
 
         # construct empty blp_avg_sep array
-        blp_avg_sep = np.empty(self.Nblpairts, np.float)
+        blp_avg_sep = np.empty(self.Nblpairts, float)
 
         # construct blpair_bls
         blpairs = _ordered_unique(self.blpair_array)
@@ -1097,7 +1097,7 @@ class UVPSpec(object):
         if blpairs is None:
             return np.arange(self.Nblpairts)[time_select]
         else:
-            blp_select = np.zeros(self.Nblpairts, np.bool)
+            blp_select = np.zeros(self.Nblpairts, bool)
             if isinstance(blpairs, (tuple, int, np.integer)):
                 blpairs = [blpairs]
             for blp in blpairs:
@@ -1493,7 +1493,7 @@ class UVPSpec(object):
                                  dtype=np.float64)
             group.create_dataset("nsample_spw{}".format(i),
                                  data=self.nsample_array[i],
-                                 dtype=np.float)
+                                 dtype=float)
             if hasattr(self, "window_function_array"):
                 group.create_dataset("window_function_spw{}".format(i),
                                      data=self.window_function_array[i],
@@ -1608,7 +1608,7 @@ class UVPSpec(object):
         # overwrite beam quantities
         if new_beam is not None:
             if verbose: print("Updating beam data with {}".format(new_beam))
-            if isinstance(new_beam, (str, np.str)):
+            if isinstance(new_beam, str):
                 # PSpecBeamUV will adopt a default cosmology upon instantiation,
                 # but this doesn't matterfor what we need from it
                 new_beam = pspecbeam.PSpecBeamUV(new_beam)
@@ -1900,7 +1900,7 @@ class UVPSpec(object):
                 if p in self._immutables:
                     assert getattr(self, p) == getattr(other, p)
                 elif p in self._ndarrays:
-                    if issubclass(getattr(self, p).dtype.type, np.str):
+                    if issubclass(getattr(self, p).dtype.type, str):
                         assert np.all(getattr(self, p) == getattr(other, p))
                     else:
                         assert np.isclose(getattr(self, p), getattr(other, p)).all()
@@ -2050,7 +2050,7 @@ class UVPSpec(object):
         for i, blp in enumerate(blpairs):
             # get indices
             inds = self.blpair_to_indices(blp)
-            assert isinstance(Tsys[blp], (float, np.float, int, np.int)) \
+            assert isinstance(Tsys[blp], (float, int, int)) \
                 or Tsys[blp].shape[0] == self.Ntimes, \
                 "Tsys must be a float or an ndarray with shape[0] == Ntimes"
             P_blp = []
@@ -2074,7 +2074,7 @@ class UVPSpec(object):
 
                 # Put into appropriate form
                 if form == 'Pk':
-                    pn = np.ones(len(dlys), np.float) * pn
+                    pn = np.ones(len(dlys), float) * pn
 
                 # append to P_blp
                 P_blp.append(pn)
@@ -2367,7 +2367,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         else:
             u.stats_array = odict([(stat, odict()) for stat in stored_stats])
 
-    u.scalar_array = np.empty((Nspws, Npols), np.float)
+    u.scalar_array = np.empty((Nspws, Npols), float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
     u.spw_dly_array, u.spw_freq_array = [], []
 
@@ -2661,7 +2661,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         u.history = "".join([uvp.history for uvp in uvps])
     else:
         u.history = uvps[0].history
-    u.labels = np.array(u.labels, np.str)
+    u.labels = np.array(u.labels, str)
 
     u.r_params = uvputils.compress_r_params(r_params)
 
@@ -2725,12 +2725,12 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     # type check
     assert isinstance(uvps, (list, tuple, np.ndarray)), \
         "uvps must be fed as a list"
-    assert isinstance(uvps[0], (UVPSpec, str, np.str)), \
+    assert isinstance(uvps[0], (UVPSpec, str)), \
         "uvps must be fed as a list of UVPSpec objects or strings"
     Nuvps = len(uvps)
 
     # load uvps if fed as strings
-    if isinstance(uvps[0], (str, np.str)):
+    if isinstance(uvps[0], str):
         _uvps = []
         for u in uvps:
             uvp = UVPSpec()

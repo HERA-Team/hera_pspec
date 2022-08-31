@@ -259,7 +259,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     # stat_l is a list of supplied error_fields, to sum over.
     if isinstance(error_field, (list, tuple, np.ndarray)):
         stat_l = list(error_field)
-    elif isinstance(error_field, (str, np.str)):
+    elif isinstance(error_field, str):
         stat_l = [error_field]
     else:
         stat_l = []
@@ -526,7 +526,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             lst_2.extend([np.mean(np.unwrap(uvp.lst_2_array[blpairts]))%(2*np.pi)])
             lst_avg_arr.extend([np.mean(np.unwrap(uvp.lst_avg_array[blpairts]))%(2*np.pi)])
         else:
-            blpair_arr.extend(np.ones_like(blpairts, np.int) * blpg[0])
+            blpair_arr.extend(np.ones_like(blpairts, int) * blpg[0])
             time_1.extend(uvp.time_1_array[blpairts])
             time_2.extend(uvp.time_2_array[blpairts])
             time_avg_arr.extend(uvp.time_avg_array[blpairts])
@@ -752,7 +752,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         dlys_array.extend(taus)
 
         # store kbins as delay bins
-        spw_dlys_array.extend(np.ones_like(taus, dtype=np.int) * spw)
+        spw_dlys_array.extend(np.ones_like(taus, dtype=int) * spw)
 
         # iterate over blpairs
         for b, blp in enumerate(uvp.get_blpairs()):
@@ -1490,8 +1490,8 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
     """
     from hera_pspec import UVPSpec
     # type check
-    assert isinstance(uvp, (UVPSpec, str, np.str)), "uvp must be fed as a UVPSpec object or filepath"
-    if isinstance(uvp, (str, np.str)):
+    assert isinstance(uvp, (UVPSpec, str)), "uvp must be fed as a UVPSpec object or filepath"
+    if isinstance(uvp, str):
         _uvp = UVPSpec()
         _uvp.read_hdf5(uvp)
         uvp = _uvp
@@ -1631,7 +1631,7 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     from hera_pspec import uvpspec
     from hera_pspec import PSpecContainer
     # type check
-    if isinstance(filename, (str, np.str)):
+    if isinstance(filename, str):
         # open in transactional mode
         psc = PSpecContainer(filename, mode='rw', keep_open=False, swmr=False, tsleep=0.5, maxiter=maxiter)
     elif isinstance(filename, PSpecContainer):
