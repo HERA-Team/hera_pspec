@@ -113,7 +113,8 @@ class FTBeam:
         raise NotImplementedError('Coming soon...')
 
     @classmethod
-    def from_file(cls, ftfile, spw_range=None, verbose=False, x_orientation=None):
+    def from_file(cls, ftfile, spw_range=None,
+                  **kwargs):
         """
         Read Fourier transform of beam in sky plane from file.
 
@@ -132,12 +133,6 @@ class FTBeam:
             In (start_chan, end_chan). Must be between 0 and 1024 (HERA
             bandwidth).
             If None, whole instrument bandwidth is considered.
-        verbose : bool, optional
-            If True, print progress, warnings and debugging info to stdout.
-        x_orientation: str, optional
-            Orientation in cardinal direction east or north of X dipole.
-            Default keeps polarization in X and Y basis.
-            Used to convert polstr to polnum and conversely.
         """
         # check file path input
         ftfile = Path(ftfile)
@@ -166,19 +161,16 @@ class FTBeam:
             freq_array = bandwidth
 
         return cls(data=ft_beam, pol=pol, freq_array=freq_array,
-                   mapsize=mapsize, verbose=verbose, x_orientation=x_orientation)
+                   mapsize=mapsize, **kwargs)
  
     @classmethod
     def gaussian(cls, freq_array, widths, pol, 
                  mapsize=1.0, npix=301,
                  cosmo=conversions.Cosmo_Conversions(),
-                 verbose=False, x_orientation=None):
+                 **kwargs):
         """
-        Read Fourier transform of beam in sky plane from file.
-
-        Initialise FTBeam object by reading file containing the 
-        Fourier transform of the  instrument beam in the sky plane 
-        for given frequencies. 
+        Initiliase a Gaussian beam on a range of frequencies,
+        given a polarisation.
 
         Parameters
         ----------
@@ -201,12 +193,6 @@ class FTBeam:
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not
             specified. 
-        verbose : bool, optional
-            If True, print progress, warnings and debugging info to stdout.
-        x_orientation: str, optional
-            Orientation in cardinal direction east or north of X dipole.
-            Default keeps polarization in X and Y basis.
-            Used to convert polstr to polnum and conversely.
         """
 
         # Frequency-related parameters
@@ -238,7 +224,7 @@ class FTBeam:
             ft_beam[ifreq] = Gauss * (np.pi/2./mapsize) * widths[ifreq]**2
 
         return cls(data=ft_beam, pol=pol, freq_array=freq_array,
-                   mapsize=mapsize, verbose=verbose, x_orientation=x_orientation)
+                   mapsize=mapsize, **kwargs)
 
     @classmethod
     def get_bandwidth(cls, ftfile):
@@ -827,8 +813,8 @@ class UVWindow:
         else:
             self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
-        if not np.isclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]).all():
-            warnings.warn('get_cylindrical_wf: kperp_bins must be linearly spaced.')
+        if not np.allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]):
+            raise ValueError('get_cylindrical_wf: kperp_bins must be linearly spaced.')
         nbins_kperp = kperp_bins.size
         dk_perp = np.diff(kperp_bins).mean()
         kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,
@@ -845,8 +831,8 @@ class UVWindow:
         else:
             self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
-        if not np.isclose(np.diff(kpara_bins),np.diff(kpara_bins)[0]).all():
-            warnings.warn('get_cylindrical_wf: kpara_bins must be linearly spaced.')
+        if not np.allclose(np.diff(kpara_bins), np.diff(kpara_bins)[0]):
+            raise ValueError('get_cylindrical_wf: kpara_bins must be linearly spaced.')
         nbins_kpara = kpara_bins.size
         dk_para = np.diff(kpara_bins).mean()
         kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,
@@ -975,8 +961,8 @@ class UVWindow:
             "must feed array of k bins for spherical average"
         self.check_kunits(kbins)  # check k units
         kbins = np.array(kbins.value)
-        if not np.isclose(np.diff(kbins),np.diff(kbins)[0]).all():
-            warnings.warn('cylindrical_to_spherical: kbins must be linearly spaced.')
+        if not np.allclose(np.diff(kbins), np.diff(kbins)[0]):
+            raise ValueError('cylindrical_to_spherical: kbins must be linearly spaced.')
         nbinsk = kbins.size
         dk = np.diff(kbins).mean()
         kbin_edges = np.arange(kbins.min()-dk/2, kbins.max()+dk, step=dk)
@@ -1086,8 +1072,8 @@ class UVWindow:
         else:
             self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
-        if not np.isclose(np.diff(kperp_bins),np.diff(kperp_bins)[0]).all():
-            warnings.warn('get_spherical_wf: kperp_bins must be linearly spaced.')
+        if not np.allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]):
+            raise ValueError('get_spherical_wf: kperp_bins must be linearly spaced.')
         nbins_kperp = kperp_bins.size
         dk_perp = np.diff(kperp_bins).mean()
         kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,
@@ -1113,8 +1099,8 @@ class UVWindow:
         else:
             self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
-        if not np.isclose(np.diff(kpara_bins),np.diff(kpara_bins)[0]).all():
-            warnings.warn('get_spherical_wf: kpara_bins must be linearly spaced.')
+        if not np.allclose(np.diff(kpara_bins), np.diff(kpara_bins)[0]):
+            raise ValueError('get_spherical_wf: kpara_bins must be linearly spaced.')
         nbins_kpara = kpara_bins.size
         dk_para = np.diff(kpara_bins).mean()
         kpara_bin_edges = np.arange(kpara_bins.min() - dk_para/2,
@@ -1138,8 +1124,8 @@ class UVWindow:
         assert kbins.value.size > 1, \
             "must feed array of k bins for spherical average"
         nbinsk = kbins.value.size
-        if not np.isclose(np.diff(kbins),np.diff(kbins)[0]).all():
-            warnings.warn('get_spherical_wf: kbins must be linearly spaced.')
+        if not np.allclose(np.diff(kbins),np.diff(kbins)[0]):
+            raise ValueError('get_spherical_wf: kbins must be linearly spaced.')
         dk = np.diff(kbins.value).mean()
         kbin_edges = np.arange(kbins.value.min()-dk/2,
                                kbins.value.max()+dk,

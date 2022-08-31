@@ -455,12 +455,11 @@ class Test_UVWindow(unittest.TestCase):
                                                      return_bins='unweighted')
         assert np.all(cyl_wf2 == cyl_wf)
         assert np.all(kperp2 == kperp)  # unweighted option to return_bins
-        # warning raised if kperp_bins not linearly spaced
+        # ValueError raised if kperp_bins not linearly spaced
         kperp_log = np.logspace(-2, 0, 100)
-        _, _, _ = test.get_cylindrical_wf(bl_len,
-                                          kperp_bins=kperp_log*test.kunits,
-                                          kpara_bins=None,
-                                          return_bins='unweighted')
+        pytest.raises(ValueError, test.get_cylindrical_wf, bl_len,
+                      kperp_bins=kperp_log*test.kunits, kpara_bins=None,
+                      return_bins='unweighted')
 
         # kpara bins
         _, kpara3, cyl_wf3 = test.get_cylindrical_wf(bl_len,
@@ -469,12 +468,11 @@ class Test_UVWindow(unittest.TestCase):
                                                      return_bins='unweighted')
         assert np.all(cyl_wf3 == cyl_wf)
         assert np.all(kpara == kpara3)
-        # warning raised if kpara_bins not linearly spaced
+        # ValueError raised if kpara_bins not linearly spaced
         kpara_log = np.logspace(-1, 1, 100)
-        _, _, _ = test.get_cylindrical_wf(bl_len,
-                                          kperp_bins=None,
-                                          kpara_bins=kpara_log*test.kunits,
-                                          return_bins='unweighted')
+        pytest.raises(ValueError, test.get_cylindrical_wf, bl_len,
+                      kperp_bins=None, kpara_bins=kpara_log*test.kunits,
+                      return_bins='unweighted')
 
         # test filling array by delay symmetry for odd number of delays
         ft_beam_test = uvwindow.FTBeam.from_file(ftfile=self.ft_file, 
@@ -531,12 +529,11 @@ class Test_UVWindow(unittest.TestCase):
                                                           ktot=ktot, 
                                                           bl_lens=bl_len)        
 
-        # raise warning if kbins not linearly spaced
+        # raise ValueError if kbins not linearly spaced
         kbins_log = np.logspace(-2, 2, 20)
-        _, _ = test.cylindrical_to_spherical(cyl_wf=cyl_wf, 
-                                             kbins=kbins_log*test.kunits, 
-                                             ktot=ktot, 
-                                             bl_lens=bl_len)  
+        pytest.raises(ValueError, test.cylindrical_to_spherical, cyl_wf=cyl_wf, 
+                      kbins=kbins_log*test.kunits, ktot=ktot, 
+                      bl_lens=bl_len)  
 
     def test_get_spherical_wf(self):
 
@@ -584,18 +581,16 @@ class Test_UVWindow(unittest.TestCase):
                                                         step=kpara_centre)
                                    * test.kunits,
                                    bl_lens=self.lens[:1])
-        # warning raised if kbins not linearly spaced
+        # ValueError raised if kbins not linearly spaced
         kperp_log = np.logspace(-2, 0, 100)
-        _ = test.get_spherical_wf(kbins=self.kbins, 
-                                  kperp_bins=kperp_log*test.kunits,
-                                  bl_lens=self.lens[:1])
+        pytest.raises(ValueError, test.get_spherical_wf, kbins=self.kbins, 
+                      kperp_bins=kperp_log*test.kunits, bl_lens=self.lens[:1])
         kpara_log = np.logspace(-1, 1, 100)
-        _ = test.get_spherical_wf(kbins=self.kbins, 
-                                  kpara_bins=kpara_log*test.kunits,
-                                  bl_lens=self.lens[:1])
+        pytest.raises(ValueError, test.get_spherical_wf, kbins=self.kbins, 
+                      kpara_bins=kpara_log*test.kunits, bl_lens=self.lens[:1])
         kbins_log = np.logspace(-2, 2, 20)
-        _ = test.get_spherical_wf(kbins=kbins_log*test.kunits,
-                                  bl_lens=self.lens[:1])
+        pytest.raises(ValueError, test.get_spherical_wf, kbins=kbins_log*test.kunits,
+                      bl_lens=self.lens[:1])
 
 
     def test_check_kunits(self):

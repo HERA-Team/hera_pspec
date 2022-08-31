@@ -1,6 +1,6 @@
 import numpy as np
 from collections import OrderedDict as odict
-import os, copy, shutil, operator, ast, fnmatch, sys
+import os, copy, shutil, operator, ast, fnmatch
 from pyuvdata import utils as uvutils
 import h5py
 import warnings
@@ -1726,7 +1726,7 @@ class UVPSpec(object):
                 # Iterate over baseline-pair groups
                 for j, blpg in enumerate(blpair_groups):
                     if verbose: 
-                        sys.stdout.write('\rComputing for bl group {} of {}...'.format(j+1, len(blpair_groups)))
+                        print('\rComputing for bl group {} of {}...'.format(j+1, len(blpair_groups)), end='')
 
                     # window functions identical for all times
                     window_function_blg = uvw.get_cylindrical_wf(blpair_lens[j],
@@ -1743,7 +1743,7 @@ class UVPSpec(object):
                             pol_window_function[iblts, :, :, :] = np.copy(window_function_blg)
 
                 if verbose: 
-                    sys.stdout.write('\rComputed wf for baseline-pair groups {} of {}.\n'.format(len(blpair_groups),len(blpair_groups)))
+                    print('\rComputed wf for baseline-pair groups {} of {}.'.format(len(blpair_groups),len(blpair_groups)))
 
                 # Append to lists (spectral window)
                 spw_window_function.append(pol_window_function)

@@ -661,11 +661,11 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if weight_by_cov:
         assert hasattr(uvp_in, 'cov_array_real'), "cannot weight by cov with no cov_array_real"
 
-    # copy input
-    uvp = copy.deepcopy(uvp_in) 
-
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
+
+    # copy input
+    uvp = copy.deepcopy(uvp_in) 
 
     # transform kgrid to little_h units
     if not little_h:
@@ -1010,8 +1010,9 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     # it is not possible to re adjust so kbins need to be in Mpc-1
     # and reciprocally
     if little_h != ('h^-3' in uvp_in.norm_units):
-        warnings.warn('Changed little_h units to make kbins consistent' \
-                      'with uvp.window_function_array')
+        warnings.warn('Changed little_h units to make kbins consistent ' \
+                      'with uvp.window_function_array. Might be inconsistent ' \
+                      'with the power spectrum units.')
         if little_h:
             kbins *= uvp_in.cosmo.h 
             bin_widths *= uvp_in.cosmo.h 
