@@ -664,14 +664,19 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
 
+    # copy input
+    uvp = copy.deepcopy(uvp_in) 
+
+    # transform kgrid to little_h units
+    if not little_h:
+        kbins = kbins / uvp.cosmo.h
+        bin_widths = bin_widths / uvp.cosmo.h
+
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
     kbin_left = kbins - bin_widths / 2
     kbin_right = kbins + bin_widths / 2
     assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
-
-    # copy input
-    uvp = copy.deepcopy(uvp_in) 
 
     # perform time and cylindrical averaging upfront if requested
     if not uvp.exact_windows and (blpair_groups is not None or time_avg):
@@ -695,10 +700,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if store_window:
         window_function_array = odict()
 
-    # transform kgrid to little_h units
-    if not little_h:
-        kbins = kbins / uvp.cosmo.h
-        bin_widths = bin_widths / uvp.cosmo.h
 
     # iterate over spectral windows
     spw_ranges = uvp.get_spw_ranges()
@@ -887,7 +888,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                                                                time_avg=time_avg,
                                                                error_weights=error_weights,
                                                                spw_array=spw,
-                                                               little_h=little_h,
+                                                               little_h=True,
                                                                verbose=True)[spw]
 
     # handle data arrays
@@ -985,7 +986,8 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
     little_h : bool, optional
         If True, kgrid is in h Mpc^-1 units, otherwise just Mpc^-1 units.
-        If False, user must ensure adopted h is consistent with uvp_in.cosmo
+        The code ensures adopted h is consistent with uvp_in.cosmo. If not,
+        it modifies the unit of kbins.
 
     verbose : bool, optional
         If True, print progress, warnings and debugging info to stdout.
@@ -1003,6 +1005,21 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
+        
+    # if window functions have been computed without little h
+    # it is not possible to re adjust so kbins need to be in Mpc-1
+    # and reciprocally
+    if little_h != ('h^-3' in uvp_in.norm_units):
+        warnings.warn('Changed little_h units to make kbins consistent ' \
+                      'with uvp.window_function_array. Might be inconsistent ' \
+                      'with the power spectrum units.')
+        if little_h:
+            kbins *= uvp_in.cosmo.h 
+            bin_widths *= uvp_in.cosmo.h 
+        else:
+            kbins /= uvp_in.cosmo.h
+            bin_widths /= uvp_in.cosmo.h
+        little_h = 'h^-3' in uvp_in.norm_units
 
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
@@ -1061,11 +1078,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                         error_weights=error_weights,
                         time_avg=time_avg,
                         inplace=True)
-
-    # transform kgrid to little_h units
-    if not little_h:
-        kbins = kbins / uvp.cosmo.h
-        bin_widths = bin_widths / uvp.cosmo.h
 
     # initialize blank arrays and dicts
     window_function_array = odict()
