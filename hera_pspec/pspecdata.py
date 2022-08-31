@@ -3485,16 +3485,10 @@ class PSpecData(object):
         else:
             uvp.norm = 'Unnormalized'
         # save version of hera_pspec with backward compatibility
-        try:
-            version.git_hash
-        except AttributeError:
-            hp_version = __version__
-        else:
-            hp_version = version.git_hash
         uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
                       "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
                       "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
-                      "".format(datetime.datetime.utcnow(), hp_version, '-'*20,
+                      "".format(datetime.datetime.utcnow(), __version__, '-'*20,
                                 filename1, label1, cal1, dset1.history, '-'*20,
                                 filename2, label2, cal2, dset2.history, '-'*20)
 
