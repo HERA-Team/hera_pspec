@@ -6,7 +6,7 @@ import h5py
 import warnings
 import json
 
-from . import conversions, noise, version, pspecbeam, grouping, utils, uvpspec_utils as uvputils
+from . import conversions, noise, version, __version__, pspecbeam, grouping, utils, uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
 
@@ -1762,7 +1762,7 @@ class UVPSpec(object):
             if np.all(spw_array==self.spw_array): 
                 self.exact_windows = True
             # Add to history
-            self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, self.history)
+            self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(__version__, add_to_history, '-'*40, self.history)
             # Validity check
             self.check()
         else:

@@ -180,7 +180,6 @@ def build_vanilla_uvpspec(beam=None):
         "history",
         "taper",
         "norm",
-        "git_hash",
         "nsample_array",
         "time_avg_array",
         "lst_avg_array",

@@ -1,7 +1,21 @@
 """
 __init__.py file for hera_pspec
 """
-from . import version, conversions, grouping, pspecbeam, plot, pstokes, testing, utils
+try:
+    from importlib.metadata import version, PackageNotFoundError
+except ImportError:
+    from importlib_metadata import version, PackageNotFoundError
+
+try:
+    from ._version import version as __version__
+except ModuleNotFoundError:  # pragma: no cover
+    try:
+        __version__ = version("hera_pspec")
+    except PackageNotFoundError:
+        # package is not installed
+        __version__ = "unknown"
+
+from . import conversions, grouping, pspecbeam, plot, pstokes, testing, utils
 from . import uvpspec_utils as uvputils
 
 from .uvpspec import UVPSpec
@@ -11,4 +25,7 @@ from .container import PSpecContainer
 from .parameter import PSpecParam
 from .pspecbeam import PSpecBeamUV, PSpecBeamGauss, PSpecBeamFromArray
 
-__version__ = version.version
+
+
+del version
+del PackageNotFoundError

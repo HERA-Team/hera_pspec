@@ -3,8 +3,9 @@ import h5py
 import argparse
 import time
 from functools import wraps
+import warnings
 
-from . import uvpspec, version, utils
+from . import uvpspec, __version__, utils
 
 
 def transactional(fn):
@@ -246,24 +247,27 @@ class PSpecContainer(object):
     def _update_header(self):
         """
         Update the header in the HDF5 file with useful metadata, including the
-        git version of hera_pspec.
+        version of hera_pspec.
         """
-        if 'header' not in list(self.data.keys()):
-            if not self.swmr:
-                hdr = self.data.create_group('header')
-            else:
-                raise ValueError("Cannot create a header group with SWMR")
-        else:
+        if 'header' in list(self.data.keys()):
             hdr = self.data['header']
+        elif not self.swmr:
+            hdr = self.data.create_group('header')
+        else:
+            raise ValueError("Cannot create a header group with SWMR")
 
         # Check if versions of hera_pspec are the same
-        if 'hera_pspec.git_hash' in list(hdr.attrs.keys()):
-            if hdr.attrs['hera_pspec.git_hash'] != version.git_hash:
-                print("WARNING: HDF5 file was created by a different version "
-                      "of hera_pspec.")
-        elif not self.swmr:
-            hdr.attrs['hera_pspec.git_hash'] = version.git_hash
-    
+        # with backward-compatibility if file generated 
+        # before version control was introduced
+        if 'hera_pspec.git_hash' in hdr.attrs or (
+            'hera_pspec.version' in hdr.attrs and hdr.attrs['hera_pspec.version'] != __version__
+        ):
+            warnings.warn("HDF5 file was created by a different version of hera_pspec")
+
+        if not self.swmr:
+            hdr.attrs['hera_pspec.version'] = __version__
+        
+        
     @transactional
     def set_pspec(self, group, psname, pspec, overwrite=False):
         """
