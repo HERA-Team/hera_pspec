@@ -4,7 +4,7 @@ import numpy as np
 import pyuvdata as uv
 import os, copy, sys
 from scipy.integrate import simps, trapz
-from .. import pspecdata, pspecbeam, conversions, container, utils, testing
+from .. import pspecdata, pspecbeam, conversions, container, utils, testing, uvwindow
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData, UVCal, utils as uvutils
 from hera_cal import redcal
@@ -1670,9 +1670,7 @@ class Test_PSpecData(unittest.TestCase):
         assert ((0, 37, 38, 'xx'), (1, 37, 38, 'xx')) in ds._identity_Y.keys()
 
         # test for exact windows
-        print('window functions')
         basename = 'FT_beam_HERA_dipole_test'
-        # Instantiate UVWindow()
         # obtain uvp object
         datafile = os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5')
         # read datafile
@@ -1684,9 +1682,16 @@ class Test_PSpecData(unittest.TestCase):
         baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
                                                                   exclude_permutations=False,
                                                                   exclude_auto_bls=True)
-        uvp_w = ds.pspec(baselines1, baselines2, (0, 1), ('xx','xx'), spw_ranges=(175,195),
-                         exact_windows=True, ftbeam_file=os.path.join(DATA_PATH, basename))
+        uvp_w = ds.pspec(baselines1, baselines2, (0, 1), ('xx','xx'), spw_ranges=(175, 195),
+                         exact_windows=True, ftbeam=os.path.join(DATA_PATH, basename))
         assert uvp_w.exact_windows
+        # give Gaussian beam as input
+        widths = -0.0343 * uvd.freq_array.flatten()/1e6 + 11.30 
+        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=uvd.freq_array.flatten(),
+                                                 widths=widths,
+                                                 pol='xx')  
+        uvp_g = ds.pspec(baselines1, baselines2, (0, 1), ('xx','xx'), spw_ranges=(175, 195),
+                         exact_windows=True, ftbeam=gaussian_beam)
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
