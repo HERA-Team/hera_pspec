@@ -427,7 +427,7 @@ class UVWindow:
                                                            verbose=verbose,
                                                            x_orientation=x_orientation))   
                 elif isinstance(ftbeam, FTBeam):
-                    ftbeam_obj_pol.append(ftbeam)   
+                    ftbeam_obj_pol.append(copy.deepcopy(ftbeam))
                 else:
                     raise TypeError('Check your ftbeam input.')
 
