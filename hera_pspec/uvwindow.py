@@ -381,6 +381,7 @@ class UVWindow:
                 - Load from file. Then input is the root name of the file
                 to use, without the polarisation
                 Ex : ft_beam_HERA_dipole (+ path)
+                - The FTBeam object to use
                 - None (default). Computation from beam simulations (slow).
                 Not yet implemented.
         x_orientation: str, optional
