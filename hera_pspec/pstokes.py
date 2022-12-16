@@ -146,14 +146,9 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     uvdS.flag_array = flag  # flag array
     uvdS.polarization_array = np.array([pstokes], dtype=int) # polarization number
     uvdS.nsample_array = uvd1.nsample_array + uvd2.nsample_array # nsamples
-    try:
-        version.git_hash
-    except AttributeError:
-        hp_version = __version__
-    else:
-        hp_version = version.git_hash
+
     uvdS.history = "Merged into pseudo-stokes vis with hera_pspec version {}\n{}" \
-                    "{}{}{}{}\n".format(hp_version, "-"*20+'\n',
+                    "{}{}{}{}\n".format(__version__, "-"*20+'\n',
                     'dset1 history:\n', uvd1.history, '\n'+'-'*20+'\ndset2 history:\n',
                     uvd2.history)
 

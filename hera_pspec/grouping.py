@@ -579,13 +579,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         delattr(uvp, "stats_array")
 
     # Add to history
-    try:
-        version.git_hash
-    except AttributeError:
-        hp_version = __version__
-    else:
-        hp_version = version.git_hash[:15]
-    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(hp_version, add_to_history, '-'*40, uvp.history)
+    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(__version__, add_to_history, '-'*40, uvp.history)
     # Validity check
     uvp.check()
 
@@ -670,14 +664,19 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
 
+    # copy input
+    uvp = copy.deepcopy(uvp_in) 
+
+    # transform kgrid to little_h units
+    if not little_h:
+        kbins = kbins / uvp.cosmo.h
+        bin_widths = bin_widths / uvp.cosmo.h
+
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
     kbin_left = kbins - bin_widths / 2
     kbin_right = kbins + bin_widths / 2
     assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
-
-    # copy input
-    uvp = copy.deepcopy(uvp_in) 
 
     # perform time and cylindrical averaging upfront if requested
     if not uvp.exact_windows and (blpair_groups is not None or time_avg):
@@ -700,11 +699,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         stats_array = odict([[stat, odict()] for stat in uvp.stats_array.keys()])
     if store_window:
         window_function_array = odict()
-
-    # transform kgrid to little_h units
-    if not little_h:
-        kbins = kbins / uvp.cosmo.h
-        bin_widths = bin_widths / uvp.cosmo.h
 
     # iterate over spectral windows
     spw_ranges = uvp.get_spw_ranges()
@@ -893,7 +887,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                                                                time_avg=time_avg,
                                                                error_weights=error_weights,
                                                                spw_array=spw,
-                                                               little_h=little_h,
+                                                               little_h=True,
                                                                verbose=True)[spw]
 
     # handle data arrays
@@ -940,14 +934,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.lst_1_array = np.unique(uvp_in.lst_1_array)
     uvp.lst_2_array = np.unique(uvp_in.lst_2_array)
 
-    # Add to history
-    try:
-        version.git_hash
-    except AttributeError:
-        hp_version = __version__
-    else:
-        hp_version = version.git_hash[:15]
-    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(hp_version, add_to_history, '-'*40, uvp.history)
+    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(__version__, add_to_history, '-'*40, uvp.history)
 
     # validity check
     if run_check:
@@ -956,9 +943,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     return uvp
 
 def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
-                        blpair_groups=None, blpair_lens=None, blpair_weights=None,
-                        error_weights=None, time_avg=False, spw_array=None,
-                        little_h=True, verbose=False):
+                          blpair_groups=None, blpair_lens=None, blpair_weights=None,
+                          error_weights=None, time_avg=False, spw_array=None,
+                          little_h=True, verbose=False):
     
     """
     Obtains exact spherical window functions from an UVPspec object,
@@ -997,8 +984,9 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         Spectral window indices.
 
     little_h : bool, optional
-        If True, kgrid is in h Mpc^-1 units, otherwise just Mpc^-1 units.
-        If False, user must ensure adopted h is consistent with uvp_in.cosmo
+        If True, kbins is in h Mpc^-1 units, otherwise just Mpc^-1 units.
+        The code ensures adopted h is consistent with uvp_in.cosmo. If not,
+        it modifies the unit of kbins.
 
     verbose : bool, optional
         If True, print progress, warnings and debugging info to stdout.
@@ -1016,6 +1004,21 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
+
+    # if window functions have been computed without little h
+    # it is not possible to re adjust so kbins need to be in Mpc-1
+    # and reciprocally
+    if little_h != ('h^-3' in uvp_in.norm_units):
+        warnings.warn('Changed little_h units to make kbins consistent ' \
+                      'with uvp.window_function_array. Might be inconsistent ' \
+                      'with the power spectrum units.')
+        if little_h:
+            kbins *= uvp_in.cosmo.h 
+            bin_widths *= uvp_in.cosmo.h 
+        else:
+            kbins /= uvp_in.cosmo.h
+            bin_widths /= uvp_in.cosmo.h
+        little_h = 'h^-3' in uvp_in.norm_units
 
     # ensure bins don't overlap
     assert len(kbins) == len(bin_widths)
@@ -1075,11 +1078,6 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                         time_avg=time_avg,
                         inplace=True)
 
-    # transform kgrid to little_h units
-    if not little_h:
-        kbins = kbins / uvp.cosmo.h
-        bin_widths = bin_widths / uvp.cosmo.h
-
     # initialize blank arrays and dicts
     window_function_array = odict()
 
@@ -1091,7 +1089,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         # construct array giving the k probed by each baseline-tau pair
         kperps = uvp.cosmo.bl_to_kperp(uvp.cosmo.f2z(avg_nu), little_h=little_h) * blpair_lens
         kparas = uvp.cosmo.tau_to_kpara(uvp.cosmo.f2z(avg_nu), little_h=little_h) * uvp.get_dlys(spw)
-        kmags = np.sqrt(kperps[:, None]**2+kparas**2)
+        kmags = np.sqrt(kperps[:, None]**2 + kparas**2)
 
         # setup arrays 
         window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
@@ -1105,9 +1103,9 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             kpara_bins = uvp.window_function_kpara[spw][:, ip]
             ktot = np.sqrt(kperp_bins[:, None]**2 + kpara_bins**2)
 
-            cyl_wf = uvp.window_function_array[spw][:, :, :, :, ip]
+            cyl_wf = uvp.window_function_array[spw][..., ip]
             # separate baseline-time axis to iterate over times
-            cyl_wf = cyl_wf.reshape((uvp.Ntimes, uvp.Nblpairs, *cyl_wf.shape[1:] ))
+            cyl_wf = cyl_wf.reshape((uvp.Ntimes, uvp.Nblpairs, *cyl_wf.shape[1:]))
 
             # take average for each time
             for it in range(uvp.Ntimes):
@@ -1115,7 +1113,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                 for m1 in range(Nk):
                     mask1 = (kbin_left[m1] <= kmags) & (kmags < kbin_right[m1])
                     if np.any(mask1):
-                        wf_temp = np.sum(cyl_wf[it, :, :, :, :]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
+                        wf_temp = np.sum(cyl_wf[it, ...]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
                         if np.sum(wf_temp) > 0.: 
                             for m2 in range(Nk):
                                 mask2 = (kbin_left[m2] <= ktot) & (ktot < kbin_right[m2])
@@ -1126,7 +1124,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                                                            where = np.sum(wf_spherical[m1,:]) != 0)
                 spw_window_function.append(wf_spherical)
 
-            window_function_array[spw][:, :, :, ip] = np.copy(spw_window_function)
+            window_function_array[spw][..., ip] = np.copy(spw_window_function)
 
     return window_function_array
 
@@ -1543,14 +1541,8 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
                 uvp_avg.set_stats(ci_tag, k, cint)
 
     # Update history
-    try:
-        version.git_hash
-    except AttributeError:
-        hp_version = __version__
-    else:
-        hp_version = version.git_hash[:15]
     uvp_avg.history = "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}" \
-                      "".format(hp_version, Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
+                      "".format(__version__, Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
 
     return uvp_avg, uvp_boots, uvp_wgts
 
