@@ -608,7 +608,7 @@ def test_spherical_average():
                    spw_ranges=(175,195), taper='bh',verbose=False)
     # get exact window functions
     uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test'),
-                                       spw_array=None, inplace=True, verbose=False)
+                                   spw_array=None, inplace=True, verbose=False)
     # spherical window functions for redundant groups
     sph = grouping.spherical_average(uvp, kbins, bin_widths)
     # spherical average for input blpair groups
@@ -619,9 +619,10 @@ def test_spherical_average():
 def test_spherical_wf_from_uvp():
 
     # parameters
-    kbins = np.arange(0, 2.9, 0.25)
+    dk = 0.25
+    kbins = np.arange(0.1, 2.9, dk)
     Nk = len(kbins)
-    bin_widths = 0.25
+    print(kbins[0])
 
     basename = 'FT_beam_HERA_dipole_test'
     # obtain uvp object
@@ -641,50 +642,68 @@ def test_spherical_wf_from_uvp():
     # obtain exact_windows (fiducial usage)
     uvp.get_exact_window_functions(ftbeam_file = os.path.join(DATA_PATH, basename),
                                    inplace=True)
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths)
-                                   #   blpair_groups=blpair_groups,
-                                   # blpair_lens=blpair_lens,
-                                   # blpair_weights=blpair_weights,
-                                   # time_avg=time_avg,
-                                   # error_weights=error_weights,
-                                   # spw_array=spw,
-                                   # little_h=little_h,
-                                   # verbose=True)[spw]
+    wf_array = grouping.spherical_wf_from_uvp(uvp,
+                                              kbins=np.arange(0.1, 2.9, dk),
+                                              bin_widths=dk,
+                                              little_h='h^-3' in uvp.norm_units)
+
     # test different options
     # little_h
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, little_h=False)
+    wf_array = grouping.spherical_wf_from_uvp(uvp, 
+                                              kbins = np.arange(0.1, 2.9, dk)/uvp.cosmo.h,
+                                              bin_widths= dk/uvp.cosmo.h,
+                                              little_h=True)
     # spw_array
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths, spw_array=0)
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths,
-                  spw_array=2)
+    wf_array = grouping.spherical_wf_from_uvp(uvp,
+                                              kbins=np.arange(0.1, 2.9, dk),
+                                              bin_widths=dk, spw_array=0,
+                                              little_h='h^-3' in uvp.norm_units)
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
+                  kbins=np.arange(0.1, 2.9, dk), bin_widths=dk,
+                  spw_array=2, little_h='h^-3' in uvp.norm_units)
      # blpair_groups
     blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,
-                                              blpair_groups=blpair_groups,
-                                              blpair_lens=blpair_lens)
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths,
-                  blpair_groups=blpair_groups[0])
-
-    # raise warning or error if blpair_groups inconsistent with blpair_lens
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,
-                                              blpair_groups=None,
-                                              blpair_lens=blpair_lens)
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,
-                                              blpair_groups=blpair_groups,
-                                              blpair_lens=None)
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths,
-                  blpair_groups=blpair_groups, blpair_lens=[blpair_lens[0],blpair_lens[0]])
-    # error if overlapping bins
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, 1.0)
-    # blpair_weights
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins, bin_widths,
+    wf_array = grouping.spherical_wf_from_uvp(uvp,
+                                              kbins=np.arange(0.1, 2.9, dk),
+                                              bin_widths=dk,
                                               blpair_groups=blpair_groups,
                                               blpair_lens=blpair_lens,
-                                              blpair_weights=[[1. for item in grp] for grp in blpair_groups])
+                                              little_h='h^-3' in uvp.norm_units)
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
+                  kbins=np.arange(0.1, 2.9, dk), bin_widths=dk,
+                  blpair_groups=blpair_groups[0], little_h='h^-3' in uvp.norm_units)
+
+    # raise warning or error if blpair_groups inconsistent with blpair_lens
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins=np.arange(0.1, 2.9, dk),
+                                              bin_widths=dk,
+                                              blpair_groups=None,
+                                              blpair_lens=blpair_lens,
+                                              little_h='h^-3' in uvp.norm_units)
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins=np.arange(0.1, 2.9, dk),
+                                              bin_widths=dk,
+                                              blpair_groups=blpair_groups,
+                                              blpair_lens=None,
+                                              little_h='h^-3' in uvp.norm_units)
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
+                  kbins=np.arange(0.1, 2.9, dk), bin_widths=dk,
+                  blpair_groups=blpair_groups, blpair_lens=[blpair_lens[0],blpair_lens[0]],
+                  little_h='h^-3' in uvp.norm_units)
+    # error if overlapping bins
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
+                 kbins=np.arange(0.1, 2.9, dk), bin_widths=1.0)
+    # # blpair_weights
+    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins=np.arange(0.1, 2.9, dk),
+                                              bin_widths=dk,
+                                              blpair_groups=blpair_groups,
+                                              blpair_lens=blpair_lens,
+                                              little_h='h^-3' in uvp.norm_units)
+                                              # blpair_weights=[[1. for item in grp] for grp in blpair_groups],
 
     # raise error if uvp.exact_windows is False
     uvp.exact_windows = False
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp, kbins, bin_widths)
+    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
+                  kbins=np.arange(0.1, 2.9, dk), bin_widths=dk,
+                  little_h='h^-3' in uvp.norm_units)
 
 
 if __name__ == "__main__":
