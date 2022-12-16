@@ -865,6 +865,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 # get squared stat and clip infs b/c linalg doesn't like them
                 sq_stat = stats_array[stat][spw].copy()
                 np.square(sq_stat, out=sq_stat, where=np.isfinite(sq_stat))
+                sq_stat = np.nan_to_num(sq_stat, copy=False, nan=np.inf, posinf=np.inf)
                 # einsum is fast enough for this, and is more succinct than matmul
                 avg_stat = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, sq_stat.clip(0, 1e40), H))
                 # set zeroed stats to large number
