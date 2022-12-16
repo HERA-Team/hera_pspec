@@ -374,7 +374,7 @@ class UVWindow:
             Choice of polarisation pair (index of pair in uvp.polpair_array).
         spw : int
             Choice of spectral window (must be in uvp.Nspws).
-        ftbeam : str of FTBeam object
+        ftbeam : str or FTBeam object
             Access to the Fourier transform of the beam on the sky plane
             (Eq. 10 in Memo)
             Options are;
