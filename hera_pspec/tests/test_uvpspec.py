@@ -70,7 +70,7 @@ class Test_UVPSpec(unittest.TestCase):
         # get_data
         d = self.uvp.get_data((0, ((1, 2), (1, 2)), ('xx','xx')))
         assert d.shape == (10, 30)
-        assert(d.dtype == np.complex)
+        assert(d.dtype == complex)
         np.testing.assert_almost_equal(d[0,0], (101.1021011020000001+0j))
         d = self.uvp.get_data((0, ((1, 2), (1, 2)), 1515))
         np.testing.assert_almost_equal(d[0,0], (101.1021011020000001+0j))

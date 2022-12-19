@@ -152,7 +152,7 @@ def test_get_red_blpairs():
     assert len(blps) == len(angs) # Ditto, for angles
 
     # Check output type
-    assert isinstance(blps[0][0], (np.int, int))
+    assert isinstance(blps[0][0], int)
 
     # Check that number of grouped blps = total no. of blps
     num_blps = 0
@@ -202,7 +202,7 @@ def test_subtract_uvp():
 
     # add a dummy stats_array
     for k in uvp.get_all_keys():
-        uvp.set_stats('mystat', k, np.ones((10, 30), dtype=np.complex))
+        uvp.set_stats('mystat', k, np.ones((10, 30), dtype=complex))
 
     # test execution
     uvs = uvputils.subtract_uvp(uvp, uvp, run_check=True)

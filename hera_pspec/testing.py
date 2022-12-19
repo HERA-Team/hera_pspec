@@ -85,15 +85,15 @@ def build_vanilla_uvpspec(beam=None):
     taper = "none"
     norm = "I"
     git_hash = "random"
-    scalar_array = np.ones((Nspws, Npols), np.float)
+    scalar_array = np.ones((Nspws, Npols), float)
     label1 = "red"
     label2 = "blue"
     r_params = ""
     cov_model = "dsets"
     exact_windows = False
     labels = np.array([label1, label2])
-    label_1_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 0
-    label_2_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 1
+    label_1_array = np.ones((Nspws, Nblpairts, Npols), int) * 0
+    label_2_array = np.ones((Nspws, Nblpairts, Npols), int) * 1
     if beam is not None:
         pol = beam.primary_beam.polarization_array[0]
         OmegaP, OmegaPP = beam.get_Omegas((pol, pol))
@@ -112,22 +112,22 @@ def build_vanilla_uvpspec(beam=None):
     window_function_array = {}
     for s in spw_array:
         data_array[s] = (
-            np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex)
+            np.ones((Nblpairts, Ndlys, Npols), dtype=complex)
             * blpair_array[:, None, None]
             / 1e9
         )
-        wgt_array[s] = np.ones((Nblpairts, Nfreqs, 2, Npols), dtype=np.float)
+        wgt_array[s] = np.ones((Nblpairts, Nfreqs, 2, Npols), dtype=float)
         # NB: The wgt_array has dimensions Nfreqs rather than Ndlys; it has the
         # dimensions of the input visibilities, not the output delay spectra
-        integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
-        nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
+        integration_array[s] = np.ones((Nblpairts, Npols), dtype=float)
+        nsample_array[s] = np.ones((Nblpairts, Npols), dtype=float)
         window_function_array[s] = np.ones(
             (Nblpairts, Ndlys, Ndlys, Npols), dtype=np.float64
         )
         cov_array_real[s] = np.moveaxis(
             np.array(
                 [
-                    [np.identity(Ndlys, dtype=np.float) for m in range(Nblpairts)]
+                    [np.identity(Ndlys, dtype=float) for m in range(Nblpairts)]
                     for n in range(Npols)
                 ]
             ),
@@ -137,7 +137,7 @@ def build_vanilla_uvpspec(beam=None):
         cov_array_imag[s] = np.moveaxis(
             np.array(
                 [
-                    [np.identity(Ndlys, dtype=np.float) for m in range(Nblpairts)]
+                    [np.identity(Ndlys, dtype=float) for m in range(Nblpairts)]
                     for n in range(Npols)
                 ]
             ),
@@ -417,7 +417,7 @@ def noise_sim(
     data : UVData with noise realizations.
     """
     # Read data files
-    if isinstance(data, (str, np.str)):
+    if isinstance(data, str):
         _data = UVData()
         _data.read_miriad(data)
         data = _data
@@ -433,7 +433,7 @@ def noise_sim(
 
     # Configure beam
     if beam is not None:
-        if isinstance(beam, (str, np.str)):
+        if isinstance(beam, str):
             beam = pspecbeam.PSpecBeamUV(beam)
         assert isinstance(beam, pspecbeam.PSpecBeamBase)
 

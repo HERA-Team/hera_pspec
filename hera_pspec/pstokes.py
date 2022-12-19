@@ -104,9 +104,9 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
         "uvd2 must be a pyuvdata.UVData instance"
 
     # convert pol1 and/or pol2 to integer if fed as a string
-    if isinstance(pol1, (str, np.str)):
+    if isinstance(pol1, str):
         pol1 = pyuvdata.utils.polstr2num(pol1, x_orientation=x_orientation)
-    if isinstance(pol2, (str, np.str)):
+    if isinstance(pol2, str):
         pol2 = pyuvdata.utils.polstr2num(pol2, x_orientation=x_orientation)
 
     # extracting data array from the UVData objects
@@ -121,7 +121,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     flag = np.logical_or(flag1, flag2)
 
     # convert pStokes to polarization integer if a string
-    if isinstance(pstokes, (str, np.str)):
+    if isinstance(pstokes, str):
         pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=x_orientation)
 
     # get string form of polarizations
@@ -144,7 +144,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     uvdS = copy.deepcopy(uvd1)
     uvdS.data_array = stdata  # pseudo-stokes data
     uvdS.flag_array = flag  # flag array
-    uvdS.polarization_array = np.array([pstokes], dtype=np.int) # polarization number
+    uvdS.polarization_array = np.array([pstokes], dtype=int) # polarization number
     uvdS.nsample_array = uvd1.nsample_array + uvd2.nsample_array # nsamples
 
     uvdS.history = "Merged into pseudo-stokes vis with hera_pspec version {}\n{}" \
@@ -220,7 +220,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     """
     # convert dset1 and dset2 to UVData objects if they are miriad files
     if isinstance(dset1, pyuvdata.UVData) == False:
-        assert isinstance(dset1, (str, np.str)), \
+        assert isinstance(dset1, str), \
             "dset1 must be fed as a string or UVData object"
         uvd1 = miriad2pyuvdata(dset1, antenna_nums=antenna_nums, bls=bls,
                                polarizations=polarizations, ant_str=ant_str,
@@ -228,7 +228,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
     else:
         uvd1 = dset1
     if isinstance(dset2, pyuvdata.UVData) == False:
-        assert isinstance(dset2, (str, np.str)), \
+        assert isinstance(dset2, str), \
             "dset2 must be fed as a string or UVData object"
         uvd2 = miriad2pyuvdata(dset2, antenna_nums=antenna_nums, bls=bls,
                                polarizations=polarizations, ant_str=ant_str,
@@ -237,7 +237,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
         uvd2 = dset2
 
     # convert pstokes to integer if fed as a string
-    if isinstance(pstokes, (str, np.str)):
+    if isinstance(pstokes, str):
         pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dset1.x_orientation)
 
     # check if dset1 and dset2 habe the same spectral window
@@ -326,7 +326,7 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
     pols = [d.polarization_array[0] for d in dsets]
 
     # convert pstokes to integer if a string
-    if isinstance(pstokes, (str, np.str)):
+    if isinstance(pstokes, str):
         pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dsets[0].x_orientation)
     assert pstokes in [1, 2, 3, 4], \
         "pstokes must be fed as a pseudo-Stokes parameter"
