@@ -359,7 +359,7 @@ class UVWindow:
         self.avg_z = self.cosmo.f2z(self.avg_nu)
 
     @classmethod
-    def from_uvpspec(cls, uvp, ipol, spw, ftfile=None, 
+    def from_uvpspec(cls, uvp, ipol, spw, ftbeam=None, 
                      x_orientation=None, verbose=False):
         """
         Method for :class:`UVWindow` objects.
@@ -374,15 +374,16 @@ class UVWindow:
             Choice of polarisation pair (index of pair in uvp.polpair_array).
         spw : int
             Choice of spectral window (must be in uvp.Nspws).
-        ftfile : str
+        ftbeam : str or FTBeam object
             Access to the Fourier transform of the beam on the sky plane
             (Eq. 10 in Memo)
             Options are;
                 - Load from file. Then input is the root name of the file
                 to use, without the polarisation
                 Ex : ft_beam_HERA_dipole (+ path)
+                - The FTBeam object to use
                 - None (default). Computation from beam simulations (slow).
-                Not yet implemented..
+                Not yet implemented.
         x_orientation: str, optional
             Orientation in cardinal direction east or north of X dipole.
             Default keeps polarization in X and Y basis.
@@ -417,15 +418,19 @@ class UVWindow:
                 # do not recompute if two polarisations are identical
                 ftbeam_obj_pol.append(ftbeam_obj_pol[0])
             else:
-                if ftfile is None:
+                if ftbeam is None:
                     ftbeam_obj_pol.append(FTBeam.from_beam(beamfile='tbd',
                                                            verbose=verbose,
                                                            x_orientation=x_orientation))
-                else:
-                    ftbeam_obj_pol.append(FTBeam.from_file('{}_{}.hdf5'.format(ftfile, pol),
+                elif isinstance(ftbeam, str):
+                    ftbeam_obj_pol.append(FTBeam.from_file(f'{ftbeam}_{pol}.hdf5',
                                                            spw_range=None,
                                                            verbose=verbose,
-                                                           x_orientation=x_orientation))                
+                                                           x_orientation=x_orientation))   
+                elif isinstance(ftbeam, FTBeam):
+                    ftbeam_obj_pol.append(copy.deepcopy(ftbeam))
+                else:
+                    raise TypeError('Check your ftbeam input.')
 
         # limit spectral window of FTBeam object to the one of the UVPSpec object
         # find spectral indices associated with spectral window
