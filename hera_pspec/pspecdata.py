@@ -4115,6 +4115,14 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 return None
 
         assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
+        
+    # Check that the given spw ranges are valid, before doing anything too hefty.
+    if spw_ranges is not None:
+        for spw in spw_ranges:
+            assert len(spw) == 2, "spw_ranges must be a list of tuples of length 2"
+            assert 0 < spw[0] < spw[1], "spw_ranges must be a list of tuples of length 2, with both elements being positive integers of increasing value"
+            for dset in dsets:
+                assert spw[1] <= dset.Nfreqs, f"spw_range of {spw} out of range for dset {dset.filename[0]} with the second element being less than the number of frequencies in the data"
 
     # read calibration if provided (calfits partial IO not yet supported)
     if cals is not None:
