@@ -4,7 +4,7 @@ channels:
 dependencies:
   - pip
   - astropy>=3.2.3
-  - h5py<=3.2
+  - h5py
   - numpy>=1.10
   - pytest
   - scipy
@@ -17,7 +17,7 @@ dependencies:
   - pytest-cov
   - coveralls
   - pip:
-    - pyuvdata==2.2.8
+    - pyuvdata
     - uvtools
     # - hera_calibration
     - git+https://github.com/hera-team/hera_cal@fix-rephase
