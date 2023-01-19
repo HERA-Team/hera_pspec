@@ -19,5 +19,6 @@ dependencies:
   - pip:
     - pyuvdata==2.2.8
     - uvtools
-    - hera_calibration
+    # - hera_calibration
+    - git+https://github.com/hera-team/hera_cal@fix-rephase
 
