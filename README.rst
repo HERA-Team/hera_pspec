@@ -4,6 +4,7 @@
 
 |Run Tests| |codecov| |Documentation|
 
+
 The ``hera_pspec`` library provides all of the tools and data structures
 needed to perform a delay spectrum analysis on interferometric data. The
 input data can be in any format supported by ``pyuvdata``, and the
@@ -11,6 +12,8 @@ output data are stored in HDF5 containers.
 
 For usage examples and documentation, see
 http://hera-pspec.readthedocs.io/en/latest/.
+
+.. inclusion-marker-installation-do-not-remove
 
 Installation
 ============
@@ -33,7 +36,7 @@ New versions are frequently released on PyPi.
 For developers
 --------------
 
-If you are developping and/or want to be use the latest working version
+If you are developping and/or want to use the latest working version
 of ``hera_pspec``, you can directly install from the GitHub repository.
 
 Preferred method of installation for users is simply ``pip install .``
@@ -76,6 +79,8 @@ Running Tests
 
 Uses the ``pytest`` package to execute test suite. From the source
 ``hera_pspec`` directory run: ``pytest``.
+
+.. exclusion-marker-installation-do-not-remove
 
 Running ``hera_pspec``
 ======================
