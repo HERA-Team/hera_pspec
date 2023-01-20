@@ -19,12 +19,12 @@ def test_cov():
     w1 = (~uvd.get_flags(24, 25)).astype(float)
     cov = utils.cov(d1, w1)
     assert cov.shape == (60, 60)
-    assert cov.dtype == np.complex
+    assert cov.dtype == complex
     d2 = uvd.get_data(37, 38)
     w2 = (~uvd.get_flags(37, 38)).astype(float)
     cov = utils.cov(d1, w2, d2=d2, w2=w2)
     assert cov.shape == (60, 60)
-    assert cov.dtype == np.complex
+    assert cov.dtype == complex
 
     # test exception
     pytest.raises(TypeError, utils.cov, d1, w1*1j)

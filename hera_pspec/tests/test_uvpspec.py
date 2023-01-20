@@ -79,19 +79,19 @@ class Test_UVPSpec(unittest.TestCase):
         # get_wgts
         w = self.uvp.get_wgts((0, ((1, 2), (1, 2)), ('xx','xx')))
         assert w.shape == (10, 50, 2) # should have Nfreq dim, not Ndlys
-        assert w.dtype == np.float
+        assert w.dtype == float
         assert w[0,0,0] == 1.0
 
         # get_integrations
         i = self.uvp.get_integrations((0, ((1, 2), (1, 2)), ('xx','xx')))
         assert i.shape == (10,)
-        assert i.dtype == np.float
+        assert i.dtype == float
         np.testing.assert_almost_equal(i[0], 1.0)
 
         # get nsample
         n = self.uvp.get_nsamples((0, ((1, 2), (1, 2)), ('xx', 'xx')))
         assert n.shape == (10,)
-        assert n.dtype == np.float
+        assert n.dtype == float
         np.testing.assert_almost_equal(n[0], 1.0)
 
         # get dly
