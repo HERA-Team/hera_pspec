@@ -16,3 +16,6 @@ hera_pspec/_version.py
 .coverage
 coverage.xml
 ex.hdf5
+out.h5
+.coverage
+coverage.xml

@@ -3606,7 +3606,7 @@ class PSpecData(object):
             # a copy of the data
             (data, flgs, antpos, ants, freqs, times, lsts,
              pols) = hc.io.load_vis(dset, return_meta=True)
-
+            
             # make bls dictionary
             bls = dict([(k, antpos[k[0]] - antpos[k[1]]) for k in data.keys()])
 
@@ -3618,7 +3618,7 @@ class PSpecData(object):
 
             # rephase
             hc.utils.lst_rephase(data, bls, freqs, dlst, lat=lat)
-
+            
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
                 # get blts indices of basline
