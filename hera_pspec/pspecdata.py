@@ -2727,7 +2727,7 @@ class PSpecData(object):
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
               baseline_tol=1.0, store_cov=False, store_cov_diag=False,
               return_q=False, store_window=True, exact_windows=False, 
-              ftbeam_file=None, verbose=True, filter_extensions=None,
+              ftbeam=None, verbose=True, filter_extensions=None,
               exact_norm=False, history='', r_params=None,
               cov_model='empirical', known_cov=None, allow_fft=False):
         """
@@ -2842,12 +2842,14 @@ class PSpecData(object):
             If True, compute exact window functions and sets store_window=True.
             Default: False
 
-        ftbeam_file : str, optional
+        ftbeam : str or FTBeam, optional
             Definition of the beam Fourier transform to be used.
             Options include;
                 - Root name of the file to use, without the polarisation
                 Ex : FT_beam_HERA_dipole (+ path)
                 - '' for computation from beam simulations (slow)
+                - FTBeam object. Make sure polarisations and bandwidths
+                are consistent with the data set.
 
         cov_model : string, optional
             Type of covariance model to calculate, if not cached.
@@ -3523,7 +3525,7 @@ class PSpecData(object):
         if store_window:
             if exact_windows:
                 # compute and store exact window functions
-                uvp.get_exact_window_functions(ftbeam_file=ftbeam_file, verbose=verbose, 
+                uvp.get_exact_window_functions(ftbeam=ftbeam, verbose=verbose, 
                                                x_orientation=self.dsets[0].x_orientation,
                                                inplace=True)
             else:
@@ -3604,7 +3606,7 @@ class PSpecData(object):
             # a copy of the data
             (data, flgs, antpos, ants, freqs, times, lsts,
              pols) = hc.io.load_vis(dset, return_meta=True)
-
+            
             # make bls dictionary
             bls = dict([(k, antpos[k[0]] - antpos[k[1]]) for k in data.keys()])
 
@@ -3616,7 +3618,7 @@ class PSpecData(object):
 
             # rephase
             hc.utils.lst_rephase(data, bls, freqs, dlst, lat=lat)
-
+            
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
                 # get blts indices of basline
@@ -3729,7 +3731,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
               bl_deg_range=(0, 180), bl_error_tol=1.0, 
-              store_window=True, exact_windows=False, ftbeam_file=None,
+              store_window=True, exact_windows=False, ftbeam=None,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
               time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
@@ -3861,12 +3863,14 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         If True, compute exact window functions and sets store_window=True.
         Default: False
 
-    ftbeam_file : str, optional
+    ftbeam : str or FTBeam, optional
         Definition of the beam Fourier transform to be used.
         Options include;
             - Root name of the file to use, without the polarisation
             Ex : FT_beam_HERA_dipole (+ path)
             - '' for computation from beam simulations (slow)
+            - FTBeam object. Make sure polarisation and bandwidth are 
+            compatible with the dataset.
 
     beam : PSpecBeam object, UVBeam object or string
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
@@ -4267,7 +4271,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                        return_q=return_q, cov_model=cov_model, known_cov=known_cov,
                        norm=norm, taper=taper, history=history, verbose=verbose,
                        filter_extensions=filter_extensions, store_window=store_window,
-                       exact_windows=exact_windows, ftbeam_file=ftbeam_file)
+                       exact_windows=exact_windows, ftbeam=ftbeam)
 
         # Store output
         psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],

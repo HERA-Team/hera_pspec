@@ -1636,7 +1636,7 @@ class UVPSpec(object):
         if "Mpc" not in self.norm_units:
             self.norm_units = "h^-3 Mpc^3"
 
-    def get_exact_window_functions(self, ftbeam_file=None, spw_array=None,
+    def get_exact_window_functions(self, ftbeam=None, spw_array=None,
                                    verbose=False, inplace=True, add_to_history='',
                                    x_orientation=None):
         """
@@ -1650,12 +1650,14 @@ class UVPSpec(object):
         Parameters
         ----------
 
-        ftbeam_file : str, optional
+        ftbeam : str or FTBeam object, optional
             Definition of the beam Fourier transform to be used.
             Options include;
                 - Root name of the file to use, without the polarisation
                 Ex : FT_beam_HERA_dipole (+ path)
                 - '' for computation from beam simulations (slow)
+                - FTBeam object. Make sure the polarisation and bandwidths
+                are compatible with uvp.
 
         spw_array : list of ints, optional
             Spectral window indices. If None, the window functions are computed on 
@@ -1716,7 +1718,7 @@ class UVPSpec(object):
             for i, p in enumerate(self.polpair_array):
 
                 # initialise UVWindow object
-                uvw = UVWindow.from_uvpspec(self, ipol=i, spw=spw, ftfile=ftbeam_file,
+                uvw = UVWindow.from_uvpspec(self, ipol=i, spw=spw, ftbeam=ftbeam,
                                             x_orientation=x_orientation, verbose=verbose)
                 # extract kperp bins the window functions corresponding to the baseline 
                 # lengths given as input

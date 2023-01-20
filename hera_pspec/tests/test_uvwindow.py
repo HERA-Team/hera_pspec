@@ -295,20 +295,31 @@ class Test_UVWindow(unittest.TestCase):
         # proper usage
         # initialise with ftfile (read pre-computed FT of the beam in file)
         uvw_ps = uvwindow.UVWindow.from_uvpspec(uvp, ipol=0, spw=0, verbose=True,
-                                                ftfile=os.path.join(DATA_PATH, basename))
+                                                ftbeam=os.path.join(DATA_PATH, basename))
         # if cross polarisation
         test = uvwindow.UVWindow.from_uvpspec(uvp_crosspol, ipol=0, spw=0, 
-                                              ftfile=os.path.join(DATA_PATH, basename))
+                                              ftbeam=os.path.join(DATA_PATH, basename))
         # if no cosmo, use default
         uvw_ps = uvwindow.UVWindow.from_uvpspec(uvp_nocosmo, ipol=0, spw=0, verbose=True,
-                                                ftfile=os.path.join(DATA_PATH, basename))
+                                                ftbeam=os.path.join(DATA_PATH, basename))
 
-        # raise error if no ftfile as option is not implemented yet
+        # raise error if no ftbeam as option is not implemented yet
         pytest.raises(NotImplementedError, uvwindow.UVWindow.from_uvpspec, uvp=uvp,
-                      ipol=0, spw=0, ftfile=None, verbose=False)
+                      ipol=0, spw=0, ftbeam=None, verbose=False)
+        # raise error if wrong type for ftbeam
+        pytest.raises(TypeError, uvwindow.UVWindow.from_uvpspec, uvp=uvp,
+                      ipol=0, spw=0, ftbeam=np.zeros(12), verbose=False)
         # raise error if spw not within uvp.Nspws
         pytest.raises(AssertionError, uvwindow.UVWindow.from_uvpspec, uvp=uvp_nocosmo,
-                      ipol=0, spw=2, ftfile=os.path.join(DATA_PATH, basename))
+                      ipol=0, spw=2, ftbeam=os.path.join(DATA_PATH, basename))
+
+        # use FTBeam object directly as input
+        widths = -0.0343 * self.freq_array/1e6 + 11.30 
+        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.freq_array,
+                                                 widths=widths,
+                                                 pol=self.pol)     
+        uvw_ps = uvwindow.UVWindow.from_uvpspec(uvp, ipol=0, spw=0, verbose=True,
+                                                ftbeam=gaussian_beam)   
 
     def test_get_kgrid(self):
 

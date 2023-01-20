@@ -4,7 +4,7 @@ import numpy as np
 import os
 import sys
 from hera_pspec.data import DATA_PATH
-from .. import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils
+from .. import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils, uvwindow
 from .. import uvpspec_utils as uvputils
 import copy
 import h5py
@@ -23,7 +23,6 @@ class Test_UVPSpec(unittest.TestCase):
 
         # setup for exact windows related tests
         self.ft_file = os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test')
-        # Instantiate UVWindow()
         # obtain uvp object
         datafile = os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5')
         # read datafile
@@ -37,7 +36,7 @@ class Test_UVPSpec(unittest.TestCase):
                                                                   exclude_auto_bls=True)
         # compute ps
         self.uvp_wf = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')], 
-                               spw_ranges=(175,195), taper='bh',verbose=False)
+                               spw_ranges=(175, 195), taper='bh',verbose=False)
 
     def tearDown(self):
         pass
@@ -499,7 +498,7 @@ class Test_UVPSpec(unittest.TestCase):
         # tests with exact windows
         # test basic write execution
         uvp = copy.deepcopy(self.uvp_wf)
-        uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
+        uvp.get_exact_window_functions(ftbeam=self.ft_file,
                                        inplace=True)
         if os.path.exists('./ex.hdf5'):
             os.remove('./ex.hdf5')
@@ -589,7 +588,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp = copy.deepcopy(self.uvp_wf)
 
         # obtain exact_windows (fiducial usage)
-        uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
+        uvp.get_exact_window_functions(ftbeam=self.ft_file,
                                        inplace=True)
         assert uvp.exact_windows
         assert uvp.window_function_array[0].shape[0] == uvp.Nblpairts
@@ -598,16 +597,23 @@ class Test_UVPSpec(unittest.TestCase):
 
         ## tests
 
+        # give Gaussian beam as input
+        widths = -0.0343 * self.uvp_wf.freq_array/1e6 + 11.30 
+        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.uvp_wf.freq_array,
+                                                 widths=widths,
+                                                 pol='xx')     
+        uvp.get_exact_window_functions(ftbeam=gaussian_beam,
+                                       spw_array=0, inplace=True, verbose=True) 
         # obtain exact window functions for one spw only
-        uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
+        uvp.get_exact_window_functions(ftbeam=self.ft_file,
                                        spw_array=0, inplace=True, verbose=True)
         # raise error if spw not in UVPSpec object
         pytest.raises(AssertionError, uvp.get_exact_window_functions,
-                      ftbeam_file = self.ft_file,
+                      ftbeam=self.ft_file,
                       spw_array=2, inplace=True)
 
         # output exact_window functions but does not make them attributes
-        kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
+        kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(ftbeam=self.ft_file,
                                                                           inplace=False)
         # check if result is the same with and without inplace
         assert np.all(wf_array[0]==uvp.window_function_array[0])
@@ -654,7 +660,7 @@ class Test_UVPSpec(unittest.TestCase):
 
         uvp = copy.deepcopy(self.uvp_wf)
         # obtain exact_windows (fiducial usage)
-        uvp.get_exact_window_functions(ftbeam_file = self.ft_file,
+        uvp.get_exact_window_functions(ftbeam=self.ft_file,
                                        inplace=True)
         uvp.fold_spectra()
 
@@ -813,7 +819,7 @@ class Test_UVPSpec(unittest.TestCase):
         # for exact windows
         # test basic write execution
         uvp1 = copy.deepcopy(self.uvp_wf)
-        uvp1.get_exact_window_functions(ftbeam_file = self.ft_file, inplace=True)
+        uvp1.get_exact_window_functions(ftbeam=self.ft_file, inplace=True)
         uvp2 = copy.deepcopy(uvp1)
         uvp2.polpair_array[0] = 1414
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
