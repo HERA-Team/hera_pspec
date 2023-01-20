@@ -31,7 +31,6 @@ jobs:
 
     - name: Install
       run: |
-        pip install git+https://github.com/hera-team/hera_cal@fix-rephase
         pip install .[dev]
 
     - name: Run Tests
