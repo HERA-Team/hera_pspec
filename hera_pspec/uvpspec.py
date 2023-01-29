@@ -2758,7 +2758,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         for p in uvp1.polpair_array:
             if p not in unique_polpairs: unique_polpairs.append(p)
 
-        uvp1_blpts = zip(uvp1.blpair_array, uvp1.time_avg_array)
+        uvp1_blpts = zip(uvp1.blpair_array, uvp1.time_1_array, uvp1.time_2_array)
         uvp1_blpts_comb = [bl[0] + 1.j*bl[1] for bl in uvp1_blpts]
         blpts_comb.extend(uvp1_blpts_comb)
 
@@ -2769,7 +2769,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     for i, uvp1 in enumerate(uvps):
         # get uvp1 sets and append to unique lists
         uvp1_spws = uvp1.get_spw_ranges()
-        uvp1_blpts = list(zip(uvp1.blpair_array, uvp1.time_avg_array))
+        uvp1_blpts = list(zip(uvp1.blpair_array, uvp1.time_1_array, uvp1.time_2_array))
         uvp1_polpairs = uvp1.polpair_array
 
         # iterate over uvps
@@ -2777,7 +2777,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
             if j <= i: continue
             # get uvp2 sets
             uvp2_spws = uvp2.get_spw_ranges()
-            uvp2_blpts = list(zip(uvp2.blpair_array, uvp2.time_avg_array))
+            uvp2_blpts = list(zip(uvp2.blpair_array, uvp2.time_1_array, uvp2.time_2_array))
             uvp2_polpairs = uvp2.polpair_array
 
             # determine if uvp1 and uvp2 are an identical match
