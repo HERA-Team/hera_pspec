@@ -4122,7 +4122,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             assert len(spw) == 2, f"spw_ranges must be a list of tuples of length 2. Got {spw}"
             assert 0 <= spw[0] < spw[1], f"spw_ranges must be a list of tuples of length 2, with both elements being non-negative integers of increasing value. Got {spw}"
             for dset in dsets:
-                assert spw[1] <= dset.Nfreqs, f"spw_range of {spw} out of range for dset {dset.filename[0]} with the second element being less than the number of frequencies in the data"
+                assert spw[1] <= dset.Nfreqs, f"spw_range of {spw} out of range for dset {dset.filename[0]}. Data has {dset.Nfreqs} frequencies."
             utils.log(f"Using spw_range: {dsets[0].freq_array[:, spw[0]] /1e6} - {dsets[0].freq_array[:, spw[1] - 1]/1e6} MHz", verbose=verbose)
 
     # read calibration if provided (calfits partial IO not yet supported)
