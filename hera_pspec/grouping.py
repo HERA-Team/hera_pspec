@@ -541,7 +541,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
     # Assign arrays and metadata to UVPSpec object
     uvp.Ntimes = len(np.unique(time_avg_arr))
-    uvp.Nblpairts = len(time_avg_arr)
+    uvp.Nbltpairs = len(time_avg_arr)
     uvp.Nblpairs = len(np.unique(blpair_arr))
     uvp.Nbls = len(bl_arr)
 
@@ -733,7 +733,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
 
 
-        # get kperps for this spw: shape (Nblpairts,)
+        # get kperps for this spw: shape (Nbltpairs,)
         kperps = uvp.get_kperps(spw, little_h=True)
 
         # get kparas for this spw: shape (Ndlys,)
@@ -914,7 +914,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     blp = uvp.blpair_array[0]
     blp_inds = uvp.blpair_to_indices(blp)
     uvp.blpair_array = uvp.blpair_array[blp_inds]
-    uvp.Nblpairts = uvp.Ntimes
+    uvp.Nbltpairs = uvp.Ntpairs
     uvp.Nblpairs = 1
     bl_array = np.unique([uvp.antnums_to_bl(an) for an in uvp.blpair_to_antnums(blp)])
     uvp.bl_vecs = np.asarray([uvp.bl_vecs[np.argmin(uvp.bl_array - bl)] for bl in bl_array])

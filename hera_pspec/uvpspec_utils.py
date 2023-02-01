@@ -485,6 +485,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
     Select function for selecting out certain slices of the data, as well
     as loading in data from HDF5 file.
 
+    TODO: Add time1, time2 selection options.
+
     Parameters
     ----------
     uvp : UVPSpec object
@@ -565,7 +567,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
     if blpairs is not None:
         if bls is None:
-            blp_select = np.zeros(uvp.Nblpairts, bool)
+            blp_select = np.zeros(uvp.Nbltpairs, bool)
 
         # assert form
         assert isinstance(blpairs[0], (tuple, int, np.integer)), \
@@ -580,7 +582,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
     if times is not None:
         if bls is None and blpairs is None:
-            blp_select = np.ones(uvp.Nblpairts, bool)
+            blp_select = np.ones(uvp.Nbltpairs, bool)
         time_select = np.logical_or.reduce(
                                [np.isclose(uvp.time_avg_array, t, rtol=1e-16)
                                 for t in times])
@@ -589,7 +591,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
     if lsts is not None:
         assert times is None, "Cannot select on lsts and times simultaneously."
         if bls is None and blpairs is None:
-            blp_select = np.ones(uvp.Nblpairts, bool)
+            blp_select = np.ones(uvp.Nbltpairs, bool)
         lst_select = np.logical_or.reduce(
                             [ np.isclose(uvp.lst_avg_array, t, rtol=1e-16)
                               for t in lsts] )
@@ -621,7 +623,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.lst_avg_array = uvp.lst_avg_array[blp_select]
         uvp.Ntimes = len(np.unique(uvp.time_avg_array))
         uvp.Nblpairs = len(np.unique(uvp.blpair_array))
-        uvp.Nblpairts = len(uvp.blpair_array)
+        uvp.Nbltpairs = len(uvp.blpair_array)
 
         # Calculate unique baselines from new blpair_array
         new_blpairs = np.unique(uvp.blpair_array)

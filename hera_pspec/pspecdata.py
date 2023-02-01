@@ -234,6 +234,7 @@ class PSpecData(object):
                     break
 
         # Store no. frequencies and no. times
+        # We are still only supporting dsets with same number of times
         self.Nfreqs = self.dsets[0].Nfreqs
         self.Ntimes = self.dsets[0].Ntimes
 
@@ -3443,8 +3444,15 @@ class PSpecData(object):
                                      % (2*np.pi)
         uvp.blpair_array = np.array(blp_arr)
         uvp.Nblpairs = len(np.unique(blp_arr))
-        uvp.Ntimes = len(np.unique(time1))
-        uvp.Nblpairts = len(time1)
+        # Ntimes in a uvpspec object now means the total number of times.
+        # In all possible datasets that could be produced by pspecdata this
+        # is equal to Ntpairs or 2 x Ntpairs if we interleave
+        # but we have given upspec the capability to have this
+        # not necessarily be the same.
+        uvp.Ntimes = len(np.unique(np.hstack([uvp.time_1_array, uvp.time_2_array])))
+        uvp.Npairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
+        uvp.Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(uvp.blpair_array, uvp.time_1_array, uvp.time_2_array)]))
+        uvp.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
         bls_arr = sorted(set(bls_arr))
         uvp.bl_array = np.array([uvp.antnums_to_bl(bl) for bl in bls_arr])
         antpos = dict(zip(dset1.antenna_numbers, dset1.antenna_positions))
@@ -3475,9 +3483,9 @@ class PSpecData(object):
         label1 = self.labels[self.dset_idx(dsets[0])]
         label2 = self.labels[self.dset_idx(dsets[1])]
         uvp.labels = sorted(set([label1, label2]))
-        uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), int) \
+        uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int) \
                             * uvp.labels.index(label1)
-        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nblpairts, uvp.Npols), int) \
+        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int) \
                             * uvp.labels.index(label2)
         uvp.labels = np.array(uvp.labels, str)
         uvp.r_params = uvputils.compress_r_params(r_params)
