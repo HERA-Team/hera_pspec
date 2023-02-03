@@ -3092,6 +3092,7 @@ class PSpecData(object):
         pols = _pols
 
         # initialize empty lists
+        # We should really pre-allocate arrays instead.
         data_array = odict()
         wgt_array = odict()
         integration_array = odict()
@@ -3449,6 +3450,7 @@ class PSpecData(object):
         # is equal to Ntpairs or 2 x Ntpairs if we interleave
         # but we have given upspec the capability to have this
         # not necessarily be the same.
+        # Ntimes could still be the number of "average times" which might be useful for noise purposes. 
         uvp.Ntimes = len(np.unique(np.hstack([uvp.time_1_array, uvp.time_2_array])))
         uvp.Npairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
         uvp.Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(uvp.blpair_array, uvp.time_1_array, uvp.time_2_array)]))

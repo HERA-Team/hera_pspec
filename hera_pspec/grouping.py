@@ -540,10 +540,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         for bl in bl_arr])
 
     # Assign arrays and metadata to UVPSpec object
-    uvp.Ntimes = len(np.unique(time_avg_arr))
+    uvp.Ntimes = len(np.unique(np.hstack([time_1, time_2])))
     uvp.Nbltpairs = len(time_avg_arr)
     uvp.Nblpairs = len(np.unique(blpair_arr))
     uvp.Nbls = len(bl_arr)
+    uvp.Ntpairs = len(set((t1, t2) for t1, t2 in zip(time_1, time_2)))
 
     # Baselines
     uvp.bl_array = bl_arr

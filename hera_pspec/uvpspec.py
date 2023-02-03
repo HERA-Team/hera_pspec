@@ -1964,7 +1964,7 @@ class UVPSpec(object):
 
         Tsys : dictionary, float or array
             System temperature in Kelvin for each blpair. Key is blpair-integer,
-            value is Tsys float or ndarray. If fed as an ndarray, shape=(Ntimes,)
+            value is Tsys float or ndarray. If fed as an ndarray, shape=(Ntpairs,)
 
         blpairs : list
             List of unique blair tuples or i12 integers to calculate noise
@@ -2032,7 +2032,7 @@ class UVPSpec(object):
         # handle Tsys
         if not isinstance(Tsys, (dict, odict)):
             if not isinstance(Tsys, np.ndarray):
-                Tsys = np.ones(self.Ntimes) * Tsys
+                Tsys = np.ones(self.Ntpairs) * Tsys
             Tsys = dict([(blp, Tsys) for blp in blpairs])
 
         # Iterate over blpairs to get P_N
@@ -2320,6 +2320,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     new_polpairs = [new_polpairs[i] for i in np.argsort(np.abs(new_polpairs))]
     Nspws = len(new_spws)
     Nbltpairs = len(new_blpts)
+    Ntpairs = len(set([(t1, t2) for blp, t1, t2 in new_blpts]))
     Npols = len(new_polpairs)
 
     # Store optional attrs only if all uvps have them
@@ -2641,6 +2642,8 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.bl_array = np.array(new_bls)
     u.Nbls = len(u.bl_array)
     u.bl_vecs = []
+    u.Ntpairs = Ntpairs
+    u.Nbltpairs = Nbltpairs
     for b, bl in enumerate(new_bls):
         l = [bl in _bls for _bls in uvp_bls].index(True)
         h = [bl == _bl for _bl in uvp_bls[l]].index(True)
@@ -2758,7 +2761,6 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
             if s not in unique_spws: unique_spws.append(s)
         for p in uvp1.polpair_array:
             if p not in unique_polpairs: unique_polpairs.append(p)
-
         uvp1_blpts_comb = [(blp, t1, t2) for blp, t1, t2 in zip(uvp1.blpair_array, uvp1.time_1_array, uvp1.time_2_array)]
         blpts_comb.extend(uvp1_blpts_comb)
 

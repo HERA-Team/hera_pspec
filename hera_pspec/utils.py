@@ -1333,7 +1333,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
 
     return uvd
 
-def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_correction=True,  num_steps_scalar=2000, little_h=True):
+def uvp_noise_error(uvp, auto_Tsys=None, auto_Tsys_int=None, err_type='P_N', precomp_P_N=None, P_SN_correction=True,  num_steps_scalar=2000, little_h=True):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
     Adds to uvp.stats_array inplace.
@@ -1345,10 +1345,12 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
         If err_type == 'P_SN', uvp should not have any
         incoherent averaging applied.
 
-    auto_Tsys : UVData object, optional
+    auto_Tsys : UVData object.
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.
         Needed for P_N computation, not needed if feeding precomp_P_N.
+        If power spectra were computed from interleaved times then the supplied auto_Tsys should include all of the times that are pesent in all of the pairs.
+
 
     err_type : str or list of str, options = ['P_N', 'P_SN']
         Type of thermal noise error to compute. P_N is the standard
@@ -1403,7 +1405,19 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
         # iterate over blpairs
         for blp in uvp.get_blpairs():
             blp_int = uvp.antnums_to_blpair(blp)
-            lst_avg = uvp.lst_avg_array[uvp.blpair_to_indices(blp)]
+            blp_inds = uvp.blpair_to_indices(blp)
+            lst_avg = uvp.lst_avg_array[blp_inds]
+
+            time_1_selection = uvp.time_1_array[blp_inds]
+            time_2_selection = uvp.time_2_array[blp_inds]
+
+            # get time indices in data
+            times_blp_1 = auto_Tsys.time_array[auto_Tsys.antpair2ind(blp[0][0], blp[0][0])]
+            times_blp_2 = auto_Tsys.time_array[auto_Tsys.antpair2ind(blp[1][0], blp[1][0])]
+
+            tinds1 = [np.where(np.isclose(times_blp_1, t, atol=1e-6)[0][0] for t in time_1_selection)]
+            tinds2 = [np.where(np.isclose(times_blp_2, t, atol=1e-6)[0][0] for t in time_2_selection)]
+            
             # iterate over polarization
             for polpair in uvp.polpair_array:
                 pol = uvpspec_utils.polpair_int2tuple(polpair)[0]  # integer
@@ -1414,14 +1428,15 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
 
                 if precomp_P_N is None:
                     # take geometric mean of four antenna autocorrs and get OR'd flags
-                    Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
-                    Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
+                    # select out the interleaving of the times
+                    Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop].real)**(1./4)
+                    Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop]
                     # average over frequency
                     if np.all(Tflag):
                         # fully flagged
