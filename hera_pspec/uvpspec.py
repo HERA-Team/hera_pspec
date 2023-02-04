@@ -160,6 +160,13 @@ class UVPSpec(object):
                             - set(self._meta_dsets) - set(self._dicts_of_dicts))
         self._meta = sorted(set(self._meta_dsets).union(set(self._meta_attrs)))
 
+        # Attributes that appeared in previous versions of UVPSpec and may be present
+        # in HDF5 files written by these older versions. We can look for these attributes
+        # when we read the files and 
+        # and deal with them appropriately to support backwards compatibility.
+        self._meta_deprecated = ["Nblpairts"]
+        self._meta_dsets_deprecated = []
+
         # check all params are covered
         assert len( set(self._all_params) - set(self._dicts) \
                   - set(self._immutables) - set(self._ndarrays) \
@@ -1342,14 +1349,14 @@ class UVPSpec(object):
         # Clear all data in the current object
         self._clear()
 
-        # Load-in meta data
+        # Load-in meta data including deprecated. 
         for k in grp.attrs:
-            if k in self._meta_attrs:
+            if k in self._meta_attrs or k in self._meta_deprecated:
                 val = grp.attrs[k]
                 if isinstance(val, bytes): val = val.decode() # bytes -> str
                 setattr(self, k, val)
         for k in grp:
-            if k in self._meta_dsets:
+            if k in self._meta_dsets or k in self._meta_dsets_deprecated:
                 setattr(self, k, grp[k][:])
 
         # Backwards compatibility: pol_array exists (not polpair_array)
@@ -1383,6 +1390,33 @@ class UVPSpec(object):
             self.cosmo = conversions.Cosmo_Conversions(
                                                 **ast.literal_eval(self.cosmo) )
 
+
+        # BACKWARDS COMPATIBILITY for files with Nblpairts.
+        # Check whether we are reading a pre Nbltpairs file by looking for the
+        # Nblpairts field.
+        if hasattr(self, "Nblpairts"):
+            reading_old_version = True
+            setattr(self, "Nbltpairs", self.Nblpairts)
+        else:
+            reading_old_version = False
+
+        if reading_old_version:
+            # If we are reading a power spectrum object that was written in the pre-Nbltpairs days
+            # then make sure to correctly set Ntimes and Ntpairs.
+            self.Ntimes = len(np.unique(np.hstack([self.time_1_array, self.time_2_array])))
+            self.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(self.time_1_array, self.time_2_array)]))
+
+        # Clear deprecated attributes.
+        for dattr in self._meta_deprecated:
+            if hasattr(self, dattr):
+                to_delete = getattr(self, dattr)
+                del to_delete
+
+        for dattr in self._meta_dsets_deprecated:
+            if hasattr(self, dattr):
+                to_delete = getattr(self, dattr)
+                del to_delete     
+            
         self.check(just_meta=just_meta)
 
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
@@ -2028,7 +2062,7 @@ class UVPSpec(object):
 
         # Get delays
         dlys = self.get_dlys(spw)
-
+        
         # handle Tsys
         if not isinstance(Tsys, (dict, odict)):
             if not isinstance(Tsys, np.ndarray):

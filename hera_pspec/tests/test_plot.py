@@ -108,7 +108,7 @@ class Test_Plot(unittest.TestCase):
         # Average over baseline-pairs but keep the time bins intact
         f2 = plot.delay_spectrum(self.uvp, [blps,], spw=0, pol=('xx','xx'),
                                   average_blpairs=True, average_times=False)
-        elements = [(matplotlib.lines.Line2D, self.uvp.Ntimes),]
+        elements = [(matplotlib.lines.Line2D, self.uvp.Ntpairs),]
         assert axes_contains(f2.axes[0], elements)
         plt.close(f2)
 
