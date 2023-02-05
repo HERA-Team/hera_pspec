@@ -2563,7 +2563,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
 
     elif concat_ax == 'blpairts':
 
-        is_in = [uvputils._fast_is_in(_blpts, new_blpts)
+        is_in = [uvputils._is_in(_blpts, new_blpts)
                  for _blpts in uvp_blpts]
 
         # Concatenate blpair-times
@@ -2798,7 +2798,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         uvp1_blpts_comb = [(blp, t1, t2) for blp, t1, t2 in zip(uvp1.blpair_array, uvp1.time_1_array, uvp1.time_2_array)]
         blpts_comb.extend(uvp1_blpts_comb)
 
-    # Old way uwing np.unique and complex coding did not support
+    # Old way using np.unique and complex coding did not support
     # two times.
     unique_blpts = list(set(blpts_comb))
 

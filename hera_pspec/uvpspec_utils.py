@@ -1049,41 +1049,26 @@ def _conj_blpair(blpair, which='both'):
     return conj_blpair
 
 
-def _fast_is_in(src_blpts, query_blpts, time_prec=8):
+def _is_in(src_blpts, query_blpts):
     """
-    Helper function to rapidly check if a given blpair-time couplet is in an
+    Helper function to check if a given bltime-pari is in an
     array.
 
     Parameters
     ----------
     src_blpts : list of tuples or array_like
         List of tuples or array of shape (N, 2), containing a list of (blpair,
-        time) couplets.
+        time1, time2) triplets.
 
     query_blpts : list of tuples or array_like
         List of tuples or array of shape (M, 2), containing a list of (blpair,
-        time) which will be looked up in src_blpts
-
-    time_prec : int, optional
-        Number of decimals to round time array to when performing float
-        comparision. Default: 8.
+        time1, time2) which will be looked up in src_blpts
 
     Returns
     -------
     is_in_arr: list of bools
         A list of booleans, which indicate which query_blpts are in src_blpts.
     """
-    # This function converts baseline-pair-times, a tuple (blp, time)
-    # to a complex number blp + 1j * time, so that "in" function is much
-    # faster.
-    src_blpts = np.asarray(src_blpts)
-    query_blpts = np.asarray(query_blpts)
-
-    # Slice to create complex array
-    src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
-    query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
-
-    # see if q complex number is in src_blpts
     return [q in src_blpts for q in query_blpts]
 
 
