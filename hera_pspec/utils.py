@@ -1333,7 +1333,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
 
     return uvd
 
-def uvp_noise_error(uvp, auto_Tsys=None, auto_Tsys_int=None, err_type='P_N', precomp_P_N=None, P_SN_correction=True,  num_steps_scalar=2000, little_h=True):
+def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_correction=True,  num_steps_scalar=2000, little_h=True):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
     Adds to uvp.stats_array inplace.
@@ -1349,7 +1349,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, auto_Tsys_int=None, err_type='P_N', pre
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.
         Needed for P_N computation, not needed if feeding precomp_P_N.
-        If power spectra were computed from interleaved times then the supplied auto_Tsys should include all of the times that are pesent in all of the pairs.
+        If power spectra were computed from interleaved times then the supplied auto_Tsys should include all of the times that are present in all of the pairs.
 
 
     err_type : str or list of str, options = ['P_N', 'P_SN']
