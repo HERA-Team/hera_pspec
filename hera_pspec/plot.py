@@ -384,6 +384,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     """
     import matplotlib
     import matplotlib.pyplot as plt
+    import matplotlib.axes
 
     # assert component
     assert component in ['real', 'abs', 'imag', 'abs-real', 'abs-imag'], "Can't parse specified component {}".format(component)
