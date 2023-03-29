@@ -2,10 +2,11 @@
 import sys
 import os
 from hera_pspec import pspecdata
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 # parse args
 args = pspecdata.get_pspec_run_argparser()
-a = args.parse_args()
+a = parse_args(args)
 
 # turn into dictionary
 kwargs = vars(a)
@@ -20,4 +21,6 @@ kwargs['include_crosscorrs'] = not(kwargs.pop('exclude_crosscorrs'))
 history = ' '.join(sys.argv)
 
 # run pspec
-pspecdata.pspec_run(dsets, filename, history=history, **kwargs)
+run_with_profiling(
+    pspecdata.pspec_run, a, dsets=dsets, filename=filename, history=history, **kwargs
+)
