@@ -83,7 +83,7 @@ class PSpecData:
             dsets_std = None
 
         # Store the input UVData objects if specified
-        if dset is not None and len(dsets) > 0:
+        if dsets is not None and len(dsets) > 0:
             self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag)
 
         # Store a primary beam
