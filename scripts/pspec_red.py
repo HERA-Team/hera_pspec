@@ -8,7 +8,6 @@ from hera_pspec.utils import log, load_config
 from hera_cal import redcal
 import pyuvdata as uv
 import os, sys, glob, time
-from hera_cal._cli_tools import parse_args, run_with_profiling
 
 # Default settings for pspec calculation
 pspec_defaults = {
