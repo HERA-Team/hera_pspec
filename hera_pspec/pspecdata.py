@@ -16,9 +16,9 @@ import uvtools.dspec as dspec
 from . import uvpspec, utils, version, __version__, pspecbeam, container, uvpspec_utils as uvputils
 
 
-class PSpecData(object):
+class PSpecData:
 
-    def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
+    def __init__(self, dsets=None, wgts=None, dsets_std=None, labels=None,
                  beam=None, cals=None, cal_flag=True):
         """
         Object to store multiple sets of UVData visibilities and perform
@@ -83,7 +83,7 @@ class PSpecData(object):
             dsets_std = None
 
         # Store the input UVData objects if specified
-        if len(dsets) > 0:
+        if dset is not None and len(dsets) > 0:
             self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag)
 
         # Store a primary beam
@@ -2217,30 +2217,14 @@ class PSpecData(object):
         if self.spw_Ndlys == None:
             self.set_Ndlys()
 
-        if mode >= self.spw_Ndlys:
-            raise IndexError("Cannot compute Q matrix for a mode outside"
-                             "of allowed range of delay modes.")
-        nfreq = self.spw_Nfreqs
-        if include_extension:
-            nfreq = nfreq + np.sum(self.filter_extension)
-            phase_correction = self.filter_extension[0]
-        else:
-            phase_correction = 0.
-        if (self.spw_Ndlys == nfreq) and (allow_fft == True):
-            _m = np.zeros((nfreq,), dtype=complex)
-            _m[mode] = 1. # delta function at specific delay mode
-            # FFT to transform to frequency space
-            m = np.fft.fft(np.fft.ifftshift(_m))
-        else:
-            if self.spw_Ndlys % 2 == 0:
-                start_idx = -self.spw_Ndlys/2
-            else:
-                start_idx = -(self.spw_Ndlys - 1)/2
-            m = (start_idx + mode) * (np.arange(nfreq) - phase_correction)
-            m = np.exp(-2j * np.pi * m / self.spw_Ndlys)
-
-        Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
-        return Q_alt
+        return utils.get_Q_alt(
+            mode=mode, 
+            n_delays=self.spw_Ndlys, 
+            n_freqs=self.spw_Nfreqs, 
+            allow_fft=allow_fft, 
+            n_extend=np.sum(self.filter_extension) if include_extension else 0.0,
+            phase_correction=self.filter_extension[0] if include_extension else 0.0
+        )
 
     def get_integral_beam(self, pol=False):
         """
