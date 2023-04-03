@@ -1583,12 +1583,12 @@ def get_Q_alt(
         raise IndexError("Cannot compute Q matrix for a mode outside"
                             "of allowed range of delay modes.")
     if n_extend:
-        nfreq = nfreq + n_extend
+        n_freqs = n_freqs + n_extend
     else:
         phase_correction = 0.
 
     if (n_delays == n_freqs) and allow_fft:
-        _m = np.zeros((nfreq,), dtype=complex)
+        _m = np.zeros((n_freqs,), dtype=complex)
         _m[mode] = 1. # delta function at specific delay mode
         # FFT to transform to frequency space
         m = np.fft.fft(np.fft.ifftshift(_m))
@@ -1597,7 +1597,7 @@ def get_Q_alt(
             start_idx = -n_delays/2
         else:
             start_idx = -(n_delays - 1)/2
-        m = (start_idx + mode) * (np.arange(nfreq) - phase_correction)
+        m = (start_idx + mode) * (np.arange(n_freqs) - phase_correction)
         m = np.exp(-2j * np.pi * m / n_delays)
 
     Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
