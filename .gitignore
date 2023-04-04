@@ -13,8 +13,6 @@ eggs/
 *ipynb_checkpoints
 hera_pspec/_version.py
 .vscode/
-.coverage
-coverage.xml
 ex.hdf5
 out.h5
 .coverage

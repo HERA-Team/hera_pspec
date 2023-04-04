@@ -13,7 +13,6 @@ import argparse
 from .conversions import Cosmo_Conversions
 import inspect
 from . import __version__
-from functools import lru_cache
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
@@ -1539,11 +1538,10 @@ def history_string(notes=''):
 
 
 
-@lru_cache
 def get_Q_alt(
     mode: int, n_delays: int, n_freqs: int,  allow_fft: bool=True, include_extension: bool=False, n_extend: float = 0., phase_correction: float = 0.
 ):
-    """
+    r"""
     Response of the covariance to a given bandpower, dC / dp_alpha,
     EXCEPT without the primary beam factors. This is Q_alt as defined
     in HERA memo #44, so it's not dC / dp_alpha, strictly, but is just
