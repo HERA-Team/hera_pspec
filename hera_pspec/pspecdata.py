@@ -93,6 +93,11 @@ class PSpecData:
         # Store a primary beam
         self.primary_beam = beam
 
+        if not hasattr(self, "_get_qalt_cached"):
+            # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
+            self._get_qalt_cached = lru_cache(maxsize=None)(utils.get_Q_alt)
+
+
     def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True):
         """
         Add a dataset to the collection in this PSpecData object.
@@ -1352,12 +1357,16 @@ class PSpecData:
                        * np.fft.fftshift(_Rx2, axes=0)
 
         else:
-            q = []
-            for i in range(self.spw_Ndlys):
-                Q = self.get_Q_alt(i)
-                QRx2 = np.dot(Q, Rx2)
-                qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
-                q.append(qi)
+            Q = np.array([self.get_Q_alt(i) for i in range(self.spw_Ndlys)])
+            QRx2 = np.dot(Q, Rx2)
+            q = np.einsum('i...,ji...->j...', Rx1.conj(), QRx2)
+
+            # q = []
+            # for i in range(self.spw_Ndlys):
+            #     Q = self.get_Q_alt(i)
+            #     QRx2 = np.dot(Q, Rx2)
+            #     qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
+            #     q.append(qi)
             return 0.5 * np.array(q)
 
     def get_G(self, key1, key2, exact_norm=False, pol=False):
@@ -3106,6 +3115,8 @@ class PSpecData:
         nblps = len(bl_pairs)
         npols = len(pols)
         nspws = len(spw_ranges)
+        nchunks = 500
+        nper_chunk = max(ntodo // nchunks, 1)
 
         # Loop over spectral windows
         for i in range(len(spw_ranges)):
@@ -3208,10 +3219,11 @@ class PSpecData:
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
 
                     ndone += 1
-                    logger.info(
-                        f"\n[{100*ndone/ntodo}%] blpair: {blp} ({k}/{nblps}) | "
-                        f"pol: {tuple(p)} ({j}/{npols}) | spw: ({i}/{nspws})"
-                    )
+                    if ndone % nper_chunk == 0:
+                        logger.info(
+                            f"[{100*ndone/ntodo:5.2f}%] blp {k+1}/{nblps} | "
+                            f"pol {j+1}/{npols} | spw {i+1}/{nspws}"
+                        )
 
                     # Check that number of non-zero weight chans >= n_dlys
                     key1_dof = np.sum(~np.isclose(self.Y(key1).diagonal(), 0.0))
@@ -3253,7 +3265,7 @@ class PSpecData:
                             Hv = self._identity_H[match]
                         else:
                             # This Y doesn't exist, so compute it
-                            logger.info("  Building G...")
+                            if nper_chunk == 1: logger.info("  Building G...")
                             Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
                             Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
                             # cache it
@@ -3263,15 +3275,15 @@ class PSpecData:
                     else:
                         # for non identity weighting (i.e. iC weighting)
                         # Gv and Hv are always different, so compute them
-                        logger.info("  Building G...")
+                        if nper_chunk == 1: logger.info("  Building G...")
                         Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
                         Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
 
                     # Calculate unnormalized bandpowers
-                    logger.info("  Building q_hat...")
+                    if nper_chunk == 1: logger.info("  Building q_hat...")
                     qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
 
-                    logger.info("  Normalizing power spectrum...")
+                    if nper_chunk == 1: logger.info("  Normalizing power spectrum...")
                     if norm == 'V^-1/2':
                         V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol)
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
@@ -3281,7 +3293,7 @@ class PSpecData:
 
                     # Multiply by scalar
                     if self.primary_beam != None:
-                        logger.info("  Computing and multiplying scalar...")
+                        if nper_chunk == 1: logger.info("  Computing and multiplying scalar...")
                         pv *= scalar
 
                     # Wide bin adjustment of scalar, which is only needed for
@@ -3295,7 +3307,7 @@ class PSpecData:
 
                     #Generate the covariance matrix if error bars provided
                     if store_cov or store_cov_diag:
-                        logger.info(" Building q_hat covariance...")
+                        if nper_chunk == 1: logger.info(" Building q_hat covariance...")
                         cov_q_real, cov_q_imag, cov_real, cov_imag \
                             = self.get_analytic_covariance(key1, key2, Mv,
                                                            exact_norm=exact_norm,
