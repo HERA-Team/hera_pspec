@@ -909,6 +909,9 @@ class Test_PSpecData(unittest.TestCase):
         #Test if error is raised when one tried FFT approach on exact_norm
         pytest.raises(NotImplementedError, self.ds.q_hat, key1, key2, exact_norm=True, allow_fft = True)
 
+        print(self.ds._get_qalt_cached.cache_info())
+        print(self.ds._get_qalt_cached_tensor.cache_info())
+        
     def test_get_H(self):
         """
         Test Fisher/weight matrix calculation.

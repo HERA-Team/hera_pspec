@@ -96,7 +96,7 @@ class PSpecData:
         if not hasattr(self, "_get_qalt_cached"):
             # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
             self._get_qalt_cached = lru_cache(maxsize=None)(utils.get_Q_alt)
-
+        self._get_qalt_cached_tensor = lru_cache(maxsize=4)(utils.get_Q_alt_tensor)
 
     def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True):
         """
@@ -1157,6 +1157,7 @@ class PSpecData:
 
         # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
         self._get_qalt_cached = lru_cache(maxsize=self.spw_Ndlys)(utils.get_Q_alt)
+        
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
                   time_indices=None):
@@ -1357,7 +1358,7 @@ class PSpecData:
                        * np.fft.fftshift(_Rx2, axes=0)
 
         else:
-            Q = np.array([self.get_Q_alt(i) for i in range(self.spw_Ndlys)])
+            Q = self.get_Q_alt_tensor()
             QRx2 = np.dot(Q, Rx2)
             q = np.einsum('i...,ji...->j...', Rx1.conj(), QRx2)
 
@@ -2191,7 +2192,7 @@ class PSpecData:
 
         return M, W
 
-    def get_Q_alt(self, mode, allow_fft=True, include_extension=False):
+    def get_Q_alt(self, mode: int, allow_fft=True, include_extension=False):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha,
         EXCEPT without the primary beam factors. This is Q_alt as defined
@@ -2235,6 +2236,39 @@ class PSpecData:
 
         return self._get_qalt_cached(
             mode=mode, 
+            n_delays=self.spw_Ndlys, 
+            n_freqs=self.spw_Nfreqs, 
+            allow_fft=allow_fft, 
+            n_extend=np.sum(self.filter_extension) if include_extension else 0.0,
+            phase_correction=self.filter_extension[0] if include_extension else 0.0
+        )
+    
+    def get_Q_alt_tensor(self, allow_fft=True, include_extension=False):
+        """
+        Gets the (Ndly, Nfreq, Nfreq) tensor of Q_alt matrices.
+
+        Parameters
+        ----------
+        allow_fft : boolean, optional
+            If set to True, allows a shortcut FFT method when
+            the number of delay bins equals the number of delay channels.
+            Default: True
+
+        include_extension : boolean, optional
+            If True, return a matrix that is spw_Nfreq x spw_Nfreq
+            (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
+            (spw_Nfreq x spw_Nfreq).
+
+        Return
+        -------
+        Q : array_like
+            Response matrix for bandpower p_alpha.
+        """
+
+        if self.spw_Ndlys == None:
+            self.set_Ndlys()
+
+        return self._get_qalt_cached_tensor( 
             n_delays=self.spw_Ndlys, 
             n_freqs=self.spw_Nfreqs, 
             allow_fft=allow_fft, 

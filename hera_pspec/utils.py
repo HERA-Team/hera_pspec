@@ -1600,3 +1600,6 @@ def get_Q_alt(
 
     Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
     return Q_alt
+
+def get_Q_alt_tensor(n_delays: int, **kwargs):
+    return np.array([get_Q_alt(mode, n_delays, **kwargs) for mode in range(n_delays)])
