@@ -500,7 +500,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
         fig, axes = plt.subplots(Nside, Nside, figsize=figsize)
     
     # Ensure axes is an ndarray
-    if isinstance(axes, matplotlib.axes._subplots.Axes):
+    if isinstance(axes, matplotlib.axes.Axes):
         axes = np.array([[axes]])
     if isinstance(axes, list):
         axes = np.array(axes)
