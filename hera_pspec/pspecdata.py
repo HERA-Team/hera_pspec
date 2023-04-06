@@ -1156,7 +1156,7 @@ class PSpecData:
             self.spw_Ndlys = ndlys
 
         # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
-        self._get_qalt_cached = lru_cache(maxsize=self.spw_Ndlys)(utils.get_Q_alt)
+        self._get_qalt_cached = lru_cache(maxsize=int(self.spw_Ndlys))(utils.get_Q_alt)
         
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
@@ -1362,12 +1362,6 @@ class PSpecData:
             QRx2 = np.dot(Q, Rx2)
             q = np.einsum('i...,ji...->j...', Rx1.conj(), QRx2)
 
-            # q = []
-            # for i in range(self.spw_Ndlys):
-            #     Q = self.get_Q_alt(i)
-            #     QRx2 = np.dot(Q, Rx2)
-            #     qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
-            #     q.append(qi)
             return 0.5 * np.array(q)
 
     def get_G(self, key1, key2, exact_norm=False, pol=False):
