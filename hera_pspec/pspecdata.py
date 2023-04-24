@@ -87,7 +87,7 @@ class PSpecData:
             dsets_std = None
 
         # Store the input UVData objects if specified
-        if dsets is not None and len(dsets) > 0:
+        if len(dsets) > 0:
             self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag)
 
         # Store a primary beam
@@ -2225,7 +2225,7 @@ class PSpecData:
         Q : array_like
             Response matrix for bandpower p_alpha.
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             self.set_Ndlys()
 
         return self._get_qalt_cached(
@@ -2259,7 +2259,7 @@ class PSpecData:
             Response matrix for bandpower p_alpha.
         """
 
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             self.set_Ndlys()
 
         return self._get_qalt_cached_tensor( 
