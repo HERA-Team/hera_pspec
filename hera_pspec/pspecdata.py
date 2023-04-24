@@ -1147,7 +1147,7 @@ class PSpecData:
             bins equal to the number of frequency channels in the current spw
         """
 
-        if ndlys == None:
+        if ndlys is None:
             self.spw_Ndlys = self.spw_Nfreqs
         else:
             # Check that one is not trying to estimate more delay channels than there are frequencies
