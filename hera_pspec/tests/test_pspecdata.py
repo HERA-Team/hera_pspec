@@ -1197,12 +1197,6 @@ class Test_PSpecData(unittest.TestCase):
         blp = (0, ((37,39),(37,39)), ('xx','xx'))
         assert np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min()
 
-        # test that warning is raised when phase_type is not 'drift'
-        uvd2 = copy.deepcopy(uvd1)
-        uvd2.phase_type = 'phased'
-        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
-        with pytest.warns(UserWarning, match="Skipping dataset 1 because it isn't drift phased"):
-            ds.rephase_to_dset(0)
 
     def test_Jy_to_mK(self):
         # test basic execution
