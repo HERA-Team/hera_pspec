@@ -14,7 +14,6 @@ from .conversions import Cosmo_Conversions
 import inspect
 from . import __version__
 
-
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size
@@ -1537,3 +1536,70 @@ def history_string(notes=''):
     """
     return history
 
+
+
+def get_Q_alt(
+    mode: int, n_delays: int, n_freqs: int,  allow_fft: bool=True, include_extension: bool=False, n_extend: float = 0., phase_correction: float = 0.
+):
+    r"""
+    Response of the covariance to a given bandpower, dC / dp_alpha,
+    EXCEPT without the primary beam factors. This is Q_alt as defined
+    in HERA memo #44, so it's not dC / dp_alpha, strictly, but is just
+    the part that does the Fourier transforms.
+
+    Assumes that Q will operate on a visibility vector in frequency space.
+    In the limit that self.spw_Ndlys equals self.spw_Nfreqs, this will
+    produce a matrix Q that performs a two-sided FFT and extracts a
+    particular Fourier mode.
+
+    (Computing x^t Q y is equivalent to Fourier transforming x and y
+    separately, extracting one element of the Fourier transformed vectors,
+    and then multiplying them.)
+
+    When self.spw_Ndlys < self.spw_Nfreqs, the effect is similar except
+    the delay bins need not be in the locations usually mandated
+    by the FFT algorithm.
+
+    Parameters
+    ----------
+    mode : int
+        Central wavenumber (index) of the bandpower, p_alpha.
+    allow_fft : boolean, optional
+        If set to True, allows a shortcut FFT method when
+        the number of delay bins equals the number of delay channels.
+        Default: True
+    include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
+        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
+        (spw_Nfreq x spw_Nfreq).
+
+    Return
+    -------
+    Q : array_like
+        Response matrix for bandpower p_alpha.
+    """
+    if mode >= n_delays or mode < 0:
+        raise IndexError("Cannot compute Q matrix for a mode outside"
+                            "of allowed range of delay modes.")
+    if n_extend:
+        n_freqs = n_freqs + n_extend
+    else:
+        phase_correction = 0.
+
+    if (n_delays == n_freqs) and allow_fft:
+        _m = np.zeros((n_freqs,), dtype=complex)
+        _m[mode] = 1. # delta function at specific delay mode
+        # FFT to transform to frequency space
+        m = np.fft.fft(np.fft.ifftshift(_m))
+    else:
+        if n_delays % 2 == 0:
+            start_idx = -n_delays/2
+        else:
+            start_idx = -(n_delays - 1)/2
+        m = (start_idx + mode) * (np.arange(n_freqs) - phase_correction)
+        m = np.exp(-2j * np.pi * m / n_delays)
+
+    Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
+    return Q_alt
+
+def get_Q_alt_tensor(n_delays: int, **kwargs):
+    return np.array([get_Q_alt(mode, n_delays, **kwargs) for mode in range(n_delays)])

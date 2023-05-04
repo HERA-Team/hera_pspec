@@ -12,13 +12,16 @@ import glob
 import warnings
 import json
 import uvtools.dspec as dspec
+import logging
+from . import uvpspec, utils, __version__, pspecbeam, container, uvpspec_utils as uvputils
+import warnings
+from functools import lru_cache
 
-from . import uvpspec, utils, version, __version__, pspecbeam, container, uvpspec_utils as uvputils
+logger = logging.getLogger(__name__)
 
+class PSpecData:
 
-class PSpecData(object):
-
-    def __init__(self, dsets=[], wgts=None, dsets_std=None, labels=None,
+    def __init__(self, dsets=None, wgts=None, dsets_std=None, labels=None,
                  beam=None, cals=None, cal_flag=True):
         """
         Object to store multiple sets of UVData visibilities and perform
@@ -57,6 +60,7 @@ class PSpecData(object):
         cal_flag : bool, optional
             If True, propagate flags from calibration into data
         """
+        dsets = [] if dsets is None else dsets
         self.clear_cache()  # clear matrix cache
         self.dsets = []; self.wgts = []; self.labels = []
         self.dsets_std = []
@@ -88,6 +92,11 @@ class PSpecData(object):
 
         # Store a primary beam
         self.primary_beam = beam
+
+        if not hasattr(self, "_get_qalt_cached"):
+            # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
+            self._get_qalt_cached = lru_cache(maxsize=None)(utils.get_Q_alt)
+        self._get_qalt_cached_tensor = lru_cache(maxsize=4)(utils.get_Q_alt_tensor)
 
     def add(self, dsets, wgts, labels=None, dsets_std=None, cals=None, cal_flag=True):
         """
@@ -1138,13 +1147,17 @@ class PSpecData(object):
             bins equal to the number of frequency channels in the current spw
         """
 
-        if ndlys == None:
+        if ndlys is None:
             self.spw_Ndlys = self.spw_Nfreqs
         else:
             # Check that one is not trying to estimate more delay channels than there are frequencies
             if self.spw_Nfreqs < ndlys:
                 raise ValueError("Cannot estimate more delays than there are frequency channels")
             self.spw_Ndlys = ndlys
+
+        # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
+        self._get_qalt_cached = lru_cache(maxsize=int(self.spw_Ndlys))(utils.get_Q_alt)
+        
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
                   time_indices=None):
@@ -1345,12 +1358,10 @@ class PSpecData(object):
                        * np.fft.fftshift(_Rx2, axes=0)
 
         else:
-            q = []
-            for i in range(self.spw_Ndlys):
-                Q = self.get_Q_alt(i)
-                QRx2 = np.dot(Q, Rx2)
-                qi = np.einsum('i...,i...->...', Rx1.conj(), QRx2)
-                q.append(qi)
+            Q = self.get_Q_alt_tensor()
+            QRx2 = np.dot(Q, Rx2)
+            q = np.einsum('i...,ji...->j...', Rx1.conj(), QRx2)
+
             return 0.5 * np.array(q)
 
     def get_G(self, key1, key2, exact_norm=False, pol=False):
@@ -2175,7 +2186,7 @@ class PSpecData(object):
 
         return M, W
 
-    def get_Q_alt(self, mode, allow_fft=True, include_extension=False):
+    def get_Q_alt(self, mode: int, allow_fft=True, include_extension=False):
         """
         Response of the covariance to a given bandpower, dC / dp_alpha,
         EXCEPT without the primary beam factors. This is Q_alt as defined
@@ -2214,33 +2225,50 @@ class PSpecData(object):
         Q : array_like
             Response matrix for bandpower p_alpha.
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             self.set_Ndlys()
 
-        if mode >= self.spw_Ndlys:
-            raise IndexError("Cannot compute Q matrix for a mode outside"
-                             "of allowed range of delay modes.")
-        nfreq = self.spw_Nfreqs
-        if include_extension:
-            nfreq = nfreq + np.sum(self.filter_extension)
-            phase_correction = self.filter_extension[0]
-        else:
-            phase_correction = 0.
-        if (self.spw_Ndlys == nfreq) and (allow_fft == True):
-            _m = np.zeros((nfreq,), dtype=complex)
-            _m[mode] = 1. # delta function at specific delay mode
-            # FFT to transform to frequency space
-            m = np.fft.fft(np.fft.ifftshift(_m))
-        else:
-            if self.spw_Ndlys % 2 == 0:
-                start_idx = -self.spw_Ndlys/2
-            else:
-                start_idx = -(self.spw_Ndlys - 1)/2
-            m = (start_idx + mode) * (np.arange(nfreq) - phase_correction)
-            m = np.exp(-2j * np.pi * m / self.spw_Ndlys)
+        return self._get_qalt_cached(
+            mode=mode, 
+            n_delays=self.spw_Ndlys, 
+            n_freqs=self.spw_Nfreqs, 
+            allow_fft=allow_fft, 
+            n_extend=np.sum(self.filter_extension) if include_extension else 0.0,
+            phase_correction=self.filter_extension[0] if include_extension else 0.0
+        )
+    
+    def get_Q_alt_tensor(self, allow_fft=True, include_extension=False):
+        """
+        Gets the (Ndly, Nfreq, Nfreq) tensor of Q_alt matrices.
 
-        Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
-        return Q_alt
+        Parameters
+        ----------
+        allow_fft : boolean, optional
+            If set to True, allows a shortcut FFT method when
+            the number of delay bins equals the number of delay channels.
+            Default: True
+
+        include_extension : boolean, optional
+            If True, return a matrix that is spw_Nfreq x spw_Nfreq
+            (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
+            (spw_Nfreq x spw_Nfreq).
+
+        Return
+        -------
+        Q : array_like
+            Response matrix for bandpower p_alpha.
+        """
+
+        if self.spw_Ndlys is None:
+            self.set_Ndlys()
+
+        return self._get_qalt_cached_tensor( 
+            n_delays=self.spw_Ndlys, 
+            n_freqs=self.spw_Nfreqs, 
+            allow_fft=allow_fft, 
+            n_extend=np.sum(self.filter_extension) if include_extension else 0.0,
+            phase_correction=self.filter_extension[0] if include_extension else 0.0
+        )
 
     def get_integral_beam(self, pol=False):
         """
@@ -3109,11 +3137,19 @@ class PSpecData(object):
         sclr_arr = []
         blp_arr = []
         bls_arr = []
+
+        ndone = 0
+        ntodo = len(bls1) * len(pols) * len(spw_ranges)
+        nblps = len(bl_pairs)
+        npols = len(pols)
+        nspws = len(spw_ranges)
+        nchunks = 500
+        nper_chunk = max(ntodo // nchunks, 1)
+
         # Loop over spectral windows
         for i in range(len(spw_ranges)):
             # set spectral range
-            if verbose:
-                print( "\nSetting spectral range: {}".format(spw_ranges[i]))
+            logger.info(f"\nSetting spectral range: {spw_ranges[i]}")
             self.set_spw(spw_ranges[i], ndlys=n_dlys[i])
             self.set_filter_extension(filter_extensions[i])
 
@@ -3141,14 +3177,15 @@ class PSpecData(object):
             # Loop over polarizations
             for j, p in enumerate(pols):
                 p_str = tuple([uvutils.polnum2str(_p) for _p in p])
-                if verbose: print( "\nUsing polarization pair: {}".format(p_str))
+                logger.info(f"\nUsing polarization pair: {p_str}")
 
                 # validating polarization pair on UVData objects
                 valid = self.validate_pol(dsets, tuple(p))
                 if not valid:
                    # Polarization pair is invalid; skip
-                   print("Polarization pair: {} failed the validation test, "
-                         "continuing...".format(p_str))
+                   warnings.warn(
+                       f"Polarization pair: {p_str} failed the validation test, continuing..."
+                    )
                    continue
 
                 spw_polpair.append( uvputils.polpair_tuple2int(p) )
@@ -3209,8 +3246,12 @@ class PSpecData(object):
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
 
-                    if verbose:
-                        print("\n(bl1, bl2) pair: {}\npol: {}".format(blp, tuple(p)))
+                    ndone += 1
+                    if ndone % nper_chunk == 0:
+                        logger.info(
+                            f"[{100*ndone/ntodo:5.2f}%] blp {k+1}/{nblps} | "
+                            f"pol {j+1}/{npols} | spw {i+1}/{nspws}"
+                        )
 
                     # Check that number of non-zero weight chans >= n_dlys
                     key1_dof = np.sum(~np.isclose(self.Y(key1).diagonal(), 0.0))
@@ -3252,7 +3293,7 @@ class PSpecData(object):
                             Hv = self._identity_H[match]
                         else:
                             # This Y doesn't exist, so compute it
-                            if verbose: print("  Building G...")
+                            if nper_chunk == 1: logger.info("  Building G...")
                             Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
                             Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
                             # cache it
@@ -3262,15 +3303,15 @@ class PSpecData(object):
                     else:
                         # for non identity weighting (i.e. iC weighting)
                         # Gv and Hv are always different, so compute them
-                        if verbose: print("  Building G...")
+                        if nper_chunk == 1: logger.info("  Building G...")
                         Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
                         Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
 
                     # Calculate unnormalized bandpowers
-                    if verbose: print("  Building q_hat...")
+                    if nper_chunk == 1: logger.info("  Building q_hat...")
                     qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
 
-                    if verbose: print("  Normalizing power spectrum...")
+                    if nper_chunk == 1: logger.info("  Normalizing power spectrum...")
                     if norm == 'V^-1/2':
                         V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol)
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
@@ -3280,7 +3321,7 @@ class PSpecData(object):
 
                     # Multiply by scalar
                     if self.primary_beam != None:
-                        if verbose: print("  Computing and multiplying scalar...")
+                        if nper_chunk == 1: logger.info("  Computing and multiplying scalar...")
                         pv *= scalar
 
                     # Wide bin adjustment of scalar, which is only needed for
@@ -3294,7 +3335,7 @@ class PSpecData(object):
 
                     #Generate the covariance matrix if error bars provided
                     if store_cov or store_cov_diag:
-                        if verbose: print(" Building q_hat covariance...")
+                        if nper_chunk == 1: logger.info(" Building q_hat covariance...")
                         cov_q_real, cov_q_imag, cov_real, cov_imag \
                             = self.get_analytic_covariance(key1, key2, Mv,
                                                            exact_norm=exact_norm,
@@ -3600,7 +3641,7 @@ class PSpecData(object):
 
             # skip if dataset is not drift phased
             if dset.phase_type != 'drift':
-                print("skipping dataset {} b/c it isn't drift phased".format(i))
+                warnings.warn(f"Skipping dataset {i} b/c it isn't drift phased")
 
             # convert UVData to DataContainers. Note this doesn't make
             # a copy of the data
@@ -3656,8 +3697,9 @@ class PSpecData(object):
             beam = self.primary_beam
         else:
             if self.primary_beam is not None:
-                print("Warning: feeding a beam model when self.primary_beam "
-                      "already exists...")
+                warnings.warn(
+                    "Feeding a beam model when self.primary_beam already exists..."
+                )
 
         # Check beam is not None
         assert beam is not None, \
@@ -3676,7 +3718,9 @@ class PSpecData(object):
         for i, dset in enumerate(self.dsets):
             # check dset vis units
             if dset.vis_units.upper() != 'JY':
-                print("Cannot convert dset {} Jy -> mK because vis_units = {}".format(i, dset.vis_units))
+                warnings.warn(
+                    f"Cannot convert dset {i} Jy -> mK because vis_units = {dset.vis_units}"
+                )
                 continue
             for j, p in enumerate(dset.polarization_array):
                 dset.data_array[:, :, :, j] *= factors[p][None, None, :]
@@ -4260,7 +4304,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             bls2_list.append(_bls2)
 
     # Open PSpecContainer to store all output in
-    if verbose: print("Opening {} in transactional mode".format(filename))
+    logger.info(f"Opening {filename} in transactional mode")
     psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=tsleep, maxiter=maxiter)
 
     # assign group name
@@ -4283,11 +4327,10 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                        exact_windows=exact_windows, ftbeam=ftbeam)
 
         # Store output
-        psname = '{}_x_{}{}'.format(dset_labels[dset_idxs[0]],
-                                    dset_labels[dset_idxs[1]], psname_ext)
+        psname = f'{dset_labels[dset_idxs[0]]}_x_{dset_labels[dset_idxs[1]]}{psname_ext}'
 
         # write in transactional mode
-        if verbose: print("Storing {}".format(psname))
+        logger.info(f"Storing {psname}")
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
                       overwrite=overwrite)
 
