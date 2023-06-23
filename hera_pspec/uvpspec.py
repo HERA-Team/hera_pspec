@@ -1409,13 +1409,11 @@ class UVPSpec(object):
         # Clear deprecated attributes.
         for dattr in self._meta_deprecated:
             if hasattr(self, dattr):
-                to_delete = getattr(self, dattr)
-                del to_delete
+                delattr(self, dattr)
 
         for dattr in self._meta_dsets_deprecated:
             if hasattr(self, dattr):
-                to_delete = getattr(self, dattr)
-                del to_delete     
+                delattr(self, dattr)
             
         self.check(just_meta=just_meta)
 

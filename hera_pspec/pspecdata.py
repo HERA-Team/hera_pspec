@@ -3452,7 +3452,6 @@ class PSpecData(object):
         # not necessarily be the same.
         # Ntimes could still be the number of "average times" which might be useful for noise purposes. 
         uvp.Ntimes = len(np.unique(np.hstack([uvp.time_1_array, uvp.time_2_array])))
-        uvp.Npairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
         uvp.Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(uvp.blpair_array, uvp.time_1_array, uvp.time_2_array)]))
         uvp.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
         bls_arr = sorted(set(bls_arr))

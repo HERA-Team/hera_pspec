@@ -1028,5 +1028,13 @@ def test_backwards_compatibility_read():
     # test read in of a static test file dated 8/2019
     uvp = uvpspec.UVPSpec()
     uvp.read_hdf5(os.path.join(DATA_PATH, 'test_uvp.h5'))
+    for dattr in uvp._meta_deprecated:
+        with pytest.raises(AttributeError) as excinfo:
+            raise AttributeError("'UVPSpec' object has no attribute")
+        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
+    for dattr in uvp._meta_dsets_deprecated:
+        with pytest.raises(AttributeError) as excinfo:
+            raise AttributeError("'UVPSpec' object has no attribute")
+        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
     # assert check does not fail
     uvp.check()

@@ -1455,7 +1455,6 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                         else:
                             Tsys = Tsys[0]
 
-                            
                     # calculate P_N
                     P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real', scalar=scalar[(spw, polpair)])[blp_int]
 
