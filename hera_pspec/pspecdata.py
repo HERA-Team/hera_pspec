@@ -318,8 +318,8 @@ class PSpecData(object):
 
         # Check phase centers if phase type is phased
         if 'phased' in set(phase_types):
-            phase_ra = [d.phase_center_ra_degrees for d in self.dsets]
-            phase_dec = [d.phase_center_dec_degrees for d in self.dsets]
+            phase_ra = [d.phase_center_app_ra_degrees for d in self.dsets]
+            phase_dec = [d.phase_center_app_dec_degrees for d in self.dsets]
             max_diff_ra = np.max( [np.diff(d)
                                    for d in itertools.combinations(phase_ra, 2)])
             max_diff_dec = np.max([np.diff(d)
