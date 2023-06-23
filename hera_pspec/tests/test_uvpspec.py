@@ -53,9 +53,9 @@ class Test_UVPSpec(unittest.TestCase):
         uvp.stats_array = odict({stat: odict()})
         for spw in uvp.spw_array:
             ndlys = uvp.get_spw_ranges(spw)[0][-1]
-            uvp.cov_array_real[spw] = np.empty((uvp.Nblpairts, ndlys, ndlys, uvp.Npols), np.float64)
-            uvp.cov_array_imag[spw] = np.empty((uvp.Nblpairts, ndlys, ndlys, uvp.Npols), np.float64)
-            uvp.stats_array[stat][spw] = np.empty((uvp.Nblpairts, ndlys, uvp.Npols), np.complex128)
+            uvp.cov_array_real[spw] = np.empty((uvp.Nbltpairs, ndlys, ndlys, uvp.Npols), np.float64)
+            uvp.cov_array_imag[spw] = np.empty((uvp.Nbltpairs, ndlys, ndlys, uvp.Npols), np.float64)
+            uvp.stats_array[stat][spw] = np.empty((uvp.Nbltpairs, ndlys, uvp.Npols), np.complex128)
         return uvp
 
     def test_param(self):
@@ -591,7 +591,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp.get_exact_window_functions(ftbeam=self.ft_file,
                                        inplace=True)
         assert uvp.exact_windows
-        assert uvp.window_function_array[0].shape[0] == uvp.Nblpairts
+        assert uvp.window_function_array[0].shape[0] == uvp.Nbltpairs
         # if not exact window function, array dim is 4
         assert uvp.window_function_array[0].ndim == 5
 
@@ -1028,5 +1028,13 @@ def test_backwards_compatibility_read():
     # test read in of a static test file dated 8/2019
     uvp = uvpspec.UVPSpec()
     uvp.read_hdf5(os.path.join(DATA_PATH, 'test_uvp.h5'))
+    for dattr in uvp._meta_deprecated:
+        with pytest.raises(AttributeError) as excinfo:
+            raise AttributeError("'UVPSpec' object has no attribute")
+        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
+    for dattr in uvp._meta_dsets_deprecated:
+        with pytest.raises(AttributeError) as excinfo:
+            raise AttributeError("'UVPSpec' object has no attribute")
+        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
     # assert check does not fail
     uvp.check()

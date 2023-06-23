@@ -61,6 +61,8 @@ def build_vanilla_uvpspec(beam=None):
     time_array = np.repeat(time_array, Nblpairs)
     time_1_array = time_array
     time_2_array = time_array
+    Ntpairs = len(set([(t1, t2) for t1, t2 in zip(time_1_array, time_2_array)]))
+    Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(blpair_array, time_1_array, time_2_array)]))
     lst_array = np.repeat(lst_array, Nblpairs)
     lst_1_array = lst_array
     lst_2_array = lst_array
@@ -153,7 +155,8 @@ def build_vanilla_uvpspec(beam=None):
         "Nspwfreqs",
         "Nspws",
         "Nblpairs",
-        "Nblpairts",
+        "Nbltpairs",
+        "Ntpairs",
         "Npols",
         "Ndlys",
         "Nbls",

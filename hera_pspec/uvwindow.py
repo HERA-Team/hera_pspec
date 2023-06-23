@@ -344,8 +344,11 @@ class UVWindow:
         assert hasattr(self.ftbeam_obj_pol[0], 'mapsize') and hasattr(self.ftbeam_obj_pol[1], 'mapsize'), \
             "Wrong input given in ftbeam_obj: must be (a list of) FTBeam object(s)"
         # check if elements in list have same properties
-        assert np.all(self.ftbeam_obj_pol[0].freq_array == self.ftbeam_obj_pol[1].freq_array), \
+        assert len(self.ftbeam_obj_pol[0].freq_array) == len(self.ftbeam_obj_pol[1].freq_array), \
             'Spectral ranges of the two FTBeam objects do not match'
+        if len(self.ftbeam_obj_pol[0].freq_array) == len(self.ftbeam_obj_pol[1].freq_array):
+            assert np.all(self.ftbeam_obj_pol[0].freq_array == self.ftbeam_obj_pol[1].freq_array), \
+                'Spectral ranges of the two FTBeam objects do not match'
         assert self.ftbeam_obj_pol[0].mapsize == self.ftbeam_obj_pol[1].mapsize, \
             'Physical properties of the two FTBeam objects do not match'
 

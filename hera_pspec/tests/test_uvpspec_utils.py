@@ -237,7 +237,7 @@ def test_conj_blpair():
     pytest.raises(ValueError, uvputils._conj_blpair, 102101103104, which='foo')
 
 
-def test_fast_is_in():
+def test_is_in():
     blps = [ 102101103104, 102101103104, 102101103104, 102101103104,
              101102104103, 101102104103, 101102104103, 101102104103,
              102101104103, 102101104103, 102101104103, 102101104103 ]
@@ -246,7 +246,7 @@ def test_fast_is_in():
               0.1, 0.15, 0.3, 0.3, ]
     src_blpts = np.array(list(zip(blps, times)))
 
-    assert uvputils._fast_is_in(src_blpts, [(101102104103, 0.2)])[0]
+    assert uvputils._is_in(src_blpts, [(101102104103, 0.2)])[0]
 
 
 def test_fast_lookup_blpairts():

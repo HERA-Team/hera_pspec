@@ -130,7 +130,7 @@ class Test_grouping(unittest.TestCase):
             uvp.set_stats("noise", key, error)
 
         # Add the simple error bar (all are set to be one) to stat_array
-        errs = np.ones((uvp.Ntimes, uvp.Ndlys))
+        errs = np.ones((uvp.Ntpairs, uvp.Ndlys))
         for key in keys:
             uvp.set_stats("simple", key, errs)
         blpair_groups = [blpairs]
@@ -158,7 +158,7 @@ class Test_grouping(unittest.TestCase):
         # is 1/sqrt{N} times the error bar on one single sample.
         averaged_stat = uvp_avg_simple_wgts.stats_array["simple"][0][0, 0, 0]
         initial_stat = uvp.stats_array["simple"][0][0, 0, 0] \
-                     / np.sqrt(uvp.Ntimes) / np.sqrt(len(blpairs))
+                     / np.sqrt(uvp.Ntpairs) / np.sqrt(len(blpairs))
         assert np.all(np.isclose(initial_stat, averaged_stat))
 
         # For non-uniform weights, we test the error bar on the average power
@@ -173,7 +173,7 @@ class Test_grouping(unittest.TestCase):
         # it matches initial over sqrt(Nblpairs - 1)
         uvp_inf_var = copy.deepcopy(uvp)
         initial_stat = uvp.get_stats('simple', (0, blpairs[0], 'xx'))
-        inf_var_stat = np.ones((uvp_inf_var.Ntimes, uvp_inf_var.Ndlys)) * np.inf
+        inf_var_stat = np.ones((uvp_inf_var.Ntpairs, uvp_inf_var.Ndlys)) * np.inf
         uvp_inf_var.set_stats('simple', (0, blpairs[1], 'xx'), inf_var_stat)
         uvp_inf_var_avg = uvp_inf_var.average_spectra(blpair_groups=blpair_groups,
                                                       error_weights='simple',
@@ -185,7 +185,7 @@ class Test_grouping(unittest.TestCase):
         # and check that averaged stat for that time is inf (not zero)
         uvp_inf_var = copy.deepcopy(uvp)
         initial_stat = uvp.get_stats('simple', (0, blpairs[0], 'xx'))
-        inf_var_stat = np.ones((uvp_inf_var.Ntimes, uvp_inf_var.Ndlys))
+        inf_var_stat = np.ones((uvp_inf_var.Ntpairs, uvp_inf_var.Ndlys))
         inf_var_stat[0] = np.inf
         for blp in blpairs:
             uvp_inf_var.set_stats('simple', (0, blp, 'xx'), inf_var_stat)
@@ -220,8 +220,8 @@ class Test_grouping(unittest.TestCase):
                                                 normalize_weights=True,
                                                 inplace=False,
                                                 add_to_history='')
-        assert uvp_time_avg.Nblpairts == uvp_time_avg.Nblpairs
-        assert uvp_time_avg.window_function_array[0].shape[0] == uvp_time_avg.Nblpairts
+        assert uvp_time_avg.Nbltpairs == uvp_time_avg.Nblpairs
+        assert uvp_time_avg.window_function_array[0].shape[0] == uvp_time_avg.Nbltpairs
         blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
 
         # redundant average
@@ -234,7 +234,7 @@ class Test_grouping(unittest.TestCase):
                                                 normalize_weights=True,
                                                 inplace=False,
                                                 add_to_history='')
-        assert uvp_red_avg.Nblpairts == uvp_red_avg.Ntimes
+        assert uvp_red_avg.Nbltpairs == uvp_red_avg.Ntpairs
 
         # both + error_weights
         keys = uvp.get_all_keys()
@@ -292,8 +292,8 @@ class Test_grouping(unittest.TestCase):
                                                         blpair_groups,
                                                         time_avg=True)
         assert uvp1[0].Nblpairs == 1
-        assert uvp1[0].Ntimes == self.uvp.Ntimes
-        assert uvp2[0].Ntimes == 1
+        assert uvp1[0].Ntpairs == self.uvp.Ntpairs
+        assert uvp2[0].Ntpairs == 1
 
         # Total of weights assigned should equal total no. of blpairs
         assert np.sum(wgts) == np.array(blpair_groups).size
@@ -308,7 +308,7 @@ class Test_grouping(unittest.TestCase):
         _blpairs = list(np.unique(self.uvp.blpair_array)[:3])
         uvp3 = self.uvp.select(spws=0, inplace=False, blpairs=_blpairs)
 
-        Nt = uvp3.Ntimes
+        Nt = uvp3.Ntpairs
         uvp3.data_array[0][Nt:2*Nt] = uvp3.data_array[0][:Nt]
         uvp3.data_array[0][2*Nt:] = uvp3.data_array[0][:Nt]
         uvp3.integration_array[0][Nt:2*Nt] = uvp3.integration_array[0][:Nt]
@@ -438,7 +438,7 @@ def test_bootstrap_run():
 
     # assert average only has one time and 3 blpairs
     uvp_avg = psc.get_pspec("grp1", "uvp_avg")
-    assert uvp_avg.Ntimes == 1
+    assert uvp_avg.Ntpairs == 1
     assert uvp_avg.Nblpairs == 3
 
     # check avg file history
@@ -507,11 +507,11 @@ def test_spherical_average():
 
     # insert cov_array and stats_array
     uvp.cov_model = 'empirical'
-    uvp.cov_array_real = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.float64)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
+    uvp.cov_array_real = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.float64)[None, : , :, None], uvp.Nbltpairs, 0), uvp.Npols, -1)
                         for s in range(uvp.Nspws)}
-    uvp.cov_array_imag = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.float64)[None, : , :, None], uvp.Nblpairts, 0), uvp.Npols, -1)
+    uvp.cov_array_imag = {s: np.repeat(np.repeat(np.eye(uvp.Ndlys, dtype=np.float64)[None, : , :, None], uvp.Nbltpairs, 0), uvp.Npols, -1)
                         for s in range(uvp.Nspws)}
-    uvp.stats_array = {'err': {s: np.ones((uvp.Nblpairts, uvp.Ndlys, uvp.Npols), dtype=np.complex128)
+    uvp.stats_array = {'err': {s: np.ones((uvp.Nbltpairs, uvp.Ndlys, uvp.Npols), dtype=np.complex128)
                                   for s in range(uvp.Nspws)}}
 
     # try a spherical average
@@ -539,8 +539,8 @@ def test_spherical_average():
         assert np.isclose(np.sqrt(sph.cov_array_real[spw])[:, range(Nk), range(Nk)], 1/np.sqrt(A[spw].sum(axis=1))).all()
         assert np.isclose(sph.stats_array['err'][spw], 1/np.sqrt(A[spw].sum(axis=1))).all()
 
-    # bug check: time_avg_array was not down-selected to new Nblpairts
-    assert sph.time_avg_array.size == sph.Nblpairts
+    # bug check: time_avg_array was not down-selected to new Nbltpairs
+    assert sph.time_avg_array.size == sph.Nbltpairs
 
     # bug check: cov_array_imag was not updated
     assert sph.cov_array_real[0].shape == sph.cov_array_imag[0].shape
@@ -552,7 +552,7 @@ def test_spherical_average():
 
     # try time average
     sph = grouping.spherical_average(uvp, kbins, bin_widths, time_avg=True)
-    assert sph.Ntimes == 1
+    assert sph.Ntpairs == 1
 
     # try weighting by stats_array
     sph = grouping.spherical_average(uvp, kbins, bin_widths, error_weights='err')
