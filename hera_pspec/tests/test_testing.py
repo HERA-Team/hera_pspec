@@ -130,15 +130,15 @@ def test_sky_noise_jy_autos():
 
 
 def test_sky_noise_sim():
-    uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    uvd = UVData()
     uvd.read_miriad(uvfile, use_future_array_shapes=True)
     beam = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
     beam_ps = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
 
     # basic test
     np.random.seed(0)
-    sim = testing.sky_noise_sim(uvd, beam, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
+    sim = testing.sky_noise_sim(uvfile, beam, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
                                 divide_by_nsamp=False)
     # assert something was inserted
     for bl in sim.get_antpairpols():
