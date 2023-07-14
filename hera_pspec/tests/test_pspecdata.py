@@ -192,6 +192,14 @@ class Test_PSpecData(unittest.TestCase):
         pytest.raises(ValueError, ds.get_G, key, key)
         pytest.raises(ValueError, ds.get_H, key, key)
 
+        # Test conversion if not future_array_shapes
+        uvd_old = uv.UVData()
+        uvd_old.read_miriad(os.path.join(DATA_PATH,
+                                          "zen.2458042.17772.xx.HH.uvXA"),
+                             use_future_array_shapes=False)
+        ds = pspecdata.PSpecData()
+        pytest.warns(UserWarning, ds.add, [uvd_old, uvd_old], [None, None])
+
     def test_add_data(self):
         """
         Test PSpecData add()
