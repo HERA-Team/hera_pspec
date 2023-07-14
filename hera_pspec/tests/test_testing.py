@@ -24,7 +24,7 @@ def test_uvpspec_from_data():
     fname = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     fname_std = os.path.join(DATA_PATH, "zen.even.std.xx.LST.1.28828.uvOCRSA")
     uvd = UVData()
-    uvd.read_miriad(fname)
+    uvd.read_miriad(fname, use_future_array_shapes=True)
     beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
     beam = pspecbeam.PSpecBeamUV(beamfile)
 
@@ -58,7 +58,7 @@ def test_uvpspec_from_data():
 def test_noise_sim():
     uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd.read_miriad(uvfile)
+    uvd.read_miriad(uvfile, use_future_array_shapes=True)
 
     # test noise amplitude
     uvd2 = copy.deepcopy(uvd)
@@ -69,9 +69,9 @@ def test_noise_sim():
     assert uvn.Nfreqs == uvd2.Nfreqs
     assert uvn.Nbls == uvd2.Nbls
     assert uvn.Npols == uvd2.Npols
-    np.testing.assert_almost_equal(np.std(uvn.data_array[:, :, :, 1].real), 0.20655731998619664)
-    np.testing.assert_almost_equal(np.std(uvn.data_array[:, :, :, 1].imag), 0.20728471891024444)
-    np.testing.assert_almost_equal(np.std(uvn.data_array[:, :, :, 0].real) / np.std(uvn.data_array[:, :, :, 1].real),
+    np.testing.assert_almost_equal(np.std(uvn.data_array[..., 1].real), 0.20655731998619664)
+    np.testing.assert_almost_equal(np.std(uvn.data_array[..., 1].imag), 0.20728471891024444)
+    np.testing.assert_almost_equal(np.std(uvn.data_array[..., 0].real) / np.std(uvn.data_array[..., 1].real),
                            1/np.sqrt(2), decimal=2)
 
     # test seed and inplace
@@ -87,8 +87,8 @@ def test_noise_sim():
 
     # test Tsys scaling
     uvn3 = testing.noise_sim(uvd2, 2*300.0, seed=0, whiten=True, inplace=False)
-    np.testing.assert_almost_equal(np.std(uvn3.data_array[:, :, :, 1].real), 2*0.20655731998619664)
-    np.testing.assert_almost_equal(np.std(uvn3.data_array[:, :, :, 1].imag), 2*0.20728471891024444)
+    np.testing.assert_almost_equal(np.std(uvn3.data_array[..., 1].real), 2*0.20655731998619664)
+    np.testing.assert_almost_equal(np.std(uvn3.data_array[..., 1].imag), 2*0.20728471891024444)
 
     # test Nextend
     uvn = testing.noise_sim(uvd, 300.0, seed=0, whiten=True, inplace=False, Nextend=4)
@@ -103,7 +103,7 @@ def test_sky_noise_jy_autos():
     # Load data
     uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd.read_miriad(uvfile)
+    uvd.read_miriad(uvfile, use_future_array_shapes=True)
     
     # Get input arrays
     lsts = np.unique(uvd.lst_array)
@@ -130,15 +130,15 @@ def test_sky_noise_jy_autos():
 
 
 def test_sky_noise_sim():
-    uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd.read_miriad(uvfile)
+    uvd = UVData()
+    uvd.read_miriad(uvfile, use_future_array_shapes=True)
     beam = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
     beam_ps = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
 
     # basic test
     np.random.seed(0)
-    sim = testing.sky_noise_sim(uvd, beam, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
+    sim = testing.sky_noise_sim(uvfile, beam, cov_amp=1000, cov_length_scale=10, constant_in_time=True,
                                 divide_by_nsamp=False)
     # assert something was inserted
     for bl in sim.get_antpairpols():

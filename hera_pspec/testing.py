@@ -71,8 +71,8 @@ def build_vanilla_uvpspec(beam=None):
     spw_freq_array = np.tile(np.arange(Nspws), Nfreqs)
     spw_dly_array = np.tile(np.arange(Nspws), Ndlys)
     spw_array = np.arange(Nspws)
-    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), Nspws)
-    dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
+    freq_array = np.linspace(100e6, 105e6, Nfreqs, endpoint=False)
+    dly_array = utils.get_delays(freq_array, n_dlys=Ndlys)
     polpair_array = np.array(
         [
             1515,
@@ -82,7 +82,7 @@ def build_vanilla_uvpspec(beam=None):
     vis_units = "unknown"
     norm_units = "Hz str"
     weighting = "identity"
-    channel_width = np.median(np.diff(freq_array))
+    channel_width = np.ones(Nfreqs) * np.median(np.diff(freq_array))
     history = "example"
     taper = "none"
     norm = "I"
@@ -291,15 +291,17 @@ def uvpspec_from_data(
     # load data
     if isinstance(data, str):
         uvd = UVData()
-        uvd.read_miriad(data)
+        uvd.read_miriad(data, use_future_array_shapes=True)
     elif isinstance(data, UVData):
         uvd = data
+        uvd.use_future_array_shapes()
 
     if isinstance(data_std, str):
         uvd_std = UVData()
-        uvd_std.read_miriad(data_std)
+        uvd_std.read_miriad(data_std, use_future_array_shapes=True)
     elif isinstance(data_std, UVData):
         uvd_std = data_std
+        uvd_std.use_future_array_shapes()
     else:
         uvd_std = None
     if uvd_std is not None:
@@ -422,11 +424,12 @@ def noise_sim(
     # Read data files
     if isinstance(data, str):
         _data = UVData()
-        _data.read_miriad(data)
+        _data.read_miriad(data, use_future_array_shapes=True)
         data = _data
     elif isinstance(data, UVData):
         if not inplace:
             data = copy.deepcopy(data)
+        data.use_future_array_shapes()
     assert isinstance(data, UVData)
 
     # whiten input data
@@ -461,7 +464,7 @@ def noise_sim(
     if not isinstance(int_time, np.ndarray):
         int_time = np.array([int_time])
     Trms = Tsys / np.sqrt(
-        int_time[:, None, None, None] * data.nsample_array * data.channel_width
+        int_time[:, None, None] * data.nsample_array * data.channel_width[None, :, None]
     )
 
     # if a pol is pStokes pol, divide by extra sqrt(2)
@@ -472,12 +475,12 @@ def noise_sim(
 
     # Get Vrms in Jy using beam
     if beam is not None:
-        freqs = np.unique(data.freq_array)[None, None, :, None]
+        freqs = np.unique(data.freq_array)[None, :, None]
         K_to_Jy = [
             1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p))
             for p in data.polarization_array
         ]
-        K_to_Jy = np.array(K_to_Jy).T[None, None, :, :]
+        K_to_Jy = np.array(K_to_Jy).T[None, :, :]
         K_to_Jy /= np.array(
             [np.sqrt(2) if p in [1, 2, 3, 4] else 1.0 for p in data.polarization_array]
         )
@@ -646,9 +649,10 @@ def sky_noise_sim(
 
     if isinstance(data, str):
         uvd = UVData()
-        uvd.read(data)
+        uvd.read(data, use_future_array_shapes=True)
     else:
         uvd = copy.deepcopy(data)
+        uvd.use_future_array_shapes()
     assert (
         -7 not in uvd.polarization_array and -8 not in uvd.polarization_array
     ), "Does not operate on cross-hand polarizations"
@@ -657,7 +661,7 @@ def sky_noise_sim(
         beam = pspecbeam.PSpecBeamUV(beam)
 
     # get metadata
-    freqs = uvd.freq_array[0]
+    freqs = uvd.freq_array
     Ntimes = uvd.Ntimes
     lsts = np.unique(uvd.lst_array)
     int_time = np.median(uvd.integration_time)
@@ -673,7 +677,7 @@ def sky_noise_sim(
             OmegaP[pol] = beam.power_beam_int(pol)
         # interpolate to freq_array of data
         OmegaP[pol] = interpolate.interp1d(
-            beam.primary_beam.freq_array[0],
+            beam.primary_beam.freq_array,
             OmegaP[pol],
             kind="linear",
             bounds_error=False,
@@ -739,6 +743,6 @@ def sky_noise_sim(
         # fill data
         blt_inds = uvd.antpair2ind(bl[:2])
         pol_ind = pols.index(bl[2])
-        uvd.data_array[blt_inds, 0, :, pol_ind] = n + sig
+        uvd.data_array[blt_inds, :, pol_ind] = n + sig
 
     return uvd

@@ -19,9 +19,9 @@ class Test_pstokes(unittest.TestCase):
     def setUp(self):
         # Loading pyuvdata objects
         self.uvd1 = pyuvdata.UVData()
-        self.uvd1.read_miriad(dset1)
+        self.uvd1.read_miriad(dset1, use_future_array_shapes=True)
         self.uvd2 = pyuvdata.UVData()
-        self.uvd2.read_miriad(dset2)
+        self.uvd2.read_miriad(dset2, use_future_array_shapes=True)
 
     def tearDown(self):
         pass
@@ -87,9 +87,9 @@ class Test_pstokes(unittest.TestCase):
     def test_construct_pstokes_multipol(self):
         """test construct_pstokes on multi-polarization files"""
         uvd = pyuvdata.UVData()
-        uvd.read(multipol_dset)
+        uvd.read(multipol_dset, use_future_array_shapes=True)
         uvc = pyuvdata.UVCal()
-        uvc.read_calfits(multipol_dset_cal)
+        uvc.read_calfits(multipol_dset_cal, use_future_array_shapes=True)
         uvutils.uvcalibrate(uvd, uvc)
         wgts = [(0.5, 0.5), (0.5, -0.5)]
 

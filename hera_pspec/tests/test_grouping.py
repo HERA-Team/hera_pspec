@@ -84,7 +84,7 @@ class Test_grouping(unittest.TestCase):
         dfile = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         # Load into UVData objects
         uvd = UVData()
-        uvd.read_miriad(dfile)
+        uvd.read_miriad(dfile, use_future_array_shapes=True)
         cosmo = conversions.Cosmo_Conversions()
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
@@ -92,7 +92,7 @@ class Test_grouping(unittest.TestCase):
         Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol='XX')
 
         # reshape to appropriately match a UVData.data_array object and multiply in!
-        uvd.data_array *= Jy_to_mK[None, None, :, None]
+        uvd.data_array *= Jy_to_mK[None, :, None]
         # slide the time axis of uvd by one integration
         uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
         uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
@@ -198,7 +198,10 @@ class Test_grouping(unittest.TestCase):
 
         # prep objects
         uvd = UVData()
-        uvd.read_uvh5(os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'))
+        uvd.read_uvh5(
+            os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
+            use_future_array_shapes=True
+        )
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
         baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
                                                                   exclude_permutations=False,
@@ -343,7 +346,7 @@ def test_bootstrap_resampled_error():
     cosmo = conversions.Cosmo_Conversions()
     beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
     uvd = UVData()
-    uvd.read_miriad(visfile)
+    uvd.read_miriad(visfile, use_future_array_shapes=True)
     ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
     reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
@@ -415,7 +418,7 @@ def test_bootstrap_run():
     cosmo = conversions.Cosmo_Conversions()
     beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
     uvd = UVData()
-    uvd.read_miriad(visfile)
+    uvd.read_miriad(visfile, use_future_array_shapes=True)
     ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
     reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
@@ -492,7 +495,10 @@ def test_get_bootstrap_run_argparser():
 def test_spherical_average():
     # create two polarization data
     uvd = UVData()
-    uvd.read(os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'))
+    uvd.read(
+        os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
+        use_future_array_shapes=True
+    )
 
     # load other data, get reds and make UVPSpec
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
@@ -598,7 +604,10 @@ def test_spherical_average():
 
     # tests related to exact_windows
     uvd = UVData()
-    uvd.read_uvh5(os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'))
+    uvd.read_uvh5(
+        os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
+        use_future_array_shapes=True
+    )
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam)
     baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
                                                               exclude_permutations=False,
@@ -627,7 +636,10 @@ def test_spherical_wf_from_uvp():
     basename = 'FT_beam_HERA_dipole_test'
     # obtain uvp object
     uvd = UVData()
-    uvd.read_uvh5(os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'))
+    uvd.read_uvh5(
+        os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
+        use_future_array_shapes=True
+    )
     # Create a new PSpecData objec
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
     # choose baselines

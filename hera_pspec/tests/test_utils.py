@@ -12,7 +12,10 @@ from hera_cal import redcal
 def test_cov():
     # load another data file
     uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+    uvd.read_miriad(
+        os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"),
+        use_future_array_shapes=True
+    )
 
     # test basic execution
     d1 = uvd.get_data(24, 25)
@@ -66,7 +69,8 @@ class Test_Utils(unittest.TestCase):
         # Load data into UVData object
         self.uvd = UVData()
         self.uvd.read_miriad(os.path.join(DATA_PATH,
-                                          "zen.2458042.17772.xx.HH.uvXA"))
+                                          "zen.2458042.17772.xx.HH.uvXA"),
+                             use_future_array_shapes=True)
 
         # Create UVPSpec object
         self.uvp, cosmo = testing.build_vanilla_uvpspec()
@@ -151,7 +155,7 @@ class Test_Utils(unittest.TestCase):
     def test_calc_blpair_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
-        uvd.read_miriad(fname)
+        uvd.read_miriad(fname, use_future_array_shapes=True)
 
         # basic execution
         (bls1, bls2, blps, xants1, xants2, rgrps, lens,
@@ -213,7 +217,7 @@ class Test_Utils(unittest.TestCase):
         # test include_crosscorrs selection option being set to false.
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
-        uvd.read_miriad(fname)
+        uvd.read_miriad(fname, use_future_array_shapes=True)
         # basic execution
         (bls1, bls2, blps, xants1, xants2, rgrps, lens,
          angs) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, extra_info=True,
@@ -231,7 +235,7 @@ class Test_Utils(unittest.TestCase):
     def test_get_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
-        uvd.read_miriad(fname, read_data=False)
+        uvd.read_miriad(fname, read_data=False, use_future_array_shapes=True)
         antpos, ants = uvd.get_ENU_antpos()
         antpos_d = dict(list(zip(ants, antpos)))
 
@@ -272,7 +276,7 @@ class Test_Utils(unittest.TestCase):
     def test_get_reds_autos_only(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
-        uvd.read_miriad(fname, read_data=False)
+        uvd.read_miriad(fname, read_data=False, use_future_array_shapes=True)
         antpos, ants = uvd.get_ENU_antpos()
         antpos_d = dict(list(zip(ants, antpos)))
         xants = [0, 1, 2]
@@ -341,7 +345,7 @@ def test_log():
 def test_get_blvec_reds():
     fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
     uvd = UVData()
-    uvd.read_miriad(fname)
+    uvd.read_miriad(fname, use_future_array_shapes=True)
     antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
     reds = redcal.get_pos_reds(dict(list(zip(ants, antpos))))
     uvp = testing.uvpspec_from_data(fname, reds[:2], spw_ranges=[(10, 40)])
