@@ -14,7 +14,6 @@ from .conversions import Cosmo_Conversions
 import inspect
 from . import __version__
 
-
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size
@@ -761,7 +760,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     pol and group selections given pol_pairs and group_pairs.
     """
     # type check
-    if isinstance(uv_templates, (str, np.str)):
+    if isinstance(uv_templates, str):
         uv_templates = [uv_templates]
     assert len(pol_pairs) == len(group_pairs), "len(pol_pairs) must equal "\
                                                "len(group_pairs)"
@@ -1142,9 +1141,9 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         List of baseline angles [degrees ENU coords] of each group in reds
     """
     # handle string and UVData object
-    if isinstance(uvd, (str, np.str, UVData)):
+    if isinstance(uvd, (str, UVData)):
         # load filepath
-        if isinstance(uvd, (str, np.str)):
+        if isinstance(uvd, str):
             _uvd = UVData()
             _uvd.read(uvd, read_data=False, file_type=file_type)
             uvd = _uvd
@@ -1345,10 +1344,12 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
         If err_type == 'P_SN', uvp should not have any
         incoherent averaging applied.
 
-    auto_Tsys : UVData object, optional
+    auto_Tsys : UVData object.
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.
         Needed for P_N computation, not needed if feeding precomp_P_N.
+        If power spectra were computed from interleaved times then the supplied auto_Tsys should include all of the times that are present in all of the pairs.
+
 
     err_type : str or list of str, options = ['P_N', 'P_SN']
         Type of thermal noise error to compute. P_N is the standard
@@ -1403,7 +1404,22 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
         # iterate over blpairs
         for blp in uvp.get_blpairs():
             blp_int = uvp.antnums_to_blpair(blp)
-            lst_avg = uvp.lst_avg_array[uvp.blpair_to_indices(blp)]
+            blp_inds = uvp.blpair_to_indices(blp)
+            lst_avg = uvp.lst_avg_array[blp_inds]
+
+            time_1_selection = uvp.time_1_array[blp_inds]
+            time_2_selection = uvp.time_2_array[blp_inds]
+
+            # get time indices in data
+            times_blp_1 = auto_Tsys.time_array[auto_Tsys.antpair2ind(blp[0][0], blp[0][0])]
+            times_blp_2 = auto_Tsys.time_array[auto_Tsys.antpair2ind(blp[1][0], blp[1][0])]
+
+            # This time matching is at roughly 1 second tolerance.
+            # Interleaves with < 1 second cadence could run into trouble.
+            # I don't anticipate this being a problem with HERA's 10 second interleave time.
+            tinds1 = [np.where(np.isclose(times_blp_1, t, atol=1e-5, rtol=0))[0][0] for t in time_1_selection]
+            tinds2 = [np.where(np.isclose(times_blp_2, t, atol=1e-5, rtol=0))[0][0] for t in time_2_selection]
+            
             # iterate over polarization
             for polpair in uvp.polpair_array:
                 pol = uvpspec_utils.polpair_int2tuple(polpair)[0]  # integer
@@ -1414,14 +1430,16 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
 
                 if precomp_P_N is None:
                     # take geometric mean of four antenna autocorrs and get OR'd flags
-                    Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
-                    Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
+                    # select out the interleaving of the times
+                    Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop].real * \
+                            auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop].real)**(1./4)
+                    Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop] + \
+                            auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop]
+                    
                     # average over frequency
                     if np.all(Tflag):
                         # fully flagged
@@ -1537,3 +1555,70 @@ def history_string(notes=''):
     """
     return history
 
+
+
+def get_Q_alt(
+    mode: int, n_delays: int, n_freqs: int,  allow_fft: bool=True, include_extension: bool=False, n_extend: float = 0., phase_correction: float = 0.
+):
+    r"""
+    Response of the covariance to a given bandpower, dC / dp_alpha,
+    EXCEPT without the primary beam factors. This is Q_alt as defined
+    in HERA memo #44, so it's not dC / dp_alpha, strictly, but is just
+    the part that does the Fourier transforms.
+
+    Assumes that Q will operate on a visibility vector in frequency space.
+    In the limit that self.spw_Ndlys equals self.spw_Nfreqs, this will
+    produce a matrix Q that performs a two-sided FFT and extracts a
+    particular Fourier mode.
+
+    (Computing x^t Q y is equivalent to Fourier transforming x and y
+    separately, extracting one element of the Fourier transformed vectors,
+    and then multiplying them.)
+
+    When self.spw_Ndlys < self.spw_Nfreqs, the effect is similar except
+    the delay bins need not be in the locations usually mandated
+    by the FFT algorithm.
+
+    Parameters
+    ----------
+    mode : int
+        Central wavenumber (index) of the bandpower, p_alpha.
+    allow_fft : boolean, optional
+        If set to True, allows a shortcut FFT method when
+        the number of delay bins equals the number of delay channels.
+        Default: True
+    include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
+        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
+        (spw_Nfreq x spw_Nfreq).
+
+    Return
+    -------
+    Q : array_like
+        Response matrix for bandpower p_alpha.
+    """
+    if mode >= n_delays or mode < 0:
+        raise IndexError("Cannot compute Q matrix for a mode outside"
+                            "of allowed range of delay modes.")
+    if n_extend:
+        n_freqs = n_freqs + n_extend
+    else:
+        phase_correction = 0.
+
+    if (n_delays == n_freqs) and allow_fft:
+        _m = np.zeros((n_freqs,), dtype=complex)
+        _m[mode] = 1. # delta function at specific delay mode
+        # FFT to transform to frequency space
+        m = np.fft.fft(np.fft.ifftshift(_m))
+    else:
+        if n_delays % 2 == 0:
+            start_idx = -n_delays/2
+        else:
+            start_idx = -(n_delays - 1)/2
+        m = (start_idx + mode) * (np.arange(n_freqs) - phase_correction)
+        m = np.exp(-2j * np.pi * m / n_delays)
+
+    Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
+    return Q_alt
+
+def get_Q_alt_tensor(n_delays: int, **kwargs):
+    return np.array([get_Q_alt(mode, n_delays, **kwargs) for mode in range(n_delays)])

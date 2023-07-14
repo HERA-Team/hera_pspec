@@ -69,7 +69,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     df = np.median(np.diff(pspec_freqs))
     integration_freqs = np.linspace(pspec_freqs.min(),
                                     pspec_freqs.min() + df*len(pspec_freqs),
-                                    num_steps, endpoint=True, dtype=np.float)
+                                    num_steps, endpoint=True, dtype=float)
 
     # The interpolations are generally more stable in MHz
     integration_freqs_MHz = integration_freqs / 1e6
@@ -92,7 +92,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
 
     # Get B_pp = \int dnu taper^2 and Bp = \int dnu
     if taper == 'none':
-        dBpp_over_BpSq = np.ones_like(integration_freqs, np.float)
+        dBpp_over_BpSq = np.ones_like(integration_freqs, float)
     else:
         dBpp_over_BpSq = dspec.gen_window(taper, len(pspec_freqs))**2.
         dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest',
@@ -231,12 +231,12 @@ class PSpecBeamBase(object):
             Contains Jy -> mK factor at each frequency.
         """
         # Check input types
-        if isinstance(freqs, (np.float, float)):
+        if isinstance(freqs, float):
             freqs = np.array([freqs])
         elif not isinstance(freqs, np.ndarray):
             raise TypeError("freqs must be fed as a float ndarray")
         elif isinstance(freqs, np.ndarray) \
-            and freqs.dtype not in (float, np.float, np.float64):
+            and freqs.dtype not in (float, np.float64):
             raise TypeError("freqs must be fed as a float ndarray")
 
         # Check frequency bounds
@@ -477,7 +477,7 @@ class PSpecBeamUV(PSpecBeamBase):
         beam_res = self.primary_beam._interp_freq(freq) # interpolate beam in frequency, based on the data frequencies
         beam_res = beam_res[0]
 
-        if isinstance(pol, (str, np.str)):
+        if isinstance(pol, str):
             pol = uvutils.polstr2num(pol, x_orientation=x_orientation)
 
         pol_array = self.primary_beam.polarization_array
@@ -684,8 +684,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
 
         # Make sure OmegaP and OmegaPP are arrays
         try:
-            OmegaP = np.array(OmegaP).astype(np.float)
-            OmegaPP = np.array(OmegaPP).astype(np.float)
+            OmegaP = np.array(OmegaP).astype(float)
+            OmegaPP = np.array(OmegaPP).astype(float)
         except:
             raise TypeError("OmegaP and OmegaPP must both be array_like.")
 

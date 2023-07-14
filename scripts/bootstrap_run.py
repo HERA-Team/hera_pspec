@@ -5,17 +5,19 @@ pair groups to produce errorbars.
 """
 import sys
 import os
-from hera_pspec import pspecdata, grouping
-from hera_pspec import uvpspec_utils as uvputils
+from hera_pspec import grouping
+from hera_cal._cli_tools import parse_args, run_with_profiling
 
 # Parse commandline args
 args = grouping.get_bootstrap_run_argparser()
-a = args.parse_args()
+a = parse_args(args)
 kwargs = vars(a) # dict of args
 
 # Get arguments
 filename = kwargs.pop('filename')
 
 # Run bootstrap
-grouping.bootstrap_run(filename, **kwargs)
+run_with_profiling(
+    grouping.bootstrap_run, a, filename=filename, **kwargs
+)
 

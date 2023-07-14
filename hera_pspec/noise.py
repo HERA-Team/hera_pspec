@@ -94,7 +94,7 @@ class Sensitivity(object):
         ----------
         cosmo : conversions.Cosmo_Conversions instance, or self.cosmo_params string, or dictionary
         """
-        if isinstance(cosmo, (str, np.str)):
+        if isinstance(cosmo, str):
             cosmo = ast.literal_eval(cosmo)
         if isinstance(cosmo, (dict, odict)):
             cosmo = conversions.Cosmo_Conversions(**cosmo)

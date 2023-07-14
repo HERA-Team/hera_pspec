@@ -421,8 +421,8 @@ def polpair_tuple2int(polpair, x_orientation=None):
 
     # Convert strings to ints if necessary
     pol1, pol2 = polpair
-    if type(pol1) in (str, np.str): pol1 = polstr2num(pol1, x_orientation=x_orientation)
-    if type(pol2) in (str, np.str): pol2 = polstr2num(pol2, x_orientation=x_orientation)
+    if type(pol1) is str: pol1 = polstr2num(pol1, x_orientation=x_orientation)
+    if type(pol2) is str: pol2 = polstr2num(pol2, x_orientation=x_orientation)
 
     # Convert to polpair integer
     ppint = (20 + pol1)*100 + (20 + pol2)
@@ -470,10 +470,10 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
 
     # get indices
     if only_pairs_in_bls:
-        blp_select = np.array( [np.bool((blp[0] in bls) * (blp[1] in bls))
+        blp_select = np.array( [bool((blp[0] in bls) * (blp[1] in bls))
                                 for blp in blpair_bls] )
     else:
-        blp_select = np.array( [np.bool((blp[0] in bls) + (blp[1] in bls))
+        blp_select = np.array( [bool((blp[0] in bls) + (blp[1] in bls))
                                 for blp in blpair_bls] )
 
     return blp_select
@@ -484,6 +484,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
     """
     Select function for selecting out certain slices of the data, as well
     as loading in data from HDF5 file.
+
+    TODO: Add time1, time2 selection options.
 
     Parameters
     ----------
@@ -565,7 +567,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
     if blpairs is not None:
         if bls is None:
-            blp_select = np.zeros(uvp.Nblpairts, np.bool)
+            blp_select = np.zeros(uvp.Nbltpairs, bool)
 
         # assert form
         assert isinstance(blpairs[0], (tuple, int, np.integer)), \
@@ -580,7 +582,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
 
     if times is not None:
         if bls is None and blpairs is None:
-            blp_select = np.ones(uvp.Nblpairts, np.bool)
+            blp_select = np.ones(uvp.Nbltpairs, bool)
         time_select = np.logical_or.reduce(
                                [np.isclose(uvp.time_avg_array, t, rtol=1e-16)
                                 for t in times])
@@ -589,7 +591,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
     if lsts is not None:
         assert times is None, "Cannot select on lsts and times simultaneously."
         if bls is None and blpairs is None:
-            blp_select = np.ones(uvp.Nblpairts, np.bool)
+            blp_select = np.ones(uvp.Nbltpairs, bool)
         lst_select = np.logical_or.reduce(
                             [ np.isclose(uvp.lst_avg_array, t, rtol=1e-16)
                               for t in lsts] )
@@ -621,7 +623,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.lst_avg_array = uvp.lst_avg_array[blp_select]
         uvp.Ntimes = len(np.unique(uvp.time_avg_array))
         uvp.Nblpairs = len(np.unique(uvp.blpair_array))
-        uvp.Nblpairts = len(uvp.blpair_array)
+        uvp.Nbltpairs = len(uvp.blpair_array)
 
         # Calculate unique baselines from new blpair_array
         new_blpairs = np.unique(uvp.blpair_array)
@@ -1047,41 +1049,26 @@ def _conj_blpair(blpair, which='both'):
     return conj_blpair
 
 
-def _fast_is_in(src_blpts, query_blpts, time_prec=8):
+def _is_in(src_blpts, query_blpts):
     """
-    Helper function to rapidly check if a given blpair-time couplet is in an
+    Helper function to check if a given bltime-pari is in an
     array.
 
     Parameters
     ----------
     src_blpts : list of tuples or array_like
         List of tuples or array of shape (N, 2), containing a list of (blpair,
-        time) couplets.
+        time1, time2) triplets.
 
     query_blpts : list of tuples or array_like
         List of tuples or array of shape (M, 2), containing a list of (blpair,
-        time) which will be looked up in src_blpts
-
-    time_prec : int, optional
-        Number of decimals to round time array to when performing float
-        comparision. Default: 8.
+        time1, time2) which will be looked up in src_blpts
 
     Returns
     -------
     is_in_arr: list of bools
         A list of booleans, which indicate which query_blpts are in src_blpts.
     """
-    # This function converts baseline-pair-times, a tuple (blp, time)
-    # to a complex number blp + 1j * time, so that "in" function is much
-    # faster.
-    src_blpts = np.asarray(src_blpts)
-    query_blpts = np.asarray(query_blpts)
-
-    # Slice to create complex array
-    src_blpts = src_blpts[:,0] + 1.j*np.around(src_blpts[:,1], time_prec)
-    query_blpts = query_blpts[:,0] + 1.j*np.around(query_blpts[:,1], time_prec)
-
-    # see if q complex number is in src_blpts
     return [q in src_blpts for q in query_blpts]
 
 
@@ -1167,7 +1154,7 @@ def _get_red_bls(uvp, bl_len_tol=1., bl_ang_tol=1.):
     lens, angs = utils.get_bl_lens_angs(bl_vecs, bl_error_tol=bl_len_tol)
 
     # Baseline indices
-    idxs = np.arange(len(lens)).astype(np.int)
+    idxs = np.arange(len(lens)).astype(int)
     grp_bls = []; grp_len = []; grp_ang = []
 
     # Group baselines by length and angle

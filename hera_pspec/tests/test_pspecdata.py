@@ -909,6 +909,7 @@ class Test_PSpecData(unittest.TestCase):
         #Test if error is raised when one tried FFT approach on exact_norm
         pytest.raises(NotImplementedError, self.ds.q_hat, key1, key2, exact_norm=True, allow_fft = True)
 
+        
     def test_get_H(self):
         """
         Test Fisher/weight matrix calculation.
@@ -1196,6 +1197,7 @@ class Test_PSpecData(unittest.TestCase):
         blp = (0, ((37,39),(37,39)), ('xx','xx'))
         assert np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min()
 
+
     def test_Jy_to_mK(self):
         # test basic execution
         uvd = self.uvd
@@ -1246,6 +1248,21 @@ class Test_PSpecData(unittest.TestCase):
         pytest.raises(ValueError, ds.trim_dset_lsts)
         assert ds.dsets[0].Ntimes == 60
         assert ds.dsets[1].Ntimes == 60
+
+    def test_get_Q_alt_tensor(self):
+        fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
+        uvd1 = UVData()
+        uvd1.read_miriad(fname)
+        uvd2 = copy.deepcopy(uvd1)
+        uvd2.lst_array = (uvd2.lst_array + 10. * np.median(np.diff(np.unique(uvd2.lst_array)))) % (2.*np.pi)
+
+        # test basic execution
+        ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None])
+
+        ndly = ds.spw_Ndlys
+        ds.spw_Ndlys = None
+        Qalt = ds.get_Q_alt_tensor()
+        assert ds.spw_Ndlys == ndly
 
     def test_units(self):
         ds = pspecdata.PSpecData()

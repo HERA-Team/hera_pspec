@@ -53,9 +53,9 @@ class Test_UVPSpec(unittest.TestCase):
         uvp.stats_array = odict({stat: odict()})
         for spw in uvp.spw_array:
             ndlys = uvp.get_spw_ranges(spw)[0][-1]
-            uvp.cov_array_real[spw] = np.empty((uvp.Nblpairts, ndlys, ndlys, uvp.Npols), np.float64)
-            uvp.cov_array_imag[spw] = np.empty((uvp.Nblpairts, ndlys, ndlys, uvp.Npols), np.float64)
-            uvp.stats_array[stat][spw] = np.empty((uvp.Nblpairts, ndlys, uvp.Npols), np.complex128)
+            uvp.cov_array_real[spw] = np.empty((uvp.Nbltpairs, ndlys, ndlys, uvp.Npols), np.float64)
+            uvp.cov_array_imag[spw] = np.empty((uvp.Nbltpairs, ndlys, ndlys, uvp.Npols), np.float64)
+            uvp.stats_array[stat][spw] = np.empty((uvp.Nbltpairs, ndlys, uvp.Npols), np.complex128)
         return uvp
 
     def test_param(self):
@@ -69,7 +69,7 @@ class Test_UVPSpec(unittest.TestCase):
         # get_data
         d = self.uvp.get_data((0, ((1, 2), (1, 2)), ('xx','xx')))
         assert d.shape == (10, 30)
-        assert(d.dtype == np.complex)
+        assert(d.dtype == complex)
         np.testing.assert_almost_equal(d[0,0], (101.1021011020000001+0j))
         d = self.uvp.get_data((0, ((1, 2), (1, 2)), 1515))
         np.testing.assert_almost_equal(d[0,0], (101.1021011020000001+0j))
@@ -79,19 +79,19 @@ class Test_UVPSpec(unittest.TestCase):
         # get_wgts
         w = self.uvp.get_wgts((0, ((1, 2), (1, 2)), ('xx','xx')))
         assert w.shape == (10, 50, 2) # should have Nfreq dim, not Ndlys
-        assert w.dtype == np.float
+        assert w.dtype == float
         assert w[0,0,0] == 1.0
 
         # get_integrations
         i = self.uvp.get_integrations((0, ((1, 2), (1, 2)), ('xx','xx')))
         assert i.shape == (10,)
-        assert i.dtype == np.float
+        assert i.dtype == float
         np.testing.assert_almost_equal(i[0], 1.0)
 
         # get nsample
         n = self.uvp.get_nsamples((0, ((1, 2), (1, 2)), ('xx', 'xx')))
         assert n.shape == (10,)
-        assert n.dtype == np.float
+        assert n.dtype == float
         np.testing.assert_almost_equal(n[0], 1.0)
 
         # get dly
@@ -591,7 +591,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvp.get_exact_window_functions(ftbeam=self.ft_file,
                                        inplace=True)
         assert uvp.exact_windows
-        assert uvp.window_function_array[0].shape[0] == uvp.Nblpairts
+        assert uvp.window_function_array[0].shape[0] == uvp.Nbltpairs
         # if not exact window function, array dim is 4
         assert uvp.window_function_array[0].ndim == 5
 
@@ -1028,5 +1028,13 @@ def test_backwards_compatibility_read():
     # test read in of a static test file dated 8/2019
     uvp = uvpspec.UVPSpec()
     uvp.read_hdf5(os.path.join(DATA_PATH, 'test_uvp.h5'))
+    for dattr in uvp._meta_deprecated:
+        with pytest.raises(AttributeError) as excinfo:
+            raise AttributeError("'UVPSpec' object has no attribute")
+        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
+    for dattr in uvp._meta_dsets_deprecated:
+        with pytest.raises(AttributeError) as excinfo:
+            raise AttributeError("'UVPSpec' object has no attribute")
+        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
     # assert check does not fail
     uvp.check()

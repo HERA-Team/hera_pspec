@@ -544,7 +544,7 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
         If True, overwrite output spectra if they exist.
     """
     # Load container
-    if isinstance(psc, (str, np.str)):
+    if isinstance(psc, str):
         psc = PSpecContainer(psc, mode='rw')
     else:
         assert isinstance(psc, PSpecContainer)

@@ -66,7 +66,7 @@ class Test_Sensitivity(unittest.TestCase):
         t_int = 10.7
         P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1,
                                   form='Pk')
-        assert isinstance(P_N, (float, np.float))
+        assert isinstance(P_N, float)
         assert np.isclose(P_N, 642386932892.2921)
         # calculate DelSq
         Dsq = self.sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1,
@@ -178,7 +178,7 @@ def test_analytic_noise():
     frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
     dlys = uvp.get_dlys(0) * 1e9
     select = np.abs(dlys) > 3000
-    assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nblpairts)
+    assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
 
     # test single time
     uvp.select(times=uvp.time_avg_array[:1], inplace=True)
@@ -187,7 +187,7 @@ def test_analytic_noise():
     frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
     dlys = uvp.get_dlys(0) * 1e9
     select = np.abs(dlys) > 3000
-    assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nblpairts)
+    assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
 
     # clean up
     os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
