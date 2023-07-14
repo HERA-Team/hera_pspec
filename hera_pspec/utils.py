@@ -119,7 +119,7 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(uvd.nsample_array[:, spw, :]))
     df = np.array(uvd.channel_width)[spw]
     # some impainted data have zero nsample while is not flagged, and they will be assigned the median nsample within the spectral window.
-    var = np.abs(x_bl1*x_bl2.conj()) / dt / df[None, :] / nsample_bl
+    var = np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl
 
     return var
 
