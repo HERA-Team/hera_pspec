@@ -87,7 +87,7 @@ class UVPSpec(object):
         self._bl_array = PSpecParam("bl_array", description="All unique baseline (antenna-pair) integers.", expected_type=np.int32, form="(Nbls,)")
 
         # Misc Attributes
-        self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", expected_type=float)
+        self._channel_width = PSpecParam("channel_width", description="width of visibility frequency channels in Hz.", form="(Nspwfreqs,)", expected_type=np.float64)
         self._telescope_location = PSpecParam("telescope_location", description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().", expected_type=np.float64)
         self._weighting = PSpecParam("weighting", description="Form of data weighting used when forming power spectra.", expected_type=str)
         self.set_symmetric_taper = PSpecParam("symmetric_taper", description="Specify whether Taper was applied symmetrically (True) or to the left(False).", expected_type=str)
@@ -132,12 +132,12 @@ class UVPSpec(object):
         self._immutables = ["Ntimes", "Ntpairs", "Nbltpairs", "Nblpairs", "Nspwdlys",
                             "Nspwfreqs", "Nspws", "Ndlys", "Npols", "Nfreqs",
                             "history", "r_params", "cov_model",
-                            "Nbls", "channel_width", "weighting", "vis_units",
+                            "Nbls", "weighting", "vis_units",
                             "norm", "norm_units", "taper", "cosmo", "beamfile",
                             'folded', 'exact_windows']
         self._ndarrays = ["spw_array", "freq_array", "dly_array",
                           "polpair_array", "lst_1_array", "lst_avg_array",
-                          "time_avg_array",
+                          "time_avg_array", "channel_width", 
                           "lst_2_array", "time_1_array", "time_2_array",
                           "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
                           "bl_vecs", "bl_array", "telescope_location",
@@ -1414,6 +1414,15 @@ class UVPSpec(object):
         for dattr in self._meta_dsets_deprecated:
             if hasattr(self, dattr):
                 delattr(self, dattr)
+
+        # If we are reading an UVPSpec object created before
+        # UVData switched to future_array_shapes
+        try: 
+            cw = getattr(self, "_channel_width").value
+        except AttributeError:
+            pass
+        else:
+            setattr(self, "_channel_width", np.atleast_1d(getattr(self, "_channel_width").value))
             
         self.check(just_meta=just_meta)
 

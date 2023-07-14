@@ -116,7 +116,8 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     x_bl1 = uvd.get_data(bl1)[time_index, spw]
     x_bl2 = uvd.get_data(bl2)[time_index, spw]
     nsample_bl = uvd.get_nsamples(bl)[time_index, spw]
-    nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(uvd.nsample_array[:,:,spw,:]))
+    nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(uvd.nsample_array[:, spw, :]))
+    df = np.array(uvd.channel_width)[spw]
     # some impainted data have zero nsample while is not flagged, and they will be assigned the median nsample within the spectral window.
     var = np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl
 
@@ -1318,14 +1319,14 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
         raise ValueError("beam must be a string, PSpecBeamBase subclass or UVPSpec object")
 
     # convert autos in Jy to Tsys in Kelvin
-    J2K = {pol: beam.Jy_to_mK(uvd.freq_array[0], pol=pol)/1e3 for pol in pols}
+    J2K = {pol: beam.Jy_to_mK(uvd.freq_array, pol=pol)/1e3 for pol in pols}
     for blpol in uvd.get_antpairpols():
         bl, pol = blpol[:2], blpol[2]
         tinds = uvd.antpair2ind(bl)
         if pol.upper() in STOKPOLS:
             pol = 'pI'
         pind = pols.index(pol)
-        uvd.data_array[tinds, 0, :, pind] *= J2K[pol]
+        uvd.data_array[tinds, :, pind] *= J2K[pol]
 
     if Tsys_outfile is not None:
         uvd.write_uvh5(Tsys_outfile, clobber=True)
