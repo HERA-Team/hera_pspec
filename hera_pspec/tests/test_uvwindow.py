@@ -379,7 +379,7 @@ class Test_UVWindow(unittest.TestCase):
         ft_beam = np.copy(test.ftbeam_obj_pol[0].ft_beam)
         interp_ft_beam, kperp_norm = test._interpolate_ft_beam(bl_len, ft_beam)
         # frequency resolution
-        delta_nu = abs(test.freq_array[-1]-test.freq_array[0])/test.Nfreqs
+        delta_nu = np.median(np.diff(test.freq_array))
         fnu = test._take_freq_FT(interp_ft_beam, delta_nu)
         # test for ft_beam of wrong dimensions
         pytest.raises(AssertionError, test._take_freq_FT,
