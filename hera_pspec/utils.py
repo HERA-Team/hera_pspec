@@ -1388,7 +1388,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     if precomp_P_N is None:
         lst_indices = np.unique(auto_Tsys.lst_array, return_index=True)[1]
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
-        freqs = auto_Tsys.freq_array[0]
+        freqs = np.squeeze(auto_Tsys.freq_array)
     # calculate scalars for spws and polpairs.
     scalar = {}
     for spw in uvp.spw_array:
@@ -1399,7 +1399,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     for spw in uvp.spw_array:
         # get spw properties
         spw_range = uvp.get_spw_ranges(spw)[0]
-        spw_start = np.argmin(np.abs(auto_Tsys.freq_array[0] - spw_range[0]))
+        spw_start = np.argmin(np.abs(np.squeeze(auto_Tsys.freq_array) - spw_range[0]))
         spw_stop = spw_start + spw_range[2]
         taper = uvt.dspec.gen_window(uvp.taper, spw_range[2])
         # iterate over blpairs
