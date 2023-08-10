@@ -664,7 +664,7 @@ class UVWindow:
         alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h,
                                      ghz=False)
         # frequency resolution
-        delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
+        delta_nu = np.median(np.diff(self.freq_array))
         # Fourier dual of frequency (unit 1: FT along theta)
         eta = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs), axes=-1)/delta_nu
         # construct array of |kpara| values for given delay tau
