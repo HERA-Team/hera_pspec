@@ -17,3 +17,4 @@ ex.hdf5
 out.h5
 .coverage
 coverage.xml
+.DS_Store
