@@ -2038,6 +2038,22 @@ def test_pspec_run():
     phserr_after = np.mean(np.abs(np.angle(ds.dsets[0].data_array / ds.dsets[1].data_array)))
     assert phserr_after < phserr_before
 
+    # test without using future array shape
+    uvd_non_future = UVData()
+    uvd_non_future.read_miriad(fnames[0])
+    if os.path.exists("./out2.h5"):
+        os.remove("./out2.h5")
+    ds = pspecdata.pspec_run([copy.deepcopy(uvd_non_future)], "./out2.h5", dsets_std=[copy.deepcopy(uvd_non_future)],
+                             blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))], interleave_times=True,
+                             verbose=False, overwrite=True, spw_ranges=[(0, 25)], rephase_to_dset=0,
+                             broadcast_dset_flags=True, time_thresh=0.3)
+    # assert ds passes validation
+    psc =  container.PSpecContainer('./out2.h5')
+    assert ds.dsets_std[0] is not None
+    ds.validate_datasets()
+    assert os.path.exists("./out2.h5")
+    os.remove("./out2.h5")
+
     # repeat feeding dsets_std and wgts
     if os.path.exists("./out2.h5"):
         os.remove("./out2.h5")
