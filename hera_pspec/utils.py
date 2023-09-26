@@ -1420,6 +1420,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
             # I don't anticipate this being a problem with HERA's 10 second interleave time.
             tinds1 = [np.where(np.isclose(times_blp_1, t, atol=1e-5, rtol=0))[0][0] for t in time_1_selection]
             tinds2 = [np.where(np.isclose(times_blp_2, t, atol=1e-5, rtol=0))[0][0] for t in time_2_selection]
+            auto_lst_avg = np.mean([np.unwrap(lsts[tinds1]), np.unwrap(lsts[tinds2])], axis=0) % (2 * np.pi)
             
             # iterate over polarization
             for polpair in uvp.polpair_array:
@@ -1451,7 +1452,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                         Tflag = np.all(Tflag, axis=-1)
                         # interpolate to appropriate LST grid
                         if np.count_nonzero(~Tflag) > 1:
-                            Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+                            Tsys = interp1d(auto_lst_avg[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
                         else:
                             Tsys = Tsys[0]
 
