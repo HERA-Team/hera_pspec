@@ -1446,8 +1446,8 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                         Tsys = np.inf
                     else:
                         # get weights
-                        Tsys1 = np.sum(Tsys1**.5 * ~Tflag1 * taper, axis=-1) / np.sum(~Tflag1 * taper, axis=-1).clip(1e-20, np.inf)
-                        Tsys2 = np.sum(Tsys2**.5 * ~Tflag2 * taper, axis=-1) / np.sum(~Tflag2 * taper, axis=-1).clip(1e-20, np.inf)
+                        Tsys1 = np.sum(Tsys1 * ~Tflag1 * taper, axis=-1) / np.sum(~Tflag1 * taper, axis=-1).clip(1e-20, np.inf)
+                        Tsys2 = np.sum(Tsys2 * ~Tflag2 * taper, axis=-1) / np.sum(~Tflag2 * taper, axis=-1).clip(1e-20, np.inf)
                         Tflag1 = np.all(Tflag1, axis=-1)
                         Tflag2 = np.all(Tflag2, axis=-1)
                         # interpolate to appropriate LST grid
@@ -1457,8 +1457,6 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                             Tsys = (Tsys1 * Tsys2)**.5
                         else:
                             Tsys = (Tsys1[0] * Tsys2[0])**.5
-
-                    assert False, Tsys
 
                     # calculate P_N
                     P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real', scalar=scalar[(spw, polpair)])[blp_int]
