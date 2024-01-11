@@ -198,6 +198,9 @@ class PSpecData:
         for d, w, s in zip(dsets, wgts, dsets_std):
             if not isinstance(d, UVData):
                 raise TypeError("Only UVData objects can be used as datasets.")
+            elif not d.future_array_shapes:
+                warnings.warn('Converting data to future_array_shapes...')
+                d.use_future_array_shapes()
             if not isinstance(w, UVData) and w is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "weights.")
@@ -248,7 +251,7 @@ class PSpecData:
         self.Ntimes = self.dsets[0].Ntimes
 
         # Store the actual frequencies
-        self.freqs = self.dsets[0].freq_array[0]
+        self.freqs = self.dsets[0].freq_array
         self.spw_range = (0, self.Nfreqs)
         self.spw_Nfreqs = self.Nfreqs
         self.spw_Ndlys = self.spw_Nfreqs
@@ -292,7 +295,7 @@ class PSpecData:
         channel_widths = [d.channel_width for d in self.dsets]
         if np.unique(Nfreqs).size > 1:
             raise ValueError("all dsets must have the same Nfreqs")
-        if np.unique(channel_widths).size > 1:
+        if not np.allclose(channel_widths[0], channel_widths):
             raise ValueError("all dsets must have the same channel_widths")
 
         # Check shape along time axis
@@ -2439,7 +2442,7 @@ class PSpecData:
                 # unflag
                 if unflag:
                     # unflag for all times
-                    dset.flag_array[:,:,self.spw_range[0]:self.spw_range[1],:] = False
+                    dset.flag_array[:, self.spw_range[0]:self.spw_range[1], :] = False
                     continue
                 # enact time threshold on flag waterfalls
                 # iterate over polarizations
@@ -2450,7 +2453,7 @@ class PSpecData:
                         # get baseline-times indices
                         bl_inds = np.where(np.in1d(dset.baseline_array, bl))[0]
                         # get flag waterfall
-                        flags = dset.flag_array[bl_inds, 0, :, i].copy()
+                        flags = dset.flag_array[bl_inds, :, i].copy()
                         Ntimes = float(flags.shape[0])
                         Nfreqs = float(flags.shape[1])
                         # get time- and freq-continguous flags
@@ -2459,12 +2462,12 @@ class PSpecData:
                         # get freq channels where non-contiguous flags exceed threshold
                         exceeds_thresh = np.sum(flags[~freq_contig_flgs], axis=0, dtype=float) / Ntimes_noncontig > time_thresh
                         # flag channels for all times that exceed time_thresh
-                        dset.flag_array[bl_inds, :, np.where(exceeds_thresh)[0][:, None], i] = True
+                        dset.flag_array[bl_inds, np.where(exceeds_thresh)[0][:, None], i] = True
                         # for pixels that have flags but didn't meet broadcasting limit
                         # flag the integration within the spw
                         flags[:, np.where(exceeds_thresh)[0]] = False
                         flag_ints = np.max(flags[:, self.spw_range[0]:self.spw_range[1]], axis=1)
-                        dset.flag_array[bl_inds[flag_ints], :, self.spw_range[0]:self.spw_range[1], i] = True
+                        dset.flag_array[bl_inds[flag_ints], self.spw_range[0]:self.spw_range[1], i] = True
 
     def units(self, little_h=True):
         """
@@ -3513,7 +3516,7 @@ class PSpecData:
         uvp.polpair_array = np.array(spw_polpair, int)
         uvp.Npols = len(spw_polpair)
         uvp.scalar_array = np.array(sclr_arr)
-        uvp.channel_width = dset1.channel_width  # all dsets validated to agree
+        uvp.channel_width = np.array(dset1.channel_width)  # all dsets validated to agree
         uvp.exact_windows = False
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
@@ -3678,7 +3681,7 @@ class PSpecData:
                 polind = pol_list.index(uvutils.polstr2num(k[-1], x_orientation=self.dsets[0].x_orientation))
 
                 # insert into dset
-                dset.data_array[indices, 0, :, polind] = data[k]
+                dset.data_array[indices, :, polind] = data[k]
 
             # set phasing in UVData object to unknown b/c there isn't a single
             # consistent phasing for the entire data set.
@@ -3732,7 +3735,7 @@ class PSpecData:
                 )
                 continue
             for j, p in enumerate(dset.polarization_array):
-                dset.data_array[:, :, :, j] *= factors[p][None, None, :]
+                dset.data_array[:, :, j] *= factors[p][None, :]
             dset.vis_units = 'mK'
 
     def trim_dset_lsts(self, lst_tol=6):
@@ -4176,7 +4179,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             assert 0 <= spw[0] < spw[1], f"spw_ranges must be a list of tuples of length 2, with both elements being non-negative integers of increasing value. Got {spw}"
             for dset in dsets:
                 assert spw[1] <= dset.Nfreqs, f"spw_range of {spw} out of range for dset {dset.filename[0]} with the second element being less than the number of frequencies in the data"
-            utils.log(f"Using spw_range: {dsets[0].freq_array[:, spw[0]] /1e6} - {dsets[0].freq_array[:, spw[1] - 1]/1e6} MHz", verbose=verbose)
+            utils.log(f"Using spw_range: {np.squeeze(dsets[0].freq_array)[spw[0]] /1e6} - {np.squeeze(dsets[0].freq_array)[spw[1] - 1]/1e6} MHz", verbose=verbose)
 
     # read calibration if provided (calfits partial IO not yet supported)
     if cals is not None:
@@ -4542,7 +4545,7 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
         else:
             dfiles = dset
         uvd.read(dfiles, bls=bls, polarizations=pols,
-                 file_type=file_type)
+                 file_type=file_type, use_future_array_shapes=True)
         uvd.extra_keywords['filename'] = json.dumps(dfiles)
         dsets.append(uvd)
 
@@ -4576,9 +4579,9 @@ def _load_cals(cnames, logf=None, verbose=True):
         # read data
         uvc = UVCal()
         if isinstance(cfile, str):
-            uvc.read_calfits(glob.glob(cfile))
+            uvc.read_calfits(glob.glob(cfile), use_future_array_shapes=True)
         else:
-            uvc.read_calfits(cfile)
+            uvc.read_calfits(cfile, use_future_array_shapes=True)
         uvc.extra_keywords['filename'] = json.dumps(cfile)
         cals.append(uvc)
 

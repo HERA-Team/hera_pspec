@@ -10,7 +10,6 @@ import os
 import time
 import copy
 from astropy import units
-from scipy.interpolate import interp2d
 from pyuvdata import UVBeam, UVData
 from hera_pspec.data import DATA_PATH
 
@@ -211,7 +210,11 @@ class Test_UVWindow(unittest.TestCase):
 
         # Load datafile
         uvd = UVData()
-        uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
+        uvd.read(
+            os.path.join(DATA_PATH, dfile),
+            read_data=False,
+            use_future_array_shapes=True
+        )
         self.reds, self.lens, _ = utils.get_reds(uvd, bl_error_tol=1.0,
                              pick_data_ants=False)
 
@@ -270,13 +273,13 @@ class Test_UVWindow(unittest.TestCase):
         # obtain uvp object
         datafile = os.path.join(DATA_PATH, dfile)
         uvd = UVData()
-        uvd.read_uvh5(datafile)
+        uvd.read_uvh5(datafile, use_future_array_shapes=True)
         # beam 
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=None)
         Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol=self.pol)
         # reshape to appropriately match a UVData.data_array object and multiply in!
-        uvd.data_array *= Jy_to_mK[None, None, :, None]
+        uvd.data_array *= Jy_to_mK[None, :, None]
         # Create a new PSpecData object, and don't forget to feed the beam object
         ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
         ds_nocosmo = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
@@ -376,7 +379,7 @@ class Test_UVWindow(unittest.TestCase):
         ft_beam = np.copy(test.ftbeam_obj_pol[0].ft_beam)
         interp_ft_beam, kperp_norm = test._interpolate_ft_beam(bl_len, ft_beam)
         # frequency resolution
-        delta_nu = abs(test.freq_array[-1]-test.freq_array[0])/test.Nfreqs
+        delta_nu = np.median(np.diff(test.freq_array))
         fnu = test._take_freq_FT(interp_ft_beam, delta_nu)
         # test for ft_beam of wrong dimensions
         pytest.raises(AssertionError, test._take_freq_FT,

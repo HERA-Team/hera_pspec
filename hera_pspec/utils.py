@@ -116,7 +116,8 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     x_bl1 = uvd.get_data(bl1)[time_index, spw]
     x_bl2 = uvd.get_data(bl2)[time_index, spw]
     nsample_bl = uvd.get_nsamples(bl)[time_index, spw]
-    nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(uvd.nsample_array[:,:,spw,:]))
+    nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(uvd.nsample_array[:, spw, :]))
+    df = np.array(uvd.channel_width)[spw]
     # some impainted data have zero nsample while is not flagged, and they will be assigned the median nsample within the spectral window.
     var = np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl
 
@@ -1318,14 +1319,14 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
         raise ValueError("beam must be a string, PSpecBeamBase subclass or UVPSpec object")
 
     # convert autos in Jy to Tsys in Kelvin
-    J2K = {pol: beam.Jy_to_mK(uvd.freq_array[0], pol=pol)/1e3 for pol in pols}
+    J2K = {pol: beam.Jy_to_mK(uvd.freq_array, pol=pol)/1e3 for pol in pols}
     for blpol in uvd.get_antpairpols():
         bl, pol = blpol[:2], blpol[2]
         tinds = uvd.antpair2ind(bl)
         if pol.upper() in STOKPOLS:
             pol = 'pI'
         pind = pols.index(pol)
-        uvd.data_array[tinds, 0, :, pind] *= J2K[pol]
+        uvd.data_array[tinds, :, pind] *= J2K[pol]
 
     if Tsys_outfile is not None:
         uvd.write_uvh5(Tsys_outfile, clobber=True)
@@ -1387,7 +1388,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     if precomp_P_N is None:
         lst_indices = np.unique(auto_Tsys.lst_array, return_index=True)[1]
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
-        freqs = auto_Tsys.freq_array[0]
+        freqs = np.squeeze(auto_Tsys.freq_array)
     # calculate scalars for spws and polpairs.
     scalar = {}
     for spw in uvp.spw_array:
@@ -1398,14 +1399,13 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     for spw in uvp.spw_array:
         # get spw properties
         spw_range = uvp.get_spw_ranges(spw)[0]
-        spw_start = np.argmin(np.abs(auto_Tsys.freq_array[0] - spw_range[0]))
+        spw_start = np.argmin(np.abs(np.squeeze(auto_Tsys.freq_array) - spw_range[0]))
         spw_stop = spw_start + spw_range[2]
         taper = uvt.dspec.gen_window(uvp.taper, spw_range[2])
         # iterate over blpairs
         for blp in uvp.get_blpairs():
             blp_int = uvp.antnums_to_blpair(blp)
             blp_inds = uvp.blpair_to_indices(blp)
-            lst_avg = uvp.lst_avg_array[blp_inds]
 
             time_1_selection = uvp.time_1_array[blp_inds]
             time_2_selection = uvp.time_2_array[blp_inds]
@@ -1431,28 +1431,32 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                 if precomp_P_N is None:
                     # take geometric mean of four antenna autocorrs and get OR'd flags
                     # select out the interleaving of the times
-                    Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop].real)**(1./4)
-                    Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop]
+                    Tsys1 = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop].real * \
+                             auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop].real)**.5
+                    Tsys2 = (auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop].real * \
+                             auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop].real)**.5
+                    Tflag1 = (auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop] | \
+                              auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop])
+                    Tflag2 = (auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop] | \
+                              auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop])
                     
                     # average over frequency
-                    if np.all(Tflag):
+                    if np.all(Tflag1 | Tflag2):
                         # fully flagged
                         Tsys = np.inf
                     else:
                         # get weights
-                        Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
-                        Tflag = np.all(Tflag, axis=-1)
+                        Tsys1 = np.sum(Tsys1 * ~Tflag1 * taper, axis=-1) / np.sum(~Tflag1 * taper, axis=-1).clip(1e-20, np.inf)
+                        Tsys2 = np.sum(Tsys2 * ~Tflag2 * taper, axis=-1) / np.sum(~Tflag2 * taper, axis=-1).clip(1e-20, np.inf)
+                        Tflag1 = np.all(Tflag1, axis=-1)
+                        Tflag2 = np.all(Tflag2, axis=-1)
                         # interpolate to appropriate LST grid
-                        if np.count_nonzero(~Tflag) > 1:
-                            Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+                        if (np.count_nonzero(~Tflag1) > 1) & (np.count_nonzero(~Tflag2) > 1):
+                            Tsys1 = interp1d(lsts[tinds1][~Tflag1], Tsys1[~Tflag1], kind='nearest', bounds_error=False, fill_value='extrapolate')(uvp.lst_1_array[blp_inds])
+                            Tsys2 = interp1d(lsts[tinds2][~Tflag2], Tsys2[~Tflag2], kind='nearest', bounds_error=False, fill_value='extrapolate')(uvp.lst_2_array[blp_inds])
+                            Tsys = (Tsys1 * Tsys2)**.5
                         else:
-                            Tsys = Tsys[0]
+                            Tsys = (Tsys1[0] * Tsys2[0])**.5
 
                     # calculate P_N
                     P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real', scalar=scalar[(spw, polpair)])[blp_int]

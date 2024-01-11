@@ -133,7 +133,7 @@ def test_analytic_noise():
     beam = pspecbeam.PSpecBeamUV(bfile)
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     uvd = UVData()
-    uvd.read(uvfile)
+    uvd.read(uvfile, use_future_array_shapes=True)
 
     # setup PSpecData
     ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
@@ -148,46 +148,46 @@ def test_analytic_noise():
     bls1, bls2, blps = utils.construct_blpairs(reds[0], exclude_auto_bls=True,
                                                exclude_permutations=True)
     taper = 'bh'
-    Nchan = 20
-    uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
-                   taper=taper, sampling=False, little_h=True, spw_ranges=[(0, Nchan)], verbose=False,
-                   cov_model='autos', store_cov=True)
-    uvp_fg = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
-                   taper=taper, sampling=False, little_h=True, spw_ranges=[(0, Nchan)], verbose=False,
-                   cov_model='foreground_dependent', store_cov=True)
+    for spw_ranges in ([(0, 20)], [(119, 140)]):
+        uvp = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
+                    taper=taper, sampling=False, little_h=True, spw_ranges=spw_ranges, verbose=False,
+                    cov_model='autos', store_cov=True)
+        uvp_fg = ds.pspec(bls1, bls2, (0, 1), [('xx', 'xx')], input_data_weight='identity', norm='I',
+                    taper=taper, sampling=False, little_h=True, spw_ranges=spw_ranges, verbose=False,
+                    cov_model='foreground_dependent', store_cov=True)
 
-    # get P_N estimate
-    auto_Tsys = utils.uvd_to_Tsys(uvd, beam, os.path.join(DATA_PATH, "test_uvd.uvh5"))
-    assert os.path.exists(os.path.join(DATA_PATH, "test_uvd.uvh5"))
-    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=False)
+        # get P_N estimate
+        auto_Tsys = utils.uvd_to_Tsys(uvd, beam, os.path.join(DATA_PATH, "test_uvd.uvh5"))
+        assert os.path.exists(os.path.join(DATA_PATH, "test_uvd.uvh5"))
+        utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=False)
 
-    # check consistency of 1-sigma standard dev. to 1%
-    cov_diag = uvp.cov_array_real[0][:, range(Nchan), range(Nchan)]
-    stats_diag = uvp.stats_array['P_N'][0]
-    frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
-    assert np.abs(frac_ratio).mean() < 0.01
+        # check consistency of 1-sigma standard dev. to 1%
+        cov_diag = np.array([np.diag(uvp.cov_array_real[0][i][:, :, 0])[:, None] for i in range(uvp.cov_array_real[0].shape[0])])
+        stats_diag = uvp.stats_array['P_N'][0]
+        frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
+        assert np.abs(frac_ratio).mean() < 0.01
 
-    ## check P_SN consistency of 1-sigma standard dev. to 1%
-    cov_diag = uvp_fg.cov_array_real[0][:, range(Nchan), range(Nchan)]
-    stats_diag = uvp.stats_array['P_SN'][0]
-    frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
-    assert np.abs(frac_ratio).mean() < 0.01
+        ## check P_SN consistency of 1-sigma standard dev. to 1%
+        cov_diag = np.array([np.diag(uvp_fg.cov_array_real[0][i][:, :, 0])[:, None] for i in range(uvp_fg.cov_array_real[0].shape[0])])
+        stats_diag = uvp.stats_array['P_SN'][0]
+        frac_ratio = (cov_diag**0.5 - stats_diag) / stats_diag
+        assert np.abs(frac_ratio).mean() < 0.01
 
-    # now compute unbiased P_SN and check that it matches P_N at high-k
-    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=True)
-    frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
-    dlys = uvp.get_dlys(0) * 1e9
-    select = np.abs(dlys) > 3000
-    assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
+        # now compute unbiased P_SN and check that it matches P_N at high-k
+        utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=True)
+        frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
+        dlys = uvp.get_dlys(0) * 1e9
+        select = np.abs(dlys) > 3000
+        assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
 
-    # test single time
-    uvp.select(times=uvp.time_avg_array[:1], inplace=True)
-    auto_Tsys.select(times=auto_Tsys.time_array[:1], inplace=True)
-    utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=True)
-    frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
-    dlys = uvp.get_dlys(0) * 1e9
-    select = np.abs(dlys) > 3000
-    assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
+        # test single time
+        uvp.select(times=uvp.time_avg_array[:1], inplace=True)
+        auto_Tsys.select(times=auto_Tsys.time_array[:1], inplace=True)
+        utils.uvp_noise_error(uvp, auto_Tsys, err_type=['P_N','P_SN'], P_SN_correction=True)
+        frac_ratio = (uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]) / uvp.stats_array["P_N"][0]
+        dlys = uvp.get_dlys(0) * 1e9
+        select = np.abs(dlys) > 3000
+        assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
 
-    # clean up
-    os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
+        # clean up
+        os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))

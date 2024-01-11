@@ -415,12 +415,13 @@ class PSpecBeamUV(PSpecBeamBase):
         # setup uvbeam object
         if isinstance(uvbeam, str):
             uvb = UVBeam()
-            uvb.read_beamfits(uvbeam)
+            uvb.read_beamfits(uvbeam, use_future_array_shapes=True)
         else:
             uvb = uvbeam
+            uvb.use_future_array_shapes()
 
         # get frequencies and set cosmology
-        self.beam_freqs = uvb.freq_array[0]
+        self.beam_freqs = uvb.freq_array
         if cosmo is not None:
             self.cosmo = cosmo
         else:
@@ -484,12 +485,11 @@ class PSpecBeamUV(PSpecBeamBase):
 
         if pol in pol_array:
             stokes_p_ind = np.where(np.isin(pol_array, pol))[0][0]
-            beam_res = beam_res[0, 0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
+            beam_res = beam_res[0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
         else:
             raise ValueError('Do not have the right polarization information')
 
         omega = np.sum(beam_res, axis=-1) * np.pi / (3. * nside**2) #compute beam solid angle as a function of frequency
-
         return beam_res, omega, nside
 
     def power_beam_int(self, pol='pI'):
