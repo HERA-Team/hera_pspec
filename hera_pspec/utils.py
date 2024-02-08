@@ -1513,6 +1513,26 @@ def uvp_noise_error_parser():
                                     "to compute, 'P_N' or 'P_SN'")
     return a
 
+def extract_autos_post_lstbin_parser():
+    """
+    Get the argparser for the extract_autos script
+
+    Args:
+        N/A
+    Returns:
+        parser (ArgumentParser): 
+            The desired parser.
+    """
+    parser = argparse.ArgumentParser(description="Argument parser for "
+                                     "autos from the chunked files into a "
+                                     "waterfall file.")
+    parser.add_argument("sumdiff", type=str, help="A string identifying whether"
+                        " the files are sum or diff files.")
+    parser.add_argument("label", type=str, help="The file label.")
+    parser.add_argument("--flist", type=str, nargs="*", 
+                        help="The list of chunked files.")
+    return parser
+
 def apply_P_SN_correction(uvp, P_SN='P_SN', P_N='P_N'):
     """
     Apply correction factor to P_SN errorbar in stats_array to account
