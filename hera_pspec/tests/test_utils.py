@@ -384,6 +384,13 @@ def test_uvp_noise_error_arser():
     assert args.groups == ["dset0_dset1"]
     assert args.spectra is None
 
+def test_extract_autos_post_lstbin_parser():
+    parser = utils.extract_autos_post_lstbin_parser()
+    args = parser.parse_args(["sum", "foo.bar", ["foo", "bar", "baz"]])
+    assert args.sumdiff == "sum"
+    assert args.label == "foo.bar"
+    assert args.flist == ["foo", "bar", "baz"]
+
 def test_job_monitor():
     # open empty files
     datafiles = ["./{}".format(i) for i in ['a', 'b', 'c', 'd']]
