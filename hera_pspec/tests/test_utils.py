@@ -386,7 +386,7 @@ def test_uvp_noise_error_arser():
 
 def test_extract_autos_post_lstbin_parser():
     parser = utils.extract_autos_post_lstbin_parser()
-    args = parser.parse_args(["sum", "foo.bar", ["foo", "bar", "baz"]])
+    args = parser.parse_args(["sum", "foo.bar", "--flist", "foo", "bar", "baz"])
     assert args.sumdiff == "sum"
     assert args.label == "foo.bar"
     assert args.flist == ["foo", "bar", "baz"]
