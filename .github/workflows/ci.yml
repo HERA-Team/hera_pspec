@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: [3.8, 3.9, "3.10"]
+        python-version: [3.9, "3.10", "3.11", "3.12"]
       fail-fast: false
 
     steps:
@@ -41,6 +41,8 @@ jobs:
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with:
         files: ./coverage.xml
         directory: ./coverage/reports/
