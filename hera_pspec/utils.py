@@ -1326,7 +1326,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
         if pol.upper() in STOKPOLS:
             pol = 'pI'
         pind = pols.index(pol)
-        uvd.data_array[tinds, :, pind] *= J2K[pol]
+        uvd.data_array[tinds, ..., pind] *= J2K[pol]
 
     if Tsys_outfile is not None:
         uvd.write_uvh5(Tsys_outfile, clobber=True)
