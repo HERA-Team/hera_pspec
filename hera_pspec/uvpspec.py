@@ -1291,9 +1291,13 @@ class UVPSpec(object):
         blvecs : array_like
             Array of baseline vectors.
         """
+        latitude, longitude, altitude = uvutils.LatLonAlt_from_XYZ(self.telescope_location[None])
         return uvutils.ENU_from_ECEF(
-                        (self.bl_vecs + self.telescope_location), \
-                     *uvutils.LatLonAlt_from_XYZ(self.telescope_location[None]))
+            self.bl_vecs + self.telescope_location,
+            latitude=latitude, 
+            longitude=longitude,
+            altitude=altitude
+        )
 
 
     def read_from_group(self, grp, just_meta=False, spws=None, bls=None,
