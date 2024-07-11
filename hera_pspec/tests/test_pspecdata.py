@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import pyuvdata as uv
 import os, copy, sys
-from scipy.integrate import simps, trapz
+from scipy.integrate import simpson, trapzezoid
 from .. import pspecdata, pspecbeam, conversions, container, utils, testing, uvwindow
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData, UVCal, utils as uvutils
@@ -1077,9 +1077,9 @@ class Test_PSpecData(unittest.TestCase):
         ps_avg = np.fft.fftshift( np.mean(ps[0], axis=1) )
 
         # Calculate integrals for Parseval's theorem
-        parseval_real = simps(gsq, x)
-        parseval_ft = dx**2. * simps(fsq, k)
-        parseval_phat = simps(ps_avg, tau)
+        parseval_real = simpson(gsq, x)
+        parseval_ft = dx**2. * simpson(fsq, k)
+        parseval_phat = simpson(ps_avg, tau)
 
         # Report on results for different ways of calculating Parseval integrals
         print "Parseval's theorem:"
@@ -1774,7 +1774,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # taper
         window = windows.blackmanharris(len(freqs))
-        NEB = Bp / trapz(window**2, x=freqs)
+        NEB = Bp / trapzezoid(window**2, x=freqs)
         scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
         data1 = d1.get_data(bls1[0])
         data2 = d2.get_data(bls2[0])
