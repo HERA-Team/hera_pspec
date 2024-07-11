@@ -447,8 +447,8 @@ def noise_sim(
     Nextend = int(Nextend)
     if Nextend > 0:
         assert (
-            data.phase_type == "drift"
-        ), "data must be drift phased in order to extend along time axis"
+            data.phase_center_catalog[0]['cat_type'] == "unprojected"
+        ), "data must be unprojected in order to extend along time axis"
         data = copy.deepcopy(data)
         _data = copy.deepcopy(data)
         dt = np.median(np.diff(np.unique(_data.time_array)))

@@ -1514,7 +1514,7 @@ class UVPSpec(object):
 
                 # Do Unicode/string conversions, as HDF5 struggles with them
                 if k == 'labels':
-                    this_attr = [np.string_(lbl) for lbl in this_attr]
+                    this_attr = [np.bytes_(lbl) for lbl in this_attr]
 
                 # Store attribute in group
                 group.attrs[k] = this_attr

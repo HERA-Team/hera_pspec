@@ -79,7 +79,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     X2Y = np.array([cosmo.X2Y(z, little_h=little_h) for z in redshifts])
 
     if exact_norm: #Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
-        scalar = integrate.trapz(X2Y, x=integration_freqs)/(np.abs(integration_freqs[-1]-integration_freqs[0]))
+        scalar = integrate.trapezoid(X2Y, x=integration_freqs)/(np.abs(integration_freqs[-1]-integration_freqs[0]))
         return scalar
 
     # Use linear interpolation to interpolate the frequency-dependent
@@ -105,7 +105,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
 
     # Integrate to get scalar
     d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 / X2Y
-    scalar = 1. / integrate.trapz(d_inv_scalar, x=integration_freqs)
+    scalar = 1. / integrate.trapezoid(d_inv_scalar, x=integration_freqs)
     return scalar
 
 
