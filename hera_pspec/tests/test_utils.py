@@ -63,9 +63,9 @@ def test_load_config():
     assert cfg['pspec']['options']['foo'] == None
 
 
-class Test_Utils(unittest.TestCase):
+class Test_Utils:
 
-    def setUp(self):
+    def setup_class(self):
         # Load data into UVData object
         self.uvd = UVData()
         self.uvd.read_miriad(os.path.join(DATA_PATH,
