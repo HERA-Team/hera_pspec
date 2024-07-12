@@ -198,12 +198,19 @@ class Test_PSpecData(unittest.TestCase):
         Test PSpecData add()
         """
         uv = self.d[0]
+        # proper usage
+        ds1 = copy.deepcopy(self.ds)
+        ds1.add(dsets=[uv], wgts=None, labels=None)
         # test adding non list objects
         pytest.raises(TypeError, self.ds.add, 1, 1)
         # test adding non UVData objects
         pytest.raises(TypeError, self.ds.add, [1], None)
         pytest.raises(TypeError, self.ds.add, [uv], [1])
         pytest.raises(TypeError, self.ds.add, [uv], None, dsets_std=[1])
+        # test adding UVData object with old array shape
+        ds2 = copy.deepcopy(uv)
+        ds2.data_array = np.tile(uv.data_array, [1,1,1,1])
+        pytest.raises(TypeError, self.ds.add, [uv], [1])
         # test adding non UVCal for cals
         pytest.raises(TypeError, self.ds.add, [uv], None, cals=[1])
         # test TypeError if dsets is dict but other inputs are not
@@ -1179,6 +1186,14 @@ class Test_PSpecData(unittest.TestCase):
         pytest.raises(ValueError, ds.validate_datasets)
         uvd2.phase_to_time(Time(2458042.5, format='jd'))
         ds.validate_datasets()
+        # phase_center_catalog should contain only one entry per dataset
+        uvd3 = copy.deepcopy(self.d[0])
+        uvd3.phase_center_catalog[1] = uvd3.phase_center_catalog[0]
+        ds2 = pspecdata.PSpecData(dsets=[uvd, uvd3], wgts=[None, None])
+        pytest.raises(ValueError, ds2.validate_datasets)
+        # phased data
+        uvd4 = copy.deepcopy(self.d[0])
+       
 
         # test polarization
         ds.validate_pol((0,1), ('xx', 'xx'))
@@ -1202,6 +1217,7 @@ class Test_PSpecData(unittest.TestCase):
         uvp1 = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
         # rephase and get pspec
         ds.rephase_to_dset(0)
+        ds2 = ds.rephase_to_dset(0, inplace=False)
         uvp2 = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
         blp = (0, ((37,39),(37,39)), ('xx','xx'))
         assert np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min()
