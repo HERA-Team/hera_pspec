@@ -198,9 +198,6 @@ class PSpecData:
         for d, w, s in zip(dsets, wgts, dsets_std):
             if not isinstance(d, UVData):
                 raise TypeError("Only UVData objects can be used as datasets.")
-            elif d.data_array[0].ndim > 2:
-                raise TypeError('UVData objects without future_array_shapes '
-                                'cannot be used.')
             if not isinstance(w, UVData) and w is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "weights.")
