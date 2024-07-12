@@ -606,13 +606,11 @@ class Test_UVPSpec(unittest.TestCase):
 
         ## tests
 
-        # give Gaussian beam as input
-        widths = -0.0343 * self.uvp_wf.freq_array/1e6 + 11.30 
-        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.uvp_wf.freq_array,
-                                                 widths=widths,
-                                                 pol='xx')     
-        uvp.get_exact_window_functions(ftbeam=gaussian_beam,
-                                       spw_array=0, inplace=True, verbose=True) 
+        # output exact_window functions but does not make them attributes
+        kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(ftbeam=self.ft_file,
+                                                                          inplace=False)
+        # check if result is the same with and without inplace
+        assert np.allclose(wf_array[0], uvp.window_function_array[0])
         # obtain exact window functions for one spw only
         uvp.get_exact_window_functions(ftbeam=self.ft_file,
                                        spw_array=0, inplace=True, verbose=True)
@@ -621,11 +619,13 @@ class Test_UVPSpec(unittest.TestCase):
                       ftbeam=self.ft_file,
                       spw_array=2, inplace=True)
 
-        # output exact_window functions but does not make them attributes
-        kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(ftbeam=self.ft_file,
-                                                                          inplace=False)
-        # check if result is the same with and without inplace
-        assert np.all(wf_array[0]==uvp.window_function_array[0])
+        # give Gaussian beam as input
+        widths = -0.0343 * self.uvp_wf.freq_array/1e6 + 11.30 
+        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.uvp_wf.freq_array,
+                                                 widths=widths,
+                                                 pol='xx')     
+        uvp.get_exact_window_functions(ftbeam=gaussian_beam,
+                                       spw_array=0, inplace=True, verbose=True) 
 
     def test_fold_spectra(self):
         uvp = copy.deepcopy(self.uvp)

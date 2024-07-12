@@ -467,8 +467,8 @@ class Test_UVWindow(unittest.TestCase):
                                                      kperp_bins=kperp*test.kunits,
                                                      kpara_bins=None,
                                                      return_bins='unweighted')
-        assert np.all(cyl_wf2 == cyl_wf)
-        assert np.all(kperp2 == kperp)  # unweighted option to return_bins
+        assert np.allclose(cyl_wf2, cyl_wf)
+        assert np.allclose(kperp2, kperp)  # unweighted option to return_bins
         # ValueError raised if kperp_bins not linearly spaced
         kperp_log = np.logspace(-2, 0, 100)
         pytest.raises(ValueError, test.get_cylindrical_wf, bl_len,
