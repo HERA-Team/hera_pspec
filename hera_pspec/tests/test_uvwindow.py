@@ -58,7 +58,7 @@ class test_FTBeam(unittest.TestCase):
                                verbose=self.verbose,
                                x_orientation=self.x_orientation)
         assert self.pol == test.pol
-        assert np.all(self.data == test.ft_beam)
+        assert np.allclose(self.data, test.ft_beam)
 
         # raise assertion error if data is not dim 3
         pytest.raises(AssertionError, uvwindow.FTBeam, 
@@ -111,11 +111,11 @@ class test_FTBeam(unittest.TestCase):
         # tests related to spw_range
         test1 = uvwindow.FTBeam.from_file(ftfile=self.ft_file,
                                           spw_range=self.spw_range)
-        assert np.all(test1.freq_array == self.freq_array)
+        assert np.allclose(test1.freq_array, self.freq_array)
 
         test2 = uvwindow.FTBeam.from_file(ftfile=self.ft_file,
                                           spw_range=None)
-        assert np.all(test2.freq_array == self.bandwidth)
+        assert np.allclose(test2.freq_array, self.bandwidth)
 
         pytest.raises(AssertionError, uvwindow.FTBeam.from_file, spw_range=(13),
                       ftfile=self.ft_file)
@@ -452,13 +452,13 @@ class Test_UVWindow(unittest.TestCase):
                                                        kpara_bins=None,
                                                        return_bins='unweighted')
         # check normalisation
-        assert np.all(np.isclose(np.sum(cyl_wf, axis=(1, 2)), 1., atol=1e-3))
+        assert np.allclose(np.sum(cyl_wf, axis=(1, 2)), 1., atol=1e-3)
         assert kperp.size == cyl_wf.shape[1]
         assert kpara.size == cyl_wf.shape[2]
         assert test.Nfreqs == cyl_wf.shape[0]
         # test the bins are recovered by get_kperp_bins and get_kpara_bins
-        assert np.all(kperp == test.get_kperp_bins(bl_len).value)
-        assert np.all(kpara == test.get_kpara_bins(test.freq_array).value)
+        assert np.allclose(kperp, test.get_kperp_bins(bl_len).value)
+        assert np.allclose(kpara, test.get_kpara_bins(test.freq_array).value)
 
         # test different key words
 
@@ -467,8 +467,8 @@ class Test_UVWindow(unittest.TestCase):
                                                      kperp_bins=kperp*test.kunits,
                                                      kpara_bins=None,
                                                      return_bins='unweighted')
-        assert np.all(cyl_wf2 == cyl_wf)
-        assert np.all(kperp2 == kperp)  # unweighted option to return_bins
+        assert np.allclose(cyl_wf2, cyl_wf)
+        assert np.allclose(kperp2, kperp)  # unweighted option to return_bins
         # ValueError raised if kperp_bins not linearly spaced
         kperp_log = np.logspace(-2, 0, 100)
         pytest.raises(ValueError, test.get_cylindrical_wf, bl_len,
@@ -480,8 +480,8 @@ class Test_UVWindow(unittest.TestCase):
                                                      kperp_bins=None,
                                                      kpara_bins=kpara*test.kunits,
                                                      return_bins='unweighted')
-        assert np.all(cyl_wf3 == cyl_wf)
-        assert np.all(kpara == kpara3)
+        assert np.allclose(cyl_wf3, cyl_wf)
+        assert np.allclose(kpara, kpara3)
         # ValueError raised if kpara_bins not linearly spaced
         kpara_log = np.logspace(-1, 1, 100)
         pytest.raises(ValueError, test.get_cylindrical_wf, bl_len,

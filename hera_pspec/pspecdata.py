@@ -198,9 +198,6 @@ class PSpecData:
         for d, w, s in zip(dsets, wgts, dsets_std):
             if not isinstance(d, UVData):
                 raise TypeError("Only UVData objects can be used as datasets.")
-            elif not d.future_array_shapes:
-                warnings.warn('Converting data to future_array_shapes...')
-                d.use_future_array_shapes()
             if not isinstance(w, UVData) and w is not None:
                 raise TypeError("Only UVData objects (or None) can be used as "
                                 "weights.")
@@ -322,7 +319,13 @@ class PSpecData:
 
         # Check phase type
         phase_types = []
-        for d in self.dsets: phase_types.append(d.phase_type)
+        for d in self.dsets: 
+            if len(d.phase_center_catalog) > 1:
+                raise ValueError(
+                    "phase_center_catalog should contain only one entry per dataset"
+                )
+       
+            phase_types.append(next(iter(d.phase_center_catalog.values()))['cat_type'])
         if np.unique(phase_types).size > 1:
             raise ValueError("all datasets must have the same phase type "
                              "(i.e. 'drift', 'phased', ...)\ncurrent phase "
@@ -362,7 +365,7 @@ class PSpecData:
         """
         #FIXME: Fix this to enable label keys
         # get iterable
-        key = uvutils._get_iterable(key)
+        key = uvutils.tools._get_iterable(key)
         if isinstance(key, str):
             key = (key,)
 
@@ -1721,7 +1724,7 @@ class PSpecData:
 
     def get_analytic_covariance(self, key1, key2, M=None, exact_norm=False,
                                 pol=False, model='empirical', known_cov=None):
-        """
+        r"""
         Calculates the auto-covariance matrix for both the real and imaginary
         parts of bandpowers (i.e., the q vectors and the p vectors).
 
@@ -2242,7 +2245,7 @@ class PSpecData:
         )
     
     def get_Q_alt_tensor(self, allow_fft=True, include_extension=False):
-        """
+        r"""
         Gets the (Ndly, Nfreq, Nfreq) tensor of Q_alt matrices.
 
         Parameters
@@ -2349,7 +2352,7 @@ class PSpecData:
         return Q_alt
 
     def p_hat(self, M, q):
-        """
+        r"""
         Optimal estimate of bandpower p_alpha, defined as p_hat = M q_hat.
 
         Parameters
@@ -2526,7 +2529,7 @@ class PSpecData:
 
     def scalar(self, polpair, little_h=True, num_steps=2000, beam=None,
                taper_override='no_override', exact_norm=False):
-        """
+        r"""
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set
         spectral window.
@@ -2610,7 +2613,7 @@ class PSpecData:
 
     def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
                                 Gv=None, Hv=None):
-        """
+        r"""
         Computes an adjustment factor for the pspec scalar. There are
         two reasons why this might be needed:
 
@@ -3426,15 +3429,17 @@ class PSpecData:
                     # insert time and blpair info only once per blpair
                     if i < 1 and j < 1:
                         # insert time info
+                        # inds is a slice if dset1 has rectangular blts.
                         inds1 = dset1.antpair2ind(bl1, ordered=False)
                         inds2 = dset2.antpair2ind(bl2, ordered=False)
+                        
                         time1.extend(dset1.time_array[inds1])
                         time2.extend(dset2.time_array[inds2])
                         lst1.extend(dset1.lst_array[inds1])
                         lst2.extend(dset2.lst_array[inds2])
 
                         # insert blpair info
-                        blp_arr.extend(np.ones_like(inds1, int) \
+                        blp_arr.extend(np.ones_like(dset1.time_array[inds1], int) \
                                        * uvputils._antnums_to_blpair(blp))
 
                 # insert into data and wgts integrations dictionaries
@@ -3644,16 +3649,19 @@ class PSpecData:
 
         # iterate over dsets
         for i, dset in enumerate(dsets):
+            if len(dset.phase_center_catalog) > 1:
+                raise ValueError("Cannot deal with datasets with more than one phase center")
+            
             # don't rephase dataset we are using as our LST anchor
             if i == dset_index:
                 # even though not phasing this dset, must set to match all other
                 # dsets due to phasing-check validation
-                dset.phase_type = 'unknown'
+                dset.phase_center_catalog[0]['cat_type'] = 'unknown'
                 continue
 
             # skip if dataset is not drift phased
-            if dset.phase_type != 'drift':
-                warnings.warn(f"Skipping dataset {i} b/c it isn't drift phased")
+            if dset.phase_center_catalog[0]['cat_type'] != 'unprojected':
+                warnings.warn(f"Skipping dataset {i} b/c it isn't unprojected")
 
             # convert UVData to DataContainers. Note this doesn't make
             # a copy of the data
@@ -3685,7 +3693,7 @@ class PSpecData:
 
             # set phasing in UVData object to unknown b/c there isn't a single
             # consistent phasing for the entire data set.
-            dset.phase_type = 'unknown'
+            dset.phase_center_catalog[0]['cat_type'] = 'unknown'
 
         if inplace is False:
             return dsets
@@ -4579,9 +4587,9 @@ def _load_cals(cnames, logf=None, verbose=True):
         # read data
         uvc = UVCal()
         if isinstance(cfile, str):
-            uvc.read_calfits(glob.glob(cfile), use_future_array_shapes=True)
+            uvc.read(glob.glob(cfile))
         else:
-            uvc.read_calfits(cfile, use_future_array_shapes=True)
+            uvc.read(cfile)
         uvc.extra_keywords['filename'] = json.dumps(cfile)
         cals.append(uvc)
 

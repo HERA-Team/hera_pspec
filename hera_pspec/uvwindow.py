@@ -7,7 +7,7 @@ import sys
 import os
 import copy
 import time
-from scipy.interpolate import interp2d
+from scipy.interpolate import RegularGridInterpolator
 from pyuvdata import UVBeam, UVData
 from astropy import units
 from pathlib import Path
@@ -569,9 +569,10 @@ class UVWindow:
             # kperp values over frequency array for bl_len
             k = self._kperp4bl_freq(self.freq_array[i], bl_len, ngrid=ngrid)
             # interpolate the FT beam over values onto regular kgrid
-            A_real = interp2d(k, k, ft_beam[i, :, :], bounds_error=False,
-                              fill_value=0.)
-            interp_ft_beam[:, :, i] = A_real(kgrid, kgrid)
+            A_real = RegularGridInterpolator(
+                (k,k), ft_beam[i], bounds_error=False, fill_value=0.0
+            )
+            interp_ft_beam[:, :, i] = A_real(np.array([kgrid, kgrid]).T)
 
         return interp_ft_beam, kperp_norm
 

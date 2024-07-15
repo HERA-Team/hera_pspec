@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import pyuvdata as uv
 import os, copy, sys
-from scipy.integrate import simps, trapz
+from scipy.integrate import simpson, trapezoid
 from .. import pspecdata, pspecbeam, conversions, container, utils, testing, uvwindow
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData, UVCal, utils as uvutils
@@ -192,25 +192,25 @@ class Test_PSpecData(unittest.TestCase):
         pytest.raises(ValueError, ds.get_G, key, key)
         pytest.raises(ValueError, ds.get_H, key, key)
 
-        # Test conversion if not future_array_shapes
-        uvd_old = uv.UVData()
-        uvd_old.read_miriad(os.path.join(DATA_PATH,
-                                          "zen.2458042.17772.xx.HH.uvXA"),
-                             use_future_array_shapes=False)
-        ds = pspecdata.PSpecData()
-        pytest.warns(UserWarning, ds.add, [uvd_old, uvd_old], [None, None])
 
     def test_add_data(self):
         """
         Test PSpecData add()
         """
         uv = self.d[0]
+        # proper usage
+        ds1 = copy.deepcopy(self.ds)
+        ds1.add(dsets=[uv], wgts=None, labels=None)
         # test adding non list objects
         pytest.raises(TypeError, self.ds.add, 1, 1)
         # test adding non UVData objects
         pytest.raises(TypeError, self.ds.add, [1], None)
         pytest.raises(TypeError, self.ds.add, [uv], [1])
         pytest.raises(TypeError, self.ds.add, [uv], None, dsets_std=[1])
+        # test adding UVData object with old array shape
+        ds2 = copy.deepcopy(uv)
+        ds2.data_array = np.tile(uv.data_array, [1,1,1,1])
+        pytest.raises(TypeError, self.ds.add, [uv], [1])
         # test adding non UVCal for cals
         pytest.raises(TypeError, self.ds.add, [uv], None, cals=[1])
         # test TypeError if dsets is dict but other inputs are not
@@ -1077,9 +1077,9 @@ class Test_PSpecData(unittest.TestCase):
         ps_avg = np.fft.fftshift( np.mean(ps[0], axis=1) )
 
         # Calculate integrals for Parseval's theorem
-        parseval_real = simps(gsq, x)
-        parseval_ft = dx**2. * simps(fsq, k)
-        parseval_phat = simps(ps_avg, tau)
+        parseval_real = simpson(gsq, x)
+        parseval_ft = dx**2. * simpson(fsq, k)
+        parseval_phat = simpson(ps_avg, tau)
 
         # Report on results for different ways of calculating Parseval integrals
         print "Parseval's theorem:"
@@ -1186,6 +1186,14 @@ class Test_PSpecData(unittest.TestCase):
         pytest.raises(ValueError, ds.validate_datasets)
         uvd2.phase_to_time(Time(2458042.5, format='jd'))
         ds.validate_datasets()
+        # phase_center_catalog should contain only one entry per dataset
+        uvd3 = copy.deepcopy(self.d[0])
+        uvd3.phase_center_catalog[1] = uvd3.phase_center_catalog[0]
+        ds2 = pspecdata.PSpecData(dsets=[uvd, uvd3], wgts=[None, None])
+        pytest.raises(ValueError, ds2.validate_datasets)
+        # phased data
+        uvd4 = copy.deepcopy(self.d[0])
+       
 
         # test polarization
         ds.validate_pol((0,1), ('xx', 'xx'))
@@ -1209,6 +1217,7 @@ class Test_PSpecData(unittest.TestCase):
         uvp1 = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
         # rephase and get pspec
         ds.rephase_to_dset(0)
+        ds2 = ds.rephase_to_dset(0, inplace=False)
         uvp2 = ds.pspec(bls, bls, (0, 1), pols=('xx','xx'), verbose=False)
         blp = (0, ((37,39),(37,39)), ('xx','xx'))
         assert np.isclose(np.abs(uvp2.get_data(blp)/uvp1.get_data(blp)), 1.0).min()
@@ -1375,7 +1384,7 @@ class Test_PSpecData(unittest.TestCase):
         for i in range(2):
             new = copy.deepcopy(uvd)
             new.time_array += new.Ntimes * np.diff(np.unique(new.time_array))[0]
-            new.lst_array = uvutils.get_lst_for_time(new.time_array, *new.telescope_location_lat_lon_alt_degrees)
+            new.lst_array = uvutils.get_lst_for_time(new.time_array, telescope_loc=new.telescope.location)
             uvd += new
 
         # get redundant baselines
@@ -1774,7 +1783,7 @@ class Test_PSpecData(unittest.TestCase):
 
         # taper
         window = windows.blackmanharris(len(freqs))
-        NEB = Bp / trapz(window**2, x=freqs)
+        NEB = Bp / trapezoid(window**2, x=freqs)
         scalar = cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2/OmegaPP) * Bp * NEB
         data1 = d1.get_data(bls1[0])
         data2 = d2.get_data(bls2[0])
@@ -1812,13 +1821,13 @@ class Test_PSpecData(unittest.TestCase):
 
         # test single integration being flagged within spw
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
-        ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25, ordered=False)[3], 600, 0] = True
+        ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25, ordered=False), 600, 0][3] = True
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.25, unflag=False)
         assert ds.dsets[0].get_flags(24, 25)[3, 400:800].all()
         assert ds.dsets[0].get_flags(24, 25)[3, :].all() == False
 
         # test pspec run sets flagged integration to have zero weight
-        uvd.flag_array[uvd.antpair2ind(24, 25, ordered=False)[3], 400, :] = True
+        uvd.flag_array[uvd.antpair2ind(24, 25, ordered=False), 400, :][3] = True
         ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None])
         ds.broadcast_dset_flags(spw_ranges=[(400, 450)], time_thresh=0.25)
         uvp = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
@@ -1830,7 +1839,7 @@ class Test_PSpecData(unittest.TestCase):
         # average spectra
         avg_uvp = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
         # repeat but change data in flagged portion
-        ds.dsets[0].data_array[uvd.antpair2ind(24, 25, ordered=False)[3], 400:450, :] *= 100
+        ds.dsets[0].data_array[uvd.antpair2ind(24, 25, ordered=False), 400:450, :][3] *= 100
         uvp2 = ds.pspec([(24, 25), (37, 38), (38, 39)], [(24, 25), (37, 38), (38, 39)], (0, 1), ('xx', 'xx'),
                         spw_ranges=[(400, 450)], verbose=False)
         avg_uvp2 = uvp.average_spectra(blpair_groups=[sorted(np.unique(uvp.blpair_array))], time_avg=True, inplace=False)
@@ -2004,8 +2013,8 @@ def test_pspec_run():
     uvd.read_miriad(fnames[0], use_future_array_shapes=True)
     # interleave the data by hand, and add some flags in
     uvd.flag_array[:] = False
-    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False)[0], 10, 0] = True
-    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False)[:3], 15, 0] = True
+    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False), 10, 0][0] = True
+    uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False), 15, 0][:3] = True
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[::2], inplace=False)
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
     if os.path.exists("./out2.h5"):
