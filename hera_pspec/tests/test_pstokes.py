@@ -30,8 +30,8 @@ class Test_pstokes(unittest.TestCase):
         pass
 
     def test_combine_pol(self):
-        uvd1 = self.uvd1
-        uvd2 = self.uvd2
+        uvd1 = copy.deepcopy(self.uvd1)
+        uvd2 = copy.deepcopy(self.uvd2)
 
         # basic execution on pol strings
         out1 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
@@ -39,10 +39,19 @@ class Test_pstokes(unittest.TestCase):
         out2 = pstokes._combine_pol(uvd1, uvd2, -5, -6)
         # assert equivalence
         assert out1 == out2
+        # basic execution with different polarization conventions
+        # out1 assumed avg by default
+        setattr(uvd1, 'pol_convention', 'sum')
+        setattr(uvd2, 'pol_convention', 'sum')
+        out3 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
+        assert np.allclose(out3.data_array, out1.data_array * 2.)
 
         # check exceptions
         pytest.raises(AssertionError, pstokes._combine_pol, dset1, dset2, 'XX', 'YY' )
         pytest.raises(AssertionError, pstokes._combine_pol, uvd1, uvd2, 'XX', 1)
+        # if different polarization conventions
+        setattr(uvd1, 'pol_convention', 'avg')
+        pytest.raises(ValueError, pstokes._combine_pol, uvd1, uvd2, 'XX', 1)
 
     def test_construct_pstokes(self):
         uvd1 = self.uvd1

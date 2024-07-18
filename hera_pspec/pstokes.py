@@ -6,6 +6,7 @@ import pyuvdata
 import copy
 from collections import OrderedDict as odict
 import argparse
+import warnings
 
 from . import version, __version__
 
@@ -86,8 +87,10 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
         Polarization of the second UVData object to use in constructing
         pStokes visibility.
 
-    pstokes: Pseudo-stokes polarization to form, type: str
-        Pseudo stokes polarization to form, can be 'pI' or 'pQ' or 'pU' or 'pV'.
+    pstokes: Pseudo-stokes polarization to form, type: str or int
+        Pseudo stokes polarization to form, can be in a number
+        or a string, in which case pyuvdata is used to make the conversion
+        to integer.
         Default: pI
 
     x_orientation: str, optional
@@ -108,6 +111,18 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
         pol1 = pyuvdata.utils.polstr2num(pol1, x_orientation=x_orientation)
     if isinstance(pol2, str):
         pol2 = pyuvdata.utils.polstr2num(pol2, x_orientation=x_orientation)
+
+    for i, uvd in enumerate([uvd1, uvd2]):
+        try:
+            uvd.pol_convention
+        except AttributeError:
+            warnings.warn(
+                f'No polarization convention in uvd{i+1}. '
+                'Considering it to be "avg".')
+            setattr(uvd, 'pol_convention', 'avg')
+
+    if uvd1.pol_convention != uvd2.pol_convention:
+        raise ValueError('pol_convention of uvd1 and uvd2 are different.')
 
     # extracting data array from the UVData objects
     data1 = uvd1.data_array
@@ -138,7 +153,9 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
         "pol2 {} not used in constructing pstokes {}".format(pol2_str, pstokes_str)
 
     # constructing Stokes visibilities
-    stdata = 0.5 * (pol_weights[pstokes][pol1]*data1 + pol_weights[pstokes][pol2]*data2)
+    stdata = (pol_weights[pstokes][pol1]*data1 + pol_weights[pstokes][pol2]*data2)
+    if uvd1.pol_convention == 'avg':
+        stdata *= 0.5
 
     # assigning and writing data, flags and metadata to UVData object
     uvdS = copy.deepcopy(uvd1)
