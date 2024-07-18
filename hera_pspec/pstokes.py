@@ -106,12 +106,6 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     assert isinstance(uvd2, pyuvdata.UVData), \
         "uvd2 must be a pyuvdata.UVData instance"
 
-    # convert pol1 and/or pol2 to integer if fed as a string
-    if isinstance(pol1, str):
-        pol1 = pyuvdata.utils.polstr2num(pol1, x_orientation=x_orientation)
-    if isinstance(pol2, str):
-        pol2 = pyuvdata.utils.polstr2num(pol2, x_orientation=x_orientation)
-
     for i, uvd in enumerate([uvd1, uvd2]):
         try:
             uvd.pol_convention
@@ -124,16 +118,96 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     if uvd1.pol_convention != uvd2.pol_convention:
         raise ValueError('pol_convention of uvd1 and uvd2 are different.')
 
-    # extracting data array from the UVData objects
-    data1 = uvd1.data_array
-    data2 = uvd2.data_array
+    # combine arrays according to polarization convention
+    combined_data, combined_flags, combined_nsamples = _combine_pol_arrays(
+        pol1, pol2, pstokes, uvd1.pol_convention,
+        [uvd1.data_array, uvd2.data_array],
+        [uvd1.flag_array, uvd2.flag_array],
+        [uvd1.nsample_array, uvd2.nsample_array])
 
-    # extracting flag array from the UVdata objects
-    flag1 = uvd1.flag_array
-    flag2 = uvd2.flag_array
+    # convert pStokes to polarization integer if a string
+    if isinstance(pstokes, str):
+        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=x_orientation)
 
-    # constructing flags (boolean)
-    flag = np.logical_or(flag1, flag2)
+    # assigning and writing data, flags and metadata to UVData object
+    uvdS = copy.deepcopy(uvd1)
+    uvdS.data_array = combined_data # pseudo-stokes data
+    uvdS.flag_array = combined_flags # flag array
+    uvdS.polarization_array = np.array([pstokes], dtype=int) # polarization number
+    uvdS.nsample_array = combined_nsamples
+
+    uvdS.history = "Merged into pseudo-stokes vis with hera_pspec version {}\n{}" \
+                    "{}{}{}{}\n".format(__version__, "-"*20+'\n',
+                    'dset1 history:\n', uvd1.history, '\n'+'-'*20+'\ndset2 history:\n',
+                    uvd2.history)
+
+    return uvdS
+
+
+def _combine_pol_arrays(
+        pol1, pol2, pstokes, pol_convention='avg',
+        data_list=None, flags_list=None, nsamples_list=None,
+        x_orientation=None
+    ):
+    """
+    Combines arrays to form the corresponding pseudo-stokes results
+    as arrays.
+
+    Parameters
+    ----------
+    pol1 : Polarization, type: str
+        Polarization of the first UVData object to use in constructing
+        pStokes visibility.
+
+    pol2 : Polarization, type: str
+        Polarization of the second UVData object to use in constructing
+        pStokes visibility.
+
+    pstokes: Pseudo-stokes polarization to form, type: str or int
+        Pseudo stokes polarization to form, can be in a number
+        or a string, in which case pyuvdata is used to make the conversion
+        to integer.
+        Default: pI
+
+    pol_convention: str ('avg' or 'sum')
+        Convention used to form polarization.  For linear polarizations ``XX``
+        and ``YY``, the stokes ``I`` sky emission can be mapped to
+        ``I = (XX + YY)/2`` (the ``avg`` convention) or ``I = XX + YY`` 
+        (the ``sum`` convention).
+
+    data_list : list of arrays
+        List of data arrays to be combined to form their pseudo-Stokes equivalent.
+        Default is None.
+
+    flags_list : list of arrays
+        List of flag arrays to be combined to form their pseudo-Stokes equivalent.
+        Default is None.
+
+    nsamples_list : list of arrays
+        List of nsamples arrays to be combined to form their pseudo-Stokes equivalent.
+        Default is None.
+
+    x_orientation: str, optional
+        Orientation in cardinal direction east or north of X dipole.
+        Default keeps polarization in X and Y basis.
+
+    Returns
+    -------
+    combined_data : array
+        Array of pseudo-Stokes values obtained from combining the arrays in data.
+
+    combined_flags : array
+        Array of samples obtained from combining the arrays in nsamples.
+
+    combined_nsamples : array
+        Array of pseudo-Stokes values obtained from combining the arrays in data.
+
+    """
+    # convert pol1 and/or pol2 to integer if fed as a string
+    if isinstance(pol1, str):
+        pol1 = pyuvdata.utils.polstr2num(pol1, x_orientation=x_orientation)
+    if isinstance(pol2, str):
+        pol2 = pyuvdata.utils.polstr2num(pol2, x_orientation=x_orientation)
 
     # convert pStokes to polarization integer if a string
     if isinstance(pstokes, str):
@@ -152,25 +226,43 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     assert pol2 in pol_weights[pstokes], \
         "pol2 {} not used in constructing pstokes {}".format(pol2_str, pstokes_str)
 
+    # assert pol_convention makes sense
+    if pol_convention not in ['avg', 'sum']:
+        raise ValueError('pol_convention must be avg or sum.')
+
+    # checks on input lists
+    for a_list in [data_list, flags_list, nsamples_list]:
+        if a_list is None:
+            continue
+        assert len(a_list) == 2, \
+            "Cannot combine more than two arrays."
+        assert np.shape(a_list[0]) == np.shape(a_list[1]), \
+            "Arrays in list must have identical shape."
+
+    # constructing flags (boolean)
+    if flags_list is not None:
+        combined_flags = np.logical_or(flags_list[0], flags_list[1])
+    else:
+        combined_flags = None
+
     # constructing Stokes visibilities
-    stdata = (pol_weights[pstokes][pol1]*data1 + pol_weights[pstokes][pol2]*data2)
-    if uvd1.pol_convention == 'avg':
-        stdata *= 0.5
+    if data_list is not None:
+        combined_data = \
+            (pol_weights[pstokes][pol1]*data_list[0] \
+            + pol_weights[pstokes][pol2]*data_list[1])
+        if pol_convention == 'avg':
+            combined_data *= 0.5
+    else:
+        combined_data = None
 
-    # assigning and writing data, flags and metadata to UVData object
-    uvdS = copy.deepcopy(uvd1)
-    uvdS.data_array = stdata  # pseudo-stokes data
-    uvdS.flag_array = flag  # flag array
-    uvdS.polarization_array = np.array([pstokes], dtype=int) # polarization number
+    # constructing nsamples
     # nsamples combined to preserve proper variance, see hera_pspec issue #391
-    uvdS.nsample_array = 4 * (uvd1.nsample_array**-1 + uvd2.nsample_array**-1)**-1 
+    if nsamples_list is not None:
+        combined_nsamples = 4 * (nsamples_list[0]**-1 + nsamples_list[1]**-1)**-1
+    else:
+        combined_nsamples = None
 
-    uvdS.history = "Merged into pseudo-stokes vis with hera_pspec version {}\n{}" \
-                    "{}{}{}{}\n".format(__version__, "-"*20+'\n',
-                    'dset1 history:\n', uvd1.history, '\n'+'-'*20+'\ndset2 history:\n',
-                    uvd2.history)
-
-    return uvdS
+    return combined_data, combined_flags, combined_nsamples
 
 
 def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=None,
