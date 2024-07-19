@@ -95,25 +95,13 @@ class Test_pstokes(unittest.TestCase):
         assert np.allclose(f1, f3)
         assert np.allclose(ns1, ns3)
 
-        # if a_list is length one, repeat to auto-combine
-        _, _, _ = pstokes._combine_pol_arrays(
-            pol1='XX',
-            pol2='YY',
-            pstokes='pI',
-            data_list=[uvd1.data_array]
-        )
-        _, _, _ = pstokes._combine_pol_arrays(
-            pol1='XX',
-            pol2='YY',
-            pstokes='pI',
-            data_list=uvd1.data_array
-        )
-
         # check exceptions
         pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'pI', 'pI')
         pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'pI', 'YY', 'pI')
         pytest.raises(ValueError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
             pol_convention='blah')
+        pytest.raises(ValueError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
+            data_list=uvd1.data_array)
         pytest.raises(ValueError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
             data_list=[uvd1.data_array, uvd1.data_array, uvd1.data_array])
         pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
