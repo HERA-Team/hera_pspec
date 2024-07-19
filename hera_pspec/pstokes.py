@@ -5,6 +5,7 @@ import numpy as np, os
 import pyuvdata
 import copy
 from collections import OrderedDict as odict
+from collections.abc import Iterable
 import argparse
 import warnings
 
@@ -173,20 +174,20 @@ def _combine_pol_arrays(
         (the ``sum`` convention).
 
     data_list : any length 2 iterable of numpy arrays
-        List of data arrays to be combined to form their pseudo-Stokes equivalent.
+        Iterable of data arrays to be combined to form their pseudo-Stokes equivalent.
         If only one is given, it is duplicated. For the ``avg`` convention, the
         data arrays are combined as ``(data1 + data2)/2``, in the the ``sum`` 
         convention, the output is ``data1 + data2``.
         Default is None.
 
     flags_list :  any length 2 iterable of numpy arrays
-        List of flag arrays to be combined to form their pseudo-Stokes equivalent.
+        Iterable of flag arrays to be combined to form their pseudo-Stokes equivalent.
         If only one is given, it is duplicated.
         Flags are combined with a logical OR.
         Default is None.
 
     nsamples_list :  any length 2 iterable of numpy arrays
-        List of nsamples arrays to be combined to form their pseudo-Stokes equivalent.
+        Iterable of nsamples arrays to be combined to form their pseudo-Stokes equivalent.
         nsamples are combined to preserve proper variance, see hera_pspec issue #391.
         If only one is given, it is duplicated.
         Default is None.
@@ -237,14 +238,11 @@ def _combine_pol_arrays(
     # checks on input lists
     for a_list in [data_list, flags_list, nsamples_list]:
         if a_list is None:
-            a_list = None
             continue
-        if not isinstance(a_list, list) and isinstance(a_list, np.ndarray):
-            a_list = [a_list]
-        if len(a_list) == 1:
-            a_list.append(a_list[0])
-        elif len(a_list) > 2:
-            raise ValueError("Cannot combine more than two arrays.")
+        if not isinstance(a_list, Iterable):
+            raise ValueError('Data, flags and nsamples inputs must be iterables')
+        elif len(a_list) != 2:
+            raise ValueError("Can only combine two arrays.")
         assert np.shape(a_list[0]) == np.shape(a_list[1]), \
             "Arrays in list must have identical shape."
 
