@@ -107,9 +107,8 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
         "uvd2 must be a pyuvdata.UVData instance"
 
     for i, uvd in enumerate([uvd1, uvd2]):
-        try:
-            uvd.pol_convention
-        except AttributeError:
+        pol_convention = getattr(uvd, 'pol_convention', None)
+        if pol_convention is None: 
             warnings.warn(
                 f'No polarization convention in uvd{i+1}. '
                 'Considering it to be "avg".')
