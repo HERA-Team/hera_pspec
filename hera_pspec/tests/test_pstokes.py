@@ -30,8 +30,8 @@ class Test_pstokes(unittest.TestCase):
         pass
 
     def test_combine_pol(self):
-        uvd1 = self.uvd1
-        uvd2 = self.uvd2
+        uvd1 = copy.deepcopy(self.uvd1)
+        uvd2 = copy.deepcopy(self.uvd2)
 
         # basic execution on pol strings
         out1 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
@@ -39,10 +39,73 @@ class Test_pstokes(unittest.TestCase):
         out2 = pstokes._combine_pol(uvd1, uvd2, -5, -6)
         # assert equivalence
         assert out1 == out2
+        # basic execution with different polarization conventions
+        # out1 assumed avg by default
+        setattr(uvd1, 'pol_convention', 'sum')
+        setattr(uvd2, 'pol_convention', 'sum')
+        out3 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
+        assert np.allclose(out3.data_array, out1.data_array * 2.)
+        assert np.allclose(out3.nsample_array, out1.nsample_array / 4.)
 
         # check exceptions
         pytest.raises(AssertionError, pstokes._combine_pol, dset1, dset2, 'XX', 'YY' )
         pytest.raises(AssertionError, pstokes._combine_pol, uvd1, uvd2, 'XX', 1)
+        # if different polarization conventions
+        setattr(uvd1, 'pol_convention', 'avg')
+        pytest.raises(ValueError, pstokes._combine_pol, uvd1, uvd2, 'XX', 'YY')
+
+    def test_combine_pol_arrays(self):
+        uvd1 = copy.deepcopy(self.uvd1)
+        uvd2 = copy.deepcopy(self.uvd2)
+
+        # proper usage
+        d1, f1, ns1 = pstokes._combine_pol_arrays(
+            pol1=-5,
+            pol2=-6,
+            pstokes='pI',
+            pol_convention='avg',
+            data_list=[uvd1.data_array, uvd2.data_array],
+            flags_list=[uvd1.flag_array, uvd2.flag_array],
+            nsamples_list=[uvd1.nsample_array, uvd2.nsample_array]
+        )
+        # inputs can be None
+        d2, f2, ns2 = pstokes._combine_pol_arrays(
+            pol1=-5,
+            pol2=-6,
+            pstokes='pI',
+            pol_convention='avg',
+            data_list=None,
+            flags_list=None,
+            nsamples_list=None
+        )
+        assert d2 is None
+        assert f2 is None
+        assert ns2 is None
+        # polarizations can be strings     
+        d3, f3, ns3 = pstokes._combine_pol_arrays(
+            pol1='XX',
+            pol2='YY',
+            pstokes='pI',
+            pol_convention='avg',
+            data_list=[uvd1.data_array, uvd2.data_array],
+            flags_list=[uvd1.flag_array, uvd2.flag_array],
+            nsamples_list=[uvd1.nsample_array, uvd2.nsample_array]
+        )
+        assert np.allclose(d1, d3)
+        assert np.allclose(f1, f3)
+        assert np.allclose(ns1, ns3)
+
+        # check exceptions
+        pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'pI', 'pI')
+        pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'pI', 'YY', 'pI')
+        pytest.raises(ValueError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
+            pol_convention='blah')
+        pytest.raises(ValueError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
+            data_list=uvd1.data_array)
+        pytest.raises(ValueError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
+            data_list=[uvd1.data_array, uvd1.data_array, uvd1.data_array])
+        pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
+            data_list=[uvd1.data_array, uvd1.data_array[0]])
 
     def test_construct_pstokes(self):
         uvd1 = self.uvd1
