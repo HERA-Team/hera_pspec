@@ -45,6 +45,7 @@ class Test_pstokes(unittest.TestCase):
         setattr(uvd2, 'pol_convention', 'sum')
         out3 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
         assert np.allclose(out3.data_array, out1.data_array * 2.)
+        assert np.allclose(out3.nsample_array, out1.nsample_array / 4.)
 
         # check exceptions
         pytest.raises(AssertionError, pstokes._combine_pol, dset1, dset2, 'XX', 'YY' )
@@ -94,23 +95,29 @@ class Test_pstokes(unittest.TestCase):
         assert np.allclose(f1, f3)
         assert np.allclose(ns1, ns3)
 
+        # if a_list is length one, repeat to auto-combine
+        _, _, _ = pstokes._combine_pol_arrays(
+            pol1='XX',
+            pol2='YY',
+            pstokes='pI',
+            data_list=[uvd1.data_array]
+        )
+        _, _, _ = pstokes._combine_pol_arrays(
+            pol1='XX',
+            pol2='YY',
+            pstokes='pI',
+            data_list=uvd1.data_array
+        )
+
         # check exceptions
         pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'pI', 'pI')
         pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'pI', 'YY', 'pI')
         pytest.raises(ValueError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
             pol_convention='blah')
-        pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
-            data_list=[uvd1.data_array])
-        pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
-            flags_list=[uvd1.flag_array])
-        pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
-            nsamples_list=[uvd1.nsample_array])
+        pytest.raises(ValueError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
+            data_list=[uvd1.data_array, uvd1.data_array, uvd1.data_array])
         pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
             data_list=[uvd1.data_array, uvd1.data_array[0]])
-        pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
-            flags_list=[uvd1.flag_array, uvd1.flag_array[0]])
-        pytest.raises(AssertionError, pstokes._combine_pol_arrays, 'XX', 'YY', 'pI',
-            nsamples_list=[uvd1.nsample_array, uvd1.nsample_array[0]])
 
     def test_construct_pstokes(self):
         uvd1 = self.uvd1

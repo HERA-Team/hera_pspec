@@ -89,8 +89,8 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
 
     pstokes: Pseudo-stokes polarization to form, type: str or int
         Pseudo stokes polarization to form, can be in a number
-        or a string, in which case pyuvdata is used to make the conversion
-        to integer.
+        or a string ('pI', 'pQ', 'pU', or 'pV') , in which case pyuvdata 
+        is used to make the conversion to integer.
         Default: pI
 
     x_orientation: str, optional
@@ -136,11 +136,9 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
     uvdS.polarization_array = np.array([pstokes], dtype=int) # polarization number
     uvdS.nsample_array = combined_nsamples
 
-    uvdS.history = "Merged into pseudo-stokes vis with hera_pspec version {}\n{}" \
-                    "{}{}{}{}\n".format(__version__, "-"*20+'\n',
-                    'dset1 history:\n', uvd1.history, '\n'+'-'*20+'\ndset2 history:\n',
-                    uvd2.history)
-
+    uvdS.history = f"Merged into pseudo-stokes vis with hera_pspec version {__version__}\n"+\
+                   "-"*20+f"\ndset1 history:\n{uvd1.history}\n"+'-'*20+\
+                   f"\ndset2 history:{uvd2.history}\n"
     return uvdS
 
 
@@ -165,26 +163,33 @@ def _combine_pol_arrays(
 
     pstokes: Pseudo-stokes polarization to form, type: str or int
         Pseudo stokes polarization to form, can be in a number
-        or a string, in which case pyuvdata is used to make the conversion
-        to integer.
-        Default: pI
+        or a string ('pI', 'pQ', 'pU', or 'pV') in which case pyuvdata
+        is used to make the conversion to integer.
+        Default: pI.
 
     pol_convention: str ('avg' or 'sum')
-        Convention used to form polarization.  For linear polarizations ``XX``
+        Convention used to form polarization. For linear polarizations ``XX``
         and ``YY``, the stokes ``I`` sky emission can be mapped to
         ``I = (XX + YY)/2`` (the ``avg`` convention) or ``I = XX + YY`` 
         (the ``sum`` convention).
 
-    data_list : list of arrays
+    data_list : any length 2 iterable of numpy arrays
         List of data arrays to be combined to form their pseudo-Stokes equivalent.
+        If only one is given, it is duplicated. For the ``avg`` convention, the
+        data arrays are combined as ``(data1 + data2)/2``, in the the ``sum`` 
+        convention, the output is ``data1 + data2``.
         Default is None.
 
-    flags_list : list of arrays
+    flags_list :  any length 2 iterable of numpy arrays
         List of flag arrays to be combined to form their pseudo-Stokes equivalent.
+        If only one is given, it is duplicated.
+        Flags are combined with a logical OR.
         Default is None.
 
-    nsamples_list : list of arrays
+    nsamples_list :  any length 2 iterable of numpy arrays
         List of nsamples arrays to be combined to form their pseudo-Stokes equivalent.
+        nsamples are combined to preserve proper variance, see hera_pspec issue #391.
+        If only one is given, it is duplicated.
         Default is None.
 
     x_orientation: str, optional
@@ -233,9 +238,14 @@ def _combine_pol_arrays(
     # checks on input lists
     for a_list in [data_list, flags_list, nsamples_list]:
         if a_list is None:
+            a_list = None
             continue
-        assert len(a_list) == 2, \
-            "Cannot combine more than two arrays."
+        if not isinstance(a_list, list) and isinstance(a_list, np.ndarray):
+            a_list = [a_list]
+        if len(a_list) == 1:
+            a_list.append(a_list[0])
+        elif len(a_list) > 2:
+            raise ValueError("Cannot combine more than two arrays.")
         assert np.shape(a_list[0]) == np.shape(a_list[1]), \
             "Arrays in list must have identical shape."
 
@@ -256,9 +266,10 @@ def _combine_pol_arrays(
         combined_data = None
 
     # constructing nsamples
-    # nsamples combined to preserve proper variance, see hera_pspec issue #391
     if nsamples_list is not None:
-        combined_nsamples = 4 * (nsamples_list[0]**-1 + nsamples_list[1]**-1)**-1
+        combined_nsamples = (nsamples_list[0]**-1 + nsamples_list[1]**-1)**-1
+        if pol_convention == 'avg':
+            combined_nsamples *= 4.
     else:
         combined_nsamples = None
 
