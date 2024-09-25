@@ -188,7 +188,7 @@ def _combine_pol_arrays(
 
     nsamples_list :  any length 2 iterable of numpy arrays
         Iterable of nsamples arrays to be combined to form their pseudo-Stokes equivalent.
-        nsamples are combined to preserve proper variance, see hera_pspec issue #391.
+        nsamples are combined to preserve proper variance, see hera_pspec issue #391 and #406
         If only one is given, it is duplicated.
         Default is None.
 
@@ -264,9 +264,9 @@ def _combine_pol_arrays(
 
     # constructing nsamples
     if nsamples_list is not None:
-        combined_nsamples = (nsamples_list[0]**-1 + nsamples_list[1]**-1)**-1
-        if pol_convention == 'avg':
-            combined_nsamples *= 4.
+        combined_nsamples = 4 * (nsamples_list[0]**-1 + nsamples_list[1]**-1)**-1
+        # for an explanation of the factor of 4, and why it doesn't depend on pol_convention,
+        # see https://github.com/HERA-Team/hera_pspec/issues/406
     else:
         combined_nsamples = None
 
