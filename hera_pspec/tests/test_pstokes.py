@@ -20,8 +20,10 @@ class Test_pstokes(unittest.TestCase):
         # Loading pyuvdata objects
         self.uvd1 = pyuvdata.UVData()
         self.uvd1.read_miriad(dset1, use_future_array_shapes=True)
+        setattr(self.uvd1, 'vis_units', 'Jy')
         self.uvd2 = pyuvdata.UVData()
         self.uvd2.read_miriad(dset2, use_future_array_shapes=True)
+        setattr(self.uvd2, 'vis_units', 'Jy')
 
     def tearDown(self):
         pass
@@ -43,9 +45,10 @@ class Test_pstokes(unittest.TestCase):
         # out1 assumed avg by default
         setattr(uvd1, 'pol_convention', 'sum')
         setattr(uvd2, 'pol_convention', 'sum')
+        
         out3 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
         assert np.allclose(out3.data_array, out1.data_array * 2.)
-        assert np.allclose(out3.nsample_array, out1.nsample_array / 4.)
+        assert np.allclose(out3.nsample_array, out1.nsample_array)
 
         # check exceptions
         pytest.raises(AssertionError, pstokes._combine_pol, dset1, dset2, 'XX', 'YY' )
@@ -81,7 +84,7 @@ class Test_pstokes(unittest.TestCase):
         assert d2 is None
         assert f2 is None
         assert ns2 is None
-        # polarizations can be strings     
+        # polarizations can be strings
         d3, f3, ns3 = pstokes._combine_pol_arrays(
             pol1='XX',
             pol2='YY',
@@ -153,6 +156,7 @@ class Test_pstokes(unittest.TestCase):
         uvd.read(multipol_dset, use_future_array_shapes=True)
         uvc = pyuvdata.UVCal()
         uvc.read_calfits(multipol_dset_cal, use_future_array_shapes=True)
+        uvc.gain_scale = 'Jy'
         uvutils.uvcalibrate(uvd, uvc)
         wgts = [(0.5, 0.5), (0.5, -0.5)]
 
