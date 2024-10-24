@@ -1030,6 +1030,51 @@ class Test_UVPSpec(unittest.TestCase):
         out = uvp1 + uvp2 + uvp3
         assert out.Npols == 3
 
+    def assert_uvpspec_equal(self, uvp1, uvp2):
+        """Helper function to compare two UVPSpec objects."""
+        assert np.all(uvp1.spw_array == uvp2.spw_array)
+        assert np.all(uvp1.polpair_array == uvp2.polpair_array)
+        for k in uvp1.data_array:
+            assert np.allclose(uvp1.data_array[k], uvp2.data_array[k])
+            assert np.allclose(uvp1.nsample_array[k], uvp2.nsample_array[k])
+            assert np.allclose(uvp1.integration_array[k], uvp2.integration_array[k])
+
+    def test_recursive_combine_uvpspec_single(self):
+        """Test recursive_combine_uvpspec with a single UVPSpec object."""
+        uvps_list = [copy.deepcopy(self.uvp)]
+        combined_recursive = uvpspec.recursive_combine_uvpspec(uvps_list)
+        self.assert_uvpspec_equal(combined_recursive, self.uvp)
+
+    def test_recursive_combine_uvpspec_pair(self):
+        """Test recursive_combine_uvpspec with a pair of UVPSpec objects."""
+        uvp_copy = copy.deepcopy(self.uvp)
+        uvp_copy.polpair_array[0] = 1414  # Slight modification for differentiation
+        uvps_list = [self.uvp, uvp_copy]
+
+        combined_recursive = uvpspec.recursive_combine_uvpspec(uvps_list)
+        combined_standard = uvpspec.combine_uvpspec(uvps_list, merge_history=False, verbose=False)
+        
+        self.assert_uvpspec_equal(combined_recursive,combined_standard)
+
+    def test_recursive_combine_uvpspec_multiple(self):
+        """Test recursive_combine_uvpspec with multiple UVPSpec objects."""
+        uvp1 = copy.deepcopy(self.uvp)
+        uvp2 = copy.deepcopy(self.uvp)
+        uvp2.polpair_array[0] = 1414
+        uvp3 = copy.deepcopy(self.uvp)
+        uvp3.polpair_array[0] = 1313
+
+        uvps_list = [uvp1, uvp2, uvp3]
+        combined_recursive = uvpspec.recursive_combine_uvpspec(uvps_list)
+        combined_standard = uvpspec.combine_uvpspec(uvps_list, merge_history=False, verbose=False)
+
+        self.assert_uvpspec_equal(combined_recursive, combined_standard)
+
+    def test_recursive_combine_uvpspec_empty(self):
+        """Test recursive_combine_uvpspec with an empty list."""
+        with pytest.raises(ValueError, match="Cannot run recursive_combine_uvpspec on length-0 objects."):
+            uvpspec.recursive_combine_uvpspec([])
+
 def test_conj_blpair_int():
     conj_blpair = uvputils._conj_blpair_int(101102103104)
     assert conj_blpair == 103104101102
