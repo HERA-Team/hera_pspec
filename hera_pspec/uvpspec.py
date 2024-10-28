@@ -2351,6 +2351,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u : UVPSpec object
         A UVPSpec object with the data of all the inputs combined.
     """
+    # Check if only one UVPSpec object is given
+    if (len(uvps) == 1) and issubclass(type(uvps[0]), UVPSpec):
+        return uvps[0]
+
     # Perform type checks and get concatenation axis
     (uvps, concat_ax, new_spws, new_blpts, new_polpairs,
      static_meta) = get_uvp_overlap(uvps, just_meta=False, verbose=verbose)
@@ -2710,6 +2714,41 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.check()
 
     return u
+
+
+def recursive_combine_uvpspec(uvps):
+    """
+    Method for faster combination of UVPSpec objects by combining them recursively.
+    This is faster than combine_uvpspec for long lists of files---e.g. if you have 
+    one uvpspec object for every unique baseline and hundreds of baselines. Note:
+    Histories are not merged, so this is the equivalent of running combine_uvpspec 
+    with merge_history=False. 
+    
+    Parameters
+    ----------
+    uvps : list
+        A list of UVPSpec objects to combine.
+
+    Returns
+    -------
+    u : UVPSpec object
+        A UVPSpec object with the data of all the inputs combined.
+
+    """
+    if len(uvps) == 0:
+        raise ValueError('Cannot run recursive_combine_uvpspec on length-0 objects.')
+    if len(uvps) == 1:
+        # Base case: only one object left, return it
+        return uvps[0]
+    elif len(uvps) == 2:
+        # Base case: two uvp objects, add them together
+        return combine_uvpspec(uvps, merge_history=False, verbose=False)  # prevents exponential profileration of copied histories
+    else:
+        # Recursive case: split the list in half and add each half
+        midpoint = len(uvps) // 2
+        left_sum = recursive_combine_uvpspec(uvps[:midpoint])
+        right_sum = recursive_combine_uvpspec(uvps[midpoint:])
+        return combine_uvpspec([left_sum, right_sum], merge_history=False, verbose=False)
 
 
 def get_uvp_overlap(uvps, just_meta=True, verbose=True):
