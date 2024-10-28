@@ -733,6 +733,10 @@ class Test_UVPSpec(unittest.TestCase):
                                          beam=beam)
         uvp1 = self._add_optionals(uvp1)
 
+        # test single UVPSpec
+        out = uvpspec.combine_uvpspec([uvp1], verbose=False)
+        assert id(out) == id(uvp1)
+
         # test concat across pol
         uvp2 = copy.deepcopy(uvp1)
         uvp2.polpair_array[0] = 1414

@@ -2351,6 +2351,10 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u : UVPSpec object
         A UVPSpec object with the data of all the inputs combined.
     """
+    # Check if only one UVPSpec object is given
+    if (len(uvps) == 1) and issubclass(type(uvps[0]), UVPSpec):
+        return uvps[0]
+
     # Perform type checks and get concatenation axis
     (uvps, concat_ax, new_spws, new_blpts, new_polpairs,
      static_meta) = get_uvp_overlap(uvps, just_meta=False, verbose=verbose)
