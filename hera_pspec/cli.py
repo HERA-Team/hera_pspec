@@ -13,6 +13,10 @@ from . import container
 from .uvpspec import recursive_combine_uvpspec
 
 @app.command()
+def hello():
+    cns.print("Hi! :wave:")
+    
+@app.command()
 def fast_merge_baselines(
     pattern: str = typer.Option(),
     group: str = typer.Option(),
