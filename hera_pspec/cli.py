@@ -71,6 +71,6 @@ def fast_merge_baselines(
         psc = container.PSpecContainer(outpath.with_suffix(".pspec.h5"), mode='rw', keep_open=False)
         psc.set_pspec(group, name, uvp, overwrite=True)
         
-    for name, extra in extras.items():
+    for name, extra in extra_attrs.items():
         with open(outpath.with_suffix(f".{name}.pkl"), 'wb') as f:
             pickle.dump(extra, f)
