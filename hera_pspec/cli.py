@@ -38,6 +38,7 @@ def fast_merge_baselines(
         
     files = sorted(glob.glob(pattern))
     cns.print(f"Found {len(files)} files matching pattern.")
+    
     for df in tqdm(files, desc="Loading files", unit="file"):
         # load power spectra
         psc = container.PSpecContainer(df, mode='r', keep_open=False)
