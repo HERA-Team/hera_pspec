@@ -5,6 +5,7 @@ import warnings
 from rich.console import Console
 import h5py
 import pickle
+import glob
 cns = Console()
 
 app = typer.Typer()
@@ -13,7 +14,7 @@ from .uvpspec import recursive_combine_uvpspec
 
 @app.command()
 def fast_merge_baselines(
-    files: list[Path],
+    pattern: str,
     group: str,
     names: list[str],
     outpath: Path,
@@ -35,6 +36,8 @@ def fast_merge_baselines(
     else:
         tqdm = lambda x: x
         
+    files = sorted(glob.glob(pattern))
+    cns.print(f"Found {len(files)} files matching pattern.")
     for df in tqdm(files, desc="Loading files", unit="file"):
         # load power spectra
         psc = container.PSpecContainer(df, mode='r', keep_open=False)
