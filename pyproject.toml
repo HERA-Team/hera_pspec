@@ -6,3 +6,93 @@ build-backend = "setuptools.build_meta"
 write_to = "hera_pspec/_version.py"
 parentdir_prefix_version = "hera_pspec-"
 fallback_version  = "0.0.0"
+
+[project]
+name = "hera_pspec"
+description = "HERA Power Spectrum Estimator Code"
+authors = [
+    {name="HERA Team"},
+]
+license = {file = "LICENSE"}
+readme = "README.rst"
+# Add here all kinds of additional classifiers as defined under
+# https://pypi.python.org/pypi?%3Aaction=list_classifiers
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved",
+    "Natural Language :: English",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "numpy>=1.14",
+    "scipy",
+    "matplotlib>=2.2",
+    "pyuvdata",
+    "astropy>=2.0",
+    "pyyaml",
+    "h5py",
+    "uvtools",
+    "hera-calibration>=3.2.2",
+    "typer",
+]
+dynamic = ['version']
+
+[project.urls]
+Documentation = "https://hera-pspec.readthedocs.io/en/latest/"
+Repository = "https://github.com/HERA-Team/hera_pspec"
+Changelog = "https://github.com/HERA-Team/hera_pspec/releases"
+Issues = "https://github.com/HERA-Team/hera_pspec/issues"
+
+[project.optional-dependencies]
+docs = [
+    "sphinx>=5.3.0",
+    "sphinx_rtd_theme>=1.1.1",
+    "readthedocs-sphinx-search>=0.1.1",
+    "nbsphinx",
+    "ipython",
+    "sphinx_autorun",
+    "numpydoc>=0.8",
+    "nbsphinx",
+    "mock==1.0.1",
+]
+tests = [
+    "coverage>=4.5.1",
+    "pytest>=3.5.1",
+    "pytest-cov>=2.5.1",
+]
+dev = [
+    "hera_pspec[doc,tests]",
+    "hera_pspec[tests]",
+]
+
+[project.scripts]
+pspec = "hera_pspec.cli:app"
+
+[tool.setuptools]
+# Doing this is discouraged, and we should package these CLI commands into the above 
+# `scripts` section.
+script-files = [
+    "scripts/pspec_run.py", 
+    "scripts/pspec_red.py",
+    "scripts/bootstrap_run.py",
+    "scripts/generate_pstokes_run.py",
+    "scripts/auto_noise_run.py",
+]
+    
+[tool.pytest.ini_options]
+# Options for py.test:
+# Specify command line options as you would do when invoking py.test directly.
+# e.g. --cov-report html (or xml) for html/xml output or --junitxml junit.xml
+# in order to write a coverage file that can be read by Jenkins.
+addopts = "--cov hera_pspec --cov-config=.coveragerc --cov-report xml:./coverage.xml --verbose"
+norecursedirs = [
+    "dist",
+    "build",
+    ".tox",
+]
+testpaths = "tests"
