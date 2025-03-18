@@ -14,10 +14,10 @@ from .uvpspec import recursive_combine_uvpspec
 
 @app.command()
 def fast_merge_baselines(
-    pattern: str,
-    group: str,
-    names: list[str],
-    outpath: Path,
+    pattern: str = typer.Option(),
+    group: str = typer.Option(),
+    names: list[str] = typer.Option(),
+    outpath: Path = typer.Option(),
     progress: bool = True,
     extras: list[str] = None,
 ):
