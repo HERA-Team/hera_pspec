@@ -66,11 +66,15 @@ def fast_merge_baselines(
                     extra_attrs[extra][blp] = f['header'].attrs[extra]
 
     cns.print("Merging power spectra")        
+    outspec = outpath.parent / outpath.name + ".pspec.h5"
+    psc = container.PSpecContainer(outspec, mode='rw', keep_open=False)
     for name, uvplist in uvps.items():
         uvp = recursive_combine_uvpspec(uvplist)
-        psc = container.PSpecContainer(outpath.with_suffix(".pspec.h5"), mode='rw', keep_open=False)
         psc.set_pspec(group, name, uvp, overwrite=True)
-        
+    
+    cns.print(f"Wrote pspecs to file: {outspec}")
     for name, extra in extra_attrs.items():
-        with open(outpath.with_suffix(f".{name}.pkl"), 'wb') as f:
+        fname = outpath.parent / outpath.name + f".{name}.pkl"
+        with open(fname, 'wb') as f:
             pickle.dump(extra, f)
+        cns.print(f"Wrote {fname}")
