@@ -2,16 +2,14 @@ import unittest
 import pytest
 import numpy as np
 import os
-import sys
 from hera_pspec.data import DATA_PATH
-from .. import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils, uvwindow
-from .. import uvpspec_utils as uvputils
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils, uvwindow
+from hera_pspec import uvpspec_utils as uvputils
 import copy
 import h5py
 from collections import OrderedDict as odict
 from pyuvdata import UVData
 from hera_cal import redcal
-import json
 
 class Test_UVPSpec(unittest.TestCase):
 

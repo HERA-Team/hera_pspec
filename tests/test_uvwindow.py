@@ -13,9 +13,8 @@ from astropy import units
 from pyuvdata import UVBeam, UVData
 from hera_pspec.data import DATA_PATH
 
-from .. import conversions, noise, version, pspecbeam, grouping, utils
-from .. import uvwindow, pspecbeam, PSpecData
-from .. import uvpspec_utils as uvputils
+from hera_pspec import conversions, pspecbeam, utils
+from hera_pspec import uvwindow, pspecbeam, PSpecData
 
 # Data files to use in tests
 dfile = 'zen.2458116.31939.HH.uvh5'

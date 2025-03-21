@@ -9,7 +9,7 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 from hera_pspec.data import DATA_PATH
-from .. import uvpspec, conversions, pspecdata, pspecbeam, noise, testing, utils
+from hera_pspec import conversions, pspecdata, pspecbeam, noise, testing, utils
 
 
 class Test_Sensitivity(unittest.TestCase):
