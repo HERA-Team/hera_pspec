@@ -191,3 +191,20 @@ def test_analytic_noise():
 
         # clean up
         os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
+
+class TestGetApproximateCorr:
+    def check_corr_matrix(self, m: np.ndarray):
+        """Perform checks of a matrix that establish it as a reasonable correlation."""
+        assert m.ndim == 2
+        assert m.shape[0] == m.shape[1]
+        assert np.all(np.diag(m)==1)
+        assert np.all(m - np.eye(m.shape[0]) <= 1)
+        np.testing.assert_array_equal(m.T, m)
+        
+    
+    @pytest.mark.parametrize('n', [1, 6, 7])
+    @pytest.mark.parametrize('taper', ['blackmanharris', 'none'])
+    def test_get_approximate_corr(self, n, taper):
+        corr = noise.get_approximate_delay_delay_corr_matrix(taper, n)
+        self.check_corr_matrix(corr)
+        

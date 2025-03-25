@@ -1,10 +1,9 @@
 import numpy as np
-import os
 import copy
 import ast
 from collections import OrderedDict as odict
-
-from . import conversions, pspecbeam
+from uvtools import dspec
+from . import conversions
 
 
 def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, component='real'):
@@ -206,6 +205,54 @@ class Sensitivity(object):
                        k=k, component=component)
 
         return P_N
+    
+def get_approximate_delay_delay_corr_matrix(
+    taper: str,
+    n_delays: int,
+) -> np.ndarray:
+    r"""Compute an approximate correlation matrix for a power spectrum.
+    
+    This correlation matrix assumes that there is no intrinsic covariance between 
+    channels of the visibilities, and that all delay-delay covariance comes in through
+    the frequency taper. In this case, the correlation between delays i and j is given
+    by
+    
+    .. math:: C_{i,j} = |\mathcal{F}(\phi^2)|(\tau_j - \tau_i)^2,
+    
+    where :math:`\phi` is the taper function.
+    
+    Parameters
+    ----------
+    taper
+        The taper function, phi, as a string. Should be an existing window function
+        in `scipy.signal.windows`.
+    n_delays
+        The number of channels in the power spectrum window.
+    """
+    taper = dspec.gen_window(taper, n_delays)
 
-
+    # Get the covariance as a function of separation of delay modes.
+    # We take the non-negative modes only, since the negative modes are symmetric.
+    cov = np.abs(np.fft.fft(taper**2)[:(n_delays+1)//2])**2
+    
+    # Divide by the max so that the auto-correlation is unity.
+    cov /= cov.max()
+    
+    # Append zeros so that we have n_delays correlation values. The correlation
+    # matrix for pixel separations larger than n_delays/2 will be zero.
+    cov = np.concatenate((cov, np.zeros(n_delays - len(cov))))
+    
+    cov2d = np.zeros((n_delays,n_delays))
+    
+    # Form a matrix where each elements value is the number of pixels it is away
+    # from the auto (diagonal). 
+    npixdiff = np.arange(n_delays, dtype=int)
+    npixdiff = np.concatenate(
+        [np.abs(npixdiff - i) for i in range(n_delays)], dtype=int
+    )
+    
+    # Index into the covariances as a function of mode difference and reshape to a matrix.
+    cov2d = cov[npixdiff].reshape((n_delays, n_delays))
+    
+    return cov2d
 
