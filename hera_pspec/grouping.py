@@ -1712,3 +1712,173 @@ def get_bootstrap_run_argparser():
     a.add_argument("--verbose", default=False, action='store_true', help="report feedback to stdout.")
 
     return a
+
+def _bin_data_like_array(d, kernel, slices):
+    """Bin a data-like array over the delay axis.
+    
+    This function is an internally used function for :func:`average_in_delay_bins`
+    """
+    nk = len(kernel)
+    kernel = kernel[None, :, None]
+    
+    out = np.zeros((d.shape[0], len(slices), d.shape[2]), dtype=d.dtype)
+    for i, slc in enumerate(slices):
+        if slc.stop - slc.start == nk:
+            out[:, i] = np.sum(d[:, slc] * kernel, axis=1)
+        elif slc.stop - slc.start == 1:
+            out[:, i:i+1] = d[:, slc]
+        else:
+            raise RuntimeError("Got a wrong slice size")
+    return out
+
+def _bin_cov_like_array(cov, kernel, kernel2d, slices):
+    """Bin a covariance-like array over the delay axis.
+    
+    This function is internall used for :func:`average_in_delay_bins`.
+    """
+    newcov = np.zeros_like(cov)[:, :len(slices), :len(slices)]
+            
+    for i, slc in enumerate(slices):
+        for j, slc2 in enumerate(slices):
+            if slc.stop - slc.start > 1 and slc2.stop - slc2.start > 1:
+                newcov[:, i, j] = np.sum(cov[:, slc, slc2] * kernel2d[None, :, :, None], axis=(1,2))
+            elif slc.stop - slc.start > 1:
+                newcov[:, i, j] = np.sum(cov[:, slc, slc2.start] * kernel[None, :, None], axis=1)
+            elif slc2.stop - slc2.start > 1:
+                newcov[:, i, j] = np.sum(cov[:, slc.start, slc2] * kernel[None, :, None], axis=1)
+            else:
+                newcov[:, i, j] = cov[:, slc.start, slc2.start]
+    return newcov
+    
+def average_in_delay_bins(
+    uvp, 
+    kernel: np.ndarray, 
+    cov_weighting_for_pn: bool | None = None
+):
+    """Average a UVPSpec object within bins of delay.
+    
+    This averages spectra only over the delay axis, for each baseline, time, spw 
+    and pol-pair. The averaging uses a weighting kernel that you can supply. THe kernel
+    is applied in a non-overlapping way.
+    
+    Window functions and covariances are also downsampled consistently using the same 
+    kernel. THe P_N statistic is downsampled consistently with the covariance array
+    (i.e. taking into account covariances between delays) unless instructed otherwise.
+    Other statistics are downsampled using the kernel weighting, but without utilizing
+    the covariance information.
+
+    Crucially, at this point, the average itself does *not* account for weighting by
+    any of the stats (either the covariance or P_N), only the kernel. The resulting
+    covariance and P_N are consistent with this assumption.
+    
+    The delays of the returned object will be symmetrical in the same way as the input
+    delays, that is, each negative delay will have a corresponding positive delay, and
+    the zero mode will remain *unaveraged*. That is, for an input with delays::
+    
+    [-6, -5, -4, -3, -2, -1, 0, 1,2,3,4,5,6]
+    
+    and a symmetric kernel of length 3, the resulting delays will be
+    
+    [-5, -2, 0, 2, 5].
+    
+    Parameters
+    ----------
+    uvp
+        The UVPSpec object to average.
+    kernel
+        The averaging kernel. This will be re-normalized to have a sum of unity.
+    cov_weighting_for_pn
+        Whether to average the P_N statistic using known covariance information, or 
+        simply by averaging with the kernel.
+    
+    Returns
+    -------
+    uvp
+        A new uvp object with the down-sampled delays.
+    """
+    uvp  = copy.deepcopy(uvp)
+    stats_array = getattr(uvp, 'stats_array', {})
+    if cov_weighting_for_pn is None:
+        cov_weighting_for_pn = hasattr(uvp, 'cov_array_real') and "P_N" in stats_array
+        
+    if cov_weighting_for_pn and not hasattr(uvp, "cov_array_real"):
+        raise ValueError("Cannot do cov_weighting_for_pn when cov_array_real is not set!")
+    if cov_weighting_for_pn and "P_N" not in stats_array:
+        raise ValueError("Cannot weight P_N when P_N is not in stats array!")
+
+    kernel = np.asarray(kernel, dtype=float)
+    kernel /= np.sum(kernel)
+    kernel2d = np.outer(kernel, kernel)
+    nk = len(kernel)
+
+    # We will replace parts of the new_uvp with downsampled
+    # delays.
+    new_uvp = copy.deepcopy(uvp)
+
+    new_uvp.data_array = {}
+    new_uvp.stats_array = {name: {} for name in stats_array}
+
+    dly_array = []
+    spw_dly_array = []
+    for spw in uvp.spw_array:   
+        
+        p = uvp.data_array[spw]
+        dly = uvp.get_dlys(spw)
+        n = len(dly)
+        zero_idx = np.where(dly==0)[0][0]
+
+        # We're going to try to keep the symmetry betwen negative and positive delays.
+        # This means we keep the zero delay un-averaged. 
+        neg_slices = []
+        low = zero_idx - nk
+        while low >= 0:
+            neg_slices.append(slice(low, low + nk))
+            low -= nk
+
+        pos_slices = []
+        high = zero_idx + 1 + nk
+        while high <= n:
+            pos_slices.append(slice(high - nk, high))
+            high += nk
+        slices = neg_slices[::-1] + [slice(zero_idx, zero_idx+1)] + pos_slices
+        newn = len(slices)
+
+        new_uvp.data_array[spw] = _bin_data_like_array(p, kernel, slices)
+        newdly = np.array([np.sum(dly[slc]*kernel) for slc in slices])
+        dly_array.append(newdly)
+
+        stats = {
+            name: _bin_data_like_array(
+                stats_array[name][spw], kernel, slices
+            )
+            for name in stats_array
+            if name != "P_N"
+        }
+        if hasattr(uvp, "cov_array_real"):
+            oldcov = uvp.cov_array_real[spw]
+            newcov = _bin_cov_like_array(oldcov, kernel, kernel2d, slices)
+            new_uvp.cov_array_real[spw] = newcov
+            new_uvp.cov_array_imag[spw] = np.zeros_like(new_uvp.cov_array_real[spw])
+
+        if hasattr(uvp, "window_function_array"):
+            wf = uvp.window_function_array[spw] # shape (Nblts, Ndly, Ndly, Npol)
+            new_uvp.window_function_array[spw] = _bin_cov_like_array(wf, kernel, kernel2d, slices)
+
+        if 'P_N' in stats_array:
+            if not cov_weighting_for_pn:
+                stats["P_N"] = np.sqrt(_bin_data_like_array(stats_array['P_N'][spw]**2, kernel, slices))
+            elif hasattr(uvp, "cov_array_real"):
+                # We assume that the diagonal of cov is just P_N.
+                stats["P_N"] = np.diagonal(np.sqrt(newcov), axis1=1, axis2=2).transpose((0, 2, 1))
+
+        spw_dly_array.append(np.ones(newn,dtype=int)*spw)
+
+        # Actually set the stats array
+        for name in stats:
+            new_uvp.stats_array[name][spw] = stats[name]
+
+    new_uvp.dly_array = np.concatenate(dly_array)
+    new_uvp.spw_dly_array = np.concatenate(spw_dly_array)
+    new_uvp.Nspwdlys = len(new_uvp.dly_array)
+
+    return new_uvp
