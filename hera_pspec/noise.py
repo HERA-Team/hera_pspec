@@ -4,6 +4,7 @@ import ast
 from collections import OrderedDict as odict
 from uvtools import dspec
 from . import conversions
+from scipy.linalg import circulant
 
 
 def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=None, component='real'):
@@ -233,26 +234,6 @@ def get_approximate_delay_delay_corr_matrix(
 
     # Get the covariance as a function of separation of delay modes.
     # We take the non-negative modes only, since the negative modes are symmetric.
-    cov = np.abs(np.fft.fft(taper**2)[:(n_delays+1)//2])**2
-    
-    # Divide by the max so that the auto-correlation is unity.
-    cov /= cov.max()
-    
-    # Append zeros so that we have n_delays correlation values. The correlation
-    # matrix for pixel separations larger than n_delays/2 will be zero.
-    cov = np.concatenate((cov, np.zeros(n_delays - len(cov))))
-    
-    cov2d = np.zeros((n_delays,n_delays))
-    
-    # Form a matrix where each elements value is the number of pixels it is away
-    # from the auto (diagonal). 
-    npixdiff = np.arange(n_delays, dtype=int)
-    npixdiff = np.concatenate(
-        [np.abs(npixdiff - i) for i in range(n_delays)], dtype=int
-    )
-    
-    # Index into the covariances as a function of mode difference and reshape to a matrix.
-    cov2d = cov[npixdiff].reshape((n_delays, n_delays))
-    
-    return cov2d
+    cov = np.abs(np.fft.fft(taper**2))**2
+    return circulant(cov/cov.max())
 
