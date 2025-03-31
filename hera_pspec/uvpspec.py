@@ -5,6 +5,7 @@ from pyuvdata import utils as uvutils
 import h5py
 import warnings
 import json
+from typing import Self
 
 from . import conversions, noise, version, __version__, pspecbeam, grouping, utils, uvpspec_utils as uvputils
 from .parameter import PSpecParam
@@ -2328,6 +2329,75 @@ class UVPSpec(object):
                                                  noise_scalar=noise_scalar)
         return scalar
 
+
+    def add_approximate_covariance(
+        self, 
+        variance_stat: str = "P_N",
+        inplace: bool=True, 
+        taper: str = 'blackmanharris'
+    ) -> Self:
+        """Add an approximate covariance matrix to a UVPSpec object.
+
+        This function calculates a delay-delay covariance matrix based on the
+        provided taper and adds it to the UVPSpec object. The covariance is
+        calculated using :func:`get_approximate_delay_delay_corr_matrix`.
+        
+        The covariance matrix added here is very simple: it is simply a correlation matrix
+        that depends only on the number of channels and the frequency taper, which is then
+        scaled to have the variance (diagonal terms) given by the `variance_stat`.
+
+        Parameters
+        ----------
+        uvp : UVPSpec
+            The UVPSpec object to add the covariance to.
+        variance_stat : str, optional
+            The statistic to use for normalization, by default "P_N".
+        inplace : bool, optional
+            Whether to modify the UVPSpec object in place, by default True.
+        taper : str, optional
+            The frequency taper used to form the power spectra.
+
+        Returns
+        -------
+        UVPSpec
+            The UVPSpec object with the added covariance.
+
+        Raises
+        ------
+        ValueError
+            If the specified variance_stat does not exist in the UVPSpec object.
+        """
+        if not inplace:
+            uvp = copy.deepcopy(self)
+        else:
+            uvp = self
+            
+        if variance_stat not in uvp.stats_array:
+            raise ValueError(f"Cannot normalize by the {variance_stat} array as it does not exist!")
+        
+        if not hasattr(uvp, "cov_array_real"):
+            uvp.cov_array_real = {}
+        if not hasattr(uvp, "cov_array_imag"):
+            uvp.cov_array_imag = {}
+            
+        for spw in uvp.spw_array:
+            n = np.sum(uvp.spw_freq_array == spw)
+            cov2d = noise.get_approximate_delay_delay_corr_matrix(taper, n)
+                    
+            # TODO: in the future, it'd be better to allow the cov_array_real on the
+            #       UVPSpec object to have a shape that doesn't require Ntimes or bls dep.
+            cov4d = np.zeros((uvp.Nbltpairs, cov2d.shape[0], cov2d.shape[1], uvp.Npols))
+            
+            for blidx in range(uvp.Nbltpairs):
+                for polidx in range(uvp.Npols):
+                    pn = uvp.stats_array[variance_stat][spw][blidx, :, polidx].real
+                    
+                    cov4d[blidx, :, :, polidx] = np.outer(pn, pn) * cov2d
+
+            uvp.cov_array_real[spw] = cov4d
+            uvp.cov_array_imag[spw] = np.zeros_like(cov4d)
+            
+        return uvp
 
 def combine_uvpspec(uvps, merge_history=True, verbose=True):
     """
