@@ -1168,7 +1168,7 @@ class PSpecData:
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
                   time_indices=None):
-        """
+        r"""
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
 
@@ -1254,7 +1254,7 @@ class PSpecData:
         return float(len(key1)) / output
 
     def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
-        """
+        r"""
 
         If exact_norm is False:
         Construct an unnormalized bandpower, q_hat, from a given pair of
@@ -1446,7 +1446,7 @@ class PSpecData:
         return G / 2.
 
     def get_H(self, key1, key2, sampling=False, exact_norm=False, pol=False):
-        """
+        r"""
         Calculates the response matrix H of the unnormalized band powers q
         to the true band powers p, i.e.,
 
@@ -1616,7 +1616,7 @@ class PSpecData:
 
     def get_unnormed_V(self, key1, key2, model='empirical', exact_norm=False,
                        pol=False, time_index=None):
-        """
+        r"""
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
 
@@ -2047,7 +2047,7 @@ class PSpecData:
 
 
     def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15):
-        """
+        r"""
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
         arXiv:1502.06016:
@@ -2194,7 +2194,7 @@ class PSpecData:
         return M, W
 
     def get_Q_alt(self, mode: int, allow_fft=True, include_extension=False):
-        """
+        r"""
         Response of the covariance to a given bandpower, dC / dp_alpha,
         EXCEPT without the primary beam factors. This is Q_alt as defined
         in HERA memo #44, so it's not dC / dp_alpha, strictly, but is just
@@ -2371,7 +2371,7 @@ class PSpecData:
         return np.dot(M, q)
 
     def cov_p_hat(self, M, q_cov):
-        """
+        r"""
         Covariance estimate between two different band powers p_alpha and p_beta
         given by M_{alpha i} M^*_{beta,j} C_q^{ij} where C_q^{ij} is the
         q-covariance.
@@ -2391,7 +2391,7 @@ class PSpecData:
 
     def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2,
                              unflag=False):
-        """
+        r"""
         For each dataset in self.dset, update the flag_array such that
         the flagging patterns are time-independent for each baseline given
         a selection for spectral windows.
@@ -2473,7 +2473,7 @@ class PSpecData:
                         dset.flag_array[bl_inds[flag_ints], self.spw_range[0]:self.spw_range[1], i] = True
 
     def units(self, little_h=True):
-        """
+        r"""
         Return the units of the power spectrum. These are inferred from the
         units reported by the input visibilities (UVData objects).
 
@@ -2509,7 +2509,7 @@ class PSpecData:
         return vis_units, norm_units
 
     def delays(self):
-        """
+        r"""
         Return an array of delays, tau, corresponding to the bins of the delay
         power spectrum output by pspec() using self.spw_range to specify the
         spectral window.
@@ -2701,7 +2701,7 @@ class PSpecData:
         return adjustment
 
     def validate_pol(self, dsets, pol_pair):
-        """
+        r"""
         Validate polarization and returns the index of the datasets so that
         the polarization pair is consistent with the UVData objects.
 
@@ -2765,7 +2765,7 @@ class PSpecData:
               ftbeam=None, verbose=True, filter_extensions=None,
               exact_norm=False, history='', r_params=None,
               cov_model='empirical', known_cov=None, allow_fft=False):
-        """
+        r"""
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
 
@@ -3594,7 +3594,7 @@ class PSpecData:
         return uvp
 
     def rephase_to_dset(self, dset_index=0, inplace=True):
-        """
+        r"""
         Rephase visibility data in self.dsets to the LST grid of
         dset[dset_index] using hera_cal.utils.lst_rephase.
 
@@ -3699,7 +3699,7 @@ class PSpecData:
             return dsets
 
     def Jy_to_mK(self, beam=None):
-        """
+        r"""
         Convert internal datasets from a Jy-scale to mK scale using a primary
         beam model if available. Note that if you intend to rephase_to_dset(),
         Jy to mK conversion must be done *after* that step.
@@ -3747,7 +3747,7 @@ class PSpecData:
             dset.vis_units = 'mK'
 
     def trim_dset_lsts(self, lst_tol=6):
-        """
+        r"""
         Assuming all datasets in self.dsets are locked to the same LST grid
         (but each may have a constant offset), trim LSTs from each dset that
         aren't found in all other dsets (within some decimal tolerance

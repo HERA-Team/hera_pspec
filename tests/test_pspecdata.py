@@ -1026,7 +1026,7 @@ class Test_PSpecData(unittest.TestCase):
                                              matrix_scale * multiplicative_tolerance)
 
 
-    """
+    r"""
     Under Construction
     def test_parseval(self):
         # Test that output power spectrum respects Parseval's theorem.

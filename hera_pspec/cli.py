@@ -25,7 +25,11 @@ def fast_merge_baselines(
     progress: bool = True,
     extras: list[str] = None,
 ):
-    """Merge a set of hera_pspec files each representing a single baseline, into one."""
+    """Merge a set of hera_pspec files each representing a single baseline, into one.
+    
+    This can be useful because reading a single file with many baselines is much much 
+    faster than reading many files each with a single baseline currently.
+    """
     uvps = {name: [] for name in names}
     if extras is None:
         extras = []
@@ -37,8 +41,9 @@ def fast_merge_baselines(
         except ImportError:
             progress = False
             warnings.warn("tqdm not found, progress bar will not be shown.")
-    else:
-        tqdm = lambda x: x
+    
+    if not progress:
+        tqdm = lambda x, **kw: x
 
     files = sorted(glob.glob(pattern))
     cns.print(f"Found {len(files)} files matching pattern.")
@@ -66,7 +71,7 @@ def fast_merge_baselines(
                     extra_attrs[extra][blp] = f['header'].attrs[extra]
 
     cns.print("Merging power spectra")
-    outspec = outpath.parent / f"{outpath.name}.pspec.h5"
+    outspec = outpath.parent / f"{outpath.name.replace(".pspec.h5", "")}.pspec.h5"
     psc = container.PSpecContainer(outspec, mode='rw', keep_open=False)
     for name, uvplist in uvps.items():
         uvp = recursive_combine_uvpspec(uvplist)

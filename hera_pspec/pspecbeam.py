@@ -13,7 +13,7 @@ from . import conversions as conversions, uvpspec_utils as uvputils
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
                           num_steps=5000, taper='none', little_h=True,
                           noise_scalar=False, exact_norm=False):
-    """
+    r"""
     This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
 
@@ -131,7 +131,7 @@ class PSpecBeamBase(object):
     def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs,
                              num_steps=5000, pol='pI', taper='none',
                              little_h=True, noise_scalar=False, exact_norm=False):
-        """
+        r"""
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
 

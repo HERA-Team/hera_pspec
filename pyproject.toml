@@ -39,6 +39,7 @@ dependencies = [
     "uvtools",
     "hera-calibration>=3.2.2",
     "typer",
+    "tqdm",
 ]
 dynamic = ['version']
 
