@@ -4,7 +4,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import os, copy, sys
-from .. import pspecdata, pspecbeam, conversions, plot, utils, grouping
+from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils, grouping
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 import glob
