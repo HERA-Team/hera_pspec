@@ -75,69 +75,11 @@ class TestFastMergeBaselines:
             data = pickle.load(fl)
             assert all(blp in data for blp in vanilla_uvp.get_blpairs())
         
-#     @pytest.mark.parametrize('progress', ['--progress', '--no-progress'])
-#     def test_happy_path(self, tmp_path, progress):
-#         runner = CliRunner()
-        
-#         uvp, _ = testing.build_vanilla_uvpspec()
-        
-#         # Set up by writing out some one-blpair files.
-#         blpairs = uvp.get_blpairs()
-#         for i, blpair in enumerate(blpairs):
-#             sub_uvp = uvp.select(blpairs=[blpair], inplace=False)
-            
-#             psc = PSpecContainer(tmp_path / f"blpair.{i:02}.h5", 'rw', keep_open=False)
-#             psc.set_pspec('pspecgroup', 'name', sub_uvp)
-# #            sub_uvp.write_hdf5(tmp_path / f"blpair.{i:02}.h5")
-            
-#         result = runner.invoke(
-#             cli.app,
-#             args=[
-#                 'fast-merge-baselines',
-#                 '--pattern', f'{tmp_path}/blpair.*.h5',
-#                 '--group', 'pspecgroup',
-#                 '--names', 'name',
-#                 '--outpath', f"{tmp_path}/combined",
-#                 progress
-#             ]
-#         )
-        
-#         if result.exit_code != 0:
-#             print(result.exc_info)
-#             print(result.stdout)
-#             assert result.exit_code == 0
-        
-#         # Test that the file we made has all the baselines in it.
-#         new = PSpecContainer(tmp_path / "combined.pspec.h5", 'r', keep_open=False)
-#         newuvp = new.get_pspec('pspecgroup', 'name')
-#         assert all(blp in uvp.get_blpairs() for blp in newuvp.get_blpairs())
-        
-#         # Test that the file we made has all the baselines in it.
-#         with open(tmp_path / "combined.extra0.pkl", 'rb') as fl:
-#             data = pickle.load(fl)
-#         assert all(blp in data for blp in blpairs)
-        
-#     def test_extras(self, tmp_path):
-#         runner = CliRunner()
-        
+def test_dummy_command():
+    runner = CliRunner()
                 
-#         result = runner.invoke(
-#             cli.app,
-#             args=[
-#                 'fast-merge-baselines',
-#                 '--pattern', f'{tmp_path}/blpair.*.h5',
-#                 '--group', 'pspecgroup',
-#                 '--names', 'name',
-#                 '--outpath', f"{tmp_path}/combined",
-#                 '--progress',
-#                 '--extras', 'extra0',
-#                 '--extras', 'extra1'
-#             ]
-#         )
-        
-#         if result.exit_code != 0:
-#             print(result.exc_info)
-#             print(result.stdout)
-#             assert result.exit_code == 0
-        
-        
+    result = runner.invoke(
+        cli.app,
+        args=['hello']
+    )
+    assert "Hi" in result.stdout

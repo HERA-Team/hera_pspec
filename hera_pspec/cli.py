@@ -6,6 +6,7 @@ from rich.console import Console
 import h5py
 import pickle
 import glob
+from tqdm import tqdm
 cns = Console()
 
 app = typer.Typer()
@@ -14,6 +15,8 @@ from .uvpspec import recursive_combine_uvpspec
 
 @app.command()
 def hello():
+    # This is a test command which we need for the CLI interface to be broken into
+    # subcommands (at least two commands need to be defined for it to be used as subc's)
     cns.print("Hi! :wave:")
     
 @app.command()
@@ -34,21 +37,11 @@ def fast_merge_baselines(
     if extras is None:
         extras = []
     extra_attrs = {extra: {} for extra in extras}
-
-    if progress:
-        try:
-            from tqdm import tqdm
-        except ImportError:
-            progress = False
-            warnings.warn("tqdm not found, progress bar will not be shown.")
     
-    if not progress:
-        tqdm = lambda x, **kw: x
-
     files = sorted(glob.glob(pattern))
     cns.print(f"Found {len(files)} files matching pattern.")
 
-    for df in tqdm(files, desc="Loading files", unit="file"):
+    for df in tqdm(files, desc="Loading files", unit="file", disable=not progress):
         # load power spectra
         psc = container.PSpecContainer(df, mode='r', keep_open=False)
 
@@ -59,9 +52,6 @@ def fast_merge_baselines(
         for name in names:
             uvp = psc.get_pspec(group, name)
             blp = uvp.get_blpairs()[0]
-
-            if name not in uvps:
-                uvps[name] = []
             uvps[name].append(uvp)
 
         if extras:
