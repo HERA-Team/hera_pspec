@@ -32,7 +32,7 @@ dependencies = [
     "numpy>=1.14",
     "scipy",
     "matplotlib>=2.2",
-    "pyuvdata",
+    "pyuvdata>=3.0",
     "astropy>=2.0",
     "pyyaml",
     "h5py",

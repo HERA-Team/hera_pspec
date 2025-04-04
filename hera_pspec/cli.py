@@ -7,6 +7,8 @@ import h5py
 import pickle
 import glob
 from tqdm import tqdm
+from typing import Annotated
+
 cns = Console()
 
 app = typer.Typer()
@@ -32,6 +34,33 @@ def fast_merge_baselines(
     
     This can be useful because reading a single file with many baselines is much much 
     faster than reading many files each with a single baseline currently.
+    
+    Required Parameters
+    ----------
+    --pattern
+        A glob pattern to match the files to be merged. For example,
+        '/path/to/files/blpair.*.h5'. Each file should be a valid PspecContainer
+        file.
+    --group
+        The group name wihtin the PSpecContainer in which the UVPSpec objects 
+        that you wish to merge are stored.
+    --names
+        The names of the UVPSpec objects within the group to be merged. 
+        These should be the same for all files. Multiple names can be provided (via 
+        multiple --names flags), and they will be merged into the same file.
+    --outpath
+        The basename of the output file. This can be a full path, but note that 
+        the final output pspec file will have an extension of ".pspec.h5" added to it.
+        An --extras specified will be written to separate files with the same basename
+        but a suffix of ".{extraname}.pkl". 
+    --progress/--no-progress
+        Whether to show a progress bar while loading the files. This is useful
+        for large datasets, but can be turned off for small datasets.
+    --extras
+        A list of extra attributes to be saved from the header of the files. 
+        These will be saved to separate files with the same basename as the output
+        file, but with a suffix of ".{extraname}.pkl". This is useful for saving
+        metadata that is not stored in the UVPSpec objects themselves.
     """
     uvps = {name: [] for name in names}
     if extras is None:

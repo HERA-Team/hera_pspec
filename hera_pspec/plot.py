@@ -809,7 +809,7 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
 
     # Conigure Units
     psunits = r"({})^2\ {}".format(uvp.vis_units, uvp.norm_units)
-    if "h^-1" in psunits: psunits = psunits.replacer("h^-1", r"h^{-1}\ ")
+    if "h^-1" in psunits: psunits = psunits.replace("h^-1", r"h^{-1}\ ")
     if "h^-3" in psunits: psunits = psunits.replace(r"h^-3", r"h^{-3}\ ")
     if "Hz" in psunits: psunits = psunits.replace("Hz", r"{\rm Hz}\ ")
     if "str" in psunits: psunits = psunits.replace("str", r"\,{\rm str}\ ")
