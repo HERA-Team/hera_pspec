@@ -2,7 +2,7 @@ import unittest
 import pytest
 import os, sys
 from hera_pspec.data import DATA_PATH
-from .. import pstokes
+from hera_pspec import pstokes
 import pyuvdata
 import pyuvdata.utils as uvutils
 import copy

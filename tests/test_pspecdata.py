@@ -2,9 +2,9 @@ import unittest
 import pytest
 import numpy as np
 import pyuvdata as uv
-import os, copy, sys
-from scipy.integrate import simpson, trapezoid
-from .. import pspecdata, pspecbeam, conversions, container, utils, testing, uvwindow
+import os, copy
+from scipy.integrate import trapezoid
+from hera_pspec import pspecdata, pspecbeam, conversions, container, utils, testing, uvwindow
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData, UVCal, utils as uvutils
 from hera_cal import redcal
@@ -1026,7 +1026,7 @@ class Test_PSpecData(unittest.TestCase):
                                              matrix_scale * multiplicative_tolerance)
 
 
-    """
+    r"""
     Under Construction
     def test_parseval(self):
         # Test that output power spectrum respects Parseval's theorem.

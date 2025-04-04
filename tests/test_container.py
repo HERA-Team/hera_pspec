@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import os, sys, copy
 from hera_pspec.data import DATA_PATH
-from .. import container, PSpecContainer, UVPSpec, testing
+from hera_pspec import container, PSpecContainer, UVPSpec, testing
 
 class Test_PSpecContainer(unittest.TestCase):
 

@@ -16,7 +16,7 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
                    component='real', lines=True, markers=False, error=None,
                    times=None, logscale=True, force_plot=False,
                    label_type='blpairt', plot_stats=None, **kwargs):
-    """
+    r"""
     Plot a 1D delay spectrum (or spectra) for a group of baselines.
     
     Parameters
@@ -274,12 +274,12 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         if delay:
             ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
         else:
-            ax.set_xlabel("$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
+            ax.set_xlabel(r"$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
     if ax.get_ylabel() == "" and plot_stats is None:
         # Sanitize power spectrum units 
         psunits = uvp_plt.units
-        if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}")
-        if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}")
+        if "h^-1" in psunits: psunits = psunits.replace(r"h^-1", "h^{-1}")
+        if "h^-3" in psunits: psunits = psunits.replace(r"h^-3", "h^{-3}")
         if "Mpc" in psunits and "\\rm" not in psunits: 
             psunits = psunits.replace("Mpc", r"{\rm Mpc}")
         if "pi" in psunits and "\\pi" not in psunits: 
@@ -287,9 +287,9 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
         
         # Power spectrum type
         if deltasq:
-            ax.set_ylabel("$\Delta^2$ $[%s]$" % psunits, fontsize=16)
+            ax.set_ylabel(r"$\Delta^2$ $[%s]$" % psunits, fontsize=16)
         else:
-            ax.set_ylabel("$P(k_\parallel)$ $[%s]$" % psunits, fontsize=16)
+            ax.set_ylabel(r"$P(k_\parallel)$ $[%s]$" % psunits, fontsize=16)
     
     # Return Figure: the axis is an attribute of figure
     if new_plot:
@@ -302,7 +302,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
                     vmin=None, vmax=None, cmap='YlGnBu', axes=None, 
                     figsize=(14, 6), force_plot=False, times=None, 
                     title_type='blpair', colorbar=True, **kwargs):
-    """
+    r"""
     Plot a 1D delay spectrum waterfall (or spectra) for a group of baselines.
     
     Parameters
@@ -487,7 +487,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     if log:
         for k in waterfall:
             waterfall[k] = np.log10(np.abs(waterfall[k]))
-        logunits = "\log_{10}"
+        logunits = r"\log_{10}"
     else:
         logunits = ""
     
@@ -599,7 +599,7 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
                     if delay:
                         ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
                     else:
-                        ax.set_xlabel("$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
+                        ax.set_xlabel(r"$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
             else:
                 ax.set_xticklabels([])
 
@@ -608,9 +608,9 @@ def delay_waterfall(uvp, blpairs, spw, pol, component='abs-real',
     # make suptitle
     if axes[0][0].get_figure()._suptitle is None:
         if deltasq:
-            units = "$%s\Delta^2$ $[%s]$" % (logunits, psunits)
+            units = r"$%s\Delta^2$ $[%s]$" % (logunits, psunits)
         else:
-            units = "$%sP(k_\parallel)$ $[%s]$" % (logunits, psunits)
+            units = r"$%sP(k_\parallel)$ $[%s]$" % (logunits, psunits)
 
         spwrange = np.around(np.array(uvp_plt.get_spw_ranges()[spw][:2]) / 1e6, 2)
         axes[0][0].get_figure().suptitle("{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange), 
@@ -808,9 +808,9 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
         x_axis = _x_axis
 
     # Conigure Units
-    psunits = "({})^2\ {}".format(uvp.vis_units, uvp.norm_units)
-    if "h^-1" in psunits: psunits = psunits.replace("h^-1", "h^{-1}\ ")
-    if "h^-3" in psunits: psunits = psunits.replace("h^-3", "h^{-3}\ ")
+    psunits = r"({})^2\ {}".format(uvp.vis_units, uvp.norm_units)
+    if "h^-1" in psunits: psunits = psunits.replace("h^-1", r"h^{-1}\ ")
+    if "h^-3" in psunits: psunits = psunits.replace(r"h^-3", r"h^{-3}\ ")
     if "Hz" in psunits: psunits = psunits.replace("Hz", r"{\rm Hz}\ ")
     if "str" in psunits: psunits = psunits.replace("str", r"\,{\rm str}\ ")
     if "Mpc" in psunits and "\\rm" not in psunits: 
@@ -895,13 +895,13 @@ def delay_wedge(uvp, spw, pol, blpairs=None, times=None, error_weights=None, fol
             cbax = ax
         cbar = fig.colorbar(cax, ax=cbax, extend=cb_extend)
         if deltasq:
-            p = "\Delta^2"
+            p = r"\Delta^2"
         else:
             p = "P"
         if delay:
-            p = "{}({},\ {})".format(p, r'\tau', r'|\vec{b}|')
+            p = r"{}({},\ {})".format(p, r'\tau', r'|\vec{b}|')
         else:
-            p = "{}({},\ {})".format(p, r'k_\parallel', r'k_\perp')
+            p = r"{}({},\ {})".format(p, r'k_\parallel', r'k_\perp')
         if log10:
             psunits = r"$\log_{{10}}\ {}\ [{}]$".format(p, psunits)
         else:

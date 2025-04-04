@@ -17,7 +17,7 @@ from . import (
 )
 
 
-def build_vanilla_uvpspec(beam=None):
+def build_vanilla_uvpspec(beam: pspecbeam.PSpecBeamBase | None=None) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
     """
     Build an example vanilla UVPSpec object from scratch, with all necessary
     metadata.

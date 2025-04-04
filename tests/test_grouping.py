@@ -3,9 +3,8 @@ import pytest
 import numpy as np
 import os
 from hera_pspec.data import DATA_PATH
-from .. import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils
-from .. import uvpspec_utils as uvputils
-from .. import grouping, container
+from hera_pspec import uvpspec, conversions, pspecbeam, pspecdata, testing, utils
+from hera_pspec import grouping, container
 from pyuvdata import UVData
 from hera_cal import redcal
 import copy
