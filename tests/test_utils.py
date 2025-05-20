@@ -12,7 +12,7 @@ def test_cov():
     uvd = UVData()
     uvd.read_miriad(
         os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"),
-        use_future_array_shapes=True
+        
     )
 
     # test basic execution
@@ -69,7 +69,7 @@ class Test_Utils:
         self.uvd = UVData()
         self.uvd.read_miriad(os.path.join(DATA_PATH,
                                           "zen.2458042.17772.xx.HH.uvXA"),
-                             use_future_array_shapes=True)
+                             )
         # Load PSpecBeam object
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.beam = pspecbeam.PSpecBeamUV(beamfile)
@@ -161,7 +161,7 @@ class Test_Utils:
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         
         uvd = UVData()
-        uvd.read_miriad(fname, use_future_array_shapes=True)
+        uvd.read_miriad(fname, )
 
         # basic execution
         (bls1, bls2, blps, xants1, xants2, rgrps, lens,
@@ -215,7 +215,7 @@ class Test_Utils:
 
         # test exceptions
         uvd2 = copy.deepcopy(uvd)
-        uvd2.antenna_positions[0] += 2
+        uvd2.telescope.antenna_positions[0] += 2
         pytest.raises(AssertionError, utils.calc_blpair_reds, uvd, uvd2)
         pytest.raises(AssertionError, utils.calc_blpair_reds, uvd, uvd, exclude_auto_bls=True, exclude_cross_bls=True)
 
@@ -223,7 +223,7 @@ class Test_Utils:
         # test include_crosscorrs selection option being set to false.
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
-        uvd.read_miriad(fname, use_future_array_shapes=True)
+        uvd.read_miriad(fname, )
         # basic execution
         (bls1, bls2, blps, xants1, xants2, rgrps, lens,
         angs) = utils.calc_blpair_reds(uvd, uvd, filter_blpairs=True, extra_info=True,
@@ -240,9 +240,9 @@ class Test_Utils:
     def test_get_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
-        uvd.read_miriad(fname, read_data=False, use_future_array_shapes=True)
-        antpos, ants = uvd.get_ENU_antpos()
-        antpos_d = dict(list(zip(ants, antpos)))
+        uvd.read_miriad(fname, read_data=False, )
+        antpos = uvd.telescope.get_enu_antpos()
+        antpos_d = dict(list(zip(uvd.telescope.antenna_numbers, antpos)))
 
         # test basic execution
         xants = [0, 1, 2]
@@ -281,9 +281,9 @@ class Test_Utils:
     def test_get_reds_autos_only(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         uvd = UVData()
-        uvd.read_miriad(fname, read_data=False, use_future_array_shapes=True)
-        antpos, ants = uvd.get_ENU_antpos()
-        antpos_d = dict(list(zip(ants, antpos)))
+        uvd.read_miriad(fname, read_data=False, )
+        antpos = uvd.telescope.get_enu_antpos()
+        antpos_d = dict(list(zip(uvd.telescope.antenna_numbers, antpos)))
         xants = [0, 1, 2]
         r, l, a = utils.get_reds(fname, xants=xants, autos_only=True, add_autos=True)
         assert len(r) == 1
@@ -372,8 +372,8 @@ def test_log():
 def test_get_blvec_reds():
     fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
     uvd = UVData()
-    uvd.read_miriad(fname, use_future_array_shapes=True)
-    antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+    uvd.read_miriad(fname, )
+    antpos, ants = uvd.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(list(zip(ants, antpos))))
     uvp = testing.uvpspec_from_data(fname, reds[:2], spw_ranges=[(10, 40)])
 

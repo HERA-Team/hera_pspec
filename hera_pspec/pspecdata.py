@@ -2727,7 +2727,7 @@ class PSpecData:
         assert isinstance(pol_pair, tuple), err_msg
 
         # take x_orientation from first dset
-        x_orientation = self.dsets[0].x_orientation
+        x_orientation = self.dsets[0].telescope.x_orientation
 
         # convert elements to integers if fed as strings
         if isinstance(pol_pair[0], str):
@@ -3116,12 +3116,12 @@ class PSpecData:
         for p in pols:
             if isinstance(p, str):
                 # Convert string to pol-integer pair
-                p = (uvutils.polstr2num(p, x_orientation=self.dsets[0].x_orientation),
-                     uvutils.polstr2num(p, x_orientation=self.dsets[0].x_orientation))
+                p = (uvutils.polstr2num(p, x_orientation=self.dsets[0].telescope.x_orientation),
+                     uvutils.polstr2num(p, x_orientation=self.dsets[0].telescope.x_orientation))
             if isinstance(p[0], str):
-                p = (uvutils.polstr2num(p[0], x_orientation=self.dsets[0].x_orientation), p[1])
+                p = (uvutils.polstr2num(p[0], x_orientation=self.dsets[0].telescope.x_orientation), p[1])
             if isinstance(p[1], str):
-                p = (p[0], uvutils.polstr2num(p[1], x_orientation=self.dsets[0].x_orientation))
+                p = (p[0], uvutils.polstr2num(p[1], x_orientation=self.dsets[0].telescope.x_orientation))
             _pols.append(p)
         pols = _pols
 
@@ -3505,7 +3505,7 @@ class PSpecData:
         uvp.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
         bls_arr = sorted(set(bls_arr))
         uvp.bl_array = np.array([uvp.antnums_to_bl(bl) for bl in bls_arr])
-        antpos = dict(zip(dset1.antenna_numbers, dset1.antenna_positions))
+        antpos = dict(zip(dset1.telescope.antenna_numbers, dset1.telescope.antenna_positions))
         uvp.bl_vecs = np.array([antpos[bl[0]] - antpos[bl[1]] for bl in bls_arr])
         uvp.Nbls = len(uvp.bl_array)
         uvp.spw_dly_array = np.array(dly_spws)
@@ -3525,7 +3525,15 @@ class PSpecData:
         uvp.exact_windows = False
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
-        uvp.telescope_location = dset1.telescope_location
+        # SGM: I've kept the same API in hera_pspec for now, but we should
+        # probably move to having a `.telescope` attribute on the UVP.
+        uvp.telescope_location = np.array(
+            [dset1.telescope.location.x.to_value("m"),
+             dset1.telescope.location.y.to_value("m"),
+             dset1.telescope.location.z.to_value("m")
+             ]
+        )
+             
         filename1 = json.loads(dset1.extra_keywords.get('filename', '""'))
         cal1 = json.loads(dset1.extra_keywords.get('calibration', '""'))
         filename2 = json.loads(dset2.extra_keywords.get('filename', '""'))
@@ -3584,7 +3592,7 @@ class PSpecData:
             if exact_windows:
                 # compute and store exact window functions
                 uvp.get_exact_window_functions(ftbeam=ftbeam, verbose=verbose, 
-                                               x_orientation=self.dsets[0].x_orientation,
+                                               x_orientation=self.dsets[0].telescope.x_orientation,
                                                inplace=True)
             else:
                 uvp.window_function_array = window_function_array
@@ -3675,7 +3683,7 @@ class PSpecData:
             dlst = lst_grid - lsts
 
             # get telescope latitude
-            lat = dset.telescope_location_lat_lon_alt_degrees[0]
+            lat = dset.telescope.location.lat.deg
 
             # rephase
             hc.utils.lst_rephase(data, bls, freqs, dlst, lat=lat)
@@ -3686,7 +3694,7 @@ class PSpecData:
                 indices = dset.antpair2ind(k[:2], ordered=False)
 
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(uvutils.polstr2num(k[-1], x_orientation=self.dsets[0].x_orientation))
+                polind = pol_list.index(uvutils.polstr2num(k[-1], x_orientation=self.dsets[0].telescope.x_orientation))
 
                 # insert into dset
                 dset.data_array[indices, :, polind] = data[k]
@@ -4476,8 +4484,8 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
         raise TypeError("uvd2 must be a UVData instance")
 
     # get antenna position dictionary
-    ap1, a1 = uvd1.get_ENU_antpos(pick_data_ants=True)
-    ap2, a2 = uvd2.get_ENU_antpos(pick_data_ants=True)
+    ap1, a1 = uvd1.get_enu_data_ants()
+    ap2, a2 = uvd2.get_enu_data_ants()
     ap1 = dict(zip(a1, ap1))
     ap2 = dict(zip(a2, ap2))
 
@@ -4553,7 +4561,7 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
         else:
             dfiles = dset
         uvd.read(dfiles, bls=bls, polarizations=pols,
-                 file_type=file_type, use_future_array_shapes=True)
+                 file_type=file_type)
         uvd.extra_keywords['filename'] = json.dumps(dfiles)
         dsets.append(uvd)
 

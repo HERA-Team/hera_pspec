@@ -102,7 +102,7 @@ class Test_PSpecData(unittest.TestCase):
             _d = uv.UVData()
             _d.read_miriad(
                 os.path.join(DATA_PATH, dfile),
-                use_future_array_shapes=True
+                
             )
             self.d.append(_d)
 
@@ -112,7 +112,7 @@ class Test_PSpecData(unittest.TestCase):
             _d = uv.UVData()
             _d.read_miriad(
                 os.path.join(DATA_PATH, dfile),
-                use_future_array_shapes=True
+                
             )
             self.d_std.append(_d)
 
@@ -133,12 +133,12 @@ class Test_PSpecData(unittest.TestCase):
         self.uvd = uv.UVData()
         self.uvd.read_miriad(os.path.join(DATA_PATH,
                                           "zen.2458042.17772.xx.HH.uvXA"),
-                             use_future_array_shapes=True)
+                             )
 
         self.uvd_std = uv.UVData()
         self.uvd_std.read_miriad(os.path.join(DATA_PATH,
                                           "zen.2458042.17772.std.xx.HH.uvXA"),
-                                 use_future_array_shapes=True)
+                                 )
 
     def tearDown(self):
         pass
@@ -1255,7 +1255,7 @@ class Test_PSpecData(unittest.TestCase):
     def test_trim_dset_lsts(self):
         fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
         uvd1 = UVData()
-        uvd1.read_miriad(fname, use_future_array_shapes=True)
+        uvd1.read_miriad(fname, )
         uvd2 = copy.deepcopy(uvd1)
         uvd2.lst_array = (uvd2.lst_array + 10. * np.median(np.diff(np.unique(uvd2.lst_array)))) % (2.*np.pi)
 
@@ -1277,7 +1277,7 @@ class Test_PSpecData(unittest.TestCase):
     def test_get_Q_alt_tensor(self):
         fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
         uvd1 = UVData()
-        uvd1.read_miriad(fname, use_future_array_shapes=True)
+        uvd1.read_miriad(fname, )
         uvd2 = copy.deepcopy(uvd1)
         uvd2.lst_array = (uvd2.lst_array + 10. * np.median(np.diff(np.unique(uvd2.lst_array)))) % (2.*np.pi)
 
@@ -1338,14 +1338,14 @@ class Test_PSpecData(unittest.TestCase):
         uvd = UVData()
         uvd.read(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         cosmo = conversions.Cosmo_Conversions()
         uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
 
         spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
-        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos, ants = uvd.get_enu_data_ants()
         antpos = dict(zip(ants, antpos))
         red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
         bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
@@ -1373,7 +1373,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd = UVData()
         uvd.read(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         uvd.nsample_array[:] = 1.0
         uvd.flag_array[:] = False
@@ -1581,7 +1581,7 @@ class Test_PSpecData(unittest.TestCase):
         assert diff <= 0.05
 
         # check with redundant baseline group list
-        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos, ants = uvd.get_enu_data_ants()
         antpos = dict(zip(ants, antpos))
         red_bls = [sorted(blg) for blg in redcal.get_pos_reds(antpos)][2]
         bls1, bls2, blps = utils.construct_blpairs(red_bls, exclude_permutations=True)
@@ -1723,7 +1723,7 @@ class Test_PSpecData(unittest.TestCase):
         datafile = os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5')
         # read datafile
         uvd = UVData()
-        uvd.read_uvh5(datafile, use_future_array_shapes=True)
+        uvd.read_uvh5(datafile, )
         # Create a new PSpecData objec
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
         # choose baselines
@@ -1801,7 +1801,7 @@ class Test_PSpecData(unittest.TestCase):
         # setup
         fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
         uvd = UVData()
-        uvd.read_miriad(fname, use_future_array_shapes=True)
+        uvd.read_miriad(fname, )
         Nfreq = uvd.data_array.shape[2]
 
         # test basic execution w/ a spw selection
@@ -2010,7 +2010,7 @@ def test_pspec_run():
 
     # test single_dset, time_interleaving, rephasing, flag broadcasting
     uvd = UVData()
-    uvd.read_miriad(fnames[0], use_future_array_shapes=True)
+    uvd.read_miriad(fnames[0], )
     # interleave the data by hand, and add some flags in
     uvd.flag_array[:] = False
     uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False), 10, 0][0] = True
@@ -2106,7 +2106,7 @@ def test_pspec_run():
     uvds = []
     for f in fnames:
         uvd = UVData()
-        uvd.read_miriad(f, use_future_array_shapes=True)
+        uvd.read_miriad(f, )
         uvds.append(uvd)
     ds = pspecdata.pspec_run(uvds, "./out.h5", dsets_std=fnames_std, Jy2mK=False, verbose=False, overwrite=True,
                              blpairs=[((500, 501), (600, 601))])
@@ -2201,10 +2201,10 @@ def test_input_calibration():
     cfiles = sorted(glob.glob(os.path.join(DATA_PATH, "zen.2458116.30*.HH.flagged_abs.calfits")))
     for i, f in enumerate(zip(dfiles, cfiles)):
         uvd = UVData()
-        uvd.read(f[0], use_future_array_shapes=True)
+        uvd.read(f[0], )
         dfiles[i] = uvd
         uvc = UVCal()
-        uvc.read_calfits(f[1], use_future_array_shapes=True)
+        uvc.read_calfits(f[1], )
         cfiles[i] = uvc
 
     # test add
@@ -2243,7 +2243,7 @@ def test_window_funcs():
     uvd = UVData()
     uvd.read_miriad(
         os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-        use_future_array_shapes=True
+        
     )
     beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
     ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd)], beam=beam)

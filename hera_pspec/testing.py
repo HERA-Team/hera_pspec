@@ -291,17 +291,15 @@ def uvpspec_from_data(
     # load data
     if isinstance(data, str):
         uvd = UVData()
-        uvd.read_miriad(data, use_future_array_shapes=True)
+        uvd.read_miriad(data)
     elif isinstance(data, UVData):
         uvd = data
-        uvd.use_future_array_shapes()
 
     if isinstance(data_std, str):
         uvd_std = UVData()
-        uvd_std.read_miriad(data_std, use_future_array_shapes=True)
+        uvd_std.read_miriad(data_std)
     elif isinstance(data_std, UVData):
         uvd_std = data_std
-        uvd_std.use_future_array_shapes()
     else:
         uvd_std = None
     if uvd_std is not None:
@@ -424,12 +422,11 @@ def noise_sim(
     # Read data files
     if isinstance(data, str):
         _data = UVData()
-        _data.read_miriad(data, use_future_array_shapes=True)
+        _data.read_miriad(data)
         data = _data
     elif isinstance(data, UVData):
         if not inplace:
             data = copy.deepcopy(data)
-        data.use_future_array_shapes()
     assert isinstance(data, UVData)
 
     # whiten input data
@@ -649,10 +646,9 @@ def sky_noise_sim(
 
     if isinstance(data, str):
         uvd = UVData()
-        uvd.read(data, use_future_array_shapes=True)
+        uvd.read(data)
     else:
         uvd = copy.deepcopy(data)
-        uvd.use_future_array_shapes()
     assert (
         -7 not in uvd.polarization_array and -8 not in uvd.polarization_array
     ), "Does not operate on cross-hand polarizations"
