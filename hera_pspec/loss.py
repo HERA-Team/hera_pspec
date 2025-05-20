@@ -1,5 +1,6 @@
 """Functions to apply and estimate losses/biases in the power spectrum estimates."""
 from .uvpspec import UVPSpec
+import copy
 
 def apply_bias_correction(
     uvp: UVPSpec, 
@@ -29,7 +30,7 @@ def apply_bias_correction(
         The bias-corrected UVPSpec object.
     """
     if not inplace:
-        uvp = uvp.copy()
+        uvp = copy.deepcopy(uvp)
         
     for spw in uvp.spw_array:
         if total_bias is not None:
