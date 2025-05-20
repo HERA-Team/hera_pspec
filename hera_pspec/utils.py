@@ -505,11 +505,6 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     # Get frequency array from input object
     try:
         freqs = data.freq_array
-        if len(freqs.shape) == 2 and freqs.shape[0] == 1:
-            freqs = freqs.flatten() # Support UVData 2D freq_array
-        elif len(freqs.shape) > 2:
-            raise ValueError("data.freq_array has unsupported shape: %s" \
-                             % str(freqs.shape))
     except:
         raise AttributeError("Object 'data' does not have a freq_array attribute.")
 
@@ -547,8 +542,7 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
         spw_range.append(spw)
 
     # Unpack from list if only a single tuple was specified originally
-    if is_tuple: return spw_range[0]
-    return spw_range
+    return spw_range[0] if is_tuple else spw_range
 
 
 def spw_range_from_redshifts(data, z_range, bounds_error=True):
