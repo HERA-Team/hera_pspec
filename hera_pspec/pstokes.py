@@ -356,7 +356,7 @@ def construct_pstokes(dset1, dset2, pstokes='pI', run_check=True, antenna_nums=N
 
     # convert pstokes to integer if fed as a string
     if isinstance(pstokes, str):
-        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dset1.x_orientation)
+        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dset1.telescope.x_orientation)
 
     # check if dset1 and dset2 habe the same spectral window
     spw1 = uvd1.spw_array
@@ -445,7 +445,7 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
 
     # convert pstokes to integer if a string
     if isinstance(pstokes, str):
-        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dsets[0].x_orientation)
+        pstokes = pyuvdata.utils.polstr2num(pstokes, x_orientation=dsets[0].telescope.x_orientation)
     assert pstokes in [1, 2, 3, 4], \
         "pstokes must be fed as a pseudo-Stokes parameter"
 

@@ -23,12 +23,15 @@ For users
 
 The package is installable, along with its dependencies, with PyPi. We
 recommend using Anaconda and creating a new conda environment before
-installing the package:
+installing the package. You may wish to install some of the dependencies directly
+with `conda` instead of `pip` before installing the package. This is especially
+important for `jax` on MacOS:
 
 ::
 
    $ conda create -n hera_pspec python=3
    $ conda activate hera_pspec
+   $ conda install jax
    $ python3 -m pip install hera_pspec
 
 New versions are frequently released on PyPi.
@@ -36,10 +39,10 @@ New versions are frequently released on PyPi.
 For developers
 --------------
 
-If you are developping and/or want to use the latest working version
+If you are developing and/or want to use the latest working version
 of ``hera_pspec``, you can directly install from the GitHub repository.
 
-Preferred method of installation for users is simply ``pip install .``
+Preferred method of installation for users is simply ``pip install -e .``
 (or ``pip install git+https://github.com/HERA-Team/hera_pspec``). This
 will install required dependencies. See below for manual dependency
 management.
@@ -53,7 +56,7 @@ dependencies manually to avoid them being installed automatically by
 
 ::
 
-   $ conda install -c conda-forge "numpy>=1.15" "astropy>=2.0" h5py pyuvdata scipy matplotlib pyyaml
+   $ conda install -c conda-forge "numpy>=1.15" "astropy>=2.0" h5py pyuvdata scipy matplotlib pyyaml jax
 
 Developing
 ^^^^^^^^^^

@@ -9,7 +9,7 @@ from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 from hera_pspec.data import DATA_PATH
-from .. import uvpspec, conversions, pspecdata, pspecbeam, noise, testing, utils
+from hera_pspec import conversions, pspecdata, pspecbeam, noise, testing, utils
 
 
 class Test_Sensitivity(unittest.TestCase):
@@ -133,7 +133,7 @@ def test_analytic_noise():
     beam = pspecbeam.PSpecBeamUV(bfile)
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     uvd = UVData()
-    uvd.read(uvfile, use_future_array_shapes=True)
+    uvd.read(uvfile, )
 
     # setup PSpecData
     ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
