@@ -49,7 +49,7 @@ class TestApplyBiasCorrection:
         data = {spw: dd.copy() for spw, dd in uvp.data_array.items()}
         
         loss.apply_bias_correction(
-            uvp, total_bias={spw: 2 for spw in uvp.spw_array}, inplace=True
+            uvp, data_bias={spw: 2 for spw in uvp.spw_array}, inplace=True
         )
         
         for spw in uvp.spw_array:
