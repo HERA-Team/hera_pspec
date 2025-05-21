@@ -93,7 +93,7 @@ if 'convert_jy_to_mk' in data_cfg.keys():
 ds = hp.PSpecData(dsets=dsets, wgts=wgts, beam=beam)
 
 # Set-up which baselines to cross-correlate
-antpos, ants = dsets[0].get_ENU_antpos(pick_data_ants=True)
+antpos, ants = dsets[0].get_enu_data_ants()
 antpos = dict(zip(ants, antpos))
 red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
 

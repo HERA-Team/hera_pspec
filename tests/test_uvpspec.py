@@ -2,16 +2,14 @@ import unittest
 import pytest
 import numpy as np
 import os
-import sys
 from hera_pspec.data import DATA_PATH
-from .. import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils, uvwindow
-from .. import uvpspec_utils as uvputils
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils, uvwindow
+from hera_pspec import uvpspec_utils as uvputils
 import copy
 import h5py
 from collections import OrderedDict as odict
 from pyuvdata import UVData
 from hera_cal import redcal
-import json
 
 class Test_UVPSpec(unittest.TestCase):
 
@@ -27,7 +25,7 @@ class Test_UVPSpec(unittest.TestCase):
         datafile = os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5')
         # read datafile
         uvd = UVData()
-        uvd.read_uvh5(datafile, use_future_array_shapes=True)
+        uvd.read_uvh5(datafile, )
         # Create a new PSpecData objec
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
         # choose baselines
@@ -144,7 +142,7 @@ class Test_UVPSpec(unittest.TestCase):
     def test_get_covariance(self):
         dfile = os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA')
         uvd = UVData()
-        uvd.read(dfile, use_future_array_shapes=True)
+        uvd.read(dfile, )
 
         cosmo = conversions.Cosmo_Conversions()
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
@@ -160,7 +158,7 @@ class Test_UVPSpec(unittest.TestCase):
         ds.rephase_to_dset(0)
 
         spws = utils.spw_range_from_freqs(uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True)
-        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+        antpos, ants = uvd.get_enu_data_ants()
         antpos = dict(zip(ants, antpos))
         red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
         bls1, bls2, blpairs = utils.construct_blpairs(red_bls[3], exclude_auto_bls=True, exclude_permutations=True)
@@ -237,7 +235,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -356,7 +354,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
@@ -456,7 +454,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
@@ -640,11 +638,11 @@ class Test_UVPSpec(unittest.TestCase):
         uvd_std = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         uvd_std.read_miriad(
             os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -723,7 +721,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -851,7 +849,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -898,7 +896,7 @@ class Test_UVPSpec(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -951,11 +949,11 @@ class Test_UVPSpec(unittest.TestCase):
         uvd_std = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         uvd_std.read_miriad(
             os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'),
-            use_future_array_shapes=True
+            
         )
         beam = pspecbeam.PSpecBeamUV(
                       os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))

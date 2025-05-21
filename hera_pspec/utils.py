@@ -326,10 +326,10 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         List of baseline angles [degrees] (North of East in ENU)
     """
     # get antenna positions
-    antpos1, ants1 = uvd1.get_ENU_antpos(pick_data_ants=False)
-    antpos1 = dict(list(zip(ants1, antpos1)))
-    antpos2, ants2 = uvd2.get_ENU_antpos(pick_data_ants=False)
-    antpos2 = dict(list(zip(ants2, antpos2)))
+    antpos1 = uvd1.telescope.get_enu_antpos()
+    antpos1 = dict(list(zip(uvd1.telescope.antenna_numbers, antpos1)))
+    antpos2 = uvd2.telescope.get_enu_antpos()
+    antpos2 = dict(list(zip(uvd2.telescope.antenna_numbers, antpos2)))
     antpos = dict(list(antpos1.items()) + list(antpos2.items()))
 
     # assert antenna positions match
@@ -342,7 +342,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     # calculate xants via flags if asked
     xants1, xants2 = [], []
     if filter_blpairs and uvd1.flag_array is not None and uvd2.flag_array is not None:
-        xants1, xants2 = set(ants1), set(ants2)
+        xants1, xants2 = set(uvd1.telescope.antenna_numbers), set(uvd2.telescope.antenna_numbers)
         baselines = sorted(set(uvd1.baseline_array).union(set(uvd2.baseline_array)))
         for bl in baselines:
             # get antenna numbers
@@ -505,11 +505,6 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     # Get frequency array from input object
     try:
         freqs = data.freq_array
-        if len(freqs.shape) == 2 and freqs.shape[0] == 1:
-            freqs = freqs.flatten() # Support UVData 2D freq_array
-        elif len(freqs.shape) > 2:
-            raise ValueError("data.freq_array has unsupported shape: %s" \
-                             % str(freqs.shape))
     except:
         raise AttributeError("Object 'data' does not have a freq_array attribute.")
 
@@ -547,8 +542,7 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
         spw_range.append(spw)
 
     # Unpack from list if only a single tuple was specified originally
-    if is_tuple: return spw_range[0]
-    return spw_range
+    return spw_range[0] if is_tuple else spw_range
 
 
 def spw_range_from_redshifts(data, z_range, bounds_error=True):
@@ -1149,7 +1143,11 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
             _uvd.read(uvd, read_data=False, file_type=file_type)
             uvd = _uvd
         # get antenna position dictionary
-        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
+        if pick_data_ants:
+            antpos, ants = uvd.get_enu_data_ants()
+        else:
+            antpos = uvd.telescope.get_enu_antpos()
+            ants = uvd.telescope.antenna_numbers
         antpos_dict = dict(list(zip(ants, antpos)))
     elif isinstance(uvd, (dict, odict)):
         # use antenna position dictionary
