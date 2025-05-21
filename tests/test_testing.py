@@ -24,7 +24,7 @@ def test_uvpspec_from_data():
     fname = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     fname_std = os.path.join(DATA_PATH, "zen.even.std.xx.LST.1.28828.uvOCRSA")
     uvd = UVData()
-    uvd.read_miriad(fname, use_future_array_shapes=True)
+    uvd.read_miriad(fname, )
     beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
     beam = pspecbeam.PSpecBeamUV(beamfile)
 
@@ -38,7 +38,7 @@ def test_uvpspec_from_data():
     assert uvp == uvp2
 
     # test multiple bl groups
-    antpos, ants = uvd.get_ENU_antpos(pick_data_ants=True)
+    antpos, ants = uvd.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
     uvp = testing.uvpspec_from_data(fname, reds[:3], beam=beam, spw_ranges=[(50, 100)])
     assert len(set(uvp.bl_array) - set([137138, 137151, 137152, 138139, 138152, 138153, 139153, 139154,
@@ -58,7 +58,7 @@ def test_uvpspec_from_data():
 def test_noise_sim():
     uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd.read_miriad(uvfile, use_future_array_shapes=True)
+    uvd.read_miriad(uvfile, )
 
     # test noise amplitude
     uvd2 = copy.deepcopy(uvd)
@@ -103,7 +103,7 @@ def test_sky_noise_jy_autos():
     # Load data
     uvd = UVData()
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd.read_miriad(uvfile, use_future_array_shapes=True)
+    uvd.read_miriad(uvfile, )
     
     # Get input arrays
     lsts = np.unique(uvd.lst_array)
@@ -132,7 +132,7 @@ def test_sky_noise_jy_autos():
 def test_sky_noise_sim():
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     uvd = UVData()
-    uvd.read_miriad(uvfile, use_future_array_shapes=True)
+    uvd.read_miriad(uvfile, )
     beam = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
     beam_ps = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
 

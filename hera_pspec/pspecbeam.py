@@ -415,10 +415,9 @@ class PSpecBeamUV(PSpecBeamBase):
         # setup uvbeam object
         if isinstance(uvbeam, str):
             uvb = UVBeam()
-            uvb.read_beamfits(uvbeam, use_future_array_shapes=True)
+            uvb.read_beamfits(uvbeam)
         else:
             uvb = uvbeam
-            uvb.use_future_array_shapes()
 
         # get frequencies and set cosmology
         self.beam_freqs = uvb.freq_array

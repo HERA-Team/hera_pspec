@@ -212,7 +212,7 @@ class Test_UVWindow(unittest.TestCase):
         uvd.read(
             os.path.join(DATA_PATH, dfile),
             read_data=False,
-            use_future_array_shapes=True
+            
         )
         self.reds, self.lens, _ = utils.get_reds(uvd, bl_error_tol=1.0,
                              pick_data_ants=False)
@@ -272,7 +272,7 @@ class Test_UVWindow(unittest.TestCase):
         # obtain uvp object
         datafile = os.path.join(DATA_PATH, dfile)
         uvd = UVData()
-        uvd.read_uvh5(datafile, use_future_array_shapes=True)
+        uvd.read_uvh5(datafile, )
         # beam 
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=None)

@@ -29,15 +29,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
 ]
 dependencies = [
-    "numpy>=1.14",
+    "numpy>=2.0",
     "scipy",
-    "matplotlib>=2.2",
-    "pyuvdata>=3.0",
-    "astropy>=2.0",
+    "matplotlib>=3.0",
+    "pyuvdata>=3.2",
+    "astropy>=6.0",
     "pyyaml",
     "h5py",
     "uvtools",
-    "hera-calibration>=3.2.2",
+    "hera-calibration>=3.7.4",
     "typer",
     "tqdm",
 ]

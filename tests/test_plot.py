@@ -57,7 +57,7 @@ class Test_Plot(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, dfiles[0]),
-            use_future_array_shapes=True
+            
         )
         self.uvd = uvd
 

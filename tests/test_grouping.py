@@ -83,7 +83,7 @@ class Test_grouping(unittest.TestCase):
         dfile = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
         # Load into UVData objects
         uvd = UVData()
-        uvd.read_miriad(dfile, use_future_array_shapes=True)
+        uvd.read_miriad(dfile, )
         cosmo = conversions.Cosmo_Conversions()
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
@@ -199,7 +199,7 @@ class Test_grouping(unittest.TestCase):
         uvd = UVData()
         uvd.read_uvh5(
             os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
-            use_future_array_shapes=True
+            
         )
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
         baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
@@ -345,8 +345,8 @@ def test_bootstrap_resampled_error():
     cosmo = conversions.Cosmo_Conversions()
     beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
     uvd = UVData()
-    uvd.read_miriad(visfile, use_future_array_shapes=True)
-    ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
+    uvd.read_miriad(visfile, )
+    ap, a = uvd.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
 
@@ -417,8 +417,8 @@ def test_bootstrap_run():
     cosmo = conversions.Cosmo_Conversions()
     beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
     uvd = UVData()
-    uvd.read_miriad(visfile, use_future_array_shapes=True)
-    ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
+    uvd.read_miriad(visfile, )
+    ap, a = uvd.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
     if os.path.exists("ex.h5"):
@@ -496,14 +496,14 @@ def test_spherical_average():
     uvd = UVData()
     uvd.read(
         os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-        use_future_array_shapes=True
+        
     )
 
     # load other data, get reds and make UVPSpec
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
     cosmo = conversions.Cosmo_Conversions()
     beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-    ap, a = uvd.get_ENU_antpos(pick_data_ants=True)
+    ap, a = uvd.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)
     reds = [r[:2] for r in reds]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo)
@@ -605,7 +605,7 @@ def test_spherical_average():
     uvd = UVData()
     uvd.read_uvh5(
         os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
-        use_future_array_shapes=True
+        
     )
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam)
     baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
@@ -637,7 +637,7 @@ def test_spherical_wf_from_uvp():
     uvd = UVData()
     uvd.read_uvh5(
         os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
-        use_future_array_shapes=True
+        
     )
     # Create a new PSpecData objec
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
