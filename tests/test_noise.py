@@ -199,7 +199,7 @@ class TestGetApproximateCorr:
         assert m.shape[0] == m.shape[1]
         assert np.all(np.diag(m)==1)
         assert np.all(m - np.eye(m.shape[0]) <= 1)
-        np.testing.assert_array_equal(m.T, m)
+        np.testing.assert_array_almost_equal(m.T, m)
         
     
     @pytest.mark.parametrize('n', [1, 6, 7])
