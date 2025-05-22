@@ -2,7 +2,7 @@ import unittest, os
 import pytest
 import numpy as np
 import pyuvdata as uv
-from .. import pspecbeam, conversions
+from hera_pspec import pspecbeam, conversions
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVBeam
 
@@ -27,7 +27,7 @@ class Test_DataSet(unittest.TestCase):
         # iPython notebook "Scalar_dev2.ipynb" in tests directory
         pstokes_beamfile = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
         uvb = UVBeam()
-        uvb.read_beamfits(pstokes_beamfile, use_future_array_shapes=True)
+        uvb.read_beamfits(pstokes_beamfile, )
         beam = pspecbeam.PSpecBeamUV(uvb)
         Om_p = beam.power_beam_int()
         Om_pp = beam.power_beam_sq_int()

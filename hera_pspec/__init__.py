@@ -15,7 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover
         # package is not installed
         __version__ = "unknown"
 
-from . import conversions, grouping, pspecbeam, plot, pstokes, testing, utils
+from . import conversions, grouping, pspecbeam, plot, pstokes, testing, utils, loss
 from . import uvpspec_utils as uvputils
 
 from .uvpspec import UVPSpec
