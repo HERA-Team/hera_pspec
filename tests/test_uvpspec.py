@@ -1114,3 +1114,21 @@ def test_backwards_compatibility_read():
         assert "'UVPSpec' object has no attribute" in str(excinfo.value)
     # assert check does not fail
     uvp.check()
+
+def test_add_approximate_cov():
+    uvp = uvpspec.UVPSpec()
+    uvp.read_hdf5(os.path.join(DATA_PATH, 'test_uvp.h5'))
+    uvp.stats_array = {'P_N': {spw: np.ones((uvp.Nbltpairs, len(uvp.get_dlys(spw)), uvp.Npols)) for spw in uvp.spw_array}}
+    
+    uvp.add_approximate_covariance(inplace=True)
+    assert hasattr(uvp, 'cov_array_real')
+    ndly = len(uvp.get_dlys(0))
+    assert uvp.cov_array_real[0].shape == (uvp.Nbltpairs, ndly, ndly, uvp.Npols)
+    assert np.allclose(np.diagonal(uvp.cov_array_real[0], axis1=1, axis2=2), 1.0)
+    
+    # test that inplace=False works, not changing the original.
+    uvp.stats_array['P_N'][0] *= 2
+    uvp2 = uvp.add_approximate_covariance(inplace=False)
+    assert hasattr(uvp, 'cov_array_real')
+    assert np.allclose(np.diagonal(uvp.cov_array_real[0], axis1=1, axis2=2), 1.0)
+    assert np.allclose(np.diagonal(uvp2.cov_array_real[0], axis1=1, axis2=2), 4.0)
