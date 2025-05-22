@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import os
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, pspecbeam, pspecdata, testing, utils
+from hera_pspec import uvpspec, conversions, pspecbeam, pspecdata, testing, utils, uvwindow
 from hera_pspec import grouping, container
 from pyuvdata import UVData
 from hera_cal import redcal
@@ -730,6 +730,10 @@ class TestAverageDelayBins:
         del self.uvp_nocov.cov_array_real
         del self.uvp_nocov.cov_array_imag
         
+        self.uvp2 = copy.deepcopy(self.uvp) 
+        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.uvp2.freq_array, widths=8., pol=1) 
+        del self.uvp2.window_function_array
+        self.uvp2.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
         
     def test_exceptions(self):
         """Test that proper exceptions are raised for bad inputs."""
@@ -753,3 +757,10 @@ class TestAverageDelayBins:
         assert new.stats_array['P_N'][0].shape == new.data_array[0].shape
         assert np.allclose(new.stats_array['P_N'][0], 1)
         
+    def test_exact_window_functions(self):
+        new = grouping.average_in_delay_bins(self.uvp2, kernel=np.array(0,1, 1,0))
+        oldshape = self.uvp2.window_function_array[0].shape
+        newshape = list(oldshape)
+        newshape[1] = len(new.get_dlys(0))
+        
+        assert new.window_function_array[0].shape == tuple(newshape)

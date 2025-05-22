@@ -1713,14 +1713,17 @@ def get_bootstrap_run_argparser():
 
     return a
 
-def _bin_data_like_array(d, kernels: list[np.ndarray], slices: list[slice]):
+def _bin_data_like_array(d: np.ndarray, kernels: list[np.ndarray], slices: list[slice], axis=1):
     """Bin a data-like array over the delay axis.
     
     This function is an internally used function for :func:`average_in_delay_bins`
     """    
-    out = np.zeros((d.shape[0], len(slices), d.shape[2]), dtype=d.dtype)
-    for i, (slc, kernel) in enumerate(zip(slices, kernels)):
-        out[:, i] = np.sum(d[:, slc] * kernel[None, :, None], axis=1)
+    newshape = list(d.shape)
+    newshape[axis] = len(slices)
+    out = np.zeros(newshape, dtype=d.dtype)
+    
+    for i, (slc, kernel) in enumerate(zip(slices, kernels)):                
+        out.swapaxes(0, axis)[i] = np.sum(d.swapaxes(0, axis)[slc] * kernel, axis=0)
         
     return out
 
@@ -1807,7 +1810,7 @@ def _get_delay_slices(
 def average_in_delay_bins(
     uvp, 
     kernel: np.ndarray, 
-    cov_weighting_for_pn: bool | None = None,
+    cov_weighted_stats: tuple[str] = ("P_N", "P_SN"),
     zero_bin_kernel: np.ndarray = np.ones(1),
 ):
     """Average a UVPSpec object within bins of delay.
@@ -1872,13 +1875,10 @@ def average_in_delay_bins(
     """
     uvp  = copy.deepcopy(uvp)
     stats_array = getattr(uvp, 'stats_array', {})
-    if cov_weighting_for_pn is None:
-        cov_weighting_for_pn = hasattr(uvp, 'cov_array_real') and "P_N" in stats_array
-        
-    if cov_weighting_for_pn and not hasattr(uvp, "cov_array_real"):
-        raise ValueError("Cannot do cov_weighting_for_pn when cov_array_real is not set!")
-    if cov_weighting_for_pn and "P_N" not in stats_array:
-        raise ValueError("Cannot weight P_N when P_N is not in stats array!")
+    if hasattr(uvp, "cov_array_real"):
+        cov_weighted_stats = tuple(stat for stat in cov_weighted_stats if stat in stats_array)
+    else:
+        cov_weighted_stats = ()    
 
     kernel = np.asarray(kernel, dtype=float)
     if not kernel.ndim == 1:
@@ -1916,11 +1916,11 @@ def average_in_delay_bins(
         dly_array.append(newdly)
 
         stats = {
-            name: _bin_data_like_array(
-                stats_array[name][spw], kernels, slices
-            )
+            name: np.sqrt(_bin_data_like_array(
+                stats_array[name][spw]**2, kernels, slices
+            ))
             for name in stats_array
-            if name != "P_N"
+            if name not in cov_weighted_stats
         }
         if hasattr(uvp, "cov_array_real"):
             oldcov = uvp.cov_array_real[spw]
@@ -1930,14 +1930,22 @@ def average_in_delay_bins(
 
         if hasattr(uvp, "window_function_array"):
             wf = uvp.window_function_array[spw] # shape (Nblts, Ndly, Ndly, Npol)
-            new_uvp.window_function_array[spw] = _bin_cov_like_array(wf, kernels, slices)
+            # We bin this like a data array (on axis=1) and end up with a non-square
+            # window function. This works both for exact/non-exact window functions.
+            # If we really need a square window function, then the second axis should 
+            # be binned using a uniform kernel.
+            new_uvp.window_function_array[spw] = _bin_data_like_array(wf, kernels, slices, axis=1)
 
-        if 'P_N' in stats_array:
-            if not cov_weighting_for_pn:
-                stats["P_N"] = np.sqrt(_bin_data_like_array(stats_array['P_N'][spw]**2, kernels, slices))
-            elif hasattr(uvp, "cov_array_real"):
-                # We assume that the diagonal of cov is just P_N.
-                stats["P_N"] = np.diagonal(np.sqrt(newcov), axis1=1, axis2=2).transpose((0, 2, 1))
+        for stat in cov_weighted_stats:
+            # Problematically, there's only one covariance array, but there could be
+            # many stats. How do we know which stat corresponds to the cov? Instead,
+            # we find the _correlation_ matrix, and apply this to each stat.
+            diag = np.sqrt(np.diagonal(uvp.cov_array_real[spw], axis1=1, axis2=2))
+            denom = diag[:, :, None] * diag[:, None]
+            corr = uvp.cov_array_real[spw] / denom
+            thiscov = corr * uvp.stats_array[stat][spw][:, :, None] * uvp.stats_array[stat][spw][:, None]
+            newc = _bin_cov_like_array(thiscov, kernels, slices)
+            stats[stat] = np.diagonal(np.sqrt(newc), axis1=1, axis2=2).transpose((0, 2, 1))
 
         spw_dly_array.append(np.ones(newn,dtype=int)*spw)
 
