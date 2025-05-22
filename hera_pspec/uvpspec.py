@@ -5,8 +5,11 @@ from pyuvdata import utils as uvutils
 import h5py
 import warnings
 import json
-from typing import Self
-
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
+    
 from . import conversions, noise, version, __version__, pspecbeam, grouping, utils, uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
