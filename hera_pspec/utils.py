@@ -116,10 +116,10 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     x_bl1 = uvd.get_data(bl1)[time_index, spw]
     x_bl2 = uvd.get_data(bl2)[time_index, spw]
     nsample_bl = uvd.get_nsamples(bl)[time_index, spw]
-    nsample_bl = np.where(nsample_bl > 0, nsample_bl, np.median(nsample_bl[nsample_bl > 0]))
+    nsample_bl = np.where(nsample_bl > 0, nsample_bl, (np.median(nsample_bl[nsample_bl > 0]) if np.any(nsample_bl > 0) else 0))
     df = np.array(uvd.channel_width)[spw]
     # some impainted data have zero nsample while is not flagged, and they will be assigned the median nsample within the spectral window.
-    var = np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl
+    var = np.where(nsample_bl == 0, np.inf, np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl)
 
     return var
 
