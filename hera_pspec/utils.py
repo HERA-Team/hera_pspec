@@ -84,6 +84,8 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     $C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t},
     where $b_alpha = (alpha,alpha)$ and $b_beta = (beta,beta)$.
     With LST binned over days, we have $C_{ii}(b, LST) = |V(b_alpha,nu_i,t) V(b_beta, nu_i,t)| / {N_{samples} B Delta_t}$.
+    Wherever nsamples is zero, we assign the median nsamples within the spectral window for that time index and that baseline.
+    If all nsamples are zero, we set the variance to be np.inf.
 
     Parameters
     ----------
