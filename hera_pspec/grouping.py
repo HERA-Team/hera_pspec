@@ -1747,8 +1747,6 @@ def _bin_cov_like_array(cov: np.ndarray, kernels: list[np.ndarray], slices: list
     This function is internally used for :func:`average_in_delay_bins`.
     """
     newcov = np.zeros_like(cov)[:, :len(slices), :len(slices)]
-    # nk = len(kernel)
-    # nzero = len(zero_kernel)
     
     for i, (k1, slc) in enumerate(zip(kernels, slices)):
         for j, (k2, slc2) in enumerate(zip(kernels, slices)):
@@ -1874,9 +1872,13 @@ def average_in_delay_bins(
         The averaging kernel. This should be a 1D array containing the averaging weights
         within each non-overlapping bin. It will be normalized to have a sum of unity.
         The size of the kernel will define the size of the resulting delay bins.
-    cov_weighting_for_pn
-        Whether to average the P_N statistic using known covariance information, or 
-        simply by averaging with the kernel.
+    cov_weighted_stats : tuple of str, optional
+        The names of the statistics to compute using the covariance information.
+        Note that any stats that represent standard deviations (e.g. "P_N", "P_SN")
+        *should* be combined in such a way that they average down more with larger
+        kernels. This will *not* be done unless they are in the `cov_weighted_stats`
+        tuple. Anything not in this tuple will simply be averaged directly using
+        the kernel, rather than by the inverse covariance.
     zero_bin_kernel
         The kernel to use for the zero bin. This must be symmetric and have an odd
         length. By default, this is a kernel of length 1 with value 1.
@@ -1954,7 +1956,8 @@ def average_in_delay_bins(
             # Problematically, there's only one covariance array, but there could be
             # many stats. How do we know which stat corresponds to the cov? Instead,
             # we find the _correlation_ matrix, and apply this to each stat.
-            diag = np.sqrt(np.diagonal(uvp.cov_array_real[spw], axis1=1, axis2=2))
+            diag = np.sqrt(np.diagonal(uvp.cov_array_real[spw], axis1=1, axis2=2)).transpose((0, 2, 1))
+            
             denom = diag[:, :, None] * diag[:, None]
             corr = uvp.cov_array_real[spw] / denom
             thiscov = corr * uvp.stats_array[stat][spw][:, :, None] * uvp.stats_array[stat][spw][:, None]

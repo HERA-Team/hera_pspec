@@ -735,6 +735,14 @@ class TestAverageDelayBins:
         del self.uvp2.window_function_array
         self.uvp2.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
         
+    def test_get_delay_slices_errors(self):
+        with pytest.raises(ValueError, match="nzero must be odd!"):
+            grouping._get_delay_slices(
+                dly=np.linspace(0, 1, 10),
+                kernel=np.array([1, 1, 1]),
+                zero_kernel=np.array([1, 0, 1, 0]),
+            )
+            
     def test_exceptions(self):
         """Test that proper exceptions are raised for bad inputs."""
         with pytest.raises(ValueError, match="The kernel must be 1D"):
@@ -751,13 +759,35 @@ class TestAverageDelayBins:
         
         assert len(new.get_dlys(0)) - 1 == (len(self.uvp.get_dlys(0)) - 1)//3
         
-    def test_pn_weighting(self):
-        uvp = copy.deepcopy(self.uvp)
+    @pytest.mark.parametrize("with_cov", [True, False])
+    @pytest.mark.parametrize("cov_weighted_stats", [(), ('P_N',)])
+    def test_pn_weighting(self, with_cov: bool, cov_weighted_stats):
+        if with_cov:
+            uvp = copy.deepcopy(self.uvp)
+        else:
+            uvp = copy.deepcopy(self.uvp_nocov)
+            
         uvp.stats_array = {'P_N': {spw: np.ones_like(uvp.data_array[spw]) for spw in uvp.spw_array}}
                 
-        new = grouping.average_in_delay_bins(uvp, kernel=np.array([1,1,1]), cov_weighted_stats=())
+        new = grouping.average_in_delay_bins(
+            uvp, 
+            kernel=np.array([1,1,1]), 
+            zero_bin_kernel=np.array([1,1,1]),
+            cov_weighted_stats=cov_weighted_stats
+        )
         assert new.stats_array['P_N'][0].shape == new.data_array[0].shape
-        assert np.allclose(new.stats_array['P_N'][0], 1)
+        np.testing.assert_allclose(
+            new.stats_array['P_N'][0], 1/np.sqrt(3) if (with_cov and cov_weighted_stats) else 1
+        )
+        
+    def test_without_cov_array(self):
+        """Test that the function works without cov_array."""
+        new = grouping.average_in_delay_bins(self.uvp_nocov, kernel=np.array([1,1,1]))
+        
+        assert len(new.get_dlys(0)) - 1 == (len(self.uvp_nocov.get_dlys(0)) - 1)//3
+        
+        # Check that the stats_array is empty
+        assert new.stats_array == {}
         
     def test_exact_window_functions(self):
         new = grouping.average_in_delay_bins(self.uvp2, kernel=np.array([0,1, 1,0]))
