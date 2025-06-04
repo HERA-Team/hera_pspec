@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import os
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, pspecbeam, pspecdata, testing, utils
+from hera_pspec import uvpspec, conversions, pspecbeam, pspecdata, testing, utils, uvwindow
 from hera_pspec import grouping, container
 from pyuvdata import UVData
 from hera_cal import redcal
@@ -717,5 +717,82 @@ def test_spherical_wf_from_uvp():
                   little_h='h^-3' in uvp.norm_units)
 
 
-if __name__ == "__main__":
-    unittest.main()
+class TestAverageDelayBins:
+    """Tests of the average_in_delay_bins function."""
+    
+    def setup_class(self):
+        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
+        self.beam = pspecbeam.PSpecBeamUV(beamfile)
+        uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam, Ndlys=None) # None means take Nfreqs
+        self.uvp = uvp
+        
+        self.uvp_nocov = copy.deepcopy(self.uvp)
+        del self.uvp_nocov.cov_array_real
+        del self.uvp_nocov.cov_array_imag
+        
+        self.uvp2 = copy.deepcopy(self.uvp) 
+        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.uvp2.freq_array, widths=8., pol=1) 
+        del self.uvp2.window_function_array
+        self.uvp2.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
+        
+    def test_get_delay_slices_errors(self):
+        with pytest.raises(ValueError, match="nzero must be odd!"):
+            grouping._get_delay_slices(
+                dly=np.linspace(0, 1, 10),
+                kernel=np.array([1, 1, 1]),
+                zero_kernel=np.array([1, 0, 1, 0]),
+            )
+            
+    def test_exceptions(self):
+        """Test that proper exceptions are raised for bad inputs."""
+        with pytest.raises(ValueError, match="The kernel must be 1D"):
+            grouping.average_in_delay_bins(self.uvp, kernel=np.array([[1, 1, 1]]))
+            
+        with pytest.raises(ValueError, match="The kernel size must be smaller than half"):
+            grouping.average_in_delay_bins(self.uvp, kernel=np.zeros(self.uvp.Ndlys))
+            
+        with pytest.raises(ValueError, match="The zero bin kernel must be symmetric"):
+            grouping.average_in_delay_bins(self.uvp, kernel=np.array([1,1]), zero_bin_kernel=np.array([1, 0, 1, 0]))
+                        
+    def test_happy_path(self):
+        new = grouping.average_in_delay_bins(self.uvp, kernel=np.array([1,1,1]))
+        
+        assert len(new.get_dlys(0)) - 1 == (len(self.uvp.get_dlys(0)) - 1)//3
+        
+    @pytest.mark.parametrize("with_cov", [True, False])
+    @pytest.mark.parametrize("cov_weighted_stats", [(), ('P_N',)])
+    def test_pn_weighting(self, with_cov: bool, cov_weighted_stats):
+        if with_cov:
+            uvp = copy.deepcopy(self.uvp)
+        else:
+            uvp = copy.deepcopy(self.uvp_nocov)
+            
+        uvp.stats_array = {'P_N': {spw: np.ones_like(uvp.data_array[spw]) for spw in uvp.spw_array}}
+                
+        new = grouping.average_in_delay_bins(
+            uvp, 
+            kernel=np.array([1,1,1]), 
+            zero_bin_kernel=np.array([1,1,1]),
+            cov_weighted_stats=cov_weighted_stats
+        )
+        assert new.stats_array['P_N'][0].shape == new.data_array[0].shape
+        np.testing.assert_allclose(
+            new.stats_array['P_N'][0], 1/np.sqrt(3) if (with_cov and cov_weighted_stats) else 1
+        )
+        
+    def test_without_cov_array(self):
+        """Test that the function works without cov_array."""
+        new = grouping.average_in_delay_bins(self.uvp_nocov, kernel=np.array([1,1,1]))
+        
+        assert len(new.get_dlys(0)) - 1 == (len(self.uvp_nocov.get_dlys(0)) - 1)//3
+        
+        # Check that the stats_array is empty
+        assert new.stats_array == {}
+        
+    def test_exact_window_functions(self):
+        new = grouping.average_in_delay_bins(self.uvp2, kernel=np.array([0,1, 1,0]))
+        oldshape = self.uvp2.window_function_array[0].shape
+        newshape = list(oldshape)
+        newshape[1] = len(new.get_dlys(0))
+        
+        assert new.window_function_array[0].shape == tuple(newshape)
