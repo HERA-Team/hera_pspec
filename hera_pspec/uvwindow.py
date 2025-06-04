@@ -748,10 +748,10 @@ class UVWindow:
 
         # define default kperp bins,
         dk_para = self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)\
-            / (abs(freq_array[-1]-freq_array[0]))
+            * np.diff(dly_array)[0]
         kpara_max = self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)\
             * abs(dly_array).max()+10.*dk_para
-        kpara_bin_edges = np.arange(dk_para, kpara_max, step=dk_para)
+        kpara_bin_edges = np.arange(dk_para/2., kpara_max, step=dk_para)
         kpara_bins = (kpara_bin_edges[1:]+kpara_bin_edges[:-1])/2
         nbins_kpara = kpara_bins.size
 
