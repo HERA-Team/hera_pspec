@@ -1942,8 +1942,12 @@ def average_in_delay_bins(
             oldcov = uvp.cov_array_real[spw]
             newcov = _bin_cov_like_array(oldcov, kernels, slices)
             new_uvp.cov_array_real[spw] = newcov
-            new_uvp.cov_array_imag[spw] = np.zeros_like(new_uvp.cov_array_real[spw])
-
+            
+        if hasattr(uvp, "cov_array_imag"):
+            oldcov = uvp.cov_array_imag[spw]
+            newcov = _bin_cov_like_array(oldcov, kernels, slices)
+            new_uvp.cov_array_imag[spw] = newcov
+        
         if hasattr(uvp, "window_function_array"):
             wf = uvp.window_function_array[spw] # shape (Nblts, Ndly, Ndly, Npol)
             # We bin this like a data array (on axis=1) and end up with a non-square
