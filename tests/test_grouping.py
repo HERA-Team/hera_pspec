@@ -723,7 +723,7 @@ class TestAverageDelayBins:
     def setup_class(self):
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.beam = pspecbeam.PSpecBeamUV(beamfile)
-        uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam)
+        uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam, Ndlys=None) # None means take Nfreqs
         self.uvp = uvp
         
         self.uvp_nocov = copy.deepcopy(self.uvp)
@@ -737,12 +737,15 @@ class TestAverageDelayBins:
         
     def test_exceptions(self):
         """Test that proper exceptions are raised for bad inputs."""
-        with pytest.raises(ValueError, match='Cannot do cov_weighting_for_pn'):
-            grouping.average_in_delay_bins(self.uvp_nocov, kernel=np.array([1,1,1]), cov_weighting_for_pn=True)
+        with pytest.raises(ValueError, match="The kernel must be 1D"):
+            grouping.average_in_delay_bins(self.uvp, kernel=np.array([[1, 1, 1]]))
             
-        with pytest.raises(ValueError, match='Cannot weight P_N when P_N is not in stats array'):
-            grouping.average_in_delay_bins(self.uvp, kernel=(1,1,1), cov_weighting_for_pn=True)
+        with pytest.raises(ValueError, match="The kernel size must be smaller than half"):
+            grouping.average_in_delay_bins(self.uvp, kernel=np.zeros(self.uvp.Ndlys))
             
+        with pytest.raises(ValueError, match="The zero bin kernel must be symmetric"):
+            grouping.average_in_delay_bins(self.uvp, kernel=np.array([1,1]), zero_bin_kernel=np.array([1, 0, 1, 0]))
+                        
     def test_happy_path(self):
         new = grouping.average_in_delay_bins(self.uvp, kernel=np.array([1,1,1]))
         
@@ -750,15 +753,14 @@ class TestAverageDelayBins:
         
     def test_pn_weighting(self):
         uvp = copy.deepcopy(self.uvp)
-        uvp.stats_array = {}
-        uvp.stats_array['P_N'] = {spw: np.ones_like(uvp.data_array[spw]) for spw in uvp.spw_array}
+        uvp.stats_array = {'P_N': {spw: np.ones_like(uvp.data_array[spw]) for spw in uvp.spw_array}}
                 
-        new = grouping.average_in_delay_bins(uvp, kernel=np.array([1,1,1]), cov_weighting_for_pn = False)
+        new = grouping.average_in_delay_bins(uvp, kernel=np.array([1,1,1]), cov_weighted_stats=())
         assert new.stats_array['P_N'][0].shape == new.data_array[0].shape
         assert np.allclose(new.stats_array['P_N'][0], 1)
         
     def test_exact_window_functions(self):
-        new = grouping.average_in_delay_bins(self.uvp2, kernel=np.array(0,1, 1,0))
+        new = grouping.average_in_delay_bins(self.uvp2, kernel=np.array([0,1, 1,0]))
         oldshape = self.uvp2.window_function_array[0].shape
         newshape = list(oldshape)
         newshape[1] = len(new.get_dlys(0))

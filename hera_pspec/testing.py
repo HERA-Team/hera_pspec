@@ -17,7 +17,10 @@ from . import (
 )
 
 
-def build_vanilla_uvpspec(beam: pspecbeam.PSpecBeamBase | None=None) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
+def build_vanilla_uvpspec(
+    beam: pspecbeam.PSpecBeamBase | None=None,
+    Ndlys: int | None = 30
+) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
     """
     Build an example vanilla UVPSpec object from scratch, with all necessary
     metadata.
@@ -25,8 +28,13 @@ def build_vanilla_uvpspec(beam: pspecbeam.PSpecBeamBase | None=None) -> tuple[uv
     Parameters
     ----------
     beam : PSpecBeamBase subclass
-    covariance: if true, compute covariance
-
+        A beam to use for the UVPSpec object. If None, no beam is used.
+    Ndlys : int, optional
+        Number of delay bins to use. If None, uses as many delay bins as
+        frequency channels. Default is 30, which was the original default, but
+        is *different* than the number of frequency channels, which can break 
+        window functions.
+        
     Returns
     -------
     uvp : UVPSpec object
@@ -35,7 +43,7 @@ def build_vanilla_uvpspec(beam: pspecbeam.PSpecBeamBase | None=None) -> tuple[uv
 
     Ntimes = 10
     Nfreqs = 50
-    Ndlys = 30
+    Ndlys = Nfreqs if Ndlys is None else Ndlys
     Nspws = 1
     Nspwfreqs = 1 * Nfreqs
     Nspwdlys = 1 * Ndlys

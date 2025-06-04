@@ -1717,13 +1717,27 @@ def _bin_data_like_array(d: np.ndarray, kernels: list[np.ndarray], slices: list[
     """Bin a data-like array over the delay axis.
     
     This function is an internally used function for :func:`average_in_delay_bins`
+    
+    Parameters
+    ----------
+    d : np.ndarray
+        The data-like array to bin. This is expected to be an ND array with 
+        one of the axes (corresponding to `axis`) having shape Ndelays.
+    kernels : list of np.ndarray
+        The kernels to use for binning. This is a list of 1D arrays, each
+        containing the averaging weights for the corresponding slice.
+    slices : list of slice objects
+        A list of slice objects, each corresponding to a kernel.
+    axis : int, optional
+        The axis along which to bin the data (i.e the delay axis). 
+        Default is 1.
     """    
     newshape = list(d.shape)
     newshape[axis] = len(slices)
     out = np.zeros(newshape, dtype=d.dtype)
     
-    for i, (slc, kernel) in enumerate(zip(slices, kernels)):                
-        out.swapaxes(0, axis)[i] = np.sum(d.swapaxes(0, axis)[slc] * kernel, axis=0)
+    for i, (slc, kernel) in enumerate(zip(slices, kernels)):
+        out.swapaxes(-1, axis)[..., i] = np.sum(d.swapaxes(-1, axis)[..., slc] * kernel, axis=-1)
         
     return out
 
@@ -1908,7 +1922,7 @@ def average_in_delay_bins(
         
         p = uvp.data_array[spw]
         dly = uvp.get_dlys(spw)
-        slices, kernels = _get_delay_slices(dly, nk, nzero=len(zero_bin_kernel))
+        slices, kernels = _get_delay_slices(dly, kernel=kernel, zero_kernel=zero_bin_kernel)
         newn = len(slices)
 
         new_uvp.data_array[spw] = _bin_data_like_array(p, kernels, slices)
