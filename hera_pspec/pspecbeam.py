@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
 import uvtools.dspec as dspec
 from collections import OrderedDict as odict
-
+from pathlib import Path
 
 from . import conversions as conversions, uvpspec_utils as uvputils
 
@@ -413,7 +413,7 @@ class PSpecBeamUV(PSpecBeamBase):
             specified. Default: None.
         """
         # setup uvbeam object
-        if isinstance(uvbeam, str):
+        if isinstance(uvbeam, str | Path):
             uvb = UVBeam()
             uvb.read_beamfits(uvbeam)
         else:

@@ -103,7 +103,8 @@ def sample_baselines(bls, seed=None):
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     blpair_weights=None, error_field=None,
                     error_weights=None, normalize_weights=True,
-                    inplace=True, add_to_history=''):
+                    inplace=True, add_to_history='',
+                    time_tol: float = 1e-6):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
     each spectrum's integration time or a specified kind of error bars.
@@ -540,12 +541,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         for bl in bl_arr])
 
     # Assign arrays and metadata to UVPSpec object
-    uvp.Ntimes = len(np.unique(np.hstack([time_1, time_2])))
     uvp.Nbltpairs = len(time_avg_arr)
     uvp.Nblpairs = len(np.unique(blpair_arr))
     uvp.Nbls = len(bl_arr)
-    uvp.Ntpairs = len(set((t1, t2) for t1, t2 in zip(time_1, time_2)))
-
+    uvp.Ntpairs = len(set((np.round(t1/time_tol,0), np.round(t2/time_tol, 0)) for t1, t2 in zip(time_1, time_2)))
+    uvp.Ntimes = uvp.Ntpairs
+    
     # Baselines
     uvp.bl_array = bl_arr
     uvp.bl_vecs = bl_vecs

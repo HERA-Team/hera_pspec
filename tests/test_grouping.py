@@ -8,21 +8,24 @@ from hera_pspec import grouping, container
 from pyuvdata import UVData
 from hera_cal import redcal
 import copy
+from pytest_cases import parametrize_with_cases
+from hera_pspec import UVPSpec
 
-class Test_grouping(unittest.TestCase):
+def case_vanilla_uvp(vanilla_uvp: UVPSpec):
+    return vanilla_uvp
 
-    def setUp(self):
-        beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
-        self.beam = pspecbeam.PSpecBeamUV(beamfile)
-        uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam)
-        uvp.check()
-        self.uvp = uvp
+def case_vanilla_uvp_with_beam(vanilla_uvp_with_beam: UVPSpec):
+    return vanilla_uvp_with_beam
 
-    def tearDown(self):
-        pass
+def case_vanilla_uvp_alternating_times(vanilla_uvp_alternating_times: UVPSpec):
+    return vanilla_uvp_alternating_times
 
-    def runTest(self):
-        pass
+# def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):
+#     return uvp_exact_wfs
+    
+    
+class TestGrouping:
+
 
     def test_group_baselines(self):
         """
@@ -281,20 +284,21 @@ class Test_grouping(unittest.TestCase):
         samp = grouping.sample_baselines(g1)
         assert len(g1) == len(samp)
 
-    def test_bootstrap_average_blpairs(self):
+    @parametrize_with_cases('uvp', cases=".", )
+    def test_bootstrap_average_blpairs(self, uvp):
         """
         Test bootstrap averaging over power spectra.
         """
         # Check that basic bootstrap averaging works
-        blpair_groups = [list(np.unique(self.uvp.blpair_array)),]
-        uvp1, wgts = grouping.bootstrap_average_blpairs([self.uvp,],
+        blpair_groups = [list(np.unique(uvp.blpair_array)),]
+        uvp1, wgts = grouping.bootstrap_average_blpairs([uvp,],
                                                         blpair_groups,
                                                         time_avg=False)
-        uvp2, wgts = grouping.bootstrap_average_blpairs([self.uvp,],
+        uvp2, wgts = grouping.bootstrap_average_blpairs([uvp,],
                                                         blpair_groups,
                                                         time_avg=True)
         assert uvp1[0].Nblpairs == 1
-        assert uvp1[0].Ntpairs == self.uvp.Ntpairs
+        assert uvp1[0].Ntpairs == uvp.Ntpairs
         assert uvp2[0].Ntpairs == 1
 
         # Total of weights assigned should equal total no. of blpairs
@@ -304,11 +308,11 @@ class Test_grouping(unittest.TestCase):
         pytest.raises(AssertionError, grouping.bootstrap_average_blpairs,
                           [np.arange(5),], blpair_groups, time_avg=False)
         pytest.raises(KeyError, grouping.bootstrap_average_blpairs,
-                          [self.uvp,], [[200200200200,],], time_avg=False)
+                          [uvp,], [[200200200200,],], time_avg=False)
 
         # Reduce UVPSpec to only 3 blpairs and set them all to the same values
-        _blpairs = list(np.unique(self.uvp.blpair_array)[:3])
-        uvp3 = self.uvp.select(spws=0, inplace=False, blpairs=_blpairs)
+        _blpairs = list(np.unique(uvp.blpair_array)[:3])
+        uvp3 = uvp.select(spws=0, inplace=False, blpairs=_blpairs)
 
         Nt = uvp3.Ntpairs
         uvp3.data_array[0][Nt:2*Nt] = uvp3.data_array[0][:Nt]
@@ -410,7 +414,7 @@ def test_validate_bootstrap_errorbar():
     assert np.abs(1.0 - zscr_imag) < 1/np.sqrt(Nsamples)
 
 
-def test_bootstrap_run():
+def test_bootstrap_run(tmp_path):
     # generate a UVPSpec and container
     visfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
@@ -421,9 +425,8 @@ def test_bootstrap_run():
     ap, a = uvd.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
     uvp = testing.uvpspec_from_data(uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo)
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
-    psc = container.PSpecContainer("ex.h5", mode='rw', keep_open=False, swmr=False)
+    outfile = tmp_path / "ex.h5"
+    psc = container.PSpecContainer(outfile, mode='rw', keep_open=False, swmr=False)
     psc.set_pspec("grp1", "uvp", uvp)
 
     # Test basic bootstrap run
@@ -459,12 +462,11 @@ def test_bootstrap_run():
 
     # test exceptions
     del psc
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
-    psc = container.PSpecContainer("ex.h5", mode='rw', keep_open=False, swmr=False)
+    outfile = tmp_path / "ex2.h5"
+    psc = container.PSpecContainer(outfile, mode='rw', keep_open=False, swmr=False)
 
     # test empty groups
-    pytest.raises(AssertionError, grouping.bootstrap_run, "ex.h5")
+    pytest.raises(AssertionError, grouping.bootstrap_run, outfile)
 
     # test bad filename
     pytest.raises(AssertionError, grouping.bootstrap_run, 1)
@@ -476,9 +478,6 @@ def test_bootstrap_run():
     # test assertionerror if SWMR
     psc = container.PSpecContainer("ex.h5", mode='rw', keep_open=False, swmr=True)
     pytest.raises(AssertionError, grouping.bootstrap_run, psc, spectra=['grp1/foo'])
-
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
 
 
 def test_get_bootstrap_run_argparser():

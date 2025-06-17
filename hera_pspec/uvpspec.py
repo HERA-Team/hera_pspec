@@ -26,7 +26,14 @@ class UVPSpec(object):
         by hera_pspec.
         """
         # Summary attributes
-        self._Ntimes = PSpecParam("Ntimes", description="Number of unique times.", expected_type=int)
+        # Note that in the past (pre-v0.5) Ntimes was the number of unique times in 
+        # either of the underlying visibilitydatasets (i.e. time_1_array and time_2_array),
+        # however throughout the code it was often assumed to mean the number of unique
+        # time-pairs (i.e. how many distinct average times there are in the data), which
+        # is really Ntpairs. In fact, there's never a situation in which you would need
+        # to know the number of unique underlying times in the context of power spectra,
+        # so now we make the two attributes identical.
+        self._Ntimes = PSpecParam("Ntimes", description="Number of unique time-pairs.", expected_type=int)
         self._Ntpairs = PSpecParam("Ntpairs", description="Number of unique time-pairs.", expected_type=int)
         self._Nbltpairs = PSpecParam("Nbltpairs", description="Total number of baseline-time-pairs.", expected_type=int)
         self._Nblpairs = PSpecParam("Nblpairs", description="Total number of baseline-pairs.", expected_type=int)
@@ -1411,9 +1418,9 @@ class UVPSpec(object):
         if reading_old_version:
             # If we are reading a power spectrum object that was written in the pre-Nbltpairs days
             # then make sure to correctly set Ntimes and Ntpairs.
-            self.Ntimes = len(np.unique(np.hstack([self.time_1_array, self.time_2_array])))
             self.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(self.time_1_array, self.time_2_array)]))
-
+            self.Ntimes = self.Ntpairs
+            
         # Clear deprecated attributes.
         for dattr in self._meta_deprecated:
             if hasattr(self, dattr):
@@ -1483,6 +1490,7 @@ class UVPSpec(object):
         with h5py.File(filepath, 'r') as f:
             self.read_from_group(f, just_meta=just_meta, spws=spws, bls=bls,
                                  times=times, lsts=lsts, polpairs=polpairs,
+                                 blpairs=blpairs,
                                  only_pairs_in_bls=only_pairs_in_bls)
 
 
@@ -1892,7 +1900,7 @@ class UVPSpec(object):
         assert set(self.spw_array) == set(np.arange(self.Nspws)), "spw_array must be np.arange(Nspws)"
 
         # check choice of window functions
-        if self.exact_windows:
+        if self.exact_windows and not just_meta:
             assert hasattr(self, 'window_function_array') and hasattr(self, 'window_function_kperp'), \
                    "Error with window functions: object has exact_windows=True but no related arrays stored."
 
@@ -2771,7 +2779,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         h = [bl == _bl for _bl in uvp_bls[l]].index(True)
         u.bl_vecs.append(uvps[l].bl_vecs[h])
     u.bl_vecs = np.array(u.bl_vecs)
-    u.Ntimes = len(np.unique(np.hstack([u.time_1_array, u.time_2_array])))
+    u.Ntimes = Ntpairs
     if merge_history:
         u.history = "".join([uvp.history for uvp in uvps])
     else:
