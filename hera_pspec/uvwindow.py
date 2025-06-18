@@ -425,7 +425,7 @@ class UVWindow:
                     ftbeam_obj_pol.append(FTBeam.from_beam(beamfile='tbd',
                                                            verbose=verbose,
                                                            x_orientation=x_orientation))
-                elif isinstance(ftbeam, str):
+                elif isinstance(ftbeam, str | Path):
                     ftbeam_obj_pol.append(FTBeam.from_file(f'{ftbeam}_{pol}.hdf5',
                                                            spw_range=None,
                                                            verbose=verbose,

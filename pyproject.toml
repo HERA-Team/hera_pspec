@@ -66,6 +66,7 @@ tests = [
     "coverage>=4.5.1",
     "pytest>=3.5.1",
     "pytest-cov>=2.5.1",
+    "pytest-cases",
 ]
 dev = [
     "hera_pspec[doc,tests]",
