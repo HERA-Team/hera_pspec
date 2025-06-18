@@ -179,6 +179,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     add_to_history : str, optional
         Added text to add to file history.
 
+    time_tol : float, optional
+        The tolerance for checking if times are equivalent, in order to count
+        "unique" time-pairs in the average. The units are (julian) days. Setting too
+        low can result in numerical noise creating more time-pairs than expected.
+
     Notes
     -----
     Currently, every baseline-pair in a blpair group must have the same
@@ -591,7 +596,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
 
 def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
-                      weight_by_cov=False, error_weights=None,
+                      weight_by_cov=False, error_weights=None, time_tol: float = 1e-6,
                       add_to_history='', little_h=True, A={}, run_check=True):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
@@ -641,6 +646,11 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     run_check : bool, optional
         If True, run UVPSpec.check() on resultant object
 
+    time_tol : float, optional
+        The tolerance for checking if times are equivalent, in order to count
+        "unique" time-pairs in the average. The units are (julian) days. Setting too
+        low can result in numerical noise creating more time-pairs than expected.
+        
     Returns
     --------
     UVPSpec object
@@ -683,6 +693,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     # perform time and cylindrical averaging upfront if requested
     if not uvp.exact_windows and (blpair_groups is not None or time_avg):
         uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg,
+                            time_tol=time_tol,
                             blpair_weights=blpair_weights, error_weights=error_weights,
                             inplace=True)
 
@@ -948,7 +959,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                           blpair_groups=None, blpair_lens=None, blpair_weights=None,
                           error_weights=None, time_avg=False, spw_array=None,
-                          little_h=True, verbose=False):
+                          little_h=True, verbose=False, time_tol: float=1e-6):
     
     """
     Obtains exact spherical window functions from an UVPspec object,
@@ -995,6 +1006,11 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         If True, print progress, warnings and debugging info to stdout.
         If None, value used is the class attribute.
 
+    time_tol : float, optional
+        The tolerance for checking if times are equivalent, in order to count
+        "unique" time-pairs in the average. The units are (julian) days. Setting too
+        low can result in numerical noise creating more time-pairs than expected.
+        
     Returns
     --------
     wf_spherical : array
@@ -1079,6 +1095,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                         blpair_weights=blpair_weights,
                         error_weights=error_weights,
                         time_avg=time_avg,
+                        time_tol=time_tol,
                         inplace=True)
 
     # initialize blank arrays and dicts
