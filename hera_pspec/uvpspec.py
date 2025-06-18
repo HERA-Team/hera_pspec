@@ -2133,7 +2133,7 @@ class UVPSpec(object):
 
     def average_spectra(self, blpair_groups=None, time_avg=False,
                         blpair_weights=None, error_field=None, error_weights=None,
-                        inplace=True, add_to_history=''):
+                        inplace=True, add_to_history='', time_tol: float=1e-6):
         """
         Average power spectra across the baseline-pair-time axis, weighted by
         each spectrum's integration time.
@@ -2207,6 +2207,11 @@ class UVPSpec(object):
         add_to_history : str, optional
             Added text to add to file history.
 
+        time_tol : float, optional
+            The tolerance for checking if times are equivalent, in order to count
+            "unique" time-pairs in the average. The units are (julian) days. Setting too
+            low can result in numerical noise creating more time-pairs than expected.
+
         Notes
         -----
         Currently, every baseline-pair in a blpair group must have the same
@@ -2215,25 +2220,21 @@ class UVPSpec(object):
         the scenario of repeated blpairs (e.g. in bootstrapping), which will
         return multiple copies of their time_array.
         """
-        if inplace:
-            grouping.average_spectra(self,
-                                     blpair_groups=blpair_groups,
-                                     time_avg=time_avg,
-                                     error_field=error_field,
-                                     error_weights=error_weights,
-                                     blpair_weights=blpair_weights,
-                                     inplace=True,
-                                     add_to_history=add_to_history)
-        else:
-            return grouping.average_spectra(self,
-                                            blpair_groups=blpair_groups,
-                                            time_avg=time_avg,
-                                            error_field=error_field,
-                                            error_weights=error_weights,
-                                            blpair_weights=blpair_weights,
-                                            inplace=False,
-                                            add_to_history=add_to_history)
+        result = grouping.average_spectra(
+            self,
+            blpair_groups=blpair_groups,
+            time_avg=time_avg,
+            error_field=error_field,
+            error_weights=error_weights,
+            blpair_weights=blpair_weights,
+            inplace=inplace,
+            add_to_history=add_to_history,
+            time_tol=time_tol,
+        )
 
+        if not inplace:
+            return result
+        
     def fold_spectra(self):
         """
         Average bandpowers from matching positive and negative delay bins onto a
