@@ -1,3 +1,8 @@
+"""Pytest configuration and fixtures for tests.
+
+This adds several mock UVPSpec objects that can be used throughout the tests.
+"""
+
 import pytest
 from hera_pspec.testing import build_vanilla_uvpspec
 from hera_pspec import UVPSpec, PSpecData, utils

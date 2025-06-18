@@ -27,7 +27,7 @@ class UVPSpec(object):
         """
         # Summary attributes
         # Note that in the past (pre-v0.5) Ntimes was the number of unique times in 
-        # either of the underlying visibilitydatasets (i.e. time_1_array and time_2_array),
+        # the union of the underlying visibility datasets (i.e. time_1_array and time_2_array),
         # however throughout the code it was often assumed to mean the number of unique
         # time-pairs (i.e. how many distinct average times there are in the data), which
         # is really Ntpairs. In fact, there's never a situation in which you would need
