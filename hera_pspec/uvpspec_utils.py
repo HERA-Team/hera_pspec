@@ -472,6 +472,7 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     if only_pairs_in_bls:
         blp_select = np.array( [bool((blp[0] in bls) * (blp[1] in bls))
                                 for blp in blpair_bls] )
+        
     else:
         blp_select = np.array( [bool((blp[0] in bls) + (blp[1] in bls))
                                 for blp in blpair_bls] )
@@ -576,6 +577,8 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         # if fed as list of tuples, convert to integers
         if isinstance(blpairs[0], tuple):
             blpairs = [uvp.antnums_to_blpair(blp) for blp in blpairs]
+        print("blps:", blpairs)
+        print("blpair_array:", uvp.blpair_array)
         blpair_select = np.logical_or.reduce(
                                    [uvp.blpair_array == blp for blp in blpairs])
         blp_select += blpair_select
@@ -621,10 +624,11 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.lst_1_array = uvp.lst_1_array[blp_select]
         uvp.lst_2_array = uvp.lst_2_array[blp_select]
         uvp.lst_avg_array = uvp.lst_avg_array[blp_select]
-        uvp.Ntimes = len(np.unique(uvp.time_avg_array))
+        uvp.Ntpairs = len(np.unique(uvp.time_avg_array))
         uvp.Nblpairs = len(np.unique(uvp.blpair_array))
         uvp.Nbltpairs = len(uvp.blpair_array)
-
+        uvp.Ntimes = uvp.Ntpairs
+        
         # Calculate unique baselines from new blpair_array
         new_blpairs = np.unique(uvp.blpair_array)
         bl1 = np.floor(new_blpairs / 1e6)
