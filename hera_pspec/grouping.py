@@ -895,14 +895,16 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
         if uvp.exact_windows:
-            window_function_array[spw] = spherical_wf_from_uvp(uvp, kbins, bin_widths,
-                                                               blpair_groups=blpair_groups,
-                                                               blpair_weights=blpair_weights,
-                                                               time_avg=time_avg,
-                                                               error_weights=error_weights,
-                                                               spw_array=spw,
-                                                               little_h=True,
-                                                               verbose=True)[spw]
+            window_function_array[spw] = spherical_wf_from_uvp(
+                uvp, np.r_[kbin_left, kbin_right[-1]],
+                blpair_groups=blpair_groups,
+                blpair_weights=blpair_weights,
+                time_avg=time_avg,
+                error_weights=error_weights,
+                spw_array=spw,
+                little_h=True,
+                verbose=True
+            )[spw]
 
     # handle data arrays
     uvp.data_array = data_array
@@ -956,7 +958,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     return uvp
 
-def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
+def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_in=None,
                           blpair_groups=None, blpair_lens=None, blpair_weights=None,
                           error_weights=None, time_avg=False, spw_array=None,
                           little_h=True, verbose=False, time_tol: float=1e-6):
@@ -971,12 +973,15 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     uvp_in : UVPSpec object
         Input UVPSpec to average
 
-    kbins : array-like
-        1D float array of ascending |k| bin centers in [h] Mpc^-1 units
+    kbin_edges : array-like
+        1D float array of ascending |k| bin edges in [h] Mpc^-1 units
         (h included if little_h is True)
 
-    bin_widths : array-like
-        1D float array of kbin widths for each element in kbins
+    kbin_edges_in : array-like
+        1D float array of ascending |k| bin edges in [h] Mpc^-1 units
+        (h included if little_h is True)
+        Default is None, that is kbins_in = kbins.
+        Output window function will have shape (kbins, kbins_in).
 
     blpair_groups : list of tuples,
         blpair_groups to average if fed (cylindrical binning)
@@ -1015,14 +1020,16 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     --------
     wf_spherical : array
         Array of spherical window functions.
-        Shape (nbinsk, nbinsk).
+        Shape (kbins.size, kbins_in.size).
 
     """
 
     # input checks
 
-    if isinstance(bin_widths, (float, int)):
-        bin_widths = np.ones_like(kbins) * bin_widths
+    if kbin_edges_in is None:
+        kbin_edges_in = np.copy(kbin_edges)
+    Nk = np.size(kbin_edges) - 1
+    Nk_in = np.size(kbin_edges_in) - 1
 
     # if window functions have been computed without little h
     # it is not possible to re adjust so kbins need to be in Mpc-1
@@ -1032,20 +1039,17 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                       'with uvp.window_function_array. Might be inconsistent ' \
                       'with the power spectrum units.')
         if little_h:
-            kbins *= uvp_in.cosmo.h 
-            bin_widths *= uvp_in.cosmo.h 
+            kbin_edges *= uvp_in.cosmo.h 
+            kbin_edges_in *= uvp_in.cosmo.h 
         else:
-            kbins /= uvp_in.cosmo.h
-            bin_widths /= uvp_in.cosmo.h
+            kbin_edges /= uvp_in.cosmo.h
+            kbin_edges_in /= uvp_in.cosmo.h
         little_h = 'h^-3' in uvp_in.norm_units
 
     # ensure bins don't overlap
-    assert len(kbins) == len(bin_widths)
-    kbin_left = kbins - bin_widths / 2
-    kbin_right = kbins + bin_widths / 2
-    assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
-    Nk = len(kbins)
-
+    assert np.all(np.diff(kbin_edges) > 0), "kbins must not overlap"
+    assert np.all(np.diff(kbin_edges_in) > 0), "kbins_in must not overlap"
+    
     # copy input
     uvp = copy.deepcopy(uvp_in) 
 
@@ -1112,7 +1116,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         kmags = np.sqrt(kperps[:, None]**2 + kparas**2)
 
         # setup arrays 
-        window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
+        window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk_in, uvp.Npols), dtype=np.float64)
 
         # iterate over polarisation
         spw_window_function = []
@@ -1129,14 +1133,14 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
             # take average for each time
             for it in range(uvp.Ntimes):
-                wf_spherical = np.zeros((Nk, Nk))
+                wf_spherical = np.zeros((Nk, Nk_in))
                 for m1 in range(Nk):
-                    mask1 = (kbin_left[m1] <= kmags) & (kmags < kbin_right[m1])
+                    mask1 = (kbin_edges[m1] <= kmags) & (kmags < kbin_edges[m1+1])
                     if np.any(mask1):
                         wf_temp = np.sum(cyl_wf[it, ...]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
                         if np.sum(wf_temp) > 0.: 
-                            for m2 in range(Nk):
-                                mask2 = (kbin_left[m2] <= ktot) & (ktot < kbin_right[m2])
+                            for m2 in range(Nk_in):
+                                mask2 = (kbin_edges_in[m2] <= ktot) & (ktot < kbin_edges_in[m2+1])
                                 if np.any(mask2): #cannot compute mean if zero elements
                                     wf_spherical[m1, m2] = np.mean(wf_temp[mask2])
                             # normalisation

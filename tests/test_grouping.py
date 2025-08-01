@@ -626,9 +626,10 @@ def test_spherical_wf_from_uvp():
 
     # parameters
     dk = 0.25
-    kbins = np.arange(0.1, 2.9, dk)
-    Nk = len(kbins)
-    print(kbins[0])
+    kbin_edges = np.arange(0.075, 2.9, dk)
+    Nk = kbin_edges.size - 1
+    kbin_edges_in = np.arange(0.075, 2.9, dk/2.)
+    Nk_in = kbin_edges_in.size - 1
 
     basename = 'FT_beam_HERA_dipole_test'
     # obtain uvp object
@@ -640,7 +641,7 @@ def test_spherical_wf_from_uvp():
     # Create a new PSpecData objec
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
     # choose baselines
-    baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
+    baselines1, baselines2, _ = utils.construct_blpairs(uvd.get_antpairs()[1:],
                                                               exclude_permutations=False,
                                                               exclude_auto_bls=True)
     # compute ps
@@ -651,69 +652,94 @@ def test_spherical_wf_from_uvp():
     # obtain exact_windows (fiducial usage)
     uvp.get_exact_window_functions(ftbeam=os.path.join(DATA_PATH, basename),
                                    inplace=True)
-    wf_array = grouping.spherical_wf_from_uvp(uvp,
-                                              kbins=np.arange(0.1, 2.9, dk),
-                                              bin_widths=dk,
-                                              little_h='h^-3' in uvp.norm_units)
+    wf_array = grouping.spherical_wf_from_uvp(
+        uvp,
+        kbin_edges=kbin_edges,
+        little_h='h^-3' in uvp.norm_units
+    )
+    assert wf_array[0].shape == (uvp.Ntimes, Nk, Nk, uvp.Npols)
 
     # test different options
+    # non square window functions
+    wf_array2 = grouping.spherical_wf_from_uvp(
+        uvp,
+        kbin_edges=kbin_edges,
+        kbin_edges_in=kbin_edges_in,
+        little_h='h^-3' in uvp.norm_units
+    )    
+    assert wf_array2[0].shape == (uvp.Ntimes, Nk, Nk_in, uvp.Npols)
     # little_h
-    wf_array = grouping.spherical_wf_from_uvp(uvp, 
-                                              kbins = np.arange(0.1, 2.9, dk)/uvp.cosmo.h,
-                                              bin_widths= dk/uvp.cosmo.h,
-                                              little_h=True)
+    wf_array = grouping.spherical_wf_from_uvp(
+        uvp, 
+        kbin_edges=kbin_edges/uvp.cosmo.h,
+        little_h=True
+    )
     # spw_array
-    wf_array = grouping.spherical_wf_from_uvp(uvp,
-                                              kbins=np.arange(0.1, 2.9, dk),
-                                              bin_widths=dk, spw_array=0,
-                                              little_h='h^-3' in uvp.norm_units)
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
-                  kbins=np.arange(0.1, 2.9, dk), bin_widths=dk,
-                  spw_array=2, little_h='h^-3' in uvp.norm_units)
+    wf_array = grouping.spherical_wf_from_uvp(
+        uvp,
+        kbin_edges,
+        spw_array=0,
+        little_h='h^-3' in uvp.norm_units
+    )
+    pytest.raises(
+        AssertionError,
+        grouping.spherical_wf_from_uvp, 
+        uvp,
+        kbin_edges,
+        spw_array=2, little_h='h^-3' in uvp.norm_units
+    )
      # blpair_groups
     blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
-    wf_array = grouping.spherical_wf_from_uvp(uvp,
-                                              kbins=np.arange(0.1, 2.9, dk),
-                                              bin_widths=dk,
-                                              blpair_groups=blpair_groups,
-                                              blpair_lens=blpair_lens,
-                                              little_h='h^-3' in uvp.norm_units)
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
-                  kbins=np.arange(0.1, 2.9, dk), bin_widths=dk,
-                  blpair_groups=blpair_groups[0], little_h='h^-3' in uvp.norm_units)
+    wf_array = grouping.spherical_wf_from_uvp(
+        uvp,
+        kbin_edges,
+        blpair_groups=blpair_groups,
+        blpair_lens=blpair_lens,
+        little_h='h^-3' in uvp.norm_units)
+    pytest.raises(
+        AssertionError, 
+        grouping.spherical_wf_from_uvp, 
+        uvp,
+        kbin_edges=kbin_edges,
+        blpair_groups=blpair_groups[0], little_h='h^-3' in uvp.norm_units
+    )
 
     # raise warning or error if blpair_groups inconsistent with blpair_lens
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins=np.arange(0.1, 2.9, dk),
-                                              bin_widths=dk,
-                                              blpair_groups=None,
-                                              blpair_lens=blpair_lens,
-                                              little_h='h^-3' in uvp.norm_units)
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins=np.arange(0.1, 2.9, dk),
-                                              bin_widths=dk,
-                                              blpair_groups=blpair_groups,
-                                              blpair_lens=None,
-                                              little_h='h^-3' in uvp.norm_units)
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
-                  kbins=np.arange(0.1, 2.9, dk), bin_widths=dk,
-                  blpair_groups=blpair_groups, blpair_lens=[blpair_lens[0],blpair_lens[0]],
-                  little_h='h^-3' in uvp.norm_units)
+    wf_array = grouping.spherical_wf_from_uvp(
+        uvp, kbin_edges,
+        blpair_groups=None,
+        blpair_lens=blpair_lens,
+        little_h='h^-3' in uvp.norm_units)
+    wf_array = grouping.spherical_wf_from_uvp(
+        uvp, kbin_edges,
+        blpair_groups=blpair_groups,
+        blpair_lens=None,
+        little_h='h^-3' in uvp.norm_units)
+    pytest.raises(
+        AssertionError,
+        grouping.spherical_wf_from_uvp, 
+        uvp, kbin_edges,
+        blpair_groups=blpair_groups, blpair_lens=[blpair_lens[0],blpair_lens[0]],
+        little_h='h^-3' in uvp.norm_units)
     # error if overlapping bins
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
-                 kbins=np.arange(0.1, 2.9, dk), bin_widths=1.0)
+    pytest.raises(
+        AssertionError,
+        grouping.spherical_wf_from_uvp,
+        uvp, kbin_edges=np.array([1., 2., 1.5]))
     # # blpair_weights
-    wf_array = grouping.spherical_wf_from_uvp(uvp, kbins=np.arange(0.1, 2.9, dk),
-                                              bin_widths=dk,
-                                              blpair_groups=blpair_groups,
-                                              blpair_lens=blpair_lens,
-                                              little_h='h^-3' in uvp.norm_units)
-                                              # blpair_weights=[[1. for item in grp] for grp in blpair_groups],
+    wf_array = grouping.spherical_wf_from_uvp(
+        uvp, kbin_edges,
+        blpair_groups=blpair_groups,
+        blpair_lens=blpair_lens,
+        little_h='h^-3' in uvp.norm_units)
+        # blpair_weights=[[1. for item in grp] for grp in blpair_groups],
 
     # raise error if uvp.exact_windows is False
     uvp.exact_windows = False
-    pytest.raises(AssertionError, grouping.spherical_wf_from_uvp, uvp,
-                  kbins=np.arange(0.1, 2.9, dk), bin_widths=dk,
-                  little_h='h^-3' in uvp.norm_units)
-
+    pytest.raises(
+        AssertionError, grouping.spherical_wf_from_uvp,
+        uvp, kbin_edges,
+        little_h='h^-3' in uvp.norm_units)
 
 class TestAverageDelayBins:
     """Tests of the average_in_delay_bins function."""
