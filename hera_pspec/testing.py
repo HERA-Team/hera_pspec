@@ -107,6 +107,7 @@ def build_vanilla_uvpspec(
     uvp.r_params = ""
     uvp.cov_model = "dsets"
     uvp.exact_windows = False
+    uvp.delay_avg = False
     
     label1 = "red"
     label2 = "blue"
@@ -140,9 +141,17 @@ def build_vanilla_uvpspec(
         # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((uvp.Nbltpairs, uvp.Npols), dtype=float)
         nsample_array[s] = np.ones((uvp.Nbltpairs, uvp.Npols), dtype=float)
-        window_function_array[s] = np.ones(
-            (uvp.Nbltpairs, uvp.Ndlys, uvp.Ndlys, uvp.Npols), dtype=np.float64
+        # if uvp.Nfreqs == uvp.Ndlys:
+        Wv = np.diag(np.ones(uvp.Ndlys, dtype=np.float64))
+        window_function_array[s] = np.repeat(
+            # repeat along blpairtime axis
+            np.repeat(Wv[None, :], uvp.Nbltpairs, axis=0)[..., None],
+            uvp.Npols, axis=-1,  # repeat along polarization axis
         )
+        # else:
+        #     window_function_array[s] = np.ones(
+        #         (uvp.Nbltpairs, uvp.Ndlys, uvp.Ndlys, uvp.Npols), dtype=np.float64
+        #     )
         cov_array_real[s] = np.moveaxis(
             np.array(
                 [
@@ -172,10 +181,10 @@ def build_vanilla_uvpspec(
     uvp.nsample_array = nsample_array
     uvp.window_function_array = window_function_array
     uvp.cosmo = cosmo
-    
+
     # From v0.5, this must always be true.
     uvp.Ntimes = uvp.Ntpairs
-    
+
     uvp.check()
 
     return uvp, cosmo

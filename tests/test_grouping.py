@@ -782,7 +782,40 @@ class TestAverageDelayBins:
         new = grouping.average_in_delay_bins(self.uvp, kernel=np.array([1,1,1]))
         
         assert len(new.get_dlys(0)) - 1 == (len(self.uvp.get_dlys(0)) - 1)//3
-        
+
+    def test_propagation(self):
+
+        new = grouping.average_in_delay_bins(self.uvp, kernel=np.array([1, 1, 1]))
+
+        # window functions propagation
+        assert np.allclose(
+            np.mean(self.uvp.window_function_array[0][:, 1:4], axis=1),
+            new.window_function_array[0][:, 0, :, :]
+        )
+
+        # folding
+        ispw = 0
+        folded_uvp = copy.deepcopy(self.uvp)
+        grouping.fold_spectra(folded_uvp)
+        Ndlys = self.uvp.data_array[ispw].shape[1]
+        assert not folded_uvp.window_function_array[ispw][:, :Ndlys//2].any(), \
+            "Window functions wrongly propagated by grouping.fold_spectra"
+
+        # time and redundant-average
+        averaged_uvp = grouping.average_spectra(self.uvp, time_avg=True, inplace=False)
+        averaged_new = grouping.average_spectra(new, time_avg=True, inplace=False)
+        assert np.allclose(np.mean(averaged_uvp.window_function_array[0][:, 1:4], axis=1), averaged_new.window_function_array[0][:, 0, :, :]), \
+            "Window functions wrongly propagated by grouping.average_spectra"
+
+        # spherical average
+        kbins = np.arange(0, 2.9, 0.25)
+        sph_uvp = grouping.spherical_average(averaged_uvp, kbins, np.diff(kbins).mean())
+        sph_new = grouping.spherical_average(averaged_new, kbins, np.diff(kbins).mean())
+        assert np.allclose(
+            sph_uvp.window_function_array[0][0, ..., 0],
+            sph_new.window_function_array[0][0, ..., 0]), \
+            "Window functions wrongly propagated by grouping.spherical_average"
+
     @pytest.mark.parametrize("with_cov", [True, False])
     @pytest.mark.parametrize("cov_weighted_stats", [(), ('P_N',)])
     def test_pn_weighting(self, with_cov: bool, cov_weighted_stats):

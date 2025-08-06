@@ -2,7 +2,7 @@ import unittest
 import pytest
 import numpy as np
 from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec import testing, pspecbeam, UVPSpec
+from hera_pspec import testing, grouping, pspecbeam, UVPSpec
 from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 import os
@@ -209,6 +209,17 @@ def test_subtract_uvp():
     assert isinstance(uvs, UVPSpec)
     assert hasattr(uvs, "stats_array")
     assert hasattr(uvs, "cov_array_real")
+    assert hasattr(uvs, "window_function_array")
+
+    # test with delay-averaged spectra
+    averaged_uvp = grouping.average_in_delay_bins(uvp, kernel=np.array([1, 1, 1]))
+    uvs = uvputils.subtract_uvp(averaged_uvp, averaged_uvp, run_check=True)
+    assert isinstance(uvs, UVPSpec)
+    assert hasattr(uvs, "stats_array")
+    assert hasattr(uvs, "cov_array_real")
+    assert hasattr(uvs, "window_function_array")
+    # make sure you cannot combine spectra if only one have been delay averaged
+    pytest.raises(ValueError, uvputils.subtract_uvp, averaged_uvp, uvp)
 
     # we subtracted uvp from itself, so data_array should be zero
     assert np.isclose(uvs.data_array[0], 0.0).all()
