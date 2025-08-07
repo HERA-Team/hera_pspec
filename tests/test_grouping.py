@@ -808,9 +808,11 @@ class TestAverageDelayBins:
             "Window functions wrongly propagated by grouping.average_spectra"
 
         # spherical average
-        kbins = np.arange(0, 2.9, 0.25)
-        sph_uvp = grouping.spherical_average(averaged_uvp, kbins, np.diff(kbins).mean())
-        sph_new = grouping.spherical_average(averaged_new, kbins, np.diff(kbins).mean())
+        dk = 0.08959223 * 3.
+        kmin = 0.004
+        kbins = np.arange(kmin, 2.3, dk)
+        sph_uvp = grouping.spherical_average(averaged_uvp, kbins, dk, time_avg=True)
+        sph_new = grouping.spherical_average(averaged_new, kbins, dk, time_avg=True)
         assert np.allclose(
             sph_uvp.window_function_array[0][0, ..., 0],
             sph_new.window_function_array[0][0, ..., 0]), \
