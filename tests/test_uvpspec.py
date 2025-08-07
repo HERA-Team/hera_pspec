@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import os
 from hera_pspec.data import DATA_PATH
-from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils, uvwindow
+from hera_pspec import uvpspec, conversions, parameter, pspecbeam, pspecdata, testing, utils, uvwindow, grouping
 from hera_pspec import uvpspec_utils as uvputils
 import copy
 from collections import OrderedDict as odict
@@ -377,9 +377,7 @@ class TestUVPSpec:
 
         # blpair select
         uvp1 = copy.deepcopy(uvp)
-        print(uvp.blpair_array)
         uvp2 = uvp1.select(blpairs=[101102101102, 102103102103], inplace=False)
-        print(uvp2.blpair_array)
         assert uvp2.Nblpairs == 2
 
         # pol select
@@ -766,6 +764,15 @@ class TestUVPSpec:
         assert out.Nblpairs == 4
         assert out.Nbls == 5
 
+        # test with delay averaging
+        new = grouping.average_in_delay_bins(out, kernel=np.array([1, 1, 1]))
+        new1 = grouping.average_in_delay_bins(uvp1, kernel=np.array([1, 1, 1]))
+        new2 = grouping.average_in_delay_bins(uvp2, kernel=np.array([1, 1, 1]))
+        combined_new = uvpspec.combine_uvpspec([new1, new2], merge_history=False)
+        assert np.allclose(combined_new.data_array[0], new.data_array[0]), \
+            "There was an issue combining two delay-averaged UVPSpec objects."
+        pytest.raises(AssertionError, uvpspec.combine_uvpspec, [uvp1, new2])
+
         # optionals
         for spw in out.spw_array:
             ndlys = out.get_spw_ranges(spw)[0][-1]
@@ -790,8 +797,8 @@ class TestUVPSpec:
         uvp3 = copy.deepcopy(uvp1)
         uvp2.polpair_array[0] = 1414
         uvp3.polpair_array[0] = 1313
-        out = uvp1 + uvp2 + uvp3
-        assert out.Npols == 3
+        out2 = uvp1 + uvp2 + uvp3
+        assert out2.Npols == 3
 
         # Test whether n_dlys != Nfreqs works
         uvp4 = testing.uvpspec_from_data(uvd, bls, beam=beam,

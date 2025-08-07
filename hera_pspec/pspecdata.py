@@ -1164,7 +1164,7 @@ class PSpecData:
 
         # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
         self._get_qalt_cached = lru_cache(maxsize=int(self.spw_Ndlys))(utils.get_Q_alt)
-        
+
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
                   time_indices=None):
@@ -3326,6 +3326,7 @@ class PSpecData:
                     else:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
                     pv = self.p_hat(Mv, qv)
+                    # Gv.shape = Hv.shape = (nfreqs, nfreqs)
 
                     # Multiply by scalar
                     if self.primary_beam != None:
@@ -3380,7 +3381,12 @@ class PSpecData:
 
                     # store the window_function
                     if store_window:
+                        # Wv shape = (nfreqs, nfreqs) ie (64, 64)
+                        # qv shape = (nfreqs, ntimes) ie (64, 60)
                         pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
+                        # pol_wf shape = (ntimes, nfreqs, nfreqs) ie (60, 64, 64)
+                        # 4 blps so final wf_array shape for each spw is
+                        # (ntimes * nbls, nfreqs, nfreqs) = (4 * 60 = 240, 64, 64)
 
                     # Get baseline keys
                     if isinstance(blp, list):
@@ -3523,6 +3529,7 @@ class PSpecData:
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = np.array(dset1.channel_width)  # all dsets validated to agree
         uvp.exact_windows = False
+        uvp.delay_avg = False
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         # SGM: I've kept the same API in hera_pspec for now, but we should
