@@ -58,7 +58,7 @@ def fast_merge_baselines(
             "but a suffix of '.{extraname}.pkl'."
         )
     ),
-    progress: bool = typer.Option(default=True, 
+    progress: bool = typer.Option(default=True,
         help=(
             "Whether to show a progress bar while loading the files. This is useful "
             "for large datasets, but can be turned off for small datasets."
@@ -73,44 +73,84 @@ def fast_merge_baselines(
             "metadata that is not stored in the UVPSpec objects themselves."
         )
     ),
+    batch_size: int = typer.Option(
+        default=None,
+        help=(
+            "Number of files to load and merge at a time. Smaller batch sizes use less "
+            "memory but may be slightly slower. If None (default), all files are loaded "
+            "at once. Adjust this based on available RAM and file sizes."
+        )
+    ),
 ):
     """Merge a set of hera_pspec files each representing a single baseline, into one.
-    
-    This can be useful because reading a single file with many baselines is much much 
+
+    This can be useful because reading a single file with many baselines is much much
     faster than reading many files each with a single baseline currently.
     """
-    uvps = {name: [] for name in names}
     if extras is None:
         extras = []
     extra_attrs = {extra: {} for extra in extras}
-    
+
     files = sorted(glob.glob(pattern))
     cns.print(f"Found {len(files)} files matching pattern.")
 
-    for df in tqdm(files, desc="Loading files", unit="file", disable=not progress):
-        # load power spectra
-        psc = container.PSpecContainer(df, mode='r', keep_open=False)
+    # Determine if we're processing in batches
+    if batch_size is None:
+        batch_size = len(files)  # Process all at once
 
-        # Load both the time-averaged and not-time-averaged power spectra.
-        # The time-averaging done in the single-baseline notebook has more
-        # accurate noise calculations that can only be done when the interleaves
-        # are separate.
-        for name in names:
-            uvp = psc.get_pspec(group, name)
-            blp = uvp.get_blpairs()[0]
-            uvps[name].append(uvp)
+    # Initialize accumulated merged results for each name
+    merged_uvps = {name: None for name in names}
 
-        if extras:
-            # load additional metadata stored in header
-            with h5py.File(df, 'r') as f:
-                for extra in extras:
-                    extra_attrs[extra][blp] = f['header'].attrs[extra]
+    # Process files in batches
+    num_batches = (len(files) + batch_size - 1) // batch_size
 
-    cns.print("Merging power spectra")
+    for batch_idx in range(num_batches):
+        start_idx = batch_idx * batch_size
+        end_idx = min((batch_idx + 1) * batch_size, len(files))
+        batch_files = files[start_idx:end_idx]
+
+        if num_batches > 1:
+            cns.print(f"Processing batch {batch_idx + 1}/{num_batches} ({len(batch_files)} files)")
+
+        # Load UVPSpec objects for this batch
+        uvps_batch = {name: [] for name in names}
+
+        for df in tqdm(batch_files, desc=f"Loading batch {batch_idx + 1}/{num_batches}", unit="file", disable=not progress):
+            # load power spectra
+            psc = container.PSpecContainer(df, mode='r', keep_open=False)
+
+            # Load both the time-averaged and not-time-averaged power spectra.
+            # The time-averaging done in the single-baseline notebook has more
+            # accurate noise calculations that can only be done when the interleaves
+            # are separate.
+            for name in names:
+                uvp = psc.get_pspec(group, name)
+                blp = uvp.get_blpairs()[0]
+                uvps_batch[name].append(uvp)
+
+            if extras:
+                # load additional metadata stored in header
+                with h5py.File(df, 'r') as f:
+                    for extra in extras:
+                        extra_attrs[extra][blp] = f['header'].attrs[extra]
+
+        # Merge the batch
+        for name, uvplist in uvps_batch.items():
+            batch_merged = recursive_combine_uvpspec(uvplist)
+
+            # Combine with previous batches
+            if merged_uvps[name] is None:
+                merged_uvps[name] = batch_merged
+            else:
+                merged_uvps[name] = recursive_combine_uvpspec([merged_uvps[name], batch_merged])
+
+        # Clear batch data to free memory
+        del uvps_batch
+
+    cns.print("Writing merged power spectra to file")
     outspec = outpath.parent / f"{outpath.name}.pspec.h5"
     psc = container.PSpecContainer(outspec, mode='rw', keep_open=False)
-    for name, uvplist in uvps.items():
-        uvp = recursive_combine_uvpspec(uvplist)
+    for name, uvp in merged_uvps.items():
         psc.set_pspec(group, name, uvp, overwrite=True)
 
     cns.print(f"Wrote pspecs to file: {outspec}")
