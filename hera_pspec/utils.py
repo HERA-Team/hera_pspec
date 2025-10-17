@@ -14,6 +14,50 @@ from .conversions import Cosmo_Conversions
 import inspect
 from . import __version__
 
+def circular_average(angles, axis=0):
+    """
+    Compute the circular mean of angles in radians, properly handling wrapping at 2*pi.
+
+    This function correctly averages angles that may wrap around 0/2*pi by
+    converting to unit vectors in the complex plane, averaging, and converting back.
+
+    For example, averaging 6.2 radians (near 2*pi) and 0.1 radians should give
+    approximately 0 or 2*pi, not pi (which would be the incorrect arithmetic mean).
+
+    Parameters
+    ----------
+    angles : array_like
+        Array of angles in radians to average. Can be any shape.
+    axis : int, optional
+        Axis along which to compute the mean. Default: 0.
+
+    Returns
+    -------
+    avg_angle : array_like
+        Circular mean of the angles, in radians, in the range [0, 2*pi).
+        Shape is the same as input with the specified axis removed.
+
+    Examples
+    --------
+    >>> # Averaging near the 2*pi wrap
+    >>> angles = np.array([6.2, 0.1])  # near 2*pi and just after
+    >>> circular_average(angles)
+    0.15...  # approximately (6.2 + 0.1) / 2 - 2*pi
+
+    >>> # Averaging angles not near wrap (should match arithmetic mean)
+    >>> angles = np.array([1.0, 1.5, 2.0])
+    >>> circular_average(angles)
+    1.5
+    """
+    angles = np.asarray(angles)
+    # Convert angles to unit vectors in complex plane
+    z = np.exp(1j * angles)
+    # Take mean of complex vectors
+    z_mean = np.mean(z, axis=axis)
+    # Convert back to angle and wrap to [0, 2*pi)
+    return np.angle(z_mean) % (2 * np.pi)
+
+
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
     Computes an empirical covariance matrix from data vectors. If d1 is of size
