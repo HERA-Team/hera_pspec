@@ -7,6 +7,59 @@ from pyuvdata import UVData
 from hera_cal import redcal
 
 
+def test_circular_average():
+    """
+    Test circular averaging function for angles in radians.
+    """
+    # Test case 1: Wrapping scenario near 2*pi
+    # Angles near 2*pi (6.2) and just after wrap (0.1)
+    angles_wrap = np.array([6.2, 0.1])
+    result = utils.circular_average(angles_wrap)
+
+    # Result should be near 0 or 2*pi, NOT near pi
+    assert (result < 0.5) or (result > 5.5), \
+        f"Circular mean near wrap should avoid pi region, got {result}"
+
+    # Verify the buggy arithmetic mean would give wrong result
+    buggy_result = np.mean(angles_wrap)
+    assert 2.5 < buggy_result < 3.5, \
+        "This verifies arithmetic mean gives wrong result near wrap"
+
+    # Test case 2: No wrapping - should match arithmetic mean
+    angles_no_wrap = np.array([1.0, 1.5, 2.0])
+    circular_result = utils.circular_average(angles_no_wrap)
+    arithmetic_result = np.mean(angles_no_wrap)
+
+    assert np.isclose(circular_result, arithmetic_result, atol=1e-10), \
+        f"Circular and arithmetic mean should agree when not wrapping, got {circular_result} vs {arithmetic_result}"
+
+    # Test case 3: Multiple wrapping scenarios
+    # Values that span 0 in different directions
+    angles_multi = np.array([6.28, 0.01, 6.25, 0.05])
+    result_multi = utils.circular_average(angles_multi)
+    assert (result_multi < 0.5) or (result_multi > 5.5), \
+        f"Multiple angles near wrap should avoid pi region, got {result_multi}"
+
+    # Test case 4: 2D array averaging along axis 0
+    angles_2d = np.array([[6.2, 1.0, 3.0],
+                          [0.1, 1.5, 3.5]])
+    result_2d = utils.circular_average(angles_2d, axis=0)
+
+    assert result_2d.shape == (3,), f"Expected shape (3,), got {result_2d.shape}"
+    assert (result_2d[0] < 0.5) or (result_2d[0] > 5.5), \
+        f"First element should handle wrapping, got {result_2d[0]}"
+    assert np.isclose(result_2d[1], 1.25, atol=1e-10), \
+        f"Second element should be 1.25, got {result_2d[1]}"
+    assert np.isclose(result_2d[2], 3.25, atol=1e-10), \
+        f"Third element should be 3.25, got {result_2d[2]}"
+
+    # Test case 5: Single value
+    single_angle = np.array([1.5])
+    result_single = utils.circular_average(single_angle)
+    assert np.isclose(result_single, 1.5, atol=1e-10), \
+        f"Single angle should return itself, got {result_single}"
+
+
 def test_cov():
     # load another data file
     uvd = UVData()
