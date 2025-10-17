@@ -529,9 +529,9 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             time_2.extend([np.mean(uvp.time_2_array[blpairts])])
             time_avg_arr.extend([np.mean(uvp.time_avg_array[blpairts])])
             # Use circular mean to properly handle 2pi wrapping
-            lst_1.extend([np.angle(np.mean(np.exp(1j * uvp.lst_1_array[blpairts]))) % (2*np.pi)])
-            lst_2.extend([np.angle(np.mean(np.exp(1j * uvp.lst_2_array[blpairts]))) % (2*np.pi)])
-            lst_avg_arr.extend([np.angle(np.mean(np.exp(1j * uvp.lst_avg_array[blpairts]))) % (2*np.pi)])
+            lst_1.extend([utils.circular_average(uvp.lst_1_array[blpairts])])
+            lst_2.extend([utils.circular_average(uvp.lst_2_array[blpairts])])
+            lst_avg_arr.extend([utils.circular_average(uvp.lst_avg_array[blpairts])])
         else:
             blpair_arr.extend(np.ones_like(blpairts, int) * blpg[0])
             time_1.extend(uvp.time_1_array[blpairts])
