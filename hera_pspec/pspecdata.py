@@ -3489,9 +3489,9 @@ class PSpecData:
         uvp.time_avg_array = np.mean([uvp.time_1_array, uvp.time_2_array], axis=0)
         uvp.lst_1_array = np.array(lst1)
         uvp.lst_2_array = np.array(lst2)
-        uvp.lst_avg_array = np.mean([np.unwrap(uvp.lst_1_array),
-                                     np.unwrap(uvp.lst_2_array)], axis=0) \
-                                     % (2*np.pi)
+        # Use circular mean to properly handle 2pi wrapping
+        angles = np.array([uvp.lst_1_array, uvp.lst_2_array])
+        uvp.lst_avg_array = np.angle(np.mean(np.exp(1j * angles), axis=0)) % (2*np.pi)
         uvp.blpair_array = np.array(blp_arr)
         uvp.Nblpairs = len(np.unique(blp_arr))
         # Ntimes in a uvpspec object now means the total number of times.
