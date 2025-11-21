@@ -64,7 +64,7 @@ docs = [
 ]
 tests = [
     "coverage>=4.5.1",
-    "pytest>=3.5.1<9.0",  # pytest 9 breaks pytest-cases (https://github.com/smarie/python-pytest-cases/issues/374)
+    "pytest>=3.5.1,<9.0",  # pytest 9 breaks pytest-cases (https://github.com/smarie/python-pytest-cases/issues/374)
     "pytest-cov>=2.5.1",
     "pytest-cases",
 ]
