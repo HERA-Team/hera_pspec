@@ -577,8 +577,6 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         # if fed as list of tuples, convert to integers
         if isinstance(blpairs[0], tuple):
             blpairs = [uvp.antnums_to_blpair(blp) for blp in blpairs]
-        print("blps:", blpairs)
-        print("blpair_array:", uvp.blpair_array)
         blpair_select = np.logical_or.reduce(
                                    [uvp.blpair_array == blp for blp in blpairs])
         blp_select += blpair_select
