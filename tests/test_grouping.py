@@ -809,13 +809,15 @@ class TestAverageDelayBins:
 
         # spherical average
         dk = 0.08959223 * 3.
-        kmin = 0.004
-        kbins = np.arange(kmin, 2.3, dk)
+        kbin_left = np.arange(dk/3/2, 2.3, dk)
+        kbin_right = kbin_left + dk
+        kbins = (kbin_left + kbin_right) / 2.
         sph_uvp = grouping.spherical_average(averaged_uvp, kbins, dk, time_avg=True)
         sph_new = grouping.spherical_average(averaged_new, kbins, dk, time_avg=True)
         assert np.allclose(
-            sph_uvp.window_function_array[0][0, ..., 0],
-            sph_new.window_function_array[0][0, ..., 0]), \
+            sph_uvp.window_function_array[0][0, :, :-1, 0],
+            # given the bin edges, the final bin is empty in the delay averaged spectrum
+            sph_new.window_function_array[0][0, :, :-1, 0]), \
             "Window functions wrongly propagated by grouping.spherical_average"
 
     @pytest.mark.parametrize("with_cov", [True, False])
