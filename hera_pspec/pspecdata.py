@@ -2727,7 +2727,7 @@ class PSpecData:
         assert isinstance(pol_pair, tuple), err_msg
 
         # take x_orientation from first dset
-        x_orientation = self.dsets[0].telescope.x_orientation
+        x_orientation = self.dsets[0].telescope.get_x_orientation_from_feeds()
 
         # convert elements to integers if fed as strings
         if isinstance(pol_pair[0], str):
@@ -3114,14 +3114,15 @@ class PSpecData:
         # convert all polarizations to integers if fed as strings
         _pols = []
         for p in pols:
+            x_orientation = self.dsets[0].telescope.get_x_orientation_from_feeds()
             if isinstance(p, str):
                 # Convert string to pol-integer pair
-                p = (uvutils.polstr2num(p, x_orientation=self.dsets[0].telescope.x_orientation),
-                     uvutils.polstr2num(p, x_orientation=self.dsets[0].telescope.x_orientation))
+                p = (uvutils.polstr2num(p, x_orientation=x_orientation),
+                     uvutils.polstr2num(p, x_orientation=x_orientation))
             if isinstance(p[0], str):
-                p = (uvutils.polstr2num(p[0], x_orientation=self.dsets[0].telescope.x_orientation), p[1])
+                p = (uvutils.polstr2num(p[0], x_orientation=x_orientation), p[1])
             if isinstance(p[1], str):
-                p = (p[0], uvutils.polstr2num(p[1], x_orientation=self.dsets[0].telescope.x_orientation))
+                p = (p[0], uvutils.polstr2num(p[1], x_orientation=x_orientation))
             _pols.append(p)
         pols = _pols
 
@@ -3592,7 +3593,7 @@ class PSpecData:
             if exact_windows:
                 # compute and store exact window functions
                 uvp.get_exact_window_functions(ftbeam=ftbeam, verbose=verbose, 
-                                               x_orientation=self.dsets[0].telescope.x_orientation,
+                                               x_orientation=self.dsets[0].telescope.get_x_orientation_from_feeds(),
                                                inplace=True)
             else:
                 uvp.window_function_array = window_function_array
@@ -3694,7 +3695,7 @@ class PSpecData:
                 indices = dset.antpair2ind(k[:2], ordered=False)
 
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(uvutils.polstr2num(k[-1], x_orientation=self.dsets[0].telescope.x_orientation))
+                polind = pol_list.index(uvutils.polstr2num(k[-1], x_orientation=self.dsets[0].telescope.get_x_orientation_from_feeds()))
 
                 # insert into dset
                 dset.data_array[indices, :, polind] = data[k]

@@ -1066,6 +1066,13 @@ class TestUVPSpec:
         """Test recursive_combine_uvpspec with an empty list."""
         with pytest.raises(ValueError, match="Cannot run recursive_combine_uvpspec on length-0 objects."):
             uvpspec.recursive_combine_uvpspec([])
+        
+    @parametrize_with_cases('uvp', cases=".", glob="*vanilla*")
+    def test_get_enu_bl_vecs(self, uvp):
+        bl_vecs = uvp.get_ENU_bl_vecs()
+        assert bl_vecs.shape == (uvp.Nbls, 3)
+        # test that the first bl vector is zero (since it's the auto)
+        assert np.allclose(bl_vecs[0], np.zeros(3))
 
 def test_conj_blpair_int():
     conj_blpair = uvputils._conj_blpair_int(101102103104)
