@@ -43,7 +43,9 @@ dependencies = [
     "typing-extensions>=4.5.0",
 ]
 dynamic = ['version']
-requires-python = ">=3.11"
+# Note that the restriction on 3.14 can be lifted once 
+# https://github.com/RadioAstronomySoftwareGroup/pyuvdata/pull/1659 is merged.
+requires-python = ">=3.11,<3.14"
 
 [project.urls]
 Documentation = "https://hera-pspec.readthedocs.io/en/latest/"
