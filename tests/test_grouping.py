@@ -599,11 +599,19 @@ def test_spherical_average():
     # exceptions
     pytest.raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)
 
+    # user input kbins theory
+    sph2 = grouping.spherical_average(
+        uvp, kbins, bin_widths, kbins_theory=kbins[:4]
+    )
+    assert np.allclose(
+        sph.window_function_array[0][:, :, :4, :],
+        sph2.window_function_array[0]
+    )
+
     # tests related to exact_windows
     uvd = UVData()
     uvd.read_uvh5(
         os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
-        
     )
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam)
     baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
@@ -743,22 +751,22 @@ def test_spherical_wf_from_uvp():
 
 class TestAverageDelayBins:
     """Tests of the average_in_delay_bins function."""
-    
+
     def setup_class(self):
         beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
         self.beam = pspecbeam.PSpecBeamUV(beamfile)
-        uvp, cosmo = testing.build_vanilla_uvpspec(beam=self.beam, Ndlys=None) # None means take Nfreqs
+        uvp, _ = testing.build_vanilla_uvpspec(beam=self.beam, Ndlys=None) # None means take Nfreqs
         self.uvp = uvp
-        
+
         self.uvp_nocov = copy.deepcopy(self.uvp)
         del self.uvp_nocov.cov_array_real
         del self.uvp_nocov.cov_array_imag
-        
-        self.uvp2 = copy.deepcopy(self.uvp) 
+
+        self.uvp2 = copy.deepcopy(self.uvp)
         gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.uvp2.freq_array, widths=8., pol=1) 
         del self.uvp2.window_function_array
         self.uvp2.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
-        
+
     def test_get_delay_slices_errors(self):
         with pytest.raises(ValueError, match="nzero must be odd!"):
             grouping._get_delay_slices(
@@ -766,7 +774,7 @@ class TestAverageDelayBins:
                 kernel=np.array([1, 1, 1]),
                 zero_kernel=np.array([1, 0, 1, 0]),
             )
-            
+
     def test_exceptions(self):
         """Test that proper exceptions are raised for bad inputs."""
         with pytest.raises(ValueError, match="The kernel must be 1D"):
@@ -785,6 +793,9 @@ class TestAverageDelayBins:
 
     def test_propagation(self):
 
+        """
+        Check if the delay average is properly propagated to UVPSpec properties.
+        """
         new = grouping.average_in_delay_bins(self.uvp, kernel=np.array([1, 1, 1]))
 
         # window functions propagation
@@ -812,13 +823,43 @@ class TestAverageDelayBins:
         kbin_left = np.arange(dk/3/2, 2.3, dk)
         kbin_right = kbin_left + dk
         kbins = (kbin_left + kbin_right) / 2.
-        sph_uvp = grouping.spherical_average(averaged_uvp, kbins, dk, time_avg=True)
-        sph_new = grouping.spherical_average(averaged_new, kbins, dk, time_avg=True)
+        sph_uvp = grouping.spherical_average(self.uvp, kbins, dk, time_avg=True)
+        sph_new = grouping.spherical_average(new, kbins, dk, time_avg=True)
         assert np.allclose(
             sph_uvp.window_function_array[0][0, :, :-1, 0],
             # given the bin edges, the final bin is empty in the delay averaged spectrum
             sph_new.window_function_array[0][0, :, :-1, 0]), \
             "Window functions wrongly propagated by grouping.spherical_average"
+        # if theory kbins are given by the user
+        sph_uvp2 = grouping.spherical_average(
+            self.uvp, kbins, bin_widths=dk,
+            kbins_theory=kbins[::2],
+            time_avg=True
+        )
+        sph_new2 = grouping.spherical_average(
+            new, kbins, bin_widths=dk,
+            kbins_theory=kbins[::2],
+            time_avg=True,
+        )
+        # window functions propagation
+        assert np.allclose(
+            sph_uvp2.window_function_array[0][0, :, :-1, 0],
+            # given the bin edges, the final bin is empty in the delay averaged spectrum
+            sph_new2.window_function_array[0][0, :, :-1, 0]), \
+            "Window functions wrongly propagated by grouping.spherical_average"
+        
+        # tests with exact window functions
+        new2 = grouping.average_in_delay_bins(self.uvp2, kernel=np.array([1, 1, 1]))
+        # delay array propagation
+        assert np.isclose(
+            new2.dly_array[0], np.mean(self.uvp2.dly_array[1:4])
+        ) 
+        # window functions propagation
+        assert np.allclose(
+            np.mean(self.uvp2.window_function_array[0][:, 1:4], axis=1),
+            new2.window_function_array[0][:, 0, ...]
+        ), "Window functions wrongly propagated by grouping.average_in_delay_bins with exact window functions"
+
 
     @pytest.mark.parametrize("with_cov", [True, False])
     @pytest.mark.parametrize("cov_weighted_stats", [(), ('P_N',)])
