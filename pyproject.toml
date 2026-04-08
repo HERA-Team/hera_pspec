@@ -32,7 +32,7 @@ dependencies = [
     "numpy>=2.0",
     "scipy",
     "matplotlib>=3.0",
-    "pyuvdata>=3.2",
+    "pyuvdata>=3.2.5",
     "astropy>=6.0",
     "pyyaml",
     "h5py",
@@ -43,6 +43,9 @@ dependencies = [
     "typing-extensions>=4.5.0",
 ]
 dynamic = ['version']
+# Note that the restriction on 3.14 can be lifted once 
+# https://github.com/RadioAstronomySoftwareGroup/pyuvdata/pull/1659 is merged.
+requires-python = ">=3.11,<3.14"
 
 [project.urls]
 Documentation = "https://hera-pspec.readthedocs.io/en/latest/"
@@ -50,7 +53,7 @@ Repository = "https://github.com/HERA-Team/hera_pspec"
 Changelog = "https://github.com/HERA-Team/hera_pspec/releases"
 Issues = "https://github.com/HERA-Team/hera_pspec/issues"
 
-[project.optional-dependencies]
+[dependency-groups]
 docs = [
     "sphinx>=5.3.0",
     "sphinx_rtd_theme>=1.1.1",
@@ -59,7 +62,6 @@ docs = [
     "ipython",
     "sphinx_autorun",
     "numpydoc>=0.8",
-    "nbsphinx",
     "mock==1.0.1",
 ]
 tests = [
@@ -69,8 +71,8 @@ tests = [
     "pytest-cases",
 ]
 dev = [
-    "hera_pspec[doc,tests]",
-    "hera_pspec[tests]",
+    {include-group = "docs"},
+    {include-group = "tests"},
 ]
 
 [project.scripts]
