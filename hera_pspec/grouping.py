@@ -933,18 +933,18 @@ def spherical_average(uvp_in, kbins, bin_widths, kbins_theory=None, blpair_group
             cov_array_real[spw] = np.moveaxis(cm, 0, -1)
             cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
-        if uvp.exact_windows:
-            window_function_array[spw] = spherical_wf_from_uvp(
-                uvp, np.r_[kbin_left, kbin_right[-1]],
-                kbin_edges_in=np.r_[kbin_left_theory, kbin_right_theory[-1]],
-                blpair_groups=blpair_groups,
-                blpair_weights=blpair_weights,
-                time_avg=time_avg,
-                error_weights=error_weights,
-                spw_array=spw,
-                little_h=True,
-                verbose=True
-            )[spw]
+    if uvp.exact_windows and store_window:
+        window_function_array = spherical_wf_from_uvp(
+            uvp, np.r_[kbin_left, kbin_right[-1]],
+            kbin_edges_in=np.r_[kbin_left_theory, kbin_right_theory[-1]],
+            blpair_groups=blpair_groups,
+            blpair_weights=blpair_weights,
+            time_avg=time_avg,
+            error_weights=error_weights,
+            spw_array=uvp.spw_array,
+            little_h=True,
+            verbose=False
+        )
 
     # handle data arrays
     uvp.data_array = data_array
