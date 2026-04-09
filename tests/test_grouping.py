@@ -636,8 +636,8 @@ def test_spherical_wf_from_uvp():
     dk = 0.25
     kbin_edges = np.arange(0.075, 2.9, dk)
     Nk = kbin_edges.size - 1
-    kbin_edges_in = np.arange(0.075, 2.9, dk/2.)
-    Nk_in = kbin_edges_in.size - 1
+    kbin_edges_theory = np.arange(0.075, 2.9, dk/2.)
+    Nk_in = kbin_edges_theory.size - 1
 
     basename = 'FT_beam_HERA_dipole_test'
     # obtain uvp object
@@ -672,9 +672,9 @@ def test_spherical_wf_from_uvp():
     wf_array2 = grouping.spherical_wf_from_uvp(
         uvp,
         kbin_edges=kbin_edges,
-        kbin_edges_in=kbin_edges_in,
+        kbin_edges_theory=kbin_edges_theory,
         little_h='h^-3' in uvp.norm_units
-    )    
+    )
     assert wf_array2[0].shape == (uvp.Ntimes, Nk, Nk_in, uvp.Npols)
     # little_h
     wf_array = grouping.spherical_wf_from_uvp(
