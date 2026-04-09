@@ -936,7 +936,7 @@ def spherical_average(uvp_in, kbins, bin_widths, kbins_theory=None, blpair_group
     if uvp.exact_windows and store_window:
         window_function_array = spherical_wf_from_uvp(
             uvp, np.r_[kbin_left, kbin_right[-1]],
-            kbin_edges_in=np.r_[kbin_left_theory, kbin_right_theory[-1]],
+            kbin_edges_theory=np.r_[kbin_left_theory, kbin_right_theory[-1]],
             blpair_groups=blpair_groups,
             blpair_weights=blpair_weights,
             time_avg=time_avg,
@@ -998,7 +998,7 @@ def spherical_average(uvp_in, kbins, bin_widths, kbins_theory=None, blpair_group
 
     return uvp
 
-def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_in=None,
+def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_theory=None,
                           blpair_groups=None, blpair_lens=None, blpair_weights=None,
                           error_weights=None, time_avg=False, spw_array=None,
                           little_h=True, verbose=False, time_tol: float=1e-6):
@@ -1017,7 +1017,7 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_in=None,
         1D float array of ascending |k| bin edges in [h] Mpc^-1 units
         (h included if little_h is True)
 
-    kbin_edges_in : array-like
+    kbin_edges_theory : array-like
         1D float array of ascending |k| bin edges in [h] Mpc^-1 units
         (h included if little_h is True)
         Default is None, that is kbins_in = kbins.
@@ -1066,10 +1066,10 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_in=None,
 
     # input checks
 
-    if kbin_edges_in is None:
-        kbin_edges_in = np.copy(kbin_edges)
+    if kbin_edges_theory is None:
+        kbin_edges_theory = np.copy(kbin_edges)
     Nk = np.size(kbin_edges) - 1
-    Nk_in = np.size(kbin_edges_in) - 1
+    Nk_in = np.size(kbin_edges_theory) - 1
 
     # if window functions have been computed without little h
     # it is not possible to re adjust so kbins need to be in Mpc-1
@@ -1078,17 +1078,20 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_in=None,
         warnings.warn('Changed little_h units to make kbins consistent ' \
                       'with uvp.window_function_array. Might be inconsistent ' \
                       'with the power spectrum units.')
+        # we modify the units of the input kbins to be consistent with uvp_in
+        # and, likely, the units of the pre-computed window functions.
         if little_h:
-            kbin_edges *= uvp_in.cosmo.h 
-            kbin_edges_in *= uvp_in.cosmo.h 
+            kbin_edges *= uvp_in.cosmo.h
+            kbin_edges_theory *= uvp_in.cosmo.h
         else:
             kbin_edges /= uvp_in.cosmo.h
-            kbin_edges_in /= uvp_in.cosmo.h
+            kbin_edges_theory /= uvp_in.cosmo.h
+        # final little_h matches the units of uvp_in
         little_h = 'h^-3' in uvp_in.norm_units
 
     # ensure bins don't overlap
     assert np.all(np.diff(kbin_edges) > 0), "kbins must not overlap"
-    assert np.all(np.diff(kbin_edges_in) > 0), "kbins_in must not overlap"
+    assert np.all(np.diff(kbin_edges_theory) > 0), "kbins_in must not overlap"
 
     # copy input
     uvp = copy.deepcopy(uvp_in) 
@@ -1178,9 +1181,9 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_in=None,
                     mask1 = (kbin_edges[m1] <= kmags) & (kmags < kbin_edges[m1+1])
                     if np.any(mask1):
                         wf_temp = np.sum(cyl_wf[it, ...]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
-                        if np.sum(wf_temp) > 0.: 
+                        if np.sum(wf_temp) > 0.:
                             for m2 in range(Nk_in):
-                                mask2 = (kbin_edges_in[m2] <= ktot) & (ktot < kbin_edges_in[m2+1])
+                                mask2 = (kbin_edges_theory[m2] <= ktot) & (ktot < kbin_edges_theory[m2+1])
                                 if np.any(mask2): #cannot compute mean if zero elements
                                     wf_spherical[m1, m2] = np.mean(wf_temp[mask2])
                             # normalisation
