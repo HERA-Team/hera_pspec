@@ -14,6 +14,49 @@ from .conversions import Cosmo_Conversions
 import inspect
 from . import __version__
 
+def circular_average(angles, axis=0):
+    """
+    Compute the circular mean of angles in radians, properly handling wrapping at 2*pi.
+
+    This function correctly averages angles that may wrap around 0/2*pi by
+    converting to unit vectors in the complex plane, averaging, and converting back.
+
+    For example, averaging 6.2 radians (near 2*pi) and 0.1 radians should give
+    approximately 0 or 2*pi, not pi (which would be the incorrect arithmetic mean).
+
+    Parameters
+    ----------
+    angles : array_like
+        Array of angles in radians to average. Can be any shape.
+    axis : int, optional
+        Axis along which to compute the mean. Default: 0.
+
+    Returns
+    -------
+    avg_angle : array_like
+        Circular mean of the angles, in radians, in the range [0, 2*pi).
+        Shape is the same as input with the specified axis removed.
+
+    Examples
+    --------
+    >>> # Averaging near the 2*pi wrap
+    >>> angles = np.array([6.2, 0.1])  # near 2*pi and just after
+    >>> circular_average(angles)
+    0.15...  # approximately (6.2 + 0.1) / 2 - 2*pi
+
+    >>> # Averaging angles not near wrap (should match arithmetic mean)
+    >>> angles = np.array([1.0, 1.5, 2.0])
+    >>> circular_average(angles)
+    1.5
+    """
+    angles = np.asarray(angles)
+    # Convert angles to unit vectors in complex plane
+    z = np.exp(1j * angles)
+    # Take mean of complex vectors
+    z_mean = np.mean(z, axis=axis)
+    # Convert back to angle and wrap to [0, 2*pi)
+    return np.angle(z_mean) % (2 * np.pi)
+
 
 def cov(d1, w1, d2=None, w2=None, conj_1=False, conj_2=True):
     """
@@ -85,6 +128,8 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     $C_{ii}(b, LST) = | V(b_alpha, LST, nu_i) V(b_beta, LST, nu_i) | / {B Delta_t},
     where $b_alpha = (alpha,alpha)$ and $b_beta = (beta,beta)$.
     With LST binned over days, we have $C_{ii}(b, LST) = |V(b_alpha,nu_i,t) V(b_beta, nu_i,t)| / {N_{samples} B Delta_t}$.
+    Wherever nsamples is zero, we assign the median nsamples within the spectral window for that time index and that baseline.
+    If all nsamples are zero, we set the variance to be np.inf.
 
     Parameters
     ----------
@@ -117,9 +162,10 @@ def variance_from_auto_correlations(uvd, bl, spw_range, time_index):
     x_bl1 = uvd.get_data(bl1)[time_index, spw]
     x_bl2 = uvd.get_data(bl2)[time_index, spw]
     nsample_bl = uvd.get_nsamples(bl)[time_index, spw]
-    nsample_bl = np.where(nsample_bl>0, nsample_bl, np.median(uvd.nsample_array[:,:,spw,:]))
+    nsample_bl = np.where(nsample_bl > 0, nsample_bl, (np.median(nsample_bl[nsample_bl > 0]) if np.any(nsample_bl > 0) else 0))
+    df = np.array(uvd.channel_width)[spw]
     # some impainted data have zero nsample while is not flagged, and they will be assigned the median nsample within the spectral window.
-    var = np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl
+    var = np.where(nsample_bl == 0, np.inf, np.abs(x_bl1*x_bl2.conj()) / dt / df / nsample_bl)
 
     return var
 
@@ -326,10 +372,10 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
         List of baseline angles [degrees] (North of East in ENU)
     """
     # get antenna positions
-    antpos1, ants1 = uvd1.get_ENU_antpos(pick_data_ants=False)
-    antpos1 = dict(list(zip(ants1, antpos1)))
-    antpos2, ants2 = uvd2.get_ENU_antpos(pick_data_ants=False)
-    antpos2 = dict(list(zip(ants2, antpos2)))
+    antpos1 = uvd1.telescope.get_enu_antpos()
+    antpos1 = dict(list(zip(uvd1.telescope.antenna_numbers, antpos1)))
+    antpos2 = uvd2.telescope.get_enu_antpos()
+    antpos2 = dict(list(zip(uvd2.telescope.antenna_numbers, antpos2)))
     antpos = dict(list(antpos1.items()) + list(antpos2.items()))
 
     # assert antenna positions match
@@ -342,7 +388,7 @@ def calc_blpair_reds(uvd1, uvd2, bl_tol=1.0, filter_blpairs=True,
     # calculate xants via flags if asked
     xants1, xants2 = [], []
     if filter_blpairs and uvd1.flag_array is not None and uvd2.flag_array is not None:
-        xants1, xants2 = set(ants1), set(ants2)
+        xants1, xants2 = set(uvd1.telescope.antenna_numbers), set(uvd2.telescope.antenna_numbers)
         baselines = sorted(set(uvd1.baseline_array).union(set(uvd2.baseline_array)))
         for bl in baselines:
             # get antenna numbers
@@ -505,11 +551,6 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     # Get frequency array from input object
     try:
         freqs = data.freq_array
-        if len(freqs.shape) == 2 and freqs.shape[0] == 1:
-            freqs = freqs.flatten() # Support UVData 2D freq_array
-        elif len(freqs.shape) > 2:
-            raise ValueError("data.freq_array has unsupported shape: %s" \
-                             % str(freqs.shape))
     except:
         raise AttributeError("Object 'data' does not have a freq_array attribute.")
 
@@ -547,8 +588,7 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
         spw_range.append(spw)
 
     # Unpack from list if only a single tuple was specified originally
-    if is_tuple: return spw_range[0]
-    return spw_range
+    return spw_range[0] if is_tuple else spw_range
 
 
 def spw_range_from_redshifts(data, z_range, bounds_error=True):
@@ -761,7 +801,7 @@ def config_pspec_blpairs(uv_templates, pol_pairs, group_pairs, exclude_auto_bls=
     pol and group selections given pol_pairs and group_pairs.
     """
     # type check
-    if isinstance(uv_templates, (str, np.str)):
+    if isinstance(uv_templates, str):
         uv_templates = [uv_templates]
     assert len(pol_pairs) == len(group_pairs), "len(pol_pairs) must equal "\
                                                "len(group_pairs)"
@@ -1142,14 +1182,18 @@ def get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False, bl_len_range=(0, 1e4),
         List of baseline angles [degrees ENU coords] of each group in reds
     """
     # handle string and UVData object
-    if isinstance(uvd, (str, np.str, UVData)):
+    if isinstance(uvd, (str, UVData)):
         # load filepath
-        if isinstance(uvd, (str, np.str)):
+        if isinstance(uvd, str):
             _uvd = UVData()
             _uvd.read(uvd, read_data=False, file_type=file_type)
             uvd = _uvd
         # get antenna position dictionary
-        antpos, ants = uvd.get_ENU_antpos(pick_data_ants=pick_data_ants)
+        if pick_data_ants:
+            antpos, ants = uvd.get_enu_data_ants()
+        else:
+            antpos = uvd.telescope.get_enu_antpos()
+            ants = uvd.telescope.antenna_numbers
         antpos_dict = dict(list(zip(ants, antpos)))
     elif isinstance(uvd, (dict, odict)):
         # use antenna position dictionary
@@ -1319,14 +1363,14 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
         raise ValueError("beam must be a string, PSpecBeamBase subclass or UVPSpec object")
 
     # convert autos in Jy to Tsys in Kelvin
-    J2K = {pol: beam.Jy_to_mK(uvd.freq_array[0], pol=pol)/1e3 for pol in pols}
+    J2K = {pol: beam.Jy_to_mK(uvd.freq_array, pol=pol)/1e3 for pol in pols}
     for blpol in uvd.get_antpairpols():
         bl, pol = blpol[:2], blpol[2]
         tinds = uvd.antpair2ind(bl)
         if pol.upper() in STOKPOLS:
             pol = 'pI'
         pind = pols.index(pol)
-        uvd.data_array[tinds, 0, :, pind] *= J2K[pol]
+        uvd.data_array[tinds, ..., pind] *= J2K[pol]
 
     if Tsys_outfile is not None:
         uvd.write_uvh5(Tsys_outfile, clobber=True)
@@ -1345,10 +1389,12 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
         If err_type == 'P_SN', uvp should not have any
         incoherent averaging applied.
 
-    auto_Tsys : UVData object, optional
+    auto_Tsys : UVData object.
         Holds autocorrelation Tsys estimates in Kelvin (see uvd_to_Tsys)
         for all antennas and polarizations involved in uvp power spectra.
         Needed for P_N computation, not needed if feeding precomp_P_N.
+        If power spectra were computed from interleaved times then the supplied auto_Tsys should include all of the times that are present in all of the pairs.
+
 
     err_type : str or list of str, options = ['P_N', 'P_SN']
         Type of thermal noise error to compute. P_N is the standard
@@ -1386,7 +1432,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     if precomp_P_N is None:
         lst_indices = np.unique(auto_Tsys.lst_array, return_index=True)[1]
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
-        freqs = auto_Tsys.freq_array[0]
+        freqs = np.squeeze(auto_Tsys.freq_array)
     # calculate scalars for spws and polpairs.
     scalar = {}
     for spw in uvp.spw_array:
@@ -1397,13 +1443,27 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
     for spw in uvp.spw_array:
         # get spw properties
         spw_range = uvp.get_spw_ranges(spw)[0]
-        spw_start = np.argmin(np.abs(auto_Tsys.freq_array[0] - spw_range[0]))
+        spw_start = np.argmin(np.abs(np.squeeze(auto_Tsys.freq_array) - spw_range[0]))
         spw_stop = spw_start + spw_range[2]
         taper = uvt.dspec.gen_window(uvp.taper, spw_range[2])
         # iterate over blpairs
         for blp in uvp.get_blpairs():
             blp_int = uvp.antnums_to_blpair(blp)
-            lst_avg = uvp.lst_avg_array[uvp.blpair_to_indices(blp)]
+            blp_inds = uvp.blpair_to_indices(blp)
+
+            time_1_selection = uvp.time_1_array[blp_inds]
+            time_2_selection = uvp.time_2_array[blp_inds]
+
+            # get time indices in data
+            times_blp_1 = auto_Tsys.time_array[auto_Tsys.antpair2ind(blp[0][0], blp[0][0])]
+            times_blp_2 = auto_Tsys.time_array[auto_Tsys.antpair2ind(blp[1][0], blp[1][0])]
+
+            # This time matching is at roughly 1 second tolerance.
+            # Interleaves with < 1 second cadence could run into trouble.
+            # I don't anticipate this being a problem with HERA's 10 second interleave time.
+            tinds1 = [np.where(np.isclose(times_blp_1, t, atol=1e-5, rtol=0))[0][0] for t in time_1_selection]
+            tinds2 = [np.where(np.isclose(times_blp_2, t, atol=1e-5, rtol=0))[0][0] for t in time_2_selection]
+            
             # iterate over polarization
             for polpair in uvp.polpair_array:
                 pol = uvpspec_utils.polpair_int2tuple(polpair)[0]  # integer
@@ -1414,27 +1474,33 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
 
                 if precomp_P_N is None:
                     # take geometric mean of four antenna autocorrs and get OR'd flags
-                    Tsys = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop].real * \
-                            auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop].real)**(1./4)
-                    Tflag = auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[:, spw_start:spw_stop] + \
-                            auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[:, spw_start:spw_stop]
+                    # select out the interleaving of the times
+                    Tsys1 = (auto_Tsys.get_data(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop].real * \
+                             auto_Tsys.get_data(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop].real)**.5
+                    Tsys2 = (auto_Tsys.get_data(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop].real * \
+                             auto_Tsys.get_data(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop].real)**.5
+                    Tflag1 = (auto_Tsys.get_flags(blp[0][0], blp[0][0], pol)[tinds1, spw_start:spw_stop] | \
+                              auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop])
+                    Tflag2 = (auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop] | \
+                              auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop])
+                    
                     # average over frequency
-                    if np.all(Tflag):
+                    if np.all(Tflag1 | Tflag2):
                         # fully flagged
                         Tsys = np.inf
                     else:
                         # get weights
-                        Tsys = np.sum(Tsys * ~Tflag * taper, axis=-1) / np.sum(~Tflag * taper, axis=-1).clip(1e-20, np.inf)
-                        Tflag = np.all(Tflag, axis=-1)
+                        Tsys1 = np.sum(Tsys1 * ~Tflag1 * taper, axis=-1) / np.sum(~Tflag1 * taper, axis=-1).clip(1e-20, np.inf)
+                        Tsys2 = np.sum(Tsys2 * ~Tflag2 * taper, axis=-1) / np.sum(~Tflag2 * taper, axis=-1).clip(1e-20, np.inf)
+                        Tflag1 = np.all(Tflag1, axis=-1)
+                        Tflag2 = np.all(Tflag2, axis=-1)
                         # interpolate to appropriate LST grid
-                        if np.count_nonzero(~Tflag) > 1:
-                            Tsys = interp1d(lsts[~Tflag], Tsys[~Tflag], kind='nearest', bounds_error=False, fill_value='extrapolate')(lst_avg)
+                        if (np.count_nonzero(~Tflag1) > 1) & (np.count_nonzero(~Tflag2) > 1):
+                            Tsys1 = interp1d(lsts[tinds1][~Tflag1], Tsys1[~Tflag1], kind='nearest', bounds_error=False, fill_value='extrapolate')(uvp.lst_1_array[blp_inds])
+                            Tsys2 = interp1d(lsts[tinds2][~Tflag2], Tsys2[~Tflag2], kind='nearest', bounds_error=False, fill_value='extrapolate')(uvp.lst_2_array[blp_inds])
+                            Tsys = (Tsys1 * Tsys2)**.5
                         else:
-                            Tsys = Tsys[0]
+                            Tsys = (Tsys1[0] * Tsys2[0])**.5
 
                     # calculate P_N
                     P_N = uvp.generate_noise_spectra(spw, polpair, Tsys, blpairs=[blp], form='Pk', component='real', scalar=scalar[(spw, polpair)])[blp_int]
@@ -1537,3 +1603,70 @@ def history_string(notes=''):
     """
     return history
 
+
+
+def get_Q_alt(
+    mode: int, n_delays: int, n_freqs: int,  allow_fft: bool=True, include_extension: bool=False, n_extend: float = 0., phase_correction: float = 0.
+):
+    r"""
+    Response of the covariance to a given bandpower, dC / dp_alpha,
+    EXCEPT without the primary beam factors. This is Q_alt as defined
+    in HERA memo #44, so it's not dC / dp_alpha, strictly, but is just
+    the part that does the Fourier transforms.
+
+    Assumes that Q will operate on a visibility vector in frequency space.
+    In the limit that self.spw_Ndlys equals self.spw_Nfreqs, this will
+    produce a matrix Q that performs a two-sided FFT and extracts a
+    particular Fourier mode.
+
+    (Computing x^t Q y is equivalent to Fourier transforming x and y
+    separately, extracting one element of the Fourier transformed vectors,
+    and then multiplying them.)
+
+    When self.spw_Ndlys < self.spw_Nfreqs, the effect is similar except
+    the delay bins need not be in the locations usually mandated
+    by the FFT algorithm.
+
+    Parameters
+    ----------
+    mode : int
+        Central wavenumber (index) of the bandpower, p_alpha.
+    allow_fft : boolean, optional
+        If set to True, allows a shortcut FFT method when
+        the number of delay bins equals the number of delay channels.
+        Default: True
+    include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
+        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
+        (spw_Nfreq x spw_Nfreq).
+
+    Return
+    -------
+    Q : array_like
+        Response matrix for bandpower p_alpha.
+    """
+    if mode >= n_delays or mode < 0:
+        raise IndexError("Cannot compute Q matrix for a mode outside"
+                            "of allowed range of delay modes.")
+    if n_extend:
+        n_freqs = n_freqs + n_extend
+    else:
+        phase_correction = 0.
+
+    if (n_delays == n_freqs) and allow_fft:
+        _m = np.zeros((n_freqs,), dtype=complex)
+        _m[mode] = 1. # delta function at specific delay mode
+        # FFT to transform to frequency space
+        m = np.fft.fft(np.fft.ifftshift(_m))
+    else:
+        if n_delays % 2 == 0:
+            start_idx = -n_delays/2
+        else:
+            start_idx = -(n_delays - 1)/2
+        m = (start_idx + mode) * (np.arange(n_freqs) - phase_correction)
+        m = np.exp(-2j * np.pi * m / n_delays)
+
+    Q_alt = np.einsum('i,j', m.conj(), m) # dot it with its conjugate
+    return Q_alt
+
+def get_Q_alt_tensor(n_delays: int, **kwargs):
+    return np.array([get_Q_alt(mode, n_delays, **kwargs) for mode in range(n_delays)])

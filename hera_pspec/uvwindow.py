@@ -7,7 +7,7 @@ import sys
 import os
 import copy
 import time
-from scipy.interpolate import interp2d
+from scipy.interpolate import RegularGridInterpolator
 from pyuvdata import UVBeam, UVData
 from astropy import units
 from pathlib import Path
@@ -113,7 +113,8 @@ class FTBeam:
         raise NotImplementedError('Coming soon...')
 
     @classmethod
-    def from_file(cls, ftfile, spw_range=None, verbose=False, x_orientation=None):
+    def from_file(cls, ftfile, spw_range=None,
+                  **kwargs):
         """
         Read Fourier transform of beam in sky plane from file.
 
@@ -132,12 +133,6 @@ class FTBeam:
             In (start_chan, end_chan). Must be between 0 and 1024 (HERA
             bandwidth).
             If None, whole instrument bandwidth is considered.
-        verbose : bool, optional
-            If True, print progress, warnings and debugging info to stdout.
-        x_orientation: str, optional
-            Orientation in cardinal direction east or north of X dipole.
-            Default keeps polarization in X and Y basis.
-            Used to convert polstr to polnum and conversely.
         """
         # check file path input
         ftfile = Path(ftfile)
@@ -166,8 +161,71 @@ class FTBeam:
             freq_array = bandwidth
 
         return cls(data=ft_beam, pol=pol, freq_array=freq_array,
-                   mapsize=mapsize, verbose=verbose, x_orientation=x_orientation)
+                   mapsize=mapsize, **kwargs)
  
+    @classmethod
+    def gaussian(cls, freq_array, widths, pol, 
+                 mapsize=1.0, npix=301,
+                 cosmo=conversions.Cosmo_Conversions(),
+                 **kwargs):
+        """
+        Initiliase a Gaussian beam on a range of frequencies,
+        given a polarisation.
+
+        Parameters
+        ----------
+        freq_array : list or array of floats
+            List of frequencies (in Hz) to define the object on.
+        widths : list or array of floats
+            List of widths, in deg, to use for the Gaussian beam in the sky
+            plane. Can be length 1 if the same value is used for all the frequencies.
+            Otherwise, must have same length as freq_array
+        pol : str or int
+            Can be pseudo-Stokes or power: 
+            in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
+            in number form: 1, 2, 4, 3, -5, -6, -7, -8
+        mapsize : float
+            Half width of the map the beam is calculated on, in rad. Increase
+            if you want better k_perp resolution.
+        npix : int
+            Number of pixels to grid sky plane, along one direction.
+            Preferably an odd number.
+        cosmo : conversions.Cosmo_Conversions object, optional
+            Cosmology object. Uses the default cosmology object if not
+            specified. 
+        """
+
+        # Frequency-related parameters
+        freq_array = np.array(freq_array)
+        assert np.size(freq_array) > 2, \
+            "Must use at least three frequencies."
+
+        # Beam widths per frequency
+        if isinstance(widths, (float, int)):
+            widths = np.ones_like(freq_array) * widths
+        else:
+            assert np.shape(widths) == np.shape(freq_array), \
+                "There must be as many frequencies as widths."
+        # convert to radian
+        if np.mean(widths) < 1:
+            warnings.warn('Small widths: make sure the input is in degrees.')
+        widths = np.array(widths) * np.pi / 180.
+        # convert widths to Fourier space
+        FT_widths = (1. / np.pi / widths) 
+
+        # corresponding grid in Fourier space
+        FT_x = np.fft.fftfreq(npix) * npix/2./mapsize
+        FT_x = np.fft.fftshift(FT_x)
+
+        # The Fourier transform of the beam is a Gaussian 
+        ft_beam = np.zeros((freq_array.size, npix, npix))
+        for ifreq in range(freq_array.size):
+            Gauss = np.exp(-1 * (FT_x  ** 2 + FT_x[:, None] ** 2) / (FT_widths[ifreq]**2))
+            ft_beam[ifreq] = Gauss * (np.pi/2./mapsize) * widths[ifreq]**2
+
+        return cls(data=ft_beam, pol=pol, freq_array=freq_array,
+                   mapsize=mapsize, **kwargs)
+
     @classmethod
     def get_bandwidth(cls, ftfile):
         """
@@ -283,11 +341,14 @@ class UVWindow:
 
         # create list of FTBeam objects for each polarisation channel
         self.ftbeam_obj_pol = list(ftbeam_obj) if np.size(ftbeam_obj) > 1 else [ftbeam_obj, ftbeam_obj]
-        assert isinstance(self.ftbeam_obj_pol[0], FTBeam) and isinstance(self.ftbeam_obj_pol[1], FTBeam), \
+        assert hasattr(self.ftbeam_obj_pol[0], 'mapsize') and hasattr(self.ftbeam_obj_pol[1], 'mapsize'), \
             "Wrong input given in ftbeam_obj: must be (a list of) FTBeam object(s)"
         # check if elements in list have same properties
-        assert np.all(self.ftbeam_obj_pol[0].freq_array == self.ftbeam_obj_pol[1].freq_array), \
+        assert len(self.ftbeam_obj_pol[0].freq_array) == len(self.ftbeam_obj_pol[1].freq_array), \
             'Spectral ranges of the two FTBeam objects do not match'
+        if len(self.ftbeam_obj_pol[0].freq_array) == len(self.ftbeam_obj_pol[1].freq_array):
+            assert np.all(self.ftbeam_obj_pol[0].freq_array == self.ftbeam_obj_pol[1].freq_array), \
+                'Spectral ranges of the two FTBeam objects do not match'
         assert self.ftbeam_obj_pol[0].mapsize == self.ftbeam_obj_pol[1].mapsize, \
             'Physical properties of the two FTBeam objects do not match'
 
@@ -301,7 +362,7 @@ class UVWindow:
         self.avg_z = self.cosmo.f2z(self.avg_nu)
 
     @classmethod
-    def from_uvpspec(cls, uvp, ipol, spw, ftfile=None, 
+    def from_uvpspec(cls, uvp, ipol, spw, ftbeam=None, 
                      x_orientation=None, verbose=False):
         """
         Method for :class:`UVWindow` objects.
@@ -316,15 +377,16 @@ class UVWindow:
             Choice of polarisation pair (index of pair in uvp.polpair_array).
         spw : int
             Choice of spectral window (must be in uvp.Nspws).
-        ftfile : str
+        ftbeam : str or FTBeam object
             Access to the Fourier transform of the beam on the sky plane
             (Eq. 10 in Memo)
             Options are;
                 - Load from file. Then input is the root name of the file
                 to use, without the polarisation
                 Ex : ft_beam_HERA_dipole (+ path)
+                - The FTBeam object to use
                 - None (default). Computation from beam simulations (slow).
-                Not yet implemented..
+                Not yet implemented.
         x_orientation: str, optional
             Orientation in cardinal direction east or north of X dipole.
             Default keeps polarization in X and Y basis.
@@ -359,24 +421,28 @@ class UVWindow:
                 # do not recompute if two polarisations are identical
                 ftbeam_obj_pol.append(ftbeam_obj_pol[0])
             else:
-                if ftfile is None:
+                if ftbeam is None:
                     ftbeam_obj_pol.append(FTBeam.from_beam(beamfile='tbd',
                                                            verbose=verbose,
                                                            x_orientation=x_orientation))
-                else:
-                    ftbeam_obj_pol.append(FTBeam.from_file('{}_{}.hdf5'.format(ftfile, pol),
+                elif isinstance(ftbeam, str | Path):
+                    ftbeam_obj_pol.append(FTBeam.from_file(f'{ftbeam}_{pol}.hdf5',
                                                            spw_range=None,
                                                            verbose=verbose,
-                                                           x_orientation=x_orientation))                
+                                                           x_orientation=x_orientation))   
+                elif isinstance(ftbeam, FTBeam):
+                    ftbeam_obj_pol.append(copy.deepcopy(ftbeam))
+                else:
+                    raise TypeError('Check your ftbeam input.')
 
         # limit spectral window of FTBeam object to the one of the UVPSpec object
+        # find spectral indices associated with spectral window
         bandwidth = ftbeam_obj_pol[0].freq_array
-        spw_range = (np.argmin(abs(bandwidth-np.min(freq_array))),
-                     np.argmin(abs(bandwidth-np.max(freq_array)))+1)
+        spw_range = np.array([0, freq_array.size]) + np.where(bandwidth >= freq_array[0]-1e-9)[0][0]
         for ip in range(2):
             if (ip > 0) and (pol[ip] == pol[0]):
                 continue
-            ftbeam_obj_pol[ip].update_spw(spw_range=spw_range)
+            ftbeam_obj_pol[ip].update_spw(spw_range=tuple(spw_range))
 
         return cls(ftbeam_obj=ftbeam_obj_pol,
                    taper=uvp.taper, cosmo=cosmo,
@@ -410,8 +476,9 @@ class UVWindow:
 
         """
         # central kperp for given baseline (i.e. 2pi*b*nu/c/R)
+        # divided by sqrt(2) because 2 dimensions
         kp_centre = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)\
-            * bl_len
+                    * bl_len / np.sqrt(2.)
         # spacing of the numerical Fourier grid, in cosmological units
         dk = 2.*np.pi/(2.*self.ftbeam_obj_pol[0].mapsize)\
             / self.cosmo.dRperp_dtheta(self.cosmo.f2z(self.freq_array.max()),
@@ -502,9 +569,10 @@ class UVWindow:
             # kperp values over frequency array for bl_len
             k = self._kperp4bl_freq(self.freq_array[i], bl_len, ngrid=ngrid)
             # interpolate the FT beam over values onto regular kgrid
-            A_real = interp2d(k, k, ft_beam[i, :, :], bounds_error=False,
-                              fill_value=0.)
-            interp_ft_beam[:, :, i] = A_real(kgrid, kgrid)
+            A_real = RegularGridInterpolator(
+                (k,k), ft_beam[i], bounds_error=False, fill_value=0.0
+            )
+            interp_ft_beam[:, :, i] = A_real(np.array([kgrid, kgrid]).T)
 
         return interp_ft_beam, kperp_norm
 
@@ -597,7 +665,7 @@ class UVWindow:
         alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h,
                                      ghz=False)
         # frequency resolution
-        delta_nu = abs(self.freq_array[-1]-self.freq_array[0])/self.Nfreqs
+        delta_nu = np.median(np.diff(self.freq_array))
         # Fourier dual of frequency (unit 1: FT along theta)
         eta = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs), axes=-1)/delta_nu
         # construct array of |kpara| values for given delay tau
@@ -680,10 +748,10 @@ class UVWindow:
 
         # define default kperp bins,
         dk_para = self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)\
-            / (abs(freq_array[-1]-freq_array[0]))
+            * np.diff(dly_array)[0]
         kpara_max = self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)\
             * abs(dly_array).max()+10.*dk_para
-        kpara_bin_edges = np.arange(dk_para, kpara_max, step=dk_para)
+        kpara_bin_edges = np.arange(dk_para/2., kpara_max, step=dk_para)
         kpara_bins = (kpara_bin_edges[1:]+kpara_bin_edges[:-1])/2
         nbins_kpara = kpara_bins.size
 
@@ -754,8 +822,8 @@ class UVWindow:
         else:
             self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
-        if not np.isclose(np.diff(kperp_bins),np.diff(kperp_bins)[0]).all():
-            warnings.warn('kperp_bins must be linearly spaced.')
+        if not np.allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]):
+            raise ValueError('get_cylindrical_wf: kperp_bins must be linearly spaced.')
         nbins_kperp = kperp_bins.size
         dk_perp = np.diff(kperp_bins).mean()
         kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,
@@ -772,8 +840,8 @@ class UVWindow:
         else:
             self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
-        if not np.isclose(np.diff(kpara_bins),np.diff(kpara_bins)[0]).all():
-            warnings.warn('kpara_bins must be linearly spaced.')
+        if not np.allclose(np.diff(kpara_bins), np.diff(kpara_bins)[0]):
+            raise ValueError('get_cylindrical_wf: kpara_bins must be linearly spaced.')
         nbins_kpara = kpara_bins.size
         dk_para = np.diff(kpara_bins).mean()
         kpara_bin_edges = np.arange(kpara_bins.min()-dk_para/2,
@@ -823,6 +891,11 @@ class UVWindow:
             cyl_wf[self.Nfreqs//2+1:, :, :] = np.flip(cyl_wf, axis=0)[self.Nfreqs//2:-1]
         else:
             cyl_wf[self.Nfreqs//2+1:, :, :] = np.flip(cyl_wf, axis=0)[self.Nfreqs//2+1:]
+        # except for tau at 1/4 and 3/4 of the spectral window for symmetry reasons
+        _, cyl_wf[self.Nfreqs - self.Nfreqs//4, :, :] = self._get_wf_for_tau(-self.dly_array[self.Nfreqs//4],
+                                                                             wf_array1,
+                                                                             kperp_bins,
+                                                                             kpara_bins)
 
         # normalisation of window functions
         sum_per_bin = np.sum(cyl_wf, axis=(1, 2))[:, None, None]
@@ -897,8 +970,8 @@ class UVWindow:
             "must feed array of k bins for spherical average"
         self.check_kunits(kbins)  # check k units
         kbins = np.array(kbins.value)
-        if not np.isclose(np.diff(kbins),np.diff(kbins)[0]).all():
-            warnings.warn('kbins must be linearly spaced.')
+        if not np.allclose(np.diff(kbins), np.diff(kbins)[0]):
+            raise ValueError('cylindrical_to_spherical: kbins must be linearly spaced.')
         nbinsk = kbins.size
         dk = np.diff(kbins).mean()
         kbin_edges = np.arange(kbins.min()-dk/2, kbins.max()+dk, step=dk)
@@ -1008,8 +1081,8 @@ class UVWindow:
         else:
             self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
-        if not np.isclose(np.diff(kperp_bins),np.diff(kperp_bins)[0]).all():
-            warnings.warn('kperp_bins must be linearly spaced.')
+        if not np.allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]):
+            raise ValueError('get_spherical_wf: kperp_bins must be linearly spaced.')
         nbins_kperp = kperp_bins.size
         dk_perp = np.diff(kperp_bins).mean()
         kperp_bin_edges = np.arange(kperp_bins.min()-dk_perp/2,
@@ -1035,8 +1108,8 @@ class UVWindow:
         else:
             self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
-        if not np.isclose(np.diff(kpara_bins),np.diff(kpara_bins)[0]).all():
-            warnings.warn('kpara_bins must be linearly spaced.')
+        if not np.allclose(np.diff(kpara_bins), np.diff(kpara_bins)[0]):
+            raise ValueError('get_spherical_wf: kpara_bins must be linearly spaced.')
         nbins_kpara = kpara_bins.size
         dk_para = np.diff(kpara_bins).mean()
         kpara_bin_edges = np.arange(kpara_bins.min() - dk_para/2,
@@ -1060,8 +1133,8 @@ class UVWindow:
         assert kbins.value.size > 1, \
             "must feed array of k bins for spherical average"
         nbinsk = kbins.value.size
-        if not np.isclose(np.diff(kbins),np.diff(kbins)[0]).all():
-            warnings.warn('kbins must be linearly spaced.')
+        if not np.allclose(np.diff(kbins),np.diff(kbins)[0]):
+            raise ValueError('get_spherical_wf: kbins must be linearly spaced.')
         dk = np.diff(kbins.value).mean()
         kbin_edges = np.arange(kbins.value.min()-dk/2,
                                kbins.value.max()+dk,

@@ -7,7 +7,7 @@ import argparse
 from astropy import stats as astats
 import os, sys
 
-from . import utils, version, uvpspec_utils as uvputils
+from . import utils, version, __version__, uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
 from .uvwindow import UVWindow
 
@@ -103,7 +103,8 @@ def sample_baselines(bls, seed=None):
 def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                     blpair_weights=None, error_field=None,
                     error_weights=None, normalize_weights=True,
-                    inplace=True, add_to_history=''):
+                    inplace=True, add_to_history='',
+                    time_tol: float = 1e-6):
     """
     Average power spectra across the baseline-pair-time axis, weighted by
     each spectrum's integration time or a specified kind of error bars.
@@ -177,6 +178,11 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
     add_to_history : str, optional
         Added text to add to file history.
+
+    time_tol : float, optional
+        The tolerance for checking if times are equivalent, in order to count
+        "unique" time-pairs in the average. The units are (julian) days. Setting too
+        low can result in numerical noise creating more time-pairs than expected.
 
     Notes
     -----
@@ -259,7 +265,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     # stat_l is a list of supplied error_fields, to sum over.
     if isinstance(error_field, (list, tuple, np.ndarray)):
         stat_l = list(error_field)
-    elif isinstance(error_field, (str, np.str)):
+    elif isinstance(error_field, str):
         stat_l = [error_field]
     else:
         stat_l = []
@@ -522,11 +528,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
             time_1.extend([np.mean(uvp.time_1_array[blpairts])])
             time_2.extend([np.mean(uvp.time_2_array[blpairts])])
             time_avg_arr.extend([np.mean(uvp.time_avg_array[blpairts])])
-            lst_1.extend([np.mean(np.unwrap(uvp.lst_1_array[blpairts]))%(2*np.pi)])
-            lst_2.extend([np.mean(np.unwrap(uvp.lst_2_array[blpairts]))%(2*np.pi)])
-            lst_avg_arr.extend([np.mean(np.unwrap(uvp.lst_avg_array[blpairts]))%(2*np.pi)])
+            # Use circular mean to properly handle 2pi wrapping
+            lst_1.extend([utils.circular_average(uvp.lst_1_array[blpairts])])
+            lst_2.extend([utils.circular_average(uvp.lst_2_array[blpairts])])
+            lst_avg_arr.extend([utils.circular_average(uvp.lst_avg_array[blpairts])])
         else:
-            blpair_arr.extend(np.ones_like(blpairts, np.int) * blpg[0])
+            blpair_arr.extend(np.ones_like(blpairts, int) * blpg[0])
             time_1.extend(uvp.time_1_array[blpairts])
             time_2.extend(uvp.time_2_array[blpairts])
             time_avg_arr.extend(uvp.time_avg_array[blpairts])
@@ -540,11 +547,12 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                         for bl in bl_arr])
 
     # Assign arrays and metadata to UVPSpec object
-    uvp.Ntimes = len(np.unique(time_avg_arr))
-    uvp.Nblpairts = len(time_avg_arr)
+    uvp.Nbltpairs = len(time_avg_arr)
     uvp.Nblpairs = len(np.unique(blpair_arr))
     uvp.Nbls = len(bl_arr)
-
+    uvp.Ntpairs = len(set((np.round(t1/time_tol,0), np.round(t2/time_tol, 0)) for t1, t2 in zip(time_1, time_2)))
+    uvp.Ntimes = uvp.Ntpairs
+    
     # Baselines
     uvp.bl_array = bl_arr
     uvp.bl_vecs = bl_vecs
@@ -579,7 +587,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         delattr(uvp, "stats_array")
 
     # Add to history
-    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
+    uvp.history = "Spectra averaged with hera_pspec [{}]\n{}\n{}\n{}".format(__version__, add_to_history, '-'*40, uvp.history)
     # Validity check
     uvp.check()
 
@@ -589,7 +597,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
 
 
 def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
-                      weight_by_cov=False, error_weights=None,
+                      weight_by_cov=False, error_weights=None, time_tol: float = 1e-6,
                       add_to_history='', little_h=True, A={}, run_check=True):
     """
     Perform a spherical average of a UVPSpec, mapping k_perp & k_para onto a |k| grid.
@@ -639,6 +647,11 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     run_check : bool, optional
         If True, run UVPSpec.check() on resultant object
 
+    time_tol : float, optional
+        The tolerance for checking if times are equivalent, in order to count
+        "unique" time-pairs in the average. The units are (julian) days. Setting too
+        low can result in numerical noise creating more time-pairs than expected.
+        
     Returns
     --------
     UVPSpec object
@@ -681,6 +694,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     # perform time and cylindrical averaging upfront if requested
     if not uvp.exact_windows and (blpair_groups is not None or time_avg):
         uvp.average_spectra(blpair_groups=blpair_groups, time_avg=time_avg,
+                            time_tol=time_tol,
                             blpair_weights=blpair_weights, error_weights=error_weights,
                             inplace=True)
 
@@ -734,7 +748,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
 
 
-        # get kperps for this spw: shape (Nblpairts,)
+        # get kperps for this spw: shape (Nbltpairs,)
         kperps = uvp.get_kperps(spw, little_h=True)
 
         # get kparas for this spw: shape (Ndlys,)
@@ -747,7 +761,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         dlys_array.extend(taus)
 
         # store kbins as delay bins
-        spw_dlys_array.extend(np.ones_like(taus, dtype=np.int) * spw)
+        spw_dlys_array.extend(np.ones_like(taus, dtype=int) * spw)
 
         # iterate over blpairs
         for b, blp in enumerate(uvp.get_blpairs()):
@@ -866,6 +880,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 # get squared stat and clip infs b/c linalg doesn't like them
                 sq_stat = stats_array[stat][spw].copy()
                 np.square(sq_stat, out=sq_stat, where=np.isfinite(sq_stat))
+                sq_stat = np.nan_to_num(sq_stat, copy=False, nan=np.inf, posinf=np.inf)
                 # einsum is fast enough for this, and is more succinct than matmul
                 avg_stat = np.sqrt(np.einsum("ptik,tip,ptik->tkp", H, sq_stat.clip(0, 1e40), H))
                 # set zeroed stats to large number
@@ -914,7 +929,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     blp = uvp.blpair_array[0]
     blp_inds = uvp.blpair_to_indices(blp)
     uvp.blpair_array = uvp.blpair_array[blp_inds]
-    uvp.Nblpairts = uvp.Ntimes
+    uvp.Nbltpairs = uvp.Ntpairs
     uvp.Nblpairs = 1
     bl_array = np.unique([uvp.antnums_to_bl(an) for an in uvp.blpair_to_antnums(blp)])
     uvp.bl_vecs = np.asarray([uvp.bl_vecs[np.argmin(uvp.bl_array - bl)] for bl in bl_array])
@@ -935,8 +950,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     uvp.lst_1_array = np.unique(uvp_in.lst_1_array)
     uvp.lst_2_array = np.unique(uvp_in.lst_2_array)
 
-    # Add to history
-    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(version.git_hash[:15], add_to_history, '-'*40, uvp.history)
+    uvp.history = "Spherically averaged with hera_pspec [{}]\n{}\n{}\n{}".format(__version__, add_to_history, '-'*40, uvp.history)
 
     # validity check
     if run_check:
@@ -945,9 +959,9 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
     return uvp
 
 def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
-                        blpair_groups=None, blpair_lens=None, blpair_weights=None,
-                        error_weights=None, time_avg=False, spw_array=None,
-                        little_h=True, verbose=False):
+                          blpair_groups=None, blpair_lens=None, blpair_weights=None,
+                          error_weights=None, time_avg=False, spw_array=None,
+                          little_h=True, verbose=False, time_tol: float=1e-6):
     
     """
     Obtains exact spherical window functions from an UVPspec object,
@@ -986,7 +1000,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         Spectral window indices.
 
     little_h : bool, optional
-        If True, kgrid is in h Mpc^-1 units, otherwise just Mpc^-1 units.
+        If True, kbins is in h Mpc^-1 units, otherwise just Mpc^-1 units.
         The code ensures adopted h is consistent with uvp_in.cosmo. If not,
         it modifies the unit of kbins.
 
@@ -994,6 +1008,11 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         If True, print progress, warnings and debugging info to stdout.
         If None, value used is the class attribute.
 
+    time_tol : float, optional
+        The tolerance for checking if times are equivalent, in order to count
+        "unique" time-pairs in the average. The units are (julian) days. Setting too
+        low can result in numerical noise creating more time-pairs than expected.
+        
     Returns
     --------
     wf_spherical : array
@@ -1007,6 +1026,21 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
         
+    # if window functions have been computed without little h
+    # it is not possible to re adjust so kbins need to be in Mpc-1
+    # and reciprocally
+    if little_h != ('h^-3' in uvp_in.norm_units):
+        warnings.warn('Changed little_h units to make kbins consistent ' \
+                      'with uvp.window_function_array. Might be inconsistent ' \
+                      'with the power spectrum units.')
+        if little_h:
+            kbins *= uvp_in.cosmo.h 
+            bin_widths *= uvp_in.cosmo.h 
+        else:
+            kbins /= uvp_in.cosmo.h
+            bin_widths /= uvp_in.cosmo.h
+        little_h = 'h^-3' in uvp_in.norm_units
+
     # if window functions have been computed without little h
     # it is not possible to re adjust so kbins need to be in Mpc-1
     # and reciprocally
@@ -1078,6 +1112,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                         blpair_weights=blpair_weights,
                         error_weights=error_weights,
                         time_avg=time_avg,
+                        time_tol=time_tol,
                         inplace=True)
 
     # initialize blank arrays and dicts
@@ -1091,7 +1126,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         # construct array giving the k probed by each baseline-tau pair
         kperps = uvp.cosmo.bl_to_kperp(uvp.cosmo.f2z(avg_nu), little_h=little_h) * blpair_lens
         kparas = uvp.cosmo.tau_to_kpara(uvp.cosmo.f2z(avg_nu), little_h=little_h) * uvp.get_dlys(spw)
-        kmags = np.sqrt(kperps[:, None]**2+kparas**2)
+        kmags = np.sqrt(kperps[:, None]**2 + kparas**2)
 
         # setup arrays 
         window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
@@ -1105,9 +1140,9 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             kpara_bins = uvp.window_function_kpara[spw][:, ip]
             ktot = np.sqrt(kperp_bins[:, None]**2 + kpara_bins**2)
 
-            cyl_wf = uvp.window_function_array[spw][:, :, :, :, ip]
+            cyl_wf = uvp.window_function_array[spw][..., ip]
             # separate baseline-time axis to iterate over times
-            cyl_wf = cyl_wf.reshape((uvp.Ntimes, uvp.Nblpairs, *cyl_wf.shape[1:] ))
+            cyl_wf = cyl_wf.reshape((uvp.Ntimes, uvp.Nblpairs, *cyl_wf.shape[1:]))
 
             # take average for each time
             for it in range(uvp.Ntimes):
@@ -1115,7 +1150,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                 for m1 in range(Nk):
                     mask1 = (kbin_left[m1] <= kmags) & (kmags < kbin_right[m1])
                     if np.any(mask1):
-                        wf_temp = np.sum(cyl_wf[it, :, :, :, :]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
+                        wf_temp = np.sum(cyl_wf[it, ...]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
                         if np.sum(wf_temp) > 0.: 
                             for m2 in range(Nk):
                                 mask2 = (kbin_left[m2] <= ktot) & (ktot < kbin_right[m2])
@@ -1126,7 +1161,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
                                                            where = np.sum(wf_spherical[m1,:]) != 0)
                 spw_window_function.append(wf_spherical)
 
-            window_function_array[spw][:, :, :, ip] = np.copy(spw_window_function)
+            window_function_array[spw][..., ip] = np.copy(spw_window_function)
 
     return window_function_array
 
@@ -1490,8 +1525,8 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
     """
     from hera_pspec import UVPSpec
     # type check
-    assert isinstance(uvp, (UVPSpec, str, np.str)), "uvp must be fed as a UVPSpec object or filepath"
-    if isinstance(uvp, (str, np.str)):
+    assert isinstance(uvp, (UVPSpec, str)), "uvp must be fed as a UVPSpec object or filepath"
+    if isinstance(uvp, str):
         _uvp = UVPSpec()
         _uvp.read_hdf5(uvp)
         uvp = _uvp
@@ -1544,7 +1579,7 @@ def bootstrap_resampled_error(uvp, blpair_groups=None, time_avg=False, Nsamples=
 
     # Update history
     uvp_avg.history = "Bootstrap errors estimated w/ hera_pspec [{}], {} samples, {} seed\n{}\n{}\n{}" \
-                      "".format(version.git_hash[:15], Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
+                      "".format(__version__, Nsamples, seed, add_to_history, '-'*40, uvp_avg.history)
 
     return uvp_avg, uvp_boots, uvp_wgts
 
@@ -1625,7 +1660,7 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
     from hera_pspec import uvpspec
     from hera_pspec import PSpecContainer
     # type check
-    if isinstance(filename, (str, np.str)):
+    if isinstance(filename, str):
         # open in transactional mode
         psc = PSpecContainer(filename, mode='rw', keep_open=False, swmr=False, tsleep=0.5, maxiter=maxiter)
     elif isinstance(filename, PSpecContainer):
@@ -1712,3 +1747,270 @@ def get_bootstrap_run_argparser():
     a.add_argument("--verbose", default=False, action='store_true', help="report feedback to stdout.")
 
     return a
+
+def _bin_data_like_array(d: np.ndarray, kernels: list[np.ndarray], slices: list[slice], axis=1):
+    """Bin a data-like array over the delay axis.
+    
+    This function is an internally used function for :func:`average_in_delay_bins`
+    
+    Parameters
+    ----------
+    d : np.ndarray
+        The data-like array to bin. This is expected to be an ND array with 
+        one of the axes (corresponding to `axis`) having shape Ndelays.
+    kernels : list of np.ndarray
+        The kernels to use for binning. This is a list of 1D arrays, each
+        containing the averaging weights for the corresponding slice.
+    slices : list of slice objects
+        A list of slice objects, each corresponding to a kernel.
+    axis : int, optional
+        The axis along which to bin the data (i.e the delay axis). 
+        Default is 1.
+    """    
+    newshape = list(d.shape)
+    newshape[axis] = len(slices)
+    out = np.zeros(newshape, dtype=d.dtype)
+    
+    for i, (slc, kernel) in enumerate(zip(slices, kernels)):
+        out.swapaxes(-1, axis)[..., i] = np.sum(d.swapaxes(-1, axis)[..., slc] * kernel, axis=-1)
+        
+    return out
+
+def _bin_cov_like_array(cov: np.ndarray, kernels: list[np.ndarray], slices: list[slice]):
+    """Bin a covariance-like array over the delay axis.
+    
+    This function is internally used for :func:`average_in_delay_bins`.
+    """
+    newcov = np.zeros_like(cov)[:, :len(slices), :len(slices)]
+    
+    for i, (k1, slc) in enumerate(zip(kernels, slices)):
+        for j, (k2, slc2) in enumerate(zip(kernels, slices)):
+            kernel2d = np.outer(k1,k2)
+            newcov[:, i, j] = np.sum(cov[:, slc, slc2] * kernel2d[None, :, :, None], axis=(1,2))            
+    return newcov
+    
+def _get_delay_slices(
+    dly: np.ndarray, 
+    kernel: np.ndarray,
+    zero_kernel: np.ndarray = np.ones(1),
+) -> tuple[list[slice], list[np.ndarray]]:
+    """Get slices for binning a delay array.
+    
+    This function is used internally in :func:`average_in_delay_bins`.
+    
+    This function takes an array of delays, *assumed to be ordered in increasing order*,
+    and also symmetric around zero, and a kernel size, and returns a list of slices that 
+    can be used to bin the array. The binning is done in a non-overlapping way. 
+    The central delays around zero are binned with a potentially different kernel
+    size, `nzero`, which gives the ability to start the averaged bins at a different
+    lowest delay.
+    
+    If there an even number of delays, the last delay is ignored.
+    
+    Parameters
+    ----------
+    dly : np.ndarray
+        The delay array to bin.
+    kernel : np.ndarray
+        The kernel to use for binning. This should be a 1D array containing the
+        averaging weights within each non-overlapping bin.
+    zero_kernel : np.ndarray
+        The kernel to use for the zero bin. This must be symmetric and have an odd
+        length. By default, this is a kernel of length 1 with value 1.
+                
+    Returns
+    -------
+    slices : list of slice objects
+        The slices to use for binning the delay array.
+    kernels : list of np.ndarray
+        The kernels to use for binning the delay array. This is a list of the same
+        length as the slices, and contains the kernel to use for each slice.
+    """
+    n = len(dly)
+    zero_idx = np.where(dly==0)[0][0]
+
+    nk = len(kernel)
+    nzero = len(zero_kernel)
+    
+    if nzero % 2 == 0:
+        raise ValueError("nzero must be odd!")
+    
+    # We're going to try to keep the symmetry betwen negative and positive delays.
+    # This means we keep the zero delay un-averaged. 
+    neg_slices = []
+    low = zero_idx - nk - nzero // 2
+    while low >= 0:
+        neg_slices.append(slice(low, low + nk))
+        low -= nk
+
+    pos_slices = []
+    high = zero_idx + 1 + nk + nzero // 2
+    while high <= n:
+        pos_slices.append(slice(high - nk, high))
+        high += nk
+
+    return (
+        neg_slices[::-1] + [slice(zero_idx - nzero//2, zero_idx+1 + nzero//2)] + pos_slices,
+        [kernel]*len(neg_slices) + [zero_kernel] + [kernel]*len(pos_slices)
+    )
+
+def average_in_delay_bins(
+    uvp, 
+    kernel: np.ndarray, 
+    cov_weighted_stats: tuple[str] = ("P_N", "P_SN"),
+    zero_bin_kernel: np.ndarray = np.ones(1),
+):
+    """Average a UVPSpec object within bins of delay.
+    
+    This averages spectra only over the delay axis, for each baseline, time, spw 
+    and pol-pair. The averaging uses a weighting kernel that you can supply. The kernel
+    is applied in a non-overlapping way.
+    
+    Window functions and covariances are also downsampled consistently using the same 
+    kernel. THe P_N statistic is downsampled consistently with the covariance array
+    (i.e. taking into account covariances between delays) unless instructed otherwise.
+    Other statistics are downsampled using the kernel weighting, but without utilizing
+    the covariance information.
+
+    Crucially, at this point, the average itself does *not* account for weighting by
+    any of the stats (either the covariance or P_N), only the kernel. The resulting
+    covariance and P_N are consistent with this assumption.
+    
+    The delays of the returned object will be symmetrical in the same way as the input
+    delays, that is, each negative delay will have a corresponding positive delay. The 
+    'zero' mode will be averaged with the `zero_bin_kernel`, which by default does no
+    averaging at all. The zero bin kernel must have an odd length so that the center
+    is zero. That is, for an input with delays::
+    
+    [-6, -5, -4, -3, -2, -1, 0, 1,2,3,4,5,6]
+    
+    and a symmetric kernel of length 3 and the default zero-bin kernel, the resulting 
+    delays will be
+    
+    [-5, -2, 0, 2, 5].
+    
+    Using instead a zero-bin kernel of length 3 with values [0, 1, 0] would result in the
+    following delays:
+    
+    [-3, 0, 3].
+    
+    Notice that the outer delays (-6 and -5) are chopped off here, because there are
+    only two of them, so they don't fill a full kernel.
+    If the delay array has even size (i.e. it has one extra negative delay), then this
+    extra delay will be ignored.
+    
+    Parameters
+    ----------
+    uvp
+        The UVPSpec object to average.
+    kernel
+        The averaging kernel. This should be a 1D array containing the averaging weights
+        within each non-overlapping bin. It will be normalized to have a sum of unity.
+        The size of the kernel will define the size of the resulting delay bins.
+    cov_weighted_stats : tuple of str, optional
+        The names of the statistics to compute using the covariance information.
+        Note that any stats that represent standard deviations (e.g. "P_N", "P_SN")
+        *should* be combined in such a way that they average down more with larger
+        kernels. This will *not* be done unless they are in the `cov_weighted_stats`
+        tuple. Anything not in this tuple will simply be averaged directly using
+        the kernel, rather than by the inverse covariance.
+    zero_bin_kernel
+        The kernel to use for the zero bin. This must be symmetric and have an odd
+        length. By default, this is a kernel of length 1 with value 1.
+        This means that the zero bin is not averaged at all. 
+        
+    Returns
+    -------
+    uvp
+        A new uvp object with the down-sampled delays.
+    """
+    uvp  = copy.deepcopy(uvp)
+    stats_array = getattr(uvp, 'stats_array', {})
+    if hasattr(uvp, "cov_array_real"):
+        cov_weighted_stats = tuple(stat for stat in cov_weighted_stats if stat in stats_array)
+    else:
+        cov_weighted_stats = ()    
+
+    kernel = np.asarray(kernel, dtype=float)
+    if not kernel.ndim == 1:
+        raise ValueError("The kernel must be 1D!")
+
+    nk = len(kernel)
+    if nk > len(uvp.dly_array) // 2:
+        raise ValueError("The kernel size must be smaller than half the size of the delay array!")
+    
+    zero_bin_kernel = np.asarray(zero_bin_kernel, dtype=float)
+    if not np.allclose(zero_bin_kernel, zero_bin_kernel[::-1]):
+        raise ValueError("The zero bin kernel must be symmetric!")
+    
+    kernel /= np.sum(kernel)
+    zero_bin_kernel /= np.sum(zero_bin_kernel)
+    
+    # We will replace parts of the new_uvp with downsampled
+    # delays.
+    new_uvp = copy.deepcopy(uvp)
+
+    new_uvp.data_array = {}
+    new_uvp.stats_array = {name: {} for name in stats_array}
+
+    dly_array = []
+    spw_dly_array = []
+    for spw in uvp.spw_array:   
+        
+        p = uvp.data_array[spw]
+        dly = uvp.get_dlys(spw)
+        slices, kernels = _get_delay_slices(dly, kernel=kernel, zero_kernel=zero_bin_kernel)
+        newn = len(slices)
+
+        new_uvp.data_array[spw] = _bin_data_like_array(p, kernels, slices)
+        newdly = np.array([np.sum(dly[slc]*krn) for slc, krn in zip(slices, kernels)])
+        dly_array.append(newdly)
+
+        stats = {
+            name: np.sqrt(_bin_data_like_array(
+                stats_array[name][spw]**2, kernels, slices
+            ))
+            for name in stats_array
+            if name not in cov_weighted_stats
+        }
+        if hasattr(uvp, "cov_array_real"):
+            oldcov = uvp.cov_array_real[spw]
+            newcov = _bin_cov_like_array(oldcov, kernels, slices)
+            new_uvp.cov_array_real[spw] = newcov
+            
+        if hasattr(uvp, "cov_array_imag"):
+            oldcov = uvp.cov_array_imag[spw]
+            newcov = _bin_cov_like_array(oldcov, kernels, slices)
+            new_uvp.cov_array_imag[spw] = newcov
+        
+        if hasattr(uvp, "window_function_array"):
+            wf = uvp.window_function_array[spw] # shape (Nblts, Ndly, Ndly, Npol)
+            # We bin this like a data array (on axis=1) and end up with a non-square
+            # window function. This works both for exact/non-exact window functions.
+            # If we really need a square window function, then the second axis should 
+            # be binned using a uniform kernel.
+            new_uvp.window_function_array[spw] = _bin_data_like_array(wf, kernels, slices, axis=1)
+
+        for stat in cov_weighted_stats:
+            # Problematically, there's only one covariance array, but there could be
+            # many stats. How do we know which stat corresponds to the cov? Instead,
+            # we find the _correlation_ matrix, and apply this to each stat.
+            diag = np.sqrt(np.diagonal(uvp.cov_array_real[spw], axis1=1, axis2=2)).transpose((0, 2, 1))
+            
+            denom = diag[:, :, None] * diag[:, None]
+            corr = uvp.cov_array_real[spw] / denom
+            thiscov = corr * uvp.stats_array[stat][spw][:, :, None] * uvp.stats_array[stat][spw][:, None]
+            newc = _bin_cov_like_array(thiscov, kernels, slices)
+            stats[stat] = np.diagonal(np.sqrt(newc), axis1=1, axis2=2).transpose((0, 2, 1))
+
+        spw_dly_array.append(np.ones(newn,dtype=int)*spw)
+
+        # Actually set the stats array
+        for name in stats:
+            new_uvp.stats_array[name][spw] = stats[name]
+
+    new_uvp.dly_array = np.concatenate(dly_array)
+    new_uvp.spw_dly_array = np.concatenate(spw_dly_array)
+    new_uvp.Nspwdlys = len(new_uvp.dly_array)
+
+    return new_uvp

@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils
 import uvtools.dspec as dspec
 from collections import OrderedDict as odict
-
+from pathlib import Path
 
 from . import conversions as conversions, uvpspec_utils as uvputils
 
@@ -13,7 +13,7 @@ from . import conversions as conversions, uvpspec_utils as uvputils
 def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
                           num_steps=5000, taper='none', little_h=True,
                           noise_scalar=False, exact_norm=False):
-    """
+    r"""
     This is not to be used by the novice user to calculate a pspec scalar.
     Instead, look at the PSpecBeamUV and PSpecBeamGauss classes.
 
@@ -69,7 +69,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     df = np.median(np.diff(pspec_freqs))
     integration_freqs = np.linspace(pspec_freqs.min(),
                                     pspec_freqs.min() + df*len(pspec_freqs),
-                                    num_steps, endpoint=True, dtype=np.float)
+                                    num_steps, endpoint=True, dtype=float)
 
     # The interpolations are generally more stable in MHz
     integration_freqs_MHz = integration_freqs / 1e6
@@ -79,7 +79,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
     X2Y = np.array([cosmo.X2Y(z, little_h=little_h) for z in redshifts])
 
     if exact_norm: #Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
-        scalar = integrate.trapz(X2Y, x=integration_freqs)/(np.abs(integration_freqs[-1]-integration_freqs[0]))
+        scalar = integrate.trapezoid(X2Y, x=integration_freqs)/(np.abs(integration_freqs[-1]-integration_freqs[0]))
         return scalar
 
     # Use linear interpolation to interpolate the frequency-dependent
@@ -92,7 +92,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
 
     # Get B_pp = \int dnu taper^2 and Bp = \int dnu
     if taper == 'none':
-        dBpp_over_BpSq = np.ones_like(integration_freqs, np.float)
+        dBpp_over_BpSq = np.ones_like(integration_freqs, float)
     else:
         dBpp_over_BpSq = dspec.gen_window(taper, len(pspec_freqs))**2.
         dBpp_over_BpSq = interp1d(pspec_freqs, dBpp_over_BpSq, kind='nearest',
@@ -105,7 +105,7 @@ def _compute_pspec_scalar(cosmo, beam_freqs, omega_ratio, pspec_freqs,
 
     # Integrate to get scalar
     d_inv_scalar = dBpp_over_BpSq * dOpp_over_Op2 / X2Y
-    scalar = 1. / integrate.trapz(d_inv_scalar, x=integration_freqs)
+    scalar = 1. / integrate.trapezoid(d_inv_scalar, x=integration_freqs)
     return scalar
 
 
@@ -131,7 +131,7 @@ class PSpecBeamBase(object):
     def compute_pspec_scalar(self, lower_freq, upper_freq, num_freqs,
                              num_steps=5000, pol='pI', taper='none',
                              little_h=True, noise_scalar=False, exact_norm=False):
-        """
+        r"""
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units
 
@@ -231,12 +231,12 @@ class PSpecBeamBase(object):
             Contains Jy -> mK factor at each frequency.
         """
         # Check input types
-        if isinstance(freqs, (np.float, float)):
+        if isinstance(freqs, float):
             freqs = np.array([freqs])
         elif not isinstance(freqs, np.ndarray):
             raise TypeError("freqs must be fed as a float ndarray")
         elif isinstance(freqs, np.ndarray) \
-            and freqs.dtype not in (float, np.float, np.float64):
+            and freqs.dtype not in (float, np.float64):
             raise TypeError("freqs must be fed as a float ndarray")
 
         # Check frequency bounds
@@ -413,14 +413,14 @@ class PSpecBeamUV(PSpecBeamBase):
             specified. Default: None.
         """
         # setup uvbeam object
-        if isinstance(uvbeam, str):
+        if isinstance(uvbeam, str | Path):
             uvb = UVBeam()
             uvb.read_beamfits(uvbeam)
         else:
             uvb = uvbeam
 
         # get frequencies and set cosmology
-        self.beam_freqs = uvb.freq_array[0]
+        self.beam_freqs = uvb.freq_array
         if cosmo is not None:
             self.cosmo = cosmo
         else:
@@ -477,19 +477,18 @@ class PSpecBeamUV(PSpecBeamBase):
         beam_res = self.primary_beam._interp_freq(freq) # interpolate beam in frequency, based on the data frequencies
         beam_res = beam_res[0]
 
-        if isinstance(pol, (str, np.str)):
+        if isinstance(pol, str):
             pol = uvutils.polstr2num(pol, x_orientation=x_orientation)
 
         pol_array = self.primary_beam.polarization_array
 
         if pol in pol_array:
             stokes_p_ind = np.where(np.isin(pol_array, pol))[0][0]
-            beam_res = beam_res[0, 0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
+            beam_res = beam_res[0, stokes_p_ind] # extract the beam with the correct polarization, dim (nfreq X npix)
         else:
             raise ValueError('Do not have the right polarization information')
 
         omega = np.sum(beam_res, axis=-1) * np.pi / (3. * nside**2) #compute beam solid angle as a function of frequency
-
         return beam_res, omega, nside
 
     def power_beam_int(self, pol='pI'):
@@ -684,8 +683,8 @@ class PSpecBeamFromArray(PSpecBeamBase):
 
         # Make sure OmegaP and OmegaPP are arrays
         try:
-            OmegaP = np.array(OmegaP).astype(np.float)
-            OmegaPP = np.array(OmegaPP).astype(np.float)
+            OmegaP = np.array(OmegaP).astype(float)
+            OmegaPP = np.array(OmegaPP).astype(float)
         except:
             raise TypeError("OmegaP and OmegaPP must both be array_like.")
 

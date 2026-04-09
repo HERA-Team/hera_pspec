@@ -17,7 +17,11 @@ from . import (
 )
 
 
-def build_vanilla_uvpspec(beam=None):
+def build_vanilla_uvpspec(
+    beam: pspecbeam.PSpecBeamBase | None=None,
+    Ndlys: int | None = 30,
+    equal_time_arrays: bool = True
+) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
     """
     Build an example vanilla UVPSpec object from scratch, with all necessary
     metadata.
@@ -25,8 +29,16 @@ def build_vanilla_uvpspec(beam=None):
     Parameters
     ----------
     beam : PSpecBeamBase subclass
-    covariance: if true, compute covariance
-
+        A beam to use for the UVPSpec object. If None, no beam is used.
+    Ndlys : int, optional
+        Number of delay bins to use. If None, uses as many delay bins as
+        frequency channels. Default is 30, which was the original default, but
+        is *different* than the number of frequency channels, which can break 
+        window functions.
+    equal_time_arrays
+        If True, the time_1_array and time_2_array will be equal. If False,
+        they will be different. Default is True.
+        
     Returns
     -------
     uvp : UVPSpec object
@@ -34,101 +46,108 @@ def build_vanilla_uvpspec(beam=None):
     uvp = uvpspec.UVPSpec()
 
     Ntimes = 10
-    Nfreqs = 50
-    Ndlys = 30
-    Nspws = 1
-    Nspwfreqs = 1 * Nfreqs
-    Nspwdlys = 1 * Ndlys
+    
+    uvp.Nfreqs = 50
+    uvp.Ndlys = uvp.Nfreqs if Ndlys is None else Ndlys
+    uvp.Nspws = 1
+    uvp.Nspwfreqs = uvp.Nspws * uvp.Nfreqs
+    uvp.Nspwdlys = uvp.Nspws * uvp.Ndlys
 
     # [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))]
     blpairs = [101102101102, 102103102103, 101103101103]
     bls = [101102, 102103, 101103]
-    Nbls = len(bls)
-    Nblpairs = len(blpairs)
-    Nblpairts = Nblpairs * Ntimes
+    uvp.Nbls = len(bls)
+    uvp.Nblpairs = len(blpairs)
+    #uvp.Nblpairts = uvp.Nblpairs * Ntimes
 
-    blpair_array = np.tile(blpairs, Ntimes)
-    bl_array = np.array(bls)
-    bl_vecs = np.array(
+    time_array = np.linspace(2458042.1, 2458042.2, Ntimes)
+    uvp.time_1_array = np.tile(time_array, uvp.Nblpairs)
+    if equal_time_arrays:
+        uvp.time_2_array = uvp.time_1_array.copy()
+    else:
+        # Make time 2 array in-between time 1 array.
+        uvp.time_2_array = uvp.time_1_array + (time_array[1] - time_array[0]) / 2.0
+        
+    uvp.blpair_array = np.tile(blpairs, Ntimes)
+    uvp.bl_array = np.array(bls)
+    uvp.bl_vecs = np.array(
         [
             [5.33391548e00, -1.35907816e01, -7.91624188e-09],
             [-8.67982998e00, 4.43554478e00, -1.08695203e01],
             [-3.34591450e00, -9.15523687e00, -1.08695203e01],
         ]
     )
-    time_array = np.linspace(2458042.1, 2458042.2, Ntimes)
     lst_array = JD2LST(time_array, longitude=21.4283)
-    time_array = np.repeat(time_array, Nblpairs)
-    time_1_array = time_array
-    time_2_array = time_array
-    lst_array = np.repeat(lst_array, Nblpairs)
-    lst_1_array = lst_array
-    lst_2_array = lst_array
-    time_avg_array = time_array
-    lst_avg_array = lst_array
-    spw_freq_array = np.tile(np.arange(Nspws), Nfreqs)
-    spw_dly_array = np.tile(np.arange(Nspws), Ndlys)
-    spw_array = np.arange(Nspws)
-    freq_array = np.repeat(np.linspace(100e6, 105e6, Nfreqs, endpoint=False), Nspws)
-    dly_array = np.repeat(utils.get_delays(freq_array, n_dlys=Ndlys), Nspws)
-    polpair_array = np.array(
-        [
-            1515,
-        ]
-    )  # corresponds to ('xx','xx')
-    Npols = len(polpair_array)
-    vis_units = "unknown"
-    norm_units = "Hz str"
-    weighting = "identity"
-    channel_width = np.median(np.diff(freq_array))
-    history = "example"
-    taper = "none"
-    norm = "I"
-    git_hash = "random"
-    scalar_array = np.ones((Nspws, Npols), np.float)
+    #time_array = np.repeat(time_array, Nblpairs)
+    uvp.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
+    uvp.Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(uvp.blpair_array, uvp.time_1_array, uvp.time_2_array)]))
+    
+    uvp.lst_1_array = JD2LST(uvp.time_1_array, longitude=21.4283)
+    uvp.lst_2_array = JD2LST(uvp.time_2_array, longitude=21.4283)
+    uvp.time_avg_array = (uvp.time_1_array + uvp.time_2_array)/2
+    uvp.lst_avg_array = JD2LST(uvp.time_avg_array, longitude=21.4283)
+    
+    uvp.spw_freq_array = np.tile(np.arange(uvp.Nspws), uvp.Nfreqs)
+    uvp.spw_dly_array = np.tile(np.arange(uvp.Nspws), uvp.Ndlys)
+    uvp.spw_array = np.arange(uvp.Nspws)
+    uvp.freq_array = np.linspace(100e6, 105e6, uvp.Nfreqs, endpoint=False)
+    uvp.dly_array = utils.get_delays(uvp.freq_array, n_dlys=uvp.Ndlys)
+    uvp.polpair_array = np.array([1515])  # corresponds to ('xx','xx')
+    uvp.Npols = len(uvp.polpair_array)
+    
+    uvp.vis_units = "unknown"
+    uvp.norm_units = "Hz str"
+    uvp.weighting = "identity"
+    uvp.channel_width = np.ones(uvp.Nfreqs) * np.median(np.diff(uvp.freq_array))
+    uvp.history = "example"
+    uvp.taper = "none"
+    uvp.norm = "I"
+    uvp.git_hash = "random"
+    uvp.scalar_array = np.ones((uvp.Nspws, uvp.Npols), float)
+    uvp.r_params = ""
+    uvp.cov_model = "dsets"
+    uvp.exact_windows = False
+    
     label1 = "red"
     label2 = "blue"
-    r_params = ""
-    cov_model = "dsets"
-    exact_windows = False
-    labels = np.array([label1, label2])
-    label_1_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 0
-    label_2_array = np.ones((Nspws, Nblpairts, Npols), np.int) * 1
+    uvp.labels = np.array([label1, label2])
+    uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int) * 0
+    uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int) * 1
     if beam is not None:
         pol = beam.primary_beam.polarization_array[0]
-        OmegaP, OmegaPP = beam.get_Omegas((pol, pol))
-        beam_freqs = beam.beam_freqs
+        uvp.OmegaP, uvp.OmegaPP = beam.get_Omegas((pol, pol))
+        uvp.beam_freqs = beam.beam_freqs
 
     # HERA coordinates in Karoo Desert, SA
-    telescope_location = np.array(
+    uvp.telescope_location = np.array(
         [5109325.85521063, 2005235.09142983, -3239928.42475397]
     )
 
-    store_cov = True
+    uvp.store_cov = True
     cosmo = conversions.Cosmo_Conversions()
 
     data_array, wgt_array = {}, {}
     integration_array, nsample_array, cov_array_real, cov_array_imag = {}, {}, {}, {}
     window_function_array = {}
-    for s in spw_array:
+    for s in uvp.spw_array:
         data_array[s] = (
-            np.ones((Nblpairts, Ndlys, Npols), dtype=np.complex)
-            * blpair_array[:, None, None]
+            np.ones((uvp.Nbltpairs, uvp.Ndlys, uvp.Npols), dtype=complex)
+            * uvp.blpair_array[:, None, None]
             / 1e9
         )
-        wgt_array[s] = np.ones((Nblpairts, Nfreqs, 2, Npols), dtype=np.float)
+        wgt_array[s] = np.ones((uvp.Nbltpairs, uvp.Nfreqs, 2, uvp.Npols), dtype=float)
         # NB: The wgt_array has dimensions Nfreqs rather than Ndlys; it has the
         # dimensions of the input visibilities, not the output delay spectra
-        integration_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
-        nsample_array[s] = np.ones((Nblpairts, Npols), dtype=np.float)
+        integration_array[s] = np.ones((uvp.Nbltpairs, uvp.Npols), dtype=float)
+        nsample_array[s] = np.ones((uvp.Nbltpairs, uvp.Npols), dtype=float)
         window_function_array[s] = np.ones(
-            (Nblpairts, Ndlys, Ndlys, Npols), dtype=np.float64
+            (uvp.Nbltpairs, uvp.Ndlys, uvp.Ndlys, uvp.Npols), dtype=np.float64
         )
         cov_array_real[s] = np.moveaxis(
             np.array(
                 [
-                    [np.identity(Ndlys, dtype=np.float) for m in range(Nblpairts)]
-                    for n in range(Npols)
+                    [np.identity(uvp.Ndlys, dtype=float) for _ in range(uvp.Nbltpairs)]
+                    for _ in range(uvp.Npols)
                 ]
             ),
             0,
@@ -137,76 +156,26 @@ def build_vanilla_uvpspec(beam=None):
         cov_array_imag[s] = np.moveaxis(
             np.array(
                 [
-                    [np.identity(Ndlys, dtype=np.float) for m in range(Nblpairts)]
-                    for n in range(Npols)
+                    [np.identity(uvp.Ndlys, dtype=float) for _ in range(uvp.Nbltpairs)]
+                    for _ in range(uvp.Npols)
                 ]
             ),
             0,
             -1,
         )
 
-    params = [
-        "Ntimes",
-        "Nfreqs",
-        "Nspws",
-        "Nspwdlys",
-        "Nspwfreqs",
-        "Nspws",
-        "Nblpairs",
-        "Nblpairts",
-        "Npols",
-        "Ndlys",
-        "Nbls",
-        "blpair_array",
-        "time_1_array",
-        "time_2_array",
-        "lst_1_array",
-        "lst_2_array",
-        "spw_array",
-        "dly_array",
-        "freq_array",
-        "polpair_array",
-        "data_array",
-        "wgt_array",
-        "r_params",
-        "window_function_array",
-        "integration_array",
-        "bl_array",
-        "bl_vecs",
-        "telescope_location",
-        "vis_units",
-        "channel_width",
-        "weighting",
-        "history",
-        "taper",
-        "norm",
-        "git_hash",
-        "nsample_array",
-        "time_avg_array",
-        "lst_avg_array",
-        "cosmo",
-        "scalar_array",
-        "labels",
-        "norm_units",
-        "labels",
-        "label_1_array",
-        "label_2_array",
-        "store_cov",
-        "cov_array_real",
-        "cov_array_imag",
-        "spw_dly_array",
-        "spw_freq_array",
-        "cov_model",
-        "exact_windows",
-    ]
-
-    if beam is not None:
-        params += ["OmegaP", "OmegaPP", "beam_freqs"]
-
-    # Set all parameters
-    for p in params:
-        setattr(uvp, p, locals()[p])
-
+    uvp.data_array = data_array
+    uvp.wgt_array = wgt_array
+    uvp.cov_array_real = cov_array_real
+    uvp.cov_array_imag = cov_array_imag
+    uvp.integration_array = integration_array
+    uvp.nsample_array = nsample_array
+    uvp.window_function_array = window_function_array
+    uvp.cosmo = cosmo
+    
+    # From v0.5, this must always be true.
+    uvp.Ntimes = uvp.Ntpairs
+    
     uvp.check()
 
     return uvp, cosmo
@@ -418,7 +387,7 @@ def noise_sim(
     data : UVData with noise realizations.
     """
     # Read data files
-    if isinstance(data, (str, np.str)):
+    if isinstance(data, str):
         _data = UVData()
         _data.read_miriad(data)
         data = _data
@@ -434,7 +403,7 @@ def noise_sim(
 
     # Configure beam
     if beam is not None:
-        if isinstance(beam, (str, np.str)):
+        if isinstance(beam, str):
             beam = pspecbeam.PSpecBeamUV(beam)
         assert isinstance(beam, pspecbeam.PSpecBeamBase)
 
@@ -442,8 +411,8 @@ def noise_sim(
     Nextend = int(Nextend)
     if Nextend > 0:
         assert (
-            data.phase_type == "drift"
-        ), "data must be drift phased in order to extend along time axis"
+            data.phase_center_catalog[0]['cat_type'] == "unprojected"
+        ), "data must be unprojected in order to extend along time axis"
         data = copy.deepcopy(data)
         _data = copy.deepcopy(data)
         dt = np.median(np.diff(np.unique(_data.time_array)))
@@ -459,7 +428,7 @@ def noise_sim(
     if not isinstance(int_time, np.ndarray):
         int_time = np.array([int_time])
     Trms = Tsys / np.sqrt(
-        int_time[:, None, None, None] * data.nsample_array * data.channel_width
+        int_time[:, None, None] * data.nsample_array * data.channel_width[None, :, None]
     )
 
     # if a pol is pStokes pol, divide by extra sqrt(2)
@@ -470,12 +439,12 @@ def noise_sim(
 
     # Get Vrms in Jy using beam
     if beam is not None:
-        freqs = np.unique(data.freq_array)[None, None, :, None]
+        freqs = np.unique(data.freq_array)[None, :, None]
         K_to_Jy = [
             1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p))
             for p in data.polarization_array
         ]
-        K_to_Jy = np.array(K_to_Jy).T[None, None, :, :]
+        K_to_Jy = np.array(K_to_Jy).T[None, :, :]
         K_to_Jy /= np.array(
             [np.sqrt(2) if p in [1, 2, 3, 4] else 1.0 for p in data.polarization_array]
         )
@@ -655,7 +624,7 @@ def sky_noise_sim(
         beam = pspecbeam.PSpecBeamUV(beam)
 
     # get metadata
-    freqs = uvd.freq_array[0]
+    freqs = uvd.freq_array
     Ntimes = uvd.Ntimes
     lsts = np.unique(uvd.lst_array)
     int_time = np.median(uvd.integration_time)
@@ -671,7 +640,7 @@ def sky_noise_sim(
             OmegaP[pol] = beam.power_beam_int(pol)
         # interpolate to freq_array of data
         OmegaP[pol] = interpolate.interp1d(
-            beam.primary_beam.freq_array[0],
+            beam.primary_beam.freq_array,
             OmegaP[pol],
             kind="linear",
             bounds_error=False,
@@ -737,6 +706,6 @@ def sky_noise_sim(
         # fill data
         blt_inds = uvd.antpair2ind(bl[:2])
         pol_ind = pols.index(bl[2])
-        uvd.data_array[blt_inds, 0, :, pol_ind] = n + sig
+        uvd.data_array[blt_inds, :, pol_ind] = n + sig
 
     return uvd
