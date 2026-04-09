@@ -148,10 +148,6 @@ def build_vanilla_uvpspec(
             np.repeat(Wv[None, :], uvp.Nbltpairs, axis=0)[..., None],
             uvp.Npols, axis=-1,  # repeat along polarization axis
         )
-        # else:
-        #     window_function_array[s] = np.ones(
-        #         (uvp.Nbltpairs, uvp.Ndlys, uvp.Ndlys, uvp.Npols), dtype=np.float64
-        #     )
         cov_array_real[s] = np.moveaxis(
             np.array(
                 [
