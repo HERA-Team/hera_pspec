@@ -884,7 +884,6 @@ def spherical_average(uvp_in, kbins, bin_widths, kbins_theory=None, blpair_group
         # Ht shape (Npols, Ntimes, Nk, Ndlyblps)
         Am = np.moveaxis(A[spw], -1, 0)
         Em = np.moveaxis(E, -1, 0)
-        # return Em[0, 0], Am[0, 0]
         # Multiply block diagoinal Em @ Am
         # by applying each baseline block in Em
         # to each Ndly x Nk baseline-horizontal block in Am
@@ -2018,8 +2017,6 @@ def average_in_delay_bins(
             # If we really need a square window function, then the second axis should 
             # be binned using a uniform kernel.
             new_uvp.window_function_array[spw] = _bin_data_like_array(oldwf, kernels, slices, axis=1)
-            # new_uvp.window_function_array[spw] = _bin_data_like_array(new_uvp.window_function_array[spw], kernels, slices, axis=2)
-            # new_uvp.window_function_array[spw] = _bin_cov_like_array(oldwf, kernels, slices)
 
         for stat in cov_weighted_stats:
             # Problematically, there's only one covariance array, but there could be

@@ -3326,7 +3326,6 @@ class PSpecData:
                     else:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
                     pv = self.p_hat(Mv, qv)
-                    # Gv.shape = Hv.shape = (nfreqs, nfreqs)
 
                     # Multiply by scalar
                     if self.primary_beam != None:
