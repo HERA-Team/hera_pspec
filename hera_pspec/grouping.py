@@ -1233,7 +1233,7 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
             if hasattr(uvp, 'window_function_array'):
-                if uvp.exact_windows or uvp.delay_avg:
+                if uvp.exact_windows or uvp.delays_are_binned:
                     left = uvp.window_function_array[spw][:, 1:Ndlys//2, ...][:, ::-1, ...]
                     right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
                     uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
@@ -1288,7 +1288,7 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
             if hasattr(uvp, 'window_function_array'):
-                if uvp.exact_windows or uvp.delay_avg:
+                if uvp.exact_windows or uvp.delays_are_binned:
                     left = uvp.window_function_array[spw][:, :Ndlys//2, ...][:, ::-1, ...]
                     right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
                     uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
@@ -2042,6 +2042,6 @@ def average_in_delay_bins(
     new_uvp.dly_array = np.concatenate(dly_array)
     new_uvp.spw_dly_array = np.concatenate(spw_dly_array)
     new_uvp.Nspwdlys = len(new_uvp.dly_array)
-    new_uvp.delay_avg = True
+    new_uvp.delays_are_binned = True
 
     return new_uvp
