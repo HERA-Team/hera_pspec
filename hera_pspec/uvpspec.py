@@ -2472,7 +2472,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     store_window = np.all([hasattr(uvp, 'window_function_array') for uvp in uvps])
     exact_windows = np.all([uvp.exact_windows for uvp in uvps])
     store_stats = np.all([hasattr(uvp, 'stats_array') for uvp in uvps])
-    delays_are_binned = np.all([uvp.delays_are_binned for uvp in uvps])
+    delays_are_binned = np.any([uvp.delays_are_binned for uvp in uvps])
     # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
