@@ -631,7 +631,7 @@ class TestUVPSpec:
         assert(uvp1.folded)
         pytest.raises(AssertionError, uvp1.fold_spectra)
 
-        if uvp1._delays_are_binned:
+        if uvp1.delays_are_binned:
             assert len(uvp1.get_dlys(0)) == len(uvp.get_dlys(0)) // 2
         else:
             assert len(uvp1.get_dlys(0)) == len(uvp.get_dlys(0)) // 2 - 1
