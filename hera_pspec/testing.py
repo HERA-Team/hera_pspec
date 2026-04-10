@@ -19,7 +19,7 @@ from . import (
 
 def build_vanilla_uvpspec(
     beam: pspecbeam.PSpecBeamBase | None=None,
-    Ndlys: int | None = 30,
+    Ndlys: int | None = None,
     equal_time_arrays: bool = True
 ) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
     """
@@ -32,9 +32,7 @@ def build_vanilla_uvpspec(
         A beam to use for the UVPSpec object. If None, no beam is used.
     Ndlys : int, optional
         Number of delay bins to use. If None, uses as many delay bins as
-        frequency channels. Default is 30, which was the original default, but
-        is *different* than the number of frequency channels, which can break 
-        window functions.
+        frequency channels. Default is None, which uses the number of frequency channels.
     equal_time_arrays
         If True, the time_1_array and time_2_array will be equal. If False,
         they will be different. Default is True.
@@ -107,7 +105,7 @@ def build_vanilla_uvpspec(
     uvp.r_params = ""
     uvp.cov_model = "dsets"
     uvp.exact_windows = False
-    uvp.delay_avg = False
+    uvp.delays_are_binned = False
     
     label1 = "red"
     label2 = "blue"

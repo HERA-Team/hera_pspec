@@ -199,10 +199,9 @@ def test_subtract_uvp():
     beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
     beam = pspecbeam.PSpecBeamUV(beamfile)
     uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-
     # add a dummy stats_array
     for k in uvp.get_all_keys():
-        uvp.set_stats('mystat', k, np.ones((10, 30), dtype=complex))
+        uvp.set_stats('mystat', k, np.ones_like(uvp.get_data(k), dtype=complex))
 
     # test execution
     uvs = uvputils.subtract_uvp(uvp, uvp, run_check=True)
