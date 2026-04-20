@@ -21,18 +21,15 @@ Installation
 For users
 ---------
 
-The package is installable, along with its dependencies, with PyPi. We
-recommend using Anaconda and creating a new conda environment before
-installing the package. You may wish to install some of the dependencies directly
-with `conda` instead of `pip` before installing the package. This is especially
-important for `jax` on MacOS:
+The package is installable from PyPI. ``hera_pspec`` currently supports
+Python 3.11, 3.12, and 3.13 (``>=3.11,<3.14``). We recommend installing it
+into a fresh virtual environment:
 
 ::
 
-   $ conda create -n hera_pspec python=3
-   $ conda activate hera_pspec
-   $ conda install jax
-   $ python3 -m pip install hera_pspec
+   $ python -m venv hera_pspec
+   $ source hera_pspec/bin/activate
+   $ python -m pip install hera_pspec
 
 New versions are frequently released on PyPi.
 
@@ -42,46 +39,34 @@ For developers
 If you are developing and/or want to use the latest working version
 of ``hera_pspec``, you can directly install from the GitHub repository.
 
-Preferred method of installation for users is simply ``pip install -e .``
-(or ``pip install git+https://github.com/HERA-Team/hera_pspec``). This
-will install required dependencies. See below for manual dependency
-management.
-
-Dependencies
-^^^^^^^^^^^^
-
-If you are using ``conda``, you may wish to install the following
-dependencies manually to avoid them being installed automatically by
-``pip``:
-
-::
-
-   $ conda install -c conda-forge "numpy>=1.15" "astropy>=2.0" h5py pyuvdata scipy matplotlib pyyaml jax
-
 Developing
 ^^^^^^^^^^
 
-If you are developing ``hera_pspec``, it is preferred that you do so in
-a fresh ``conda`` environment. The following commands will install all
-relevant development packages:
+The repository already includes a ``uv.lock`` file and dependency groups
+for development, documentation, and tests. With ``uv`` installed, the
+recommended setup is:
 
 ::
 
    $ git clone https://github.com/HERA-Team/hera_pspec.git
    $ cd hera_pspec
-   $ conda create -n hera_pspec python=3
-   $ conda activate hera_pspec
-   $ conda env update -n hera_pspec -f ci/hera_pspec_tests.yml
-   $ pip install -e . 
+   $ uv sync --all-extras --dev
 
-This will install extra dependencies required for testing/development as
-well as the standard ones.
+This installs the package along with the dependencies used in CI for
+testing and documentation work.
 
 Running Tests
 ^^^^^^^^^^^^^
 
-Uses the ``pytest`` package to execute test suite. From the source
-``hera_pspec`` directory run: ``pytest``.
+From the source ``hera_pspec`` directory, common development commands are:
+
+::
+
+   $ uv run pytest
+   $ uv run pytest -Werror
+
+The repository pytest configuration already includes the standard coverage
+options used in CI, so ``uv run pytest`` will also produce coverage output.
 
 .. exclusion-marker-installation-do-not-remove
 

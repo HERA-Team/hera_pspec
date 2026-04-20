@@ -16,15 +16,14 @@ A set of `example Jupyter notebooks <https://github.com/HERA-Team/hera_pspec/tre
 Installation
 ------------
 
-The package is installable, along with its dependencies, with PyPi. We
-recommend using Anaconda and creating a new conda environment before
-installing the package:
+The package is installable from PyPI and supports Python 3.11, 3.12, and
+3.13.
 
 ::
 
-   $ conda create -n hera_pspec python=3
-   $ conda activate hera_pspec
-   $ python3 -m pip install hera_pspec
+   $ python -m venv hera_pspec
+   $ source hera_pspec/bin/activate
+   $ python -m pip install hera_pspec
 
 New versions are frequently released on PyPi.
 For more installation options, see below.

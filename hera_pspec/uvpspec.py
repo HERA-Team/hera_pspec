@@ -1710,12 +1710,11 @@ class UVPSpec(object):
 
         ftbeam : str or FTBeam object, optional
             Definition of the beam Fourier transform to be used.
-            Options include;
-                - Root name of the file to use, without the polarisation
-                Ex : FT_beam_HERA_dipole (+ path)
-                - '' for computation from beam simulations (slow)
-                - FTBeam object. Make sure the polarisation and bandwidths
-                are compatible with uvp.
+            Valid options are the root name of the file to use without the
+            polarization suffix, for example ``FT_beam_HERA_dipole`` plus its
+            path; ``''`` to compute from beam simulations (slow); or an
+            ``FTBeam`` object whose polarization and bandwidth are compatible
+            with ``uvp``.
 
         spw_array : list of ints, optional
             Spectral window indices. If None, the window functions are computed on 
