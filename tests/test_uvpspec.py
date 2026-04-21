@@ -50,7 +50,7 @@ class TestUVPSpec:
     def test_param(self):
         a = parameter.PSpecParam("example", description="example", expected_type=int)
 
-    
+
     @parametrize_with_cases('uvp', cases=".")
     def test_eq(self, uvp: uvpspec.UVPSpec):
         # test equivalence
@@ -631,10 +631,10 @@ class TestUVPSpec:
         assert(uvp1.folded)
         pytest.raises(AssertionError, uvp1.fold_spectra)
 
-        if uvp1.delays_are_binned:
-            assert len(uvp1.get_dlys(0)) == len(uvp.get_dlys(0)) // 2
-        else:
+        if uvp.get_dlys(0).size % 2 == 0:
             assert len(uvp1.get_dlys(0)) == len(uvp.get_dlys(0)) // 2 - 1
+        else:
+            assert len(uvp1.get_dlys(0)) == len(uvp.get_dlys(0)) // 2
         assert(np.isclose(uvp1.nsample_array[0], 2.0).all())
 
     def test_fold_spectra_odd_cases(self):

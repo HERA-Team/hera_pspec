@@ -998,6 +998,7 @@ def spherical_average(uvp_in, kbins, bin_widths, kbins_theory=None, blpair_group
 
     return uvp
 
+
 def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_theory=None,
                           blpair_groups=None, blpair_lens=None, blpair_weights=None,
                           error_weights=None, time_avg=False, spw_array=None,
@@ -1221,7 +1222,6 @@ def fold_spectra(uvp):
 
         # get number of dly bins
         Ndlys = uvp.data_array[spw].shape[1]
-
         # This section could be streamlined considerably since there is a lot of
         # code overlap between the even and odd Ndlys cases.
 
@@ -1233,20 +1233,20 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
             if hasattr(uvp, 'window_function_array'):
-                if uvp.exact_windows or uvp.delays_are_binned:
+                Nkpar = uvp.window_function_array[spw].shape[2]
+                first_kpar = 1 if Nkpar % 2 == 0 else 0
+                if uvp.exact_windows:
                     left = uvp.window_function_array[spw][:, 1:Ndlys//2, ...][:, ::-1, ...]
-                    right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
+                    right = uvp.window_function_array[spw][:, Ndlys//2+1:, ...]
                     uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
                 else:
-                    leftleft = uvp.window_function_array[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
-                    leftright = uvp.window_function_array[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
-                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                    uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                                     +leftright\
-                                                                                     +rightleft\
-                                                                                     +rightright)
-                    uvp.window_function_array[spw][:, :, :Ndlys//2, :] = 0.0
+                    leftleft = uvp.window_function_array[spw][:, 1:Ndlys//2, first_kpar:Nkpar//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.window_function_array[spw][:, 1:Ndlys//2, Nkpar//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1:, first_kpar:Nkpar//2, :][:, :, ::-1, :]
+                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Nkpar//2+1:, :]
+                    uvp.window_function_array[spw][:, Ndlys//2+1:, Nkpar//2+1:, :] = .25 *\
+                        (leftleft + leftright + rightleft + rightright)
+                    uvp.window_function_array[spw][:, :, :Nkpar//2, :] = 0.0
                 uvp.window_function_array[spw][:, :Ndlys//2, ...] = 0.0
             # fold covariance array if it exists.
             if hasattr(uvp, 'cov_array_real'):
@@ -1254,21 +1254,17 @@ def fold_spectra(uvp):
                 leftright = uvp.cov_array_real[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
                 rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
                 rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
+                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25 * \
+                    (leftleft + leftright + rightleft + rightright)
                 uvp.cov_array_real[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_real[spw][:, :, :Ndlys//2, : :] = 0.0
+                uvp.cov_array_real[spw][:, :, :Ndlys//2, :] = 0.0
 
                 leftleft = uvp.cov_array_imag[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
                 leftright = uvp.cov_array_imag[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
+                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1:, 1:Ndlys//2, :][:, :, ::-1, :]
                 rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
+                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25 * \
+                    (leftleft + leftright + rightleft + rightright)
                 uvp.cov_array_imag[spw][:, :Ndlys//2, :, :] = 0.0
                 uvp.cov_array_imag[spw][:, :, :Ndlys//2, : :] = 0.0
 
@@ -1288,45 +1284,41 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
             if hasattr(uvp, 'window_function_array'):
-                if uvp.exact_windows or uvp.delays_are_binned:
+                Nkpar = uvp.window_function_array[spw].shape[2]
+                first_kpar = 1 if Nkpar % 2 == 0 else 0
+                if uvp.exact_windows:
                     left = uvp.window_function_array[spw][:, :Ndlys//2, ...][:, ::-1, ...]
-                    right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
+                    right = uvp.window_function_array[spw][:, Ndlys//2+1:, ...]
                     uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
                 else:
-                    leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                    leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                    uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                                 +leftright\
-                                                                                 +rightleft\
-                                                                                 +rightright)
-                    uvp.window_function_array[spw][:, :, :Ndlys//2, :] = 0.0
+                    leftleft = uvp.window_function_array[spw][:, :Ndlys//2, first_kpar:Nkpar//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.window_function_array[spw][:, :Ndlys//2, Nkpar//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1:, first_kpar:Nkpar//2, :][:, :, ::-1, :]
+                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Nkpar//2+1:, :]
+                    uvp.window_function_array[spw][:, Ndlys//2+1:, Nkpar//2+1:, :] = .25 * \
+                        (leftleft + leftright + rightleft + rightright)
+                    uvp.window_function_array[spw][:, :, :Nkpar//2, :] = 0.0
                 uvp.window_function_array[spw][:, :Ndlys//2, ...] = 0.0
 
             # fold covariance array if it exists.
             if hasattr(uvp,'cov_array_real'):
                 leftleft = uvp.cov_array_real[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
                 leftright = uvp.cov_array_real[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1:, :Ndlys//2, :][:, :, ::-1, :]
                 rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
+                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25 * \
+                    (leftleft + leftright + rightleft + rightright)
                 uvp.cov_array_real[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_real[spw][:, :, :Ndlys//2, : :] = 0.0
+                uvp.cov_array_real[spw][:, :, :Ndlys//2, :] = 0.0
 
                 leftleft = uvp.cov_array_imag[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
                 leftright = uvp.cov_array_imag[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1:, :Ndlys//2, :][:, :, ::-1, :]
                 rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
+                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25 * \
+                    (leftleft + leftright + rightleft + rightright)
                 uvp.cov_array_imag[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_imag[spw][:, :, :Ndlys//2, : :] = 0.0
+                uvp.cov_array_imag[spw][:, :, :Ndlys//2, :] = 0.0
 
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
@@ -2042,6 +2034,5 @@ def average_in_delay_bins(
     new_uvp.dly_array = np.concatenate(dly_array)
     new_uvp.spw_dly_array = np.concatenate(spw_dly_array)
     new_uvp.Nspwdlys = len(new_uvp.dly_array)
-    new_uvp.delays_are_binned = True
 
     return new_uvp

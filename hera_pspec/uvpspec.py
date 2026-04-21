@@ -116,7 +116,6 @@ class UVPSpec(object):
         self._beam_freqs = PSpecParam("beam_freqs", description="Frequency bins of the OmegaP and OmegaPP beam-integral arrays [Hz].", form="(Nbeam_freqs,)", expected_type=np.float64)
         self._cosmo = PSpecParam("cosmo", description="Instance of conversion.Cosmo_Conversions class.", expected_type=conversions.Cosmo_Conversions)
         desc = "Whether the UVPSpec object have been averaged over delays. Then, Ndlys!=Nfreqs."
-        self._delays_are_binned = PSpecParam("delays_are_binned", description=desc, expected_type=bool)
         # Collect all parameters: required and non-required
         self._all_params = sorted( [ p[1:] for p in
                                     fnmatch.filter(self.__dict__.keys(), '_*')])
@@ -146,7 +145,7 @@ class UVPSpec(object):
                             "history", "r_params", "cov_model",
                             "Nbls", "weighting", "vis_units",
                             "norm", "norm_units", "taper", "cosmo", "beamfile",
-                            'folded', 'exact_windows', 'delays_are_binned']
+                            'folded', 'exact_windows',]
         self._ndarrays = ["spw_array", "freq_array", "dly_array",
                           "polpair_array", "lst_1_array", "lst_avg_array",
                           "time_avg_array", "channel_width", 
@@ -1398,8 +1397,6 @@ class UVPSpec(object):
         # Backwards compatibility: exact_windows
         if 'exact_windows' not in grp.attrs:
             setattr(self, 'exact_windows', False)
-        if 'delays_are_binned' not in grp.attrs:
-            setattr(self, 'delays_are_binned', False)
 
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
@@ -2142,7 +2139,6 @@ class UVPSpec(object):
 
         return P_N
 
-
     def average_spectra(self, blpair_groups=None, time_avg=False,
                         blpair_weights=None, error_field=None, error_weights=None,
                         inplace=True, add_to_history='', time_tol: float=1e-6):
@@ -2261,7 +2257,6 @@ class UVPSpec(object):
         """
         grouping.fold_spectra(self)
 
-
     def get_blpair_groups_from_bl_groups(self, blgroups, only_pairs_in_bls=False):
         """
         Get baseline pair matches from a list of baseline groups.
@@ -2352,7 +2347,6 @@ class UVPSpec(object):
                                                  little_h=little_h,
                                                  noise_scalar=noise_scalar)
         return scalar
-
 
     def add_approximate_covariance(
         self, 
@@ -2467,12 +2461,17 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     Ntpairs = len(set([(t1, t2) for blp, t1, t2 in new_blpts]))
     Npols = len(new_polpairs)
 
+    # get each uvp's data axes
+    uvp_spws = [_uvp.get_spw_ranges() for _uvp in uvps]
+    uvp_blpts = [list(zip(_uvp.blpair_array, _uvp.time_1_array, _uvp.time_2_array))
+                 for _uvp in uvps]
+    uvp_polpairs = [_uvp.polpair_array.tolist() for _uvp in uvps]
+
     # Store optional attrs only if all uvps have them
     store_cov = np.all([hasattr(uvp, 'cov_array_real') for uvp in uvps])
     store_window = np.all([hasattr(uvp, 'window_function_array') for uvp in uvps])
     exact_windows = np.all([uvp.exact_windows for uvp in uvps])
     store_stats = np.all([hasattr(uvp, 'stats_array') for uvp in uvps])
-    delays_are_binned = np.any([uvp.delays_are_binned for uvp in uvps])
     # Create new empty data arrays and fill spw arrays
     u.data_array = odict()
     u.integration_array = odict()
@@ -2518,15 +2517,15 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         # so needs to keep this shape)
         u.nsample_array[i] = np.empty((Nbltpairs, Npols), np.float64)
         if store_window:
+            l = [spw in _u for _u in uvp_spws].index(True)
+            m = [spw == _spw for _spw in uvp_spws[l]].index(True)
             if exact_windows:
-                Nkperp = uvps[0].window_function_kperp[i][:, 0].size
-                Nkpara = uvps[0].window_function_kpara[i][:, 0].size
+                Nkperp = uvps[l].window_function_kperp[m][:, 0].size
+                Nkpara = uvps[l].window_function_kpara[m][:, 0].size
                 u.window_function_array[i] = np.empty((Nbltpairs, spw[3], Nkperp, Nkpara, Npols), np.float64)
             else:
-                if delays_are_binned:
-                    u.window_function_array[i] = np.empty((Nbltpairs, spw[3], spw[2], Npols), np.float64)
-                else:
-                    u.window_function_array[i] = np.empty((Nbltpairs, spw[3], spw[3], Npols), np.float64)
+                Nkpar = uvps[l].window_function_array[m].shape[2]
+                u.window_function_array[i] = np.empty((Nbltpairs, spw[3], Nkpar, Npols), np.float64)
         if store_cov:
             u.cov_array_real[i] = np.empty((Nbltpairs, spw[3], spw[3], Npols), np.float64)
             u.cov_array_imag[i] = np.empty((Nbltpairs, spw[3], spw[3], Npols), np.float64)
@@ -2545,7 +2544,6 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.Nspwfreqs = len(u.spw_freq_array)
     u.Ndlys = len(np.unique(u.dly_array))
     u.Nspwdlys = len(u.spw_dly_array)
-    u.delays_are_binned = delays_are_binned
 
     # other metadata
     u.polpair_array = np.array(new_polpairs)
@@ -2566,12 +2564,6 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.labels = sorted(set(np.concatenate([uvp.labels for uvp in uvps])))
     u.label_1_array = np.empty((Nspws, Nbltpairs, Npols), np.int32)
     u.label_2_array = np.empty((Nspws, Nbltpairs, Npols), np.int32)
-
-    # get each uvp's data axes
-    uvp_spws = [_uvp.get_spw_ranges() for _uvp in uvps]
-    uvp_blpts = [list(zip(_uvp.blpair_array, _uvp.time_1_array, _uvp.time_2_array))
-                 for _uvp in uvps]
-    uvp_polpairs = [_uvp.polpair_array.tolist() for _uvp in uvps]
 
     # Construct dict of label indices, to be used for re-ordering later
     u_lbls = {lbl: ll for ll, lbl in enumerate(u.labels)}
@@ -2744,7 +2736,6 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     n = blpts_idxs[j]
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
                     if store_window:
-                        print(u.window_function_array[i].shape, uvps[l].window_function_array[m].shape)
                         u.window_function_array[i][j, ..., k] = uvps[l].window_function_array[m][n, ..., q]
                     if store_cov:
                         u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][n, :, :, q]
@@ -2909,7 +2900,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 
     # ensure static metadata agree between all objects
     static_meta = ['channel_width', 'telescope_location', 'weighting',
-                   'OmegaP', 'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 'delays_are_binned',
+                   'OmegaP', 'beam_freqs', 'OmegaPP', 'beamfile', 'norm',
                    'taper', 'vis_units', 'norm_units', 'folded', 'cosmo', 'exact_windows']
     for m in static_meta:
         for u in uvps[1:]:

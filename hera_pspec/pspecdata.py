@@ -3528,7 +3528,6 @@ class PSpecData:
         uvp.scalar_array = np.array(sclr_arr)
         uvp.channel_width = np.array(dset1.channel_width)  # all dsets validated to agree
         uvp.exact_windows = False
-        uvp.delays_are_binned = False
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         # SGM: I've kept the same API in hera_pspec for now, but we should

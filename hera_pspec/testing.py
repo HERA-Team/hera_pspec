@@ -105,7 +105,6 @@ def build_vanilla_uvpspec(
     uvp.r_params = ""
     uvp.cov_model = "dsets"
     uvp.exact_windows = False
-    uvp.delays_are_binned = False
     
     label1 = "red"
     label2 = "blue"
