@@ -2,7 +2,7 @@ import unittest
 import pytest
 import numpy as np
 from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec import testing, pspecbeam, UVPSpec
+from hera_pspec import testing, grouping, pspecbeam, UVPSpec
 from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 import os
@@ -199,16 +199,26 @@ def test_subtract_uvp():
     beamfile = os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits')
     beam = pspecbeam.PSpecBeamUV(beamfile)
     uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-
     # add a dummy stats_array
     for k in uvp.get_all_keys():
-        uvp.set_stats('mystat', k, np.ones((10, 30), dtype=complex))
+        uvp.set_stats('mystat', k, np.ones_like(uvp.get_data(k), dtype=complex))
 
     # test execution
     uvs = uvputils.subtract_uvp(uvp, uvp, run_check=True)
     assert isinstance(uvs, UVPSpec)
     assert hasattr(uvs, "stats_array")
     assert hasattr(uvs, "cov_array_real")
+    assert hasattr(uvs, "window_function_array")
+
+    # test with delay-averaged spectra
+    averaged_uvp = grouping.average_in_delay_bins(uvp, kernel=np.array([1, 1, 1]))
+    uvs = uvputils.subtract_uvp(averaged_uvp, averaged_uvp, run_check=True)
+    assert isinstance(uvs, UVPSpec)
+    assert hasattr(uvs, "stats_array")
+    assert hasattr(uvs, "cov_array_real")
+    assert hasattr(uvs, "window_function_array")
+    # make sure you cannot combine spectra if only one have been delay averaged
+    pytest.raises(ValueError, uvputils.subtract_uvp, averaged_uvp, uvp)
 
     # we subtracted uvp from itself, so data_array should be zero
     assert np.isclose(uvs.data_array[0], 0.0).all()

@@ -5,12 +5,13 @@ This adds several mock UVPSpec objects that can be used throughout the tests.
 
 import pytest
 from hera_pspec.testing import build_vanilla_uvpspec
-from hera_pspec import UVPSpec, PSpecData, utils
+from hera_pspec import UVPSpec, PSpecData, utils, grouping
 from hera_pspec import PSpecBeamUV
 from pathlib import Path
 from hera_pspec.data import DATA_PATH
 from pyuvdata import UVData
 import copy
+import numpy as np
 
 DATA_PATH = Path(DATA_PATH)
 
@@ -31,7 +32,17 @@ def vanilla_uvp_with_beam(beam_nf_dipole: PSpecBeamUV) -> UVPSpec:
 def vanilla_uvp_alternating_times(beam_nf_dipole: PSpecBeamUV) -> UVPSpec:
     """A UVPSpec with alternating times."""
     return build_vanilla_uvpspec(equal_time_arrays=False, beam=beam_nf_dipole)[0]
-    
+
+@pytest.fixture(scope="session")
+def vanilla_uvp_w_ndlys() -> UVPSpec:
+    """A UVPSpec with delay binning."""
+    return build_vanilla_uvpspec(Ndlys=30)[0]
+
+@pytest.fixture(scope="session")
+def vanilla_uvp_delay_binned() -> UVPSpec:
+    """A UVPSpec with delay binning."""
+    return grouping.average_in_delay_bins(build_vanilla_uvpspec()[0], kernel=np.array([1, 1, 1]))
+
 @pytest.fixture(scope="session")
 def uvp_example_data() -> UVPSpec:
     # obtain uvp object
