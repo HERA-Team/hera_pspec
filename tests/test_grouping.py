@@ -13,10 +13,10 @@ from hera_pspec import UVPSpec
 def case_vanilla_uvp(vanilla_uvp: UVPSpec):
     return vanilla_uvp
 
-def case_vanilla_uvp_with_beam(vanilla_uvp_with_beam: UVPSpec):
+def case_vanilla_uvp_with_beam(beam_nf_dipole, vanilla_uvp_with_beam: UVPSpec):
     return vanilla_uvp_with_beam
 
-def case_vanilla_uvp_alternating_times(vanilla_uvp_alternating_times: UVPSpec):
+def case_vanilla_uvp_alternating_times(beam_nf_dipole, vanilla_uvp_alternating_times: UVPSpec):
     return vanilla_uvp_alternating_times
 
 # def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):

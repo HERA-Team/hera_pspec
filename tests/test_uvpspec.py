@@ -16,7 +16,7 @@ from pathlib import Path
 def case_vanilla_uvp(vanilla_uvp: UVPSpec):
     return vanilla_uvp
 
-def case_vanilla_uvp_with_beam(vanilla_uvp_with_beam: UVPSpec):
+def case_vanilla_uvp_with_beam(beam_nf_dipole, vanilla_uvp_with_beam: UVPSpec):
     return vanilla_uvp_with_beam
 
 def case_vanilla_uvp_w_ndlys(vanilla_uvp_w_ndlys: UVPSpec):
@@ -25,10 +25,10 @@ def case_vanilla_uvp_w_ndlys(vanilla_uvp_w_ndlys: UVPSpec):
 def case_vanilla_uvp_delay_binned(vanilla_uvp_delay_binned: UVPSpec):
     return vanilla_uvp_delay_binned
 
-def case_vanilla_uvp_alternating_times(vanilla_uvp_alternating_times: UVPSpec):
+def case_vanilla_uvp_alternating_times(beam_nf_dipole, vanilla_uvp_alternating_times: UVPSpec):
     return vanilla_uvp_alternating_times
 
-def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):
+def case_uvp_exact_wfs(uvp_example_data, uvp_exact_wfs: UVPSpec):
     return uvp_exact_wfs
 
 class TestUVPSpec:
