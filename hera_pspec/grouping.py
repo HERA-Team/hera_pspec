@@ -411,7 +411,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
                             if uvp.exact_windows:
                                 window_function = (np.sum(window_function * w[:, :, None, None], axis=0)\
                                                     / (wsum)[:, None, None])[None]
-                            if not uvp.exact_windows:
+                            else:
                                 window_function = (np.sum(window_function * w[:, :, None], axis=0) \
                                                    / (wsum)[:, None])[None]
                         if store_cov:
@@ -596,7 +596,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
         return uvp
 
 
-def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=False, blpair_weights=None,
+def spherical_average(uvp_in, kbins, bin_widths, kbins_theory=None, blpair_groups=None, time_avg=False, blpair_weights=None,
                       weight_by_cov=False, error_weights=None, time_tol: float = 1e-6,
                       add_to_history='', little_h=True, A={}, run_check=True):
     """
@@ -614,6 +614,13 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     bin_widths : array-like
         1D float array of kbin widths for each element in kbins
+
+    kbins_theory : array-like, optional
+        1D float array of ascending |k| bin centers in [h] Mpc^-1 units
+        used in the theory (used for averaging the window functions).
+        For now, it is assumed the bins are linearly equally spaced.
+        Default is identical to data spherical binning.
+        (h included if little_h is True)
 
     blpair_groups : list of tuples, optional
         blpair_groups to average if fed (cylindrical binning)
@@ -678,7 +685,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         bin_widths = np.ones_like(kbins) * bin_widths
 
     # copy input
-    uvp = copy.deepcopy(uvp_in) 
+    uvp = copy.deepcopy(uvp_in)
 
     # transform kgrid to little_h units
     if not little_h:
@@ -713,6 +720,24 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
         stats_array = odict([[stat, odict()] for stat in uvp.stats_array.keys()])
     if store_window:
         window_function_array = odict()
+        # define arrays for theory spherical bins
+        if kbins_theory is None:
+            kbins_theory = kbins
+            bin_widths_theory = bin_widths
+            kbin_left_theory = kbin_left
+            kbin_right_theory = kbin_right
+            Nk_theory = Nk
+        else:
+            kbins_theory = np.atleast_1d(kbins_theory)
+            bin_widths_theory = np.ones_like(kbins_theory) * np.diff(kbins_theory).mean()
+            # transform kgrid to little_h units
+            if not little_h:
+                kbins_theory = kbins_theory / uvp.cosmo.h
+                bin_widths_theory = bin_widths_theory / uvp.cosmo.h
+            kbin_left_theory = kbins_theory - bin_widths_theory / 2
+            kbin_right_theory = kbins_theory + bin_widths_theory / 2
+            assert np.all(kbin_left_theory[1:] >= kbin_right_theory[:-1] - 1e-6), "kbins_theory must not overlap"
+            Nk_theory = len(kbins_theory)
 
     # iterate over spectral windows
     spw_ranges = uvp.get_spw_ranges()
@@ -725,6 +750,8 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
         # setup arrays with delays in them
         Ndlys = spw_range[3]
+        Nfreqs = spw_range[2]
+        # check if object has been delay-averaged
         Ndlyblps = Ndlys * uvp.Nblpairs
         data_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128)
         if store_cov:
@@ -735,23 +762,27 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 stats_array[stat][spw] = np.zeros((uvp.Ntimes, Ndlyblps, uvp.Npols), dtype=np.complex128)
         if store_window:
             if uvp.exact_windows:
-                window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
+                window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk_theory, uvp.Npols), dtype=np.float64)
             else:
-                window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Ndlyblps, uvp.Npols), dtype=np.float64)
+                Nkpar = uvp.window_function_array[spw].shape[2]
+                window_function_array[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nkpar, uvp.Npols), dtype=np.float64)
 
         # setup the design matrix: P_cyl = A P_sph
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
-
+        # design matrix for window functions
+        Aw = np.zeros((uvp.Ntimes, Nfreqs, Nk_theory, uvp.Npols), dtype=np.float64)
         # setup weighting matrix: block diagonal for each Ndly x Ndly
         # we can represent the Ndlyblps x Ndlyblps block diagonal matrix as Ndlyblps x Ndlys
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
-
 
         # get kperps for this spw: shape (Nbltpairs,)
         kperps = uvp.get_kperps(spw, little_h=True)
 
         # get kparas for this spw: shape (Ndlys,)
         kparas = uvp.get_kparas(spw, little_h=True)
+        # get kparas for this spw: shape (Nfreqs,) - used for window function averaging
+        all_dlys = utils.get_delays(uvp.freq_array[uvp.spw_to_freq_indices(spw)])
+        kparas_per_freq = uvp.get_kparas(spw, little_h=True, dlys=all_dlys)
 
         # get k to tau mapping for this spw
         avgz = uvp.cosmo.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
@@ -787,7 +818,7 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             data_array[spw][:, dslice] = uvp.data_array[spw][blpt_inds]
 
             if store_window and not uvp.exact_windows:
-                window_function_array[spw][:, dslice, dslice] = uvp.window_function_array[spw][blpt_inds]
+                window_function_array[spw][:, dslice, ...] = uvp.window_function_array[spw][blpt_inds]
 
             if store_stats:
                 for stat in stats_array:
@@ -813,7 +844,6 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
                 E[:, range(dstart, dstop), range(0, Ndlys)] = 1.0
                 f = np.isclose(uvp.integration_array[spw][blpt_inds] * uvp.nsample_array[spw][blpt_inds], 0)
                 E[:, range(dstart, dstop), range(0, Ndlys)] *= (~f[:, None, :])
-
             # append to non-dly arrays
             Emean = np.trace(E[:, dslice, :], axis1=1, axis2=2)  # use sum of E across delay as weight
             wgt_array[spw] += wgts * Emean[:, None, None, :]
@@ -823,16 +853,24 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # get k_sph -> k_cyl mapping
             for i, kmag in enumerate(kmags):
                 kind = (kbin_left < kmag) & (kbin_right >= kmag)
-
-                if not np.any(kind):
+                if np.any(kind):
                     # skip if not in any kbins
-                    continue
-                else:
                     # convert kind into an integer for indexing
                     kind = np.where(kind)[0][0]
-
                 # populate A matrix
                 A[spw][:, i + Ndlys * b, kind, :] = 1.0
+
+            # get k_sph -> k_cyl mapping for window function
+            # get k magnitude of data: (Ndlys,)
+            kmags_per_freq = np.sqrt(kperps[blpt_inds][0]**2 + kparas_per_freq**2)
+            for i, kmag in enumerate(kmags_per_freq):
+                kind = (kbin_left_theory < kmag) & (kbin_right_theory >= kmag)
+                if np.any(kind):
+                    # skip if not in any kbins
+                    # convert kind into an integer for indexing
+                    kind = np.where(kind)[0][0]
+                # populate Aw matrix
+                Aw[:, i, kind, :] = 1.0
 
         # normalize metadata sums
         wgt_array[spw] /= np.max(wgt_array[spw], axis=(2, 3), keepdims=True).clip(1e-40, np.inf)
@@ -870,7 +908,8 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             # bin window function: W_sph = H.T W_cyl A
             # wm shape (Npols, Ntimes, Ndlyblps, Ndlyblps)
             wm = np.moveaxis(window_function_array[spw], -1, 0)
-            wm = Ht @ wm @ Am
+            Aw2 = np.moveaxis(Aw, -1, 0)
+            wm = Ht @ wm @ Aw2
             window_function_array[spw] = np.moveaxis(wm, 0, -1)
 
         if store_stats:
@@ -895,15 +934,18 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
             cov_array_real[spw] = np.moveaxis(cm, 0, -1)
             cov_array_imag[spw] = np.zeros_like(cov_array_real[spw])
 
-        if uvp.exact_windows:
-            window_function_array[spw] = spherical_wf_from_uvp(uvp, kbins, bin_widths,
-                                                               blpair_groups=blpair_groups,
-                                                               blpair_weights=blpair_weights,
-                                                               time_avg=time_avg,
-                                                               error_weights=error_weights,
-                                                               spw_array=spw,
-                                                               little_h=True,
-                                                               verbose=True)[spw]
+    if uvp.exact_windows and store_window:
+        window_function_array = spherical_wf_from_uvp(
+            uvp, np.r_[kbin_left, kbin_right[-1]],
+            kbin_edges_theory=np.r_[kbin_left_theory, kbin_right_theory[-1]],
+            blpair_groups=blpair_groups,
+            blpair_weights=blpair_weights,
+            time_avg=time_avg,
+            error_weights=error_weights,
+            spw_array=uvp.spw_array,
+            little_h=True,
+            verbose=False
+        )
 
     # handle data arrays
     uvp.data_array = data_array
@@ -957,7 +999,8 @@ def spherical_average(uvp_in, kbins, bin_widths, blpair_groups=None, time_avg=Fa
 
     return uvp
 
-def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
+
+def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_theory=None,
                           blpair_groups=None, blpair_lens=None, blpair_weights=None,
                           error_weights=None, time_avg=False, spw_array=None,
                           little_h=True, verbose=False, time_tol: float=1e-6):
@@ -972,12 +1015,15 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     uvp_in : UVPSpec object
         Input UVPSpec to average
 
-    kbins : array-like
-        1D float array of ascending |k| bin centers in [h] Mpc^-1 units
+    kbin_edges : array-like
+        1D float array of ascending |k| bin edges in [h] Mpc^-1 units
         (h included if little_h is True)
 
-    bin_widths : array-like
-        1D float array of kbin widths for each element in kbins
+    kbin_edges_theory : array-like
+        1D float array of ascending |k| bin edges in [h] Mpc^-1 units
+        (h included if little_h is True)
+        Default is None, that is kbins_in = kbins.
+        Output window function will have shape (kbins, kbins_in).
 
     blpair_groups : list of tuples,
         blpair_groups to average if fed (cylindrical binning)
@@ -1016,14 +1062,16 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
     --------
     wf_spherical : array
         Array of spherical window functions.
-        Shape (nbinsk, nbinsk).
+        Shape (kbins.size, kbins_in.size).
 
     """
 
     # input checks
 
-    if isinstance(bin_widths, (float, int)):
-        bin_widths = np.ones_like(kbins) * bin_widths
+    if kbin_edges_theory is None:
+        kbin_edges_theory = np.copy(kbin_edges)
+    Nk = np.size(kbin_edges) - 1
+    Nk_in = np.size(kbin_edges_theory) - 1
 
     # if window functions have been computed without little h
     # it is not possible to re adjust so kbins need to be in Mpc-1
@@ -1032,20 +1080,20 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         warnings.warn('Changed little_h units to make kbins consistent ' \
                       'with uvp.window_function_array. Might be inconsistent ' \
                       'with the power spectrum units.')
+        # we modify the units of the input kbins to be consistent with uvp_in
+        # and, likely, the units of the pre-computed window functions.
         if little_h:
-            kbins *= uvp_in.cosmo.h 
-            bin_widths *= uvp_in.cosmo.h 
+            kbin_edges *= uvp_in.cosmo.h
+            kbin_edges_theory *= uvp_in.cosmo.h
         else:
-            kbins /= uvp_in.cosmo.h
-            bin_widths /= uvp_in.cosmo.h
+            kbin_edges /= uvp_in.cosmo.h
+            kbin_edges_theory /= uvp_in.cosmo.h
+        # final little_h matches the units of uvp_in
         little_h = 'h^-3' in uvp_in.norm_units
 
     # ensure bins don't overlap
-    assert len(kbins) == len(bin_widths)
-    kbin_left = kbins - bin_widths / 2
-    kbin_right = kbins + bin_widths / 2
-    assert np.all(kbin_left[1:] >= kbin_right[:-1] - 1e-6), "kbins must not overlap"
-    Nk = len(kbins)
+    assert np.all(np.diff(kbin_edges) > 0), "kbins must not overlap"
+    assert np.all(np.diff(kbin_edges_theory) > 0), "kbins_in must not overlap"
 
     # copy input
     uvp = copy.deepcopy(uvp_in) 
@@ -1068,7 +1116,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
             # get baseline length for each group of baseline pairs
             # assuming only redundant baselines are paired together
             blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.)
-        else:     
+        else:
             # ensure consistency between inputs
             assert len(blpair_groups)==len(blpair_lens), "Baseline-pair groups" \
                         " are inconsistent with baseline lengths"
@@ -1113,7 +1161,7 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
         kmags = np.sqrt(kperps[:, None]**2 + kparas**2)
 
         # setup arrays 
-        window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk, uvp.Npols), dtype=np.float64)
+        window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk_in, uvp.Npols), dtype=np.float64)
 
         # iterate over polarisation
         spw_window_function = []
@@ -1130,14 +1178,14 @@ def spherical_wf_from_uvp(uvp_in, kbins, bin_widths,
 
             # take average for each time
             for it in range(uvp.Ntimes):
-                wf_spherical = np.zeros((Nk, Nk))
+                wf_spherical = np.zeros((Nk, Nk_in))
                 for m1 in range(Nk):
-                    mask1 = (kbin_left[m1] <= kmags) & (kmags < kbin_right[m1])
+                    mask1 = (kbin_edges[m1] <= kmags) & (kmags < kbin_edges[m1+1])
                     if np.any(mask1):
                         wf_temp = np.sum(cyl_wf[it, ...]*mask1[:, :, None, None].astype(int), axis=(0, 1))/np.sum(mask1)
-                        if np.sum(wf_temp) > 0.: 
-                            for m2 in range(Nk):
-                                mask2 = (kbin_left[m2] <= ktot) & (ktot < kbin_right[m2])
+                        if np.sum(wf_temp) > 0.:
+                            for m2 in range(Nk_in):
+                                mask2 = (kbin_edges_theory[m2] <= ktot) & (ktot < kbin_edges_theory[m2+1])
                                 if np.any(mask2): #cannot compute mean if zero elements
                                     wf_spherical[m1, m2] = np.mean(wf_temp[mask2])
                             # normalisation
@@ -1168,14 +1216,13 @@ def fold_spectra(uvp):
         UVPSpec object to be folded.
     """
     # assert folded is False
-    assert uvp.folded == False, "cannot fold power spectra if uvp.folded == True"
+    assert uvp.folded is False, "cannot fold power spectra if uvp.folded is True"
     store_cov = hasattr(uvp, "cov_array_real")
     # Iterate over spw
     for spw in range(uvp.Nspws):
 
         # get number of dly bins
-        Ndlys = len(uvp.get_dlys(spw))
-
+        Ndlys = uvp.data_array[spw].shape[1]
         # This section could be streamlined considerably since there is a lot of
         # code overlap between the even and odd Ndlys cases.
 
@@ -1187,42 +1234,38 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
             if hasattr(uvp, 'window_function_array'):
+                Nkpar = uvp.window_function_array[spw].shape[2]
+                first_kpar = 1 if Nkpar % 2 == 0 else 0
                 if uvp.exact_windows:
                     left = uvp.window_function_array[spw][:, 1:Ndlys//2, ...][:, ::-1, ...]
-                    right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
+                    right = uvp.window_function_array[spw][:, Ndlys//2+1:, ...]
                     uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
                 else:
-                    leftleft = uvp.window_function_array[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
-                    leftright = uvp.window_function_array[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
-                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                    uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                                     +leftright\
-                                                                                     +rightleft\
-                                                                                     +rightright)
-                    uvp.window_function_array[spw][:, :, :Ndlys//2, :] = 0.0
+                    leftleft = uvp.window_function_array[spw][:, 1:Ndlys//2, first_kpar:Nkpar//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.window_function_array[spw][:, 1:Ndlys//2, Nkpar//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1:, first_kpar:Nkpar//2, :][:, :, ::-1, :]
+                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Nkpar//2+1:, :]
+                    uvp.window_function_array[spw][:, Ndlys//2+1:, Nkpar//2+1:, :] = .25 *\
+                        (leftleft + leftright + rightleft + rightright)
+                    uvp.window_function_array[spw][:, :, :Nkpar//2, :] = 0.0
                 uvp.window_function_array[spw][:, :Ndlys//2, ...] = 0.0
             # fold covariance array if it exists.
-            if hasattr(uvp,'cov_array_real'):
+            if hasattr(uvp, 'cov_array_real'):
                 leftleft = uvp.cov_array_real[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
                 leftright = uvp.cov_array_real[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
                 rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
                 rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
+                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25 * \
+                    (leftleft + leftright + rightleft + rightright)
                 uvp.cov_array_real[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_real[spw][:, :, :Ndlys//2, : :] = 0.0
+                uvp.cov_array_real[spw][:, :, :Ndlys//2, :] = 0.0
 
                 leftleft = uvp.cov_array_imag[spw][:, 1:Ndlys//2, 1:Ndlys//2, :][:, ::-1, ::-1, :]
                 leftright = uvp.cov_array_imag[spw][:, 1:Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , 1:Ndlys//2, :][:, :, ::-1, :]
+                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1:, 1:Ndlys//2, :][:, :, ::-1, :]
                 rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
+                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25 * \
+                    (leftleft + leftright + rightleft + rightright)
                 uvp.cov_array_imag[spw][:, :Ndlys//2, :, :] = 0.0
                 uvp.cov_array_imag[spw][:, :, :Ndlys//2, : :] = 0.0
 
@@ -1242,45 +1285,41 @@ def fold_spectra(uvp):
             uvp.data_array[spw][:, :Ndlys//2, :] = 0.0
             uvp.nsample_array[spw] *= 2.0
             if hasattr(uvp, 'window_function_array'):
+                Nkpar = uvp.window_function_array[spw].shape[2]
+                first_kpar = 1 if Nkpar % 2 == 0 else 0
                 if uvp.exact_windows:
                     left = uvp.window_function_array[spw][:, :Ndlys//2, ...][:, ::-1, ...]
-                    right = uvp.window_function_array[spw][:, Ndlys//2+1: , ...]
+                    right = uvp.window_function_array[spw][:, Ndlys//2+1:, ...]
                     uvp.window_function_array[spw][:, Ndlys//2+1:, ...] = .50*(left+right)
                 else:
-                    leftleft = uvp.window_function_array[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
-                    leftright = uvp.window_function_array[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
-                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                    uvp.window_function_array[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                                 +leftright\
-                                                                                 +rightleft\
-                                                                                 +rightright)
-                    uvp.window_function_array[spw][:, :, :Ndlys//2, :] = 0.0
+                    leftleft = uvp.window_function_array[spw][:, :Ndlys//2, first_kpar:Nkpar//2, :][:, ::-1, ::-1, :]
+                    leftright = uvp.window_function_array[spw][:, :Ndlys//2, Nkpar//2+1:, :][:, ::-1, :, :]
+                    rightleft = uvp.window_function_array[spw][:, Ndlys//2+1:, first_kpar:Nkpar//2, :][:, :, ::-1, :]
+                    rightright = uvp.window_function_array[spw][:, Ndlys//2+1:, Nkpar//2+1:, :]
+                    uvp.window_function_array[spw][:, Ndlys//2+1:, Nkpar//2+1:, :] = .25 * \
+                        (leftleft + leftright + rightleft + rightright)
+                    uvp.window_function_array[spw][:, :, :Nkpar//2, :] = 0.0
                 uvp.window_function_array[spw][:, :Ndlys//2, ...] = 0.0
 
             # fold covariance array if it exists.
             if hasattr(uvp,'cov_array_real'):
                 leftleft = uvp.cov_array_real[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
                 leftright = uvp.cov_array_real[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                rightleft = uvp.cov_array_real[spw][:, Ndlys//2+1:, :Ndlys//2, :][:, :, ::-1, :]
                 rightright = uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
+                uvp.cov_array_real[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25 * \
+                    (leftleft + leftright + rightleft + rightright)
                 uvp.cov_array_real[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_real[spw][:, :, :Ndlys//2, : :] = 0.0
+                uvp.cov_array_real[spw][:, :, :Ndlys//2, :] = 0.0
 
                 leftleft = uvp.cov_array_imag[spw][:, :Ndlys//2, :Ndlys//2, :][:, ::-1, ::-1, :]
                 leftright = uvp.cov_array_imag[spw][:, :Ndlys//2, Ndlys//2+1:, :][:, ::-1, :, :]
-                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1: , :Ndlys//2, :][:, :, ::-1, :]
+                rightleft = uvp.cov_array_imag[spw][:, Ndlys//2+1:, :Ndlys//2, :][:, :, ::-1, :]
                 rightright = uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :]
-                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25*(leftleft\
-                                                                         +leftright\
-                                                                         +rightleft\
-                                                                         +rightright)
+                uvp.cov_array_imag[spw][:, Ndlys//2+1:, Ndlys//2+1:, :] = .25 * \
+                    (leftleft + leftright + rightleft + rightright)
                 uvp.cov_array_imag[spw][:, :Ndlys//2, :, :] = 0.0
-                uvp.cov_array_imag[spw][:, :, :Ndlys//2, : :] = 0.0
+                uvp.cov_array_imag[spw][:, :, :Ndlys//2, :] = 0.0
 
             # fold stats array if it exists: sum in inverse quadrature
             if hasattr(uvp, 'stats_array'):
@@ -1839,8 +1878,8 @@ def _get_delay_slices(
     )
 
 def average_in_delay_bins(
-    uvp, 
-    kernel: np.ndarray, 
+    uvp,
+    kernel: np.ndarray,
     cov_weighted_stats: tuple[str] = ("P_N", "P_SN"),
     zero_bin_kernel: np.ndarray = np.ones(1),
 ):
@@ -1939,8 +1978,8 @@ def average_in_delay_bins(
 
     dly_array = []
     spw_dly_array = []
-    for spw in uvp.spw_array:   
-        
+    for spw in uvp.spw_array:
+
         p = uvp.data_array[spw]
         dly = uvp.get_dlys(spw)
         slices, kernels = _get_delay_slices(dly, kernel=kernel, zero_kernel=zero_bin_kernel)
@@ -1968,12 +2007,12 @@ def average_in_delay_bins(
             new_uvp.cov_array_imag[spw] = newcov
         
         if hasattr(uvp, "window_function_array"):
-            wf = uvp.window_function_array[spw] # shape (Nblts, Ndly, Ndly, Npol)
+            oldwf = uvp.window_function_array[spw] # shape (Nblts, Ndly, Ndly, Npol)
             # We bin this like a data array (on axis=1) and end up with a non-square
             # window function. This works both for exact/non-exact window functions.
             # If we really need a square window function, then the second axis should 
             # be binned using a uniform kernel.
-            new_uvp.window_function_array[spw] = _bin_data_like_array(wf, kernels, slices, axis=1)
+            new_uvp.window_function_array[spw] = _bin_data_like_array(oldwf, kernels, slices, axis=1)
 
         for stat in cov_weighted_stats:
             # Problematically, there's only one covariance array, but there could be

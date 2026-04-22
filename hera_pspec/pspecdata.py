@@ -1164,7 +1164,7 @@ class PSpecData:
 
         # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
         self._get_qalt_cached = lru_cache(maxsize=int(self.spw_Ndlys))(utils.get_Q_alt)
-        
+
 
     def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
                   time_indices=None):
@@ -3381,7 +3381,12 @@ class PSpecData:
 
                     # store the window_function
                     if store_window:
+                        # Wv shape = (nfreqs, nfreqs) ie (64, 64)
+                        # qv shape = (nfreqs, ntimes) ie (64, 60)
                         pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
+                        # pol_wf shape = (ntimes, nfreqs, nfreqs) ie (60, 64, 64)
+                        # 4 blps so final wf_array shape for each spw is
+                        # (ntimes * nbls, nfreqs, nfreqs) = (4 * 60 = 240, 64, 64)
 
                     # Get baseline keys
                     if isinstance(blp, list):
