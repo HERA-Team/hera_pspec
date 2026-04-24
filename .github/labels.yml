@@ -1,0 +1,38 @@
+# Declarative label inventory for maintainers. This file does not
+# automatically sync labels to GitHub without separate repo automation.
+- name: "area: ci"
+  color: "1d76db"
+  description: CI, workflow, coverage, warning checks, and release automation.
+- name: "area: docs"
+  color: "1d76db"
+  description: README, ReadTheDocs, API docs, and prose documentation.
+- name: "area: examples"
+  color: "1d76db"
+  description: Notebooks, tutorials, example scripts, and example data paths.
+- name: "area: packaging"
+  color: "1d76db"
+  description: Build backend, dependency metadata, installation, wheels, and releases.
+- name: "area: pspecdata"
+  color: "1d76db"
+  description: PSpecData, estimator setup, covariance models, and OQE execution.
+- name: "area: uvpspec"
+  color: "1d76db"
+  description: UVPSpec, HDF5 IO, selection, combination, and result metadata.
+- name: "area: grouping"
+  color: "1d76db"
+  description: Averaging, folding, bootstrapping, spherical binning, and delay-bin grouping.
+- name: "type: maintenance"
+  color: "0e8a16"
+  description: Tooling, cleanup, dependency updates, and non-science refactors.
+- name: "type: deprecation"
+  color: "0e8a16"
+  description: Planned removal or replacement of supported APIs or features.
+- name: "type: science"
+  color: "5319e7"
+  description: Scientific or statistical behavior, estimator math, normalization, and sensitivity logic.
+- name: good first issue
+  color: "7057ff"
+  description: Scoped issue suitable for a new contributor.
+- name: needs decision
+  color: "fbca04"
+  description: Blocked on maintainer, design, or science-policy agreement.

@@ -2256,9 +2256,9 @@ class PSpecData:
             Default: True
 
         include_extension : boolean, optional
-            If True, return a matrix that is spw_Nfreq x spw_Nfreq
-            (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
-            (spw_Nfreq x spw_Nfreq).
+            If True, return a matrix with shape ``(spw_Nfreq, spw_Nfreq)``.
+            This is required when using ``dC_ij / dp_alpha``, since
+            ``C_ij`` itself has shape ``(spw_Nfreq, spw_Nfreq)``.
 
         Return
         -------
@@ -2879,12 +2879,11 @@ class PSpecData:
 
         ftbeam : str or FTBeam, optional
             Definition of the beam Fourier transform to be used.
-            Options include;
-                - Root name of the file to use, without the polarisation
-                Ex : FT_beam_HERA_dipole (+ path)
-                - '' for computation from beam simulations (slow)
-                - FTBeam object. Make sure polarisations and bandwidths
-                are consistent with the data set.
+            Valid options are the root name of the file to use without the
+            polarization suffix, for example ``FT_beam_HERA_dipole`` plus its
+            path; ``''`` to compute from beam simulations (slow); or an
+            ``FTBeam`` object whose polarizations and bandwidths are
+            consistent with the data set.
 
         cov_model : string, optional
             Type of covariance model to calculate, if not cached.
