@@ -30,6 +30,60 @@
 - name: "type: science"
   color: "5319e7"
   description: Scientific or statistical behavior, estimator math, normalization, and sensitivity logic.
+- name: "type: bug"
+  color: "d73a4a"
+  description: Something isn't working correctly.
+- name: "type: feature"
+  color: "0e8a16"
+  description: New analysis capability or user-facing functionality.
+- name: "type: testing"
+  color: "b1fc6f"
+  description: Test additions, fixtures, and test-infrastructure changes.
+- name: "type: performance"
+  color: "016175"
+  description: Walltime, memory, or scaling improvements.
+- name: "type: question"
+  color: "d876e3"
+  description: A question about the code, API, or documentation.
+- name: "type: maint: dependencies"
+  color: "0366d6"
+  description: Pull requests that update a dependency file.
+- name: "type: maint: documentation"
+  color: "0075ca"
+  description: Improvements or additions to documentation.
+- name: "type: maint: refactoring"
+  color: "ef67c4"
+  description: Refactoring without behavior change.
+- name: "type: maint: removal"
+  color: "9ae7ea"
+  description: Removals and deprecations.
+- name: "type: maint: style"
+  color: "c120e5"
+  description: Code style and formatting.
+- name: "type: maint: build"
+  color: "bfdadc"
+  description: Build system and packaging.
+- name: "breaking change"
+  color: "e305fc"
+  description: Removes, renames, or changes the semantics of a public API.
+- name: "priority: low"
+  color: "bfd4f2"
+  description: Nice to have; deferrable past the current cycle.
+- name: "priority: medium"
+  color: "e99695"
+  description: Should land in the current development cycle.
+- name: "priority: high"
+  color: "b60205"
+  description: Blocking or near-blocking; address as soon as possible.
+- name: "status: duplicate"
+  color: "d93f0b"
+  description: Already tracked by another issue or PR.
+- name: "status: invalid"
+  color: "d93f0b"
+  description: Not a valid issue or PR (insufficient information, off-topic, etc.).
+- name: "status: wontfix"
+  color: "d93f0b"
+  description: Valid concern but out of scope or not planned.
 - name: good first issue
   color: "7057ff"
   description: Scoped issue suitable for a new contributor.
