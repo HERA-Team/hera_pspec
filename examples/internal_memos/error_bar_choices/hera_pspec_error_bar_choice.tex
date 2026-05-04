@@ -5,7 +5,7 @@
 \usepackage{natbib}
 \bibliographystyle{abbrvnat}
 \setcitestyle{authoryear,open={(},close={)}}
-\newcommand{\JRT}[1]{\textcolor{red}{JRT: #1}} 
+\newcommand{\JRT}[1]{\textcolor{red}{JRT: #1}}
 
 \title{Error Bar Choices in HERA PSPEC}
 \author{pspec team}
@@ -13,21 +13,21 @@
 
 \maketitle{}
 \begin{abstract}
-    In this memo we summarize the math behind several ways to derive error bars on power spectra which are available in the current pipeline of HERA PSPEC.  
+    In this memo we summarize the math behind several ways to derive error bars on power spectra which are available in the current pipeline of HERA PSPEC.
 \end{abstract}
 
 \section{Foreground/systematics dependent variance}
 \label{ap:fg_dependent_var}
 
-We begin with a general expression of the variance on power spectra with the existence of foregrounds or systematics, which includes both the noise variance and the signal-noise coupling term. Given two delay spectra $\tilde{x}_1 = \tilde{s} + \tilde{n}_1$ and $\tilde{x}_2 = \tilde{s} + \tilde{n}_2$, and we express $\tilde{s} = a + b i$, $\tilde{n}_1 = c_1 + d_1 i$ and $\tilde{n}_2 = c_2 + d_2 i$, the power spectra formed from $\tilde{x}_1^* \tilde{x}_2$ is 
+We begin with a general expression of the variance on power spectra with the existence of foregrounds or systematics, which includes both the noise variance and the signal-noise coupling term. Given two delay spectra $\tilde{x}_1 = \tilde{s} + \tilde{n}_1$ and $\tilde{x}_2 = \tilde{s} + \tilde{n}_2$, and we express $\tilde{s} = a + b i$, $\tilde{n}_1 = c_1 + d_1 i$ and $\tilde{n}_2 = c_2 + d_2 i$, the power spectra formed from $\tilde{x}_1^* \tilde{x}_2$ is
 \begin{align*}
-P_{\tilde{x}_1\tilde{x}_2} & = \tilde{s}^*\tilde{s} + \tilde{s}^*\tilde{n}_2 + \tilde{n}_1^*\tilde{s} + 
+P_{\tilde{x}_1\tilde{x}_2} & = \tilde{s}^*\tilde{s} + \tilde{s}^*\tilde{n}_2 + \tilde{n}_1^*\tilde{s} +
 \tilde{n}_1^*\tilde{n}_2 \notag \\
 & = \{a^2+b^2 + a(c_1+c_2) + b(d_1+d_2) + c_1c_2 + d_1d_2\} \notag \\
 & \phantom{=} + \{a(d_2-d_1)+b(c_1-c_2)+d_2 c_1-d_1 c_2\}i \,.
 \end{align*}
 
-Here we consider $\langle s \rangle = s$, which means $a$ and $b$ are not random variables, but related to the true signal power spectrum by $P_{\tilde{s}\tilde{s}} = a^2 +b^2$, and $c_1$, $d_1$, $c_2$ and $d_2$ are i.i.d random normal variables. We then have 
+Here we consider $\langle s \rangle = s$, which means $a$ and $b$ are not random variables, but related to the true signal power spectrum by $P_{\tilde{s}\tilde{s}} = a^2 +b^2$, and $c_1$, $d_1$, $c_2$ and $d_2$ are i.i.d random normal variables. We then have
 \begin{align}
 \label{eq:var_real_ps}
 \text{var} \left[\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) \right] &= \text{var} \left[a^2+b^2 + a(c_1+c_2) + b(d_1+d_2) + c_1c_2 + d_1d_2 \right] \notag \\
@@ -35,20 +35,20 @@ Here we consider $\langle s \rangle = s$, which means $a$ and $b$ are not random
 & = \sqrt{2}P_{\tilde{s}\tilde{s}}P_\text{N} + P_\text{N}^2 \notag \\
 & = \sqrt{2}\langle \text{Re} (P_{\tilde{x}_1\tilde{x}_2})\rangle P_\text{N} + P_\text{N}^2 \,.
 \end{align}
-In the equations above we have used the relation $\text{var} ( c_1c_2 + d_1d_2) = 2\langle c_1^2\rangle^2 = P_\text{N}^2$, where $P_\text{N}$ is the analytic noise power spectrum we will refer to again later. We have also used the fact $\langle \text{Re} (P_{\tilde{x}_1\tilde{x}_2})\rangle = P_{\tilde{s}\tilde{s}}$, therefore we can choose $\sqrt{2}\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) P_\text{N} + P_\text{N}^2$ as a general form of error bars with the existence of foregrounds or systematics. Also, since $\text{Re} (P_{\tilde{x}_1\tilde{x}_2})$ could be negative due to noise randomness, we explicitly exert a zero clipping for negative values of $\text{Re} (P_{\tilde{x}_1\tilde{x}_2})$. This will of course come with excess variance, which is not ideal, but may still be a good first-order approximation in the limit that we don't have good signal or residual systematic models.   
+In the equations above we have used the relation $\text{var} ( c_1c_2 + d_1d_2) = 2\langle c_1^2\rangle^2 = P_\text{N}^2$, where $P_\text{N}$ is the analytic noise power spectrum we will refer to again later. We have also used the fact $\langle \text{Re} (P_{\tilde{x}_1\tilde{x}_2})\rangle = P_{\tilde{s}\tilde{s}}$, therefore we can choose $\sqrt{2}\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) P_\text{N} + P_\text{N}^2$ as a general form of error bars with the existence of foregrounds or systematics. Also, since $\text{Re} (P_{\tilde{x}_1\tilde{x}_2})$ could be negative due to noise randomness, we explicitly exert a zero clipping for negative values of $\text{Re} (P_{\tilde{x}_1\tilde{x}_2})$. This will of course come with excess variance, which is not ideal, but may still be a good first-order approximation in the limit that we don't have good signal or residual systematic models.
 
-If we consider the variance on the whole complex values of power spectrum, then 
+If we consider the variance on the whole complex values of power spectrum, then
 \begin{align}
 \label{eq:var_ps}
 \text{var} \left[P_{\tilde{x}_1\tilde{x}_2} \right] &= \text{var} \left[a^2+b^2 + a(c_1+c_2) + b(d_1+d_2) + c_1c_2 + d_1d_2 \right] \notag \\
 &\phantom{=} +  \text{var} \left[a(d_2-d_1)+b(c_1-c_2)+d_2 c_1-d_1 c_2 \right] \notag \\
 & = 4(a^2+b^2)\langle c_1^2\rangle + 4\langle c_1^2\rangle^2 \,.
 \end{align}
-It is just the form in \citet{kolopanis2019simplified}, while they used the notation $P_\text{N} = 2\langle c_1^2\rangle$, thus $\text{var} \left[P_{\tilde{x}_1\tilde{x}_2} \right] = 2 P_{\tilde{s}\tilde{s}} P_\text{N} + P_\text{N}^2$ there. 
+It is just the form in \citet{kolopanis2019simplified}, while they used the notation $P_\text{N} = 2\langle c_1^2\rangle$, thus $\text{var} \left[P_{\tilde{x}_1\tilde{x}_2} \right] = 2 P_{\tilde{s}\tilde{s}} P_\text{N} + P_\text{N}^2$ there.
 
 \section{Analytic method from QE formalism}
 \label{ap:analytic}
-The QE formalism used in HERA PSPEC power spectrum estimation \footnote{\url{http://reionization.org/wp-content/uploads/2020/04/HERA044_power_spectrum_normalization_v2.pdf}} naturally leads to an analytic expression of the output covariance between bandpowers. 
+The QE formalism used in HERA PSPEC power spectrum estimation \footnote{\url{http://reionization.org/wp-content/uploads/2020/04/HERA044_power_spectrum_normalization_v2.pdf}} naturally leads to an analytic expression of the output covariance between bandpowers.
 
 In HERA PSPEC, an unnormalized estimator to $\alpha$th bandpowers $\hat{q}_\alpha$ is defined as $\hat{q}_\alpha = \bm{x}_1^\dagger \bm{Q}^{12,\alpha} \bm{x}_2 = \sum_{ij} \bm{x}_{1,i}^*\bm{Q}^{12,\alpha}_{ij}\bm{x}_{2,j}$, where $\bm{x}_{1}$ and $\bm{x}_{2}$ are visibilities across frequencies. The key idea here is to propagate the input covariance on visibilities between frequencies into the output covariance on bandpowers between delays. We continue to define three sets of input covariance matrices $\bm{C}^{12}$, $\bm{U}^{12}$ and $\bm{S}^{12}$
 \begin{align}
@@ -58,7 +58,7 @@ In HERA PSPEC, an unnormalized estimator to $\alpha$th bandpowers $\hat{q}_\alph
 \end{align}
 and we have
 \begin{align}
-\langle \hat{q}_\alpha \hat{q}_\beta \rangle - \langle \hat{q}_\alpha \rangle\langle \hat{q}_\beta\rangle =& 
+\langle \hat{q}_\alpha \hat{q}_\beta \rangle - \langle \hat{q}_\alpha \rangle\langle \hat{q}_\beta\rangle =&
 \sum_{ijkl}\langle \bm{x}_{1,i}^*\bm{Q}^{12,\alpha}_{ij}\bm{x}_{2,j}\bm{x}_{1,k}^*\bm{Q}^{12,\beta}_{kl}\bm{x}_{2,l}\rangle - \langle \bm{x}_{1,i}^*\bm{Q}^{12,\alpha}_{ij}\bm{x}_{2,j}\rangle\langle \bm{x}_{1,k}^*\bm{Q}^{12,\beta}_{kl}\bm{x}_{2,l}\rangle\notag\\
 =&\sum_{ijkl}\bm{Q}^{12,\alpha}_{ij}\bm{Q}^{12,\beta}_{kl}(\langle \bm{x}_{1,i}^*\bm{x}_{2,j}\bm{x}_{1,k}^*\bm{x}_{2,l}\rangle - \langle \bm{x}_{1,i}^*\bm{x}_{2,j}\rangle\langle \bm{x}_{1,k}^*\bm{x}_{2,l}\rangle)\notag\\
 =&\sum_{ijkl}\bm{Q}^{12,\alpha}_{ij}\bm{Q}^{12,\beta}_{kl}(\langle \bm{x}_{1,i}^*\bm{x}_{1,k}^*\rangle\langle \bm{x}_{2,j}\bm{x}_{2,l}\rangle + \langle \bm{x}_{1,i}^*\bm{x}_{2,l}\rangle \langle \bm{x}_{1,k}^*\bm{x}_{2,j}\rangle)\notag\\
@@ -88,43 +88,43 @@ and we have
 \end{align}
 where $\bm{Q}^{12,\alpha*}_{ij}= \bm{Q}^{21,\alpha}_{ji}$.
 
-Therefore the covariance between the real part of $\hat{q}_\alpha$ and the real part of $\hat{q}_\beta$ is 
+Therefore the covariance between the real part of $\hat{q}_\alpha$ and the real part of $\hat{q}_\beta$ is
 \begin{equation}
     \frac{1}{4}\left\{ (\langle \hat{q}_\alpha \hat{q}_\beta \rangle - \langle \hat{q}_\alpha \rangle\langle \hat{q}_\beta \rangle) + (\langle \hat{q}_\alpha  \hat{q}_\beta^* \rangle - \langle \hat{q}_\alpha \rangle\langle \hat{q}_\beta ^*\rangle) + (\langle \hat{q}_\alpha^*  \hat{q}_\beta \rangle - \langle \hat{q}_\alpha^* \rangle\langle \hat{q}_\beta \rangle)
         + (\langle \hat{q}_\alpha ^*  \hat{q}_\beta ^*\rangle - \langle \hat{q}_\alpha^*\rangle\langle \hat{q}_\beta^*\rangle) \right\}\,,
 \end{equation}
-and the covariance between the imaginary part of $\hat{q}_\alpha$ and the imaginary part of $\hat{q}_\beta$ is 
+and the covariance between the imaginary part of $\hat{q}_\alpha$ and the imaginary part of $\hat{q}_\beta$ is
 \begin{equation}
     \frac{1}{4}\left\{ (\langle \hat{q}_\alpha \hat{q}_\beta \rangle - \langle \hat{q}_\alpha \rangle\langle \hat{q}_\beta \rangle) - (\langle \hat{q}_\alpha  \hat{q}_\beta^* \rangle - \langle \hat{q}_\alpha \rangle\langle \hat{q}_\beta ^*\rangle) - (\langle \hat{q}_\alpha^*  \hat{q}_\beta \rangle - \langle \hat{q}_\alpha^* \rangle\langle \hat{q}_\beta \rangle)
         + (\langle \hat{q}_\alpha ^*  \hat{q}_\beta ^*\rangle - \langle \hat{q}_\alpha^*\rangle\langle \hat{q}_\beta^*\rangle) \right\}\,.
 \end{equation}
 
-$\hat{q}_\alpha$ should be normalized via multiplying a proper matrix $\bm{M}$ as 
+$\hat{q}_\alpha$ should be normalized via multiplying a proper matrix $\bm{M}$ as
 \begin{equation}
 \label{eq:palpha}
     \hat{P}_\alpha = \sum_{\beta} \bm{M}_{\alpha\beta} \hat{q}_\beta \,.
 \end{equation}
-We then update the results above for $\hat{P}_\alpha$. The covariance between the real part of $\hat{P}_\alpha$ and the real part of $\hat{P}_\beta$ is 
+We then update the results above for $\hat{P}_\alpha$. The covariance between the real part of $\hat{P}_\alpha$ and the real part of $\hat{P}_\beta$ is
 \begin{align}
     &\frac{1}{4} \sum_{\gamma\delta} \Big\{ \bm{M}_{\alpha\gamma} \bm{M}_{\beta\delta} (\langle \hat{q}_\gamma q_\delta \rangle - \langle \hat{q}_\gamma \rangle\langle q_\delta\rangle) + \bm{M}_{\alpha\gamma} \bm{M}_{\beta\delta}^* (\langle \hat{q}_\gamma q_\delta^*\rangle - \langle \hat{q}_\gamma \rangle\langle q_\delta^*\rangle) + \notag\\&
-        \bm{M}_{\alpha\gamma}^* \bm{M}_{\beta\delta} (\langle \hat{q}_\gamma^* q_\delta \rangle - \langle \hat{q}_\gamma^* \rangle\langle q_\delta \rangle) + 
+        \bm{M}_{\alpha\gamma}^* \bm{M}_{\beta\delta} (\langle \hat{q}_\gamma^* q_\delta \rangle - \langle \hat{q}_\gamma^* \rangle\langle q_\delta \rangle) +
         \bm{M}_{\alpha\gamma}^* \bm{M}_{\beta\delta}^* (\langle \hat{q}_\gamma^* q_\delta^*\rangle - \langle \hat{q}_\gamma^*\rangle\langle q_\delta^*\rangle) \Big\}\,,
 \end{align}
 and the covariance in the imaginary part of $\hat{P}_\alpha$ and the imaginary part of $\hat{P}_\beta$ is
 \begin{align}
     &\frac{1}{4} \sum_{\gamma\delta} \Big\{ \bm{M}_{\alpha\gamma} \bm{M}_{\beta\delta} (\langle \hat{q}_\gamma q_\delta \rangle - \langle \hat{q}_\gamma \rangle\langle q_\delta\rangle) - \bm{M}_{\alpha\gamma} \bm{M}_{\beta\delta}^* (\langle \hat{q}_\gamma q_\delta^*\rangle - \langle \hat{q}_\gamma \rangle\langle q_\delta^*\rangle) - \notag\\&
-        \bm{M}_{\alpha\gamma}^* \bm{M}_{\beta\delta} (\langle \hat{q}_\gamma^* q_\delta \rangle - \langle \hat{q}_\gamma^* \rangle\langle q_\delta \rangle) + 
+        \bm{M}_{\alpha\gamma}^* \bm{M}_{\beta\delta} (\langle \hat{q}_\gamma^* q_\delta \rangle - \langle \hat{q}_\gamma^* \rangle\langle q_\delta \rangle) +
         \bm{M}_{\alpha\gamma}^* \bm{M}_{\beta\delta}^* (\langle \hat{q}_\gamma^* q_\delta^*\rangle - \langle \hat{q}_\gamma^*\rangle\langle q_\delta^*\rangle) \Big\}\,.
 \end{align}
 
-Remarkably, the variance of the real part of $\hat{P}_\alpha$ is 
+Remarkably, the variance of the real part of $\hat{P}_\alpha$ is
 \begin{align}
 \label{eq:var_in_ps_real}
-    &\frac{1}{4} \sum_{\beta\gamma} 
+    &\frac{1}{4} \sum_{\beta\gamma}
     \Big\{\bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma} \big[ \text{tr}(\bm{Q}^{12,\beta} \bm{U}^{22} \bm{Q}^{21,\gamma*} \bm{S}^{11}) + \text{tr}(\bm{Q}^{12,\beta} \bm{C}^{21}\notag \\
-    & \phantom{=} \bm{Q}^{12,\gamma} \bm{C}^{21}) \big] 
+    & \phantom{=} \bm{Q}^{12,\gamma} \bm{C}^{21}) \big]
     \, + 2\times \bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma}^* \big[ \text{tr}(\bm{Q}^{12,\beta} \bm{U}^{21} \bm{Q}^{12,\gamma *} \bm{S}^{21}) \, + \notag\\
-    & \phantom{=} \text{tr}(\bm{Q}^{12,\beta} \bm{C}^{22} \bm{Q}^{21,\gamma} \bm{C}^{11}) \big]  
+    & \phantom{=} \text{tr}(\bm{Q}^{12,\beta} \bm{C}^{22} \bm{Q}^{21,\gamma} \bm{C}^{11}) \big]
     +\bm{M}_{\alpha\beta}^* \bm{M}_{\alpha\gamma}^* \big[ \text{tr}(\bm{Q}^{21,\beta} \bm{U}^{11} \bm{Q}^{12,\gamma*} \notag\\
     & \phantom{=} \bm{S}^{22})+ \text{tr}( \bm{Q}^{21,\beta} \bm{C}^{12} \bm{Q}^{21,\gamma} \bm{C}^{12}) \big] \Big\}\,,
 \end{align}
@@ -132,7 +132,7 @@ while the variance of the imaginary part of $\hat{P}_\alpha$ is
 \begin{align}
 \label{eq:var_in_ps_imag}
    &\frac{-1}{4} \sum_{\beta\gamma} \Big\{ \bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma} \big[ \text{tr}(\bm{Q}^{12,\beta} \bm{U}^{22} \bm{Q}^{21,\gamma*} \bm{S}^{11}) + \text{tr}(\bm{Q}^{12,\beta} \bm{C}^{21}\notag \\
-   & \phantom{=} \bm{Q}^{12,\gamma} \bm{C}^{21}) \big] 
+   & \phantom{=} \bm{Q}^{12,\gamma} \bm{C}^{21}) \big]
    \, - 2 \times \bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma}^* \big[ \text{tr}(\bm{Q}^{12,\beta} \bm{U}^{21} \bm{Q}^{12,\gamma *} \bm{S}^{21}) \, + \notag\\
    & \phantom{=} \text{tr}(\bm{Q}^{12,\beta} \bm{C}^{22} \bm{Q}^{21,\gamma} \bm{C}^{11}) \big]
     +\bm{M}_{\alpha\beta}^* \bm{M}_{\alpha\gamma}^* \big[ \text{tr}(\bm{Q}^{21,\beta} \bm{U}^{11} \bm{Q}^{12,\gamma*} \notag \\
@@ -146,29 +146,29 @@ Therefore to get the final error bar on power spectrum, we should accurately mod
    & - \langle V_\text{n}(\{a,b\},\nu_i,t) \rangle \langle V_\text{n}^*(\{a,b\},\nu_i,t) \rangle \notag \\
    \approx &  \phantom{-} \left|\frac{V(\{a,a\}, \nu_i,t)V(\{b,b\}, \nu_i,t)}{N_\text{nights} B \Delta t}\right| \,,
 \end{align}
-where $B\Delta t$ is the product of the channel bandwidth and the integration time. Non-zero parts in Equation \ref{eq:var_in_ps_real} or \ref{eq:var_in_ps_imag} give us the noise variance on either real or imaginary parts of power spectra as 
+where $B\Delta t$ is the product of the channel bandwidth and the integration time. Non-zero parts in Equation \ref{eq:var_in_ps_real} or \ref{eq:var_in_ps_imag} give us the noise variance on either real or imaginary parts of power spectra as
 \begin{equation}
 \label{eq:analytic_noise_variance}
-\frac{1}{2} \sum_{\beta\gamma} 
-    \Big\{\bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma}^* \big[\text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) \Big\}\,.    
+\frac{1}{2} \sum_{\beta\gamma}
+    \Big\{\bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma}^* \big[\text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) \Big\}\,.
 \end{equation}
-In the following we will show it is an equivalent form of $P_\text{N}^2$ where $P_\text{N}$ is what we call `Analytic Noise Power Spectrum' estimated in another parallel way given a system temperature input.      
+In the following we will show it is an equivalent form of $P_\text{N}^2$ where $P_\text{N}$ is what we call `Analytic Noise Power Spectrum' estimated in another parallel way given a system temperature input.
 
-If we also consider a `Foreground/systematics dependent variance', Equation \ref{eq:var_in_ps_real} reduces to 
+If we also consider a `Foreground/systematics dependent variance', Equation \ref{eq:var_in_ps_real} reduces to
 \begin{align}
 \label{eq:reduced_var_in_ps_real}
-    & \frac{1}{2} \sum_{\beta\gamma} 
-    \Big\{\bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma}^* \big[\text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) 
+    & \frac{1}{2} \sum_{\beta\gamma}
+    \Big\{\bm{M}_{\alpha\beta} \bm{M}_{\alpha\gamma}^* \big[\text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11})
     \notag \\
-    \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{signal}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11}) 
-    \notag \\ 
+    \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{signal}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{n}^{11})
+    \notag \\
     \phantom{=} & + \text{tr}(\bm{Q}^{12,\beta} \bm{C}_\text{n}^{22} \bm{Q}^{21,\gamma} \bm{C}_\text{signal}^{11}) \big]  \Big\}\,,
 \end{align}
 where
 \begin{align}
     \bm{C}_{\text{signal}, ij}^{11} = \bm{C}_{\text{signal}, ij}^{22} = \frac{1}{2}\left[\bm{x}_{1,i} \bm{x}_{2,j}^* + \bm{x}_{2,i} \bm{x}_{1,j}^*\right]\,.
 \end{align}
-Equation \ref{eq:reduced_var_in_ps_real} is an equivalent form to $\sqrt{2}\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) P_\text{N} + P_\text{N}^2$. We also apply a similar zero clipping on $\bm{C}_{\text{signal}, ij}^{11}$, where rows and columns containing negative diagonal elements are set to be zero.  
+Equation \ref{eq:reduced_var_in_ps_real} is an equivalent form to $\sqrt{2}\text{Re} (P_{\tilde{x}_1\tilde{x}_2}) P_\text{N} + P_\text{N}^2$. We also apply a similar zero clipping on $\bm{C}_{\text{signal}, ij}^{11}$, where rows and columns containing negative diagonal elements are set to be zero.
 
 \subsection{Direct Noise Estimation By Differencing Visibility}
 \label{subsubsec:diff}
@@ -183,15 +183,15 @@ With the visibility residual $[V_\text{n}(\bm{b},\nu,t_1) -  V_\text{n}(\bm{b},\
     \bm{P}_\text{diff} & =\frac{(\tilde{n}_{1,t2} - \tilde{n}_{1,t_1})^*}{\sqrt{2}}\frac{(\tilde{n}_{2,t2} - \tilde{n}_{2,t_1})}{\sqrt{2}} \notag \\
     & = \{\frac{(c_{1,t2}-c_{1,t1})}{\sqrt{2}}\frac{(c_{2,t2}-c_{2,t1})}{\sqrt{2}} + \frac{(d_{1,t2}-d_{1,t1})}{\sqrt{2}}\frac{(d_{2,t2}-d_{2,t1})}{\sqrt{2}}\} \notag \\
     & \phantom{==} + \{\frac{(c_{1,t2}-c_{1,t1})}{\sqrt{2}}\frac{(d_{2,t2}-d_{2,t1})}{\sqrt{2}}-\frac{(c_{2,t2}-c_{2,t1})}{\sqrt{2}}\frac{(d_{1,t2}-d_{1,t1})}{\sqrt{2}}\}i \,,
-\end{align} 
-where we see $\langle\{\text{Re}(\bm{P}_\text{diff})\}^2 \rangle \equiv \langle \{\frac{(c_{1,t2}-c_{1,t1})}{\sqrt{2}}\frac{(c_{2,t2}-c_{2,t1})}{\sqrt{2}} + \frac{(d_{1,t2}-d_{1,t1})}{\sqrt{2}}\frac{(d_{2,t2}-d_{2,t1})}{\sqrt{2}}\}^2 \rangle = \langle c_1^2\rangle\langle c_2^2\rangle + \langle d_1^2\rangle\langle d_2^2\rangle = P_\text{N}^2$. Therefore we could use $|\text{Re}(\bm{P}_\text{diff})|$ as a realization of error bars of $\bm{P}_{\tilde{x}_1\tilde{x}_2}$ in the noise-dominated region. 
+\end{align}
+where we see $\langle\{\text{Re}(\bm{P}_\text{diff})\}^2 \rangle \equiv \langle \{\frac{(c_{1,t2}-c_{1,t1})}{\sqrt{2}}\frac{(c_{2,t2}-c_{2,t1})}{\sqrt{2}} + \frac{(d_{1,t2}-d_{1,t1})}{\sqrt{2}}\frac{(d_{2,t2}-d_{2,t1})}{\sqrt{2}}\}^2 \rangle = \langle c_1^2\rangle\langle c_2^2\rangle + \langle d_1^2\rangle\langle d_2^2\rangle = P_\text{N}^2$. Therefore we could use $|\text{Re}(\bm{P}_\text{diff})|$ as a realization of error bars of $\bm{P}_{\tilde{x}_1\tilde{x}_2}$ in the noise-dominated region.
 
 Intuitively, $\bm{P}_\text{diff}$ can be computed from time-differenced or frequency differenced visibility. However, by differencing the neighbouring points in frequency, we actually apply a high-pass filter in the delay space which means we suppress the power at low delay modes. To illustrate it, we replace the original data vector $\bm{x}_i$ with the difference data vector $\bm{x}'_i \equiv V'(\bm{b},\nu_i) = \left[V(\bm{b},\nu_{i+1})-V(\bm{b},\nu_i)\right] / \sqrt{2} \equiv \left(\bm{x}_{i+1} - \bm{x}_i\right)/\sqrt{2}\, (i=1,\cdots,N-1)$ and $\bm{x}'_N = \bm{x}_N$, and the new estimation of the same bandpower is %%\acl{We will probably want to use a different notation than tilde to avoid confusion with the delay transform}
 \begin{eqnarray}
     \hat{q}'_\alpha & \equiv & \sum_{ij}\frac{1}{2}e^{i2\pi\eta_\alpha(\nu_i - \nu_j)}\bm{R}_{1,i}\bm{R}_{2,j} \bm{x}'^*_{1,i} \bm{x}'_{2,j} \notag \\
     & = &\sum_{i=1,\cdots, N-1;j}\frac{1}{2}e^{i2\pi\eta_\alpha(\nu_i - \nu_j)} \bm{R}_{1,i}\bm{R}_{2,j} \frac{(\bm{x}_{1,i+1}-\bm{x}_{1,i})^*}{\sqrt{2}} \bm{x}'_{2,j} \notag \\
-    & \phantom{=} & + \sum_{j} \frac{1}{2} e^{i2\pi\eta_\alpha(\nu_N - \nu_j)} \bm{R}_{1,N}\bm{R}_{2,j} \bm{x}_{1,N}^* \bm{x}'_{2,j} \notag \\ 
-    & = & \sum_{i=1,\cdots, N-1;j}\frac{1}{2} e^{i2\pi\eta_\alpha(\nu_i - \nu_j)} \bm{R}_{1,i}\bm{R}_{2,j} \frac{\bm{x}^*_{1,i+1}}{\sqrt{2}} \bm{x}'_{2,j}\notag \\ 
+    & \phantom{=} & + \sum_{j} \frac{1}{2} e^{i2\pi\eta_\alpha(\nu_N - \nu_j)} \bm{R}_{1,N}\bm{R}_{2,j} \bm{x}_{1,N}^* \bm{x}'_{2,j} \notag \\
+    & = & \sum_{i=1,\cdots, N-1;j}\frac{1}{2} e^{i2\pi\eta_\alpha(\nu_i - \nu_j)} \bm{R}_{1,i}\bm{R}_{2,j} \frac{\bm{x}^*_{1,i+1}}{\sqrt{2}} \bm{x}'_{2,j}\notag \\
     & \phantom{=} & - \sum_{i=1,\cdots, N-1;j}\frac{1}{2} e^{i2\pi\eta_\alpha(\nu_i - \nu_j)} \bm{R}_{1,i}\bm{R}_{2,j} \frac{\bm{x}^*_{1,i}}{\sqrt{2}} \bm{x}'_{2,j} \notag \\
     & \phantom{=} & + \sum_{j} \frac{1}{2} e^{i2\pi\eta_\alpha(\nu_N - \nu_j)} \bm{R}_{1,N}\bm{R}_{2,j} \bm{x}_{1,N}^* \bm{x}'_{2,j} \notag \\
     & \approx & (e^{-i2\pi\eta_\alpha \Delta\nu} -1 )\sum_{ij} \frac{1}{2} e^{i2\pi\eta_\alpha(\nu_i-\nu_j)} \bm{R}_{1,i}\bm{R}_{2,j} \frac{\bm{x}^*_{1,i}}{\sqrt{2}} \bm{x}'_{2,j} \notag \\
@@ -210,7 +210,7 @@ The `analytic' noise power specturm can be also estimated from a system temperat
 \end{equation}
 where $X^2Y$ are conversion factors from signal angles and frequencies to cosmological coordinates, $\Omega_\text{eff}$ is the effective beam area, $t_\text{int}$ is the integration time, $N_\text{coherent}$ is the number of samples averaged at the level of visibility while $N_\text{incoherent}$ is the numbers of samples averaged at the level of power spectrum.
 
-Generally, $T_\text{sys} = T_\text{signal} + T_\text{rcvr}$. It can be estimated via the RMS of the differenced visibilities over samples, where we take the differences of raw visibilities in adjacent time and frequency channels to obtain the differenced visibilities first. By the relation  
+Generally, $T_\text{sys} = T_\text{signal} + T_\text{rcvr}$. It can be estimated via the RMS of the differenced visibilities over samples, where we take the differences of raw visibilities in adjacent time and frequency channels to obtain the differenced visibilities first. By the relation
 \begin{equation}
 \label{eq:RMS_Tsys}
 V_\text{RMS} = \frac{2k_b \nu^2 \Omega_p}{c^2}\frac{T_\text{sys}}{B \Delta t} \,,
@@ -225,7 +225,7 @@ Combining both Equation \ref{eq:RMS_Tsys} and Equation \ref{eq:auto_Tsys} we der
 \label{eq:auto2RMS}
 V^2_\text{RMS,\{a,b\}} = \frac{V(\{a,a\}) V(\{b,b\})}{B \Delta t}\,,
 \end{equation}
-which is equivalent to Equation \ref{eq:auto_vis_noise} for the input noise covariance matrix. Thus the noise power spectrum estimated in this way essentially reduces to a special case of the analytic method we introduced earlier. While the analytic method is more preferred since in Equation \ref{eq:analytic_P_N} we actually use a spectral-window-averaged system temperature which might lose some information on frequency spectra during the averaging process.   
+which is equivalent to Equation \ref{eq:auto_vis_noise} for the input noise covariance matrix. Thus the noise power spectrum estimated in this way essentially reduces to a special case of the analytic method we introduced earlier. While the analytic method is more preferred since in Equation \ref{eq:analytic_P_N} we actually use a spectral-window-averaged system temperature which might lose some information on frequency spectra during the averaging process.
 
-\bibliography{bibtex} 
+\bibliography{bibtex}
 \end{document}

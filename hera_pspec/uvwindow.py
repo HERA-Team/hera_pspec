@@ -30,18 +30,18 @@ class FTBeam:
                 dimensions (Nfreqs, N, N).
             - pol contains the polarisation of the beam used.
             - freq_array gives the frequency coordinates of data.
-            - mapsize is the size of the flat map the beam was projected 
+            - mapsize is the size of the flat map the beam was projected
                 onto (in deg).
 
         Parameters
         ----------
         data : 3D array of floats
-            Array containing the real part of the Fourier transform of the 
-            beam in the sky plane (flat-sky approximation), for each of 
+            Array containing the real part of the Fourier transform of the
+            beam in the sky plane (flat-sky approximation), for each of
             the frequencies in freq_array.
             Has dimensions (Nfreqs,N,N).
         pol : str or int
-            Can be pseudo-Stokes or power: 
+            Can be pseudo-Stokes or power:
             in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
             in number form: 1, 2, 4, 3, -5, -6, -7, -8
         freq_array : 1D array or list of floats
@@ -92,11 +92,11 @@ class FTBeam:
         Compute Fourier transform of beam in sky plane given a file
         containing beam simulations.
 
-        Given the path to a beam simulation, obtain the Fourier transform 
-        of the instrument beam in the sky plane for all the frequencies 
-        in the spectral window. 
+        Given the path to a beam simulation, obtain the Fourier transform
+        of the instrument beam in the sky plane for all the frequencies
+        in the spectral window.
         Output is an array of dimensions (kperpx, kperpy, freq).
-        Computations correspond to the Fourier transform performed in equation 
+        Computations correspond to the Fourier transform performed in equation
         10 of memo.
 
         Parameters
@@ -118,14 +118,14 @@ class FTBeam:
         """
         Read Fourier transform of beam in sky plane from file.
 
-        Initialise FTBeam object by reading file containing the 
-        Fourier transform of the  instrument beam in the sky plane 
-        for given frequencies. 
+        Initialise FTBeam object by reading file containing the
+        Fourier transform of the  instrument beam in the sky plane
+        for given frequencies.
 
         Parameters
         ----------
         ftfile : str
-            Path to file constraining to the Fourier transform of the 
+            Path to file constraining to the Fourier transform of the
             beam on the sky plane (Eq. 10 in Memo), including the polarisation
             Ex : path/to/file/ft_beam_HERA_dipole_pI.hdf5
             File must be h5 format.
@@ -162,9 +162,9 @@ class FTBeam:
 
         return cls(data=ft_beam, pol=pol, freq_array=freq_array,
                    mapsize=mapsize, **kwargs)
- 
+
     @classmethod
-    def gaussian(cls, freq_array, widths, pol, 
+    def gaussian(cls, freq_array, widths, pol,
                  mapsize=1.0, npix=301,
                  cosmo=conversions.Cosmo_Conversions(),
                  **kwargs):
@@ -181,7 +181,7 @@ class FTBeam:
             plane. Can be length 1 if the same value is used for all the frequencies.
             Otherwise, must have same length as freq_array
         pol : str or int
-            Can be pseudo-Stokes or power: 
+            Can be pseudo-Stokes or power:
             in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
             in number form: 1, 2, 4, 3, -5, -6, -7, -8
         mapsize : float
@@ -192,7 +192,7 @@ class FTBeam:
             Preferably an odd number.
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not
-            specified. 
+            specified.
         """
 
         # Frequency-related parameters
@@ -211,13 +211,13 @@ class FTBeam:
             warnings.warn('Small widths: make sure the input is in degrees.')
         widths = np.array(widths) * np.pi / 180.
         # convert widths to Fourier space
-        FT_widths = (1. / np.pi / widths) 
+        FT_widths = (1. / np.pi / widths)
 
         # corresponding grid in Fourier space
         FT_x = np.fft.fftfreq(npix) * npix/2./mapsize
         FT_x = np.fft.fftshift(FT_x)
 
-        # The Fourier transform of the beam is a Gaussian 
+        # The Fourier transform of the beam is a Gaussian
         ft_beam = np.zeros((freq_array.size, npix, npix))
         for ifreq in range(freq_array.size):
             Gauss = np.exp(-1 * (FT_x  ** 2 + FT_x[:, None] ** 2) / (FT_widths[ifreq]**2))
@@ -234,8 +234,8 @@ class FTBeam:
         Parameters
         ----------
         ftfile : str
-            Path to file constraining to the Fourier transform of the 
-            beam on the sky plane (Eq. 10 in Memo). The input is the 
+            Path to file constraining to the Fourier transform of the
+            beam on the sky plane (Eq. 10 in Memo). The input is the
             root name of the file to use, including the polarisation
             Ex : path/to/file/ft_beam_HERA_dipole_pI.hdf5
             File must be h5 format.
@@ -295,9 +295,9 @@ class UVWindow:
         Parameters
         ----------
         ftbeam_obj : (list of) FTBeam object(s)
-            List of FTBeam objects. 
+            List of FTBeam objects.
             If a unique object is given, it is expanded in a matching pair of
-            FTBeam objects. 
+            FTBeam objects.
             Its bandwidth and polarisation attributes will define the attributes
             of the UVWindow object.
         taper : str
@@ -308,7 +308,7 @@ class UVWindow:
                 Default: True (h^-1 Mpc).
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not
-            specified. 
+            specified.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -362,7 +362,7 @@ class UVWindow:
         self.avg_z = self.cosmo.f2z(self.avg_nu)
 
     @classmethod
-    def from_uvpspec(cls, uvp, ipol, spw, ftbeam=None, 
+    def from_uvpspec(cls, uvp, ipol, spw, ftbeam=None,
                      x_orientation=None, verbose=False):
         """
         Method for :class:`UVWindow` objects.
@@ -429,7 +429,7 @@ class UVWindow:
                     ftbeam_obj_pol.append(FTBeam.from_file(f'{ftbeam}_{pol}.hdf5',
                                                            spw_range=None,
                                                            verbose=verbose,
-                                                           x_orientation=x_orientation))   
+                                                           x_orientation=x_orientation))
                 elif isinstance(ftbeam, FTBeam):
                     ftbeam_obj_pol.append(copy.deepcopy(ftbeam))
                 else:
@@ -744,7 +744,7 @@ class UVWindow:
         assert freq_array.size > 1, "Must feed list of frequencies."
 
         dly_array = utils.get_delays(freq_array, n_dlys=len(freq_array))
-        avg_z = self.cosmo.f2z(np.mean(freq_array))                  
+        avg_z = self.cosmo.f2z(np.mean(freq_array))
 
         # define default kperp bins,
         dk_para = self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)\
@@ -932,7 +932,7 @@ class UVWindow:
             List of baseline lengths used to compute cyl_wf.
             Must have same length as same size as cyl_wf.shape[0].
         bl_weights : list of weights (float or int), optional
-            Relative weight of each baseline-length when performing 
+            Relative weight of each baseline-length when performing
             the average. This should have the same shape as bl_lens.
             Default: None (all baseline pairs have unity weights).
 
@@ -991,9 +991,9 @@ class UVWindow:
             if np.any(mask2):
                 weighted_k[m1] = np.mean(kmags[mask2])
                 mask2 = mask2.astype(int)*bl_weights[:, None] #add weights for redundancy
-                kweights[m1] = np.sum(mask2) 
+                kweights[m1] = np.sum(mask2)
                 wf_temp = np.sum(cyl_wf*mask2[:,:,None,None], axis=(0, 1))/np.sum(mask2)
-                if np.sum(wf_temp) > 0.: 
+                if np.sum(wf_temp) > 0.:
                     for m in range(nbinsk):
                         mask = (kbin_edges[m] <= ktot) & (ktot < kbin_edges[m+1])
                         if np.any(mask): #cannot compute mean if zero elements
@@ -1030,7 +1030,7 @@ class UVWindow:
             Must have same length as bl_weights.
         bl_weights : list, optional.
             List baselines weights. Must have same length as bl_lens.
-            If None, a weight of 1 is attributed to 
+            If None, a weight of 1 is attributed to
             each bl_len.
         kperp_bins : array-like astropy.quantity with units, optional.
             1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
@@ -1186,7 +1186,7 @@ class UVWindow:
             Must have same length as bl_weights.
         bl_weights : list, optional.
             List baselines weights. Must have same length as bl_lens.
-            If None, a weight of 1 is attributed to 
+            If None, a weight of 1 is attributed to
             each bl_len.
         kperp_bins : array-like astropy.quantity with unit, optional.
             1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
@@ -1267,7 +1267,7 @@ class UVWindow:
             f.create_dataset('bl_weights',shape=(nbls,),data=bl_weights,dtype=float)
             f.create_dataset('dly_array',shape=(self.Nfreqs,),data=self.dly_array,dtype=float)
             f.create_dataset('cyl_wf',shape=(nbls,self.Nfreqs,nbins_kperp,nbins_kpara),data=cyl_wf,dtype=float)
-            
+
     def check_kunits(self, karray):
         """
         Check unit consistency between k's throughout code.
@@ -1312,15 +1312,11 @@ def check_spw_range(spw_range, bandwidth=None):
     if spw_range[1]-spw_range[0] <= 0:
         return False
     if min(spw_range) < 0:
-        return False 
-    # bandwidth-related checks  
+        return False
+    # bandwidth-related checks
     if bandwidth is not None:
         bandwidth = np.array(bandwidth)
         if max(spw_range) > bandwidth.size:
             return False
 
     return True
-
-
-
-

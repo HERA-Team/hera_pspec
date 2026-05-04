@@ -16,19 +16,19 @@ def vanilla_uvp() -> UVPSpec:
 def single_baseline_files(tmp_path_factory, vanilla_uvp: UVPSpec) -> list[Path]:
     # Set up by writing out some one-blpair files.
     tmp_path = tmp_path_factory.mktemp('single-bl-files')
-    
+
     blpairs = vanilla_uvp.get_blpairs()
     files = []
     for i, blpair in enumerate(blpairs):
         sub_uvp = vanilla_uvp.select(blpairs=[blpair], inplace=False)
-        
+
         fname = tmp_path / f"blpair.{i:02}.h5"
         psc = PSpecContainer(fname, 'rw', keep_open=False)
         psc.set_pspec('pspecgroup', 'name', sub_uvp)
         psc.set_pspec('pspecgroup', 'name2', sub_uvp)
-        
+
         files.append(fname)
-                
+
     for fname in files:
         with h5py.File(fname, 'a') as fl:
             fl['header'].attrs['extra0'] = [1,2,3]
@@ -149,10 +149,10 @@ class TestFastMergeBaselines:
         newuvp = new.get_pspec('pspecgroup', 'name')
         assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
         assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
-        
+
 def test_dummy_command():
     runner = CliRunner()
-                
+
     result = runner.invoke(
         cli.app,
         args=['hello']

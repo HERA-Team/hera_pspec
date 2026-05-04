@@ -90,7 +90,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
 
     pstokes: Pseudo-stokes polarization to form, type: str or int
         Pseudo stokes polarization to form, can be in a number
-        or a string ('pI', 'pQ', 'pU', or 'pV') , in which case pyuvdata 
+        or a string ('pI', 'pQ', 'pU', or 'pV') , in which case pyuvdata
         is used to make the conversion to integer.
         Default: pI
 
@@ -109,7 +109,7 @@ def _combine_pol(uvd1, uvd2, pol1, pol2, pstokes='pI', x_orientation=None):
 
     for i, uvd in enumerate([uvd1, uvd2]):
         pol_convention = getattr(uvd, 'pol_convention', None)
-        if pol_convention is None: 
+        if pol_convention is None:
             warnings.warn(
                 f'No polarization convention in uvd{i+1}. '
                 'Considering it to be "avg".')
@@ -170,13 +170,13 @@ def _combine_pol_arrays(
     pol_convention: str ('avg' or 'sum')
         Convention used to form polarization. For linear polarizations ``XX``
         and ``YY``, the stokes ``I`` sky emission can be mapped to
-        ``I = (XX + YY)/2`` (the ``avg`` convention) or ``I = XX + YY`` 
+        ``I = (XX + YY)/2`` (the ``avg`` convention) or ``I = XX + YY``
         (the ``sum`` convention).
 
     data_list : any length 2 iterable of numpy arrays
         Iterable of data arrays to be combined to form their pseudo-Stokes equivalent.
         If only one is given, it is duplicated. For the ``avg`` convention, the
-        data arrays are combined as ``(data1 + data2)/2``, in the the ``sum`` 
+        data arrays are combined as ``(data1 + data2)/2``, in the the ``sum``
         convention, the output is ``data1 + data2``.
         Default is None.
 

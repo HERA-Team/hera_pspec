@@ -3,8 +3,8 @@ from .uvpspec import UVPSpec
 import copy
 
 def apply_bias_correction(
-    uvp: UVPSpec, 
-    total_bias: dict | None = None, 
+    uvp: UVPSpec,
+    total_bias: dict | None = None,
     data_bias: dict | None =None,
     inplace: bool = True,
 ):
@@ -23,7 +23,7 @@ def apply_bias_correction(
         keys are spw integers, values are correction scalars
     inplace : bool
         Whether to apply the bias correction in place.
-    
+
     Returns
     -------
     UVPSpec
@@ -31,7 +31,7 @@ def apply_bias_correction(
     """
     if not inplace:
         uvp = copy.deepcopy(uvp)
-        
+
     for spw in uvp.spw_array:
         if total_bias is not None:
             uvp.data_array[spw] *= total_bias[spw]
@@ -40,11 +40,11 @@ def apply_bias_correction(
                 uvp.cov_array_imag[spw] *= total_bias[spw]**2
             if hasattr(uvp, 'stats_array'):
                 for stat in uvp.stats_array:
-                    # TODO: this is right for P_N but not quite right for P_SN 
+                    # TODO: this is right for P_N but not quite right for P_SN
                     # (though I'm not sure how much we care)
                     uvp.stats_array[stat][spw] *= total_bias[spw]
-                    
+
         if data_bias is not None:
             uvp.data_array[spw] *= data_bias[spw]
-    
+
     return uvp

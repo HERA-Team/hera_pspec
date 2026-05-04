@@ -92,7 +92,7 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                             = np.sqrt(stat1.real**2 + stat2.real**2) \
                             + 1j*np.sqrt(stat1.imag**2 + stat2.imag**2)
 
-                # add cov in quadrature: real and imag separately                
+                # add cov in quadrature: real and imag separately
                 if hasattr(uvp1, "cov_array_real") \
                   and hasattr(uvp2, "cov_array_real"):
                     if uvp1.cov_model == uvp2.cov_model:
@@ -101,7 +101,7 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                         uvp1.cov_array_real[i][blp1_inds, :, :, j] \
                             = np.sqrt(cov1r.real**2 + cov2r.real**2) \
                               + 1j*np.sqrt(cov1r.imag**2 + cov2r.imag**2)
-                        
+
                         cov1i = uvp1.get_cov(key1, component='imag')
                         cov2i = uvp2.get_cov(key2, component='imag')
                         uvp1.cov_array_imag[i][blp1_inds, :, :, j] \
@@ -109,7 +109,7 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                               + 1j*np.sqrt(cov1i.imag**2 + cov2i.imag**2)
 
                 # same for window function
-                if (hasattr(uvp1, 'window_function_array') 
+                if (hasattr(uvp1, 'window_function_array')
                     and hasattr(uvp2, 'window_function_array')):
                     window1 = uvp1.get_window_function(key1)
                     window2 = uvp2.get_window_function(key2)
@@ -472,7 +472,7 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     if only_pairs_in_bls:
         blp_select = np.array( [bool((blp[0] in bls) * (blp[1] in bls))
                                 for blp in blpair_bls] )
-        
+
     else:
         blp_select = np.array( [bool((blp[0] in bls) + (blp[1] in bls))
                                 for blp in blpair_bls] )
@@ -626,7 +626,7 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         uvp.Nblpairs = len(np.unique(uvp.blpair_array))
         uvp.Nbltpairs = len(uvp.blpair_array)
         uvp.Ntimes = uvp.Ntpairs
-        
+
         # Calculate unique baselines from new blpair_array
         new_blpairs = np.unique(uvp.blpair_array)
         bl1 = np.floor(new_blpairs / 1e6)

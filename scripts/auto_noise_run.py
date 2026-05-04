@@ -18,7 +18,7 @@ def main(args):
 
     # get groups automatically if not provided.
     groups = args.groups if args.groups is not None else psc.groups()
-    
+
     # iterate through spectra and groups,
     # compute noise, and update container.
     for group in groups:

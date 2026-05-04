@@ -20,4 +20,3 @@ filename = kwargs.pop('filename')
 run_with_profiling(
     grouping.bootstrap_run, a, filename=filename, **kwargs
 )
-

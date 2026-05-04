@@ -200,11 +200,10 @@ class TestGetApproximateCorr:
         assert np.all(np.diag(m)==1)
         assert np.all(m - np.eye(m.shape[0]) <= 1)
         np.testing.assert_array_almost_equal(m.T, m)
-        
-    
+
+
     @pytest.mark.parametrize('n', [1, 6, 7])
     @pytest.mark.parametrize('taper', ['blackmanharris', 'none'])
     def test_get_approximate_corr(self, n, taper):
         corr = noise.get_approximate_delay_delay_corr_matrix(taper, n)
         self.check_corr_matrix(corr)
-        

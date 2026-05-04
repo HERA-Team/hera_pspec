@@ -26,12 +26,12 @@ import sys
 
 # Mock-import modules to allow build to complete without throwing errors
 import mock
-MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'scipy.integrate', 
-                'pyuvdata', 'h5py', 'omnical', 'linsolve', 
-                'hera_qm', 'uvtools', 'uvtools.dspec', 'hera_cal', 
-                'hera_cal.utils', 'healpy', 'astropy', 
-                'astropy.cosmology', 'astropy.units', 'astropy.constants', 
-                'matplotlib', 'matplotlib.pyplot', 'pylab', 'yaml', 
+MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'scipy.integrate',
+                'pyuvdata', 'h5py', 'omnical', 'linsolve',
+                'hera_qm', 'uvtools', 'uvtools.dspec', 'hera_cal',
+                'hera_cal.utils', 'healpy', 'astropy',
+                'astropy.cosmology', 'astropy.units', 'astropy.constants',
+                'matplotlib', 'matplotlib.pyplot', 'pylab', 'yaml',
                 'pyuvdata.utils', 'hera_sim']
 
 for mod_name in MOCK_MODULES:

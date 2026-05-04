@@ -65,7 +65,7 @@ def test_cov():
     uvd = UVData()
     uvd.read_miriad(
         os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"),
-        
+
     )
 
     # test basic execution
@@ -212,7 +212,7 @@ class Test_Utils:
 
     def test_calc_blpair_reds(self):
         fname = os.path.join(DATA_PATH, 'zen.all.xx.LST.1.06964.uvA')
-        
+
         uvd = UVData()
         uvd.read_miriad(fname, )
 
@@ -393,7 +393,7 @@ class Test_Utils:
         pytest.raises(ValueError, utils.uvd_to_Tsys, self.uvd, 12.)
 
 
-        
+
 def test_log():
     """
     Test that log() prints output.

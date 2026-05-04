@@ -57,7 +57,7 @@ class Test_Plot(unittest.TestCase):
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, dfiles[0]),
-            
+
         )
         self.uvd = uvd
 
@@ -219,7 +219,7 @@ class Test_Plot(unittest.TestCase):
             # build-up a large uvpspec object
             _uvp = copy.deepcopy(uvp)
             _uvp.time_avg_array += 0 # don't change avg time to make sure this is ok.
-            _uvp.time_1_array += (i+1)**2 
+            _uvp.time_1_array += (i+1)**2
             _uvp.time_2_array += (i+1)**2
             uvp = uvp + _uvp
         pytest.raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs(), 0, 'xx')

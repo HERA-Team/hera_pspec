@@ -143,7 +143,7 @@ class Cosmo_Conversions(object):
             freq = freq * 1e9
 
         return (units.f21 / freq - 1)
-    
+
     @staticmethod
     def z2f(z, ghz=False):
         """
@@ -189,14 +189,14 @@ class Cosmo_Conversions(object):
             Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Whether to have cosmological length units be h^-1 Mpc (True) or
             Mpc (False). Default: True (h^-1 Mpc)
         """
         d = integrate.quad(lambda z: 1/self.E(z), 0, z)[0]
         if little_h:
             return d * units.ckm / 100.
         else:
-            return d * units.ckm / self.H0 
+            return d * units.ckm / self.H0
 
     def DM(self, z, little_h=True):
         """
@@ -209,7 +209,7 @@ class Cosmo_Conversions(object):
             Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Whether to have cosmological length units be h^-1 Mpc (True) or
             Mpc (False). Default: True (h^-1 Mpc)
         """
         if little_h:
@@ -241,7 +241,7 @@ class Cosmo_Conversions(object):
             Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Whether to have cosmological length units be h^-1 Mpc (True) or
             Mpc (False). Default: True (h^-1 Mpc)
         """
         return self.DM(z, little_h=little_h) / (1 + z)
@@ -257,26 +257,26 @@ class Cosmo_Conversions(object):
             Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Whether to have cosmological length units be h^-1 Mpc (True) or
             Mpc (False). Default: True (h^-1 Mpc)
         """
-        return self.DM(z, little_h=little_h) 
+        return self.DM(z, little_h=little_h)
 
     def dRpara_df(self, z, ghz=False, little_h=True):
         """
-        Conversion from frequency bandwidth to radial comoving distance at a 
+        Conversion from frequency bandwidth to radial comoving distance at a
         specific redshift: [Mpc / Hz]
 
         Parameters:
         -----------
         z : float
             Redshift.
-            
+
         ghz : bool, optional
             Whether to convert output to [Mpc / GHz] (if True). Default: False.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Whether to have cosmological length units be h^-1 Mpc (True) or
             Mpc (False). Default: True (h^-1 Mpc)
         """
         if little_h:
@@ -298,7 +298,7 @@ class Cosmo_Conversions(object):
             Redshift.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or 
+            Whether to have cosmological length units be h^-1 Mpc (True) or
             Mpc (False). Default: True (h^-1 Mpc)
 
         Notes:
@@ -310,10 +310,10 @@ class Cosmo_Conversions(object):
 
     def bl_to_kperp(self, z, little_h=True):
         """
-        Produce the conversion factor from baseline length [meters] to 
-        k_perpendicular mode [h Mpc-1] at a specified redshift. 
+        Produce the conversion factor from baseline length [meters] to
+        k_perpendicular mode [h Mpc-1] at a specified redshift.
 
-        Multiply this conversion factor by a baseline-separation length in 
+        Multiply this conversion factor by a baseline-separation length in
         [meters] to get its corresponding k_perp mode in [h Mpc-1].
 
         Parameters
@@ -337,7 +337,7 @@ class Cosmo_Conversions(object):
 
     def tau_to_kpara(self, z, little_h=True):
         """
-        Produce the conversion factor from delay [seconds] to k_parallel mode 
+        Produce the conversion factor from delay [seconds] to k_parallel mode
         [h Mpc-1] at a specified redshift.
 
         Multiply this conversion factor by a delay mode in [seconds]
@@ -364,7 +364,7 @@ class Cosmo_Conversions(object):
 
     def __str__(self):
         message = "Cosmo_Conversions object at <{}>\n".format(hex(id(self)))
-        message += "; ".join( ["{:s} : {:0.4f}".format(p, getattr(self, p)) 
+        message += "; ".join( ["{:s} : {:0.4f}".format(p, getattr(self, p))
                                for p in self.params] )
         return message
 
@@ -373,4 +373,3 @@ class Cosmo_Conversions(object):
         Check two Cosmo_Conversion objects are equivalent
         """
         return self.get_params() == other.get_params()
-
