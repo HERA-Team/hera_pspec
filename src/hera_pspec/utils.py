@@ -1,6 +1,8 @@
 import numpy as np
-import time, yaml
-import itertools, glob
+import time
+import yaml
+import itertools
+import glob
 import traceback
 from hera_cal import redcal
 from collections import OrderedDict as odict

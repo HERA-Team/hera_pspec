@@ -1,6 +1,6 @@
 import unittest
 import pytest
-import os, sys
+import os
 from hera_pspec.data import DATA_PATH
 from hera_pspec import pstokes
 import pyuvdata

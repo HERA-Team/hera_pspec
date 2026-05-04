@@ -1,20 +1,19 @@
 import numpy as np
 from pyuvdata import UVData, UVCal
-import copy, operator, itertools, sys
+import copy
+import itertools
 from collections import OrderedDict as odict
 import hera_cal as hc
 from pyuvdata import utils as uvutils
 import datetime
 import time
 import argparse
-import ast
 import glob
 import warnings
 import json
 import uvtools.dspec as dspec
 import logging
 from . import uvpspec, utils, __version__, pspecbeam, container, uvpspec_utils as uvputils
-import warnings
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
@@ -83,7 +82,7 @@ class PSpecData:
             wgts = [None for dset in dsets]
 
         # set dsets_std to None if any are None.
-        if not dsets_std is None and None in dsets_std:
+        if dsets_std is not None and None in dsets_std:
             dsets_std = None
 
         # Store the input UVData objects if specified
@@ -762,7 +761,7 @@ class PSpecData:
 
         return covar
 
-    def I(self, key):
+    def I(self, key):  # noqa: E743  (intentional: `I` is the standard symbol for the identity covariance)
         """
         Return identity covariance matrix.
 
@@ -989,12 +988,12 @@ class PSpecData:
 
             elif self.data_weighting == 'dayenu':
                 r_param_key = (self.data_weighting,) + key
-                if not r_param_key in self.r_params:
+                if r_param_key not in self.r_params:
                     raise ValueError("r_param not set for %s!"%str(r_param_key))
                 r_params = self.r_params[r_param_key]
-                if not 'filter_centers' in r_params or\
-                   not 'filter_half_widths' in r_params or\
-                   not  'filter_factors' in r_params:
+                if 'filter_centers' not in r_params or\
+                   'filter_half_widths' not in r_params or\
+                   'filter_factors' not in r_params:
                        raise ValueError("filtering parameters not specified!")
                 #This line retrieves a the psuedo-inverse of a lazy covariance
                 #matrix given by dspec.dayenu_mat_inv.
@@ -3286,10 +3285,10 @@ class PSpecData:
                     if input_data_weight == 'dayenu':
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
-                        if not key1 in r_params:
+                        if key1 not in r_params:
                             raise ValueError("No r_param dictionary supplied"
                                              " for baseline %s"%(str(key1)))
-                        if not key2 in r_params:
+                        if key2 not in r_params:
                             raise ValueError("No r_param dictionary supplied"
                                              " for baseline %s"%(str(key2)))
                         self.set_r_param(key1, r_params[key1])

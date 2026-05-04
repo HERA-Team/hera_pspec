@@ -1,11 +1,9 @@
 #!/usr/bin/env python2
 import numpy as np
-import copy, operator, itertools
-from collections import OrderedDict as odict
+import copy
 from pyuvdata import UVData
 from hera_cal.utils import JD2LST
 from scipy import stats, interpolate
-from astropy import constants
 
 from . import (
     uvpspec,
@@ -13,7 +11,6 @@ from . import (
     conversions,
     pspecbeam,
     utils,
-    uvpspec_utils as uvputils,
 )
 
 

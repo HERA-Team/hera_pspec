@@ -3,8 +3,6 @@
 Pipeline script to load a PSpecContainer and bootstrap over redundant baseline-
 pair groups to produce errorbars.
 """
-import sys
-import os
 from hera_pspec import grouping
 from hera_cal._cli_tools import parse_args, run_with_profiling
 

@@ -1,9 +1,7 @@
-import unittest
 import pytest
 import numpy as np
 from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec import testing, grouping, pspecbeam, UVPSpec
-from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 import os
 import copy

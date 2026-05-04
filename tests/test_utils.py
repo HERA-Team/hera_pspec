@@ -1,6 +1,8 @@
 import pytest
 import numpy as np
-import os, sys, copy
+import os
+import sys
+import copy
 from hera_pspec.data import DATA_PATH
 from hera_pspec import utils, testing, pspecbeam
 from pyuvdata import UVData

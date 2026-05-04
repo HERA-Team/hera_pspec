@@ -1,5 +1,4 @@
 import numpy as np
-import copy
 import ast
 from collections import OrderedDict as odict
 from uvtools import dspec

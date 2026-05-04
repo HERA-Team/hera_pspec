@@ -2,10 +2,7 @@ import unittest
 import pytest
 import numpy as np
 import os
-import sys
 import copy
-import h5py
-from collections import OrderedDict as odict
 from pyuvdata import UVData
 
 from hera_pspec.data import DATA_PATH

@@ -1,9 +1,6 @@
 import numpy as np
-import pyuvdata
 import copy
 from collections import OrderedDict as odict
-import astropy.units as u
-import astropy.constants as c
 from pyuvdata import UVData
 import uvtools
 
@@ -106,7 +103,6 @@ def delay_spectrum(uvp, blpairs, spw, pol, average_blpairs=False,
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance.
     """
-    import matplotlib
     import matplotlib.pyplot as plt
 
     # Create new Axes if none specified
@@ -1024,7 +1020,6 @@ def plot_uvdata_waterfalls(uvd, basename, data='data', plot_mode='log',
         Keyword arguments passed to uvtools.plot.waterfall, which passes them
         on to matplotlib.imshow.
     """
-    import matplotlib
     import matplotlib.pyplot as plt
 
     assert isinstance(uvd, UVData), "'uvd' must be a UVData object."
@@ -1073,7 +1068,7 @@ def _get_sigfig(x):
     return -int(np.floor(np.log10(np.abs(x))))
 
 def _round_sigfig(x, up=True):
-    sigfigs = get_sigfig(x)
+    sigfigs = _get_sigfig(x)
     if up:
         return np.ceil(10**sigfigs * x) / 10**sigfigs
     else:

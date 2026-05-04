@@ -834,7 +834,7 @@ class TestUVPSpec:
 
         # w/o merge
         out = uvpspec.combine_uvpspec([uvp_a, uvp_b], merge_history=False, verbose=False)
-        assert 'batwing' in out.history and not 'foobar' in out.history
+        assert 'batwing' in out.history and 'foobar' not in out.history
 
         # test no cov_array if cov_model is not consistent
         uvp_a = copy.deepcopy(uvp1)

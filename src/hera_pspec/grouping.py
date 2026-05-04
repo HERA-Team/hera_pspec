@@ -5,11 +5,10 @@ import copy
 import warnings
 import argparse
 from astropy import stats as astats
-import os, sys
+import os
 
-from . import utils, version, __version__, uvpspec_utils as uvputils
+from . import utils, __version__, uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
-from .uvwindow import UVWindow
 
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False,
@@ -1421,8 +1420,8 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False,
     # Homogenise input UVPSpec objects in terms of available polarizations
     # and spectral windows
     if len(uvp_list) > 1:
-        uvp_list = uvpspec_utils.select_common(uvp_list, spws=True,
-                                               pols=True, inplace=False)
+        uvp_list = uvputils.select_common(uvp_list, spws=True,
+                                          pols=True, inplace=False)
 
     # Loop over UVPSpec objects, looking for available blpairs in each
     avail_blpairs = [_ordered_unique(uvp.blpair_array) for uvp in uvp_list]
@@ -1680,7 +1679,6 @@ def bootstrap_run(filename, spectra=None, blpair_groups=None, time_avg=False, Ns
         0.5 sec wait per attempt. Useful in the case of multiprocesses bootstrapping
         different groups of the same container.
     """
-    from hera_pspec import uvpspec
     from hera_pspec import PSpecContainer
     # type check
     if isinstance(filename, str):

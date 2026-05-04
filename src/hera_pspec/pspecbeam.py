@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import scipy.integrate as integrate
 from scipy.interpolate import interp1d
 from pyuvdata import UVBeam, utils as uvutils

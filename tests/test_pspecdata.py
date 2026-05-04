@@ -2,7 +2,8 @@ import unittest
 import pytest
 import numpy as np
 import pyuvdata as uv
-import os, copy
+import os
+import copy
 from scipy.integrate import trapezoid
 from hera_pspec import pspecdata, pspecbeam, conversions, container, utils, testing, uvwindow
 from hera_pspec.data import DATA_PATH
