@@ -78,7 +78,7 @@ how to run ``hera_pspec``. There are also some example Jupyter
 notebooks, including
 ``examples/PS_estimation_examples.ipynb``
 (a brief tutorial on how to create delay spectra), and
-``examples/PSpecBeam_tutorial.ipynb`` 
+``examples/PSpecBeam_tutorial.ipynb``
 (a brief tutorial on handling beam objects).
 
 .. |Run Tests| image:: https://github.com/HERA-Team/hera_pspec/workflows/Run%20Tests/badge.svg

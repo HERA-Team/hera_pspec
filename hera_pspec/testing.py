@@ -36,7 +36,7 @@ def build_vanilla_uvpspec(
     equal_time_arrays
         If True, the time_1_array and time_2_array will be equal. If False,
         they will be different. Default is True.
-        
+
     Returns
     -------
     uvp : UVPSpec object
@@ -44,7 +44,7 @@ def build_vanilla_uvpspec(
     uvp = uvpspec.UVPSpec()
 
     Ntimes = 10
-    
+
     uvp.Nfreqs = 50
     uvp.Ndlys = uvp.Nfreqs if Ndlys is None else Ndlys
     uvp.Nspws = 1
@@ -65,7 +65,7 @@ def build_vanilla_uvpspec(
     else:
         # Make time 2 array in-between time 1 array.
         uvp.time_2_array = uvp.time_1_array + (time_array[1] - time_array[0]) / 2.0
-        
+
     uvp.blpair_array = np.tile(blpairs, Ntimes)
     uvp.bl_array = np.array(bls)
     uvp.bl_vecs = np.array(
@@ -79,12 +79,12 @@ def build_vanilla_uvpspec(
     #time_array = np.repeat(time_array, Nblpairs)
     uvp.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
     uvp.Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(uvp.blpair_array, uvp.time_1_array, uvp.time_2_array)]))
-    
+
     uvp.lst_1_array = JD2LST(uvp.time_1_array, longitude=21.4283)
     uvp.lst_2_array = JD2LST(uvp.time_2_array, longitude=21.4283)
     uvp.time_avg_array = (uvp.time_1_array + uvp.time_2_array)/2
     uvp.lst_avg_array = JD2LST(uvp.time_avg_array, longitude=21.4283)
-    
+
     uvp.spw_freq_array = np.tile(np.arange(uvp.Nspws), uvp.Nfreqs)
     uvp.spw_dly_array = np.tile(np.arange(uvp.Nspws), uvp.Ndlys)
     uvp.spw_array = np.arange(uvp.Nspws)
@@ -92,7 +92,7 @@ def build_vanilla_uvpspec(
     uvp.dly_array = utils.get_delays(uvp.freq_array, n_dlys=uvp.Ndlys)
     uvp.polpair_array = np.array([1515])  # corresponds to ('xx','xx')
     uvp.Npols = len(uvp.polpair_array)
-    
+
     uvp.vis_units = "unknown"
     uvp.norm_units = "Hz str"
     uvp.weighting = "identity"
@@ -105,7 +105,7 @@ def build_vanilla_uvpspec(
     uvp.r_params = ""
     uvp.cov_model = "dsets"
     uvp.exact_windows = False
-    
+
     label1 = "red"
     label2 = "blue"
     uvp.labels = np.array([label1, label2])

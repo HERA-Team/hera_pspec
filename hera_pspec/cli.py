@@ -20,11 +20,11 @@ def hello():
     # This is a test command which we need for the CLI interface to be broken into
     # subcommands (at least two commands need to be defined for it to be used as subc's)
     cns.print("Hi! :wave:")
-    
+
 _pattern_help=(
-    
+
 )
-_group_help = """The group name wihtin the PSpecContainer in which the UVPSpec objects 
+_group_help = """The group name wihtin the PSpecContainer in which the UVPSpec objects
 that you wish to merge are stored.
 """
 

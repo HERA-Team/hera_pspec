@@ -1463,7 +1463,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
             # I don't anticipate this being a problem with HERA's 10 second interleave time.
             tinds1 = [np.where(np.isclose(times_blp_1, t, atol=1e-5, rtol=0))[0][0] for t in time_1_selection]
             tinds2 = [np.where(np.isclose(times_blp_2, t, atol=1e-5, rtol=0))[0][0] for t in time_2_selection]
-            
+
             # iterate over polarization
             for polpair in uvp.polpair_array:
                 pol = uvpspec_utils.polpair_int2tuple(polpair)[0]  # integer
@@ -1483,7 +1483,7 @@ def uvp_noise_error(uvp, auto_Tsys=None, err_type='P_N', precomp_P_N=None, P_SN_
                               auto_Tsys.get_flags(blp[0][1], blp[0][1], pol)[tinds1, spw_start:spw_stop])
                     Tflag2 = (auto_Tsys.get_flags(blp[1][0], blp[1][0], pol)[tinds2, spw_start:spw_stop] | \
                               auto_Tsys.get_flags(blp[1][1], blp[1][1], pol)[tinds2, spw_start:spw_stop])
-                    
+
                     # average over frequency
                     if np.all(Tflag1 | Tflag2):
                         # fully flagged

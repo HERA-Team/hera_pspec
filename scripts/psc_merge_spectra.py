@@ -14,6 +14,6 @@ run_with_profiling(
     container.combine_psc_spectra, a,
     psc=a.filename,
     uvp_split_str=a.uvp_split_str,
-    ext_split_str=a.ext_split_str, 
+    ext_split_str=a.ext_split_str,
     verbose=a.verbose
 )

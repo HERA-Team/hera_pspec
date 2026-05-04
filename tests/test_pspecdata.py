@@ -102,7 +102,7 @@ class Test_PSpecData(unittest.TestCase):
             _d = uv.UVData()
             _d.read_miriad(
                 os.path.join(DATA_PATH, dfile),
-                
+
             )
             self.d.append(_d)
 
@@ -112,7 +112,7 @@ class Test_PSpecData(unittest.TestCase):
             _d = uv.UVData()
             _d.read_miriad(
                 os.path.join(DATA_PATH, dfile),
-                
+
             )
             self.d_std.append(_d)
 
@@ -925,7 +925,7 @@ class Test_PSpecData(unittest.TestCase):
         #Test if error is raised when one tried FFT approach on exact_norm
         pytest.raises(NotImplementedError, self.ds.q_hat, key1, key2, exact_norm=True, allow_fft = True)
 
-        
+
     def test_get_H(self):
         """
         Test Fisher/weight matrix calculation.
@@ -1193,7 +1193,7 @@ class Test_PSpecData(unittest.TestCase):
         pytest.raises(ValueError, ds2.validate_datasets)
         # phased data
         uvd4 = copy.deepcopy(self.d[0])
-       
+
 
         # test polarization
         ds.validate_pol((0,1), ('xx', 'xx'))
@@ -1338,7 +1338,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd = UVData()
         uvd.read(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         cosmo = conversions.Cosmo_Conversions()
         uvb = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, 'HERA_NF_dipole_power.beamfits'), cosmo=cosmo)
@@ -1373,7 +1373,7 @@ class Test_PSpecData(unittest.TestCase):
         uvd = UVData()
         uvd.read(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         uvd.nsample_array[:] = 1.0
         uvd.flag_array[:] = False
@@ -1734,10 +1734,10 @@ class Test_PSpecData(unittest.TestCase):
                          exact_windows=True, ftbeam=os.path.join(DATA_PATH, basename))
         assert uvp_w.exact_windows
         # give Gaussian beam as input
-        widths = -0.0343 * uvd.freq_array.flatten()/1e6 + 11.30 
+        widths = -0.0343 * uvd.freq_array.flatten()/1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=uvd.freq_array.flatten(),
                                                  widths=widths,
-                                                 pol='xx')  
+                                                 pol='xx')
         uvp_g = ds.pspec(baselines1, baselines2, (0, 1), ('xx','xx'), spw_ranges=(175, 195),
                          exact_windows=True, ftbeam=gaussian_beam)
 
@@ -2243,7 +2243,7 @@ def test_window_funcs():
     uvd = UVData()
     uvd.read_miriad(
         os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-        
+
     )
     beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
     ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd)], beam=beam)

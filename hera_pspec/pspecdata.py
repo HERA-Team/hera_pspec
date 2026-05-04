@@ -319,12 +319,12 @@ class PSpecData:
 
         # Check phase type
         phase_types = []
-        for d in self.dsets: 
+        for d in self.dsets:
             if len(d.phase_center_catalog) > 1:
                 raise ValueError(
                     "phase_center_catalog should contain only one entry per dataset"
                 )
-       
+
             phase_types.append(next(iter(d.phase_center_catalog.values()))['cat_type'])
         if np.unique(phase_types).size > 1:
             raise ValueError("all datasets must have the same phase type "
@@ -2242,14 +2242,14 @@ class PSpecData:
             self.set_Ndlys()
 
         return self._get_qalt_cached(
-            mode=mode, 
-            n_delays=self.spw_Ndlys, 
-            n_freqs=self.spw_Nfreqs, 
-            allow_fft=allow_fft, 
+            mode=mode,
+            n_delays=self.spw_Ndlys,
+            n_freqs=self.spw_Nfreqs,
+            allow_fft=allow_fft,
             n_extend=np.sum(self.filter_extension) if include_extension else 0.0,
             phase_correction=self.filter_extension[0] if include_extension else 0.0
         )
-    
+
     def get_Q_alt_tensor(self, allow_fft=True, include_extension=False):
         r"""
         Gets the (Ndly, Nfreq, Nfreq) tensor of Q_alt matrices.
@@ -2281,10 +2281,10 @@ class PSpecData:
         if self.spw_Ndlys is None:
             self.set_Ndlys()
 
-        return self._get_qalt_cached_tensor( 
-            n_delays=self.spw_Ndlys, 
-            n_freqs=self.spw_Nfreqs, 
-            allow_fft=allow_fft, 
+        return self._get_qalt_cached_tensor(
+            n_delays=self.spw_Ndlys,
+            n_freqs=self.spw_Nfreqs,
+            allow_fft=allow_fft,
             n_extend=np.sum(self.filter_extension) if include_extension else 0.0,
             phase_correction=self.filter_extension[0] if include_extension else 0.0
         )
@@ -2773,7 +2773,7 @@ class PSpecData:
               input_data_weight='identity', norm='I', taper='none',
               sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
               baseline_tol=1.0, store_cov=False, store_cov_diag=False,
-              return_q=False, store_window=True, exact_windows=False, 
+              return_q=False, store_window=True, exact_windows=False,
               ftbeam=None, verbose=True, filter_extensions=None,
               exact_norm=False, history='', r_params=None,
               cov_model='empirical', known_cov=None, allow_fft=False):
@@ -3449,7 +3449,7 @@ class PSpecData:
                         # inds is a slice if dset1 has rectangular blts.
                         inds1 = dset1.antpair2ind(bl1, ordered=False)
                         inds2 = dset2.antpair2ind(bl2, ordered=False)
-                        
+
                         time1.extend(dset1.time_array[inds1])
                         time2.extend(dset2.time_array[inds2])
                         lst1.extend(dset1.lst_array[inds1])
@@ -3516,7 +3516,7 @@ class PSpecData:
         # is equal to Ntpairs or 2 x Ntpairs if we interleave
         # but we have given upspec the capability to have this
         # not necessarily be the same.
-        # Ntimes could still be the number of "average times" which might be useful for noise purposes. 
+        # Ntimes could still be the number of "average times" which might be useful for noise purposes.
         uvp.Ntimes = len(np.unique(np.hstack([uvp.time_1_array, uvp.time_2_array])))
         uvp.Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(uvp.blpair_array, uvp.time_1_array, uvp.time_2_array)]))
         uvp.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
@@ -3550,7 +3550,7 @@ class PSpecData:
              dset1.telescope.location.z.to_value("m")
              ]
         )
-             
+
         filename1 = json.loads(dset1.extra_keywords.get('filename', '""'))
         cal1 = json.loads(dset1.extra_keywords.get('calibration', '""'))
         filename2 = json.loads(dset2.extra_keywords.get('filename', '""'))
@@ -3608,7 +3608,7 @@ class PSpecData:
         if store_window:
             if exact_windows:
                 # compute and store exact window functions
-                uvp.get_exact_window_functions(ftbeam=ftbeam, verbose=verbose, 
+                uvp.get_exact_window_functions(ftbeam=ftbeam, verbose=verbose,
                                                x_orientation=self.dsets[0].telescope.get_x_orientation_from_feeds(),
                                                inplace=True)
             else:
@@ -3676,7 +3676,7 @@ class PSpecData:
         for i, dset in enumerate(dsets):
             if len(dset.phase_center_catalog) > 1:
                 raise ValueError("Cannot deal with datasets with more than one phase center")
-            
+
             # don't rephase dataset we are using as our LST anchor
             if i == dset_index:
                 # even though not phasing this dset, must set to match all other
@@ -3692,7 +3692,7 @@ class PSpecData:
             # a copy of the data
             (data, flgs, antpos, ants, freqs, times, lsts,
              pols) = hc.io.load_vis(dset, return_meta=True)
-            
+
             # make bls dictionary
             bls = dict([(k, antpos[k[0]] - antpos[k[1]]) for k in data.keys()])
 
@@ -3704,7 +3704,7 @@ class PSpecData:
 
             # rephase
             hc.utils.lst_rephase(data, bls, freqs, dlst, lat=lat)
-            
+
             # re-insert into dataset
             for j, k in enumerate(data.keys()):
                 # get blts indices of basline
@@ -3820,7 +3820,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
               input_data_weight='identity', norm='I', taper='none', sampling=False,
               exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
               Nblps_per_group=None, bl_len_range=(0, 1e10),
-              bl_deg_range=(0, 180), bl_error_tol=1.0, 
+              bl_deg_range=(0, 180), bl_error_tol=1.0,
               store_window=True, exact_windows=False, ftbeam=None,
               beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
               trim_dset_lsts=False, broadcast_dset_flags=True,
@@ -3959,7 +3959,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             - Root name of the file to use, without the polarisation
             Ex : FT_beam_HERA_dipole (+ path)
             - '' for computation from beam simulations (slow)
-            - FTBeam object. Make sure polarisation and bandwidth are 
+            - FTBeam object. Make sure polarisation and bandwidth are
             compatible with the dataset.
 
     beam : PSpecBeam object, UVBeam object or string
@@ -4205,7 +4205,7 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
                 return None
 
         assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
-        
+
     # Check that the given spw ranges are valid, before doing anything too hefty.
     if spw_ranges is not None:
         for spw in spw_ranges:

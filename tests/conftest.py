@@ -19,7 +19,7 @@ DATA_PATH = Path(DATA_PATH)
 def beam_nf_dipole() -> PSpecBeamUV:
     beamfile = DATA_PATH / 'HERA_NF_dipole_power.beamfits'
     return PSpecBeamUV(beamfile)
-        
+
 @pytest.fixture(scope="session")
 def vanilla_uvp() -> UVPSpec:
     return build_vanilla_uvpspec(equal_time_arrays=True)[0]
@@ -61,18 +61,15 @@ def uvp_example_data() -> UVPSpec:
     )
     # compute ps
     return ds.pspec(
-        baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')], 
+        baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')],
         spw_ranges=(175, 195), taper='bh',verbose=False
     )
-    
+
 @pytest.fixture(scope="session")
 def uvp_exact_wfs(uvp_example_data) -> UVPSpec:
     uvp = copy.deepcopy(uvp_example_data)
     ft_file = DATA_PATH / 'FT_beam_HERA_dipole_test'
-    
+
     uvp.get_exact_window_functions(ftbeam=ft_file, inplace=True)
     uvp.check()
     return uvp
-
-
-    

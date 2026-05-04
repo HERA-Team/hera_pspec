@@ -12,13 +12,13 @@ def calc_P_N(scalar, Tsys, t_int, Ncoherent=1, Nincoherent=None, form='Pk', k=No
     Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
     component of the power spectrum.
 
-    The noise power spectrum is written as 
+    The noise power spectrum is written as
 
     P_N = scalar * (Tsys * 1e3)^2 / (t_int * Ncoherent) / sqrt(Nincoherent)
 
     where scalar is a nomalization given by the cosmological model and beam response, i.e. X2Y * Omega_eff
-    Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec], 
-    Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the 
+    Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec],
+    Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the
     number of incoherent averages after squaring. If component is 'real' or 'imag' an additional factor
     of 1/sqrt(2) is multiplied.
     For an ensemble of power spectra with the same Tsys, this estimate should equal their RMS value.
@@ -131,7 +131,7 @@ class Sensitivity(object):
     def calc_scalar(self, freqs, pol, num_steps=5000, little_h=True):
         """
         Calculate noise power spectrum prefactor from Eqn. (1) of Pober et al. 2014, ApJ 782, 66,
-        equal to 
+        equal to
 
         scalar = X2Y(z) * Omega_P^2 / Omega_PP
 
@@ -157,7 +157,7 @@ class Sensitivity(object):
         self.pol : str, polarization used to calculate self.scalar
         """
         # compute scalar
-        self.scalar = self.beam.compute_pspec_scalar(freqs.min(), freqs.max(), len(freqs), num_steps=num_steps, 
+        self.scalar = self.beam.compute_pspec_scalar(freqs.min(), freqs.max(), len(freqs), num_steps=num_steps,
                                                      pol=pol, little_h=little_h, noise_scalar=True)
         self.subband = freqs
         self.pol = pol
@@ -167,13 +167,13 @@ class Sensitivity(object):
         Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
         component of the power spectrum.
 
-        The noise power spectrum is written as 
+        The noise power spectrum is written as
 
         P_N = scalar * (Tsys * 1e3)^2 / (t_int * Ncoherent) / sqrt(Nincoherent)
 
         where scalar is a nomalization given by the cosmological model and beam response, i.e. X2Y * Omega_eff
-        Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec], 
-        Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the 
+        Tsys is the system temp in Kelvin, t_int is the integration time of the underlying data [sec],
+        Ncoherent is the number of coherent averages before forming power spectra, and Nincoherent is the
         number of incoherent averages after squaring. If component is 'real' or 'imag' a factor of 1/sqrt(2)
         is multiplied.
 
@@ -202,26 +202,26 @@ class Sensitivity(object):
         assert form in ('Pk', 'DelSq'), "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
 
         # calculate P_N
-        P_N = calc_P_N(self.scalar, Tsys, t_int, Ncoherent=Ncoherent, Nincoherent=Nincoherent, form=form, 
+        P_N = calc_P_N(self.scalar, Tsys, t_int, Ncoherent=Ncoherent, Nincoherent=Nincoherent, form=form,
                        k=k, component=component)
 
         return P_N
-    
+
 def get_approximate_delay_delay_corr_matrix(
     taper: str,
     n_delays: int,
 ) -> np.ndarray:
     r"""Compute an approximate correlation matrix for a power spectrum.
-    
-    This correlation matrix assumes that there is no intrinsic covariance between 
+
+    This correlation matrix assumes that there is no intrinsic covariance between
     channels of the visibilities, and that all delay-delay covariance comes in through
     the frequency taper. In this case, the correlation between delays i and j is given
     by
-    
+
     .. math:: C_{i,j} = |\mathcal{F}(\phi^2)|(\tau_j - \tau_i)^2,
-    
+
     where :math:`\phi` is the taper function.
-    
+
     Parameters
     ----------
     taper
@@ -236,4 +236,3 @@ def get_approximate_delay_delay_corr_matrix(
     # We take the non-negative modes only, since the negative modes are symmetric.
     cov = np.abs(np.fft.fft(taper**2))**2
     return circulant(cov/cov.max())
-
