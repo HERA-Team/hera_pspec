@@ -19,7 +19,7 @@ from . import (
 
 def build_vanilla_uvpspec(
     beam: pspecbeam.PSpecBeamBase | None=None,
-    Ndlys: int | None = 30,
+    Ndlys: int | None = None,
     equal_time_arrays: bool = True
 ) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
     """
@@ -32,9 +32,7 @@ def build_vanilla_uvpspec(
         A beam to use for the UVPSpec object. If None, no beam is used.
     Ndlys : int, optional
         Number of delay bins to use. If None, uses as many delay bins as
-        frequency channels. Default is 30, which was the original default, but
-        is *different* than the number of frequency channels, which can break 
-        window functions.
+        frequency channels. Default is None, which uses the number of frequency channels.
     equal_time_arrays
         If True, the time_1_array and time_2_array will be equal. If False,
         they will be different. Default is True.
@@ -140,8 +138,12 @@ def build_vanilla_uvpspec(
         # dimensions of the input visibilities, not the output delay spectra
         integration_array[s] = np.ones((uvp.Nbltpairs, uvp.Npols), dtype=float)
         nsample_array[s] = np.ones((uvp.Nbltpairs, uvp.Npols), dtype=float)
-        window_function_array[s] = np.ones(
-            (uvp.Nbltpairs, uvp.Ndlys, uvp.Ndlys, uvp.Npols), dtype=np.float64
+        # if uvp.Nfreqs == uvp.Ndlys:
+        Wv = np.diag(np.ones(uvp.Ndlys, dtype=np.float64))
+        window_function_array[s] = np.repeat(
+            # repeat along blpairtime axis
+            np.repeat(Wv[None, :], uvp.Nbltpairs, axis=0)[..., None],
+            uvp.Npols, axis=-1,  # repeat along polarization axis
         )
         cov_array_real[s] = np.moveaxis(
             np.array(
@@ -172,10 +174,10 @@ def build_vanilla_uvpspec(
     uvp.nsample_array = nsample_array
     uvp.window_function_array = window_function_array
     uvp.cosmo = cosmo
-    
+
     # From v0.5, this must always be true.
     uvp.Ntimes = uvp.Ntpairs
-    
+
     uvp.check()
 
     return uvp, cosmo

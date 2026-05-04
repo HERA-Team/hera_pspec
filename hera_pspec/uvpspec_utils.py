@@ -113,7 +113,7 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                     and hasattr(uvp2, 'window_function_array')):
                     window1 = uvp1.get_window_function(key1)
                     window2 = uvp2.get_window_function(key2)
-                    uvp1.window_function_array[i][blp1_inds, :, :, j] \
+                    uvp1.window_function_array[i][blp1_inds, ..., j] \
                         = np.sqrt(window1.real**2 + window2.real**2) \
                         + 1j*np.sqrt(window1.imag**2 + window2.imag**2)
 
