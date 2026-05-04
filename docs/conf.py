@@ -197,5 +197,3 @@ texinfo_documents = [
      author, 'hera_pspec', 'HERA delay power spectrum estimation.',
      'Miscellaneous'),
 ]
-
-

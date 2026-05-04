@@ -1,7 +1,7 @@
 """
 Module to construct pseudo-Stokes (I,Q,U,V) visibilities from miriad files or UVData objects
 """
-import numpy as np, os
+import numpy as np
 import pyuvdata
 import copy
 from collections import OrderedDict as odict
@@ -9,7 +9,7 @@ from collections.abc import Iterable
 import argparse
 import warnings
 
-from . import version, __version__
+from . import __version__
 
 # Weights used in forming Stokes visibilities.
 # See pyuvdata.utils.polstr2num for conversion between polarization string
@@ -437,7 +437,7 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
     # type check
     assert isinstance(dsets, list), \
         "dsets must be fed as a list of UVData objects"
-    assert np.all(isinstance(d, UVData) for d in dsets), \
+    assert np.all(isinstance(d, pyuvdata.UVData) for d in dsets), \
         "dsets must be fed as a list of UVData objects"
 
     # get polarization of each dset

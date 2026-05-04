@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import sys
-import os
 from hera_pspec import pspecdata
 from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 

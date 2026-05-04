@@ -1,7 +1,7 @@
 import unittest
 import pytest
 import numpy as np
-import os, sys, copy
+import os
 from hera_pspec.data import DATA_PATH
 from hera_pspec import container, PSpecContainer, UVPSpec, testing
 

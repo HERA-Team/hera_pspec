@@ -1,10 +1,12 @@
 import numpy as np
 from collections import OrderedDict as odict
-import os, copy, shutil, operator, ast, fnmatch
+import os
+import copy
+import ast
+import fnmatch
 from pyuvdata import utils as uvutils
 import h5py
 import warnings
-import json
 try:
     from typing import Self
 except ImportError:
@@ -2581,7 +2583,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     r_params = {}
     for _r_param in _r_params:
         for rkey in _r_param:
-            if not rkey in r_params:
+            if rkey not in r_params:
                 r_params[rkey] = _r_param[rkey]
             elif r_params[rkey] != _r_param[rkey]:
                 #For now, we won't support inconsistent weightings.

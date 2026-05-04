@@ -6,13 +6,11 @@ import numpy as np
 import sys
 import os
 import copy
-import time
 from scipy.interpolate import RegularGridInterpolator
-from pyuvdata import UVBeam, UVData
 from astropy import units
 from pathlib import Path
 
-from . import conversions, noise, version, pspecbeam, grouping, utils
+from . import conversions, utils
 from . import uvpspec_utils as uvputils
 
 

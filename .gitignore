@@ -12,7 +12,7 @@ eggs/
 *GIT_INFO
 *ipynb_checkpoints
 docs/_build/
-hera_pspec/_version.py
+src/hera_pspec/_version.py
 .vscode/
 ex.hdf5
 out.h5

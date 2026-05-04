@@ -1,5 +1,5 @@
 import numpy as np
-import copy, operator
+import copy
 from collections import OrderedDict as odict
 from pyuvdata.utils import polstr2num, polnum2str
 import json
@@ -195,7 +195,7 @@ def decompress_r_params(r_params_str):
                                         is to be suppressed.
     """
     decompressed_r_params = {}
-    if r_params_str != '' and not r_params_str is None:
+    if r_params_str != '' and r_params_str is not None:
         r_params = json.loads(r_params_str)
         for rpi in r_params:
             rp_dict = {}
@@ -832,9 +832,9 @@ def _select(uvp, spws=None, bls=None, only_pairs_in_bls=False, blpairs=None,
         for blpkey in blp_keys:
             key1 = blpkey[1][0] + (blpkey[2][0],)
             key2 = blpkey[1][1] + (blpkey[2][1],)
-            if not key1 in blkeys:
+            if key1 not in blkeys:
                 blkeys += [key1,]
-            if not key2 in blkeys:
+            if key2 not in blkeys:
                 blkeys += [key2,]
         new_r_params = {}
         if hasattr(uvp, 'r_params') and uvp.r_params != '':

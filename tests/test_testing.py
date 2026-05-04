@@ -1,8 +1,8 @@
 import pytest
 from hera_pspec.data import DATA_PATH
-from hera_pspec import testing, uvpspec, conversions, pspecbeam, utils
+from hera_pspec import testing, uvpspec, conversions, pspecbeam
 import os
-from pyuvdata import UVData, UVBeam
+from pyuvdata import UVData
 import numpy as np
 from hera_cal import redcal
 import copy
@@ -112,7 +112,8 @@ def test_sky_noise_jy_autos():
     channel_width = np.mean(np.diff(freqs))
 
     # Callable beam function
-    omega_p = lambda freq: 0.05 * (freq / 100.e6)**-1.
+    def omega_p(freq):
+        return 0.05 * (freq / 100.e6)**-1.
 
     # Call function
     n = testing.sky_noise_jy_autos(

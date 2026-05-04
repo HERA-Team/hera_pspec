@@ -1,20 +1,14 @@
 import unittest
 import pytest
-from pyuvdata import utils as uvutils
-import uvtools.dspec as dspec
-import h5py
-import warnings
 import numpy as np
-import sys
 import os
-import time
 import copy
 from astropy import units
-from pyuvdata import UVBeam, UVData
+from pyuvdata import UVData
 from hera_pspec.data import DATA_PATH
 
 from hera_pspec import conversions, pspecbeam, utils
-from hera_pspec import uvwindow, pspecbeam, PSpecData
+from hera_pspec import uvwindow, PSpecData
 
 # Data files to use in tests
 dfile = 'zen.2458116.31939.HH.uvh5'
