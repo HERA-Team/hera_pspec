@@ -5,8 +5,8 @@ categories:
       - "API breaking"
   - title: ":rocket: Features"
     labels:
-      - "type: feature: ui"
-      - "type: feature: physical"
+      - "type: feature: ux"
+      - "type: feature: science"
   - title: ":fire: Removals and Deprecations"
     labels:
       - "type: maint: removal"
