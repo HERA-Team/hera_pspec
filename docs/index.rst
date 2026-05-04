@@ -13,22 +13,6 @@ You can find the code in the ``hera_pspec`` `GitHub repository <https://github.c
 A set of `example Jupyter notebooks <https://github.com/HERA-Team/hera_pspec/tree/master/examples>`_ are also available on GitHub.
 
 
-Installation
-------------
-
-The package is installable, along with its dependencies, with PyPi. We
-recommend using Anaconda and creating a new conda environment before
-installing the package:
-
-::
-
-   $ conda create -n hera_pspec python=3
-   $ conda activate hera_pspec
-   $ python3 -m pip install hera_pspec
-
-New versions are frequently released on PyPi.
-For more installation options, see below.
-
 Contents
 --------
 

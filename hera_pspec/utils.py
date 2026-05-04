@@ -1635,9 +1635,19 @@ def get_Q_alt(
         If set to True, allows a shortcut FFT method when
         the number of delay bins equals the number of delay channels.
         Default: True
-    include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
-        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
-        (spw_Nfreq x spw_Nfreq).
+    include_extension : bool, optional
+        Accepted for backwards-compatible API but unused inside this
+        function: the matrix shape is driven entirely by ``n_extend``.
+    n_extend : float, optional
+        Channel-extension count. When non-zero, the returned matrix has
+        shape ``(n_freqs + n_extend, n_freqs + n_extend)`` (instead of
+        ``(n_freqs, n_freqs)``) so it can be contracted against a
+        similarly extended covariance ``C_{ij}`` when computing
+        ``\partial C_{ij} / \partial p_\alpha``.
+    phase_correction : float, optional
+        Index offset applied to the Fourier-mode frequency vector when
+        ``n_extend > 0``; ignored otherwise. Typically the left
+        ``filter_extension`` of the caller.
 
     Return
     -------
