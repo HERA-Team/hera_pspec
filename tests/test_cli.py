@@ -39,9 +39,9 @@ def single_baseline_files(tmp_path_factory, vanilla_uvp: UVPSpec) -> list[Path]:
 class TestFastMergeBaselines:
     def test_happy_path(self, vanilla_uvp, single_baseline_files: list[Path]):
         runner = CliRunner()
-                    
+
         pth = single_baseline_files[0].parent
-        
+
         result = runner.invoke(
             cli.app,
             args=[
@@ -56,24 +56,99 @@ class TestFastMergeBaselines:
                 '--extras', 'extra1',
             ]
         )
-        
+
         if result.exit_code != 0:
             print(result.exc_info)
             print(result.stdout)
             assert result.exit_code == 0
-        
+
         # Test that the file we made has all the baselines in it.
         new = PSpecContainer(pth / "combined.pspec.h5", 'r', keep_open=False)
         newuvp = new.get_pspec('pspecgroup', 'name')
         assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
-        
+
         newuvp = new.get_pspec('pspecgroup', 'name2')
         assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
-        
+
         # Test that the file we made has all the baselines in it.
         with open(pth / "combined.extra0.pkl", 'rb') as fl:
             data = pickle.load(fl)
             assert all(blp in data for blp in vanilla_uvp.get_blpairs())
+
+    def test_batch_processing(self, vanilla_uvp, single_baseline_files: list[Path]):
+        """Test that batch processing produces the same result as loading all at once."""
+        runner = CliRunner()
+
+        pth = single_baseline_files[0].parent
+
+        # Run with batch_size=2 (small batches to test the batching logic)
+        result = runner.invoke(
+            cli.app,
+            args=[
+                'fast-merge-baselines',
+                '--pattern', f'{pth}/blpair.*.h5',
+                '--group', 'pspecgroup',
+                '--names', 'name',
+                '--names', 'name2',
+                '--outpath', f"{pth}/combined_batched",
+                '--no-progress',
+                '--extras', 'extra0',
+                '--extras', 'extra1',
+                '--batch-size', '2',
+            ]
+        )
+
+        if result.exit_code != 0:
+            print(result.exc_info)
+            print(result.stdout)
+            assert result.exit_code == 0
+
+        # Verify the batched result has all the baselines
+        new = PSpecContainer(pth / "combined_batched.pspec.h5", 'r', keep_open=False)
+        newuvp = new.get_pspec('pspecgroup', 'name')
+        assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
+        assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
+
+        newuvp2 = new.get_pspec('pspecgroup', 'name2')
+        assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp2.get_blpairs())
+        assert len(newuvp2.get_blpairs()) == len(vanilla_uvp.get_blpairs())
+
+        # Test extras were saved correctly
+        with open(pth / "combined_batched.extra0.pkl", 'rb') as fl:
+            data = pickle.load(fl)
+            assert all(blp in data for blp in vanilla_uvp.get_blpairs())
+            assert len(data) == len(vanilla_uvp.get_blpairs())
+
+    def test_single_batch(self, vanilla_uvp, single_baseline_files: list[Path]):
+        """Test that batch_size=1 works correctly (edge case)."""
+        runner = CliRunner()
+
+        pth = single_baseline_files[0].parent
+
+        # Run with batch_size=1 (most extreme batching)
+        result = runner.invoke(
+            cli.app,
+            args=[
+                'fast-merge-baselines',
+                '--pattern', f'{pth}/blpair.*.h5',
+                '--group', 'pspecgroup',
+                '--names', 'name',
+                '--outpath', f"{pth}/combined_single",
+                '--no-progress',
+                '--batch-size', '1',
+            ]
+        )
+
+        if result.exit_code != 0:
+            print(result.exc_info)
+            print(result.stdout)
+            assert result.exit_code == 0
+
+        # Verify the result has all the baselines
+        new = PSpecContainer(pth / "combined_single.pspec.h5", 'r', keep_open=False)
+        newuvp = new.get_pspec('pspecgroup', 'name')
+        assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
+        assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
         
 def test_dummy_command():
     runner = CliRunner()
