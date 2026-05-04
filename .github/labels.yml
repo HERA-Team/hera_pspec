@@ -21,27 +21,27 @@
 - name: "area: grouping"
   color: "1d76db"
   description: Averaging, folding, bootstrapping, spherical binning, and delay-bin grouping.
-- name: "type: maintenance"
-  color: "0e8a16"
-  description: Tooling, cleanup, dependency updates, and non-science refactors.
 - name: "type: deprecation"
   color: "0e8a16"
   description: Planned removal or replacement of supported APIs or features.
-- name: "type: science"
+- name: "type: feature: science"
   color: "5319e7"
   description: Scientific or statistical behavior, estimator math, normalization, and sensitivity logic.
 - name: "type: bug"
   color: "d73a4a"
   description: Something isn't working correctly.
-- name: "type: feature"
+- name: "type: feature: ux"
   color: "0e8a16"
-  description: New analysis capability or user-facing functionality.
+  description: New user-facing functionality.
 - name: "type: testing"
   color: "b1fc6f"
   description: Test additions, fixtures, and test-infrastructure changes.
-- name: "type: performance"
+- name: "type: performance: memory"
   color: "016175"
-  description: Walltime, memory, or scaling improvements.
+  description: Memory improvement
+- name: "type: performance: speed"
+  color: "016175"
+  description: Wall-time performance improvements
 - name: "type: question"
   color: "d876e3"
   description: A question about the code, API, or documentation.
