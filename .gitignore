@@ -11,6 +11,7 @@ eggs/
 *egg-info
 *GIT_INFO
 *ipynb_checkpoints
+docs/_build/
 hera_pspec/_version.py
 .vscode/
 ex.hdf5
