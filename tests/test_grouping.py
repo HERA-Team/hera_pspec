@@ -21,8 +21,8 @@ def case_vanilla_uvp_alternating_times(beam_nf_dipole, vanilla_uvp_alternating_t
 
 # def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):
 #     return uvp_exact_wfs
-    
-    
+
+
 class TestGrouping:
 
 
@@ -201,14 +201,14 @@ class TestGrouping:
         uvd = UVData()
         uvd.read_uvh5(
             os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
-            
+
         )
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
         baselines1, baselines2, blpairs = utils.construct_blpairs(uvd.get_antpairs()[1:],
                                                                   exclude_permutations=False,
                                                                   exclude_auto_bls=True)
         # compute ps
-        uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx', 'xx')], 
+        uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx', 'xx')],
                        spw_ranges=(175,195), taper='bh',verbose=False)
         # get exact window functions
         uvp.get_exact_window_functions(ftbeam=os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test'),
@@ -494,7 +494,7 @@ def test_spherical_average():
     uvd = UVData()
     uvd.read(
         os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-        
+
     )
 
     # load other data, get reds and make UVPSpec
@@ -618,7 +618,7 @@ def test_spherical_average():
                                                               exclude_permutations=False,
                                                               exclude_auto_bls=True)
     # compute ps
-    uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx', 'xx')], 
+    uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx', 'xx')],
                    spw_ranges=(175,195), taper='bh',verbose=False)
     # get exact window functions
     uvp.get_exact_window_functions(ftbeam=os.path.join(DATA_PATH, 'FT_beam_HERA_dipole_test'),
@@ -644,7 +644,7 @@ def test_spherical_wf_from_uvp():
     uvd = UVData()
     uvd.read_uvh5(
         os.path.join(DATA_PATH, 'zen.2458116.31939.HH.uvh5'),
-        
+
     )
     # Create a new PSpecData objec
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
@@ -653,7 +653,7 @@ def test_spherical_wf_from_uvp():
                                                               exclude_permutations=False,
                                                               exclude_auto_bls=True)
     # compute ps
-    uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')], 
+    uvp = ds.pspec(baselines1, baselines2, dsets=(0, 1), pols=[('xx','xx')],
                    spw_ranges=(175,195), taper='bh',verbose=False)
     uvp.cosmo = conversions.Cosmo_Conversions() #uvp.set_cosmology not overwriting
 
@@ -678,7 +678,7 @@ def test_spherical_wf_from_uvp():
     assert wf_array2[0].shape == (uvp.Ntimes, Nk, Nk_in, uvp.Npols)
     # little_h
     wf_array = grouping.spherical_wf_from_uvp(
-        uvp, 
+        uvp,
         kbin_edges=kbin_edges/uvp.cosmo.h,
         little_h=True
     )
@@ -691,7 +691,7 @@ def test_spherical_wf_from_uvp():
     )
     pytest.raises(
         AssertionError,
-        grouping.spherical_wf_from_uvp, 
+        grouping.spherical_wf_from_uvp,
         uvp,
         kbin_edges,
         spw_array=2, little_h='h^-3' in uvp.norm_units
@@ -705,8 +705,8 @@ def test_spherical_wf_from_uvp():
         blpair_lens=blpair_lens,
         little_h='h^-3' in uvp.norm_units)
     pytest.raises(
-        AssertionError, 
-        grouping.spherical_wf_from_uvp, 
+        AssertionError,
+        grouping.spherical_wf_from_uvp,
         uvp,
         kbin_edges=kbin_edges,
         blpair_groups=blpair_groups[0], little_h='h^-3' in uvp.norm_units
@@ -725,7 +725,7 @@ def test_spherical_wf_from_uvp():
         little_h='h^-3' in uvp.norm_units)
     pytest.raises(
         AssertionError,
-        grouping.spherical_wf_from_uvp, 
+        grouping.spherical_wf_from_uvp,
         uvp, kbin_edges,
         blpair_groups=blpair_groups, blpair_lens=[blpair_lens[0],blpair_lens[0]],
         little_h='h^-3' in uvp.norm_units)
@@ -763,7 +763,7 @@ class TestAverageDelayBins:
         del self.uvp_nocov.cov_array_imag
 
         self.uvp2 = copy.deepcopy(self.uvp)
-        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.uvp2.freq_array, widths=8., pol=1) 
+        gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=self.uvp2.freq_array, widths=8., pol=1)
         del self.uvp2.window_function_array
         self.uvp2.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
 
@@ -779,16 +779,16 @@ class TestAverageDelayBins:
         """Test that proper exceptions are raised for bad inputs."""
         with pytest.raises(ValueError, match="The kernel must be 1D"):
             grouping.average_in_delay_bins(self.uvp, kernel=np.array([[1, 1, 1]]))
-            
+
         with pytest.raises(ValueError, match="The kernel size must be smaller than half"):
             grouping.average_in_delay_bins(self.uvp, kernel=np.zeros(self.uvp.Ndlys))
-            
+
         with pytest.raises(ValueError, match="The zero bin kernel must be symmetric"):
             grouping.average_in_delay_bins(self.uvp, kernel=np.array([1,1]), zero_bin_kernel=np.array([1, 0, 1, 0]))
-                        
+
     def test_happy_path(self):
         new = grouping.average_in_delay_bins(self.uvp, kernel=np.array([1,1,1]))
-        
+
         assert len(new.get_dlys(0)) - 1 == (len(self.uvp.get_dlys(0)) - 1)//3
 
     def test_propagation(self):
@@ -847,13 +847,13 @@ class TestAverageDelayBins:
             # given the bin edges, the final bin is empty in the delay averaged spectrum
             sph_new2.window_function_array[0][0, :, :-1, 0]), \
             "Window functions wrongly propagated by grouping.spherical_average"
-        
+
         # tests with exact window functions
         new2 = grouping.average_in_delay_bins(self.uvp2, kernel=np.array([1, 1, 1]))
         # delay array propagation
         assert np.isclose(
             new2.dly_array[0], np.mean(self.uvp2.dly_array[1:4])
-        ) 
+        )
         # window functions propagation
         assert np.allclose(
             np.mean(self.uvp2.window_function_array[0][:, 1:4], axis=1),
@@ -868,12 +868,12 @@ class TestAverageDelayBins:
             uvp = copy.deepcopy(self.uvp)
         else:
             uvp = copy.deepcopy(self.uvp_nocov)
-            
+
         uvp.stats_array = {'P_N': {spw: np.ones_like(uvp.data_array[spw]) for spw in uvp.spw_array}}
-                
+
         new = grouping.average_in_delay_bins(
-            uvp, 
-            kernel=np.array([1,1,1]), 
+            uvp,
+            kernel=np.array([1,1,1]),
             zero_bin_kernel=np.array([1,1,1]),
             cov_weighted_stats=cov_weighted_stats
         )
@@ -881,20 +881,20 @@ class TestAverageDelayBins:
         np.testing.assert_allclose(
             new.stats_array['P_N'][0], 1/np.sqrt(3) if (with_cov and cov_weighted_stats) else 1
         )
-        
+
     def test_without_cov_array(self):
         """Test that the function works without cov_array."""
         new = grouping.average_in_delay_bins(self.uvp_nocov, kernel=np.array([1,1,1]))
-        
+
         assert len(new.get_dlys(0)) - 1 == (len(self.uvp_nocov.get_dlys(0)) - 1)//3
-        
+
         # Check that the stats_array is empty
         assert new.stats_array == {}
-        
+
     def test_exact_window_functions(self):
         new = grouping.average_in_delay_bins(self.uvp2, kernel=np.array([0,1, 1,0]))
         oldshape = self.uvp2.window_function_array[0].shape
         newshape = list(oldshape)
         newshape[1] = len(new.get_dlys(0))
-        
+
         assert new.window_function_array[0].shape == tuple(newshape)

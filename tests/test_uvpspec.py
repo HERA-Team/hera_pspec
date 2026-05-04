@@ -175,7 +175,7 @@ class TestUVPSpec:
         assert cov_imag[0].shape == (24, 24)
 
     def test_stats_array(
-        self, 
+        self,
         vanilla_uvp_with_beam: uvpspec.UVPSpec,
         tmp_path: Path
     ):
@@ -232,7 +232,7 @@ class TestUVPSpec:
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -264,7 +264,7 @@ class TestUVPSpec:
 
     def test_blpair_conversions(self, vanilla_uvp: uvpspec.UVPSpec):
         uvp = vanilla_uvp
-        
+
         # test blpair -> antnums
         an = uvp.blpair_to_antnums(101102101102)
         assert an == ((1, 2), (1, 2))
@@ -439,7 +439,7 @@ class TestUVPSpec:
     def test_check(self, uvp: uvpspec.UVPSpec):
         uvp = copy.deepcopy(uvp)
         uvp.check()
-        
+
         # test failure modes
         nt = uvp.Ntimes
         del uvp.Ntimes
@@ -463,7 +463,7 @@ class TestUVPSpec:
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
         bls = [(37, 38), (38, 39), (52, 53)]
@@ -481,7 +481,7 @@ class TestUVPSpec:
     @parametrize_with_cases('uvp', cases=".")
     def test_write_read_hdf5(self, uvp: uvpspec.UVPSpec, tmp_path: Path):
         uvp = copy.deepcopy(uvp)
-        
+
         out = tmp_path / 'ex.hdf5'
         # test basic write execution
         uvp.write_hdf5(out, overwrite=True)
@@ -587,7 +587,7 @@ class TestUVPSpec:
 
     def test_get_exact_window_functions(self, uvp_example_data: uvpspec.UVPSpec):
         ft_file = Path(DATA_PATH) / 'FT_beam_HERA_dipole_test'
-    
+
         uvp = copy.deepcopy(uvp_example_data)
 
         # obtain exact_windows (fiducial usage)
@@ -616,12 +616,12 @@ class TestUVPSpec:
                       spw_array=2, inplace=True)
 
         # give Gaussian beam as input
-        widths = -0.0343 * uvp.freq_array/1e6 + 11.30 
+        widths = -0.0343 * uvp.freq_array/1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(freq_array=uvp_example_data.freq_array,
                                                  widths=widths,
-                                                 pol='xx')     
+                                                 pol='xx')
         uvp.get_exact_window_functions(ftbeam=gaussian_beam,
-                                       spw_array=0, inplace=True, verbose=True) 
+                                       spw_array=0, inplace=True, verbose=True)
 
     @parametrize_with_cases('uvp', cases=".")
     def test_fold_spectra(self, uvp: uvpspec.UVPSpec):
@@ -643,11 +643,11 @@ class TestUVPSpec:
         uvd_std = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         uvd_std.read_miriad(
             os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -684,8 +684,8 @@ class TestUVPSpec:
         # test basic execution
         s = uvp.compute_scalar(0, ('xx','xx'), num_steps=1000, noise_scalar=False)
         np.testing.assert_almost_equal(s/553995277.90425551, 1.0, decimal=5)
-        
-        
+
+
         pytest.raises(AssertionError, vanilla_uvp.compute_scalar, 0, -5)
 
     def test_set_cosmology(self, vanilla_uvp_with_beam: uvpspec.UVPSpec, beam_nf_dipole):
@@ -719,7 +719,7 @@ class TestUVPSpec:
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -856,7 +856,7 @@ class TestUVPSpec:
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -902,7 +902,7 @@ class TestUVPSpec:
         uvd = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         beam = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH,
                                                "HERA_NF_dipole_power.beamfits"))
@@ -955,11 +955,11 @@ class TestUVPSpec:
         uvd_std = UVData()
         uvd.read_miriad(
             os.path.join(DATA_PATH, 'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         uvd_std.read_miriad(
             os.path.join(DATA_PATH,'zen.even.xx.LST.1.28828.uvOCRSA'),
-            
+
         )
         beam = pspecbeam.PSpecBeamUV(
                       os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
@@ -1063,7 +1063,7 @@ class TestUVPSpec:
 
         combined_recursive = uvpspec.recursive_combine_uvpspec(uvps_list)
         combined_standard = uvpspec.combine_uvpspec(uvps_list, merge_history=False, verbose=False)
-        
+
         self.assert_uvpspec_equal(combined_recursive,combined_standard)
 
     @parametrize_with_cases('uvp', cases=".")
@@ -1128,13 +1128,13 @@ def test_add_approximate_cov():
     uvp = uvpspec.UVPSpec()
     uvp.read_hdf5(os.path.join(DATA_PATH, 'test_uvp.h5'))
     uvp.stats_array = {'P_N': {spw: np.ones((uvp.Nbltpairs, len(uvp.get_dlys(spw)), uvp.Npols)) for spw in uvp.spw_array}}
-    
+
     uvp.add_approximate_covariance(inplace=True)
     assert hasattr(uvp, 'cov_array_real')
     ndly = len(uvp.get_dlys(0))
     assert uvp.cov_array_real[0].shape == (uvp.Nbltpairs, ndly, ndly, uvp.Npols)
     assert np.allclose(np.diagonal(uvp.cov_array_real[0], axis1=1, axis2=2), 1.0)
-    
+
     # test that inplace=False works, not changing the original.
     uvp.stats_array['P_N'][0] *= 2
     uvp2 = uvp.add_approximate_covariance(inplace=False)

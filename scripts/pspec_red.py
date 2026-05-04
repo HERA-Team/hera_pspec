@@ -18,7 +18,7 @@ pspec_defaults = {
     'exclude_permutations':     False,
 }
 
-    
+
 #-------------------------------------------------------------------------------
 # Settings
 #-------------------------------------------------------------------------------
@@ -42,8 +42,8 @@ pspec_cfg = cfg['pspec']
 
 files = []
 for i in range(len(data_cfg['subdirs'])):
-    files += glob.glob( os.path.join(data_cfg['root'], 
-                                     data_cfg['subdirs'][i], 
+    files += glob.glob( os.path.join(data_cfg['root'],
+                                     data_cfg['subdirs'][i],
                                      data_cfg['template']) )
 for f in files:
     print(f)
@@ -113,25 +113,24 @@ dset_idxs = range(len(ds.dsets))
 for i in dset_idxs:
     for j in dset_idxs:
         if i == j: continue
-        
+
         # Name for this set of power spectra
         pspec_name = "pspec_dset(%d,%d)" % (i,j)
-        
+
         # Calculate power spectra for all baseline pairs (returns UVPSpec)
-        ps = ds.pspec([bls,], [bls,], dsets=(i,j), 
-                      input_data_weight=pspec_cfg['weight'], 
-                      norm=pspec_cfg['norm'], 
-                      taper=pspec_cfg['taper'], 
-                      avg_group=pspec_defaults['avg_group'], 
-                      exclude_auto_bls=pspec_defaults['exclude_auto_bls'], 
+        ps = ds.pspec([bls,], [bls,], dsets=(i,j),
+                      input_data_weight=pspec_cfg['weight'],
+                      norm=pspec_cfg['norm'],
+                      taper=pspec_cfg['taper'],
+                      avg_group=pspec_defaults['avg_group'],
+                      exclude_auto_bls=pspec_defaults['exclude_auto_bls'],
                       exclude_permutations=pspec_defaults['exclude_permutations'],
                       spw_ranges=None,
                       little_h=pspec_defaults['little_h'])
-        
+
         # Store power spectra in container
-        ps_store.set_pspec(group=pspec_cfg['groupname'], psname=pspec_name, 
+        ps_store.set_pspec(group=pspec_cfg['groupname'], psname=pspec_name,
                            pspec=ps, overwrite=pspec_defaults['overwrite'])
 
 # Print list of power spectra that were stored in the container
 ps_store.tree()
-

@@ -4,9 +4,9 @@
 
 **The HERA delay spectrum estimation package**
 
-The ``hera_pspec`` library provides all of the tools and data structures needed 
-to perform a delay spectrum analysis on interferometric data. The input data 
-can be in any format supported by ``pyuvdata``, and the output data are stored in 
+The ``hera_pspec`` library provides all of the tools and data structures needed
+to perform a delay spectrum analysis on interferometric data. The input data
+can be in any format supported by ``pyuvdata``, and the output data are stored in
 HDF5 containers.
 
 You can find the code in the ``hera_pspec`` `GitHub repository <https://github.com/HERA-Team/hera_pspec>`_. It is also available on `PyPi <https://pypi.org/project/hera-pspec/>`_.
@@ -35,7 +35,7 @@ Contents
 .. toctree::
    :maxdepth: 2
 
-   installation   
+   installation
    pspec
    pspecbeam
    pspecdata

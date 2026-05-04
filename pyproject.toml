@@ -43,7 +43,7 @@ dependencies = [
     "typing-extensions>=4.5.0",
 ]
 dynamic = ['version']
-# Note that the restriction on 3.14 can be lifted once 
+# Note that the restriction on 3.14 can be lifted once
 # https://github.com/RadioAstronomySoftwareGroup/pyuvdata/pull/1659 is merged.
 requires-python = ">=3.11,<3.14"
 
@@ -73,22 +73,23 @@ tests = [
 dev = [
     {include-group = "docs"},
     {include-group = "tests"},
+    "prek>=0.3.11",
 ]
 
 [project.scripts]
 pspec = "hera_pspec.cli:app"
 
 [tool.setuptools]
-# Doing this is discouraged, and we should package these CLI commands into the above 
+# Doing this is discouraged, and we should package these CLI commands into the above
 # `scripts` section.
 script-files = [
-    "scripts/pspec_run.py", 
+    "scripts/pspec_run.py",
     "scripts/pspec_red.py",
     "scripts/bootstrap_run.py",
     "scripts/generate_pstokes_run.py",
     "scripts/auto_noise_run.py",
 ]
-    
+
 [tool.pytest.ini_options]
 # Options for py.test:
 # Specify command line options as you would do when invoking py.test directly.

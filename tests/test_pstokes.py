@@ -45,7 +45,7 @@ class Test_pstokes(unittest.TestCase):
         # out1 assumed avg by default
         setattr(uvd1, 'pol_convention', 'sum')
         setattr(uvd2, 'pol_convention', 'sum')
-        
+
         out3 = pstokes._combine_pol(uvd1, uvd2, 'XX', 'YY')
         assert np.allclose(out3.data_array, out1.data_array * 2.)
         assert np.allclose(out3.nsample_array, out1.nsample_array)

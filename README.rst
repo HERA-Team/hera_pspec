@@ -24,8 +24,8 @@ For users
 The package is installable, along with its dependencies, with PyPi. We
 recommend using Anaconda and creating a new conda environment before
 installing the package. You may wish to install some of the dependencies directly
-with `conda` instead of `pip` before installing the package. This is especially
-important for `jax` on MacOS:
+with ``conda`` instead of ``pip`` before installing the package. This is especially
+important for ``jax`` on MacOS:
 
 ::
 
@@ -72,7 +72,7 @@ relevant development packages:
    $ conda create -n hera_pspec python=3
    $ conda activate hera_pspec
    $ conda env update -n hera_pspec -f ci/hera_pspec_tests.yml
-   $ pip install -e . 
+   $ pip install -e .
 
 This will install extra dependencies required for testing/development as
 well as the standard ones.
@@ -94,7 +94,7 @@ how to run ``hera_pspec``. There are also some example Jupyter
 notebooks, including
 ``examples/PS_estimation_examples.ipynb``
 (a brief tutorial on how to create delay spectra), and
-``examples/PSpecBeam_tutorial.ipynb`` 
+``examples/PSpecBeam_tutorial.ipynb``
 (a brief tutorial on handling beam objects).
 
 .. |Run Tests| image:: https://github.com/HERA-Team/hera_pspec/workflows/Run%20Tests/badge.svg

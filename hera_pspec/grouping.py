@@ -552,7 +552,7 @@ def average_spectra(uvp_in, blpair_groups=None, time_avg=False,
     uvp.Nbls = len(bl_arr)
     uvp.Ntpairs = len(set((np.round(t1/time_tol,0), np.round(t2/time_tol, 0)) for t1, t2 in zip(time_1, time_2)))
     uvp.Ntimes = uvp.Ntpairs
-    
+
     # Baselines
     uvp.bl_array = bl_arr
     uvp.bl_vecs = bl_vecs
@@ -658,7 +658,7 @@ def spherical_average(uvp_in, kbins, bin_widths, kbins_theory=None, blpair_group
         The tolerance for checking if times are equivalent, in order to count
         "unique" time-pairs in the average. The units are (julian) days. Setting too
         low can result in numerical noise creating more time-pairs than expected.
-        
+
     Returns
     --------
     UVPSpec object
@@ -1004,10 +1004,10 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_theory=None,
                           blpair_groups=None, blpair_lens=None, blpair_weights=None,
                           error_weights=None, time_avg=False, spw_array=None,
                           little_h=True, verbose=False, time_tol: float=1e-6):
-    
+
     """
     Obtains exact spherical window functions from an UVPspec object,
-    given a set of baseline-pair groups, their associated lengths, and 
+    given a set of baseline-pair groups, their associated lengths, and
     a set of spherical k-bins.
 
     Parameters
@@ -1030,8 +1030,8 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_theory=None,
 
     blpair_weights : list
         relative weights of blpairs in blpair averaging (used for bootstrapping)
-    
-    blpair_lens : list 
+
+    blpair_lens : list
         lengths of blpairs in blpair_groups
 
     error_weights : str, optional
@@ -1057,7 +1057,7 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_theory=None,
         The tolerance for checking if times are equivalent, in order to count
         "unique" time-pairs in the average. The units are (julian) days. Setting too
         low can result in numerical noise creating more time-pairs than expected.
-        
+
     Returns
     --------
     wf_spherical : array
@@ -1096,7 +1096,7 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_theory=None,
     assert np.all(np.diff(kbin_edges_theory) > 0), "kbins_in must not overlap"
 
     # copy input
-    uvp = copy.deepcopy(uvp_in) 
+    uvp = copy.deepcopy(uvp_in)
 
     if blpair_groups is None:
         if blpair_lens is not None:
@@ -1160,7 +1160,7 @@ def spherical_wf_from_uvp(uvp_in, kbin_edges, kbin_edges_theory=None,
         kparas = uvp.cosmo.tau_to_kpara(uvp.cosmo.f2z(avg_nu), little_h=little_h) * uvp.get_dlys(spw)
         kmags = np.sqrt(kperps[:, None]**2 + kparas**2)
 
-        # setup arrays 
+        # setup arrays
         window_function_array[spw] = np.zeros((uvp.Ntimes, Nk, Nk_in, uvp.Npols), dtype=np.float64)
 
         # iterate over polarisation
@@ -1773,13 +1773,13 @@ def get_bootstrap_run_argparser():
 
 def _bin_data_like_array(d: np.ndarray, kernels: list[np.ndarray], slices: list[slice], axis=1):
     """Bin a data-like array over the delay axis.
-    
+
     This function is an internally used function for :func:`average_in_delay_bins`
-    
+
     Parameters
     ----------
     d : np.ndarray
-        The data-like array to bin. This is expected to be an ND array with 
+        The data-like array to bin. This is expected to be an ND array with
         one of the axes (corresponding to `axis`) having shape Ndelays.
     kernels : list of np.ndarray
         The kernels to use for binning. This is a list of 1D arrays, each
@@ -1787,49 +1787,49 @@ def _bin_data_like_array(d: np.ndarray, kernels: list[np.ndarray], slices: list[
     slices : list of slice objects
         A list of slice objects, each corresponding to a kernel.
     axis : int, optional
-        The axis along which to bin the data (i.e the delay axis). 
+        The axis along which to bin the data (i.e the delay axis).
         Default is 1.
-    """    
+    """
     newshape = list(d.shape)
     newshape[axis] = len(slices)
     out = np.zeros(newshape, dtype=d.dtype)
-    
+
     for i, (slc, kernel) in enumerate(zip(slices, kernels)):
         out.swapaxes(-1, axis)[..., i] = np.sum(d.swapaxes(-1, axis)[..., slc] * kernel, axis=-1)
-        
+
     return out
 
 def _bin_cov_like_array(cov: np.ndarray, kernels: list[np.ndarray], slices: list[slice]):
     """Bin a covariance-like array over the delay axis.
-    
+
     This function is internally used for :func:`average_in_delay_bins`.
     """
     newcov = np.zeros_like(cov)[:, :len(slices), :len(slices)]
-    
+
     for i, (k1, slc) in enumerate(zip(kernels, slices)):
         for j, (k2, slc2) in enumerate(zip(kernels, slices)):
             kernel2d = np.outer(k1,k2)
-            newcov[:, i, j] = np.sum(cov[:, slc, slc2] * kernel2d[None, :, :, None], axis=(1,2))            
+            newcov[:, i, j] = np.sum(cov[:, slc, slc2] * kernel2d[None, :, :, None], axis=(1,2))
     return newcov
-    
+
 def _get_delay_slices(
-    dly: np.ndarray, 
+    dly: np.ndarray,
     kernel: np.ndarray,
     zero_kernel: np.ndarray = np.ones(1),
 ) -> tuple[list[slice], list[np.ndarray]]:
     """Get slices for binning a delay array.
-    
+
     This function is used internally in :func:`average_in_delay_bins`.
-    
+
     This function takes an array of delays, *assumed to be ordered in increasing order*,
-    and also symmetric around zero, and a kernel size, and returns a list of slices that 
-    can be used to bin the array. The binning is done in a non-overlapping way. 
+    and also symmetric around zero, and a kernel size, and returns a list of slices that
+    can be used to bin the array. The binning is done in a non-overlapping way.
     The central delays around zero are binned with a potentially different kernel
     size, `nzero`, which gives the ability to start the averaged bins at a different
     lowest delay.
-    
+
     If there an even number of delays, the last delay is ignored.
-    
+
     Parameters
     ----------
     dly : np.ndarray
@@ -1840,7 +1840,7 @@ def _get_delay_slices(
     zero_kernel : np.ndarray
         The kernel to use for the zero bin. This must be symmetric and have an odd
         length. By default, this is a kernel of length 1 with value 1.
-                
+
     Returns
     -------
     slices : list of slice objects
@@ -1854,12 +1854,12 @@ def _get_delay_slices(
 
     nk = len(kernel)
     nzero = len(zero_kernel)
-    
+
     if nzero % 2 == 0:
         raise ValueError("nzero must be odd!")
-    
+
     # We're going to try to keep the symmetry betwen negative and positive delays.
-    # This means we keep the zero delay un-averaged. 
+    # This means we keep the zero delay un-averaged.
     neg_slices = []
     low = zero_idx - nk - nzero // 2
     while low >= 0:
@@ -1884,12 +1884,12 @@ def average_in_delay_bins(
     zero_bin_kernel: np.ndarray = np.ones(1),
 ):
     """Average a UVPSpec object within bins of delay.
-    
-    This averages spectra only over the delay axis, for each baseline, time, spw 
+
+    This averages spectra only over the delay axis, for each baseline, time, spw
     and pol-pair. The averaging uses a weighting kernel that you can supply. The kernel
     is applied in a non-overlapping way.
-    
-    Window functions and covariances are also downsampled consistently using the same 
+
+    Window functions and covariances are also downsampled consistently using the same
     kernel. THe P_N statistic is downsampled consistently with the covariance array
     (i.e. taking into account covariances between delays) unless instructed otherwise.
     Other statistics are downsampled using the kernel weighting, but without utilizing
@@ -1898,30 +1898,30 @@ def average_in_delay_bins(
     Crucially, at this point, the average itself does *not* account for weighting by
     any of the stats (either the covariance or P_N), only the kernel. The resulting
     covariance and P_N are consistent with this assumption.
-    
+
     The delays of the returned object will be symmetrical in the same way as the input
-    delays, that is, each negative delay will have a corresponding positive delay. The 
+    delays, that is, each negative delay will have a corresponding positive delay. The
     'zero' mode will be averaged with the `zero_bin_kernel`, which by default does no
     averaging at all. The zero bin kernel must have an odd length so that the center
     is zero. That is, for an input with delays::
-    
+
     [-6, -5, -4, -3, -2, -1, 0, 1,2,3,4,5,6]
-    
-    and a symmetric kernel of length 3 and the default zero-bin kernel, the resulting 
+
+    and a symmetric kernel of length 3 and the default zero-bin kernel, the resulting
     delays will be
-    
+
     [-5, -2, 0, 2, 5].
-    
+
     Using instead a zero-bin kernel of length 3 with values [0, 1, 0] would result in the
     following delays:
-    
+
     [-3, 0, 3].
-    
+
     Notice that the outer delays (-6 and -5) are chopped off here, because there are
     only two of them, so they don't fill a full kernel.
     If the delay array has even size (i.e. it has one extra negative delay), then this
     extra delay will be ignored.
-    
+
     Parameters
     ----------
     uvp
@@ -1940,8 +1940,8 @@ def average_in_delay_bins(
     zero_bin_kernel
         The kernel to use for the zero bin. This must be symmetric and have an odd
         length. By default, this is a kernel of length 1 with value 1.
-        This means that the zero bin is not averaged at all. 
-        
+        This means that the zero bin is not averaged at all.
+
     Returns
     -------
     uvp
@@ -1952,7 +1952,7 @@ def average_in_delay_bins(
     if hasattr(uvp, "cov_array_real"):
         cov_weighted_stats = tuple(stat for stat in cov_weighted_stats if stat in stats_array)
     else:
-        cov_weighted_stats = ()    
+        cov_weighted_stats = ()
 
     kernel = np.asarray(kernel, dtype=float)
     if not kernel.ndim == 1:
@@ -1961,14 +1961,14 @@ def average_in_delay_bins(
     nk = len(kernel)
     if nk > len(uvp.dly_array) // 2:
         raise ValueError("The kernel size must be smaller than half the size of the delay array!")
-    
+
     zero_bin_kernel = np.asarray(zero_bin_kernel, dtype=float)
     if not np.allclose(zero_bin_kernel, zero_bin_kernel[::-1]):
         raise ValueError("The zero bin kernel must be symmetric!")
-    
+
     kernel /= np.sum(kernel)
     zero_bin_kernel /= np.sum(zero_bin_kernel)
-    
+
     # We will replace parts of the new_uvp with downsampled
     # delays.
     new_uvp = copy.deepcopy(uvp)
@@ -2000,17 +2000,17 @@ def average_in_delay_bins(
             oldcov = uvp.cov_array_real[spw]
             newcov = _bin_cov_like_array(oldcov, kernels, slices)
             new_uvp.cov_array_real[spw] = newcov
-            
+
         if hasattr(uvp, "cov_array_imag"):
             oldcov = uvp.cov_array_imag[spw]
             newcov = _bin_cov_like_array(oldcov, kernels, slices)
             new_uvp.cov_array_imag[spw] = newcov
-        
+
         if hasattr(uvp, "window_function_array"):
             oldwf = uvp.window_function_array[spw] # shape (Nblts, Ndly, Ndly, Npol)
             # We bin this like a data array (on axis=1) and end up with a non-square
             # window function. This works both for exact/non-exact window functions.
-            # If we really need a square window function, then the second axis should 
+            # If we really need a square window function, then the second axis should
             # be binned using a uniform kernel.
             new_uvp.window_function_array[spw] = _bin_data_like_array(oldwf, kernels, slices, axis=1)
 
@@ -2019,7 +2019,7 @@ def average_in_delay_bins(
             # many stats. How do we know which stat corresponds to the cov? Instead,
             # we find the _correlation_ matrix, and apply this to each stat.
             diag = np.sqrt(np.diagonal(uvp.cov_array_real[spw], axis1=1, axis2=2)).transpose((0, 2, 1))
-            
+
             denom = diag[:, :, None] * diag[:, None]
             corr = uvp.cov_array_real[spw] / denom
             thiscov = corr * uvp.stats_array[stat][spw][:, :, None] * uvp.stats_array[stat][spw][:, None]

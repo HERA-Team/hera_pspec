@@ -9,7 +9,7 @@ try:
     from typing import Self
 except ImportError:
     from typing_extensions import Self
-    
+
 from . import conversions, noise, version, __version__, pspecbeam, grouping, utils, uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
@@ -26,7 +26,7 @@ class UVPSpec(object):
         by hera_pspec.
         """
         # Summary attributes
-        # Note that in the past (pre-v0.5) Ntimes was the number of unique times in 
+        # Note that in the past (pre-v0.5) Ntimes was the number of unique times in
         # the union of the underlying visibility datasets (i.e. time_1_array and time_2_array),
         # however throughout the code it was often assumed to mean the number of unique
         # time-pairs (i.e. how many distinct average times there are in the data), which
@@ -148,14 +148,14 @@ class UVPSpec(object):
                             'folded', 'exact_windows',]
         self._ndarrays = ["spw_array", "freq_array", "dly_array",
                           "polpair_array", "lst_1_array", "lst_avg_array",
-                          "time_avg_array", "channel_width", 
+                          "time_avg_array", "channel_width",
                           "lst_2_array", "time_1_array", "time_2_array",
                           "blpair_array", "OmegaP", "OmegaPP", "beam_freqs",
                           "bl_vecs", "bl_array", "telescope_location",
                           "scalar_array", "labels", "label_1_array",
                           "label_2_array", "spw_freq_array", "spw_dly_array"]
         self._dicts = ["data_array", "wgt_array", "integration_array", "window_function_array",
-                       "window_function_kperp", "window_function_kpara", 
+                       "window_function_kperp", "window_function_kpara",
                        "nsample_array", "cov_array_real", "cov_array_imag"]
         self._dicts_of_dicts = ["stats_array"]
 
@@ -173,7 +173,7 @@ class UVPSpec(object):
 
         # Attributes that appeared in previous versions of UVPSpec and may be present
         # in HDF5 files written by these older versions. We can look for these attributes
-        # when we read the files and 
+        # when we read the files and
         # and deal with them appropriately to support backwards compatibility.
         self._meta_deprecated = ["Nblpairts"]
         self._meta_dsets_deprecated = []
@@ -567,7 +567,7 @@ class UVPSpec(object):
         little_h : boolean, optional
                 Whether to have cosmological length units be h^-1 Mpc or Mpc
                 Default: h^-1 Mpc
-        
+
         dlys: array of floats
             List of delay values to compute the k_parallel over.
             If used, it overrides spw.
@@ -582,7 +582,7 @@ class UVPSpec(object):
         assert hasattr(self, 'cosmo'), \
             "self.cosmo must exist to form cosmological " \
             "wave-vectors. See self.set_cosmology()"
-        
+
         # check inputs
         if dlys is None:
             dlys = self.get_dlys(spw)
@@ -1314,7 +1314,7 @@ class UVPSpec(object):
         latitude, longitude, altitude = uvutils.LatLonAlt_from_XYZ(self.telescope_location[None])
         return uvutils.ENU_from_ECEF(
             self.bl_vecs + self.telescope_location,
-            latitude=latitude, 
+            latitude=latitude,
             longitude=longitude,
             altitude=altitude
         )
@@ -1373,7 +1373,7 @@ class UVPSpec(object):
         # Clear all data in the current object
         self._clear()
 
-        # Load-in meta data including deprecated. 
+        # Load-in meta data including deprecated.
         for k in grp.attrs:
             if k in self._meta_attrs or k in self._meta_deprecated:
                 val = grp.attrs[k]
@@ -1429,7 +1429,7 @@ class UVPSpec(object):
             # then make sure to correctly set Ntimes and Ntpairs.
             self.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(self.time_1_array, self.time_2_array)]))
             self.Ntimes = self.Ntpairs
-            
+
         # Clear deprecated attributes.
         for dattr in self._meta_deprecated:
             if hasattr(self, dattr):
@@ -1441,13 +1441,13 @@ class UVPSpec(object):
 
         # If we are reading an UVPSpec object created before
         # UVData switched to future_array_shapes
-        try: 
+        try:
             cw = getattr(self, "_channel_width").value
         except AttributeError:
             pass
         else:
             setattr(self, "_channel_width", np.atleast_1d(getattr(self, "_channel_width").value))
-            
+
         self.check(just_meta=just_meta)
 
     def read_hdf5(self, filepath, just_meta=False, spws=None, bls=None,
@@ -1727,7 +1727,7 @@ class UVPSpec(object):
                 are compatible with uvp.
 
         spw_array : list of ints, optional
-            Spectral window indices. If None, the window functions are computed on 
+            Spectral window indices. If None, the window functions are computed on
             all the uvp.spw_ranges, successively. Default: None.
 
         verbose : bool, optional
@@ -1787,14 +1787,14 @@ class UVPSpec(object):
                 # initialise UVWindow object
                 uvw = UVWindow.from_uvpspec(self, ipol=i, spw=spw, ftbeam=ftbeam,
                                             x_orientation=x_orientation, verbose=verbose)
-                # extract kperp bins the window functions corresponding to the baseline 
+                # extract kperp bins the window functions corresponding to the baseline
                 # lengths given as input
                 kperp_bins = uvw.get_kperp_bins(blpair_lens)
                 kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
                 pol_window_function = np.zeros((self.Nbltpairs, self.get_dlys(spw).size, kperp_bins.size, kpara_bins.size))
                 # Iterate over baseline-pair groups
                 for j, blpg in enumerate(blpair_groups):
-                    if verbose: 
+                    if verbose:
                         print('\rComputing for bl group {} of {}...'.format(j+1, len(blpair_groups)), end='')
 
                     # window functions identical for all times
@@ -1805,13 +1805,13 @@ class UVPSpec(object):
                         warnings.warn('nan values in the window functions at spw={}, blpair_lens={:.2f}'.format(spw, blpair_lens[j]))
                     # shape of window_function: (Ndlys, Nkperp, Nkpara)
 
-                    # Iterate within a baseline-pair group 
+                    # Iterate within a baseline-pair group
                     for k, blp in enumerate(blpg):
                         # iterate over baselines within group, which all have the same window function
                         for iblts in self.blpair_to_indices(blp):
                             pol_window_function[iblts, :, :, :] = np.copy(window_function_blg)
 
-                if verbose: 
+                if verbose:
                     print('\rComputed wf for baseline-pair groups {} of {}.'.format(len(blpair_groups),len(blpair_groups)))
 
                 # Append to lists (spectral window)
@@ -1828,7 +1828,7 @@ class UVPSpec(object):
             self.window_function_array = window_function_array
             self.window_function_kperp = window_function_kperp
             self.window_function_kpara = window_function_kpara
-            if np.all(spw_array==self.spw_array): 
+            if np.all(spw_array==self.spw_array):
                 self.exact_windows = True
             # Add to history
             self.history = "Computed exact window functions [{}]\n{}\n{}\n{}".format(__version__, add_to_history, '-'*40, self.history)
@@ -2094,7 +2094,7 @@ class UVPSpec(object):
 
         # Get delays
         dlys = self.get_dlys(spw)
-        
+
         # handle Tsys
         if not isinstance(Tsys, (dict, odict)):
             if not isinstance(Tsys, np.ndarray):
@@ -2242,7 +2242,7 @@ class UVPSpec(object):
 
         if not inplace:
             return result
-        
+
     def fold_spectra(self):
         """
         Average bandpowers from matching positive and negative delay bins onto a
@@ -2349,9 +2349,9 @@ class UVPSpec(object):
         return scalar
 
     def add_approximate_covariance(
-        self, 
+        self,
         variance_stat: str = "P_N",
-        inplace: bool=True, 
+        inplace: bool=True,
         taper: str = 'blackmanharris'
     ) -> Self:
         """Add an approximate covariance matrix to a UVPSpec object.
@@ -2359,7 +2359,7 @@ class UVPSpec(object):
         This function calculates a delay-delay covariance matrix based on the
         provided taper and adds it to the UVPSpec object. The covariance is
         calculated using :func:`get_approximate_delay_delay_corr_matrix`.
-        
+
         The covariance matrix added here is very simple: it is simply a correlation matrix
         that depends only on the number of channels and the frequency taper, which is then
         scaled to have the variance (diagonal terms) given by the `variance_stat`.
@@ -2389,32 +2389,32 @@ class UVPSpec(object):
             uvp = copy.deepcopy(self)
         else:
             uvp = self
-            
+
         if variance_stat not in uvp.stats_array:
             raise ValueError(f"Cannot normalize by the {variance_stat} array as it does not exist!")
-        
+
         if not hasattr(uvp, "cov_array_real"):
             uvp.cov_array_real = {}
         if not hasattr(uvp, "cov_array_imag"):
             uvp.cov_array_imag = {}
-            
+
         for spw in uvp.spw_array:
             n = np.sum(uvp.spw_freq_array == spw)
             cov2d = noise.get_approximate_delay_delay_corr_matrix(taper, n)
-                    
+
             # TODO: in the future, it'd be better to allow the cov_array_real on the
             #       UVPSpec object to have a shape that doesn't require Ntimes or bls dep.
             cov4d = np.zeros((uvp.Nbltpairs, cov2d.shape[0], cov2d.shape[1], uvp.Npols))
-            
+
             for blidx in range(uvp.Nbltpairs):
                 for polidx in range(uvp.Npols):
                     pn = uvp.stats_array[variance_stat][spw][blidx, :, polidx].real
-                    
+
                     cov4d[blidx, :, :, polidx] = np.outer(pn, pn) * cov2d
 
             uvp.cov_array_real[spw] = cov4d
             uvp.cov_array_imag[spw] = np.zeros_like(cov4d)
-            
+
         return uvp
 
 
@@ -2802,11 +2802,11 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
 def recursive_combine_uvpspec(uvps):
     """
     Method for faster combination of UVPSpec objects by combining them recursively.
-    This is faster than combine_uvpspec for long lists of files---e.g. if you have 
+    This is faster than combine_uvpspec for long lists of files---e.g. if you have
     one uvpspec object for every unique baseline and hundreds of baselines. Note:
-    Histories are not merged, so this is the equivalent of running combine_uvpspec 
-    with merge_history=False. 
-    
+    Histories are not merged, so this is the equivalent of running combine_uvpspec
+    with merge_history=False.
+
     Parameters
     ----------
     uvps : list
@@ -2998,7 +2998,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 def _ordered_unique(arr):
     """
     Get the unique elements of an array while preserving order.
-    
+
     """
     arr = np.asarray(arr)
     _, idx = np.unique(arr, return_index=True)

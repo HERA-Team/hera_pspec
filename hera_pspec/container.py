@@ -10,8 +10,8 @@ from . import uvpspec, __version__, utils
 
 def transactional(fn):
     """
-    Handle 'transactional' operations on PSpecContainer, where the HDF5 file is 
-    opened and then closed again for every operation. This is done when 
+    Handle 'transactional' operations on PSpecContainer, where the HDF5 file is
+    opened and then closed again for every operation. This is done when
     keep_open = False.
 
     For calling a @transactional function within another @transactional function,
@@ -23,7 +23,7 @@ def transactional(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         psc = args[0] # self object
-        
+
         # Open HDF5 file if needed
         if psc.data is None:
             psc._open()
@@ -43,10 +43,10 @@ def transactional(fn):
         # Close HDF5 file if necessary
         if not psc.keep_open and not nested:
             psc._close()
-        
+
         # Return function result
         return f
-    
+
     return wrapper
 
 
@@ -73,16 +73,16 @@ class PSpecContainer(object):
             Whether to load the HDF5 file as read/write ('rw') or read-only
             ('r'). If 'rw' is specified and the file doesn't exist, an empty
             one will be created.
-        
+
         keep_open : bool, optional
-            Whether the HDF5 file should be kept open, or opened and then 
-            closed again each time an operation is performed. Setting 
+            Whether the HDF5 file should be kept open, or opened and then
+            closed again each time an operation is performed. Setting
             `keep_open=False` is helpful for multi-process access patterns.
             Default: True (keep file open).
 
         swmr : bool, optional
             Enable Single-Writer Multiple-Reader (SWMR) feature of HDF5.
-            Note that SWMR can only be used on POSIX-compliant 
+            Note that SWMR can only be used on POSIX-compliant
             filesystems, and so may not work on some network filesystems.
             Default: False (do not use SWMR)
 
@@ -90,7 +90,7 @@ class PSpecContainer(object):
             Time to wait in seconds after each attempt at opening the file.
 
         maxiter : int, optional
-            Maximum number of attempts to open file (useful for concurrent 
+            Maximum number of attempts to open file (useful for concurrent
             access when file may be locked temporarily by other processes).
         """
         self.filename = filename
@@ -109,14 +109,14 @@ class PSpecContainer(object):
 
     def _open(self):
         """
-        Open HDF5 file ready for reading/writing. Does nothing if the file is 
+        Open HDF5 file ready for reading/writing. Does nothing if the file is
         already open.
-        
-        This method uses HDF5's single writer, multiple reader (swmr) mode, 
-        which allows multiple handles to exist for the same file at the same 
-        time, as long as only one is in rw mode. The rw instance should be the 
-        *first* one that is created; if a read-only instance is already open 
-        when a rw instance is created, an error will be raised by h5py. 
+
+        This method uses HDF5's single writer, multiple reader (swmr) mode,
+        which allows multiple handles to exist for the same file at the same
+        time, as long as only one is in rw mode. The rw instance should be the
+        *first* one that is created; if a read-only instance is already open
+        when a rw instance is created, an error will be raised by h5py.
         """
         if self.data is not None: return
 
@@ -142,12 +142,12 @@ class PSpecContainer(object):
         Ncount = 0
         while True:
             try:
-                self.data = h5py.File(self.filename, mode, libver='latest', 
+                self.data = h5py.File(self.filename, mode, libver='latest',
                                       swmr=swmr)
                 if self.mode == 'rw':
                     try:
-                        # Enable single writer, multiple reader mode on HDF5 file. 
-                        # This allows multiple handles to exist for the same file 
+                        # Enable single writer, multiple reader mode on HDF5 file.
+                        # This allows multiple handles to exist for the same file
                         # at the same time, as long as only one is in rw mode
                         if self.swmr:
                             self.data.swmr_mode = True
@@ -166,7 +166,7 @@ class PSpecContainer(object):
                             "processes).")
                     else:
                         raise
-                
+
                 # sleep and try again
                 Ncount += 1
                 time.sleep(self.tsleep)
@@ -188,7 +188,7 @@ class PSpecContainer(object):
             return
         self.data.close()
         self.data = None
-    
+
     def _store_pspec(self, pspec_group, uvp):
         """
         Store a UVPSpec object as group of datasets within the HDF5 file.
@@ -219,7 +219,7 @@ class PSpecContainer(object):
         pspec_group : HDF5 group
             Group containing datasets that contain power spectrum and
             supporting information, in a standard format expected by UVPSpec.
-        
+
         kwargs : dict, optional
             UVPSpec.read_from_group partial IO keyword arguments
 
@@ -230,7 +230,7 @@ class PSpecContainer(object):
         """
         # Check that group is tagged as containing UVPSpec (pspec_type attribute)
         if 'pspec_type' in list(pspec_group.attrs.keys()):
-            
+
             # Convert bytes -> str if needed
             pspec_type = pspec_group.attrs['pspec_type']
             if isinstance(pspec_type, bytes): pspec_type = pspec_type.decode()
@@ -257,7 +257,7 @@ class PSpecContainer(object):
             raise ValueError("Cannot create a header group with SWMR")
 
         # Check if versions of hera_pspec are the same
-        # with backward-compatibility if file generated 
+        # with backward-compatibility if file generated
         # before version control was introduced
         if 'hera_pspec.git_hash' in hdr.attrs or (
             'hera_pspec.version' in hdr.attrs and hdr.attrs['hera_pspec.version'] != __version__
@@ -266,8 +266,8 @@ class PSpecContainer(object):
 
         if not self.swmr:
             hdr.attrs['hera_pspec.version'] = __version__
-        
-        
+
+
     @transactional
     def set_pspec(self, group, psname, pspec, overwrite=False):
         """
@@ -365,7 +365,7 @@ class PSpecContainer(object):
         psname : str, optional
             The name of the power spectrum to return. If None, extract all
             available power spectra.
-        
+
         kwargs : dict
             UVPSpec.read_from_group partial IO keyword arguments
 
@@ -401,7 +401,7 @@ class PSpecContainer(object):
         # Traverse the entire set of groups/datasets looking for pspecs
         grp.visititems(pspec_filter) # This adds power spectra to the uvp list
         return uvp
-    
+
     @transactional
     def spectra(self, group):
         """
@@ -479,14 +479,14 @@ class PSpecContainer(object):
                 for pspec in tree[grp]:
                     s += "  |--%s\n" % pspec
             return s
-    
+
     @transactional
     def save(self):
         """
         Force HDF5 file to flush to disk.
         """
         self.data.flush()
-    
+
     def __del__(self):
         """
         Make sure that HDF5 file is closed on destruct.
@@ -501,7 +501,7 @@ class PSpecContainer(object):
 def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_',
                         merge_history=True, verbose=True, overwrite=False):
     """
-    Iterate through a PSpecContainer and, within each specified group, combine 
+    Iterate through a PSpecContainer and, within each specified group, combine
     UVPSpec (i.e. spectra) of similar name but varying psname extension.
 
     Power spectra to-be-merged are assumed to follow the naming convention
@@ -509,15 +509,15 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
     dset1_x_dset2_ext1, dset1_x_dset2_ext2, ...
 
     where _x_ is the default dset_split_str, and _ is the default ext_split_str.
-    The spectra names are first split by dset_split_str, and then by 
-    ext_split_str. In this particular case, all instances of dset1_x_dset2* 
+    The spectra names are first split by dset_split_str, and then by
+    ext_split_str. In this particular case, all instances of dset1_x_dset2*
     will be merged together.
 
-    In order to merge spectra names with no dset distinction and only an 
-    extension, feed dset_split_str as '' or None. Example, to merge together: 
+    In order to merge spectra names with no dset distinction and only an
+    extension, feed dset_split_str as '' or None. Example, to merge together:
     uvp_1, uvp_2, uvp_3, feed dset_split_str=None and ext_split_str='_'.
 
-    Note this is a destructive and inplace operation, all of the *_ext1 objects 
+    Note this is a destructive and inplace operation, all of the *_ext1 objects
     are removed after merge.
 
     Parameters
@@ -548,7 +548,7 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
         psc = PSpecContainer(psc, mode='rw')
     else:
         assert isinstance(psc, PSpecContainer)
-    
+
     # Get groups
     _groups = psc.groups()
     if groups is None:
@@ -568,7 +568,7 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
             if dset_split_str == '' or dset_split_str is None:
                 sp = spc.split(ext_split_str)[0]
             else:
-                sp = utils.flatten([s.split(ext_split_str) 
+                sp = utils.flatten([s.split(ext_split_str)
                                     for s in spc.split(dset_split_str)])[:2]
                 sp = dset_split_str.join(sp)
             if sp not in unique_spectra:
@@ -604,7 +604,7 @@ def combine_psc_spectra(psc, groups=None, dset_split_str='_x_', ext_split_str='_
                 if verbose:
                     print("uvp merge failed for spectra {}/{}, exception: " \
                           "{}".format(grp, spc, exc))
-    
+
 
 
 def get_combine_psc_spectra_argparser():
@@ -615,12 +615,12 @@ def get_combine_psc_spectra_argparser():
     a.add_argument("filename", type=str,
                    help="Filename of HDF5 container (PSpecContainer) containing "
                         "groups / input power spectra.")
-    a.add_argument("--dset_split_str", default='_x_', type=str, 
+    a.add_argument("--dset_split_str", default='_x_', type=str,
                    help='The pattern used to split dset1 from dset2 in the '
                         'psname.')
-    a.add_argument("--ext_split_str", default='_', type=str, 
+    a.add_argument("--ext_split_str", default='_', type=str,
                    help='The pattern used to split the dset names from their '
                         'extension in the psname (if it exists).')
-    a.add_argument("--verbose", default=False, action='store_true', 
+    a.add_argument("--verbose", default=False, action='store_true',
                    help='Report feedback to stdout.')
     return a
