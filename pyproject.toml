@@ -127,6 +127,7 @@ ignore = [
     "F841",   # unused-variable (74)
     "W291",   # trailing-whitespace (110) — handled by pre-commit
     "W293",   # blank-line-with-whitespace (68) — handled by pre-commit
+    "E731",   # lambda-assignment (3 in example notebooks) — idiomatic in tutorials
 ]
 
 [tool.pytest.ini_options]
