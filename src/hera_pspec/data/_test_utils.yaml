@@ -1,6 +1,6 @@
 
 data:
-    root:       ../hera_pspec/
+    root:       ../
     subdirs:
         - data
     pairs: [['xx', 'xx'], ['yy', 'yy']]
