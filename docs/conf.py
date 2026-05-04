@@ -20,6 +20,7 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+import importlib.util
 import os
 import sys
 
@@ -34,7 +35,15 @@ MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'scipy.integrate',
                 'pyuvdata.utils', 'hera_sim']
 
 for mod_name in MOCK_MODULES:
-    sys.modules[mod_name] = mock.Mock()
+    # find_spec raises ModuleNotFoundError when a parent package of a dotted
+    # name (e.g. ``scipy`` for ``scipy.interpolate``) is itself missing.
+    # Treat that as "not installed" so minimal build environments still mock.
+    try:
+        spec = importlib.util.find_spec(mod_name)
+    except ModuleNotFoundError:
+        spec = None
+    if spec is None:
+        sys.modules[mod_name] = mock.Mock()
 
 sys.path.insert(0, os.path.abspath('../'))
 #import hera_pspec
@@ -87,7 +96,7 @@ release = u'0.1'
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = 'en'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -188,6 +197,5 @@ texinfo_documents = [
      author, 'hera_pspec', 'HERA delay power spectrum estimation.',
      'Miscellaneous'),
 ]
-
 
 

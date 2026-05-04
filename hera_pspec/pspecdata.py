@@ -2223,9 +2223,15 @@ class PSpecData:
             the number of delay bins equals the number of delay channels.
             Default: True
 
-        include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
-        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
-        (spw_Nfreq x spw_Nfreq).
+        include_extension : bool, optional
+            If True, expand both axes of the returned matrix by
+            ``sum(self.filter_extension)`` (so the shape becomes
+            ``(spw_Nfreqs + sum(filter_extension),
+            spw_Nfreqs + sum(filter_extension))``) and apply a phase
+            correction of ``self.filter_extension[0]``. Use this when
+            computing ``\partial C_{ij} / \partial p_\alpha`` against a
+            covariance ``C_{ij}`` that has been similarly extended.
+            Default: False.
 
         Return
         -------
@@ -2255,10 +2261,16 @@ class PSpecData:
             the number of delay bins equals the number of delay channels.
             Default: True
 
-        include_extension : boolean, optional
-            If True, return a matrix that is spw_Nfreq x spw_Nfreq
-            (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
-            (spw_Nfreq x spw_Nfreq).
+        include_extension : bool, optional
+            If True, expand the two frequency axes of each per-mode
+            matrix by ``sum(self.filter_extension)``, so the returned
+            tensor has shape ``(spw_Ndlys,
+            spw_Nfreqs + sum(filter_extension),
+            spw_Nfreqs + sum(filter_extension))`` and a phase correction
+            of ``self.filter_extension[0]`` is applied. Use this when
+            computing ``\partial C_{ij} / \partial p_\alpha`` against a
+            covariance ``C_{ij}`` that has been similarly extended.
+            Default: False.
 
         Return
         -------
@@ -2879,12 +2891,11 @@ class PSpecData:
 
         ftbeam : str or FTBeam, optional
             Definition of the beam Fourier transform to be used.
-            Options include;
-                - Root name of the file to use, without the polarisation
-                Ex : FT_beam_HERA_dipole (+ path)
-                - '' for computation from beam simulations (slow)
-                - FTBeam object. Make sure polarisations and bandwidths
-                are consistent with the data set.
+            Valid options are the root name of the file to use without the
+            polarization suffix, for example ``FT_beam_HERA_dipole`` plus its
+            path; ``''`` to compute from beam simulations (slow); or an
+            ``FTBeam`` object whose polarizations and bandwidths are
+            consistent with the data set.
 
         cov_model : string, optional
             Type of covariance model to calculate, if not cached.
