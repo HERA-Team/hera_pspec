@@ -2223,9 +2223,15 @@ class PSpecData:
             the number of delay bins equals the number of delay channels.
             Default: True
 
-        include_extension: If True, return a matrix that is spw_Nfreq x spw_Nfreq
-        (required if using \partial C_{ij} / \partial p_\alpha since C_{ij} is
-        (spw_Nfreq x spw_Nfreq).
+        include_extension : bool, optional
+            If True, expand both axes of the returned matrix by
+            ``sum(self.filter_extension)`` (so the shape becomes
+            ``(spw_Nfreqs + sum(filter_extension),
+            spw_Nfreqs + sum(filter_extension))``) and apply a phase
+            correction of ``self.filter_extension[0]``. Use this when
+            computing ``\partial C_{ij} / \partial p_\alpha`` against a
+            covariance ``C_{ij}`` that has been similarly extended.
+            Default: False.
 
         Return
         -------
@@ -2255,10 +2261,16 @@ class PSpecData:
             the number of delay bins equals the number of delay channels.
             Default: True
 
-        include_extension : boolean, optional
-            If True, return a matrix with shape ``(spw_Nfreq, spw_Nfreq)``.
-            This is required when using ``dC_ij / dp_alpha``, since
-            ``C_ij`` itself has shape ``(spw_Nfreq, spw_Nfreq)``.
+        include_extension : bool, optional
+            If True, expand the two frequency axes of each per-mode
+            matrix by ``sum(self.filter_extension)``, so the returned
+            tensor has shape ``(spw_Ndlys,
+            spw_Nfreqs + sum(filter_extension),
+            spw_Nfreqs + sum(filter_extension))`` and a phase correction
+            of ``self.filter_extension[0]`` is applied. Use this when
+            computing ``\partial C_{ij} / \partial p_\alpha`` against a
+            covariance ``C_{ij}`` that has been similarly extended.
+            Default: False.
 
         Return
         -------

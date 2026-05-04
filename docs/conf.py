@@ -35,7 +35,14 @@ MOCK_MODULES = ['numpy', 'scipy', 'scipy.interpolate', 'scipy.integrate',
                 'pyuvdata.utils', 'hera_sim']
 
 for mod_name in MOCK_MODULES:
-    if importlib.util.find_spec(mod_name) is None:
+    # find_spec raises ModuleNotFoundError when a parent package of a dotted
+    # name (e.g. ``scipy`` for ``scipy.interpolate``) is itself missing.
+    # Treat that as "not installed" so minimal build environments still mock.
+    try:
+        spec = importlib.util.find_spec(mod_name)
+    except ModuleNotFoundError:
+        spec = None
+    if spec is None:
         sys.modules[mod_name] = mock.Mock()
 
 sys.path.insert(0, os.path.abspath('../'))

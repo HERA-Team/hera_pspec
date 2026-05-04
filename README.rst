@@ -21,15 +21,14 @@ Installation
 For users
 ---------
 
-The package is installable from PyPI. ``hera_pspec`` currently supports
-Python 3.11, 3.12, and 3.13 (``>=3.11,<3.14``). We recommend installing it
-into a fresh virtual environment:
+The package is installable from PyPI. We recommend installing it into a
+fresh virtual environment using `uv <https://docs.astral.sh/uv/>`_:
 
 ::
 
-   $ python -m venv hera_pspec
+   $ uv venv hera_pspec
    $ source hera_pspec/bin/activate
-   $ python -m pip install hera_pspec
+   $ uv pip install hera_pspec
 
 New versions are frequently released on PyPi.
 
