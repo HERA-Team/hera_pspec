@@ -3746,9 +3746,10 @@ class PSpecData:
         for i, dset in enumerate(self.dsets):
             # check dset vis units
             if dset.vis_units.upper() != 'JY':
-                warnings.warn(
-                    f"Cannot convert dset {i} Jy -> mK because vis_units = {dset.vis_units}"
-                )
+                if dset.vis_units.upper() != 'MK':
+                    warnings.warn(
+                        f"Cannot convert dset {i} Jy -> mK because vis_units = {dset.vis_units}"
+                    )
                 continue
             for j, p in enumerate(dset.polarization_array):
                 dset.data_array[:, :, j] *= factors[p][None, :]
