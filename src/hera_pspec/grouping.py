@@ -520,9 +520,7 @@ def average_spectra(
                     bpg_stats[stat] = np.sqrt(stat_avg)
                 if store_window:
                     if uvp.exact_windows:
-                        bpg_window_function = np.sum(
-                            bpg_window_function, axis=0
-                        )  # / w_list_sum[:, :, None, None]
+                        bpg_window_function = np.sum(bpg_window_function, axis=0)
                     else:
                         bpg_window_function = (
                             np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None]

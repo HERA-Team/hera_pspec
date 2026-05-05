@@ -4149,16 +4149,14 @@ class PSpecData:
         uvp.Ntimes = len(np.unique(np.hstack([uvp.time_1_array, uvp.time_2_array])))
         uvp.Nbltpairs = len(
             set(
-                [
-                    (blp, t1, t2)
-                    for blp, t1, t2 in zip(
-                        uvp.blpair_array, uvp.time_1_array, uvp.time_2_array
-                    )
-                ]
+                (blp, t1, t2)
+                for blp, t1, t2 in zip(
+                    uvp.blpair_array, uvp.time_1_array, uvp.time_2_array
+                )
             )
         )
         uvp.Ntpairs = len(
-            set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)])
+            set((t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array))
         )
         bls_arr = sorted(set(bls_arr))
         uvp.bl_array = np.array([uvp.antnums_to_bl(bl) for bl in bls_arr])
