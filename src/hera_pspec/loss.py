@@ -1,11 +1,13 @@
 """Functions to apply and estimate losses/biases in the power spectrum estimates."""
+
 from .uvpspec import UVPSpec
 import copy
+
 
 def apply_bias_correction(
     uvp: UVPSpec,
     total_bias: dict | None = None,
-    data_bias: dict | None =None,
+    data_bias: dict | None = None,
     inplace: bool = True,
 ):
     """
@@ -35,10 +37,10 @@ def apply_bias_correction(
     for spw in uvp.spw_array:
         if total_bias is not None:
             uvp.data_array[spw] *= total_bias[spw]
-            if hasattr(uvp, 'cov_array_real'):
-                uvp.cov_array_real[spw] *= total_bias[spw]**2
-                uvp.cov_array_imag[spw] *= total_bias[spw]**2
-            if hasattr(uvp, 'stats_array'):
+            if hasattr(uvp, "cov_array_real"):
+                uvp.cov_array_real[spw] *= total_bias[spw] ** 2
+                uvp.cov_array_imag[spw] *= total_bias[spw] ** 2
+            if hasattr(uvp, "stats_array"):
                 for stat in uvp.stats_array:
                     # TODO: this is right for P_N but not quite right for P_SN
                     # (though I'm not sure how much we care)

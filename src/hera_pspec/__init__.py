@@ -1,6 +1,7 @@
 """
 __init__.py file for hera_pspec
 """
+
 try:
     from importlib.metadata import version, PackageNotFoundError
 except ImportError:
@@ -24,7 +25,6 @@ from .pspecdata import PSpecData
 from .container import PSpecContainer
 from .parameter import PSpecParam
 from .pspecbeam import PSpecBeamUV, PSpecBeamGauss, PSpecBeamFromArray
-
 
 
 del version
