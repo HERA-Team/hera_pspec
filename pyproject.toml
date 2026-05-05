@@ -30,8 +30,8 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=2.0",
-    "scipy>=1.14.0",
-    "matplotlib>=3.9.0",
+    "scipy>=1.13.0",
+    "matplotlib>=3.8.0",
     "pyuvdata>=3.2.5",
     "astropy>=6.1.0",
     "pyyaml>=6.0.1",
@@ -66,7 +66,7 @@ docs = [
 ]
 tests = [
     "coverage>=7.0",
-    "pytest>=8.0,<10.0",  # pytest 9 breaks pytest-cases (https://github.com/smarie/python-pytest-cases/issues/374)
+    "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-cases>=3.8.0",
 ]

@@ -58,9 +58,6 @@ jobs:
   tests-min-deps:
     name: Tests (lowest-direct deps)
     runs-on: ubuntu-latest
-    env:
-      PYTHON: "3.11"
-      OS: ubuntu-latest
     steps:
     - uses: actions/checkout@main
       with:
@@ -87,9 +84,6 @@ jobs:
   tests-upgraded:
     name: Tests (upgraded deps)
     runs-on: ubuntu-latest
-    env:
-      PYTHON: "3.13"
-      OS: ubuntu-latest
     steps:
     - uses: actions/checkout@main
       with:
