@@ -5,11 +5,13 @@ conversions.py
 Cosmological and instrumental
 conversion functions for hera_pspec
 """
+
 import numpy as np
 import scipy.integrate as integrate
 
 try:
     from astropy.cosmology import LambdaCDM
+
     _astropy = True
 except:
     print("Could not import astropy")
@@ -29,6 +31,7 @@ class units:
     f21 : 21cm frequency in Hz
     w21 : 21cm wavelength in meters
     """
+
     c = 2.99792458e8  # speed of light in m s-1
     ckm = c / 1e3  # speed of light in km s-1
     G = 6.67408e-11  # Newton constant m3 kg-1 s-2
@@ -37,13 +40,14 @@ class units:
     sb = 5.670367e-8  # stefan boltzmann constant W m-2 K-4
     f21 = 1.420405751e9  # frequency of 21cm transition in Hz
     w21 = 0.211061140542  # 21cm wavelength in meters
-    H0_to_SI = 3.24078e-20 # km s-1 Mpc-1 to s-1
+    H0_to_SI = 3.24078e-20  # km s-1 Mpc-1 to s-1
 
 
 class cgs_units:
     """
     fundamental constants in ** CGS ** units
     """
+
     c = 2.99792458e10  # cm s-1
     kb = 1.38064852e-16  # erg K-1
 
@@ -62,11 +66,20 @@ class Cosmo_Conversions(object):
     Furlanetto 2006 (2006PhR...433..181F)
 
     """
+
     # astropy load attribute
     _astropy = _astropy
 
-    def __init__(self, Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=67.27,
-                 Om_M=None, Om_k=None, **kwargs):
+    def __init__(
+        self,
+        Om_L=0.68440,
+        Om_b=0.04911,
+        Om_c=0.26442,
+        H0=67.27,
+        Om_M=None,
+        Om_k=None,
+        **kwargs,
+    ):
         """
         Default parameter values are Planck 2015 TT,TE,EE+lowP.
         (Table 4 of https://doi.org/10.1051/0004-6361/201525830)
@@ -142,7 +155,7 @@ class Cosmo_Conversions(object):
         if ghz:
             freq = freq * 1e9
 
-        return (units.f21 / freq - 1)
+        return units.f21 / freq - 1
 
     @staticmethod
     def z2f(z, ghz=False):
@@ -163,7 +176,8 @@ class Cosmo_Conversions(object):
             Frequency in Hz (or GHz if ghz=True)
         """
         freq = units.f21 / (z + 1)
-        if ghz: freq /= 1e9
+        if ghz:
+            freq /= 1e9
         return freq
 
     def E(self, z):
@@ -176,7 +190,7 @@ class Cosmo_Conversions(object):
         z : float
             Redshift.
         """
-        return np.sqrt(self.Om_M*(1+z)**3 + self.Om_k*(1+z)**2 + self.Om_L)
+        return np.sqrt(self.Om_M * (1 + z) ** 3 + self.Om_k * (1 + z) ** 2 + self.Om_L)
 
     def DC(self, z, little_h=True):
         """
@@ -192,9 +206,9 @@ class Cosmo_Conversions(object):
             Whether to have cosmological length units be h^-1 Mpc (True) or
             Mpc (False). Default: True (h^-1 Mpc)
         """
-        d = integrate.quad(lambda z: 1/self.E(z), 0, z)[0]
+        d = integrate.quad(lambda z: 1 / self.E(z), 0, z)[0]
         if little_h:
-            return d * units.ckm / 100.
+            return d * units.ckm / 100.0
         else:
             return d * units.ckm / self.H0
 
@@ -213,18 +227,24 @@ class Cosmo_Conversions(object):
             Mpc (False). Default: True (h^-1 Mpc)
         """
         if little_h:
-            DH = units.ckm / 100.
+            DH = units.ckm / 100.0
         else:
             DH = units.ckm / self.H0
 
         if self.Om_k > 0:
-            DM = DH * np.sinh(np.sqrt(self.Om_k) \
-                    * self.DC(z, little_h=little_h) / DH) \
-                    / np.sqrt(self.Om_k)
+            DM = (
+                DH
+                * np.sinh(np.sqrt(self.Om_k) * self.DC(z, little_h=little_h) / DH)
+                / np.sqrt(self.Om_k)
+            )
         elif self.Om_k < 0:
-            DM = DH * np.sin(np.sqrt(np.abs(self.Om_k)) \
-                    * self.DC(z, little_h=little_h) / DH) \
-                    / np.sqrt(np.abs(self.Om_k))
+            DM = (
+                DH
+                * np.sin(
+                    np.sqrt(np.abs(self.Om_k)) * self.DC(z, little_h=little_h) / DH
+                )
+                / np.sqrt(np.abs(self.Om_k))
+            )
         else:
             DM = self.DC(z, little_h=little_h)
 
@@ -280,9 +300,9 @@ class Cosmo_Conversions(object):
             Mpc (False). Default: True (h^-1 Mpc)
         """
         if little_h:
-            y = (1 + z)**2.0 / self.E(z) * units.ckm / 100. / units.f21
+            y = (1 + z) ** 2.0 / self.E(z) * units.ckm / 100.0 / units.f21
         else:
-            y = (1 + z)**2.0 / self.E(z) * units.ckm / self.H0 / units.f21
+            y = (1 + z) ** 2.0 / self.E(z) * units.ckm / self.H0 / units.f21
         if ghz:
             return y * 1e9
         else:
@@ -305,8 +325,9 @@ class Cosmo_Conversions(object):
         ------
         Calls Cosmo_Conversions.dRperp_dtheta() and Cosmo_Conversions.dRpara_df().
         """
-        return self.dRperp_dtheta(z, little_h=little_h)**2 \
-             * self.dRpara_df(z, little_h=little_h)
+        return self.dRperp_dtheta(z, little_h=little_h) ** 2 * self.dRpara_df(
+            z, little_h=little_h
+        )
 
     def bl_to_kperp(self, z, little_h=True):
         """
@@ -331,8 +352,11 @@ class Cosmo_Conversions(object):
             Conversion factor in units [h Mpc-1 / meters]
         """
         # Parsons 2012, Pober 2014, Kohn 2018
-        bl2kpara = 2*np.pi / (self.dRperp_dtheta(z, little_h=little_h) \
-                              * (units.c / self.z2f(z)))
+        bl2kpara = (
+            2
+            * np.pi
+            / (self.dRperp_dtheta(z, little_h=little_h) * (units.c / self.z2f(z)))
+        )
         return bl2kpara
 
     def tau_to_kpara(self, z, little_h=True):
@@ -358,14 +382,15 @@ class Cosmo_Conversions(object):
             Conversion factor in units [h Mpc-1 / seconds]
         """
         # Parsons 2012, Pober 2014, Kohn 2018
-        tau2kpara = 2*np.pi / self.dRpara_df(z, little_h=little_h, ghz=False)
+        tau2kpara = 2 * np.pi / self.dRpara_df(z, little_h=little_h, ghz=False)
 
         return tau2kpara
 
     def __str__(self):
         message = "Cosmo_Conversions object at <{}>\n".format(hex(id(self)))
-        message += "; ".join( ["{:s} : {:0.4f}".format(p, getattr(self, p))
-                               for p in self.params] )
+        message += "; ".join(
+            ["{:s} : {:0.4f}".format(p, getattr(self, p)) for p in self.params]
+        )
         return message
 
     def __eq__(self, other):

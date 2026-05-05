@@ -5,19 +5,13 @@ from pyuvdata import UVData
 from hera_cal.utils import JD2LST
 from scipy import stats, interpolate
 
-from . import (
-    uvpspec,
-    pspecdata,
-    conversions,
-    pspecbeam,
-    utils,
-)
+from . import uvpspec, pspecdata, conversions, pspecbeam, utils
 
 
 def build_vanilla_uvpspec(
-    beam: pspecbeam.PSpecBeamBase | None=None,
+    beam: pspecbeam.PSpecBeamBase | None = None,
     Ndlys: int | None = None,
-    equal_time_arrays: bool = True
+    equal_time_arrays: bool = True,
 ) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
     """
     Build an example vanilla UVPSpec object from scratch, with all necessary
@@ -53,7 +47,7 @@ def build_vanilla_uvpspec(
     bls = [101102, 102103, 101103]
     uvp.Nbls = len(bls)
     uvp.Nblpairs = len(blpairs)
-    #uvp.Nblpairts = uvp.Nblpairs * Ntimes
+    # uvp.Nblpairts = uvp.Nblpairs * Ntimes
 
     time_array = np.linspace(2458042.1, 2458042.2, Ntimes)
     uvp.time_1_array = np.tile(time_array, uvp.Nblpairs)
@@ -73,13 +67,24 @@ def build_vanilla_uvpspec(
         ]
     )
     lst_array = JD2LST(time_array, longitude=21.4283)
-    #time_array = np.repeat(time_array, Nblpairs)
-    uvp.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
-    uvp.Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(uvp.blpair_array, uvp.time_1_array, uvp.time_2_array)]))
+    # time_array = np.repeat(time_array, Nblpairs)
+    uvp.Ntpairs = len(
+        set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)])
+    )
+    uvp.Nbltpairs = len(
+        set(
+            [
+                (blp, t1, t2)
+                for blp, t1, t2 in zip(
+                    uvp.blpair_array, uvp.time_1_array, uvp.time_2_array
+                )
+            ]
+        )
+    )
 
     uvp.lst_1_array = JD2LST(uvp.time_1_array, longitude=21.4283)
     uvp.lst_2_array = JD2LST(uvp.time_2_array, longitude=21.4283)
-    uvp.time_avg_array = (uvp.time_1_array + uvp.time_2_array)/2
+    uvp.time_avg_array = (uvp.time_1_array + uvp.time_2_array) / 2
     uvp.lst_avg_array = JD2LST(uvp.time_avg_array, longitude=21.4283)
 
     uvp.spw_freq_array = np.tile(np.arange(uvp.Nspws), uvp.Nfreqs)
@@ -140,7 +145,8 @@ def build_vanilla_uvpspec(
         window_function_array[s] = np.repeat(
             # repeat along blpairtime axis
             np.repeat(Wv[None, :], uvp.Nbltpairs, axis=0)[..., None],
-            uvp.Npols, axis=-1,  # repeat along polarization axis
+            uvp.Npols,
+            axis=-1,  # repeat along polarization axis
         )
         cov_array_real[s] = np.moveaxis(
             np.array(
@@ -192,7 +198,7 @@ def uvpspec_from_data(
     n_dlys=None,
     r_params=None,
     verbose=False,
-    **kwargs
+    **kwargs,
 ):
     """
     Build an example UVPSpec object from a visibility file and PSpecData.
@@ -297,12 +303,12 @@ def uvpspec_from_data(
     assert isinstance(bl_grps, list), "bl_grps must be a list"
     if not isinstance(bl_grps[0], list):
         bl_grps = [bl_grps]
-    assert np.all(
-        [isinstance(blgrp, list) for blgrp in bl_grps]
-    ), "bl_grps must be fed as a list of lists"
-    assert np.all(
-        [isinstance(blgrp[0], tuple) for blgrp in bl_grps]
-    ), "bl_grps must be fed as a list of lists of tuples"
+    assert np.all([isinstance(blgrp, list) for blgrp in bl_grps]), (
+        "bl_grps must be fed as a list of lists"
+    )
+    assert np.all([isinstance(blgrp[0], tuple) for blgrp in bl_grps]), (
+        "bl_grps must be fed as a list of lists of tuples"
+    )
     bls1, bls2 = [], []
     for blgrp in bl_grps:
         _bls1, _bls2, _ = utils.construct_blpairs(
@@ -325,7 +331,7 @@ def uvpspec_from_data(
         n_dlys=n_dlys,
         r_params=r_params,
         cov_model=cov_model,
-        **kwargs
+        **kwargs,
     )
     return uvp
 
@@ -409,9 +415,9 @@ def noise_sim(
     # Extend times
     Nextend = int(Nextend)
     if Nextend > 0:
-        assert (
-            data.phase_center_catalog[0]['cat_type'] == "unprojected"
-        ), "data must be unprojected in order to extend along time axis"
+        assert data.phase_center_catalog[0]["cat_type"] == "unprojected", (
+            "data must be unprojected in order to extend along time axis"
+        )
         data = copy.deepcopy(data)
         _data = copy.deepcopy(data)
         dt = np.median(np.diff(np.unique(_data.time_array)))
@@ -515,7 +521,9 @@ def gauss_cov_fg(cov_amp, cov_length_scale, freqs, Ntimes=100, constant_in_time=
     return s
 
 
-def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, channel_width=None, Trx=0.0):
+def sky_noise_jy_autos(
+    lsts, freqs, autovis, omega_p, integration_time, channel_width=None, Trx=0.0
+):
     """Make a noise realization for a given auto-visibility level and beam.
 
     This is a simple replacement for ``hera_sim.noise.sky_noise_jy``.
@@ -554,7 +562,7 @@ def sky_noise_jy_autos(lsts, freqs, autovis, omega_p, integration_time, channel_
     # Calculate Jansky to Kelvin conversion factor
     # The factor of 1e-26 converts from Jy to W/m^2/Hz.
     wavelengths = conversions.units.c / freqs  # meters
-    Jy2K = 1e-26 * wavelengths ** 2 / (2 * conversions.units.kb * omega_p)
+    Jy2K = 1e-26 * wavelengths**2 / (2 * conversions.units.kb * omega_p)
 
     # Use autocorrelation vsibility to set noise scale
     Tsky = autovis * Jy2K.reshape(1, -1)
@@ -615,9 +623,9 @@ def sky_noise_sim(
         uvd.read(data)
     else:
         uvd = copy.deepcopy(data)
-    assert (
-        -7 not in uvd.polarization_array and -8 not in uvd.polarization_array
-    ), "Does not operate on cross-hand polarizations"
+    assert -7 not in uvd.polarization_array and -8 not in uvd.polarization_array, (
+        "Does not operate on cross-hand polarizations"
+    )
 
     if isinstance(beam, str):
         beam = pspecbeam.PSpecBeamUV(beam)

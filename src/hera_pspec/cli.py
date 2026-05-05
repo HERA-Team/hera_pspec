@@ -1,4 +1,5 @@
 """A CLI interface for hera_pspec."""
+
 import typer
 from pathlib import Path
 from rich.console import Console
@@ -13,18 +14,19 @@ app = typer.Typer()
 from . import container  # noqa: E402  (typer pattern: register subcommands after app is constructed)
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
+
 @app.command()
 def hello():
     # This is a test command which we need for the CLI interface to be broken into
     # subcommands (at least two commands need to be defined for it to be used as subc's)
     cns.print("Hi! :wave:")
 
-_pattern_help=(
 
-)
+_pattern_help = ()
 _group_help = """The group name wihtin the PSpecContainer in which the UVPSpec objects
 that you wish to merge are stored.
 """
+
 
 @app.command()
 def fast_merge_baselines(
@@ -56,11 +58,12 @@ def fast_merge_baselines(
             "but a suffix of '.{extraname}.pkl'."
         )
     ),
-    progress: bool = typer.Option(default=True,
+    progress: bool = typer.Option(
+        default=True,
         help=(
             "Whether to show a progress bar while loading the files. This is useful "
             "for large datasets, but can be turned off for small datasets."
-        )
+        ),
     ),
     extras: list[str] = typer.Option(
         default=None,
@@ -69,7 +72,7 @@ def fast_merge_baselines(
             "These will be saved to separate files with the same basename as the output "
             "file, but with a suffix of '.{extraname}.pkl'. This is useful for saving "
             "metadata that is not stored in the UVPSpec objects themselves."
-        )
+        ),
     ),
     batch_size: int = typer.Option(
         default=None,
@@ -77,7 +80,7 @@ def fast_merge_baselines(
             "Number of files to load and merge at a time. Smaller batch sizes use less "
             "memory but may be slightly slower. If None (default), all files are loaded "
             "at once. Adjust this based on available RAM and file sizes."
-        )
+        ),
     ),
 ):
     """Merge a set of hera_pspec files each representing a single baseline, into one.
@@ -108,14 +111,21 @@ def fast_merge_baselines(
         batch_files = files[start_idx:end_idx]
 
         if num_batches > 1:
-            cns.print(f"Processing batch {batch_idx + 1}/{num_batches} ({len(batch_files)} files)")
+            cns.print(
+                f"Processing batch {batch_idx + 1}/{num_batches} ({len(batch_files)} files)"
+            )
 
         # Load UVPSpec objects for this batch
         uvps_batch = {name: [] for name in names}
 
-        for df in tqdm(batch_files, desc=f"Loading batch {batch_idx + 1}/{num_batches}", unit="file", disable=not progress):
+        for df in tqdm(
+            batch_files,
+            desc=f"Loading batch {batch_idx + 1}/{num_batches}",
+            unit="file",
+            disable=not progress,
+        ):
             # load power spectra
-            psc = container.PSpecContainer(df, mode='r', keep_open=False)
+            psc = container.PSpecContainer(df, mode="r", keep_open=False)
 
             # Load both the time-averaged and not-time-averaged power spectra.
             # The time-averaging done in the single-baseline notebook has more
@@ -128,9 +138,9 @@ def fast_merge_baselines(
 
             if extras:
                 # load additional metadata stored in header
-                with h5py.File(df, 'r') as f:
+                with h5py.File(df, "r") as f:
                     for extra in extras:
-                        extra_attrs[extra][blp] = f['header'].attrs[extra]
+                        extra_attrs[extra][blp] = f["header"].attrs[extra]
 
         # Merge the batch
         for name, uvplist in uvps_batch.items():
@@ -140,20 +150,22 @@ def fast_merge_baselines(
             if merged_uvps[name] is None:
                 merged_uvps[name] = batch_merged
             else:
-                merged_uvps[name] = recursive_combine_uvpspec([merged_uvps[name], batch_merged])
+                merged_uvps[name] = recursive_combine_uvpspec(
+                    [merged_uvps[name], batch_merged]
+                )
 
         # Clear batch data to free memory
         del uvps_batch
 
     cns.print("Writing merged power spectra to file")
     outspec = outpath.parent / f"{outpath.name}.pspec.h5"
-    psc = container.PSpecContainer(outspec, mode='rw', keep_open=False)
+    psc = container.PSpecContainer(outspec, mode="rw", keep_open=False)
     for name, uvp in merged_uvps.items():
         psc.set_pspec(group, name, uvp, overwrite=True)
 
     cns.print(f"Wrote pspecs to file: {outspec}")
     for name, extra in extra_attrs.items():
         fname = outpath.parent / f"{outpath.name}.{name}.pkl"
-        with open(fname, 'wb') as f:
+        with open(fname, "wb") as f:
             pickle.dump(extra, f)
         cns.print(f"Wrote {fname}")

@@ -142,3 +142,6 @@ norecursedirs = [
     ".tox",
 ]
 testpaths = "tests"
+
+[tool.ruff.format]
+skip-magic-trailing-comma = true

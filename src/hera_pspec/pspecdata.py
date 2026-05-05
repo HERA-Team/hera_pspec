@@ -13,15 +13,30 @@ import warnings
 import json
 import uvtools.dspec as dspec
 import logging
-from . import uvpspec, utils, __version__, pspecbeam, container, uvpspec_utils as uvputils
+from . import (
+    uvpspec,
+    utils,
+    __version__,
+    pspecbeam,
+    container,
+    uvpspec_utils as uvputils,
+)
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
-class PSpecData:
 
-    def __init__(self, dsets=None, wgts=None, dsets_std=None, labels=None,
-                 beam=None, cals=None, cal_flag=True):
+class PSpecData:
+    def __init__(
+        self,
+        dsets=None,
+        wgts=None,
+        dsets_std=None,
+        labels=None,
+        beam=None,
+        cals=None,
+        cal_flag=True,
+    ):
         """
         Object to store multiple sets of UVData visibilities and perform
         operations such as power spectrum estimation on them.
@@ -61,7 +76,9 @@ class PSpecData:
         """
         dsets = [] if dsets is None else dsets
         self.clear_cache()  # clear matrix cache
-        self.dsets = []; self.wgts = []; self.labels = []
+        self.dsets = []
+        self.wgts = []
+        self.labels = []
         self.dsets_std = []
         self.Nfreqs = None
         self.spw_range = None
@@ -71,11 +88,11 @@ class PSpecData:
         # parametric R matrices.
         self.r_params = {}
         self.filter_extension = (0, 0)
-        self.cov_regularization = 0.
+        self.cov_regularization = 0.0
         # set data weighting to identity by default
         # and taper to none by default
-        self.data_weighting = 'identity'
-        self.taper = 'none'
+        self.data_weighting = "identity"
+        self.taper = "none"
         self.symmetric_taper = True
         # Set all weights to None if wgts=None
         if wgts is None:
@@ -87,7 +104,14 @@ class PSpecData:
 
         # Store the input UVData objects if specified
         if len(dsets) > 0:
-            self.add(dsets, wgts, dsets_std=dsets_std, labels=labels, cals=cals, cal_flag=cal_flag)
+            self.add(
+                dsets,
+                wgts,
+                dsets_std=dsets_std,
+                labels=labels,
+                cals=cals,
+                cal_flag=cal_flag,
+            )
 
         # Store a primary beam
         self.primary_beam = beam
@@ -133,27 +157,23 @@ class PSpecData:
         if isinstance(dsets, dict):
             # Disallow labels kwarg if a dict was passed
             if labels is not None:
-                raise ValueError("If 'dsets' is a dict, 'labels' cannot be "
-                                 "specified.")
+                raise ValueError("If 'dsets' is a dict, 'labels' cannot be specified.")
             labels = list(dsets.keys())
 
             if wgts is None:
                 wgts = dict([(l, None) for l in labels])
             elif not isinstance(wgts, dict):
-                raise TypeError("If 'dsets' is a dict, 'wgts' must also be "
-                                "a dict")
+                raise TypeError("If 'dsets' is a dict, 'wgts' must also be a dict")
 
             if dsets_std is None:
                 dsets_std = dict([(l, None) for l in labels])
             elif not isinstance(dsets_std, dict):
-                raise TypeError("If 'dsets' is a dict, 'dsets_std' must also be "
-                                "a dict")
+                raise TypeError("If 'dsets' is a dict, 'dsets_std' must also be a dict")
 
             if cals is None:
                 cals = dict([(l, None) for l in labels])
             elif not isinstance(cals, dict):
-                raise TypeError("If 'cals' is a dict, 'cals' must also be "
-                                "a dict")
+                raise TypeError("If 'cals' is a dict, 'cals' must also be a dict")
 
             # Unpack dsets and wgts dicts
             dsets = [dsets[key] for key in labels]
@@ -162,47 +182,69 @@ class PSpecData:
             cals = [cals[key] for key in labels]
 
         # Convert input args to lists if possible
-        if isinstance(dsets, UVData): dsets = [dsets,]
-        if isinstance(wgts, UVData): wgts = [wgts,]
-        if isinstance(labels, str): labels = [labels,]
-        if isinstance(dsets_std, UVData): dsets_std = [dsets_std,]
-        if isinstance(cals, UVCal): cals = [cals,]
-        if wgts is None: wgts = [wgts,]
-        if dsets_std is None: dsets_std = [dsets_std for m in range(len(dsets))]
-        if cals is None: cals = [cals for m in range(len(dsets))]
-        if isinstance(dsets, tuple): dsets = list(dsets)
-        if isinstance(wgts, tuple): wgts = list(wgts)
-        if isinstance(dsets_std, tuple): dsets_std = list(dsets_std)
-        if isinstance(cals, tuple): cals = list(cals)
+        if isinstance(dsets, UVData):
+            dsets = [dsets]
+        if isinstance(wgts, UVData):
+            wgts = [wgts]
+        if isinstance(labels, str):
+            labels = [labels]
+        if isinstance(dsets_std, UVData):
+            dsets_std = [dsets_std]
+        if isinstance(cals, UVCal):
+            cals = [cals]
+        if wgts is None:
+            wgts = [wgts]
+        if dsets_std is None:
+            dsets_std = [dsets_std for m in range(len(dsets))]
+        if cals is None:
+            cals = [cals for m in range(len(dsets))]
+        if isinstance(dsets, tuple):
+            dsets = list(dsets)
+        if isinstance(wgts, tuple):
+            wgts = list(wgts)
+        if isinstance(dsets_std, tuple):
+            dsets_std = list(dsets_std)
+        if isinstance(cals, tuple):
+            cals = list(cals)
 
         # Only allow UVData or lists
-        if not isinstance(dsets, list) or not isinstance(wgts, list)\
-        or not isinstance(dsets_std, list) or not isinstance(cals, list):
-            raise TypeError("dsets, dsets_std, wgts and cals must be UVData"
-                            "UVCal, or lists of UVData or UVCal")
+        if (
+            not isinstance(dsets, list)
+            or not isinstance(wgts, list)
+            or not isinstance(dsets_std, list)
+            or not isinstance(cals, list)
+        ):
+            raise TypeError(
+                "dsets, dsets_std, wgts and cals must be UVData"
+                "UVCal, or lists of UVData or UVCal"
+            )
 
         # Make sure enough weights were specified
-        assert len(dsets) == len(wgts), \
+        assert len(dsets) == len(wgts), (
             "The dsets and wgts lists must have equal length"
-        assert len(dsets_std) == len(dsets), \
+        )
+        assert len(dsets_std) == len(dsets), (
             "The dsets and dsets_std lists must have equal length"
-        assert len(cals) == len(dsets), \
+        )
+        assert len(cals) == len(dsets), (
             "The dsets and cals lists must have equal length"
+        )
         if labels is not None:
-            assert len(dsets) == len(labels), \
-                "If labels are specified, the dsets and labels lists " \
+            assert len(dsets) == len(labels), (
+                "If labels are specified, the dsets and labels lists "
                 "must have equal length"
+            )
 
         # Check that everything is a UVData object
         for d, w, s in zip(dsets, wgts, dsets_std):
             if not isinstance(d, UVData):
                 raise TypeError("Only UVData objects can be used as datasets.")
             if not isinstance(w, UVData) and w is not None:
-                raise TypeError("Only UVData objects (or None) can be used as "
-                                "weights.")
+                raise TypeError("Only UVData objects (or None) can be used as weights.")
             if not isinstance(s, UVData) and s is not None:
-                raise TypeError("Only UVData objects (or None) can be used as "
-                                "error sets")
+                raise TypeError(
+                    "Only UVData objects (or None) can be used as error sets"
+                )
         for c in cals:
             if not isinstance(c, UVCal) and c is not None:
                 raise TypeError("Only UVCal objects can be used for calibration.")
@@ -211,18 +253,26 @@ class PSpecData:
         if self.labels is None:
             self.labels = []
         if labels is None:
-            labels = ["dset{:d}".format(i)
-                    for i in range(len(self.dsets), len(dsets) + len(self.dsets))]
+            labels = [
+                "dset{:d}".format(i)
+                for i in range(len(self.dsets), len(dsets) + len(self.dsets))
+            ]
 
         # Apply calibration if provided
         for dset, dset_std, cal in zip(dsets, dsets_std, cals):
             if cal is not None:
                 if dset is not None:
                     uvutils.uvcalibrate(dset, cal, inplace=True, prop_flags=cal_flag)
-                    dset.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
+                    dset.extra_keywords["calibration"] = cal.extra_keywords.get(
+                        "filename", '""'
+                    )
                 if dset_std is not None:
-                    uvutils.uvcalibrate(dset_std, cal, inplace=True, prop_flags=cal_flag)
-                    dset_std.extra_keywords['calibration'] = cal.extra_keywords.get('filename', '""')
+                    uvutils.uvcalibrate(
+                        dset_std, cal, inplace=True, prop_flags=cal_flag
+                    )
+                    dset_std.extra_keywords["calibration"] = cal.extra_keywords.get(
+                        "filename", '""'
+                    )
 
         # Append to list
         self.dsets += dsets
@@ -259,16 +309,28 @@ class PSpecData:
         # Basic info
         s = "PSpecData object\n"
         s += "  %d datasets" % len(self.dsets)
-        if len(self.dsets) == 0: return s
+        if len(self.dsets) == 0:
+            return s
 
         # Dataset summary
         for i, d in enumerate(self.dsets):
             if self.labels[i] is None:
-                s += "  dset (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" \
-                      % (i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols)
+                s += "  dset (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" % (
+                    i,
+                    d.Nbls,
+                    d.Nfreqs,
+                    d.Ntimes,
+                    d.Npols,
+                )
             else:
-                s += "  dset '%s' (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" \
-                      % (self.labels[i], i, d.Nbls, d.Nfreqs, d.Ntimes, d.Npols)
+                s += "  dset '%s' (%d): %d bls (freqs=%d, times=%d, pols=%d)\n" % (
+                    self.labels[i],
+                    i,
+                    d.Nbls,
+                    d.Nfreqs,
+                    d.Ntimes,
+                    d.Npols,
+                )
         return s
 
     def validate_datasets(self, verbose=True):
@@ -281,8 +343,7 @@ class PSpecData:
             raise ValueError("self.wgts does not have same len as self.dsets")
 
         if len(self.dsets_std) != len(self.dsets):
-            raise ValueError("self.dsets_std does not have the same len as "
-                             "self.dsets")
+            raise ValueError("self.dsets_std does not have the same len as self.dsets")
         if len(self.labels) != len(self.dsets):
             raise ValueError("self.labels does not have same len as self.dsets")
 
@@ -301,20 +362,30 @@ class PSpecData:
 
         # raise warnings if times don't match
         if len(self.dsets) > 1:
-            lst_diffs = np.array( [ np.unique(self.dsets[0].lst_array)
-                                  - np.unique(dset.lst_array)
-                                   for dset in self.dsets[1:]] )
+            lst_diffs = np.array(
+                [
+                    np.unique(self.dsets[0].lst_array) - np.unique(dset.lst_array)
+                    for dset in self.dsets[1:]
+                ]
+            )
             if np.max(np.abs(lst_diffs)) > 0.001:
-                raise_warning("Warning: LST bins in dsets misaligned by more than 15 seconds",
-                              verbose=verbose)
+                raise_warning(
+                    "Warning: LST bins in dsets misaligned by more than 15 seconds",
+                    verbose=verbose,
+                )
 
             # raise warning if frequencies don't match
-            freq_diffs = np.array( [ np.unique(self.dsets[0].freq_array)
-                                   - np.unique(dset.freq_array)
-                                    for dset in self.dsets[1:]] )
+            freq_diffs = np.array(
+                [
+                    np.unique(self.dsets[0].freq_array) - np.unique(dset.freq_array)
+                    for dset in self.dsets[1:]
+                ]
+            )
             if np.max(np.abs(freq_diffs)) > 0.001e6:
-                raise_warning("Warning: frequency bins in dsets misaligned by more than 0.001 MHz",
-                              verbose=verbose)
+                raise_warning(
+                    "Warning: frequency bins in dsets misaligned by more than 0.001 MHz",
+                    verbose=verbose,
+                )
 
         # Check phase type
         phase_types = []
@@ -324,25 +395,31 @@ class PSpecData:
                     "phase_center_catalog should contain only one entry per dataset"
                 )
 
-            phase_types.append(next(iter(d.phase_center_catalog.values()))['cat_type'])
+            phase_types.append(next(iter(d.phase_center_catalog.values()))["cat_type"])
         if np.unique(phase_types).size > 1:
-            raise ValueError("all datasets must have the same phase type "
-                             "(i.e. 'drift', 'phased', ...)\ncurrent phase "
-                             "types are {}".format(phase_types))
+            raise ValueError(
+                "all datasets must have the same phase type "
+                "(i.e. 'drift', 'phased', ...)\ncurrent phase "
+                "types are {}".format(phase_types)
+            )
 
         # Check phase centers if phase type is phased
-        if 'phased' in set(phase_types):
+        if "phased" in set(phase_types):
             phase_ra = [d.phase_center_app_ra_degrees for d in self.dsets]
             phase_dec = [d.phase_center_app_dec_degrees for d in self.dsets]
-            max_diff_ra = np.max( [np.diff(d)
-                                   for d in itertools.combinations(phase_ra, 2)])
-            max_diff_dec = np.max([np.diff(d)
-                                  for d in itertools.combinations(phase_dec, 2)])
+            max_diff_ra = np.max(
+                [np.diff(d) for d in itertools.combinations(phase_ra, 2)]
+            )
+            max_diff_dec = np.max(
+                [np.diff(d) for d in itertools.combinations(phase_dec, 2)]
+            )
             max_diff = np.sqrt(max_diff_ra**2 + max_diff_dec**2)
             if max_diff > 0.15:
-                raise_warning("Warning: maximum phase-center difference "
-                              "between datasets is > 10 arcmin",
-                              verbose=verbose)
+                raise_warning(
+                    "Warning: maximum phase-center difference "
+                    "between datasets is > 10 arcmin",
+                    verbose=verbose,
+                )
 
     def check_key_in_dset(self, key, dset_ind):
         """
@@ -362,7 +439,7 @@ class PSpecData:
         exists : bool
             True if the key exists, False otherwise
         """
-        #FIXME: Fix this to enable label keys
+        # FIXME: Fix this to enable label keys
         # get iterable
         key = uvutils.tools._get_iterable(key)
         if isinstance(key, str):
@@ -393,18 +470,30 @@ class PSpecData:
             self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
         else:
             for k in keys:
-                try: del(self._C[k])
-                except(KeyError): pass
-                try: del(self._I[k])
-                except(KeyError): pass
-                try: del(self._iC[k])
-                except(KeyError): pass
-                try: del(self.r_params[k])
-                except(KeyError): pass
-                try: del(self._Y[k])
-                except(KeyError): pass
-                try: del(self._R[k])
-                except(KeyError): pass
+                try:
+                    del self._C[k]
+                except KeyError:
+                    pass
+                try:
+                    del self._I[k]
+                except KeyError:
+                    pass
+                try:
+                    del self._iC[k]
+                except KeyError:
+                    pass
+                try:
+                    del self.r_params[k]
+                except KeyError:
+                    pass
+                try:
+                    del self._Y[k]
+                except KeyError:
+                    pass
+                try:
+                    del self._R[k]
+                except KeyError:
+                    pass
 
     def dset_idx(self, dset):
         """
@@ -470,8 +559,9 @@ class PSpecData:
         # put pol into bl key if it exists
         if len(key) > 0:
             pol = key[0]
-            assert isinstance(pol, (str, int, np.integer)), \
+            assert isinstance(pol, (str, int, np.integer)), (
                 "pol must be fed as a str or int"
+            )
             bl += (key[0],)
 
         return dset_idx, bl
@@ -523,7 +613,7 @@ class PSpecData:
             Array of std data from the requested UVData dataset and baseline.
         """
         assert isinstance(key, tuple)
-        dset,bl = self.parse_blkey(key)
+        dset, bl = self.parse_blkey(key)
         spw = slice(*self.get_spw(include_extension=include_extension))
         return self.dsets_std[dset].get_data(bl).T[spw]
 
@@ -572,7 +662,8 @@ class PSpecData:
             while the ndarrays should have shape (spw_Nfreqs, spw_Nfreqs)
         """
         self.clear_cache(cov.keys())
-        for key in cov: self._C[key] = cov[key]
+        for key in cov:
+            self._C[key] = cov[key]
 
     def get_spw(self, include_extension=False):
         """
@@ -592,11 +683,21 @@ class PSpecData:
             include_extension = True
         # if there is non-zero self.filter_extension, include_extension is automatically set to be True
         if include_extension:
-            return (self.spw_range[0] - self.filter_extension[0], self.spw_range[1] + self.filter_extension[1])
+            return (
+                self.spw_range[0] - self.filter_extension[0],
+                self.spw_range[1] + self.filter_extension[1],
+            )
         else:
             return self.spw_range
 
-    def C_model(self, key, model='empirical', time_index=None, known_cov=None, include_extension=False):
+    def C_model(
+        self,
+        key,
+        model="empirical",
+        time_index=None,
+        known_cov=None,
+        include_extension=False,
+    ):
         """
         Return a covariance model having specified a key and model type.
         Note: Time-dependent flags that differ from frequency channel-to-channel
@@ -648,13 +749,15 @@ class PSpecData:
 
         # parse key
         dset, bl = self.parse_blkey(key)
-        if model == 'empirical':
+        if model == "empirical":
             # add model to key
-            Ckey = ((dset, dset), (bl,bl), ) + (model, None, False, True,)
+            Ckey = ((dset, dset), (bl, bl)) + (model, None, False, True)
         else:
-            assert isinstance(time_index, int), "time_index must be integer if cov-model=={}".format(model)
+            assert isinstance(time_index, int), (
+                "time_index must be integer if cov-model=={}".format(model)
+            )
             # add model to key
-            Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
+            Ckey = ((dset, dset), (bl, bl)) + (model, time_index, False, True)
 
         # Check if Ckey exists in known_cov. If so, just update self._C[Ckey] with known_cov.
         if known_cov is not None:
@@ -666,20 +769,58 @@ class PSpecData:
         # check cache
         if Ckey not in self._C:
             # calculate covariance model
-            if model == 'empirical':
-                self.set_C({Ckey: utils.cov(self.x(key, include_extension=include_extension), self.w(key, include_extension=include_extension))})
-            elif model == 'dsets':
-                self.set_C({Ckey: np.diag( np.abs(self.w(key, include_extension=include_extension)[:,time_index] * self.dx(key, include_extension=include_extension)[:,time_index]) ** 2. )})
-            elif model == 'autos':
+            if model == "empirical":
+                self.set_C(
+                    {
+                        Ckey: utils.cov(
+                            self.x(key, include_extension=include_extension),
+                            self.w(key, include_extension=include_extension),
+                        )
+                    }
+                )
+            elif model == "dsets":
+                self.set_C(
+                    {
+                        Ckey: np.diag(
+                            np.abs(
+                                self.w(key, include_extension=include_extension)[
+                                    :, time_index
+                                ]
+                                * self.dx(key, include_extension=include_extension)[
+                                    :, time_index
+                                ]
+                            )
+                            ** 2.0
+                        )
+                    }
+                )
+            elif model == "autos":
                 spw_range = self.get_spw(include_extension=include_extension)
-                self.set_C({Ckey: np.diag(utils.variance_from_auto_correlations(self.dsets[dset], bl, spw_range, time_index))})
+                self.set_C(
+                    {
+                        Ckey: np.diag(
+                            utils.variance_from_auto_correlations(
+                                self.dsets[dset], bl, spw_range, time_index
+                            )
+                        )
+                    }
+                )
             else:
                 raise ValueError("didn't recognize Ckey {}".format(Ckey))
 
         return self._C[Ckey]
 
-    def cross_covar_model(self, key1, key2, model='empirical',
-                          time_index=None, conj_1=False, conj_2=True, known_cov=None, include_extension=False):
+    def cross_covar_model(
+        self,
+        key1,
+        key2,
+        model="empirical",
+        time_index=None,
+        conj_1=False,
+        conj_2=True,
+        known_cov=None,
+        include_extension=False,
+    ):
         """
         Return a covariance model having specified a key and model type.
         Note: Time-dependent flags that differ from frequency channel-to-channel
@@ -742,16 +883,26 @@ class PSpecData:
         dset2, bl2 = self.parse_blkey(key2)
         covar = None
 
-        if model == 'empirical':
-            covar = utils.cov(self.x(key1, include_extension=include_extension), self.w(key1, include_extension=include_extension),
-                              self.x(key2, include_extension=include_extension), self.w(key2, include_extension=include_extension),
-                              conj_1=conj_1, conj_2=conj_2)
-        if model in ['dsets','autos']:
-            covar = np.zeros((np.diff(self.get_spw(include_extension=include_extension))[0],
-                np.diff(self.get_spw(include_extension=include_extension))[0]), dtype=np.float64)
+        if model == "empirical":
+            covar = utils.cov(
+                self.x(key1, include_extension=include_extension),
+                self.w(key1, include_extension=include_extension),
+                self.x(key2, include_extension=include_extension),
+                self.w(key2, include_extension=include_extension),
+                conj_1=conj_1,
+                conj_2=conj_2,
+            )
+        if model in ["dsets", "autos"]:
+            covar = np.zeros(
+                (
+                    np.diff(self.get_spw(include_extension=include_extension))[0],
+                    np.diff(self.get_spw(include_extension=include_extension))[0],
+                ),
+                dtype=np.float64,
+            )
         # Check if model exists in known_cov. If so, just overwrite covar with known_cov.
         if known_cov is not None:
-            Ckey = ((dset1, dset2), (bl1,bl2), ) + (model, time_index, conj_1, conj_2,)
+            Ckey = ((dset1, dset2), (bl1, bl2)) + (model, time_index, conj_1, conj_2)
             if Ckey in known_cov.keys():
                 spw = slice(*self.get_spw(include_extension=include_extension))
                 covar = known_cov[Ckey][spw, spw]
@@ -786,7 +937,7 @@ class PSpecData:
             self._I[key] = np.identity(self.spw_Nfreqs + np.sum(self.filter_extension))
         return self._I[key]
 
-    def iC(self, key, model='empirical', time_index=None):
+    def iC(self, key, model="empirical", time_index=None):
         """
         Return the inverse covariance matrix, C^-1.
 
@@ -822,23 +973,23 @@ class PSpecData:
         dset, bl = self.parse_blkey(key)
         key = (dset,) + (bl,)
 
-        Ckey = ((dset, dset), (bl,bl), ) + (model, time_index, False, True,)
+        Ckey = ((dset, dset), (bl, bl)) + (model, time_index, False, True)
 
         # Calculate inverse covariance if not in cache
         if Ckey not in self._iC:
             C = self.C_model(key, model=model, time_index=time_index)
-            #U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
+            # U,S,V = np.linalg.svd(C.conj()) # conj in advance of next step
             if np.linalg.cond(C) >= 1e9:
                 warnings.warn("Poorly conditioned covariance. Computing Pseudo-Inverse")
                 ic = np.linalg.pinv(C)
             else:
                 ic = np.linalg.inv(C)
             # FIXME: Not sure what these are supposed to do
-            #if self.lmin is not None: S += self.lmin # ensure invertibility
-            #if self.lmode is not None: S += S[self.lmode-1]
+            # if self.lmin is not None: S += self.lmin # ensure invertibility
+            # if self.lmode is not None: S += S[self.lmode-1]
 
             # FIXME: Is series of dot products quicker?
-            self.set_iC({Ckey:ic})
+            self.set_iC({Ckey: ic})
         return self._iC[Ckey]
 
     def Y(self, key):
@@ -876,8 +1027,9 @@ class PSpecData:
 
         if key not in self._Y:
             self._Y[key] = np.diag(np.max(self.w(key), axis=1))
-            if not np.all(np.isclose(self._Y[key], 0.0) \
-                        + np.isclose(self._Y[key], 1.0)):
+            if not np.all(
+                np.isclose(self._Y[key], 0.0) + np.isclose(self._Y[key], 1.0)
+            ):
                 raise NotImplementedError("Non-binary weights not currently implmented")
         return self._Y[key]
 
@@ -948,17 +1100,23 @@ class PSpecData:
         # Only add to Rkey if a particular mode is enabled
         # If you do add to this, you need to specify this in self.set_R docstring!
         Rkey = key + (self.data_weighting,) + (self.taper,)
-        if self.data_weighting == 'dayenu':
+        if self.data_weighting == "dayenu":
             # add extra dayenu params
-            Rkey = Rkey + tuple(self.filter_extension,) + (self.spw_Nfreqs,) \
-                   + (self.symmetric_taper,)
+            Rkey = (
+                Rkey
+                + tuple(self.filter_extension)
+                + (self.spw_Nfreqs,)
+                + (self.symmetric_taper,)
+            )
 
         if Rkey not in self._R:
             # form sqrt(taper) matrix
-            if self.taper == 'none':
+            if self.taper == "none":
                 sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
-                sqrtT = np.sqrt(dspec.gen_window(self.taper, self.spw_Nfreqs)).reshape(1, -1)
+                sqrtT = np.sqrt(dspec.gen_window(self.taper, self.spw_Nfreqs)).reshape(
+                    1, -1
+                )
 
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
@@ -969,48 +1127,80 @@ class PSpecData:
             sqrtT[np.isnan(sqrtT)] = 0.0
             sqrtY[np.isnan(sqrtY)] = 0.0
             fext = self.filter_extension
-            #if we want to use a full-band filter, set the R-matrix to filter and then truncate.
-            tmat = np.zeros((self.spw_Nfreqs,
-                             self.spw_Nfreqs+np.sum(fext)),dtype=complex)
-            tmat[:,fext[0]:fext[0] + self.spw_Nfreqs] = np.identity(self.spw_Nfreqs,dtype=complex)
+            # if we want to use a full-band filter, set the R-matrix to filter and then truncate.
+            tmat = np.zeros(
+                (self.spw_Nfreqs, self.spw_Nfreqs + np.sum(fext)), dtype=complex
+            )
+            tmat[:, fext[0] : fext[0] + self.spw_Nfreqs] = np.identity(
+                self.spw_Nfreqs, dtype=complex
+            )
             # form R matrix
-            if self.data_weighting == 'identity':
+            if self.data_weighting == "identity":
                 if self.symmetric_taper:
-                    self._R[Rkey] =  sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT
+                    self._R[Rkey] = sqrtT.T * sqrtY.T * self.I(key) * sqrtY * sqrtT
                 else:
-                    self._R[Rkey] =  sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.I(key) * sqrtY)
+                    self._R[Rkey] = sqrtT.T**2.0 * np.dot(
+                        tmat, sqrtY.T * self.I(key) * sqrtY
+                    )
 
-            elif self.data_weighting == 'iC':
+            elif self.data_weighting == "iC":
                 if self.symmetric_taper:
                     self._R[Rkey] = sqrtT.T * sqrtY.T * self.iC(key) * sqrtY * sqrtT
                 else:
-                    self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, sqrtY.T * self.iC(key) * sqrtY )
+                    self._R[Rkey] = sqrtT.T**2.0 * np.dot(
+                        tmat, sqrtY.T * self.iC(key) * sqrtY
+                    )
 
-            elif self.data_weighting == 'dayenu':
+            elif self.data_weighting == "dayenu":
                 r_param_key = (self.data_weighting,) + key
                 if r_param_key not in self.r_params:
-                    raise ValueError("r_param not set for %s!"%str(r_param_key))
+                    raise ValueError("r_param not set for %s!" % str(r_param_key))
                 r_params = self.r_params[r_param_key]
-                if 'filter_centers' not in r_params or\
-                   'filter_half_widths' not in r_params or\
-                   'filter_factors' not in r_params:
-                       raise ValueError("filtering parameters not specified!")
-                #This line retrieves a the psuedo-inverse of a lazy covariance
-                #matrix given by dspec.dayenu_mat_inv.
+                if (
+                    "filter_centers" not in r_params
+                    or "filter_half_widths" not in r_params
+                    or "filter_factors" not in r_params
+                ):
+                    raise ValueError("filtering parameters not specified!")
+                # This line retrieves a the psuedo-inverse of a lazy covariance
+                # matrix given by dspec.dayenu_mat_inv.
                 # Note that we multiply sqrtY inside of the pinv
-                #to apply flagging weights before taking psuedo inverse.
+                # to apply flagging weights before taking psuedo inverse.
                 if self.symmetric_taper:
-                    self._R[Rkey] = sqrtT.T * np.linalg.pinv(sqrtY.T * \
-                    dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]],
-                                        filter_centers=r_params['filter_centers'],
-                                        filter_half_widths=r_params['filter_half_widths'],
-                                        filter_factors=r_params['filter_factors']) * sqrtY) * sqrtT
+                    self._R[Rkey] = (
+                        sqrtT.T
+                        * np.linalg.pinv(
+                            sqrtY.T
+                            * dspec.dayenu_mat_inv(
+                                x=self.freqs[
+                                    self.spw_range[0] - fext[0] : self.spw_range[1]
+                                    + fext[1]
+                                ],
+                                filter_centers=r_params["filter_centers"],
+                                filter_half_widths=r_params["filter_half_widths"],
+                                filter_factors=r_params["filter_factors"],
+                            )
+                            * sqrtY
+                        )
+                        * sqrtT
+                    )
                 else:
-                    self._R[Rkey] = sqrtT.T ** 2. * np.dot(tmat, np.linalg.pinv(sqrtY.T * \
-                    dspec.dayenu_mat_inv(x=self.freqs[self.spw_range[0]-fext[0]:self.spw_range[1]+fext[1]],
-                                        filter_centers=r_params['filter_centers'],
-                                        filter_half_widths=r_params['filter_half_widths'],
-                                        filter_factors=r_params['filter_factors']) * sqrtY))
+                    self._R[Rkey] = sqrtT.T**2.0 * np.dot(
+                        tmat,
+                        np.linalg.pinv(
+                            sqrtY.T
+                            * dspec.dayenu_mat_inv(
+                                x=self.freqs[
+                                    self.spw_range[0] - fext[0] : self.spw_range[1]
+                                    + fext[1]
+                                ],
+                                filter_centers=r_params["filter_centers"],
+                                filter_half_widths=r_params["filter_half_widths"],
+                                filter_factors=r_params["filter_factors"],
+                            )
+                            * sqrtY
+                        ),
+                    )
 
         return self._R[Rkey]
 
@@ -1029,12 +1219,14 @@ class PSpecData:
         use_taper : bool,
             do you want to use a symmetric taper? True or False?
         """
-        if use_symmetric_taper and (self.filter_extension[0] > 0 or self.filter_extension[1] > 0):
-            raise ValueError("You cannot use a symmetric taper when there are nonzero filter extensions.")
+        if use_symmetric_taper and (
+            self.filter_extension[0] > 0 or self.filter_extension[1] > 0
+        ):
+            raise ValueError(
+                "You cannot use a symmetric taper when there are nonzero filter extensions."
+            )
         else:
             self.symmetric_taper = use_symmetric_taper
-
-
 
     def set_filter_extension(self, filter_extension):
         """
@@ -1047,22 +1239,40 @@ class PSpecData:
             filter will be applied to data.
             filter_extensions will be clipped to not extend beyond data range.
         """
-        if self.symmetric_taper and not filter_extension[0] == 0 and not filter_extension[1]==0:
-            raise_warning("You cannot set filter extensions greater then zero when symmetric_taper==True! Setting symmetric_taper==False!")
+        if (
+            self.symmetric_taper
+            and not filter_extension[0] == 0
+            and not filter_extension[1] == 0
+        ):
+            raise_warning(
+                "You cannot set filter extensions greater then zero when symmetric_taper==True! Setting symmetric_taper==False!"
+            )
             self.symmetric_taper = False
-        assert isinstance(filter_extension, (list, tuple)), "filter_extension must a tuple or list"
+        assert isinstance(filter_extension, (list, tuple)), (
+            "filter_extension must a tuple or list"
+        )
         assert len(filter_extension) == 2, "filter extension must be length 2"
-        assert isinstance(filter_extension[0], int) and\
-               isinstance(filter_extension[1], int) and \
-               filter_extension[0] >= 0 and\
-               filter_extension[1] >=0, "filter extension must contain only positive integers"
-        filter_extension=list(filter_extension)
+        assert (
+            isinstance(filter_extension[0], int)
+            and isinstance(filter_extension[1], int)
+            and filter_extension[0] >= 0
+            and filter_extension[1] >= 0
+        ), "filter extension must contain only positive integers"
+        filter_extension = list(filter_extension)
         if filter_extension[0] > self.spw_range[0]:
-            warnings.warn("filter_extension[0] exceeds data spw_range. Defaulting to spw_range[0]!")
+            warnings.warn(
+                "filter_extension[0] exceeds data spw_range. Defaulting to spw_range[0]!"
+            )
         if filter_extension[1] > self.Nfreqs - self.spw_range[1]:
-            warnings.warn("filter_extension[1] exceeds channels between spw_range[1] and Nfreqs. Defaulting to Nfreqs-spw_range[1]!")
-        filter_extension[0] = np.min([self.spw_range[0], filter_extension[0]])#clip extension to not extend beyond data range
-        filter_extension[1] = np.min([self.Nfreqs - self.spw_range[1], filter_extension[1]])#clip extension to not extend beyond data range
+            warnings.warn(
+                "filter_extension[1] exceeds channels between spw_range[1] and Nfreqs. Defaulting to Nfreqs-spw_range[1]!"
+            )
+        filter_extension[0] = np.min(
+            [self.spw_range[0], filter_extension[0]]
+        )  # clip extension to not extend beyond data range
+        filter_extension[1] = np.min(
+            [self.Nfreqs - self.spw_range[1], filter_extension[1]]
+        )  # clip extension to not extend beyond data range
         self.filter_extension = tuple(filter_extension)
 
     def set_weighting(self, data_weighting):
@@ -1134,10 +1344,12 @@ class PSpecData:
             Number of delay bins. Default: None, sets number of delay
             bins equal to the number of frequency channels in the spw.
         """
-        assert isinstance(spw_range, tuple), \
+        assert isinstance(spw_range, tuple), (
             "spw_range must be fed as a len-2 integer tuple"
-        assert isinstance(spw_range[0], (int, np.integer)), \
+        )
+        assert isinstance(spw_range[0], (int, np.integer)), (
             "spw_range must be fed as len-2 integer tuple"
+        )
         self.spw_range = spw_range
         self.spw_Nfreqs = spw_range[1] - spw_range[0]
         self.set_Ndlys(ndlys=ndlys)
@@ -1158,15 +1370,23 @@ class PSpecData:
         else:
             # Check that one is not trying to estimate more delay channels than there are frequencies
             if self.spw_Nfreqs < ndlys:
-                raise ValueError("Cannot estimate more delays than there are frequency channels")
+                raise ValueError(
+                    "Cannot estimate more delays than there are frequency channels"
+                )
             self.spw_Ndlys = ndlys
 
         # Set the lru-cached get_Q_alt function, with a maxsize of Ndlys
         self._get_qalt_cached = lru_cache(maxsize=int(self.spw_Ndlys))(utils.get_Q_alt)
 
-
-    def cov_q_hat(self, key1, key2, model='empirical', exact_norm=False, pol=False,
-                  time_indices=None):
+    def cov_q_hat(
+        self,
+        key1,
+        key2,
+        model="empirical",
+        exact_norm=False,
+        pol=False,
+        time_indices=None,
+    ):
         r"""
         Compute the un-normalized covariance matrix for q_hat for a given pair
         of visibility vectors. Returns the following matrix:
@@ -1223,32 +1443,45 @@ class PSpecData:
             time_indices = [time_indices]
         if not isinstance(time_indices, list):
             raise ValueError("time_indices must be an integer or list of integers.")
-        if isinstance(key1,list):
+        if isinstance(key1, list):
             assert isinstance(key2, list), "key1 is a list, key2 must be a list"
             assert len(key2) == len(key1), "key1 length must equal key2 length"
-        if isinstance(key2,list):
+        if isinstance(key2, list):
             assert isinstance(key1, list), "key2 is a list, key1 must be a list"
-        #check time_indices
+        # check time_indices
         for tind in time_indices:
             if not (tind >= 0 and tind <= self.Ntimes):
                 raise ValueError("Invalid time index provided.")
 
-        if not isinstance(key1,list):
+        if not isinstance(key1, list):
             key1 = [key1]
-        if not isinstance(key2,list):
+        if not isinstance(key2, list):
             key2 = [key2]
 
-        output = np.zeros((len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
+        output = np.zeros(
+            (len(time_indices), self.spw_Ndlys, self.spw_Ndlys), dtype=complex
+        )
         for k1, k2 in zip(key1, key2):
-            if model == 'dsets':
-                output+=1./np.asarray([self.get_unnormed_V(k1, k2, model=model,
-                                  exact_norm=exact_norm, pol=pol, time_index=t)\
-                                  for t in time_indices])
+            if model == "dsets":
+                output += 1.0 / np.asarray(
+                    [
+                        self.get_unnormed_V(
+                            k1,
+                            k2,
+                            model=model,
+                            exact_norm=exact_norm,
+                            pol=pol,
+                            time_index=t,
+                        )
+                        for t in time_indices
+                    ]
+                )
 
-            elif model == 'empirical':
-                cm = self.get_unnormed_V(k1, k2, model=model,
-                                  exact_norm=exact_norm, pol=pol)
-                output+=1./np.asarray([cm for m in range(len(time_indices))])
+            elif model == "empirical":
+                cm = self.get_unnormed_V(
+                    k1, k2, model=model, exact_norm=exact_norm, pol=pol
+                )
+                output += 1.0 / np.asarray([cm for m in range(len(time_indices))])
 
         return float(len(key1)) / output
 
@@ -1318,7 +1551,7 @@ class PSpecData:
                 R1 += self.R(_key)
         else:
             Rx1 = np.dot(self.R(key1), self.x(key1))
-            R1  = self.R(key1)
+            R1 = self.R(key1)
 
         # Calculate R x_2
         if isinstance(key2, list):
@@ -1327,21 +1560,29 @@ class PSpecData:
                 R2 += self.R(_key)
         else:
             Rx2 = np.dot(self.R(key2), self.x(key2))
-            R2  = self.R(key2)
+            R2 = self.R(key2)
 
         # The set of operations for exact_norm == True are drawn from Equations
         # 11(a) and 11(b) from HERA memo #44. We are incorporating the
         # multiplicatives to the exponentials, and sticking to quantities in
         # their physical units.
 
-        if exact_norm and allow_fft: #exact_norm approach is meant to enable non-uniform binnning as well, where FFT is not
-            #applicable. As of now, we are using uniform binning.
-            raise NotImplementedError("Exact normalization does not support FFT approach at present")
+        if (
+            exact_norm and allow_fft
+        ):  # exact_norm approach is meant to enable non-uniform binnning as well, where FFT is not
+            # applicable. As of now, we are using uniform binning.
+            raise NotImplementedError(
+                "Exact normalization does not support FFT approach at present"
+            )
 
-        elif exact_norm and not(allow_fft):
-            q          = []
-            del_tau    = np.median(np.diff(self.delays()))*1e-9  #Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
-            integral_beam = self.get_integral_beam(pol) #Integral of beam in Eq.11(a) (HERA memo #44)
+        elif exact_norm and not (allow_fft):
+            q = []
+            del_tau = (
+                np.median(np.diff(self.delays())) * 1e-9
+            )  # Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
+            integral_beam = self.get_integral_beam(
+                pol
+            )  # Integral of beam in Eq.11(a) (HERA memo #44)
 
             for i in range(self.spw_Ndlys):
                 # Ideally, del_tau and integral_beam should be part of get_Q. We use them here to
@@ -1350,23 +1591,26 @@ class PSpecData:
                 QRx2 = np.dot(Q, Rx2)
 
                 # Square and sum over columns
-                qi = 0.5 * np.einsum('i...,i...->...', Rx1.conj(), QRx2)
+                qi = 0.5 * np.einsum("i...,i...->...", Rx1.conj(), QRx2)
                 q.append(qi)
 
-            q = np.asarray(q) #(Ndlys X Ntime)
+            q = np.asarray(q)  # (Ndlys X Ntime)
             return q
 
         # use FFT if possible and allowed
         elif allow_fft and (self.spw_Nfreqs == self.spw_Ndlys):
             _Rx1 = np.fft.fft(Rx1, axis=0)
             _Rx2 = np.fft.fft(Rx2, axis=0)
-            return 0.5 * np.fft.fftshift(_Rx1, axes=0).conj() \
-                       * np.fft.fftshift(_Rx2, axes=0)
+            return (
+                0.5
+                * np.fft.fftshift(_Rx1, axes=0).conj()
+                * np.fft.fftshift(_Rx2, axes=0)
+            )
 
         else:
             Q = self.get_Q_alt_tensor()
             QRx2 = np.dot(Q, Rx2)
-            q = np.einsum('i...,ji...->j...', Rx1.conj(), QRx2)
+            q = np.einsum("i...,ji...->j...", Rx1.conj(), QRx2)
 
             return 0.5 * np.array(q)
 
@@ -1404,45 +1648,47 @@ class PSpecData:
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
         if self.spw_Ndlys == None:
-            raise ValueError("Number of delay bins should have been set"
-                             "by now! Cannot be equal to None")
+            raise ValueError(
+                "Number of delay bins should have been set"
+                "by now! Cannot be equal to None"
+            )
 
         G = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
 
         iR1Q1, iR2Q2 = {}, {}
-        if (exact_norm):
-            integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays()))*1e-9
         if exact_norm:
-            qnorm =  del_tau * integral_beam
+            integral_beam = self.get_integral_beam(pol)
+            del_tau = np.median(np.diff(self.delays())) * 1e-9
+        if exact_norm:
+            qnorm = del_tau * integral_beam
         else:
-            qnorm = 1.
+            qnorm = 1.0
         for ch in range(self.spw_Ndlys):
-            #G is given by Tr[E^\alpha C,\beta]
-            #where E^\alpha = R_1^\dagger Q^\apha R_2
-            #C,\beta = Q2 and Q^\alpha = Q1
-            #Note that we conjugate transpose R
-            #because we want to E^\alpha to
-            #give the absolute value squared of z = m_\alpha \dot R @ x
-            #where m_alpha takes the FT from frequency to the \alpha fourier mode.
-            #Q is essentially m_\alpha^\dagger m
+            # G is given by Tr[E^\alpha C,\beta]
+            # where E^\alpha = R_1^\dagger Q^\apha R_2
+            # C,\beta = Q2 and Q^\alpha = Q1
+            # Note that we conjugate transpose R
+            # because we want to E^\alpha to
+            # give the absolute value squared of z = m_\alpha \dot R @ x
+            # where m_alpha takes the FT from frequency to the \alpha fourier mode.
+            # Q is essentially m_\alpha^\dagger m
             # so we need to sandwhich it between R_1^\dagger and R_2
             Q1 = self.get_Q_alt(ch) * qnorm
             Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
-            iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q
-            iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
+            iR1Q1[ch] = np.dot(np.conj(R1).T, Q1)  # R_1 Q
+            iR2Q2[ch] = np.dot(R2, Q2)  # R_2 Q
         for i in range(self.spw_Ndlys):
             for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
-                G[i,j] = np.einsum('ab,ba', iR1Q1[i], iR2Q2[j])
+                G[i, j] = np.einsum("ab,ba", iR1Q1[i], iR2Q2[j])
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(G) == 0:
             G = np.eye(self.spw_Ndlys)
 
-        return G / 2.
+        return G / 2.0
 
     def get_H(self, key1, key2, sampling=False, exact_norm=False, pol=False):
         r"""
@@ -1503,55 +1749,57 @@ class PSpecData:
             Dimensions (Nfreqs, Nfreqs).
         """
         if self.spw_Ndlys == None:
-            raise ValueError("Number of delay bins should have been set"
-                             "by now! Cannot be equal to None.")
+            raise ValueError(
+                "Number of delay bins should have been set"
+                "by now! Cannot be equal to None."
+            )
 
         H = np.zeros((self.spw_Ndlys, self.spw_Ndlys), dtype=complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
         if not sampling:
-            nfreq=np.sum(self.filter_extension) + self.spw_Nfreqs
+            nfreq = np.sum(self.filter_extension) + self.spw_Nfreqs
             sinc_matrix = np.zeros((nfreq, nfreq))
             for i in range(nfreq):
                 for j in range(nfreq):
-                    sinc_matrix[i,j] = float(i - j)
+                    sinc_matrix[i, j] = float(i - j)
             sinc_matrix = np.sinc(sinc_matrix / float(nfreq))
 
         iR1Q1, iR2Q2 = {}, {}
-        if (exact_norm):
+        if exact_norm:
             integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays()))*1e-9
+            del_tau = np.median(np.diff(self.delays())) * 1e-9
         if exact_norm:
             qnorm = del_tau * integral_beam
         else:
-            qnorm = 1.
+            qnorm = 1.0
         for ch in range(self.spw_Ndlys):
             Q1 = self.get_Q_alt(ch) * qnorm
             Q2 = self.get_Q_alt(ch, include_extension=True) * qnorm
             if not sampling:
                 Q2 *= sinc_matrix
-            #H is given by Tr([E^\alpha C,\beta])
-            #where E^\alpha = R_1^\dagger Q^\apha R_2
-            #C,\beta = Q2 and Q^\alpha = Q1
-            #Note that we conjugate transpose R
-            #because we want to E^\alpha to
-            #give the absolute value squared of z = m_\alpha \dot R @ x
-            #where m_alpha takes the FT from frequency to the \alpha fourier mode.
-            #Q is essentially m_\alpha^\dagger m
+            # H is given by Tr([E^\alpha C,\beta])
+            # where E^\alpha = R_1^\dagger Q^\apha R_2
+            # C,\beta = Q2 and Q^\alpha = Q1
+            # Note that we conjugate transpose R
+            # because we want to E^\alpha to
+            # give the absolute value squared of z = m_\alpha \dot R @ x
+            # where m_alpha takes the FT from frequency to the \alpha fourier mode.
+            # Q is essentially m_\alpha^\dagger m
             # so we need to sandwhich it between R_1^\dagger and R_2
-            iR1Q1[ch] = np.dot(np.conj(R1).T, Q1) # R_1 Q_alt
-            iR2Q2[ch] = np.dot(R2, Q2) # R_2 Q
+            iR1Q1[ch] = np.dot(np.conj(R1).T, Q1)  # R_1 Q_alt
+            iR2Q2[ch] = np.dot(R2, Q2)  # R_2 Q
 
-        for i in range(self.spw_Ndlys): # this loop goes as nchan^4
+        for i in range(self.spw_Ndlys):  # this loop goes as nchan^4
             for j in range(self.spw_Ndlys):
                 # tr(R_2 Q_i R_1 Q_j)
-                H[i,j] = np.einsum('ab,ba', iR1Q1[i], iR2Q2[j])
+                H[i, j] = np.einsum("ab,ba", iR1Q1[i], iR2Q2[j])
 
         # check if all zeros, in which case turn into identity
         if np.count_nonzero(H) == 0:
             H = np.eye(self.spw_Ndlys)
 
-        return H / 2.
+        return H / 2.0
 
     def get_unnormed_E(self, key1, key2, exact_norm=False, pol=False):
         """
@@ -1595,26 +1843,35 @@ class PSpecData:
 
         """
         if self.spw_Ndlys == None:
-            raise ValueError("Number of delay bins should have been set"
-                             "by now! Cannot be equal to None")
+            raise ValueError(
+                "Number of delay bins should have been set"
+                "by now! Cannot be equal to None"
+            )
         nfreq = self.spw_Nfreqs + np.sum(self.filter_extension)
-        E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq),
-                               dtype=complex)
+        E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq), dtype=complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
-        if (exact_norm):
+        if exact_norm:
             integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays()))*1e-9
+            del_tau = np.median(np.diff(self.delays())) * 1e-9
         for dly_idx in range(self.spw_Ndlys):
-            if exact_norm: QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
-            else: QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
+            if exact_norm:
+                QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
+            else:
+                QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
             E_matrices[dly_idx] = np.dot(np.conj(R1).T, QR2)
 
         return 0.5 * E_matrices
 
-
-    def get_unnormed_V(self, key1, key2, model='empirical', exact_norm=False,
-                       pol=False, time_index=None):
+    def get_unnormed_V(
+        self,
+        key1,
+        key2,
+        model="empirical",
+        exact_norm=False,
+        pol=False,
+        time_index=None,
+    ):
         r"""
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
         vectors). If the data were real and x_1 = x_2, the expression would be
@@ -1707,22 +1964,32 @@ class PSpecData:
         E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
         C1 = self.C_model(key1, model=model, time_index=time_index)
         C2 = self.C_model(key2, model=model, time_index=time_index)
-        P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False,
-                                     conj_2=False, time_index=time_index)
-        S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True,
-                                     conj_2=True, time_index=time_index)
+        P21 = self.cross_covar_model(
+            key2, key1, model=model, conj_1=False, conj_2=False, time_index=time_index
+        )
+        S21 = self.cross_covar_model(
+            key2, key1, model=model, conj_1=True, conj_2=True, time_index=time_index
+        )
 
-        E21C1 = np.dot(np.transpose(E_matrices.conj(), (0,2,1)), C1)
+        E21C1 = np.dot(np.transpose(E_matrices.conj(), (0, 2, 1)), C1)
         E12C2 = np.dot(E_matrices, C2)
-        auto_term = np.einsum('aij,bji', E12C2, E21C1)
+        auto_term = np.einsum("aij,bji", E12C2, E21C1)
         E12starS21 = np.dot(E_matrices.conj(), S21)
         E12P21 = np.dot(E_matrices, P21)
-        cross_term = np.einsum('aij,bji', E12P21, E12starS21)
+        cross_term = np.einsum("aij,bji", E12P21, E12starS21)
 
         return auto_term + cross_term
 
-    def get_analytic_covariance(self, key1, key2, M=None, exact_norm=False,
-                                pol=False, model='empirical', known_cov=None):
+    def get_analytic_covariance(
+        self,
+        key1,
+        key2,
+        M=None,
+        exact_norm=False,
+        pol=False,
+        model="empirical",
+        known_cov=None,
+    ):
         r"""
         Calculates the auto-covariance matrix for both the real and imaginary
         parts of bandpowers (i.e., the q vectors and the p vectors).
@@ -1886,35 +2153,60 @@ class PSpecData:
         # E_matrices has a shape of (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
         # using numpy.einsum_path to speed up the array products with numpy.einsum
-        einstein_path_0 =  np.einsum_path('bij, cji->bc', E_matrices, E_matrices, optimize='optimal')[0]
-        einstein_path_1 = np.einsum_path('bi, ci,i->bc', E_matrices[:,:,0], E_matrices[:,:,0],E_matrices[0,:,0], optimize='optimal')[0]
-        einstein_path_2 =  np.einsum_path('ab,cd,bd->ac', M[0], M[0], M[0], optimize='optimal')[0]
+        einstein_path_0 = np.einsum_path(
+            "bij, cji->bc", E_matrices, E_matrices, optimize="optimal"
+        )[0]
+        einstein_path_1 = np.einsum_path(
+            "bi, ci,i->bc",
+            E_matrices[:, :, 0],
+            E_matrices[:, :, 0],
+            E_matrices[0, :, 0],
+            optimize="optimal",
+        )[0]
+        einstein_path_2 = np.einsum_path(
+            "ab,cd,bd->ac", M[0], M[0], M[0], optimize="optimal"
+        )[0]
 
         # check if the covariance matrix is uniform along the time axis. If so, we just calculate the result for one timestamp and duplicate its copies
         # along the time axis.
         check_uniform_input = False
-        if model != 'foreground_dependent':
-        # When model is 'foreground_dependent', since we are processing the outer products of visibilities from different times,
-        # we are expected to have time-dependent inputs, thus check_uniform_input is always set to be False here.
-            C11_first = self.C_model(key1, model=model, known_cov=known_cov, time_index=0)
-            C11_last = self.C_model(key1, model=model, known_cov=known_cov, time_index=self.dsets[0].Ntimes-1)
+        if model != "foreground_dependent":
+            # When model is 'foreground_dependent', since we are processing the outer products of visibilities from different times,
+            # we are expected to have time-dependent inputs, thus check_uniform_input is always set to be False here.
+            C11_first = self.C_model(
+                key1, model=model, known_cov=known_cov, time_index=0
+            )
+            C11_last = self.C_model(
+                key1,
+                model=model,
+                known_cov=known_cov,
+                time_index=self.dsets[0].Ntimes - 1,
+            )
             if np.isclose(C11_first, C11_last).all():
                 check_uniform_input = True
 
         cov_q_real, cov_q_imag, cov_p_real, cov_p_imag = [], [], [], []
         for time_index in range(self.dsets[0].Ntimes):
-            if model in ['dsets','autos']:
+            if model in ["dsets", "autos"]:
                 # calculate <q_a q_b^\dagger> - <q_a><q_b^\dagger> = tr[ E^{12,a} C^{22} E^{21,b} C^{11} ]
                 # We have used tr[A D_1 B D_2] = \sum_{ijkm} A_{ij} d_{1j} \delta_{jk} B_{km} d_{2m} \delta_{mi} = \sum_{ik} [A_{ik}*d_{1k}] * [B_{ki}*d_{2i}]
                 # to simplify the computation.
-                C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
-                C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
-                E21C11 = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11))
+                C11 = self.C_model(
+                    key1, model=model, known_cov=known_cov, time_index=time_index
+                )
+                C22 = self.C_model(
+                    key2, model=model, known_cov=known_cov, time_index=time_index
+                )
+                E21C11 = np.multiply(
+                    np.transpose(E_matrices.conj(), (0, 2, 1)), np.diag(C11)
+                )
                 E12C22 = np.multiply(E_matrices, np.diag(C22))
                 # Get q_q, q_qdagger, qdagger_qdagger
-                q_q, qdagger_qdagger = 0.+1.j*0, 0.+1.j*0
-                q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path_0)
-            elif model == 'foreground_dependent':
+                q_q, qdagger_qdagger = 0.0 + 1.0j * 0, 0.0 + 1.0j * 0
+                q_qdagger = np.einsum(
+                    "bij, cji->bc", E12C22, E21C11, optimize=einstein_path_0
+                )
+            elif model == "foreground_dependent":
                 # calculate tr[ E^{12,b} Cautos^{22} E^{21,c} Cautos^{11} +
                 # E^{12,b} Cs E^{21,c} Cautos^{11} +
                 # E^{12,b} Cautos^{22} E^{21,c} Cs ],
@@ -1923,112 +2215,264 @@ class PSpecData:
                 # we have used tr[A u u*^t B D_2] = \sum_{ijkm} A_{ij} u_j u*_k B_{km} D_{2mi} \\
                 # = \sum_{i} [ \sum_j A_{ij} u_j ] * [\sum_k u*_k B_{ki} ] * d_{2i}
                 # to simplify the computation.
-                C11_autos = self.C_model(key1, model='autos', known_cov=known_cov, time_index=time_index)
-                C22_autos = self.C_model(key2, model='autos', known_cov=known_cov, time_index=time_index)
-                E21C11_autos = np.multiply(np.transpose(E_matrices.conj(), (0,2,1)), np.diag(C11_autos))
+                C11_autos = self.C_model(
+                    key1, model="autos", known_cov=known_cov, time_index=time_index
+                )
+                C22_autos = self.C_model(
+                    key2, model="autos", known_cov=known_cov, time_index=time_index
+                )
+                E21C11_autos = np.multiply(
+                    np.transpose(E_matrices.conj(), (0, 2, 1)), np.diag(C11_autos)
+                )
                 E12C22_autos = np.multiply(E_matrices, np.diag(C22_autos))
                 # Get q_q, q_qdagger, qdagger_qdagger
-                q_q, qdagger_qdagger = 0.+1.j*0, 0.+1.j*0
-                q_qdagger = np.einsum('bij, cji->bc', E12C22_autos, E21C11_autos, optimize=einstein_path_0)
-                x1 = self.w(key1)[:,time_index] * self.x(key1)[:,time_index]
-                x2 = self.w(key2)[:,time_index] * self.x(key2)[:,time_index]
+                q_q, qdagger_qdagger = 0.0 + 1.0j * 0, 0.0 + 1.0j * 0
+                q_qdagger = np.einsum(
+                    "bij, cji->bc", E12C22_autos, E21C11_autos, optimize=einstein_path_0
+                )
+                x1 = self.w(key1)[:, time_index] * self.x(key1)[:, time_index]
+                x2 = self.w(key2)[:, time_index] * self.x(key2)[:, time_index]
                 E12_x1 = np.dot(E_matrices, x1)
                 E12_x2 = np.dot(E_matrices, x2)
                 x2star_E21 = E12_x2.conj()
                 x1star_E21 = E12_x1.conj()
-                x1star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), x1.conj())
-                x2star_E12 = np.dot(np.transpose(E_matrices,(0,2,1)), x2.conj())
+                x1star_E12 = np.dot(np.transpose(E_matrices, (0, 2, 1)), x1.conj())
+                x2star_E12 = np.dot(np.transpose(E_matrices, (0, 2, 1)), x2.conj())
                 E21_x1 = x1star_E12.conj()
                 E21_x2 = x2star_E12.conj()
-                SN_cov = np.einsum('bi,ci,i->bc', E12_x1, x2star_E21, np.diag(C11_autos), optimize=einstein_path_1)/2. + np.einsum('bi,ci,i->bc', E12_x2, x1star_E21, np.diag(C11_autos), optimize=einstein_path_1)/2.\
-                            + np.einsum('bi,ci,i->bc', x2star_E12, E21_x1, np.diag(C22_autos), optimize=einstein_path_1)/2. + np.einsum('bi,ci,i->bc', x1star_E12, E21_x2, np.diag(C22_autos), optimize=einstein_path_1)/2.
+                SN_cov = (
+                    np.einsum(
+                        "bi,ci,i->bc",
+                        E12_x1,
+                        x2star_E21,
+                        np.diag(C11_autos),
+                        optimize=einstein_path_1,
+                    )
+                    / 2.0
+                    + np.einsum(
+                        "bi,ci,i->bc",
+                        E12_x2,
+                        x1star_E21,
+                        np.diag(C11_autos),
+                        optimize=einstein_path_1,
+                    )
+                    / 2.0
+                    + np.einsum(
+                        "bi,ci,i->bc",
+                        x2star_E12,
+                        E21_x1,
+                        np.diag(C22_autos),
+                        optimize=einstein_path_1,
+                    )
+                    / 2.0
+                    + np.einsum(
+                        "bi,ci,i->bc",
+                        x1star_E12,
+                        E21_x2,
+                        np.diag(C22_autos),
+                        optimize=einstein_path_1,
+                    )
+                    / 2.0
+                )
                 # Apply zero clipping on the columns and rows containing negative diagonal elements
-                SN_cov[np.real(np.diag(SN_cov))<=0., :] = 0. + 1.j*0
-                SN_cov[:, np.real(np.diag(SN_cov))<=0.,] = 0. + 1.j*0
+                SN_cov[np.real(np.diag(SN_cov)) <= 0.0, :] = 0.0 + 1.0j * 0
+                SN_cov[:, np.real(np.diag(SN_cov)) <= 0.0] = 0.0 + 1.0j * 0
                 q_qdagger += SN_cov
             else:
                 # for general case (which is the slowest without simplification)
-                C11 = self.C_model(key1, model=model, known_cov=known_cov, time_index=time_index)
-                C22 = self.C_model(key2, model=model, known_cov=known_cov, time_index=time_index)
-                C21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)
-                C12 = self.cross_covar_model(key1, key2, model=model, conj_1=False, conj_2=True, known_cov=known_cov, time_index=time_index)
-                P11 = self.cross_covar_model(key1, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
-                S11 = self.cross_covar_model(key1, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
-                P22 = self.cross_covar_model(key2, key2, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
-                S22 = self.cross_covar_model(key2, key2, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
-                P21 = self.cross_covar_model(key2, key1, model=model, conj_1=False, conj_2=False, known_cov=known_cov, time_index=time_index)
-                S21 = self.cross_covar_model(key2, key1, model=model, conj_1=True, conj_2=True, known_cov=known_cov, time_index=time_index)
+                C11 = self.C_model(
+                    key1, model=model, known_cov=known_cov, time_index=time_index
+                )
+                C22 = self.C_model(
+                    key2, model=model, known_cov=known_cov, time_index=time_index
+                )
+                C21 = self.cross_covar_model(
+                    key2,
+                    key1,
+                    model=model,
+                    conj_1=False,
+                    conj_2=True,
+                    known_cov=known_cov,
+                    time_index=time_index,
+                )
+                C12 = self.cross_covar_model(
+                    key1,
+                    key2,
+                    model=model,
+                    conj_1=False,
+                    conj_2=True,
+                    known_cov=known_cov,
+                    time_index=time_index,
+                )
+                P11 = self.cross_covar_model(
+                    key1,
+                    key1,
+                    model=model,
+                    conj_1=False,
+                    conj_2=False,
+                    known_cov=known_cov,
+                    time_index=time_index,
+                )
+                S11 = self.cross_covar_model(
+                    key1,
+                    key1,
+                    model=model,
+                    conj_1=True,
+                    conj_2=True,
+                    known_cov=known_cov,
+                    time_index=time_index,
+                )
+                P22 = self.cross_covar_model(
+                    key2,
+                    key2,
+                    model=model,
+                    conj_1=False,
+                    conj_2=False,
+                    known_cov=known_cov,
+                    time_index=time_index,
+                )
+                S22 = self.cross_covar_model(
+                    key2,
+                    key2,
+                    model=model,
+                    conj_1=True,
+                    conj_2=True,
+                    known_cov=known_cov,
+                    time_index=time_index,
+                )
+                P21 = self.cross_covar_model(
+                    key2,
+                    key1,
+                    model=model,
+                    conj_1=False,
+                    conj_2=False,
+                    known_cov=known_cov,
+                    time_index=time_index,
+                )
+                S21 = self.cross_covar_model(
+                    key2,
+                    key1,
+                    model=model,
+                    conj_1=True,
+                    conj_2=True,
+                    known_cov=known_cov,
+                    time_index=time_index,
+                )
                 # Get q_q, q_qdagger, qdagger_qdagger
-                if np.isclose(P22, 0).all() or np.isclose(S11,0).all():
-                    q_q = 0.+1.j*0
+                if np.isclose(P22, 0).all() or np.isclose(S11, 0).all():
+                    q_q = 0.0 + 1.0j * 0
                 else:
                     E12P22 = np.matmul(E_matrices, P22)
-                    E21starS11 = np.matmul(np.transpose(E_matrices, (0,2,1)), S11)
-                    q_q = np.einsum('bij, cji->bc', E12P22, E21starS11, optimize=einstein_path_0)
+                    E21starS11 = np.matmul(np.transpose(E_matrices, (0, 2, 1)), S11)
+                    q_q = np.einsum(
+                        "bij, cji->bc", E12P22, E21starS11, optimize=einstein_path_0
+                    )
                 if np.isclose(C21, 0).all():
-                    q_q += 0.+1.j*0
+                    q_q += 0.0 + 1.0j * 0
                 else:
                     E12C21 = np.matmul(E_matrices, C21)
-                    q_q += np.einsum('bij, cji->bc', E12C21, E12C21, optimize=einstein_path_0)
-                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C11)
+                    q_q += np.einsum(
+                        "bij, cji->bc", E12C21, E12C21, optimize=einstein_path_0
+                    )
+                E21C11 = np.matmul(np.transpose(E_matrices.conj(), (0, 2, 1)), C11)
                 E12C22 = np.matmul(E_matrices, C22)
-                q_qdagger = np.einsum('bij, cji->bc', E12C22, E21C11, optimize=einstein_path_0)
-                if np.isclose(P21, 0).all() or np.isclose(S21,0).all():
-                    q_qdagger += 0.+1.j*0
+                q_qdagger = np.einsum(
+                    "bij, cji->bc", E12C22, E21C11, optimize=einstein_path_0
+                )
+                if np.isclose(P21, 0).all() or np.isclose(S21, 0).all():
+                    q_qdagger += 0.0 + 1.0j * 0
                 else:
                     E12P21 = np.matmul(E_matrices, P21)
                     E12starS21 = np.matmul(E_matrices.conj(), S21)
-                    q_qdagger += np.einsum('bij, cji->bc', E12P21, E12starS21, optimize=einstein_path_0)
+                    q_qdagger += np.einsum(
+                        "bij, cji->bc", E12P21, E12starS21, optimize=einstein_path_0
+                    )
                 if np.isclose(C12, 0).all():
-                    qdagger_qdagger = 0.+1.j*0
+                    qdagger_qdagger = 0.0 + 1.0j * 0
                 else:
-                    E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), C12)
-                    qdagger_qdagger = np.einsum('bij, cji->bc', E21C12, E21C12, optimize=einstein_path_0)
-                if np.isclose(P11, 0).all() or np.isclose(S22,0).all():
-                    qdagger_qdagger += 0.+1.j*0
+                    E21C12 = np.matmul(np.transpose(E_matrices.conj(), (0, 2, 1)), C12)
+                    qdagger_qdagger = np.einsum(
+                        "bij, cji->bc", E21C12, E21C12, optimize=einstein_path_0
+                    )
+                if np.isclose(P11, 0).all() or np.isclose(S22, 0).all():
+                    qdagger_qdagger += 0.0 + 1.0j * 0
                 else:
-                    E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0,2,1)), P11)
+                    E21P11 = np.matmul(np.transpose(E_matrices.conj(), (0, 2, 1)), P11)
                     E12starS22 = np.matmul(E_matrices.conj(), S22)
-                    qdagger_qdagger += np.einsum('bij, cji->bc', E21P11, E12starS22, optimize=einstein_path_0)
+                    qdagger_qdagger += np.einsum(
+                        "bij, cji->bc", E21P11, E12starS22, optimize=einstein_path_0
+                    )
 
-            cov_q_real_temp = (q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj() ) / 4.
-            cov_q_imag_temp = -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj() ) / 4.
+            cov_q_real_temp = (
+                q_q + qdagger_qdagger + q_qdagger + q_qdagger.conj()
+            ) / 4.0
+            cov_q_imag_temp = (
+                -(q_q + qdagger_qdagger - q_qdagger - q_qdagger.conj()) / 4.0
+            )
 
             m = M[time_index]
             # calculate \sum_{bd} [ M_{ab} M_{cd} (<q_b q_d> - <q_b><q_d>) ]
             if np.isclose([q_q], 0).all():
-                MMq_q = np.zeros((E_matrices.shape[0],E_matrices.shape[0])).astype(np.complex128)
+                MMq_q = np.zeros((E_matrices.shape[0], E_matrices.shape[0])).astype(
+                    np.complex128
+                )
             else:
-                assert np.shape(q_q) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
-                MMq_q = np.einsum('ab,cd,bd->ac', m, m, q_q, optimize=einstein_path_2)
+                assert np.shape(q_q) == np.shape(m), (
+                    "covariance matrix and normalization matrix has different shapes."
+                )
+                MMq_q = np.einsum("ab,cd,bd->ac", m, m, q_q, optimize=einstein_path_2)
             # calculate \sum_{bd} [ M_{ab} M_{cd}^* (<q_b q_d^\dagger> - <q_b><q_d^\dagger>) ]
             # and \sum_{bd} [ M_{ab}^* M_{cd} (<q_b^\dagger q_d> - <q_b^\dagger><q_d>) ]
             if np.isclose([q_qdagger], 0).all():
-                MM_q_qdagger = 0.+1.j*0
-                M_Mq_qdagger_ = 0.+1.j*0
+                MM_q_qdagger = 0.0 + 1.0j * 0
+                M_Mq_qdagger_ = 0.0 + 1.0j * 0
             else:
-                assert np.shape(q_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
-                MM_q_qdagger = np.einsum('ab,cd,bd->ac', m, m.conj(), q_qdagger, optimize=einstein_path_2)
-                M_Mq_qdagger_ = np.einsum('ab,cd,bd->ac', m.conj(), m, q_qdagger.conj(), optimize=einstein_path_2)
+                assert np.shape(q_qdagger) == np.shape(m), (
+                    "covariance matrix and normalization matrix has different shapes."
+                )
+                MM_q_qdagger = np.einsum(
+                    "ab,cd,bd->ac", m, m.conj(), q_qdagger, optimize=einstein_path_2
+                )
+                M_Mq_qdagger_ = np.einsum(
+                    "ab,cd,bd->ac",
+                    m.conj(),
+                    m,
+                    q_qdagger.conj(),
+                    optimize=einstein_path_2,
+                )
             # calculate \sum_{bd} [ M_{ab}^* M_{cd}^* (<q_b^\dagger q_d^\dagger> - <q_b^\dagger><q_d^\dagger>) ]
             if np.isclose([qdagger_qdagger], 0).all():
-                M_M_qdagger_qdagger = 0.+1.j*0
+                M_M_qdagger_qdagger = 0.0 + 1.0j * 0
             else:
-                assert np.shape(qdagger_qdagger) == np.shape(m), "covariance matrix and normalization matrix has different shapes."
-                M_M_qdagger_qdagger = np.einsum('ab,cd,bd->ac', m.conj(), m.conj(), qdagger_qdagger, optimize=einstein_path_2)
+                assert np.shape(qdagger_qdagger) == np.shape(m), (
+                    "covariance matrix and normalization matrix has different shapes."
+                )
+                M_M_qdagger_qdagger = np.einsum(
+                    "ab,cd,bd->ac",
+                    m.conj(),
+                    m.conj(),
+                    qdagger_qdagger,
+                    optimize=einstein_path_2,
+                )
 
-            cov_p_real_temp = ( MMq_q + MM_q_qdagger + M_Mq_qdagger_ + M_M_qdagger_qdagger)/ 4.
-            cov_p_imag_temp = -( MMq_q - MM_q_qdagger - M_Mq_qdagger_ + M_M_qdagger_qdagger)/ 4.
+            cov_p_real_temp = (
+                MMq_q + MM_q_qdagger + M_Mq_qdagger_ + M_M_qdagger_qdagger
+            ) / 4.0
+            cov_p_imag_temp = (
+                -(MMq_q - MM_q_qdagger - M_Mq_qdagger_ + M_M_qdagger_qdagger) / 4.0
+            )
             # cov_p_real_temp has a shaoe of (spw_Ndlys, spw_Ndlys)
 
             if check_uniform_input:
-            # if the covariance matrix is uniform along the time axis, we just calculate the result for one timestamp and duplicate its copies
-            # along the time axis.
-                cov_q_real.extend([cov_q_real_temp]*self.dsets[0].Ntimes)
-                cov_q_imag.extend([cov_q_imag_temp]*self.dsets[0].Ntimes)
-                cov_p_real.extend([cov_p_real_temp]*self.dsets[0].Ntimes)
-                cov_p_imag.extend([cov_p_imag_temp]*self.dsets[0].Ntimes)
-                warnings.warn("Producing time-uniform covariance matrices between bandpowers.")
+                # if the covariance matrix is uniform along the time axis, we just calculate the result for one timestamp and duplicate its copies
+                # along the time axis.
+                cov_q_real.extend([cov_q_real_temp] * self.dsets[0].Ntimes)
+                cov_q_imag.extend([cov_q_imag_temp] * self.dsets[0].Ntimes)
+                cov_p_real.extend([cov_p_real_temp] * self.dsets[0].Ntimes)
+                cov_p_imag.extend([cov_p_imag_temp] * self.dsets[0].Ntimes)
+                warnings.warn(
+                    "Producing time-uniform covariance matrices between bandpowers."
+                )
                 break
             else:
                 cov_q_real.append(cov_q_real_temp)
@@ -2044,8 +2488,7 @@ class PSpecData:
 
         return cov_q_real, cov_q_imag, cov_p_real, cov_p_imag
 
-
-    def get_MW(self, G, H, mode='I', band_covar=None, exact_norm=False, rcond=1e-15):
+    def get_MW(self, G, H, mode="I", band_covar=None, exact_norm=False, rcond=1e-15):
         r"""
         Construct the normalization matrix M and window function matrix W for
         the power spectrum estimator. These are defined through Eqs. 14-16 of
@@ -2115,33 +2558,36 @@ class PSpecData:
         #     return M, W
 
         # Check that mode is supported
-        modes = ['H^-1', 'V^-1/2', 'I', 'L^-1']
-        assert (mode in modes)
+        modes = ["H^-1", "V^-1/2", "I", "L^-1"]
+        assert mode in modes
 
-        if mode != 'I' and exact_norm is True:
+        if mode != "I" and exact_norm is True:
             raise NotImplementedError("Exact norm is not supported for non-I modes")
 
         # Build M matrix according to specified mode
-        if mode == 'H^-1':
+        if mode == "H^-1":
             try:
                 M = np.linalg.inv(H)
 
             except np.linalg.LinAlgError as err:
-                if 'Singular matrix' in str(err):
+                if "Singular matrix" in str(err):
                     M = np.linalg.pinv(H, rcond=rcond)
-                    raise_warning("Warning: Window function matrix is singular "
-                                  "and cannot be inverted, so using "
-                                  " pseudoinverse instead.")
+                    raise_warning(
+                        "Warning: Window function matrix is singular "
+                        "and cannot be inverted, so using "
+                        " pseudoinverse instead."
+                    )
 
                 else:
-                    raise np.linalg.LinAlgError("Linear algebra error with H matrix "
-                                                "during MW computation.")
+                    raise np.linalg.LinAlgError(
+                        "Linear algebra error with H matrix during MW computation."
+                    )
 
             W = np.dot(M, H)
             W_norm = np.sum(W, axis=1)
             W = (W.T / W_norm).T
 
-        elif mode == 'V^-1/2':
+        elif mode == "V^-1/2":
             if np.sum(band_covar) == None:
                 raise ValueError("Covariance not supplied for V^-1/2 normalization")
             # First find the eigenvectors and eigenvalues of the unnormalizd covariance
@@ -2149,27 +2595,33 @@ class PSpecData:
             eigvals, eigvects = np.linalg.eigh(band_covar)
             nonpos_eigvals = eigvals <= 1e-20
             if (nonpos_eigvals).any():
-                raise_warning("At least one non-positive eigenvalue for the "
-                              "unnormed bandpower covariance matrix.")
+                raise_warning(
+                    "At least one non-positive eigenvalue for the "
+                    "unnormed bandpower covariance matrix."
+                )
                 # truncate them
                 eigvals = eigvals[~nonpos_eigvals]
                 eigvects = eigvects[:, ~nonpos_eigvals]
-            V_minus_half = np.dot(eigvects, np.dot(np.diag(1./np.sqrt(eigvals)), eigvects.T))
+            V_minus_half = np.dot(
+                eigvects, np.dot(np.diag(1.0 / np.sqrt(eigvals)), eigvects.T)
+            )
 
-            W_norm = np.diag(1. / np.sum(np.dot(V_minus_half, H), axis=1))
+            W_norm = np.diag(1.0 / np.sum(np.dot(V_minus_half, H), axis=1))
             M = np.dot(W_norm, V_minus_half)
             W = np.dot(M, H)
 
-        elif mode == 'I':
+        elif mode == "I":
             # This is not the M matrix as is rigorously defined in the
             # OQE formalism, because the power spectrum scalar is excluded
             # in this matrix normalization (i.e., M doesn't do the full
             # normalization)
-            M = np.diag(1. / np.sum(G, axis=1))
-            W_norm = np.diag(1. / np.sum(H, axis=1))
+            M = np.diag(1.0 / np.sum(G, axis=1))
+            W_norm = np.diag(1.0 / np.sum(H, axis=1))
             W = np.dot(W_norm, H)
         else:
-            raise NotImplementedError("Cholesky decomposition mode not currently supported.")
+            raise NotImplementedError(
+                "Cholesky decomposition mode not currently supported."
+            )
             # # Cholesky decomposition
             # order = np.arange(G.shape[0]) - np.ceil((G.shape[0]-1.)/2.)
             # order[order < 0] = order[order < 0] - 0.1
@@ -2246,7 +2698,7 @@ class PSpecData:
             n_freqs=self.spw_Nfreqs,
             allow_fft=allow_fft,
             n_extend=np.sum(self.filter_extension) if include_extension else 0.0,
-            phase_correction=self.filter_extension[0] if include_extension else 0.0
+            phase_correction=self.filter_extension[0] if include_extension else 0.0,
         )
 
     def get_Q_alt_tensor(self, allow_fft=True, include_extension=False):
@@ -2285,7 +2737,7 @@ class PSpecData:
             n_freqs=self.spw_Nfreqs,
             allow_fft=allow_fft,
             n_extend=np.sum(self.filter_extension) if include_extension else 0.0,
-            phase_correction=self.filter_extension[0] if include_extension else 0.0
+            phase_correction=self.filter_extension[0] if include_extension else 0.0,
         )
 
     def get_integral_beam(self, pol=False):
@@ -2306,24 +2758,26 @@ class PSpecData:
         integral_beam : array_like
             integral containing the spectral beam and tapering.
         """
-        nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
+        nu = self.freqs[self.spw_range[0] : self.spw_range[1]]  # in Hz
 
         try:
             # Get beam response in (frequency, pixel), beam area(freq) and
             # Nside, used in computing dtheta
-            beam_res, beam_omega, N = \
-                self.primary_beam.beam_normalized_response(pol, nu)
-            prod = 1. / beam_omega
+            beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(
+                pol, nu
+            )
+            prod = 1.0 / beam_omega
             beam_prod = beam_res * prod[:, np.newaxis]
 
             # beam_prod has omega subsumed, but taper is still part of R matrix
             # The nside term is dtheta^2, where dtheta is the resolution in
             # healpix map
-            integral_beam = np.pi/(3.*N*N) * np.dot(beam_prod, beam_prod.T)
+            integral_beam = np.pi / (3.0 * N * N) * np.dot(beam_prod, beam_prod.T)
 
-        except(AttributeError):
-            warnings.warn("The beam response could not be calculated. "
-                          "PS will not be normalized!")
+        except AttributeError:
+            warnings.warn(
+                "The beam response could not be calculated. PS will not be normalized!"
+            )
             integral_beam = np.ones((len(nu), len(nu)))
 
         return integral_beam
@@ -2352,14 +2806,16 @@ class PSpecData:
         if self.spw_Ndlys == None:
             self.set_Ndlys()
         if mode >= self.spw_Ndlys:
-            raise IndexError("Cannot compute Q matrix for a mode outside"
-                             "of allowed range of delay modes.")
+            raise IndexError(
+                "Cannot compute Q matrix for a mode outside"
+                "of allowed range of delay modes."
+            )
 
-        tau = self.delays()[int(mode)] * 1.0e-9 # delay in seconds
-        nu  = self.freqs[self.spw_range[0]:self.spw_range[1]] # in Hz
+        tau = self.delays()[int(mode)] * 1.0e-9  # delay in seconds
+        nu = self.freqs[self.spw_range[0] : self.spw_range[1]]  # in Hz
 
-        eta_int = np.exp(-2j * np.pi * tau * nu) # exponential part
-        Q_alt = np.einsum('i,j', eta_int.conj(), eta_int) # dot with conjugate
+        eta_int = np.exp(-2j * np.pi * tau * nu)  # exponential part
+        Q_alt = np.einsum("i,j", eta_int.conj(), eta_int)  # dot with conjugate
         return Q_alt
 
     def p_hat(self, M, q):
@@ -2397,11 +2853,10 @@ class PSpecData:
         """
         p_cov = np.zeros_like(q_cov)
         for tnum in range(len(p_cov)):
-            p_cov[tnum] = np.einsum('ab,cd,bd->ac', M, M, q_cov[tnum])
+            p_cov[tnum] = np.einsum("ab,cd,bd->ac", M, M, q_cov[tnum])
         return p_cov
 
-    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2,
-                             unflag=False):
+    def broadcast_dset_flags(self, spw_ranges=None, time_thresh=0.2, unflag=False):
         r"""
         For each dataset in self.dset, update the flag_array such that
         the flagging patterns are time-independent for each baseline given
@@ -2445,8 +2900,9 @@ class PSpecData:
         # spw type check
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
-        assert isinstance(spw_ranges, list), \
+        assert isinstance(spw_ranges, list), (
             "spw_ranges must be fed as a list of tuples"
+        )
 
         # iterate over datasets
         for dset in self.dsets:
@@ -2456,7 +2912,7 @@ class PSpecData:
                 # unflag
                 if unflag:
                     # unflag for all times
-                    dset.flag_array[:, self.spw_range[0]:self.spw_range[1], :] = False
+                    dset.flag_array[:, self.spw_range[0] : self.spw_range[1], :] = False
                     continue
                 # enact time threshold on flag waterfalls
                 # iterate over polarizations
@@ -2474,14 +2930,24 @@ class PSpecData:
                         freq_contig_flgs = np.sum(flags, axis=1) / Nfreqs > 0.999999
                         Ntimes_noncontig = np.sum(~freq_contig_flgs, dtype=float)
                         # get freq channels where non-contiguous flags exceed threshold
-                        exceeds_thresh = np.sum(flags[~freq_contig_flgs], axis=0, dtype=float) / Ntimes_noncontig > time_thresh
+                        exceeds_thresh = (
+                            np.sum(flags[~freq_contig_flgs], axis=0, dtype=float)
+                            / Ntimes_noncontig
+                            > time_thresh
+                        )
                         # flag channels for all times that exceed time_thresh
-                        dset.flag_array[bl_inds, np.where(exceeds_thresh)[0][:, None], i] = True
+                        dset.flag_array[
+                            bl_inds, np.where(exceeds_thresh)[0][:, None], i
+                        ] = True
                         # for pixels that have flags but didn't meet broadcasting limit
                         # flag the integration within the spw
                         flags[:, np.where(exceeds_thresh)[0]] = False
-                        flag_ints = np.max(flags[:, self.spw_range[0]:self.spw_range[1]], axis=1)
-                        dset.flag_array[bl_inds[flag_ints], self.spw_range[0]:self.spw_range[1], i] = True
+                        flag_ints = np.max(
+                            flags[:, self.spw_range[0] : self.spw_range[1]], axis=1
+                        )
+                        dset.flag_array[
+                            bl_inds[flag_ints], self.spw_range[0] : self.spw_range[1], i
+                        ] = True
 
     def units(self, little_h=True):
         r"""
@@ -2501,8 +2967,10 @@ class PSpecData:
         """
         # Work out the power spectrum units
         if len(self.dsets) == 0:
-            raise IndexError("No datasets have been added yet; cannot "
-                             "calculate power spectrum units.")
+            raise IndexError(
+                "No datasets have been added yet; cannot "
+                "calculate power spectrum units."
+            )
 
         # get visibility units
         vis_units = self.dsets[0].vis_units
@@ -2532,14 +3000,27 @@ class PSpecData:
         """
         # Calculate the delays
         if len(self.dsets) == 0:
-            raise IndexError("No datasets have been added yet; cannot "
-                             "calculate delays.")
+            raise IndexError(
+                "No datasets have been added yet; cannot calculate delays."
+            )
         else:
-            return utils.get_delays(self.freqs[self.spw_range[0]:self.spw_range[1]],
-                                    n_dlys=self.spw_Ndlys) * 1e9 # convert to ns
+            return (
+                utils.get_delays(
+                    self.freqs[self.spw_range[0] : self.spw_range[1]],
+                    n_dlys=self.spw_Ndlys,
+                )
+                * 1e9
+            )  # convert to ns
 
-    def scalar(self, polpair, little_h=True, num_steps=2000, beam=None,
-               taper_override='no_override', exact_norm=False):
+    def scalar(
+        self,
+        polpair,
+        little_h=True,
+        num_steps=2000,
+        beam=None,
+        taper_override="no_override",
+        exact_norm=False,
+    ):
         r"""
         Computes the scalar function to convert a power spectrum estimate
         in "telescope units" to cosmological units, using self.spw_range to set
@@ -2594,17 +3075,18 @@ class PSpecData:
             polpair = (polpair, polpair)
         if polpair[0] != polpair[1]:
             raise NotImplementedError(
-                    "Polarizations don't match. Beam scalar can only be "
-                    "calculated for auto-polarization pairs at the moment.")
+                "Polarizations don't match. Beam scalar can only be "
+                "calculated for auto-polarization pairs at the moment."
+            )
         pol = polpair[0]
 
         # set spw_range and get freqs
-        freqs = self.freqs[self.spw_range[0]:self.spw_range[1]]
+        freqs = self.freqs[self.spw_range[0] : self.spw_range[1]]
         start = freqs[0]
         end = freqs[0] + np.median(np.diff(freqs)) * len(freqs)
 
         # Override the taper if desired
-        if taper_override == 'no_override':
+        if taper_override == "no_override":
             taper = self.taper
         else:
             taper = taper_override
@@ -2612,18 +3094,31 @@ class PSpecData:
         # calculate scalar
         if beam is None:
             scalar = self.primary_beam.compute_pspec_scalar(
-                                        start, end, len(freqs), pol=pol,
-                                        taper=self.taper, little_h=little_h,
-                                        num_steps=num_steps, exact_norm=exact_norm)
+                start,
+                end,
+                len(freqs),
+                pol=pol,
+                taper=self.taper,
+                little_h=little_h,
+                num_steps=num_steps,
+                exact_norm=exact_norm,
+            )
         else:
-            scalar = beam.compute_pspec_scalar(start, end, len(freqs),
-                                               pol=pol, taper=self.taper,
-                                               little_h=little_h,
-                                               num_steps=num_steps, exact_norm=exact_norm)
+            scalar = beam.compute_pspec_scalar(
+                start,
+                end,
+                len(freqs),
+                pol=pol,
+                taper=self.taper,
+                little_h=little_h,
+                num_steps=num_steps,
+                exact_norm=exact_norm,
+            )
         return scalar
 
-    def scalar_delay_adjustment(self, key1=None, key2=None, sampling=False,
-                                Gv=None, Hv=None):
+    def scalar_delay_adjustment(
+        self, key1=None, key2=None, sampling=False, Gv=None, Hv=None
+    ):
         r"""
         Computes an adjustment factor for the pspec scalar. There are
         two reasons why this might be needed:
@@ -2676,8 +3171,10 @@ class PSpecData:
         adjustment : float if the data_weighting is 'identity'
                      1d array of floats with length spw_Ndlys otherwise.
         """
-        if Gv is None: Gv = self.get_G(key1, key2)
-        if Hv is None: Hv = self.get_H(key1, key2, sampling)
+        if Gv is None:
+            Gv = self.get_G(key1, key2)
+        if Hv is None:
+            Hv = self.get_H(key1, key2, sampling)
 
         # get ratio
         summed_G = np.sum(Gv, axis=1)
@@ -2691,21 +3188,21 @@ class PSpecData:
         ## XXX: Adjustments like this are hacky and wouldn't be necessary
         ## if we deprecate the incorrectly normalized
         ## Q and M matrix definitions.
-        #In the future, we need to do our normalizations properly and
-        #stop introducing arbitrary normalization factors.
-        #if the input identity weighting is diagonal, then the
-        #adjustment factor is independent of alpha.
+        # In the future, we need to do our normalizations properly and
+        # stop introducing arbitrary normalization factors.
+        # if the input identity weighting is diagonal, then the
+        # adjustment factor is independent of alpha.
         # get mean ratio.
-        if self.data_weighting == 'identity':
+        if self.data_weighting == "identity":
             mean_ratio = np.mean(ratio)
             scatter = np.abs(ratio - mean_ratio)
             if (scatter > 10**-4 * mean_ratio).any():
                 raise ValueError("The normalization scalar is band-dependent!")
             adjustment = self.spw_Ndlys / (self.spw_Nfreqs * mean_ratio)
-        #otherwise, the adjustment factor is dependent on alpha.
+        # otherwise, the adjustment factor is dependent on alpha.
         else:
             adjustment = self.spw_Ndlys / (self.spw_Nfreqs * ratio)
-        if self.taper != 'none':
+        if self.taper != "none":
             tapering_fct = dspec.gen_window(self.taper, self.spw_Nfreqs)
             adjustment *= np.mean(tapering_fct**2)
 
@@ -2742,14 +3239,20 @@ class PSpecData:
 
         # convert elements to integers if fed as strings
         if isinstance(pol_pair[0], str):
-            pol_pair = (uvutils.polstr2num(pol_pair[0], x_orientation=x_orientation), pol_pair[1])
+            pol_pair = (
+                uvutils.polstr2num(pol_pair[0], x_orientation=x_orientation),
+                pol_pair[1],
+            )
         if isinstance(pol_pair[1], str):
-            pol_pair = (pol_pair[0], uvutils.polstr2num(pol_pair[1], x_orientation=x_orientation))
+            pol_pair = (
+                pol_pair[0],
+                uvutils.polstr2num(pol_pair[1], x_orientation=x_orientation),
+            )
 
         assert isinstance(pol_pair[0], (int, np.integer)), err_msg
         assert isinstance(pol_pair[1], (int, np.integer)), err_msg
 
-        #if pol_pair[0] != pol_pair[1]:
+        # if pol_pair[0] != pol_pair[1]:
         #    raise NotImplementedError("Only auto/equal polarizations are implement at the moment.")
 
         dset_ind1 = self.dset_idx(dsets[0])
@@ -2759,23 +3262,53 @@ class PSpecData:
 
         valid = True
         if pol_pair[0] not in dset1.polarization_array:
-            print("dset {} does not contain data for polarization {}".format(dset_ind1, pol_pair[0]))
+            print(
+                "dset {} does not contain data for polarization {}".format(
+                    dset_ind1, pol_pair[0]
+                )
+            )
             valid = False
 
         if pol_pair[1] not in dset2.polarization_array:
-            print("dset {} does not contain data for polarization {}".format(dset_ind2, pol_pair[1]))
+            print(
+                "dset {} does not contain data for polarization {}".format(
+                    dset_ind2, pol_pair[1]
+                )
+            )
             valid = False
 
         return valid
 
-    def pspec(self, bls1, bls2, dsets, pols, n_dlys=None,
-              input_data_weight='identity', norm='I', taper='none',
-              sampling=False, little_h=True, spw_ranges=None, symmetric_taper=True,
-              baseline_tol=1.0, store_cov=False, store_cov_diag=False,
-              return_q=False, store_window=True, exact_windows=False,
-              ftbeam=None, verbose=True, filter_extensions=None,
-              exact_norm=False, history='', r_params=None,
-              cov_model='empirical', known_cov=None, allow_fft=False):
+    def pspec(
+        self,
+        bls1,
+        bls2,
+        dsets,
+        pols,
+        n_dlys=None,
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        sampling=False,
+        little_h=True,
+        spw_ranges=None,
+        symmetric_taper=True,
+        baseline_tol=1.0,
+        store_cov=False,
+        store_cov_diag=False,
+        return_q=False,
+        store_window=True,
+        exact_windows=False,
+        ftbeam=None,
+        verbose=True,
+        filter_extensions=None,
+        exact_norm=False,
+        history="",
+        r_params=None,
+        cov_model="empirical",
+        known_cov=None,
+        allow_fft=False,
+    ):
         r"""
         Estimate the delay power spectrum from a pair of datasets contained in
         this object, using the optimal quadratic estimator of arXiv:1502.06016.
@@ -3026,49 +3559,56 @@ class PSpecData:
 
         # Currently the "pspec normalization scalar" doesn't work if a
         # non-identity data weighting AND a non-trivial taper are used
-        if taper != 'none' and input_data_weight != 'identity':
-            raise_warning("Warning: Scalar power spectrum normalization "
-                                  "doesn't work with current implementation "
-                                  "if the tapering AND non-identity "
-                                  "weighting matrices are both used.",
-                                  verbose=verbose)
+        if taper != "none" and input_data_weight != "identity":
+            raise_warning(
+                "Warning: Scalar power spectrum normalization "
+                "doesn't work with current implementation "
+                "if the tapering AND non-identity "
+                "weighting matrices are both used.",
+                verbose=verbose,
+            )
 
         # get datasets
-        assert isinstance(dsets, (list, tuple)), \
+        assert isinstance(dsets, (list, tuple)), (
             "dsets must be fed as length-2 tuple of integers"
+        )
         assert len(dsets) == 2, "len(dsets) must be 2"
-        assert isinstance(dsets[0], (int, np.integer)) \
-            and isinstance(dsets[1], (int, np.integer)), \
-                "dsets must contain integer indices"
+        assert isinstance(dsets[0], (int, np.integer)) and isinstance(
+            dsets[1], (int, np.integer)
+        ), "dsets must contain integer indices"
         dset1 = self.dsets[self.dset_idx(dsets[0])]
         dset2 = self.dsets[self.dset_idx(dsets[1])]
 
         # assert form of bls1 and bls2
-        assert isinstance(bls1, list), \
+        assert isinstance(bls1, list), (
             "bls1 and bls2 must be fed as a list of antpair tuples"
-        assert isinstance(bls2, list), \
+        )
+        assert isinstance(bls2, list), (
             "bls1 and bls2 must be fed as a list of antpair tuples"
-        assert len(bls1) == len(bls2) and len(bls1) > 0, \
+        )
+        assert len(bls1) == len(bls2) and len(bls1) > 0, (
             "length of bls1 must equal length of bls2 and be > 0"
+        )
 
         for i in range(len(bls1)):
             if isinstance(bls1[i], tuple):
-                assert isinstance(bls2[i], tuple), \
+                assert isinstance(bls2[i], tuple), (
                     "bls1[{}] type must match bls2[{}] type".format(i, i)
+                )
             else:
-                assert len(bls1[i]) == len(bls2[i]), \
+                assert len(bls1[i]) == len(bls2[i]), (
                     "len(bls1[{}]) must match len(bls2[{}])".format(i, i)
+                )
 
         # construct list of baseline pairs
         bl_pairs = []
         for i in range(len(bls1)):
             if isinstance(bls1[i], tuple):
-                bl_pairs.append( (bls1[i], bls2[i]) )
+                bl_pairs.append((bls1[i], bls2[i]))
             elif isinstance(bls1[i], list) and len(bls1[i]) == 1:
-                bl_pairs.append( (bls1[i][0], bls2[i][0]) )
+                bl_pairs.append((bls1[i][0], bls2[i][0]))
             else:
-                bl_pairs.append(
-                    [ (bls1[i][j], bls2[i][j]) for j in range(len(bls1[i])) ] )
+                bl_pairs.append([(bls1[i][j], bls2[i][j]) for j in range(len(bls1[i]))])
 
         # validate bl-pair redundancy
         validate_blpairs(bl_pairs, dset1, dset2, baseline_tol=baseline_tol)
@@ -3077,19 +3617,22 @@ class PSpecData:
         if spw_ranges is None:
             spw_ranges = [(0, self.Nfreqs)]
         if isinstance(spw_ranges, tuple):
-            spw_ranges = [spw_ranges,]
+            spw_ranges = [spw_ranges]
 
         if filter_extensions is None:
             filter_extensions = [(0, 0) for m in range(len(spw_ranges))]
         # convert to list if only a tuple was given
         if isinstance(filter_extensions, tuple):
-            filter_extensions = [filter_extensions,]
+            filter_extensions = [filter_extensions]
 
-        assert len(spw_ranges) == len(filter_extensions), "must provide same number of spw_ranges as filter_extensions"
+        assert len(spw_ranges) == len(filter_extensions), (
+            "must provide same number of spw_ranges as filter_extensions"
+        )
 
         # Check that spw_ranges is list of len-2 tuples
-        assert np.isclose([len(t) for t in spw_ranges], 2).all(), \
-                "spw_ranges must be fed as a list of length-2 tuples"
+        assert np.isclose([len(t) for t in spw_ranges], 2).all(), (
+            "spw_ranges must be fed as a list of length-2 tuples"
+        )
 
         # if using default setting of number of delay bins equal to number
         # of frequency channels
@@ -3101,13 +3644,15 @@ class PSpecData:
         # if using the whole band in the dataset, then there should just be
         # one n_dly parameter specified
         if spw_ranges is None and n_dlys != None:
-            assert len(n_dlys) == 1, \
+            assert len(n_dlys) == 1, (
                 "Only one spw, so cannot specify more than one n_dly value"
+            )
 
         # assert that the same number of ndlys has been specified as the
         # number of spws
-        assert len(spw_ranges) == len(n_dlys), \
+        assert len(spw_ranges) == len(n_dlys), (
             "Need to specify number of delay bins for each spw"
+        )
 
         if store_cov_diag and store_cov:
             store_cov = False
@@ -3115,11 +3660,12 @@ class PSpecData:
             # no matter what the initial choice for store_cov.
 
         if exact_windows and not store_window:
-            warnings.warn('exact_windows is True... setting store_window to True.')
+            warnings.warn("exact_windows is True... setting store_window to True.")
             store_window = True
 
         # setup polarization selection
-        if isinstance(pols, (tuple, str)): pols = [pols]
+        if isinstance(pols, (tuple, str)):
+            pols = [pols]
 
         # convert all polarizations to integers if fed as strings
         _pols = []
@@ -3127,8 +3673,10 @@ class PSpecData:
             x_orientation = self.dsets[0].telescope.get_x_orientation_from_feeds()
             if isinstance(p, str):
                 # Convert string to pol-integer pair
-                p = (uvutils.polstr2num(p, x_orientation=x_orientation),
-                     uvutils.polstr2num(p, x_orientation=x_orientation))
+                p = (
+                    uvutils.polstr2num(p, x_orientation=x_orientation),
+                    uvutils.polstr2num(p, x_orientation=x_orientation),
+                )
             if isinstance(p[0], str):
                 p = (uvutils.polstr2num(p[0], x_orientation=x_orientation), p[1])
             if isinstance(p[1], str):
@@ -3187,7 +3735,7 @@ class PSpecData:
             spw_window_function = []
 
             d = self.delays() * 1e-9
-            f = dset1.freq_array.flatten()[spw_ranges[i][0]:spw_ranges[i][1]]
+            f = dset1.freq_array.flatten()[spw_ranges[i][0] : spw_ranges[i][1]]
             dlys.extend(d)
             dly_spws.extend(np.ones_like(d, np.int16) * i)
             freq_spws.extend(np.ones_like(f, np.int16) * i)
@@ -3201,13 +3749,13 @@ class PSpecData:
                 # validating polarization pair on UVData objects
                 valid = self.validate_pol(dsets, tuple(p))
                 if not valid:
-                   # Polarization pair is invalid; skip
-                   warnings.warn(
-                       f"Polarization pair: {p_str} failed the validation test, continuing..."
+                    # Polarization pair is invalid; skip
+                    warnings.warn(
+                        f"Polarization pair: {p_str} failed the validation test, continuing..."
                     )
-                   continue
+                    continue
 
-                spw_polpair.append( uvputils.polpair_tuple2int(p) )
+                spw_polpair.append(uvputils.polpair_tuple2int(p))
                 pol_data = []
                 pol_wgts = []
                 pol_ints = []
@@ -3218,33 +3766,41 @@ class PSpecData:
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
                 if self.primary_beam is not None:
-
                     # Raise error if cross-pol is requested
-                    if (p[0] != p[1]):
+                    if p[0] != p[1]:
                         raise NotImplementedError(
                             "Visibilities with different polarizations can only "
                             "be cross-correlated if primary_beam = None. Cannot "
-                            "compute beam scalar for mixed polarizations.")
+                            "compute beam scalar for mixed polarizations."
+                        )
 
                     # using zero'th indexed polarization, as cross-polarized
                     # beams are not yet implemented
-                    if norm == 'H^-1':
+                    if norm == "H^-1":
                         # If using decorrelation, the H^-1 normalization
                         # already deals with the taper, so we need to override
                         # the taper when computing the scalar
-                        scalar = self.scalar(p, little_h=little_h,
-                                             taper_override='none',
-                                             exact_norm=exact_norm)
+                        scalar = self.scalar(
+                            p,
+                            little_h=little_h,
+                            taper_override="none",
+                            exact_norm=exact_norm,
+                        )
                     else:
-                        scalar = self.scalar(p, little_h=little_h,
-                                exact_norm=exact_norm)
+                        scalar = self.scalar(
+                            p, little_h=little_h, exact_norm=exact_norm
+                        )
                 else:
-                    raise_warning("Warning: self.primary_beam is not defined, "
-                                  "so pspectra are not properly normalized",
-                                  verbose=verbose)
+                    raise_warning(
+                        "Warning: self.primary_beam is not defined, "
+                        "so pspectra are not properly normalized",
+                        verbose=verbose,
+                    )
                     scalar = 1.0
 
-                pol = (p[0]) # used in get_integral_beam function to specify the correct polarization for the beam
+                pol = p[
+                    0
+                ]  # used in get_integral_beam function to specify the correct polarization for the beam
                 spw_scalar.append(scalar)
 
                 # Loop over baseline pairs
@@ -3252,14 +3808,16 @@ class PSpecData:
                     # assign keys
                     if isinstance(blp, list):
                         # interpet blp as group of baseline-pairs
-                        raise NotImplementedError("Baseline lists bls1 and bls2"
-                                " must be lists of tuples (not lists of lists"
-                                " of tuples).\n"
-                                "Use hera_pspec.pspecdata.construct_blpairs()"
-                                " to construct appropriately grouped baseline"
-                                " lists.")
-                        #key1 = [(dsets[0],) + _blp[0] + (p[0],) for _blp in blp]
-                        #key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
+                        raise NotImplementedError(
+                            "Baseline lists bls1 and bls2"
+                            " must be lists of tuples (not lists of lists"
+                            " of tuples).\n"
+                            "Use hera_pspec.pspecdata.construct_blpairs()"
+                            " to construct appropriately grouped baseline"
+                            " lists."
+                        )
+                        # key1 = [(dsets[0],) + _blp[0] + (p[0],) for _blp in blp]
+                        # key2 = [(dsets[1],) + _blp[1] + (p[1],) for _blp in blp]
                     elif isinstance(blp, tuple):
                         # interpret blp as baseline-pair
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
@@ -3268,43 +3826,53 @@ class PSpecData:
                     ndone += 1
                     if ndone % nper_chunk == 0:
                         logger.info(
-                            f"[{100*ndone/ntodo:5.2f}%] blp {k+1}/{nblps} | "
-                            f"pol {j+1}/{npols} | spw {i+1}/{nspws}"
+                            f"[{100 * ndone / ntodo:5.2f}%] blp {k + 1}/{nblps} | "
+                            f"pol {j + 1}/{npols} | spw {i + 1}/{nspws}"
                         )
 
                     # Check that number of non-zero weight chans >= n_dlys
                     key1_dof = np.sum(~np.isclose(self.Y(key1).diagonal(), 0.0))
                     key2_dof = np.sum(~np.isclose(self.Y(key2).diagonal(), 0.0))
-                    if key1_dof - np.sum(self.filter_extension) < self.spw_Ndlys\
-                     or key2_dof - np.sum(self.filter_extension) < self.spw_Ndlys:
+                    if (
+                        key1_dof - np.sum(self.filter_extension) < self.spw_Ndlys
+                        or key2_dof - np.sum(self.filter_extension) < self.spw_Ndlys
+                    ):
                         if verbose:
-                            print("WARNING: Number of unflagged chans for key1 "
-                                  "and/or key2 < n_dlys\n which may lead to "
-                                  "normalization instabilities.")
-                    #if using inverse sinc weighting, set r_params
-                    if input_data_weight == 'dayenu':
+                            print(
+                                "WARNING: Number of unflagged chans for key1 "
+                                "and/or key2 < n_dlys\n which may lead to "
+                                "normalization instabilities."
+                            )
+                    # if using inverse sinc weighting, set r_params
+                    if input_data_weight == "dayenu":
                         key1 = (dsets[0],) + blp[0] + (p_str[0],)
                         key2 = (dsets[1],) + blp[1] + (p_str[1],)
                         if key1 not in r_params:
-                            raise ValueError("No r_param dictionary supplied"
-                                             " for baseline %s"%(str(key1)))
+                            raise ValueError(
+                                "No r_param dictionary supplied"
+                                " for baseline %s" % (str(key1))
+                            )
                         if key2 not in r_params:
-                            raise ValueError("No r_param dictionary supplied"
-                                             " for baseline %s"%(str(key2)))
+                            raise ValueError(
+                                "No r_param dictionary supplied"
+                                " for baseline %s" % (str(key2))
+                            )
                         self.set_r_param(key1, r_params[key1])
                         self.set_r_param(key2, r_params[key2])
 
                     # Build Fisher matrix
-                    if input_data_weight == 'identity':
+                    if input_data_weight == "identity":
                         # in this case, all Gv and Hv differ only by flagging pattern
                         # so check if we've already computed this
                         # First: get flag weighting matrices given key1 & key2
-                        Y = np.vstack([self.Y(key1).diagonal(),
-                                       self.Y(key2).diagonal()])
+                        Y = np.vstack(
+                            [self.Y(key1).diagonal(), self.Y(key2).diagonal()]
+                        )
 
                         # Second: check cache for Y
-                        matches = [np.isclose(Y, y).all()
-                                   for y in self._identity_Y.values()]
+                        matches = [
+                            np.isclose(Y, y).all() for y in self._identity_Y.values()
+                        ]
                         if True in matches:
                             # This Y exists, so pick appropriate G and H and continue
                             match = list(self._identity_Y.keys())[matches.index(True)]
@@ -3312,9 +3880,16 @@ class PSpecData:
                             Hv = self._identity_H[match]
                         else:
                             # This Y doesn't exist, so compute it
-                            if nper_chunk == 1: logger.info("  Building G...")
-                            Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
-                            Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
+                            if nper_chunk == 1:
+                                logger.info("  Building G...")
+                            Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol=pol)
+                            Hv = self.get_H(
+                                key1,
+                                key2,
+                                sampling=sampling,
+                                exact_norm=exact_norm,
+                                pol=pol,
+                            )
                             # cache it
                             self._identity_Y[(key1, key2)] = Y
                             self._identity_G[(key1, key2)] = Gv
@@ -3322,78 +3897,120 @@ class PSpecData:
                     else:
                         # for non identity weighting (i.e. iC weighting)
                         # Gv and Hv are always different, so compute them
-                        if nper_chunk == 1: logger.info("  Building G...")
-                        Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol = pol)
-                        Hv = self.get_H(key1, key2, sampling=sampling, exact_norm=exact_norm, pol = pol)
+                        if nper_chunk == 1:
+                            logger.info("  Building G...")
+                        Gv = self.get_G(key1, key2, exact_norm=exact_norm, pol=pol)
+                        Hv = self.get_H(
+                            key1,
+                            key2,
+                            sampling=sampling,
+                            exact_norm=exact_norm,
+                            pol=pol,
+                        )
 
                     # Calculate unnormalized bandpowers
-                    if nper_chunk == 1: logger.info("  Building q_hat...")
-                    qv = self.q_hat(key1, key2, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft)
+                    if nper_chunk == 1:
+                        logger.info("  Building q_hat...")
+                    qv = self.q_hat(
+                        key1, key2, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft
+                    )
 
-                    if nper_chunk == 1: logger.info("  Normalizing power spectrum...")
-                    if norm == 'V^-1/2':
-                        V_mat = self.get_unnormed_V(key1, key2, exact_norm=exact_norm, pol = pol)
-                        Mv, Wv = self.get_MW(Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm)
+                    if nper_chunk == 1:
+                        logger.info("  Normalizing power spectrum...")
+                    if norm == "V^-1/2":
+                        V_mat = self.get_unnormed_V(
+                            key1, key2, exact_norm=exact_norm, pol=pol
+                        )
+                        Mv, Wv = self.get_MW(
+                            Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm
+                        )
                     else:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
                     if self.primary_beam != None:
-                        if nper_chunk == 1: logger.info("  Computing and multiplying scalar...")
+                        if nper_chunk == 1:
+                            logger.info("  Computing and multiplying scalar...")
                         pv *= scalar
 
                     # Wide bin adjustment of scalar, which is only needed for
                     # the diagonal norm matrix mode (i.e., norm = 'I')
-                    if norm == 'I' and not(exact_norm):
+                    if norm == "I" and not (exact_norm):
                         sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
                         if isinstance(sa, float):
                             pv *= sa
                         else:
                             pv = np.atleast_2d(sa).T * pv
 
-                    #Generate the covariance matrix if error bars provided
+                    # Generate the covariance matrix if error bars provided
                     if store_cov or store_cov_diag:
-                        if nper_chunk == 1: logger.info(" Building q_hat covariance...")
-                        cov_q_real, cov_q_imag, cov_real, cov_imag \
-                            = self.get_analytic_covariance(key1, key2, Mv,
-                                                           exact_norm=exact_norm,
-                                                           pol=pol,
-                                                           model=cov_model,
-                                                           known_cov=known_cov, )
+                        if nper_chunk == 1:
+                            logger.info(" Building q_hat covariance...")
+                        cov_q_real, cov_q_imag, cov_real, cov_imag = (
+                            self.get_analytic_covariance(
+                                key1,
+                                key2,
+                                Mv,
+                                exact_norm=exact_norm,
+                                pol=pol,
+                                model=cov_model,
+                                known_cov=known_cov,
+                            )
+                        )
 
                         if self.primary_beam != None:
-                            cov_real = cov_real * (scalar)**2.
-                            cov_imag = cov_imag * (scalar)**2.
+                            cov_real = cov_real * (scalar) ** 2.0
+                            cov_imag = cov_imag * (scalar) ** 2.0
 
-                        if norm == 'I' and not(exact_norm):
+                        if norm == "I" and not (exact_norm):
                             if isinstance(sa, float):
-                                cov_real = cov_real * (sa)**2.
-                                cov_imag = cov_imag * (sa)**2.
+                                cov_real = cov_real * (sa) ** 2.0
+                                cov_imag = cov_imag * (sa) ** 2.0
                             else:
                                 cov_real = cov_real * np.outer(sa, sa)[None]
                                 cov_imag = cov_imag * np.outer(sa, sa)[None]
 
                         if not return_q:
                             if store_cov:
-                                pol_cov_real.extend(np.real(cov_real).astype(np.float64))
-                                pol_cov_imag.extend(np.real(cov_imag).astype(np.float64))
+                                pol_cov_real.extend(
+                                    np.real(cov_real).astype(np.float64)
+                                )
+                                pol_cov_imag.extend(
+                                    np.real(cov_imag).astype(np.float64)
+                                )
                             if store_cov_diag:
-                                stats = np.sqrt(np.diagonal(np.real(cov_real), axis1=1, axis2=2)) + 1.j*np.sqrt(np.diagonal(np.real(cov_imag), axis1=1, axis2=2))
+                                stats = np.sqrt(
+                                    np.diagonal(np.real(cov_real), axis1=1, axis2=2)
+                                ) + 1.0j * np.sqrt(
+                                    np.diagonal(np.real(cov_imag), axis1=1, axis2=2)
+                                )
                                 pol_stats_array_cov_model.extend(stats)
                         else:
                             if store_cov:
-                                pol_cov_real.extend(np.real(cov_q_real).astype(np.float64))
-                                pol_cov_imag.extend(np.real(cov_q_imag).astype(np.float64))
+                                pol_cov_real.extend(
+                                    np.real(cov_q_real).astype(np.float64)
+                                )
+                                pol_cov_imag.extend(
+                                    np.real(cov_q_imag).astype(np.float64)
+                                )
                             if store_cov_diag:
-                                stats = np.sqrt(np.diagonal(np.real(cov_q_real), axis1=1, axis2=2)) + 1.j*np.sqrt(np.diagonal(np.real(cov_q_imag), axis1=1, axis2=2))
+                                stats = np.sqrt(
+                                    np.diagonal(np.real(cov_q_real), axis1=1, axis2=2)
+                                ) + 1.0j * np.sqrt(
+                                    np.diagonal(np.real(cov_q_imag), axis1=1, axis2=2)
+                                )
                                 pol_stats_array_cov_model.extend(stats)
 
                     # store the window_function
                     if store_window:
                         # Wv shape = (nfreqs, nfreqs) ie (64, 64)
                         # qv shape = (nfreqs, ntimes) ie (64, 60)
-                        pol_window_function.extend(np.repeat(Wv[np.newaxis,:,:], qv.shape[1], axis=0).astype(np.float64))
+                        pol_window_function.extend(
+                            np.repeat(Wv[np.newaxis, :, :], qv.shape[1], axis=0).astype(
+                                np.float64
+                            )
+                        )
                         # pol_wf shape = (ntimes, nfreqs, nfreqs) ie (60, 64, 64)
                         # 4 blps so final wf_array shape for each spw is
                         # (ntimes * nbls, nfreqs, nfreqs) = (4 * 60 = 240, 64, 64)
@@ -3420,10 +4037,16 @@ class PSpecData:
                     wgts2 = self.w(key2).T
 
                     # get avg of nsample across frequency axis, weighted by wgts
-                    nsamp1 = np.sum(dset1.get_nsamples(bl1 + (p[0],))[:, slice(*self.get_spw())] * wgts1, axis=1) \
-                             / np.sum(wgts1, axis=1).clip(1, np.inf)
-                    nsamp2 = np.sum(dset2.get_nsamples(bl2 + (p[1],))[:, slice(*self.get_spw())] * wgts2, axis=1) \
-                             / np.sum(wgts2, axis=1).clip(1, np.inf)
+                    nsamp1 = np.sum(
+                        dset1.get_nsamples(bl1 + (p[0],))[:, slice(*self.get_spw())]
+                        * wgts1,
+                        axis=1,
+                    ) / np.sum(wgts1, axis=1).clip(1, np.inf)
+                    nsamp2 = np.sum(
+                        dset2.get_nsamples(bl2 + (p[1],))[:, slice(*self.get_spw())]
+                        * wgts2,
+                        axis=1,
+                    ) / np.sum(wgts2, axis=1).clip(1, np.inf)
 
                     # get integ1
                     blts1 = dset1.antpair2ind(bl1, ordered=False)
@@ -3436,11 +4059,12 @@ class PSpecData:
                     # take inverse avg of integ1 and integ2 to get total integ
                     # inverse avg is done b/c integ ~ 1/noise_var
                     # and due to non-linear operation of V_1 * V_2
-                    pol_ints.extend(1./np.mean([1./integ1, 1./integ2], axis=0))
+                    pol_ints.extend(1.0 / np.mean([1.0 / integ1, 1.0 / integ2], axis=0))
 
                     # combined weight is geometric mean
-                    pol_wgts.extend(np.concatenate([wgts1[:, :, None],
-                                                    wgts2[:, :, None]], axis=2))
+                    pol_wgts.extend(
+                        np.concatenate([wgts1[:, :, None], wgts2[:, :, None]], axis=2)
+                    )
 
                     # insert time and blpair info only once per blpair
                     if i < 1 and j < 1:
@@ -3455,8 +4079,10 @@ class PSpecData:
                         lst2.extend(dset2.lst_array[inds2])
 
                         # insert blpair info
-                        blp_arr.extend(np.ones_like(dset1.time_array[inds1], int) \
-                                       * uvputils._antnums_to_blpair(blp))
+                        blp_arr.extend(
+                            np.ones_like(dset1.time_array[inds1], int)
+                            * uvputils._antnums_to_blpair(blp)
+                        )
 
                 # insert into data and wgts integrations dictionaries
                 spw_data.append(pol_data)
@@ -3471,7 +4097,9 @@ class PSpecData:
             spw_data = np.moveaxis(np.array(spw_data), 0, -1)
             spw_wgts = np.moveaxis(np.array(spw_wgts), 0, -1)
             spw_ints = np.moveaxis(np.array(spw_ints), 0, -1)
-            spw_stats_array_cov_model = np.moveaxis(np.array(spw_stats_array_cov_model), 0, -1)
+            spw_stats_array_cov_model = np.moveaxis(
+                np.array(spw_stats_array_cov_model), 0, -1
+            )
             if store_cov:
                 spw_cov_real = np.moveaxis(np.array(spw_cov_real), 0, -1)
                 spw_cov_imag = np.moveaxis(np.array(spw_cov_imag), 0, -1)
@@ -3491,14 +4119,16 @@ class PSpecData:
 
             # raise error if none of pols are consistent with the UVData objects
             if len(spw_polpair) == 0:
-                raise ValueError("None of the specified polarization pairs "
-                                 "match that of the UVData objects")
+                raise ValueError(
+                    "None of the specified polarization pairs "
+                    "match that of the UVData objects"
+                )
             self.set_filter_extension((0, 0))
             # set filter_extension to be zero when ending the loop
 
         # fill uvp object
         uvp = uvpspec.UVPSpec()
-        uvp.symmetric_taper=symmetric_taper
+        uvp.symmetric_taper = symmetric_taper
         # fill meta-data
         uvp.time_1_array = np.array(time1)
         uvp.time_2_array = np.array(time2)
@@ -3517,11 +4147,22 @@ class PSpecData:
         # not necessarily be the same.
         # Ntimes could still be the number of "average times" which might be useful for noise purposes.
         uvp.Ntimes = len(np.unique(np.hstack([uvp.time_1_array, uvp.time_2_array])))
-        uvp.Nbltpairs = len(set([(blp, t1, t2) for blp, t1, t2 in zip(uvp.blpair_array, uvp.time_1_array, uvp.time_2_array)]))
-        uvp.Ntpairs = len(set([(t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array)]))
+        uvp.Nbltpairs = len(
+            set(
+                (blp, t1, t2)
+                for blp, t1, t2 in zip(
+                    uvp.blpair_array, uvp.time_1_array, uvp.time_2_array
+                )
+            )
+        )
+        uvp.Ntpairs = len(
+            set((t1, t2) for t1, t2 in zip(uvp.time_1_array, uvp.time_2_array))
+        )
         bls_arr = sorted(set(bls_arr))
         uvp.bl_array = np.array([uvp.antnums_to_bl(bl) for bl in bls_arr])
-        antpos = dict(zip(dset1.telescope.antenna_numbers, dset1.telescope.antenna_positions))
+        antpos = dict(
+            zip(dset1.telescope.antenna_numbers, dset1.telescope.antenna_positions)
+        )
         uvp.bl_vecs = np.array([antpos[bl[0]] - antpos[bl[1]] for bl in bls_arr])
         uvp.Nbls = len(uvp.bl_array)
         uvp.spw_dly_array = np.array(dly_spws)
@@ -3537,53 +4178,71 @@ class PSpecData:
         uvp.polpair_array = np.array(spw_polpair, int)
         uvp.Npols = len(spw_polpair)
         uvp.scalar_array = np.array(sclr_arr)
-        uvp.channel_width = np.array(dset1.channel_width)  # all dsets validated to agree
+        uvp.channel_width = np.array(
+            dset1.channel_width
+        )  # all dsets validated to agree
         uvp.exact_windows = False
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
         # SGM: I've kept the same API in hera_pspec for now, but we should
         # probably move to having a `.telescope` attribute on the UVP.
         uvp.telescope_location = np.array(
-            [dset1.telescope.location.x.to_value("m"),
-             dset1.telescope.location.y.to_value("m"),
-             dset1.telescope.location.z.to_value("m")
-             ]
+            [
+                dset1.telescope.location.x.to_value("m"),
+                dset1.telescope.location.y.to_value("m"),
+                dset1.telescope.location.z.to_value("m"),
+            ]
         )
 
-        filename1 = json.loads(dset1.extra_keywords.get('filename', '""'))
-        cal1 = json.loads(dset1.extra_keywords.get('calibration', '""'))
-        filename2 = json.loads(dset2.extra_keywords.get('filename', '""'))
-        cal2 = json.loads(dset2.extra_keywords.get('calibration', '""'))
+        filename1 = json.loads(dset1.extra_keywords.get("filename", '""'))
+        cal1 = json.loads(dset1.extra_keywords.get("calibration", '""'))
+        filename2 = json.loads(dset2.extra_keywords.get("filename", '""'))
+        cal2 = json.loads(dset2.extra_keywords.get("calibration", '""'))
         label1 = self.labels[self.dset_idx(dsets[0])]
         label2 = self.labels[self.dset_idx(dsets[1])]
         uvp.labels = sorted(set([label1, label2]))
-        uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int) \
-                            * uvp.labels.index(label1)
-        uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int) \
-                            * uvp.labels.index(label2)
+        uvp.label_1_array = np.ones(
+            (uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int
+        ) * uvp.labels.index(label1)
+        uvp.label_2_array = np.ones(
+            (uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int
+        ) * uvp.labels.index(label2)
         uvp.labels = np.array(uvp.labels, str)
         uvp.r_params = uvputils.compress_r_params(r_params)
         uvp.taper = taper
         if not return_q:
             uvp.norm = norm
         else:
-            uvp.norm = 'Unnormalized'
+            uvp.norm = "Unnormalized"
         # save version of hera_pspec with backward compatibility
-        uvp.history = "UVPSpec written on {} with hera_pspec git hash {}\n{}\n" \
-                      "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
-                      "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n" \
-                      "".format(datetime.datetime.utcnow(), __version__, '-'*20,
-                                filename1, label1, cal1, dset1.history, '-'*20,
-                                filename2, label2, cal2, dset2.history, '-'*20)
+        uvp.history = (
+            "UVPSpec written on {} with hera_pspec git hash {}\n{}\n"
+            "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n"
+            "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n"
+            "".format(
+                datetime.datetime.utcnow(),
+                __version__,
+                "-" * 20,
+                filename1,
+                label1,
+                cal1,
+                dset1.history,
+                "-" * 20,
+                filename2,
+                label2,
+                cal2,
+                dset2.history,
+                "-" * 20,
+            )
+        )
 
         if self.primary_beam is not None:
             # attach cosmology
             uvp.cosmo = self.primary_beam.cosmo
             # attach beam info
             uvp.beam_freqs = self.primary_beam.beam_freqs
-            uvp.OmegaP, uvp.OmegaPP = \
-                                self.primary_beam.get_Omegas(uvp.polpair_array)
-            if hasattr(self.primary_beam, 'filename'):
+            uvp.OmegaP, uvp.OmegaPP = self.primary_beam.get_Omegas(uvp.polpair_array)
+            if hasattr(self.primary_beam, "filename"):
                 uvp.beamfile = self.primary_beam.filename
 
         # fill data arrays
@@ -3591,8 +4250,11 @@ class PSpecData:
         uvp.integration_array = integration_array
         uvp.wgt_array = wgt_array
         uvp.nsample_array = dict(
-                        [ (k, np.ones_like(uvp.integration_array[k], float))
-                         for k in uvp.integration_array.keys() ] )
+            [
+                (k, np.ones_like(uvp.integration_array[k], float))
+                for k in uvp.integration_array.keys()
+            ]
+        )
 
         # covariance
         if store_cov:
@@ -3601,15 +4263,20 @@ class PSpecData:
             uvp.cov_model = cov_model
         if store_cov_diag:
             uvp.stats_array = odict()
-            uvp.stats_array[cov_model+"_diag"] = stats_array_cov_model
+            uvp.stats_array[cov_model + "_diag"] = stats_array_cov_model
 
         # window functions
         if store_window:
             if exact_windows:
                 # compute and store exact window functions
-                uvp.get_exact_window_functions(ftbeam=ftbeam, verbose=verbose,
-                                               x_orientation=self.dsets[0].telescope.get_x_orientation_from_feeds(),
-                                               inplace=True)
+                uvp.get_exact_window_functions(
+                    ftbeam=ftbeam,
+                    verbose=verbose,
+                    x_orientation=self.dsets[
+                        0
+                    ].telescope.get_x_orientation_from_feeds(),
+                    inplace=True,
+                )
             else:
                 uvp.window_function_array = window_function_array
 
@@ -3674,23 +4341,26 @@ class PSpecData:
         # iterate over dsets
         for i, dset in enumerate(dsets):
             if len(dset.phase_center_catalog) > 1:
-                raise ValueError("Cannot deal with datasets with more than one phase center")
+                raise ValueError(
+                    "Cannot deal with datasets with more than one phase center"
+                )
 
             # don't rephase dataset we are using as our LST anchor
             if i == dset_index:
                 # even though not phasing this dset, must set to match all other
                 # dsets due to phasing-check validation
-                dset.phase_center_catalog[0]['cat_type'] = 'unknown'
+                dset.phase_center_catalog[0]["cat_type"] = "unknown"
                 continue
 
             # skip if dataset is not drift phased
-            if dset.phase_center_catalog[0]['cat_type'] != 'unprojected':
+            if dset.phase_center_catalog[0]["cat_type"] != "unprojected":
                 warnings.warn(f"Skipping dataset {i} b/c it isn't unprojected")
 
             # convert UVData to DataContainers. Note this doesn't make
             # a copy of the data
-            (data, flgs, antpos, ants, freqs, times, lsts,
-             pols) = hc.io.load_vis(dset, return_meta=True)
+            (data, flgs, antpos, ants, freqs, times, lsts, pols) = hc.io.load_vis(
+                dset, return_meta=True
+            )
 
             # make bls dictionary
             bls = dict([(k, antpos[k[0]] - antpos[k[1]]) for k in data.keys()])
@@ -3710,14 +4380,21 @@ class PSpecData:
                 indices = dset.antpair2ind(k[:2], ordered=False)
 
                 # get index in polarization_array for this polarization
-                polind = pol_list.index(uvutils.polstr2num(k[-1], x_orientation=self.dsets[0].telescope.get_x_orientation_from_feeds()))
+                polind = pol_list.index(
+                    uvutils.polstr2num(
+                        k[-1],
+                        x_orientation=self.dsets[
+                            0
+                        ].telescope.get_x_orientation_from_feeds(),
+                    )
+                )
 
                 # insert into dset
                 dset.data_array[indices, :, polind] = data[k]
 
             # set phasing in UVData object to unknown b/c there isn't a single
             # consistent phasing for the entire data set.
-            dset.phase_center_catalog[0]['cat_type'] = 'unknown'
+            dset.phase_center_catalog[0]["cat_type"] = "unknown"
 
         if inplace is False:
             return dsets
@@ -3746,12 +4423,14 @@ class PSpecData:
                 )
 
         # Check beam is not None
-        assert beam is not None, \
+        assert beam is not None, (
             "Cannot convert Jy --> mK b/c beam object is not defined..."
+        )
 
         # assert type of beam
-        assert isinstance(beam, pspecbeam.PSpecBeamBase), \
+        assert isinstance(beam, pspecbeam.PSpecBeamBase), (
             "beam model must be a subclass of pspecbeam.PSpecBeamBase"
+        )
 
         # iterate over all pols and get conversion factors
         factors = {}
@@ -3761,15 +4440,15 @@ class PSpecData:
         # iterate over datasets and apply factor
         for i, dset in enumerate(self.dsets):
             # check dset vis units
-            if dset.vis_units.upper() != 'JY':
-                if dset.vis_units.upper() != 'MK':
+            if dset.vis_units.upper() != "JY":
+                if dset.vis_units.upper() != "MK":
                     warnings.warn(
                         f"Cannot convert dset {i} Jy -> mK because vis_units = {dset.vis_units}"
                     )
                 continue
             for j, p in enumerate(dset.polarization_array):
                 dset.data_array[:, :, j] *= factors[p][None, :]
-            dset.vis_units = 'mK'
+            dset.vis_units = "mK"
 
     def trim_dset_lsts(self, lst_tol=6):
         r"""
@@ -3789,16 +4468,17 @@ class PSpecData:
         dlst = np.median(np.diff(np.unique(self.dsets[0].lst_array)))
         for dset in self.dsets:
             _dlst = np.median(np.diff(np.unique(dset.lst_array)))
-            if not np.isclose(dlst, _dlst, atol=10**(-lst_tol) / dset.Ntimes):
-                raise ValueError("Not all datasets in self.dsets are on the same LST "
-                      "grid, cannot LST trim.")
+            if not np.isclose(dlst, _dlst, atol=10 ** (-lst_tol) / dset.Ntimes):
+                raise ValueError(
+                    "Not all datasets in self.dsets are on the same LST "
+                    "grid, cannot LST trim."
+                )
 
         # get lst array of each dataset, turn into string and add to common_lsts
         lst_arrs = []
         common_lsts = set()
         for i, dset in enumerate(self.dsets):
-            lsts = ["{lst:0.{tol}f}".format(lst=l, tol=lst_tol)
-                    for l in dset.lst_array]
+            lsts = ["{lst:0.{tol}f}".format(lst=l, tol=lst_tol) for l in dset.lst_array]
             lst_arrs.append(lsts)
             if i == 0:
                 common_lsts = common_lsts.union(set(lsts))
@@ -3813,20 +4493,62 @@ class PSpecData:
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
 
 
-def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
-              groupname=None, dset_labels=None, dset_pairs=None, psname_ext=None,
-              spw_ranges=None, n_dlys=None, pol_pairs=None, blpairs=None,
-              input_data_weight='identity', norm='I', taper='none', sampling=False,
-              exclude_auto_bls=False, exclude_cross_bls=False, exclude_permutations=True,
-              Nblps_per_group=None, bl_len_range=(0, 1e10),
-              bl_deg_range=(0, 180), bl_error_tol=1.0,
-              store_window=True, exact_windows=False, ftbeam=None,
-              beam=None, cosmo=None, interleave_times=False, rephase_to_dset=None,
-              trim_dset_lsts=False, broadcast_dset_flags=True,
-              time_thresh=0.2, Jy2mK=False, overwrite=True, symmetric_taper=True,
-              file_type='miriad', verbose=True, exact_norm=False, store_cov=False, store_cov_diag=False, filter_extensions=None,
-              history='', r_params=None, tsleep=0.1, maxiter=1, return_q=False, known_cov=None, cov_model='empirical',
-              include_autocorrs=False, include_crosscorrs=True, xant_flag_thresh=0.95, allow_fft=False):
+def pspec_run(
+    dsets,
+    filename,
+    dsets_std=None,
+    cals=None,
+    cal_flag=True,
+    groupname=None,
+    dset_labels=None,
+    dset_pairs=None,
+    psname_ext=None,
+    spw_ranges=None,
+    n_dlys=None,
+    pol_pairs=None,
+    blpairs=None,
+    input_data_weight="identity",
+    norm="I",
+    taper="none",
+    sampling=False,
+    exclude_auto_bls=False,
+    exclude_cross_bls=False,
+    exclude_permutations=True,
+    Nblps_per_group=None,
+    bl_len_range=(0, 1e10),
+    bl_deg_range=(0, 180),
+    bl_error_tol=1.0,
+    store_window=True,
+    exact_windows=False,
+    ftbeam=None,
+    beam=None,
+    cosmo=None,
+    interleave_times=False,
+    rephase_to_dset=None,
+    trim_dset_lsts=False,
+    broadcast_dset_flags=True,
+    time_thresh=0.2,
+    Jy2mK=False,
+    overwrite=True,
+    symmetric_taper=True,
+    file_type="miriad",
+    verbose=True,
+    exact_norm=False,
+    store_cov=False,
+    store_cov_diag=False,
+    filter_extensions=None,
+    history="",
+    r_params=None,
+    tsleep=0.1,
+    maxiter=1,
+    return_q=False,
+    known_cov=None,
+    cov_model="empirical",
+    include_autocorrs=False,
+    include_crosscorrs=True,
+    xant_flag_thresh=0.95,
+    allow_fft=False,
+):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
     results to a PSpecContainer object.
@@ -4118,14 +4840,15 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         weighting matrices.
     """
     # type check
-    assert isinstance(dsets, (list, tuple, np.ndarray)), \
+    assert isinstance(dsets, (list, tuple, np.ndarray)), (
         "dsets must be fed as a list of dataset string paths or UVData objects."
+    )
 
     # parse psname
     if psname_ext is not None:
         assert isinstance(psname_ext, str)
     else:
-        psname_ext = ''
+        psname_ext = ""
 
     # polarizations check
     if pol_pairs is not None:
@@ -4161,31 +4884,41 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     if dset_labels is None:
         dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
     else:
-        assert not np.any(['_' in dl for dl in dset_labels]), \
-          "cannot accept underscores in input dset_labels: {}".format(dset_labels)
+        assert not np.any(["_" in dl for dl in dset_labels]), (
+            "cannot accept underscores in input dset_labels: {}".format(dset_labels)
+        )
 
     # if dsets are not UVData, assume they are filepaths or list of filepaths
     if not isinstance(dsets[0], UVData):
         try:
             # load data into UVData objects if fed as list of strings
             t0 = time.time()
-            dsets = _load_dsets(dsets, bls=bls, pols=pols, file_type=file_type, verbose=verbose)
-            utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
-                      lvl=1, verbose=verbose)
+            dsets = _load_dsets(
+                dsets, bls=bls, pols=pols, file_type=file_type, verbose=verbose
+            )
+            utils.log(
+                "Loaded data in %1.1f sec." % (time.time() - t0), lvl=1, verbose=verbose
+            )
         except ValueError:
             # at least one of the dset loads failed due to no data being present
-            utils.log("One of the dset loads failed due to no data overlap given "
-                      "the bls and pols selection", verbose=verbose)
+            utils.log(
+                "One of the dset loads failed due to no data overlap given "
+                "the bls and pols selection",
+                verbose=verbose,
+            )
             return None
 
-    assert np.all([isinstance(d, UVData) for d in dsets]), \
+    assert np.all([isinstance(d, UVData) for d in dsets]), (
         "dsets must be fed as a list of dataset string paths or UVData objects."
+    )
 
     # check dsets_std input
     if dsets_std is not None:
-        err_msg = "input dsets_std must be a list of UVData objects or " \
-                  "filepaths to miriad files"
-        assert isinstance(dsets_std,(list, tuple, np.ndarray)), err_msg
+        err_msg = (
+            "input dsets_std must be a list of UVData objects or "
+            "filepaths to miriad files"
+        )
+        assert isinstance(dsets_std, (list, tuple, np.ndarray)), err_msg
         assert len(dsets_std) == Ndsets, "len(dsets_std) must equal len(dsets)"
 
         # load data if not UVData
@@ -4193,14 +4926,22 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             try:
                 # load data into UVData objects if fed as list of strings
                 t0 = time.time()
-                dsets_std = _load_dsets(dsets_std, bls=bls, pols=pols, file_type=file_type, verbose=verbose)
-                utils.log("Loaded data in %1.1f sec." % (time.time() - t0),
-                          lvl=1, verbose=verbose)
+                dsets_std = _load_dsets(
+                    dsets_std, bls=bls, pols=pols, file_type=file_type, verbose=verbose
+                )
+                utils.log(
+                    "Loaded data in %1.1f sec." % (time.time() - t0),
+                    lvl=1,
+                    verbose=verbose,
+                )
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data
                 # being present
-                utils.log("One of the dsets_std loads failed due to no data overlap given "
-                          "the bls and pols selection", verbose=verbose)
+                utils.log(
+                    "One of the dsets_std loads failed due to no data overlap given "
+                    "the bls and pols selection",
+                    verbose=verbose,
+                )
                 return None
 
         assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
@@ -4208,11 +4949,20 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # Check that the given spw ranges are valid, before doing anything too hefty.
     if spw_ranges is not None:
         for spw in spw_ranges:
-            assert len(spw) == 2, f"spw_ranges must be a list of tuples of length 2. Got {spw}"
-            assert 0 <= spw[0] < spw[1], f"spw_ranges must be a list of tuples of length 2, with both elements being non-negative integers of increasing value. Got {spw}"
+            assert len(spw) == 2, (
+                f"spw_ranges must be a list of tuples of length 2. Got {spw}"
+            )
+            assert 0 <= spw[0] < spw[1], (
+                f"spw_ranges must be a list of tuples of length 2, with both elements being non-negative integers of increasing value. Got {spw}"
+            )
             for dset in dsets:
-                assert spw[1] <= dset.Nfreqs, f"spw_range of {spw} out of range for dset {dset.filename[0]} with the second element being less than the number of frequencies in the data"
-            utils.log(f"Using spw_range: {np.squeeze(dsets[0].freq_array)[spw[0]] /1e6} - {np.squeeze(dsets[0].freq_array)[spw[1] - 1]/1e6} MHz", verbose=verbose)
+                assert spw[1] <= dset.Nfreqs, (
+                    f"spw_range of {spw} out of range for dset {dset.filename[0]} with the second element being less than the number of frequencies in the data"
+                )
+            utils.log(
+                f"Using spw_range: {np.squeeze(dsets[0].freq_array)[spw[0]] / 1e6} - {np.squeeze(dsets[0].freq_array)[spw[1] - 1] / 1e6} MHz",
+                verbose=verbose,
+            )
 
     # read calibration if provided (calfits partial IO not yet supported)
     if cals is not None:
@@ -4221,8 +4971,11 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         if not isinstance(cals[0], UVCal):
             t0 = time.time()
             cals = _load_cals(cals, verbose=verbose)
-            utils.log("Loaded calibration in %1.1f sec." % (time.time() - t0),
-                      lvl=1, verbose=verbose)
+            utils.log(
+                "Loaded calibration in %1.1f sec." % (time.time() - t0),
+                lvl=1,
+                verbose=verbose,
+            )
         err_msg = "cals must be a list of UVCal, filepaths, or list of filepaths"
         assert np.all([isinstance(c, UVCal) for c in cals]), err_msg
 
@@ -4244,8 +4997,15 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             beam.cosmo = cosmo
 
     # package into PSpecData
-    ds = PSpecData(dsets=dsets, wgts=[None for d in dsets], labels=dset_labels,
-                   dsets_std=dsets_std, beam=beam, cals=cals, cal_flag=cal_flag)
+    ds = PSpecData(
+        dsets=dsets,
+        wgts=[None for d in dsets],
+        labels=dset_labels,
+        dsets_std=dsets_std,
+        beam=beam,
+        cals=cals,
+        cal_flag=cal_flag,
+    )
 
     # erase calibration as they are no longer needed
     del cals
@@ -4258,19 +5018,32 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     if interleave_times:
         if len(ds.dsets) != 1:
             raise ValueError("interleave_times only applicable for Ndsets == 1")
-        Ntimes = ds.dsets[0].Ntimes # get smallest Ntimes
+        Ntimes = ds.dsets[0].Ntimes  # get smallest Ntimes
         Ntimes -= Ntimes % 2  # make it an even number
         # update dsets
-        ds.dsets.append(ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False))
-        ds.dsets[0].select(times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True)
+        ds.dsets.append(
+            ds.dsets[0].select(
+                times=np.unique(ds.dsets[0].time_array)[1:Ntimes:2], inplace=False
+            )
+        )
+        ds.dsets[0].select(
+            times=np.unique(ds.dsets[0].time_array)[0:Ntimes:2], inplace=True
+        )
         ds.labels.append("dset1")
 
         # update dsets_std
         if ds.dsets_std[0] is None:
             ds.dsets_std.append(None)
         else:
-            ds.dsets_std.append(ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2], inplace=False))
-            ds.dsets_std[0].select(times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True)
+            ds.dsets_std.append(
+                ds.dsets_std[0].select(
+                    times=np.unique(ds.dsets_std[0].time_array)[1:Ntimes:2],
+                    inplace=False,
+                )
+            )
+            ds.dsets_std[0].select(
+                times=np.unique(ds.dsets_std[0].time_array)[0:Ntimes:2], inplace=True
+            )
 
         # wgts is currently always None
         ds.wgts.append(None)
@@ -4298,13 +5071,15 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     # is already cross-correlating different times to avoid noise bias.
     # See issue #160 on hera_pspec repo
     if exclude_auto_bls:
-        raise_warning("Skipping the cross-multiplications of a baseline "
-                      "with itself may cause a bias if one is already "
-                      "cross-correlating different times to avoid the "
-                      "noise bias. Please see hera_pspec github issue 160 "
-                      "to make sure you know what you are doing! "
-                      "https://github.com/HERA-Team/hera_pspec/issues/160",
-                      verbose=verbose)
+        raise_warning(
+            "Skipping the cross-multiplications of a baseline "
+            "with itself may cause a bias if one is already "
+            "cross-correlating different times to avoid the "
+            "noise bias. Please see hera_pspec github issue 160 "
+            "to make sure you know what you are doing! "
+            "https://github.com/HERA-Team/hera_pspec/issues/160",
+            verbose=verbose,
+        )
 
     # check dset pair type
     err_msg = "dset_pairs must be fed as a list of len-2 integer tuples"
@@ -4316,20 +5091,21 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
     for i, dsetp in enumerate(dset_pairs):
         # get bls if blpairs not fed
         if blpairs is None:
-            (bls1, bls2, blps, xants1,
-             xants2) = utils.calc_blpair_reds(
-                                      dsets[dsetp[0]], dsets[dsetp[1]],
-                                      filter_blpairs=True,
-                                      exclude_auto_bls=exclude_auto_bls,
-                                      exclude_cross_bls=exclude_cross_bls,
-                                      exclude_permutations=exclude_permutations,
-                                      Nblps_per_group=Nblps_per_group,
-                                      bl_len_range=bl_len_range,
-                                      bl_deg_range=bl_deg_range,
-                                      include_autocorrs=include_autocorrs,
-                                      include_crosscorrs=include_crosscorrs,
-                                      bl_tol=bl_error_tol,
-                                      xant_flag_thresh=xant_flag_thresh)
+            (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
+                dsets[dsetp[0]],
+                dsets[dsetp[1]],
+                filter_blpairs=True,
+                exclude_auto_bls=exclude_auto_bls,
+                exclude_cross_bls=exclude_cross_bls,
+                exclude_permutations=exclude_permutations,
+                Nblps_per_group=Nblps_per_group,
+                bl_len_range=bl_len_range,
+                bl_deg_range=bl_deg_range,
+                include_autocorrs=include_autocorrs,
+                include_crosscorrs=include_crosscorrs,
+                bl_tol=bl_error_tol,
+                xant_flag_thresh=xant_flag_thresh,
+            )
             bls1_list.append(bls1)
             bls2_list.append(bls2)
 
@@ -4340,8 +5116,9 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
             _bls1 = []
             _bls2 = []
             for _bl1, _bl2 in zip(bls1, bls2):
-                if (_bl1 in dset1_bls or _bl1[::-1] in dset1_bls) \
-                    and (_bl2 in dset2_bls or _bl2[::-1] in dset2_bls):
+                if (_bl1 in dset1_bls or _bl1[::-1] in dset1_bls) and (
+                    _bl2 in dset2_bls or _bl2[::-1] in dset2_bls
+                ):
                     _bls1.append(_bl1)
                     _bls2.append(_bl2)
 
@@ -4350,11 +5127,13 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
 
     # Open PSpecContainer to store all output in
     logger.info(f"Opening {filename} in transactional mode")
-    psc = container.PSpecContainer(filename, mode='rw', keep_open=False, tsleep=tsleep, maxiter=maxiter)
+    psc = container.PSpecContainer(
+        filename, mode="rw", keep_open=False, tsleep=tsleep, maxiter=maxiter
+    )
 
     # assign group name
     if groupname is None:
-        groupname = '_'.join(dset_labels)
+        groupname = "_".join(dset_labels)
 
     # Loop over dataset combinations
     for i, dset_idxs in enumerate(dset_pairs):
@@ -4362,22 +5141,41 @@ def pspec_run(dsets, filename, dsets_std=None, cals=None, cal_flag=True,
         if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
             continue
         # Run OQE
-        uvp = ds.pspec(bls1_list[i], bls2_list[i], dset_idxs, pol_pairs, symmetric_taper=symmetric_taper,
-                       spw_ranges=spw_ranges, n_dlys=n_dlys, r_params=r_params,
-                       store_cov=store_cov, store_cov_diag=store_cov_diag, input_data_weight=input_data_weight,
-                       exact_norm=exact_norm, sampling=sampling,
-                       return_q=return_q, cov_model=cov_model, known_cov=known_cov,
-                       norm=norm, taper=taper, history=history, verbose=verbose,
-                       filter_extensions=filter_extensions, store_window=store_window,
-                       exact_windows=exact_windows, ftbeam=ftbeam)
+        uvp = ds.pspec(
+            bls1_list[i],
+            bls2_list[i],
+            dset_idxs,
+            pol_pairs,
+            symmetric_taper=symmetric_taper,
+            spw_ranges=spw_ranges,
+            n_dlys=n_dlys,
+            r_params=r_params,
+            store_cov=store_cov,
+            store_cov_diag=store_cov_diag,
+            input_data_weight=input_data_weight,
+            exact_norm=exact_norm,
+            sampling=sampling,
+            return_q=return_q,
+            cov_model=cov_model,
+            known_cov=known_cov,
+            norm=norm,
+            taper=taper,
+            history=history,
+            verbose=verbose,
+            filter_extensions=filter_extensions,
+            store_window=store_window,
+            exact_windows=exact_windows,
+            ftbeam=ftbeam,
+        )
 
         # Store output
-        psname = f'{dset_labels[dset_idxs[0]]}_x_{dset_labels[dset_idxs[1]]}{psname_ext}'
+        psname = (
+            f"{dset_labels[dset_idxs[0]]}_x_{dset_labels[dset_idxs[1]]}{psname_ext}"
+        )
 
         # write in transactional mode
         logger.info(f"Storing {psname}")
-        psc.set_pspec(group=groupname, psname=psname, pspec=uvp,
-                      overwrite=overwrite)
+        psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
 
     return ds
 
@@ -4387,88 +5185,300 @@ def get_pspec_run_argparser():
 
     def list_of_int_tuples(v):
         """Format for parsing lists of integer pairs for different OQE args.
-             Two acceptable formats are
-             Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and
-             Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]"""
-        if '~' in v:
-            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        Two acceptable formats are
+        Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and
+        Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]"""
+        if "~" in v:
+            v = [tuple([int(_x) for _x in x.split("~")]) for x in v.split(",")]
         else:
             v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_str_tuples(v):
         """Lists of string 2-tuples for various OQE args (ex. Polarization pairs).
-           Two acceptable formats are
-           Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and
-           Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]"""
-        if '~' in v:
-            v = [tuple([str(_x) for _x in x.split('~')]) for x in v.split(",")]
+        Two acceptable formats are
+        Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and
+        Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]"""
+        if "~" in v:
+            v = [tuple([str(_x) for _x in x.split("~")]) for x in v.split(",")]
         else:
             v = [tuple([str(_x) for _x in x.split()]) for x in v.split(",")]
         return v
 
     def list_of_tuple_tuples(v):
         """List of tuple tuples for various OQE args (ex. baseline pair lists). Two acceptable formats are
-            Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and
-            Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...])"""
-        if '~' in v:
-            v = [tuple([int(_x) for _x in x.split('~')]) for x in v.split(",")]
+        Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and
+        Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...])"""
+        if "~" in v:
+            v = [tuple([int(_x) for _x in x.split("~")]) for x in v.split(",")]
         else:
             v = [tuple([int(_x) for _x in x.split()]) for x in v.split(",")]
         v = [(x[:2], x[2:]) for x in v]
         return v
 
-    a.add_argument("dsets", nargs='*', help="List of UVData objects or miriad filepaths.")
+    a.add_argument(
+        "dsets", nargs="*", help="List of UVData objects or miriad filepaths."
+    )
     a.add_argument("filename", type=str, help="Output filename of HDF5 container.")
-    a.add_argument("--dsets_std", nargs='*', default=None, type=str, help="List of miriad filepaths to visibility standard deviations.")
-    a.add_argument("--groupname", default=None, type=str, help="Groupname for the UVPSpec objects in the HDF5 container.")
-    a.add_argument("--dset_pairs", default=None, type=list_of_int_tuples, help="List of dset pairings for OQE. Two acceptable formats are "
-                                                                               "Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and "
-                                                                               "Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]")
-    a.add_argument("--dset_labels", default=None, type=str, nargs='*', help="List of string labels for each input dataset.")
-    a.add_argument("--spw_ranges", default=None, type=list_of_int_tuples, help="List of spw channel selections. Two acceptable formats are "
-                                                                               "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
-                                                                               "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]")
-    a.add_argument("--n_dlys", default=None, type=int, nargs='+', help="List of integers specifying number of delays to use per spectral window selection.")
-    a.add_argument("--pol_pairs", default=None, type=list_of_str_tuples, help="List of pol-string pairs to use in OQE. Two acceptable formats are "
-                                                                              "Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and "
-                                                                              "Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]")
-    a.add_argument("--blpairs", default=None, type=list_of_tuple_tuples, help="List of baseline-pair antenna integers to run OQE on. Two acceptable formats are "
-                                                                              "Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and "
-                                                                              "Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]")
-    a.add_argument("--input_data_weight", default='identity', type=str, help="Data weighting for OQE. See PSpecData.pspec for details.")
-    a.add_argument("--norm", default='I', type=str, help='M-matrix normalization type for OQE. See PSpecData.pspec for details.')
-    a.add_argument("--taper", default='none', type=str, help="Taper function to use in OQE delay transform. See PSpecData.pspec for details.")
-    a.add_argument("--beam", default=None, type=str, help="Filepath to UVBeam healpix map of antenna beam.")
-    a.add_argument("--cosmo", default=None, nargs='+', type=float, help="List of float values for [Om_L, Om_b, Om_c, H0, Om_M, Om_k].")
-    a.add_argument("--rephase_to_dset", default=None, type=int, help="dset integer index to phase all other dsets to. Default is no rephasing.")
-    a.add_argument("--trim_dset_lsts", default=False, action='store_true', help="Trim non-overlapping dset LSTs.")
-    a.add_argument("--broadcast_dset_flags", default=False, action='store_true', help="Broadcast dataset flags across time according to time_thresh.")
-    a.add_argument("--time_thresh", default=0.2, type=float, help="Fractional flagging threshold across time to trigger flag broadcast if broadcast_dset_flags is True")
-    a.add_argument("--Jy2mK", default=False, action='store_true', help="Convert datasets from Jy to mK if a beam model is provided.")
-    a.add_argument("--exclude_auto_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with itself.')
-    a.add_argument("--exclude_cross_bls", default=False, action='store_true', help='If blpairs is not provided, exclude all baselines paired with a different baseline.')
-    a.add_argument("--exclude_permutations", default=False, action='store_true', help='If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).')
-    a.add_argument("--Nblps_per_group", default=None, type=int, help="If blpairs is not provided and group == True, set the number of blpairs in each group.")
-    a.add_argument("--bl_len_range", default=(0, 1e10), nargs='+', type=float, help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.")
-    a.add_argument("--bl_deg_range", default=(0, 180), nargs='+', type=float, help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.")
-    a.add_argument("--bl_error_tol", default=1.0, type=float, help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.")
-    a.add_argument("--store_cov", default=False, action='store_true', help="Compute and store covariance of bandpowers given dsets_std files or empirical covariance.")
-    a.add_argument("--store_cov_diag", default=False, action='store_true', help="Compute and store the error bars calculated by QE formalism.")
-    a.add_argument("--return_q", default=False, action='store_true', help="Return unnormalized bandpowers given dsets files.")
-    a.add_argument("--overwrite", default=False, action='store_true', help="Overwrite output if it exists.")
-    a.add_argument("--cov_model", default='empirical', type=str, help="Model for computing covariance, currently supports empirical or dsets")
-    a.add_argument("--psname_ext", default='', type=str, help="Extension for pspectra name in PSpecContainer.")
-    a.add_argument("--verbose", default=False, action='store_true', help="Report feedback to standard output.")
-    a.add_argument("--file_type", default="uvh5", help="filetypes of input UVData. Default is 'uvh5'")
-    a.add_argument("--filter_extensions", default=None, type=list_of_int_tuples, help="List of spw filter extensions wrapped in quotes. Ex:20~20,40~40' ->> [(20, 20), (40, 40), ...]")
-    a.add_argument("--symmetric_taper", default=True, type=bool, help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ")
-    a.add_argument("--include_autocorrs", default=False, action="store_true", help="Include power spectra of autocorr visibilities.")
-    a.add_argument("--exclude_crosscorrs", default=False, action="store_true", help="If True, exclude cross-correlations from power spectra (autocorr power spectra only).")
-    a.add_argument("--interleave_times", default=False, action="store_true", help="Cross multiply even/odd time intervals.")
-    a.add_argument("--xant_flag_thresh", default=0.95, type=float, help="fraction of baseline waterfall that needs to be flagged for entire baseline to be flagged (and excluded from pspec)")
-    a.add_argument("--store_window", default=False, action="store_true", help="store window function array.")
-    a.add_argument("--allow_fft", default=False, action="store_true", help="use an FFT to comptue q-hat.")
+    a.add_argument(
+        "--dsets_std",
+        nargs="*",
+        default=None,
+        type=str,
+        help="List of miriad filepaths to visibility standard deviations.",
+    )
+    a.add_argument(
+        "--groupname",
+        default=None,
+        type=str,
+        help="Groupname for the UVPSpec objects in the HDF5 container.",
+    )
+    a.add_argument(
+        "--dset_pairs",
+        default=None,
+        type=list_of_int_tuples,
+        help="List of dset pairings for OQE. Two acceptable formats are "
+        "Ex1: '0~0,1~1' --> [(0, 0), (1, 1), ...] and "
+        "Ex2: '0 0, 1 1' --> [(0, 0), (1, 1), ...]",
+    )
+    a.add_argument(
+        "--dset_labels",
+        default=None,
+        type=str,
+        nargs="*",
+        help="List of string labels for each input dataset.",
+    )
+    a.add_argument(
+        "--spw_ranges",
+        default=None,
+        type=list_of_int_tuples,
+        help="List of spw channel selections. Two acceptable formats are "
+        "Ex1: '200~300,500~650' --> [(200, 300), (500, 650), ...] and "
+        "Ex2: '200 300, 500 650' --> [(200, 300), (500, 650), ...]",
+    )
+    a.add_argument(
+        "--n_dlys",
+        default=None,
+        type=int,
+        nargs="+",
+        help="List of integers specifying number of delays to use per spectral window selection.",
+    )
+    a.add_argument(
+        "--pol_pairs",
+        default=None,
+        type=list_of_str_tuples,
+        help="List of pol-string pairs to use in OQE. Two acceptable formats are "
+        "Ex1: 'xx~xx,yy~yy' --> [('xx', 'xx'), ('yy', 'yy'), ...] and "
+        "Ex2: 'xx xx, yy yy' --> [('xx', 'xx'), ('yy', 'yy'), ...]",
+    )
+    a.add_argument(
+        "--blpairs",
+        default=None,
+        type=list_of_tuple_tuples,
+        help="List of baseline-pair antenna integers to run OQE on. Two acceptable formats are "
+        "Ex1: '1~2~3~4,5~6~7~8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...] and "
+        "Ex2: '1 2 3 4, 5 6 7 8' --> [((1 2), (3, 4)), ((5, 6), (7, 8)), ...]",
+    )
+    a.add_argument(
+        "--input_data_weight",
+        default="identity",
+        type=str,
+        help="Data weighting for OQE. See PSpecData.pspec for details.",
+    )
+    a.add_argument(
+        "--norm",
+        default="I",
+        type=str,
+        help="M-matrix normalization type for OQE. See PSpecData.pspec for details.",
+    )
+    a.add_argument(
+        "--taper",
+        default="none",
+        type=str,
+        help="Taper function to use in OQE delay transform. See PSpecData.pspec for details.",
+    )
+    a.add_argument(
+        "--beam",
+        default=None,
+        type=str,
+        help="Filepath to UVBeam healpix map of antenna beam.",
+    )
+    a.add_argument(
+        "--cosmo",
+        default=None,
+        nargs="+",
+        type=float,
+        help="List of float values for [Om_L, Om_b, Om_c, H0, Om_M, Om_k].",
+    )
+    a.add_argument(
+        "--rephase_to_dset",
+        default=None,
+        type=int,
+        help="dset integer index to phase all other dsets to. Default is no rephasing.",
+    )
+    a.add_argument(
+        "--trim_dset_lsts",
+        default=False,
+        action="store_true",
+        help="Trim non-overlapping dset LSTs.",
+    )
+    a.add_argument(
+        "--broadcast_dset_flags",
+        default=False,
+        action="store_true",
+        help="Broadcast dataset flags across time according to time_thresh.",
+    )
+    a.add_argument(
+        "--time_thresh",
+        default=0.2,
+        type=float,
+        help="Fractional flagging threshold across time to trigger flag broadcast if broadcast_dset_flags is True",
+    )
+    a.add_argument(
+        "--Jy2mK",
+        default=False,
+        action="store_true",
+        help="Convert datasets from Jy to mK if a beam model is provided.",
+    )
+    a.add_argument(
+        "--exclude_auto_bls",
+        default=False,
+        action="store_true",
+        help="If blpairs is not provided, exclude all baselines paired with itself.",
+    )
+    a.add_argument(
+        "--exclude_cross_bls",
+        default=False,
+        action="store_true",
+        help="If blpairs is not provided, exclude all baselines paired with a different baseline.",
+    )
+    a.add_argument(
+        "--exclude_permutations",
+        default=False,
+        action="store_true",
+        help="If blpairs is not provided, exclude a basline-pair permutations. Ex: if (A, B) exists, exclude (B, A).",
+    )
+    a.add_argument(
+        "--Nblps_per_group",
+        default=None,
+        type=int,
+        help="If blpairs is not provided and group == True, set the number of blpairs in each group.",
+    )
+    a.add_argument(
+        "--bl_len_range",
+        default=(0, 1e10),
+        nargs="+",
+        type=float,
+        help="If blpairs is not provided, limit the baselines used based on their minimum and maximum length in meters.",
+    )
+    a.add_argument(
+        "--bl_deg_range",
+        default=(0, 180),
+        nargs="+",
+        type=float,
+        help="If blpairs is not provided, limit the baseline used based on a min and max angle cut in ENU frame in degrees.",
+    )
+    a.add_argument(
+        "--bl_error_tol",
+        default=1.0,
+        type=float,
+        help="If blpairs is not provided, this is the error tolerance in forming redundant baseline groups in meters.",
+    )
+    a.add_argument(
+        "--store_cov",
+        default=False,
+        action="store_true",
+        help="Compute and store covariance of bandpowers given dsets_std files or empirical covariance.",
+    )
+    a.add_argument(
+        "--store_cov_diag",
+        default=False,
+        action="store_true",
+        help="Compute and store the error bars calculated by QE formalism.",
+    )
+    a.add_argument(
+        "--return_q",
+        default=False,
+        action="store_true",
+        help="Return unnormalized bandpowers given dsets files.",
+    )
+    a.add_argument(
+        "--overwrite",
+        default=False,
+        action="store_true",
+        help="Overwrite output if it exists.",
+    )
+    a.add_argument(
+        "--cov_model",
+        default="empirical",
+        type=str,
+        help="Model for computing covariance, currently supports empirical or dsets",
+    )
+    a.add_argument(
+        "--psname_ext",
+        default="",
+        type=str,
+        help="Extension for pspectra name in PSpecContainer.",
+    )
+    a.add_argument(
+        "--verbose",
+        default=False,
+        action="store_true",
+        help="Report feedback to standard output.",
+    )
+    a.add_argument(
+        "--file_type",
+        default="uvh5",
+        help="filetypes of input UVData. Default is 'uvh5'",
+    )
+    a.add_argument(
+        "--filter_extensions",
+        default=None,
+        type=list_of_int_tuples,
+        help="List of spw filter extensions wrapped in quotes. Ex:20~20,40~40' ->> [(20, 20), (40, 40), ...]",
+    )
+    a.add_argument(
+        "--symmetric_taper",
+        default=True,
+        type=bool,
+        help="If True, apply sqrt of taper before foreground filtering and then another sqrt after. If False, apply full taper after foreground Filter. ",
+    )
+    a.add_argument(
+        "--include_autocorrs",
+        default=False,
+        action="store_true",
+        help="Include power spectra of autocorr visibilities.",
+    )
+    a.add_argument(
+        "--exclude_crosscorrs",
+        default=False,
+        action="store_true",
+        help="If True, exclude cross-correlations from power spectra (autocorr power spectra only).",
+    )
+    a.add_argument(
+        "--interleave_times",
+        default=False,
+        action="store_true",
+        help="Cross multiply even/odd time intervals.",
+    )
+    a.add_argument(
+        "--xant_flag_thresh",
+        default=0.95,
+        type=float,
+        help="fraction of baseline waterfall that needs to be flagged for entire baseline to be flagged (and excluded from pspec)",
+    )
+    a.add_argument(
+        "--store_window",
+        default=False,
+        action="store_true",
+        help="store window function array.",
+    )
+    a.add_argument(
+        "--allow_fft",
+        default=False,
+        action="store_true",
+        help="use an FFT to comptue q-hat.",
+    )
     return a
 
 
@@ -4509,9 +5519,10 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     # ensure shared antenna keys match within tolerance
     shared = sorted(set(ap1.keys()) & set(ap2.keys()))
     for k in shared:
-        assert np.linalg.norm(ap1[k] - ap2[k]) <= baseline_tol, \
-            "uvd1 and uvd2 don't agree on antenna positions within " \
+        assert np.linalg.norm(ap1[k] - ap2[k]) <= baseline_tol, (
+            "uvd1 and uvd2 don't agree on antenna positions within "
             "tolerance of {} m".format(baseline_tol)
+        )
     ap = ap1
     ap.update(ap2)
 
@@ -4524,8 +5535,12 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
             bl1_vec = ap[blp[0][0]] - ap[blp[0][1]]
             bl2_vec = ap[blp[1][0]] - ap[blp[1][1]]
             if np.linalg.norm(bl1_vec - bl2_vec) >= baseline_tol:
-                raise_warning("blpair {} exceeds redundancy tolerance of "
-                              "{} m".format(blp, baseline_tol), verbose=verbose)
+                raise_warning(
+                    "blpair {} exceeds redundancy tolerance of {} m".format(
+                        blp, baseline_tol
+                    ),
+                    verbose=verbose,
+                )
 
 
 def raise_warning(warning, verbose=True):
@@ -4536,8 +5551,16 @@ def raise_warning(warning, verbose=True):
         print(warning)
 
 
-def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
-                file_type='miriad', cals=None, cal_flag=True):
+def _load_dsets(
+    fnames,
+    bls=None,
+    pols=None,
+    logf=None,
+    verbose=True,
+    file_type="miriad",
+    cals=None,
+    cal_flag=True,
+):
     """
     Helper function for loading UVData-compatible datasets in pspec_run.
 
@@ -4568,8 +5591,12 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
     dsets = []
     Ndsets = len(fnames)
     for i, dset in enumerate(fnames):
-        utils.log("Reading {} / {} datasets...".format(i+1, Ndsets),
-                  f=logf, lvl=1, verbose=verbose)
+        utils.log(
+            "Reading {} / {} datasets...".format(i + 1, Ndsets),
+            f=logf,
+            lvl=1,
+            verbose=verbose,
+        )
 
         # read data
         uvd = UVData()
@@ -4577,12 +5604,12 @@ def _load_dsets(fnames, bls=None, pols=None, logf=None, verbose=True,
             dfiles = glob.glob(dset)
         else:
             dfiles = dset
-        uvd.read(dfiles, bls=bls, polarizations=pols,
-                 file_type=file_type)
-        uvd.extra_keywords['filename'] = json.dumps(dfiles)
+        uvd.read(dfiles, bls=bls, polarizations=pols, file_type=file_type)
+        uvd.extra_keywords["filename"] = json.dumps(dfiles)
         dsets.append(uvd)
 
     return dsets
+
 
 def _load_cals(cnames, logf=None, verbose=True):
     """
@@ -4606,8 +5633,12 @@ def _load_cals(cnames, logf=None, verbose=True):
     cals = []
     Ncals = len(cnames)
     for i, cfile in enumerate(cnames):
-        utils.log("Reading {} / {} calibrations...".format(i+1, Ncals),
-                  f=logf, lvl=1, verbose=verbose)
+        utils.log(
+            "Reading {} / {} calibrations...".format(i + 1, Ncals),
+            f=logf,
+            lvl=1,
+            verbose=verbose,
+        )
 
         # read data
         uvc = UVCal()
@@ -4615,7 +5646,7 @@ def _load_cals(cnames, logf=None, verbose=True):
             uvc.read(glob.glob(cfile))
         else:
             uvc.read(cfile)
-        uvc.extra_keywords['filename'] = json.dumps(cfile)
+        uvc.extra_keywords["filename"] = json.dumps(cfile)
         cals.append(uvc)
 
     return cals

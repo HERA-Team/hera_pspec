@@ -7,15 +7,17 @@ import h5py
 import pickle
 from pathlib import Path
 
-@pytest.fixture(scope='module')
+
+@pytest.fixture(scope="module")
 def vanilla_uvp() -> UVPSpec:
     uvp, _ = testing.build_vanilla_uvpspec()
     return uvp
 
-@pytest.fixture(scope='module')
+
+@pytest.fixture(scope="module")
 def single_baseline_files(tmp_path_factory, vanilla_uvp: UVPSpec) -> list[Path]:
     # Set up by writing out some one-blpair files.
-    tmp_path = tmp_path_factory.mktemp('single-bl-files')
+    tmp_path = tmp_path_factory.mktemp("single-bl-files")
 
     blpairs = vanilla_uvp.get_blpairs()
     files = []
@@ -23,18 +25,19 @@ def single_baseline_files(tmp_path_factory, vanilla_uvp: UVPSpec) -> list[Path]:
         sub_uvp = vanilla_uvp.select(blpairs=[blpair], inplace=False)
 
         fname = tmp_path / f"blpair.{i:02}.h5"
-        psc = PSpecContainer(fname, 'rw', keep_open=False)
-        psc.set_pspec('pspecgroup', 'name', sub_uvp)
-        psc.set_pspec('pspecgroup', 'name2', sub_uvp)
+        psc = PSpecContainer(fname, "rw", keep_open=False)
+        psc.set_pspec("pspecgroup", "name", sub_uvp)
+        psc.set_pspec("pspecgroup", "name2", sub_uvp)
 
         files.append(fname)
 
     for fname in files:
-        with h5py.File(fname, 'a') as fl:
-            fl['header'].attrs['extra0'] = [1,2,3]
-            fl['header'].attrs['extra1'] = 'a nice string'
+        with h5py.File(fname, "a") as fl:
+            fl["header"].attrs["extra0"] = [1, 2, 3]
+            fl["header"].attrs["extra1"] = "a nice string"
 
     return files
+
 
 class TestFastMergeBaselines:
     def test_happy_path(self, vanilla_uvp, single_baseline_files: list[Path]):
@@ -45,16 +48,23 @@ class TestFastMergeBaselines:
         result = runner.invoke(
             cli.app,
             args=[
-                'fast-merge-baselines',
-                '--pattern', f'{pth}/blpair.*.h5',
-                '--group', 'pspecgroup',
-                '--names', 'name',
-                '--names', 'name2',
-                '--outpath', f"{pth}/combined",
-                '--no-progress',
-                '--extras', 'extra0',
-                '--extras', 'extra1',
-            ]
+                "fast-merge-baselines",
+                "--pattern",
+                f"{pth}/blpair.*.h5",
+                "--group",
+                "pspecgroup",
+                "--names",
+                "name",
+                "--names",
+                "name2",
+                "--outpath",
+                f"{pth}/combined",
+                "--no-progress",
+                "--extras",
+                "extra0",
+                "--extras",
+                "extra1",
+            ],
         )
 
         if result.exit_code != 0:
@@ -63,15 +73,15 @@ class TestFastMergeBaselines:
             assert result.exit_code == 0
 
         # Test that the file we made has all the baselines in it.
-        new = PSpecContainer(pth / "combined.pspec.h5", 'r', keep_open=False)
-        newuvp = new.get_pspec('pspecgroup', 'name')
+        new = PSpecContainer(pth / "combined.pspec.h5", "r", keep_open=False)
+        newuvp = new.get_pspec("pspecgroup", "name")
         assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
 
-        newuvp = new.get_pspec('pspecgroup', 'name2')
+        newuvp = new.get_pspec("pspecgroup", "name2")
         assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
 
         # Test that the file we made has all the baselines in it.
-        with open(pth / "combined.extra0.pkl", 'rb') as fl:
+        with open(pth / "combined.extra0.pkl", "rb") as fl:
             data = pickle.load(fl)
             assert all(blp in data for blp in vanilla_uvp.get_blpairs())
 
@@ -85,17 +95,25 @@ class TestFastMergeBaselines:
         result = runner.invoke(
             cli.app,
             args=[
-                'fast-merge-baselines',
-                '--pattern', f'{pth}/blpair.*.h5',
-                '--group', 'pspecgroup',
-                '--names', 'name',
-                '--names', 'name2',
-                '--outpath', f"{pth}/combined_batched",
-                '--no-progress',
-                '--extras', 'extra0',
-                '--extras', 'extra1',
-                '--batch-size', '2',
-            ]
+                "fast-merge-baselines",
+                "--pattern",
+                f"{pth}/blpair.*.h5",
+                "--group",
+                "pspecgroup",
+                "--names",
+                "name",
+                "--names",
+                "name2",
+                "--outpath",
+                f"{pth}/combined_batched",
+                "--no-progress",
+                "--extras",
+                "extra0",
+                "--extras",
+                "extra1",
+                "--batch-size",
+                "2",
+            ],
         )
 
         if result.exit_code != 0:
@@ -104,17 +122,17 @@ class TestFastMergeBaselines:
             assert result.exit_code == 0
 
         # Verify the batched result has all the baselines
-        new = PSpecContainer(pth / "combined_batched.pspec.h5", 'r', keep_open=False)
-        newuvp = new.get_pspec('pspecgroup', 'name')
+        new = PSpecContainer(pth / "combined_batched.pspec.h5", "r", keep_open=False)
+        newuvp = new.get_pspec("pspecgroup", "name")
         assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
         assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
 
-        newuvp2 = new.get_pspec('pspecgroup', 'name2')
+        newuvp2 = new.get_pspec("pspecgroup", "name2")
         assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp2.get_blpairs())
         assert len(newuvp2.get_blpairs()) == len(vanilla_uvp.get_blpairs())
 
         # Test extras were saved correctly
-        with open(pth / "combined_batched.extra0.pkl", 'rb') as fl:
+        with open(pth / "combined_batched.extra0.pkl", "rb") as fl:
             data = pickle.load(fl)
             assert all(blp in data for blp in vanilla_uvp.get_blpairs())
             assert len(data) == len(vanilla_uvp.get_blpairs())
@@ -129,14 +147,19 @@ class TestFastMergeBaselines:
         result = runner.invoke(
             cli.app,
             args=[
-                'fast-merge-baselines',
-                '--pattern', f'{pth}/blpair.*.h5',
-                '--group', 'pspecgroup',
-                '--names', 'name',
-                '--outpath', f"{pth}/combined_single",
-                '--no-progress',
-                '--batch-size', '1',
-            ]
+                "fast-merge-baselines",
+                "--pattern",
+                f"{pth}/blpair.*.h5",
+                "--group",
+                "pspecgroup",
+                "--names",
+                "name",
+                "--outpath",
+                f"{pth}/combined_single",
+                "--no-progress",
+                "--batch-size",
+                "1",
+            ],
         )
 
         if result.exit_code != 0:
@@ -145,16 +168,14 @@ class TestFastMergeBaselines:
             assert result.exit_code == 0
 
         # Verify the result has all the baselines
-        new = PSpecContainer(pth / "combined_single.pspec.h5", 'r', keep_open=False)
-        newuvp = new.get_pspec('pspecgroup', 'name')
+        new = PSpecContainer(pth / "combined_single.pspec.h5", "r", keep_open=False)
+        newuvp = new.get_pspec("pspecgroup", "name")
         assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
         assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
+
 
 def test_dummy_command():
     runner = CliRunner()
 
-    result = runner.invoke(
-        cli.app,
-        args=['hello']
-    )
+    result = runner.invoke(cli.app, args=["hello"])
     assert "Hi" in result.stdout
