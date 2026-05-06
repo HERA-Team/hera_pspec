@@ -18,7 +18,7 @@ from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
 @app.command()
-def hello():
+def hello() -> None:
     # This is a test command which we need for the CLI interface to be broken into
     # subcommands (at least two commands need to be defined for it to be used as subc's)
     cns.print("Hi! :wave:")
@@ -67,7 +67,7 @@ def fast_merge_baselines(
             "for large datasets, but can be turned off for small datasets."
         ),
     ),
-    extras: list[str] = typer.Option(
+    extras: list[str] | None = typer.Option(
         default=None,
         help=(
             "A list of extra attributes to be saved from the header of the files. "
@@ -76,7 +76,7 @@ def fast_merge_baselines(
             "metadata that is not stored in the UVPSpec objects themselves."
         ),
     ),
-    batch_size: int = typer.Option(
+    batch_size: int | None = typer.Option(
         default=None,
         help=(
             "Number of files to load and merge at a time. Smaller batch sizes use less "
@@ -84,7 +84,7 @@ def fast_merge_baselines(
             "at once. Adjust this based on available RAM and file sizes."
         ),
     ),
-):
+) -> None:
     """Merge a set of hera_pspec files each representing a single baseline, into one.
 
     This can be useful because reading a single file with many baselines is much much

@@ -7,10 +7,10 @@ from .uvpspec import UVPSpec
 
 def apply_bias_correction(
     uvp: UVPSpec,
-    total_bias: dict | None = None,
-    data_bias: dict | None = None,
+    total_bias: dict[int, float] | None = None,
+    data_bias: dict[int, float] | None = None,
     inplace: bool = True,
-):
+) -> UVPSpec:
     """
     Apply correction factors to power spectra.
 

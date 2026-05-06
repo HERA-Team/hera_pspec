@@ -1,22 +1,33 @@
+from __future__ import annotations
+
 import ast
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
+import numpy.typing as npt
 from scipy.linalg import circulant
 from uvtools import dspec
 
 from . import conversions
 
+if TYPE_CHECKING:
+    from .conversions import Cosmo_Conversions
+    from .pspecbeam import PSpecBeamBase
+
+PowerSpectrum = float | npt.NDArray[np.floating[Any]]
+CosmologyInput = str | dict[str, Any] | conversions.Cosmo_Conversions
+
 
 def calc_P_N(
-    scalar,
-    Tsys,
-    t_int,
-    Ncoherent=1,
-    Nincoherent=None,
-    form="Pk",
-    k=None,
-    component="real",
-):
+    scalar: float,
+    Tsys: float,
+    t_int: float,
+    Ncoherent: int = 1,
+    Nincoherent: int | None = None,
+    form: Literal["Pk", "DelSq"] = "Pk",
+    k: npt.NDArray[np.floating[Any]] | None = None,
+    component: Literal["abs", "real", "imag"] = "real",
+) -> PowerSpectrum:
     """
     Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
     component of the power spectrum.
@@ -83,7 +94,11 @@ def calc_P_N(
 class Sensitivity:
     """Power spectrum thermal sensitivity calculator"""
 
-    def __init__(self, cosmo=None, beam=None):
+    def __init__(
+        self,
+        cosmo: CosmologyInput | None = None,
+        beam: PSpecBeamBase | None = None,
+    ) -> None:
         """
         Object for power spectrum thermal sensitivity calculations.
 
@@ -99,7 +114,7 @@ class Sensitivity:
         if beam is not None:
             self.set_beam(beam)
 
-    def set_cosmology(self, cosmo):
+    def set_cosmology(self, cosmo: CosmologyInput) -> None:
         """
         Set a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
 
@@ -114,7 +129,7 @@ class Sensitivity:
         self.cosmo = cosmo
         self.cosmo_params = str(self.cosmo.get_params())
 
-    def set_beam(self, beam):
+    def set_beam(self, beam: PSpecBeamBase) -> None:
         """
         Set a pspecbeam.PSpecBeam object to self as self.beam
 
@@ -143,7 +158,13 @@ class Sensitivity:
 
         self.beam = beam
 
-    def calc_scalar(self, freqs, pol, num_steps=5000, little_h=True):
+    def calc_scalar(
+        self,
+        freqs: npt.NDArray[np.floating[Any]],
+        pol: str,
+        num_steps: int = 5000,
+        little_h: bool = True,
+    ) -> None:
         """
         Calculate noise power spectrum prefactor from Eqn. (1) of Pober et al. 2014, ApJ 782, 66,
         equal to
@@ -186,14 +207,14 @@ class Sensitivity:
 
     def calc_P_N(
         self,
-        Tsys,
-        t_int,
-        Ncoherent=1,
-        Nincoherent=None,
-        form="Pk",
-        k=None,
-        component="real",
-    ):
+        Tsys: float,
+        t_int: float,
+        Ncoherent: int = 1,
+        Nincoherent: int | None = None,
+        form: Literal["Pk", "DelSq"] = "Pk",
+        k: npt.NDArray[np.floating[Any]] | None = None,
+        component: Literal["abs", "real", "imag"] = "real",
+    ) -> PowerSpectrum:
         """
         Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
         component of the power spectrum.
