@@ -227,9 +227,10 @@ def average_spectra(
 
         # Get all baseline pairs in uvp object (in integer form)
         uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
-        blvecs_groups = []
-        for group in blpair_groups:
-            blvecs_groups.append(uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])])
+        uvp_blvecs = uvp.get_blpair_blvecs()
+        blvecs_groups = [
+            uvp_blvecs[uvp_blpairs.index(group[0])] for group in blpair_groups
+        ]
         # get baseline length for each group of baseline pairs
         # assuming only redundant baselines are paired together
         blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.0)
@@ -951,18 +952,18 @@ def spherical_average(
                 # fill diagonal with by 1/stats_array^2 as weight
                 stat_weight = stats_array[error_weights][spw][:, dslice].real.copy()
                 np.square(stat_weight, out=stat_weight, where=np.isfinite(stat_weight))
-                E[:, range(dstart, dstop), range(0, Ndlys)] = 1 / stat_weight.clip(
+                E[:, range(dstart, dstop), range(Ndlys)] = 1 / stat_weight.clip(
                     1e-40, np.inf
                 )
 
             else:
-                E[:, range(dstart, dstop), range(0, Ndlys)] = 1.0
+                E[:, range(dstart, dstop), range(Ndlys)] = 1.0
                 f = np.isclose(
                     uvp.integration_array[spw][blpt_inds]
                     * uvp.nsample_array[spw][blpt_inds],
                     0,
                 )
-                E[:, range(dstart, dstop), range(0, Ndlys)] *= ~f[:, None, :]
+                E[:, range(dstart, dstop), range(Ndlys)] *= ~f[:, None, :]
             # append to non-dly arrays
             Emean = np.trace(
                 E[:, dslice, :], axis1=1, axis2=2
@@ -1253,11 +1254,10 @@ def spherical_wf_from_uvp(
         if blpair_lens is None:
             # Get all baseline pairs in uvp object (in integer form)
             uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
-            blvecs_groups = []
-            for group in blpair_groups:
-                blvecs_groups.append(
-                    uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])]
-                )
+            uvp_blvecs = uvp.get_blpair_blvecs()
+            blvecs_groups = [
+                uvp_blvecs[uvp_blpairs.index(group[0])] for group in blpair_groups
+            ]
             # get baseline length for each group of baseline pairs
             # assuming only redundant baselines are paired together
             blpair_lens, _ = utils.get_bl_lens_angs(blvecs_groups, bl_error_tol=1.0)
@@ -1669,10 +1669,7 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False, seed=None
 
     # Check that all requested blpairs exist in at least one UVPSpec object
     all_req_blpairs = _ordered_unique([blp for grp in blpair_groups for blp in grp])
-    missing = []
-    for blp in all_req_blpairs:
-        if blp not in all_avail_blpairs:
-            missing.append(blp)
+    missing = [blp for blp in all_req_blpairs if blp not in all_avail_blpairs]
     if len(missing) > 0:
         raise KeyError(
             "The following baseline-pairs were specified, but do "

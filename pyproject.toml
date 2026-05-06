@@ -114,7 +114,16 @@ extend-exclude = [
 # Include checks that already pass or almost pass; ignore any rule that fails
 # with more than a few errors and defer cleanup to follow-up PRs. Counts below
 # are post-`ruff check --fix` against this commit's working tree.
-select = ["E", "W", "F"]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "FA",     # flake8-future-annotations
+    "Q",      # flake8-quotes
+    "A",      # flake8-builtins
+    "PIE",    # flake8-pie
+    "PERF",   # perflint
+]
 ignore = [
     "E501",   # line-too-long (1116) — defer to ruff format
     "E701",   # multi-statement on one line, colon (105)
@@ -128,6 +137,11 @@ ignore = [
     "W291",   # trailing-whitespace (110) — handled by pre-commit
     "W293",   # blank-line-with-whitespace (68) — handled by pre-commit
     "E731",   # lambda-assignment (3 in example notebooks) — idiomatic in tutorials
+]
+
+[tool.ruff.lint.per-file-ignores]
+"docs/conf.py" = [
+    "A",      # conf.py legitimately shadows builtins (e.g., copyright)
 ]
 
 [tool.pytest.ini_options]
