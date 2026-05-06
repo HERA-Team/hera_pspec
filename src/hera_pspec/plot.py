@@ -453,8 +453,7 @@ def delay_waterfall(
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance if input ax is None.
     """
-    import matplotlib
-    import matplotlib.axes
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
 
     # assert component
@@ -576,7 +575,7 @@ def delay_waterfall(
         fig, axes = plt.subplots(Nside, Nside, figsize=figsize)
 
     # Ensure axes is an ndarray
-    if isinstance(axes, matplotlib.axes.Axes):
+    if isinstance(axes, mpl.axes.Axes):
         axes = np.array([[axes]])
     if isinstance(axes, list):
         axes = np.array(axes)
@@ -870,7 +869,7 @@ def delay_wedge(
     fig : matplotlib.pyplot.Figure
         Matplotlib Figure instance if ax is None.
     """
-    import matplotlib
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
 
     # type checking
@@ -976,10 +975,10 @@ def delay_wedge(
     if loglog:
         ax.set_xscale("log")
         ax.set_yscale("log")
-        ax.yaxis.set_major_formatter(matplotlib.ticker.LogFormatterSciNotation())
-        ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-        ax.xaxis.set_major_formatter(matplotlib.ticker.LogFormatterSciNotation())
-        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        ax.yaxis.set_major_formatter(mpl.ticker.LogFormatterSciNotation())
+        ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+        ax.xaxis.set_major_formatter(mpl.ticker.LogFormatterSciNotation())
+        ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
 
     # rotate
     if rotate:
