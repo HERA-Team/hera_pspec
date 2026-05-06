@@ -792,12 +792,7 @@ def spherical_average(
     # initialize blank arrays and dicts
     Nk = len(kbins)
     dlys_array, spw_dlys_array = [], []
-    data_array, wgt_array, integration_array, nsample_array = (
-        {},
-        {},
-        {},
-        {},
-    )
+    data_array, wgt_array, integration_array, nsample_array = ({}, {}, {}, {})
     store_stats = hasattr(uvp, "stats_array")
     store_cov = hasattr(uvp, "cov_array_real")
     store_window = hasattr(uvp, "window_function_array") or uvp.exact_windows
@@ -1835,7 +1830,9 @@ def bootstrap_resampled_error(
 
     # get all keys in uvp_avg and get data from each uvp_boot
     keys = uvp_avg.get_all_keys()
-    uvp_boot_data = dict([(k, np.array([u.get_data(k) for u in uvp_boots])) for k in keys])
+    uvp_boot_data = dict(
+        [(k, np.array([u.get_data(k) for u in uvp_boots])) for k in keys]
+    )
 
     # calculate various error estimates
     if normal_std:

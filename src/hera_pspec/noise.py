@@ -94,9 +94,7 @@ class Sensitivity:
     """Power spectrum thermal sensitivity calculator"""
 
     def __init__(
-        self,
-        cosmo: CosmologyInput | None = None,
-        beam: PSpecBeamBase | None = None,
+        self, cosmo: CosmologyInput | None = None, beam: PSpecBeamBase | None = None
     ) -> None:
         """
         Object for power spectrum thermal sensitivity calculations.
