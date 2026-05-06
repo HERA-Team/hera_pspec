@@ -3,7 +3,7 @@ import glob
 import os
 import unittest
 
-import matplotlib
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
@@ -119,7 +119,7 @@ class Test_Plot(unittest.TestCase):
             average_blpairs=True,
             average_times=True,
         )
-        elements = [(matplotlib.lines.Line2D, 1)]
+        elements = [(mpl.lines.Line2D, 1)]
         assert axes_contains(f1.axes[0], elements)
         plt.close(f1)
 
@@ -132,7 +132,7 @@ class Test_Plot(unittest.TestCase):
             average_blpairs=True,
             average_times=False,
         )
-        elements = [(matplotlib.lines.Line2D, self.uvp.Ntpairs)]
+        elements = [(mpl.lines.Line2D, self.uvp.Ntpairs)]
         assert axes_contains(f2.axes[0], elements)
         plt.close(f2)
 
@@ -145,7 +145,7 @@ class Test_Plot(unittest.TestCase):
             average_blpairs=False,
             average_times=True,
         )
-        elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs)]
+        elements = [(mpl.lines.Line2D, self.uvp.Nblpairs)]
         assert axes_contains(f3.axes[0], elements)
         plt.close(f3)
 
@@ -160,7 +160,7 @@ class Test_Plot(unittest.TestCase):
             average_times=True,
             fold=True,
         )
-        elements = [(matplotlib.lines.Line2D, 1)]
+        elements = [(mpl.lines.Line2D, 1)]
         assert axes_contains(f4.axes[0], elements)
         plt.close(f4)
 
@@ -174,7 +174,7 @@ class Test_Plot(unittest.TestCase):
             average_times=True,
             component="imag",
         )
-        elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs)]
+        elements = [(mpl.lines.Line2D, self.uvp.Nblpairs)]
         assert axes_contains(f4.axes[0], elements)
         plt.close(f4)
 
@@ -188,7 +188,7 @@ class Test_Plot(unittest.TestCase):
             average_times=True,
             component="abs",
         )
-        elements = [(matplotlib.lines.Line2D, self.uvp.Nblpairs)]
+        elements = [(mpl.lines.Line2D, self.uvp.Nblpairs)]
         assert axes_contains(f4.axes[0], elements)
         plt.close(f5)
 
@@ -252,7 +252,7 @@ class Test_Plot(unittest.TestCase):
             average_times=True,
             delay=False,
         )
-        elements = [(matplotlib.lines.Line2D, 1), (matplotlib.legend.Legend, 0)]
+        elements = [(mpl.lines.Line2D, 1), (mpl.legend.Legend, 0)]
         self.assertTrue(axes_contains(f1.axes[0], elements))
         plt.close(f1)
 
@@ -270,7 +270,7 @@ class Test_Plot(unittest.TestCase):
             label_type="blpair",
         )
         # Should contain 1 line and 1 legend
-        elements = [(matplotlib.lines.Line2D, 1), (matplotlib.legend.Legend, 1)]
+        elements = [(mpl.lines.Line2D, 1), (mpl.legend.Legend, 1)]
         self.assertTrue(axes_contains(f2.axes[0], elements))
         plt.close(f2)
 

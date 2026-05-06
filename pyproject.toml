@@ -124,6 +124,15 @@ select = [
     "PIE",    # flake8-pie
     "PERF",   # perflint
     "UP",     # pyupgrade
+    "FLY",    # flynt
+    "LOG",    # flake8-logging
+    "ISC",    # flake8-implicit-str-concat
+    "RSE",    # flake8-raise
+    "TID",    # flake8-tidy-imports
+    "YTT",    # flake8-2020 (sys.version usage)
+    "ICN",    # flake8-import-conventions
+    "FURB",   # refurb
+    "RUF100", # unused-noqa (RUF100 only; rest of RUF deferred)
 ]
 ignore = [
     "UP031",  # printf-string-formatting (69) — manual conversion, deferred to follow-up PR

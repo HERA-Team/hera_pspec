@@ -460,7 +460,7 @@ def polpair_tuple2int(polpair, x_orientation=None):
         return [polpair_tuple2int(p) for p in polpair]
 
     # Check types
-    assert type(polpair) in (tuple,), "pol must be a tuple"
+    assert type(polpair) is tuple, "pol must be a tuple"
     assert len(polpair) == 2, "polpair tuple must have 2 elements"
 
     # Convert strings to ints if necessary
