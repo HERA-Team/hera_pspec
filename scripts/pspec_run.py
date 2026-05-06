@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 import sys
+
+from hera_cal._cli_tools import filter_kwargs, parse_args, run_with_profiling
+
 from hera_pspec import pspecdata
-from hera_cal._cli_tools import parse_args, run_with_profiling, filter_kwargs
 
 # parse args
 args = pspecdata.get_pspec_run_argparser()

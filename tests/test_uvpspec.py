@@ -1,26 +1,28 @@
-import pytest
-import numpy as np
+import copy
 import os
-from hera_pspec.data import DATA_PATH
+from collections import OrderedDict as odict
+from pathlib import Path
+
+import numpy as np
+import pytest
+from hera_cal import redcal
+from pytest_cases import parametrize_with_cases
+from pyuvdata import UVData
+
 from hera_pspec import (
-    uvpspec,
+    UVPSpec,
     conversions,
+    grouping,
     parameter,
     pspecbeam,
     pspecdata,
     testing,
     utils,
+    uvpspec,
     uvwindow,
-    grouping,
 )
 from hera_pspec import uvpspec_utils as uvputils
-import copy
-from collections import OrderedDict as odict
-from pyuvdata import UVData
-from hera_cal import redcal
-from pytest_cases import parametrize_with_cases
-from hera_pspec import UVPSpec
-from pathlib import Path
+from hera_pspec.data import DATA_PATH
 
 
 # Setup Test Cases for this module

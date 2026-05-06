@@ -1,13 +1,15 @@
-import numpy as np
-from collections import OrderedDict as odict
-import random
-import copy
-import warnings
 import argparse
-from astropy import stats as astats
+import copy
 import os
+import random
+import warnings
+from collections import OrderedDict as odict
 
-from . import utils, __version__, uvpspec_utils as uvputils
+import numpy as np
+from astropy import stats as astats
+
+from . import __version__, utils
+from . import uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
 
 

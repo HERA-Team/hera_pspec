@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 from __future__ import print_function
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def run_old_oqe(fname, key1, key2, freqrange):
@@ -62,6 +63,7 @@ def run_new_oqe(fname, key1, key2, freqrange):
     Run new OQE algorithm using hera_pspec.
     """
     from pyuvdata import UVData
+
     import hera_pspec as pspec
 
     # (1) Read data from file

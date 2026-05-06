@@ -3,15 +3,16 @@
 This adds several mock UVPSpec objects that can be used throughout the tests.
 """
 
-import pytest
-from hera_pspec.testing import build_vanilla_uvpspec
-from hera_pspec import UVPSpec, PSpecData, utils, grouping
-from hera_pspec import PSpecBeamUV
-from pathlib import Path
-from hera_pspec.data import DATA_PATH
-from pyuvdata import UVData
 import copy
+from pathlib import Path
+
 import numpy as np
+import pytest
+from pyuvdata import UVData
+
+from hera_pspec import PSpecBeamUV, PSpecData, UVPSpec, grouping, utils
+from hera_pspec.data import DATA_PATH
+from hera_pspec.testing import build_vanilla_uvpspec
 
 DATA_PATH = Path(DATA_PATH)
 

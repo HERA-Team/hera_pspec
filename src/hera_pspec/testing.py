@@ -1,11 +1,12 @@
 #!/usr/bin/env python2
-import numpy as np
 import copy
-from pyuvdata import UVData
-from hera_cal.utils import JD2LST
-from scipy import stats, interpolate
 
-from . import uvpspec, pspecdata, conversions, pspecbeam, utils
+import numpy as np
+from hera_cal.utils import JD2LST
+from pyuvdata import UVData
+from scipy import interpolate, stats
+
+from . import conversions, pspecbeam, pspecdata, utils, uvpspec
 
 
 def build_vanilla_uvpspec(

@@ -1,7 +1,8 @@
 """Functions to apply and estimate losses/biases in the power spectrum estimates."""
 
-from .uvpspec import UVPSpec
 import copy
+
+from .uvpspec import UVPSpec
 
 
 def apply_bias_correction(

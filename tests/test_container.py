@@ -1,9 +1,11 @@
-import unittest
-import pytest
-import numpy as np
 import os
+import unittest
+
+import numpy as np
+import pytest
+
+from hera_pspec import PSpecContainer, UVPSpec, container, testing
 from hera_pspec.data import DATA_PATH
-from hera_pspec import container, PSpecContainer, UVPSpec, testing
 
 
 class Test_PSpecContainer(unittest.TestCase):

@@ -1,12 +1,14 @@
-import unittest
-import pytest
+import copy
 import os
-from hera_pspec.data import DATA_PATH
-from hera_pspec import pstokes
+import unittest
+
+import numpy as np
+import pytest
 import pyuvdata
 import pyuvdata.utils as uvutils
-import copy
-import numpy as np
+
+from hera_pspec import pstokes
+from hera_pspec.data import DATA_PATH
 
 dset1 = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
 dset2 = os.path.join(DATA_PATH, "zen.all.yy.LST.1.06964.uvA")

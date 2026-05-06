@@ -2,13 +2,14 @@
 Module to construct pseudo-Stokes (I,Q,U,V) visibilities from miriad files or UVData objects
 """
 
-import numpy as np
-import pyuvdata
+import argparse
 import copy
+import warnings
 from collections import OrderedDict as odict
 from collections.abc import Iterable
-import argparse
-import warnings
+
+import numpy as np
+import pyuvdata
 
 from . import __version__
 

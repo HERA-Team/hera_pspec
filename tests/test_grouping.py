@@ -1,22 +1,25 @@
-import pytest
-import numpy as np
+import copy
 import os
-from hera_pspec.data import DATA_PATH
+
+import numpy as np
+import pytest
+from hera_cal import redcal
+from pytest_cases import parametrize_with_cases
+from pyuvdata import UVData
+
 from hera_pspec import (
-    uvpspec,
+    UVPSpec,
+    container,
     conversions,
+    grouping,
     pspecbeam,
     pspecdata,
     testing,
     utils,
+    uvpspec,
     uvwindow,
 )
-from hera_pspec import grouping, container
-from pyuvdata import UVData
-from hera_cal import redcal
-import copy
-from pytest_cases import parametrize_with_cases
-from hera_pspec import UVPSpec
+from hera_pspec.data import DATA_PATH
 
 
 def case_vanilla_uvp(vanilla_uvp: UVPSpec):

@@ -1,10 +1,12 @@
-import unittest
 import os
-import pytest
+import unittest
+
 import numpy as np
-from hera_pspec import pspecbeam, conversions
-from hera_pspec.data import DATA_PATH
+import pytest
 from pyuvdata import UVBeam
+
+from hera_pspec import conversions, pspecbeam
+from hera_pspec.data import DATA_PATH
 
 
 class Test_DataSet(unittest.TestCase):

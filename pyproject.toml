@@ -118,6 +118,7 @@ select = [
     "E",      # pycodestyle errors
     "W",      # pycodestyle warnings
     "F",      # pyflakes
+    "I",      # isort
     "FA",     # flake8-future-annotations
     "Q",      # flake8-quotes
     "A",      # flake8-builtins

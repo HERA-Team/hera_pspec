@@ -1,28 +1,31 @@
-import unittest
-import pytest
-import numpy as np
-import pyuvdata as uv
-import os
 import copy
+import glob
+import os
+import unittest
+import warnings
+
+import numpy as np
+import pytest
+import pyuvdata as uv
+from astropy.time import Time
+from hera_cal import redcal
+from pyuvdata import UVCal, UVData
+from pyuvdata import utils as uvutils
 from scipy.integrate import trapezoid
+from scipy.interpolate import interp1d
+from scipy.signal import windows
+from uvtools import dspec
+
 from hera_pspec import (
-    pspecdata,
-    pspecbeam,
-    conversions,
     container,
-    utils,
+    conversions,
+    pspecbeam,
+    pspecdata,
     testing,
+    utils,
     uvwindow,
 )
 from hera_pspec.data import DATA_PATH
-from pyuvdata import UVData, UVCal, utils as uvutils
-from hera_cal import redcal
-from scipy.signal import windows
-from scipy.interpolate import interp1d
-from astropy.time import Time
-import warnings
-import glob
-from uvtools import dspec
 
 # Data files to use in tests
 dfiles = ["zen.2458042.12552.xx.HH.uvXAA", "zen.2458042.12552.xx.HH.uvXAA"]
