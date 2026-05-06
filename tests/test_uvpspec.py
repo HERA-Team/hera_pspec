@@ -756,10 +756,7 @@ class TestUVPSpec:
             inplace=True,
         )
         pytest.raises(
-            TypeError,
-            uvp.get_exact_window_functions,
-            ftbeam=3.14,
-            inplace=False,
+            TypeError, uvp.get_exact_window_functions, ftbeam=3.14, inplace=False
         )
         pytest.raises(
             TypeError,

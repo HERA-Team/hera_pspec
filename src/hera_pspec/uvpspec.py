@@ -2821,9 +2821,7 @@ class UVPSpec:
             List of blpair groups, which themselves are lists of blpair
             integers.
         """
-        blgroups = _normalize_nested_sequence(
-            blgroups, "blgroups", "baseline groups"
-        )
+        blgroups = _normalize_nested_sequence(blgroups, "blgroups", "baseline groups")
 
         blpair_groups = []
         for blg in blgroups:

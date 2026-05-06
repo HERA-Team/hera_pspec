@@ -49,7 +49,9 @@ def test_grouping_input_validation(vanilla_uvp: UVPSpec):
     with pytest.raises(
         TypeError, match="blpair_groups must be a sequence of baseline-pair groups"
     ):
-        grouping.average_spectra(vanilla_uvp, blpair_groups=[101102101102], inplace=False)
+        grouping.average_spectra(
+            vanilla_uvp, blpair_groups=[101102101102], inplace=False
+        )
 
     with pytest.raises(
         TypeError, match="error_field must be a string or a sequence of strings"
