@@ -52,7 +52,7 @@ def transactional(fn):
     return wrapper
 
 
-class PSpecContainer(object):
+class PSpecContainer:
     """
     Container class for managing multiple UVPSpec objects.
     """
@@ -141,7 +141,7 @@ class PSpecContainer(object):
             hdf5_v = float(".".join(h5py.version.hdf5_version.split(".")[:2]))
             if hdf5_v < 1.1:
                 raise NotImplementedError(
-                    "HDF5 version is {}: must be >= 1.10 for SWMR".format(hdf5_v)
+                    f"HDF5 version is {hdf5_v}: must be >= 1.10 for SWMR"
                 )
 
         # Try to open the file
@@ -159,7 +159,7 @@ class PSpecContainer(object):
                     except ValueError:
                         pass
                 break
-            except (IOError, OSError):
+            except OSError:
                 # raise Exception if exceeded maxiter
                 if Ncount >= self.maxiter:
                     if self.mode == "rw":
@@ -208,7 +208,7 @@ class PSpecContainer(object):
             Object containing power spectrum and related data.
         """
         if self.mode == "r":
-            raise IOError("HDF5 file was opened read-only; cannot write to file.")
+            raise OSError("HDF5 file was opened read-only; cannot write to file.")
 
         # Get data and attributes from UVPSpec object (stored in dicts)
         assert isinstance(uvp, uvpspec.UVPSpec)
@@ -295,7 +295,7 @@ class PSpecContainer(object):
             overwrite it or raise an error. Default: False (does not overwrite).
         """
         if self.mode == "r":
-            raise IOError("HDF5 file was opened read-only; cannot write to file.")
+            raise OSError("HDF5 file was opened read-only; cannot write to file.")
 
         if isinstance(group, (tuple, list, dict)):
             raise ValueError("Only one group can be specified at a time.")
@@ -599,8 +599,8 @@ def combine_psc_spectra(
             if spc in spectra and overwrite == False:
                 if verbose:
                     print(
-                        "spectra {}/{} already exists and overwrite == False, "
-                        "skipping...".format(grp, spc)
+                        f"spectra {grp}/{spc} already exists and overwrite == False, "
+                        "skipping..."
                     )
                 continue
 
@@ -626,11 +626,7 @@ def combine_psc_spectra(
             except Exception as exc:
                 # merge failed, so continue
                 if verbose:
-                    print(
-                        "uvp merge failed for spectra {}/{}, exception: {}".format(
-                            grp, spc, exc
-                        )
-                    )
+                    print(f"uvp merge failed for spectra {grp}/{spc}, exception: {exc}")
 
 
 def get_combine_psc_spectra_argparser():

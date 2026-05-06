@@ -734,7 +734,6 @@ dependencies = [
 dev = [
     { name = "coverage" },
     { name = "ipython" },
-    { name = "mock" },
     { name = "nbsphinx" },
     { name = "numpydoc" },
     { name = "prek" },
@@ -749,7 +748,6 @@ dev = [
 ]
 docs = [
     { name = "ipython" },
-    { name = "mock" },
     { name = "nbsphinx" },
     { name = "numpydoc" },
     { name = "readthedocs-sphinx-search" },
@@ -785,7 +783,6 @@ requires-dist = [
 dev = [
     { name = "coverage", specifier = ">=7.0" },
     { name = "ipython", specifier = ">=8.18.0" },
-    { name = "mock", specifier = "==1.0.1" },
     { name = "nbsphinx", specifier = ">=0.9.0" },
     { name = "numpydoc", specifier = ">=0.8" },
     { name = "prek", specifier = ">=0.3.11" },
@@ -799,7 +796,6 @@ dev = [
 ]
 docs = [
     { name = "ipython", specifier = ">=8.18.0" },
-    { name = "mock", specifier = "==1.0.1" },
     { name = "nbsphinx", specifier = ">=0.9.0" },
     { name = "numpydoc", specifier = ">=0.8" },
     { name = "readthedocs-sphinx-search", specifier = ">=0.1.1" },
@@ -1367,12 +1363,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8c/27/12607423d0a9c6bbbcc780ad19f1f6baa2b68b18ce4bddcdc122c4c68dc9/ml_dtypes-0.5.4-cp313-cp313t-win_amd64.whl", hash = "sha256:cb73dccfc991691c444acc8c0012bee8f2470da826a92e3a20bb333b1a7894e6", size = 225612, upload-time = "2025-11-17T22:32:08.615Z" },
     { url = "https://files.pythonhosted.org/packages/e5/80/5a5929e92c72936d5b19872c5fb8fc09327c1da67b3b68c6a13139e77e20/ml_dtypes-0.5.4-cp313-cp313t-win_arm64.whl", hash = "sha256:3bbbe120b915090d9dd1375e4684dd17a20a2491ef25d640a908281da85e73f1", size = 164145, upload-time = "2025-11-17T22:32:09.782Z" },
 ]
-
-[[package]]
-name = "mock"
-version = "1.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a2/52/7edcd94f0afb721a2d559a5b9aae8af4f8f2c79bc63fdbe8a8a6c9b23bbe/mock-1.0.1.tar.gz", hash = "sha256:b839dd2d9c117c701430c149956918a423a9863b48b09c90e30a6013e7d2f44f", size = 818644, upload-time = "2012-11-05T21:39:33.248Z" }
 
 [[package]]
 name = "nbclient"

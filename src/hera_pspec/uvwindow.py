@@ -527,7 +527,7 @@ class UVWindow:
             )
         )
         assert width > dk, (
-            "Change width to resolve full window function (dk={:.2e}).".format(dk)
+            f"Change width to resolve full window function (dk={dk:.2e})."
         )
         # defines kgrid (kperp_x).
         kgrid = np.arange(kp_centre - width, kp_centre + width, step=dk)
@@ -1257,9 +1257,7 @@ class UVWindow:
         cyl_wf = np.zeros((nbls, self.Nfreqs, nbins_kperp, nbins_kpara))
         for ib in range(nbls):
             if verbose:
-                sys.stdout.write(
-                    "\rComputing for blg {:d} of {:d}...".format(ib + 1, nbls)
-                )
+                sys.stdout.write(f"\rComputing for blg {ib + 1:d} of {nbls:d}...")
             cyl_wf[ib, :, :, :] = self.get_cylindrical_wf(
                 bl_len=bl_lens[ib],
                 kperp_bins=kperp_bins * self.kunits,
@@ -1267,9 +1265,7 @@ class UVWindow:
                 verbose=verbose,
             )
         if verbose:
-            sys.stdout.write(
-                "\rComputing for blg {:d} of {:d}... \n".format(nbls, nbls)
-            )
+            sys.stdout.write(f"\rComputing for blg {nbls:d} of {nbls:d}... \n")
 
         # perform spherical binning
         wf_spherical, weighted_k = self.cylindrical_to_spherical(
@@ -1319,9 +1315,9 @@ class UVWindow:
         # Check output
         filepath = Path(filepath)
         if filepath.exists() and clobber is False:
-            raise IOError("{} exists, not overwriting...".format(filepath))
+            raise OSError(f"{filepath} exists, not overwriting...")
         elif filepath.exists() and clobber is True:
-            print("{} exists, overwriting...".format(filepath))
+            print(f"{filepath} exists, overwriting...")
             os.remove(filepath)
 
         nbls = len(bl_lens)  # number of redudant groups

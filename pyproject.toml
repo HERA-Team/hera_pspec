@@ -62,7 +62,6 @@ docs = [
     "ipython>=8.18.0",
     "sphinx_autorun>=2.0.0",
     "numpydoc>=0.8",
-    "mock==1.0.1",
 ]
 tests = [
     "coverage>=7.0",
@@ -124,8 +123,10 @@ select = [
     "A",      # flake8-builtins
     "PIE",    # flake8-pie
     "PERF",   # perflint
+    "UP",     # pyupgrade
 ]
 ignore = [
+    "UP031",  # printf-string-formatting (69) — manual conversion, deferred to follow-up PR
     "E501",   # line-too-long (1116) — defer to ruff format
     "E701",   # multi-statement on one line, colon (105)
     "E702",   # multi-statement on one line, semicolon (11)

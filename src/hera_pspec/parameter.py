@@ -6,7 +6,7 @@ by hera_pspec.
 """
 
 
-class PSpecParam(object):
+class PSpecParam:
     def __init__(
         self, name, description=None, value=None, expected_type=None, form=None
     ):
@@ -16,6 +16,4 @@ class PSpecParam(object):
         self.value = value
         self.expected_type = expected_type
         self.form = form
-        self.__doc__ = "name : {}, form : {}, expected_type : {} \n {}".format(
-            name, form, expected_type, description
-        )
+        self.__doc__ = f"name : {name}, form : {form}, expected_type : {expected_type} \n {description}"

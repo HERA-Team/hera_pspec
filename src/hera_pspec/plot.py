@@ -181,7 +181,7 @@ def delay_spectrum(
     # Check plot_stats
     if plot_stats is not None:
         assert plot_stats in uvp_plt.stats_array, (
-            "specified key {} not found in stats_array".format(plot_stats)
+            f"specified key {plot_stats} not found in stats_array"
         )
 
     # Plot power spectra
@@ -224,15 +224,13 @@ def delay_spectrum(
 
                 # form label
                 if label_type == "key":
-                    label = "{}".format(key)
+                    label = f"{key}"
                 elif label_type == "blpair":
-                    label = "{}".format(blp)
+                    label = f"{blp}"
                 elif label_type == "blpairt":
-                    label = "{}, {:0.5f}".format(blp, t)
+                    label = f"{blp}, {t:0.5f}"
                 else:
-                    raise ValueError(
-                        "Couldn't undestand label_type {}".format(label_type)
-                    )
+                    raise ValueError(f"Couldn't understand label_type {label_type}")
 
                 # plot elements
                 cax = None
@@ -461,7 +459,7 @@ def delay_waterfall(
 
     # assert component
     assert component in ["real", "abs", "imag", "abs-real", "abs-imag"], (
-        "Can't parse specified component {}".format(component)
+        f"Can't parse specified component {component}"
     )
     fix_negval = component in ["real", "imag"] and log
 
@@ -663,12 +661,7 @@ def delay_waterfall(
                 elif title_type == "blvec":
                     blv = 0.5 * (blvecs[blp[0]] + blvecs[blp[1]])
                     lens, angs = utils.get_bl_lens_angs([blv], bl_error_tol=1.0)
-                    ax.set_title(
-                        "bl len {len:0.2f} m & {ang:0.0f} deg".format(
-                            len=lens[0], ang=angs[0]
-                        ),
-                        y=1,
-                    )
+                    ax.set_title(f"bl len {lens[0]:0.2f} m & {angs[0]:0.0f} deg", y=1)
 
             # set colorbar
             if colorbar:
@@ -684,7 +677,7 @@ def delay_waterfall(
             # configure left-column plots
             if j == 0:
                 # set yticks
-                ax.set_ylabel(r"LST [{}]".format(lst_units), fontsize=16)
+                ax.set_ylabel(rf"LST [{lst_units}]", fontsize=16)
             else:
                 ax.set_yticklabels([])
 
@@ -937,7 +930,7 @@ def delay_wedge(
         x_axis = _x_axis
 
     # Conigure Units
-    psunits = r"({})^2\ {}".format(uvp.vis_units, uvp.norm_units)
+    psunits = rf"({uvp.vis_units})^2\ {uvp.norm_units}"
     if "h^-1" in psunits:
         psunits = psunits.replace("h^-1", r"h^{-1}\ ")
     if "h^-3" in psunits:
@@ -968,7 +961,7 @@ def delay_wedge(
     elif component == "abs":
         data = np.abs(data)
     else:
-        raise ValueError("Did not understand component {}".format(component))
+        raise ValueError(f"Did not understand component {component}")
 
     # if real or imag and log is True, set negative values to near zero
     # this is done so that one can use cmap.set_under() and cmap.set_bad() separately
@@ -1054,9 +1047,9 @@ def delay_wedge(
         else:
             p = r"{}({},\ {})".format(p, r"k_\parallel", r"k_\perp")
         if log10:
-            psunits = r"$\log_{{10}}\ {}\ [{}]$".format(p, psunits)
+            psunits = rf"$\log_{{10}}\ {p}\ [{psunits}]$"
         else:
-            psunits = r"${}\ [{}]$".format(p, psunits)
+            psunits = rf"${p}\ [{psunits}]$"
         cbar.set_label(psunits, fontsize=14)
         if fix_negval:
             cbar.ax.set_title("$< 0$", y=-0.05, fontsize=16)

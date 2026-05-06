@@ -536,7 +536,7 @@ def test_bootstrap_run(tmp_path):
     spcs = psc.spectra("grp1")
 
     # assert all bs samples were written
-    assert np.all(["uvp_bs{}".format(i) in spcs for i in range(100)])
+    assert np.all([f"uvp_bs{i}" in spcs for i in range(100)])
 
     # assert average was written
     assert "uvp_avg" in spcs and "uvp" in spcs

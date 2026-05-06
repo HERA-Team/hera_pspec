@@ -81,7 +81,7 @@ def calc_P_N(
     return P_N
 
 
-class Sensitivity(object):
+class Sensitivity:
     """Power spectrum thermal sensitivity calculator"""
 
     def __init__(self, cosmo=None, beam=None):

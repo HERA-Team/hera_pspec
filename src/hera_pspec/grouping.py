@@ -1857,7 +1857,7 @@ def bootstrap_resampled_error(
 
     if cintervals is not None:
         for ci in cintervals:
-            ci_tag = "bs_cinterval_{:05.2f}".format(ci)
+            ci_tag = f"bs_cinterval_{ci:05.2f}"
             for k in keys:
                 cint = np.percentile(
                     uvp_boot_data[k].real, ci, axis=0
@@ -2022,7 +2022,7 @@ def bootstrap_run(
         # if keep_samples write uvp_boots
         if keep_samples:
             for i, uvpb in enumerate(uvp_boots):
-                psc.set_pspec(grp, spc + "_bs{}".format(i), uvpb, overwrite=overwrite)
+                psc.set_pspec(grp, spc + f"_bs{i}", uvpb, overwrite=overwrite)
 
 
 def get_bootstrap_run_argparser():

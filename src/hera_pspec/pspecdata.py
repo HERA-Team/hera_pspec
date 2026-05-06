@@ -250,7 +250,7 @@ class PSpecData:
             self.labels = []
         if labels is None:
             labels = [
-                "dset{:d}".format(i)
+                f"dset{i:d}"
                 for i in range(len(self.dsets), len(dsets) + len(self.dsets))
             ]
 
@@ -281,7 +281,7 @@ class PSpecData:
             ext = 1
             while ext < 1e5:
                 if l in self.labels[:i]:
-                    l = self.labels[i] + ".{:d}".format(ext)
+                    l = self.labels[i] + f".{ext:d}"
                     ext += 1
                 else:
                     self.labels[i] = l
@@ -396,7 +396,7 @@ class PSpecData:
             raise ValueError(
                 "all datasets must have the same phase type "
                 "(i.e. 'drift', 'phased', ...)\ncurrent phase "
-                "types are {}".format(phase_types)
+                f"types are {phase_types}"
             )
 
         # Check phase centers if phase type is phased
@@ -443,7 +443,7 @@ class PSpecData:
 
         # check key is a tuple
         if isinstance(key, tuple) == False or len(key) not in (1, 2, 3):
-            raise KeyError("key {} must be a length 1, 2 or 3 tuple".format(key))
+            raise KeyError(f"key {key} must be a length 1, 2 or 3 tuple")
 
         try:
             _ = self.dsets[dset_ind]._key2inds(key)
@@ -750,7 +750,7 @@ class PSpecData:
             Ckey = ((dset, dset), (bl, bl)) + (model, None, False, True)
         else:
             assert isinstance(time_index, int), (
-                "time_index must be integer if cov-model=={}".format(model)
+                f"time_index must be integer if cov-model=={model}"
             )
             # add model to key
             Ckey = ((dset, dset), (bl, bl)) + (model, time_index, False, True)
@@ -802,7 +802,7 @@ class PSpecData:
                     }
                 )
             else:
-                raise ValueError("didn't recognize Ckey {}".format(Ckey))
+                raise ValueError(f"didn't recognize Ckey {Ckey}")
 
         return self._C[Ckey]
 
@@ -904,7 +904,7 @@ class PSpecData:
                 covar = known_cov[Ckey][spw, spw]
 
         if covar is None:
-            raise ValueError("didn't recognize model {}".format(model))
+            raise ValueError(f"didn't recognize model {model}")
 
         return covar
 
@@ -2979,7 +2979,7 @@ class PSpecData:
                 h_unit = "h^-3 "
             else:
                 h_unit = ""
-            norm_units = "{}Mpc^3".format(h_unit)
+            norm_units = f"{h_unit}Mpc^3"
 
         return vis_units, norm_units
 
@@ -3259,17 +3259,13 @@ class PSpecData:
         valid = True
         if pol_pair[0] not in dset1.polarization_array:
             print(
-                "dset {} does not contain data for polarization {}".format(
-                    dset_ind1, pol_pair[0]
-                )
+                f"dset {dset_ind1} does not contain data for polarization {pol_pair[0]}"
             )
             valid = False
 
         if pol_pair[1] not in dset2.polarization_array:
             print(
-                "dset {} does not contain data for polarization {}".format(
-                    dset_ind2, pol_pair[1]
-                )
+                f"dset {dset_ind2} does not contain data for polarization {pol_pair[1]}"
             )
             valid = False
 
@@ -3589,11 +3585,11 @@ class PSpecData:
         for i in range(len(bls1)):
             if isinstance(bls1[i], tuple):
                 assert isinstance(bls2[i], tuple), (
-                    "bls1[{}] type must match bls2[{}] type".format(i, i)
+                    f"bls1[{i}] type must match bls2[{i}] type"
                 )
             else:
                 assert len(bls1[i]) == len(bls2[i]), (
-                    "len(bls1[{}]) must match len(bls2[{}])".format(i, i)
+                    f"len(bls1[{i}]) must match len(bls2[{i}])"
                 )
 
         # construct list of baseline pairs
@@ -4878,10 +4874,10 @@ def pspec_run(
             dset_pairs = [(0, 0)]
 
     if dset_labels is None:
-        dset_labels = ["dset{}".format(i) for i in range(Ndsets)]
+        dset_labels = [f"dset{i}" for i in range(Ndsets)]
     else:
         assert not np.any(["_" in dl for dl in dset_labels]), (
-            "cannot accept underscores in input dset_labels: {}".format(dset_labels)
+            f"cannot accept underscores in input dset_labels: {dset_labels}"
         )
 
     # if dsets are not UVData, assume they are filepaths or list of filepaths
@@ -5517,7 +5513,7 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
     for k in shared:
         assert np.linalg.norm(ap1[k] - ap2[k]) <= baseline_tol, (
             "uvd1 and uvd2 don't agree on antenna positions within "
-            "tolerance of {} m".format(baseline_tol)
+            f"tolerance of {baseline_tol} m"
         )
     ap = ap1
     ap.update(ap2)
@@ -5532,9 +5528,7 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
             bl2_vec = ap[blp[1][0]] - ap[blp[1][1]]
             if np.linalg.norm(bl1_vec - bl2_vec) >= baseline_tol:
                 raise_warning(
-                    "blpair {} exceeds redundancy tolerance of {} m".format(
-                        blp, baseline_tol
-                    ),
+                    f"blpair {blp} exceeds redundancy tolerance of {baseline_tol} m",
                     verbose=verbose,
                 )
 
@@ -5588,10 +5582,7 @@ def _load_dsets(
     Ndsets = len(fnames)
     for i, dset in enumerate(fnames):
         utils.log(
-            "Reading {} / {} datasets...".format(i + 1, Ndsets),
-            f=logf,
-            lvl=1,
-            verbose=verbose,
+            f"Reading {i + 1} / {Ndsets} datasets...", f=logf, lvl=1, verbose=verbose
         )
 
         # read data
@@ -5630,10 +5621,7 @@ def _load_cals(cnames, logf=None, verbose=True):
     Ncals = len(cnames)
     for i, cfile in enumerate(cnames):
         utils.log(
-            "Reading {} / {} calibrations...".format(i + 1, Ncals),
-            f=logf,
-            lvl=1,
-            verbose=verbose,
+            f"Reading {i + 1} / {Ncals} calibrations...", f=logf, lvl=1, verbose=verbose
         )
 
         # read data
