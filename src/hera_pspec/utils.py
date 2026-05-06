@@ -5,7 +5,6 @@ import inspect
 import itertools
 import time
 import traceback
-from collections import OrderedDict as odict
 from datetime import datetime
 
 import numpy as np
@@ -753,7 +752,7 @@ def load_config(config_file):
 
     # define recursive replace function
     def replace(d):
-        if isinstance(d, (dict, odict)):
+        if isinstance(d, dict):
             for k in d.keys():
                 # 'None' and '' turn into None
                 if d[k] == "None":
@@ -763,7 +762,7 @@ def load_config(config_file):
                     [isinstance(i, list) for i in d[k]]
                 ):
                     d[k] = [tuple(i) for i in d[k]]
-                elif isinstance(d[k], (dict, odict)):
+                elif isinstance(d[k], dict):
                     replace(d[k])
 
     # Open and read config file
@@ -970,7 +969,7 @@ def config_pspec_blpairs(
     blps = list(zip(bls1, bls2))
 
     # iterate over pol-group pairs that exist
-    groupings = odict()
+    groupings = {}
     for pp, gp in zip(pol_pairs, group_pairs):
         if (pp[0], gp[0]) not in pol_grps or (pp[1], gp[1]) not in pol_grps:
             if verbose:
@@ -1017,7 +1016,7 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
     from hera_pspec import UVPSpec
 
     # type check
-    assert isinstance(blvecs, (dict, odict, UVPSpec)), (
+    assert isinstance(blvecs, (dict, UVPSpec)), (
         "blpairs must be fed as a dict or UVPSpec"
     )
     if isinstance(blvecs, UVPSpec):
@@ -1029,7 +1028,7 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
         # get baseline-pairs
         blpairs = uvp.get_blpairs()
         # form dictionary
-        _blvecs = odict()
+        _blvecs = {}
         for blp in blpairs:
             bl1 = blp[0]
             bl2 = blp[1]
@@ -1306,7 +1305,7 @@ def get_reds(
             antpos = uvd.telescope.get_enu_antpos()
             ants = uvd.telescope.antenna_numbers
         antpos_dict = dict(list(zip(ants, antpos)))
-    elif isinstance(uvd, (dict, odict)):
+    elif isinstance(uvd, dict):
         # use antenna position dictionary
         antpos_dict = uvd
     else:

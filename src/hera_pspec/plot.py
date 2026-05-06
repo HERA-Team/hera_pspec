@@ -1,5 +1,4 @@
 import copy
-from collections import OrderedDict as odict
 
 import numpy as np
 import uvtools
@@ -515,7 +514,7 @@ def delay_waterfall(
         x = k_para
 
     # Extract power spectra into array
-    waterfall = odict()
+    waterfall = {}
     for blgrp in blpairs:
         # Loop over blpairs in group and plot power spectrum for each one
         for blp in blgrp:

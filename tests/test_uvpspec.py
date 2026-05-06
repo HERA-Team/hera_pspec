@@ -1,6 +1,5 @@
 import copy
 import os
-from collections import OrderedDict as odict
 from pathlib import Path
 
 import numpy as np
@@ -55,11 +54,11 @@ def case_uvp_exact_wfs(uvp_example_data, uvp_exact_wfs: UVPSpec):
 class TestUVPSpec:
     def _add_optionals(self, uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
         """add dummy optional cov_array and stats_array to uvp"""
-        uvp.cov_array_real = odict()
-        uvp.cov_array_imag = odict()
+        uvp.cov_array_real = {}
+        uvp.cov_array_imag = {}
         uvp.cov_model = "empirical"
         stat = "noise_err"
-        uvp.stats_array = odict({stat: odict()})
+        uvp.stats_array = {stat: {}}
         for spw in uvp.spw_array:
             ndlys = uvp.get_spw_ranges(spw)[0][-1]
             uvp.cov_array_real[spw] = np.empty(

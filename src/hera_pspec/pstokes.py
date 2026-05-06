@@ -5,7 +5,6 @@ Module to construct pseudo-Stokes (I,Q,U,V) visibilities from miriad files or UV
 import argparse
 import copy
 import warnings
-from collections import OrderedDict as odict
 from collections.abc import Iterable
 
 import numpy as np
@@ -17,10 +16,10 @@ from . import __version__
 # See pyuvdata.utils.polstr2num for conversion between polarization string
 # and polarization integer. Ex. {'XX': -5, ...}
 pol_weights = {
-    1: odict([(-5, 1.0), (-6, 1.0)]),
-    2: odict([(-5, 1.0), (-6, -1.0)]),
-    3: odict([(-7, 1.0), (-8, 1.0)]),
-    4: odict([(-7, -1.0j), (-8, 1.0j)]),
+    1: dict([(-5, 1.0), (-6, 1.0)]),
+    2: dict([(-5, 1.0), (-6, -1.0)]),
+    3: dict([(-7, 1.0), (-8, 1.0)]),
+    4: dict([(-7, -1.0j), (-8, 1.0j)]),
 }
 
 

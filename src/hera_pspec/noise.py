@@ -1,5 +1,4 @@
 import ast
-from collections import OrderedDict as odict
 
 import numpy as np
 from scipy.linalg import circulant
@@ -110,7 +109,7 @@ class Sensitivity:
         """
         if isinstance(cosmo, str):
             cosmo = ast.literal_eval(cosmo)
-        if isinstance(cosmo, (dict, odict)):
+        if isinstance(cosmo, dict):
             cosmo = conversions.Cosmo_Conversions(**cosmo)
         self.cosmo = cosmo
         self.cosmo_params = str(self.cosmo.get_params())
