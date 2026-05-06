@@ -127,7 +127,7 @@ def _compute_pspec_scalar(
     return scalar
 
 
-class PSpecBeamBase(object):
+class PSpecBeamBase:
     def __init__(self, cosmo=None):
         """
         Base class for PSpecBeam objects. Provides compute_pspec_scalar()
@@ -271,15 +271,11 @@ class PSpecBeamBase(object):
         # Check frequency bounds
         if np.min(freqs) < self.beam_freqs.min():
             print(
-                "Warning: min freq {} < self.beam_freqs.min(), extrapolating...".format(
-                    np.min(freqs)
-                )
+                f"Warning: min freq {np.min(freqs)} < self.beam_freqs.min(), extrapolating..."
             )
         if np.max(freqs) > self.beam_freqs.max():
             print(
-                "Warning: max freq {} > self.beam_freqs.max(), extrapolating...".format(
-                    np.max(freqs)
-                )
+                f"Warning: max freq {np.max(freqs)} > self.beam_freqs.max(), extrapolating..."
             )
 
         Op = interp1d(

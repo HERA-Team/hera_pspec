@@ -244,14 +244,12 @@ def _combine_pol_arrays(
     pstokes_str = pyuvdata.utils.polnum2str(pstokes)
 
     # assert pstokes in pol_weights, and pol1 and pol2 in pol_weights[pstokes]
-    assert pstokes in pol_weights, "unrecognized pstokes parameter {}".format(
-        pstokes_str
-    )
+    assert pstokes in pol_weights, f"unrecognized pstokes parameter {pstokes_str}"
     assert pol1 in pol_weights[pstokes], (
-        "pol1 {} not used in constructing pstokes {}".format(pol1_str, pstokes_str)
+        f"pol1 {pol1_str} not used in constructing pstokes {pstokes_str}"
     )
     assert pol2 in pol_weights[pstokes], (
-        "pol2 {} not used in constructing pstokes {}".format(pol2_str, pstokes_str)
+        f"pol2 {pol2_str} not used in constructing pstokes {pstokes_str}"
     )
 
     # assert pol_convention makes sense
@@ -435,13 +433,13 @@ def construct_pstokes(
     # polarization to form the desired pseudo Stokes visibilities. If multiple
     # exist, downselect on polarization.
     assert req_pol1 in uvd1.polarization_array, (
-        "Polarization {} not found in dset1 object".format(req_pol1)
+        f"Polarization {req_pol1} not found in dset1 object"
     )
     if uvd1.Npols > 1:
         uvd1 = uvd1.select(polarizations=req_pol1, inplace=False)
 
     assert req_pol2 in uvd2.polarization_array, (
-        "Polarization {} not found in dset2 object".format(req_pol2)
+        f"Polarization {req_pol2} not found in dset2 object"
     )
     if uvd2.Npols > 1:
         uvd2 = uvd2.select(polarizations=req_pol2, inplace=False)

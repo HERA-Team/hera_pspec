@@ -414,7 +414,7 @@ def calc_blpair_reds(
         if a in antpos1 and a in antpos2:
             msg = (
                 "antenna positions from uvd1 and uvd2 do not agree to within "
-                "tolerance of {} m".format(bl_tol)
+                f"tolerance of {bl_tol} m"
             )
             assert np.linalg.norm(antpos1[a] - antpos2[a]) < bl_tol, msg
 
@@ -767,7 +767,7 @@ def load_config(config_file):
                     replace(d[k])
 
     # Open and read config file
-    with open(config_file, "r") as cfile:
+    with open(config_file) as cfile:
         try:
             cfg = yaml.load(cfile, Loader=yaml.FullLoader)
         except yaml.YAMLError as exc:
@@ -900,8 +900,8 @@ def config_pspec_blpairs(
                 # insert into unique_files with {pol} and {group} re-inserted
                 for _file in files:
                     _unique_file = _file.replace(
-                        ".{pol}.".format(pol=pol), ".{pol}."
-                    ).replace(".{group}.".format(group=group), ".{group}.")
+                        f".{pol}.", ".{pol}."
+                    ).replace(f".{group}.", ".{group}.")
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
     unique_files = sorted(unique_files)
@@ -975,9 +975,7 @@ def config_pspec_blpairs(
         if (pp[0], gp[0]) not in pol_grps or (pp[1], gp[1]) not in pol_grps:
             if verbose:
                 print(
-                    "pol_pair {} and group_pair {} not found in data files".format(
-                        pp, gp
-                    )
+                    f"pol_pair {pp} and group_pair {gp} not found in data files"
                 )
             continue
         groupings[(tuple(gp), tuple(pp))] = blps
@@ -1055,7 +1053,7 @@ def get_blvec_reds(blvecs, bl_error_tol=1.0, match_bl_lens=False):
         bl_ang = np.arctan2(*bl_vec[::-1]) * 180 / np.pi
         if bl_ang < 0:
             bl_ang = (bl_ang + 180) % 360
-        bl_tag = "{:03.0f}_{:03.0f}".format(bl_len, bl_ang)
+        bl_tag = f"{bl_len:03.0f}_{bl_ang:03.0f}"
 
         # append to list if unique within tolerance
         if match_bl_lens:
@@ -1142,7 +1140,7 @@ def job_monitor(
     # check for len-0
     if len(exit_codes) == 0:
         raise ValueError(
-            "No output generated from run_func over iterator {}".format(iterator)
+            f"No output generated from run_func over iterator {iterator}"
         )
 
     # inspect for failures
@@ -1155,7 +1153,7 @@ def job_monitor(
             f=lf,
             verbose=verbose,
         )
-        raise ValueError("All {} jobs failed".format(action_name))
+        raise ValueError(f"All {action_name} jobs failed")
 
     # if not all failed, try re-run
     failures = np.where(exit_codes != 0)[0]
@@ -1178,16 +1176,14 @@ def job_monitor(
     # print failures if they exist
     if len(failures) > 0:
         log(
-            "\nSome {} jobs failed after {} tries:\n{}".format(
-                action_name, maxiter, failures
-            ),
+            f"\nSome {action_name} jobs failed after {maxiter} tries:\n{failures}",
             f=lf,
             verbose=verbose,
         )
     else:
         t_run = time.time() - t_start
         log(
-            "\nAll {} jobs ran through ({:1.1f} sec)".format(action_name, t_run),
+            f"\nAll {action_name} jobs ran through ({t_run:1.1f} sec)",
             f=lf,
             verbose=verbose,
         )

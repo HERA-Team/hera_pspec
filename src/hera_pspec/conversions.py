@@ -52,7 +52,7 @@ class cgs_units:
     kb = 1.38064852e-16  # erg K-1
 
 
-class Cosmo_Conversions(object):
+class Cosmo_Conversions:
     """
     Cosmo_Conversions class for mathematical conversion functions,
     some of which require a cosmological model, others of which
@@ -387,9 +387,9 @@ class Cosmo_Conversions(object):
         return tau2kpara
 
     def __str__(self):
-        message = "Cosmo_Conversions object at <{}>\n".format(hex(id(self)))
+        message = f"Cosmo_Conversions object at <{hex(id(self))}>\n"
         message += "; ".join(
-            ["{:s} : {:0.4f}".format(p, getattr(self, p)) for p in self.params]
+            [f"{p:s} : {getattr(self, p):0.4f}" for p in self.params]
         )
         return message
 

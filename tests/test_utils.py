@@ -505,7 +505,7 @@ def test_log():
     logf = open("logf.log", "w")
     utils.log("message", f=logf, verbose=False)
     logf.close()
-    with open("logf.log", "r") as f:
+    with open("logf.log") as f:
         assert f.readlines()[0] == "message"
 
     # traceback
@@ -515,7 +515,7 @@ def test_log():
     except NameError:
         utils.log("raised an exception", f=logf, tb=sys.exc_info(), verbose=False)
     logf.close()
-    with open("logf.log", "r") as f:
+    with open("logf.log") as f:
         log = "".join(f.readlines())
         assert "NameError" in log and "raised an exception" in log
     os.remove("logf.log")
@@ -573,7 +573,7 @@ def test_uvp_noise_error_arser():
 
 def test_job_monitor():
     # open empty files
-    datafiles = ["./{}".format(i) for i in ["a", "b", "c", "d"]]
+    datafiles = [f"./{i}" for i in ["a", "b", "c", "d"]]
     for df in datafiles:
         with open(df, "w") as f:
             pass

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # hera_pspec documentation build configuration file, created by
 # sphinx-quickstart on Tue Apr 24 13:55:12 2018.
@@ -25,7 +24,7 @@ import os
 import sys
 
 # Mock-import modules to allow build to complete without throwing errors
-import mock
+from unittest import mock
 
 MOCK_MODULES = [
     "numpy",

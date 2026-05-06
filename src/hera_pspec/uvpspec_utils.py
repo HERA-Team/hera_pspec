@@ -801,28 +801,28 @@ def _select(
             # if h5file is passed, default to loading in data
             if h5file is not None:
                 # assign data arrays
-                _data = h5file["data_spw{}".format(s_old)]
-                _wgts = h5file["wgt_spw{}".format(s_old)]
-                _ints = h5file["integration_spw{}".format(s_old)]
-                _nsmp = h5file["nsample_spw{}".format(s_old)]
+                _data = h5file[f"data_spw{s_old}"]
+                _wgts = h5file[f"wgt_spw{s_old}"]
+                _ints = h5file[f"integration_spw{s_old}"]
+                _nsmp = h5file[f"nsample_spw{s_old}"]
                 # assign non-required arrays
                 if store_window:
-                    _window_function = h5file["window_function_spw{}".format(s_old)]
+                    _window_function = h5file[f"window_function_spw{s_old}"]
                     if exact_windows:
                         _window_function_kperp = h5file[
-                            "window_function_kperp_spw{}".format(s_old)
+                            f"window_function_kperp_spw{s_old}"
                         ]
                         _window_function_kpara = h5file[
-                            "window_function_kpara_spw{}".format(s_old)
+                            f"window_function_kpara_spw{s_old}"
                         ]
                 if store_cov:
-                    _cov_real = h5file["cov_real_spw{}".format(s_old)]
-                    _cov_imag = h5file["cov_imag_spw{}".format(s_old)]
+                    _cov_real = h5file[f"cov_real_spw{s_old}"]
+                    _cov_imag = h5file[f"cov_imag_spw{s_old}"]
                 _stat = odict()
                 for statname in statnames:
                     if statname not in stats:
                         stats[statname] = odict()
-                    _stat[statname] = h5file["stats_{}_{}".format(statname, s_old)]
+                    _stat[statname] = h5file[f"stats_{statname}_{s_old}"]
 
             # if no h5file, we are performing a select, so use uvp's arrays
             else:
@@ -1147,7 +1147,7 @@ def _conj_blpair(blpair, which="both"):
     elif which == "both":
         conj_blpair = _antnums_to_blpair((antnums[0][::-1], antnums[1][::-1]))
     else:
-        raise ValueError("didn't recognize {}".format(which))
+        raise ValueError(f"didn't recognize {which}")
 
     return conj_blpair
 

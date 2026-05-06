@@ -430,7 +430,7 @@ class Test_Plot(unittest.TestCase):
         basename = "test_waterfall_plots_3423523923_{bl}_{pol}"
 
         for d in ["data", "flags", "nsamples"]:
-            print("running on {}".format(d))
+            print(f"running on {d}")
             plot.plot_uvdata_waterfalls(
                 uvd, basename, vmin=0, vmax=100, data=d, plot_mode="real"
             )
