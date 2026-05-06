@@ -4,6 +4,7 @@ import os
 import random
 import warnings
 from collections import OrderedDict as odict
+from collections.abc import MutableMapping
 
 import numpy as np
 from astropy import stats as astats
@@ -11,6 +12,54 @@ from astropy import stats as astats
 from . import __version__, utils
 from . import uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
+
+
+def _require_uvpspec(uvp, arg_name):
+    from hera_pspec import UVPSpec
+
+    if not isinstance(uvp, UVPSpec):
+        raise TypeError(
+            f"{arg_name} must be a UVPSpec object, got {type(uvp).__name__}."
+        )
+
+
+def _normalize_grouped_input(value, arg_name, group_description):
+    if not isinstance(value, (list, tuple, np.ndarray)):
+        raise TypeError(f"{arg_name} must be a sequence of {group_description}.")
+
+    groups = []
+    for group in value:
+        if not isinstance(group, (list, tuple, np.ndarray)):
+            raise TypeError(f"{arg_name} must be a sequence of {group_description}.")
+        if len(group) == 0:
+            raise ValueError(f"{arg_name} cannot contain empty groups.")
+        groups.append(list(group))
+
+    return groups
+
+
+def _normalize_stat_names(value, arg_name):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if not isinstance(value, (list, tuple, np.ndarray)):
+        raise TypeError(f"{arg_name} must be a string or a sequence of strings.")
+    if not np.all([isinstance(item, str) for item in value]):
+        raise TypeError(f"{arg_name} must be a string or a sequence of strings.")
+    return list(value)
+
+
+def _as_1d_float_array(value, arg_name):
+    try:
+        array = np.atleast_1d(np.asarray(value, dtype=float))
+    except (TypeError, ValueError) as exc:
+        raise TypeError(f"{arg_name} must be numeric and array-like.") from exc
+
+    if array.ndim != 1:
+        raise ValueError(f"{arg_name} must be one-dimensional.")
+
+    return array
 
 
 def group_baselines(bls, Ngroups, keep_remainder=False, randomize=False, seed=None):
@@ -204,6 +253,11 @@ def average_spectra(
     the scenario of repeated blpairs (e.g. in bootstrapping), which will
     return multiple copies of their time_array.
     """
+    _require_uvpspec(uvp_in, "uvp_in")
+    if error_weights is not None and not isinstance(error_weights, str):
+        raise TypeError("error_weights must be a string or None.")
+    stat_l = _normalize_stat_names(error_field, "error_field")
+
     if inplace:
         uvp = uvp_in
     else:
@@ -215,13 +269,12 @@ def average_spectra(
 
     # If blpair_groups were fed in, enforce type and structure
     if blpair_groups is not None:
-        # Enforce shape of blpair_groups
-        assert isinstance(blpair_groups[0], (list, np.ndarray)), (
-            "blpair_groups must be fed as a list of baseline-pair lists. See docstring."
+        blpair_groups = _normalize_grouped_input(
+            blpair_groups, "blpair_groups", "baseline-pair groups"
         )
 
         # Convert blpair_groups to list of blpair group integers
-        if isinstance(blpair_groups[0][0], tuple):
+        if len(blpair_groups) > 0 and isinstance(blpair_groups[0][0], tuple):
             new_blpair_grps = [
                 [uvp.antnums_to_blpair(blp) for blp in blpg] for blpg in blpair_groups
             ]
@@ -244,9 +297,8 @@ def average_spectra(
         # get baseline length for each group of baseline pairs
         # assuming only redundant baselines are paired together
         blpair_lens = [blv for blv in uvp.get_blpair_seps()[np.sort(idx)]]
-        assert blpair_weights is None, (
-            "Cannot specify blpair_weights if blpair_groups is None."
-        )
+        if blpair_weights is not None:
+            raise ValueError("Cannot specify blpair_weights if blpair_groups is None.")
 
     # Print warning if a blpair appears more than once in all of blpair_groups
     all_blpairs = [item for sublist in blpair_groups for item in sublist]
@@ -260,13 +312,14 @@ def average_spectra(
         # Assign unity weights to baseline-pair groups that were specified
         blpair_weights = [[1.0 for item in grp] for grp in blpair_groups]
     else:
+        blpair_weights = _normalize_grouped_input(
+            blpair_weights, "blpair_weights", "baseline-pair weight groups"
+        )
         # Check that blpair_weights has the same shape as blpair_groups
         for i, grp in enumerate(blpair_groups):
-            try:
-                len(blpair_weights[i]) == len(grp)
-            except:
-                raise IndexError(
-                    "blpair_weights must have the same shape as blpair_groups"
+            if i >= len(blpair_weights) or len(blpair_weights[i]) != len(grp):
+                raise ValueError(
+                    "blpair_weights must have the same shape as blpair_groups."
                 )
 
     # pre-check for error_weights
@@ -280,13 +333,6 @@ def average_spectra(
                 )
         use_error_weights = True
 
-    # stat_l is a list of supplied error_fields, to sum over.
-    if isinstance(error_field, (list, tuple, np.ndarray)):
-        stat_l = list(error_field)
-    elif isinstance(error_field, str):
-        stat_l = [error_field]
-    else:
-        stat_l = []
     if use_error_weights:
         if error_weights not in stat_l:
             stat_l.append(error_weights)
@@ -756,6 +802,11 @@ def spherical_average(
 
     3. For speed, it helps to perform cylindrical binning upfront by suppyling blpair_groups.
     """
+    _require_uvpspec(uvp_in, "uvp_in")
+    if not isinstance(A, MutableMapping):
+        raise TypeError("A must be a mutable mapping.")
+    kbins = _as_1d_float_array(kbins, "kbins")
+
     # input checks
     if weight_by_cov:
         assert hasattr(uvp_in, "cov_array_real"), (
@@ -764,6 +815,8 @@ def spherical_average(
 
     if isinstance(bin_widths, (float, int)):
         bin_widths = np.ones_like(kbins) * bin_widths
+    else:
+        bin_widths = _as_1d_float_array(bin_widths, "bin_widths")
 
     # copy input
     uvp = copy.deepcopy(uvp_in)
@@ -1209,9 +1262,13 @@ def spherical_wf_from_uvp(
     """
 
     # input checks
+    _require_uvpspec(uvp_in, "uvp_in")
+    kbin_edges = _as_1d_float_array(kbin_edges, "kbin_edges")
 
     if kbin_edges_theory is None:
         kbin_edges_theory = np.copy(kbin_edges)
+    else:
+        kbin_edges_theory = _as_1d_float_array(kbin_edges_theory, "kbin_edges_theory")
     Nk = np.size(kbin_edges) - 1
     Nk_in = np.size(kbin_edges_theory) - 1
 
@@ -1249,9 +1306,8 @@ def spherical_wf_from_uvp(
             )
         blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
     else:
-        # Enforce shape of blpair_groups
-        assert isinstance(blpair_groups[0], (list, np.ndarray)), (
-            "blpair_groups must be fed as a list of baseline-pair lists. See docstring."
+        blpair_groups = _normalize_grouped_input(
+            blpair_groups, "blpair_groups", "baseline-pair groups"
         )
         if blpair_lens is None:
             # Get all baseline pairs in uvp object (in integer form)
@@ -1385,6 +1441,8 @@ def fold_spectra(uvp):
     uvp : UVPSpec
         UVPSpec object to be folded.
     """
+    _require_uvpspec(uvp, "uvp")
+
     # assert folded is False
     assert uvp.folded is False, "cannot fold power spectra if uvp.folded is True"
     store_cov = hasattr(uvp, "cov_array_real")

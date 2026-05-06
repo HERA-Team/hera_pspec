@@ -715,6 +715,14 @@ class TestUVPSpec:
         assert uvp.Ntimes == 1
         assert uvp.Nblpairs == 1
 
+    def test_get_blpair_groups_from_bl_groups_input_validation(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ):
+        with pytest.raises(
+            TypeError, match="blgroups must be a sequence of baseline groups"
+        ):
+            vanilla_uvp.get_blpair_groups_from_bl_groups([101102])
+
     def test_get_exact_window_functions(self, uvp_example_data: uvpspec.UVPSpec):
         ft_file = Path(DATA_PATH) / "FT_beam_HERA_dipole_test"
 
@@ -741,11 +749,31 @@ class TestUVPSpec:
         )
         # raise error if spw not in UVPSpec object
         pytest.raises(
-            AssertionError,
+            ValueError,
             uvp.get_exact_window_functions,
             ftbeam=ft_file,
             spw_array=2,
             inplace=True,
+        )
+        pytest.raises(
+            TypeError,
+            uvp.get_exact_window_functions,
+            ftbeam=3.14,
+            inplace=False,
+        )
+        pytest.raises(
+            TypeError,
+            uvp.get_exact_window_functions,
+            ftbeam=ft_file,
+            spw_array=["bad"],
+            inplace=False,
+        )
+        pytest.raises(
+            TypeError,
+            uvp.get_exact_window_functions,
+            ftbeam=ft_file,
+            x_orientation=1,
+            inplace=False,
         )
 
         # give Gaussian beam as input
