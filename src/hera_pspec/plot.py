@@ -230,9 +230,7 @@ def delay_spectrum(
                 elif label_type == "blpairt":
                     label = f"{blp}, {t:0.5f}"
                 else:
-                    raise ValueError(
-                        f"Couldn't undestand label_type {label_type}"
-                    )
+                    raise ValueError(f"Couldn't undestand label_type {label_type}")
 
                 # plot elements
                 cax = None
@@ -663,10 +661,7 @@ def delay_waterfall(
                 elif title_type == "blvec":
                     blv = 0.5 * (blvecs[blp[0]] + blvecs[blp[1]])
                     lens, angs = utils.get_bl_lens_angs([blv], bl_error_tol=1.0)
-                    ax.set_title(
-                        f"bl len {lens[0]:0.2f} m & {angs[0]:0.0f} deg",
-                        y=1,
-                    )
+                    ax.set_title(f"bl len {lens[0]:0.2f} m & {angs[0]:0.0f} deg", y=1)
 
             # set colorbar
             if colorbar:

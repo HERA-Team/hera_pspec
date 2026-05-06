@@ -1987,9 +1987,7 @@ class UVPSpec:
                 f"wgt_spw{i}", data=self.wgt_array[i], dtype=np.float64
             )
             group.create_dataset(
-                f"integration_spw{i}",
-                data=self.integration_array[i],
-                dtype=np.float64,
+                f"integration_spw{i}", data=self.integration_array[i], dtype=np.float64
             )
             group.create_dataset(
                 f"nsample_spw{i}", data=self.nsample_array[i], dtype=float
@@ -2013,14 +2011,10 @@ class UVPSpec:
                     )
             if hasattr(self, "cov_array_real"):
                 group.create_dataset(
-                    f"cov_real_spw{i}",
-                    data=self.cov_array_real[i],
-                    dtype=np.float64,
+                    f"cov_real_spw{i}", data=self.cov_array_real[i], dtype=np.float64
                 )
                 group.create_dataset(
-                    f"cov_imag_spw{i}",
-                    data=self.cov_array_imag[i],
-                    dtype=np.float64,
+                    f"cov_imag_spw{i}", data=self.cov_array_imag[i], dtype=np.float64
                 )
 
         # Store any statistics arrays
@@ -2337,9 +2331,7 @@ class UVPSpec:
             # only enforce existance if not just_meta
             if not just_meta:
                 if p in self._req_params:
-                    assert hasattr(self, p), (
-                        f"required parameter {p} doesn't exist"
-                    )
+                    assert hasattr(self, p), f"required parameter {p} doesn't exist"
 
             # if attribute exists, check its type
             if hasattr(self, p):
@@ -3593,18 +3585,11 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
             concat_ax = ["spw", "blpairts", "polpairs"][matches.index(False)]
             data_concat_axes[(i, j)] = concat_ax
             if verbose:
-                print(
-                    f"uvp {i} and {j} are concatable across {concat_ax} axis"
-                )
+                print(f"uvp {i} and {j} are concatable across {concat_ax} axis")
 
     # assert all uvp pairs have the same (single) non-overlap (concat) axis
     err_msg = "Non-overlapping data in uvps span multiple data axes:\n{}".format(
-        "\n".join(
-            [
-                f"{i[0][0]} & {i[0][1]}: {i[1]}"
-                for i in data_concat_axes.items()
-            ]
-        )
+        "\n".join([f"{i[0][0]} & {i[0][1]}: {i[1]}" for i in data_concat_axes.items()])
     )
     assert len(set(data_concat_axes.values())) == 1, err_msg
 

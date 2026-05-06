@@ -5582,10 +5582,7 @@ def _load_dsets(
     Ndsets = len(fnames)
     for i, dset in enumerate(fnames):
         utils.log(
-            f"Reading {i + 1} / {Ndsets} datasets...",
-            f=logf,
-            lvl=1,
-            verbose=verbose,
+            f"Reading {i + 1} / {Ndsets} datasets...", f=logf, lvl=1, verbose=verbose
         )
 
         # read data
@@ -5624,10 +5621,7 @@ def _load_cals(cnames, logf=None, verbose=True):
     Ncals = len(cnames)
     for i, cfile in enumerate(cnames):
         utils.log(
-            f"Reading {i + 1} / {Ncals} calibrations...",
-            f=logf,
-            lvl=1,
-            verbose=verbose,
+            f"Reading {i + 1} / {Ncals} calibrations...", f=logf, lvl=1, verbose=verbose
         )
 
         # read data

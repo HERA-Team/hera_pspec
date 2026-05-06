@@ -388,9 +388,7 @@ class Cosmo_Conversions:
 
     def __str__(self):
         message = f"Cosmo_Conversions object at <{hex(id(self))}>\n"
-        message += "; ".join(
-            [f"{p:s} : {getattr(self, p):0.4f}" for p in self.params]
-        )
+        message += "; ".join([f"{p:s} : {getattr(self, p):0.4f}" for p in self.params])
         return message
 
     def __eq__(self, other):

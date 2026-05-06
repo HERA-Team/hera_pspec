@@ -899,9 +899,9 @@ def config_pspec_blpairs(
                     pol_grps.append((pol, group))
                 # insert into unique_files with {pol} and {group} re-inserted
                 for _file in files:
-                    _unique_file = _file.replace(
-                        f".{pol}.", ".{pol}."
-                    ).replace(f".{group}.", ".{group}.")
+                    _unique_file = _file.replace(f".{pol}.", ".{pol}.").replace(
+                        f".{group}.", ".{group}."
+                    )
                     if _unique_file not in unique_files:
                         unique_files.append(_unique_file)
     unique_files = sorted(unique_files)
@@ -974,9 +974,7 @@ def config_pspec_blpairs(
     for pp, gp in zip(pol_pairs, group_pairs):
         if (pp[0], gp[0]) not in pol_grps or (pp[1], gp[1]) not in pol_grps:
             if verbose:
-                print(
-                    f"pol_pair {pp} and group_pair {gp} not found in data files"
-                )
+                print(f"pol_pair {pp} and group_pair {gp} not found in data files")
             continue
         groupings[(tuple(gp), tuple(pp))] = blps
 
@@ -1139,9 +1137,7 @@ def job_monitor(
 
     # check for len-0
     if len(exit_codes) == 0:
-        raise ValueError(
-            f"No output generated from run_func over iterator {iterator}"
-        )
+        raise ValueError(f"No output generated from run_func over iterator {iterator}")
 
     # inspect for failures
     if np.all(exit_codes != 0):

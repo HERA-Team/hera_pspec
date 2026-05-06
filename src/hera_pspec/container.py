@@ -626,9 +626,7 @@ def combine_psc_spectra(
             except Exception as exc:
                 # merge failed, so continue
                 if verbose:
-                    print(
-                        f"uvp merge failed for spectra {grp}/{spc}, exception: {exc}"
-                    )
+                    print(f"uvp merge failed for spectra {grp}/{spc}, exception: {exc}")
 
 
 def get_combine_psc_spectra_argparser():
