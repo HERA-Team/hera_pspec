@@ -8,7 +8,7 @@ from pyuvdata import UVBeam
 from pyuvdata import utils as uvutils
 from scipy.interpolate import interp1d
 
-from . import conversions as conversions
+from . import conversions
 from . import uvpspec_utils as uvputils
 
 
