@@ -4830,6 +4830,11 @@ def pspec_run(
         The PSpecData object used for OQE of power spectrum, with cached
         weighting matrices.
     """
+    no_output_warning = (
+        "pspec_run produced no output because the selected data contains no "
+        "matching baseline-pairs."
+    )
+
     # type check
     assert isinstance(dsets, (list, tuple, np.ndarray)), (
         "dsets must be fed as a list of dataset string paths or UVData objects."
@@ -4892,11 +4897,7 @@ def pspec_run(
             )
         except ValueError:
             # at least one of the dset loads failed due to no data being present
-            utils.log(
-                "One of the dset loads failed due to no data overlap given "
-                "the bls and pols selection",
-                verbose=verbose,
-            )
+            warnings.warn(no_output_warning, stacklevel=2)
             return None
 
     assert np.all([isinstance(d, UVData) for d in dsets]), (
@@ -4928,11 +4929,7 @@ def pspec_run(
             except ValueError:
                 # at least one of the dsets_std loads failed due to no data
                 # being present
-                utils.log(
-                    "One of the dsets_std loads failed due to no data overlap given "
-                    "the bls and pols selection",
-                    verbose=verbose,
-                )
+                warnings.warn(no_output_warning, stacklevel=2)
                 return None
 
         assert np.all([isinstance(d, UVData) for d in dsets_std]), err_msg
@@ -5127,6 +5124,7 @@ def pspec_run(
         groupname = "_".join(dset_labels)
 
     # Loop over dataset combinations
+    stored_pspec = False
     for i, dset_idxs in enumerate(dset_pairs):
         # check bls lists aren't empty
         if len(bls1_list[i]) == 0 or len(bls2_list[i]) == 0:
@@ -5167,6 +5165,10 @@ def pspec_run(
         # write in transactional mode
         logger.info(f"Storing {psname}")
         psc.set_pspec(group=groupname, psname=psname, pspec=uvp, overwrite=overwrite)
+        stored_pspec = True
+
+    if not stored_pspec:
+        warnings.warn(no_output_warning, stacklevel=2)
 
     return ds
 
