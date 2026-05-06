@@ -9,7 +9,7 @@ import h5py
 import numpy as np
 from pyuvdata import utils as uvutils
 
-from . import __version__, conversions, grouping, noise, pspecbeam, utils, version
+from . import __version__, conversions, grouping, noise, pspecbeam
 from . import uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
