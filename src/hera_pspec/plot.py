@@ -1156,7 +1156,7 @@ def plot_uvdata_waterfalls(
     vmin=None,
     vmax=None,
     recenter=False,
-    format="png",
+    format="png",  # noqa: A002 — public kwarg name; renaming is a breaking change
     **kwargs,
 ):
     """

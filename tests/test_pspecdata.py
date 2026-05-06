@@ -1769,17 +1769,16 @@ class Test_PSpecData(unittest.TestCase):
         )
         # get RMS of noise-dominated bandpowers for uvp_auto_cov
         noise_dlys = np.abs(uvp_auto_cov.get_dlys(0) * 1e9) > 1000
-        rms = []
-        for key in uvp_auto_cov.get_all_keys():
-            rms.append(
-                np.std(
-                    uvp_auto_cov.get_data(key).real
-                    / np.sqrt(
-                        np.diagonal(uvp_auto_cov.get_cov(key).real, axis1=1, axis2=2)
-                    ),
-                    axis=0,
-                )
+        rms = [
+            np.std(
+                uvp_auto_cov.get_data(key).real
+                / np.sqrt(
+                    np.diagonal(uvp_auto_cov.get_cov(key).real, axis1=1, axis2=2)
+                ),
+                axis=0,
             )
+            for key in uvp_auto_cov.get_all_keys()
+        ]
         rms = np.mean(rms, axis=0)
         # assert this is close to 1.0
         assert np.isclose(np.mean(rms[noise_dlys]), 1.0, atol=0.1)

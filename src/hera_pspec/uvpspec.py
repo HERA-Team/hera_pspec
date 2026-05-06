@@ -887,9 +887,7 @@ class UVPSpec(object):
             i = 1
         blpairs = _ordered_unique(self.blpair_array)
         bls = [self.antnums_to_bl(self.blpair_to_antnums(blp)[i]) for blp in blpairs]
-        blp_blvecs = []
-        for bl in bls:
-            blp_blvecs.append(bl_vecs[bl_array.index(bl)])
+        blp_blvecs = [bl_vecs[bl_array.index(bl)] for bl in bls]
 
         return np.array(blp_blvecs)
 

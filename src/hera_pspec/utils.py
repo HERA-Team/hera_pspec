@@ -265,19 +265,11 @@ def construct_blpairs(
 
     # iterate through and eliminate all autos if desired
     if exclude_auto_bls:
-        new_blpairs = []
-        for blp in blpairs:
-            if blp[0] != blp[1]:
-                new_blpairs.append(blp)
-        blpairs = new_blpairs
+        blpairs = [blp for blp in blpairs if blp[0] != blp[1]]
 
     # same for cross
     if exclude_cross_bls:
-        new_blpairs = []
-        for blp in blpairs:
-            if blp[0] == blp[1]:
-                new_blpairs.append(blp)
-        blpairs = new_blpairs
+        blpairs = [blp for blp in blpairs if blp[0] == blp[1]]
 
     # create bls1 and bls2 list
     bls1 = [blp[0] for blp in blpairs]
@@ -1363,10 +1355,7 @@ def get_reds(
     if xants is not None:
         _reds, _lens, _angs = [], [], []
         for i, r in enumerate(reds):
-            _r = []
-            for bl in r:
-                if bl[0] not in xants and bl[1] not in xants:
-                    _r.append(bl)
+            _r = [bl for bl in r if bl[0] not in xants and bl[1] not in xants]
             if len(_r) > 0:
                 _reds.append(_r)
                 _lens.append(lens[i])
