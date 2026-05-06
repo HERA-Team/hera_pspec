@@ -11,7 +11,6 @@ from uvtools import dspec
 from . import conversions
 
 if TYPE_CHECKING:
-    from .conversions import Cosmo_Conversions
     from .pspecbeam import PSpecBeamBase
 
 PowerSpectrum = float | npt.NDArray[np.floating[Any]]
