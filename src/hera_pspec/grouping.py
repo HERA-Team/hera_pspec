@@ -227,8 +227,9 @@ def average_spectra(
 
         # Get all baseline pairs in uvp object (in integer form)
         uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
+        uvp_blvecs = uvp.get_blpair_blvecs()
         blvecs_groups = [
-            uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])]
+            uvp_blvecs[uvp_blpairs.index(group[0])]
             for group in blpair_groups
         ]
         # get baseline length for each group of baseline pairs
@@ -1254,8 +1255,9 @@ def spherical_wf_from_uvp(
         if blpair_lens is None:
             # Get all baseline pairs in uvp object (in integer form)
             uvp_blpairs = [uvp.antnums_to_blpair(blp) for blp in uvp.get_blpairs()]
+            uvp_blvecs = uvp.get_blpair_blvecs()
             blvecs_groups = [
-                uvp.get_blpair_blvecs()[uvp_blpairs.index(group[0])]
+                uvp_blvecs[uvp_blpairs.index(group[0])]
                 for group in blpair_groups
             ]
             # get baseline length for each group of baseline pairs
