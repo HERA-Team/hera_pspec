@@ -230,7 +230,7 @@ def delay_spectrum(
                 elif label_type == "blpairt":
                     label = f"{blp}, {t:0.5f}"
                 else:
-                    raise ValueError(f"Couldn't undestand label_type {label_type}")
+                    raise ValueError(f"Couldn't understand label_type {label_type}")
 
                 # plot elements
                 cax = None
