@@ -14,18 +14,8 @@ try:
 except ImportError:
     from typing_extensions import Self
 
-from . import (
-    __version__,
-    conversions,
-    grouping,
-    noise,
-    pspecbeam,
-    utils,
-    version,
-)
-from . import (
-    uvpspec_utils as uvputils,
-)
+from . import __version__, conversions, grouping, noise, pspecbeam, utils, version
+from . import uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
 

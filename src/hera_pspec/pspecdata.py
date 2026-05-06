@@ -16,16 +16,8 @@ import uvtools.dspec as dspec
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
-from . import (
-    __version__,
-    container,
-    pspecbeam,
-    utils,
-    uvpspec,
-)
-from . import (
-    uvpspec_utils as uvputils,
-)
+from . import __version__, container, pspecbeam, utils, uvpspec
+from . import uvpspec_utils as uvputils
 
 logger = logging.getLogger(__name__)
 
