@@ -1,14 +1,14 @@
-import unittest
-import pytest
-import numpy as np
-import os
 import copy
+import os
+import unittest
+
+import numpy as np
+import pytest
 from astropy import units
 from pyuvdata import UVData
-from hera_pspec.data import DATA_PATH
 
-from hera_pspec import conversions, pspecbeam, utils
-from hera_pspec import uvwindow, PSpecData
+from hera_pspec import PSpecData, conversions, pspecbeam, utils, uvwindow
+from hera_pspec.data import DATA_PATH
 
 # Data files to use in tests
 dfile = "zen.2458116.31939.HH.uvh5"

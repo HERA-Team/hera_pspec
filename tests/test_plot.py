@@ -1,14 +1,16 @@
+import copy
+import glob
+import os
 import unittest
-import pytest
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import os
-import copy
-from hera_pspec import pspecdata, pspecbeam, conversions, plot, utils, grouping
-from hera_pspec.data import DATA_PATH
+import pytest
 from pyuvdata import UVData
-import glob
+
+from hera_pspec import conversions, grouping, plot, pspecbeam, pspecdata, utils
+from hera_pspec.data import DATA_PATH
 
 # Data files to use in tests
 dfiles = ["zen.all.xx.LST.1.06964.uvA"]

@@ -5,9 +5,10 @@ Pipeline script for generating pstokes visibility.
 
 import copy
 
-from hera_pspec import pstokes
-from pyuvdata import UVData
 import pyuvdata
+from pyuvdata import UVData
+
+from hera_pspec import pstokes
 
 ap = pstokes.generate_pstokes_argparser()
 args = ap.parse_args()

@@ -3,10 +3,11 @@
 Pipeline script to obtain error bars from autocorrelations.
 """
 
+from hera_cal._cli_tools import parse_args, run_with_profiling
+from pyuvdata import UVData
+
 from hera_pspec import utils
 from hera_pspec.container import PSpecContainer
-from pyuvdata import UVData
-from hera_cal._cli_tools import parse_args, run_with_profiling
 
 
 def main(args):

@@ -1,28 +1,21 @@
-import numpy as np
-from collections import OrderedDict as odict
-import os
-import copy
 import ast
+import copy
 import fnmatch
-from pyuvdata import utils as uvutils
-import h5py
+import os
 import warnings
+from collections import OrderedDict as odict
+
+import h5py
+import numpy as np
+from pyuvdata import utils as uvutils
 
 try:
     from typing import Self
 except ImportError:
     from typing_extensions import Self
 
-from . import (
-    conversions,
-    noise,
-    version,
-    __version__,
-    pspecbeam,
-    grouping,
-    utils,
-    uvpspec_utils as uvputils,
-)
+from . import __version__, conversions, grouping, noise, pspecbeam, utils, version
+from . import uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
 

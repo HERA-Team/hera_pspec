@@ -1,11 +1,12 @@
-import numpy as np
-import h5py
 import argparse
 import time
-from functools import wraps
 import warnings
+from functools import wraps
 
-from . import uvpspec, __version__, utils
+import h5py
+import numpy as np
+
+from . import __version__, utils, uvpspec
 
 
 def transactional(fn):

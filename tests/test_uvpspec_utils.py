@@ -1,11 +1,13 @@
-import pytest
-import numpy as np
-from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec import testing, grouping, pspecbeam, UVPSpec
-from hera_pspec.data import DATA_PATH
-import os
 import copy
 import json
+import os
+
+import numpy as np
+import pytest
+
+from hera_pspec import UVPSpec, grouping, pspecbeam, testing
+from hera_pspec import uvpspec_utils as uvputils
+from hera_pspec.data import DATA_PATH
 
 
 def test_select_common():

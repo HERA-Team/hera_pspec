@@ -3,14 +3,16 @@
 Run HERA OQE power spectrum estimation code on sets of redundant baselines.
 """
 
-import hera_pspec as hp
-from hera_pspec.utils import log, load_config
-from hera_cal import redcal
-import pyuvdata as uv
+import glob
 import os
 import sys
-import glob
 import time
+
+import pyuvdata as uv
+from hera_cal import redcal
+
+import hera_pspec as hp
+from hera_pspec.utils import load_config, log
 
 # Default settings for pspec calculation
 pspec_defaults = {

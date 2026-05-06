@@ -1,10 +1,11 @@
-import numpy as np
 import copy
 from collections import OrderedDict as odict
-from pyuvdata import UVData
-import uvtools
 
-from . import conversions, uvpspec, utils
+import numpy as np
+import uvtools
+from pyuvdata import UVData
+
+from . import conversions, utils, uvpspec
 
 
 def delay_spectrum(
@@ -455,8 +456,8 @@ def delay_waterfall(
         Matplotlib Figure instance if input ax is None.
     """
     import matplotlib
-    import matplotlib.pyplot as plt
     import matplotlib.axes
+    import matplotlib.pyplot as plt
 
     # assert component
     assert component in ["real", "abs", "imag", "abs-real", "abs-imag"], (

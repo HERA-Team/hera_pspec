@@ -4,8 +4,9 @@ Command-line script for merging UVPSpec power spectra
 within a PSpecContainer.
 """
 
-from hera_pspec import container
 from hera_cal._cli_tools import parse_args, run_with_profiling
+
+from hera_pspec import container
 
 # Parse commandline args
 args = container.get_combine_psc_argparser()

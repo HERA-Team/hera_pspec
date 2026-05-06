@@ -1,11 +1,13 @@
+import pickle
+from pathlib import Path
+
+import h5py
+import pytest
 from typer.testing import CliRunner
+
 from hera_pspec import cli, testing
 from hera_pspec.container import PSpecContainer
 from hera_pspec.uvpspec import UVPSpec
-import pytest
-import h5py
-import pickle
-from pathlib import Path
 
 
 @pytest.fixture(scope="module")

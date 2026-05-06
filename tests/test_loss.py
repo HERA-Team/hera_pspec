@@ -1,9 +1,11 @@
 """Tests for loss functions in hera_pspec."""
 
 import os
-from hera_pspec import pspecbeam, testing, loss
-from hera_pspec.data import DATA_PATH
+
 import numpy as np
+
+from hera_pspec import loss, pspecbeam, testing
+from hera_pspec.data import DATA_PATH
 
 
 class TestApplyBiasCorrection:

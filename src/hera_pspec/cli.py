@@ -1,17 +1,19 @@
 """A CLI interface for hera_pspec."""
 
-import typer
-from pathlib import Path
-from rich.console import Console
-import h5py
-import pickle
 import glob
+import pickle
+from pathlib import Path
+
+import h5py
+import typer
+from rich.console import Console
 from tqdm import tqdm
 
 cns = Console()
 
 app = typer.Typer()
-from . import container  # noqa: E402  (typer pattern: register subcommands after app is constructed)
+# typer pattern: register subcommands after app is constructed
+from . import container  # noqa: E402
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 

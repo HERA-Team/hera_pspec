@@ -4,8 +4,9 @@ Pipeline script to load a PSpecContainer and bootstrap over redundant baseline-
 pair groups to produce errorbars.
 """
 
-from hera_pspec import grouping
 from hera_cal._cli_tools import parse_args, run_with_profiling
+
+from hera_pspec import grouping
 
 # Parse commandline args
 args = grouping.get_bootstrap_run_argparser()

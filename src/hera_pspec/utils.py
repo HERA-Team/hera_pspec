@@ -1,20 +1,23 @@
-import numpy as np
-import time
-import yaml
-import itertools
-import glob
-import traceback
-from hera_cal import redcal
-from collections import OrderedDict as odict
-from pyuvdata import UVData, utils as uvutils
-from datetime import datetime
-import copy
-from scipy.interpolate import interp1d
-import uvtools as uvt
 import argparse
-from .conversions import Cosmo_Conversions
+import copy
+import glob
 import inspect
+import itertools
+import time
+import traceback
+from collections import OrderedDict as odict
+from datetime import datetime
+
+import numpy as np
+import uvtools as uvt
+import yaml
+from hera_cal import redcal
+from pyuvdata import UVData
+from pyuvdata import utils as uvutils
+from scipy.interpolate import interp1d
+
 from . import __version__
+from .conversions import Cosmo_Conversions
 
 
 def circular_average(angles, axis=0):
@@ -1463,8 +1466,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
     uvd.select(bls=autobls, polarizations=pols)
 
     # construct beam
-    from hera_pspec import pspecbeam
-    from hera_pspec import uvpspec
+    from hera_pspec import pspecbeam, uvpspec
 
     if isinstance(beam, str):
         beam = pspecbeam.PSpecBeamUV(beam)

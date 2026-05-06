@@ -1,12 +1,15 @@
-import numpy as np
-import scipy.integrate as integrate
-from scipy.interpolate import interp1d
-from pyuvdata import UVBeam, utils as uvutils
-import uvtools.dspec as dspec
 from collections import OrderedDict as odict
 from pathlib import Path
 
-from . import conversions as conversions, uvpspec_utils as uvputils
+import numpy as np
+import scipy.integrate as integrate
+import uvtools.dspec as dspec
+from pyuvdata import UVBeam
+from pyuvdata import utils as uvutils
+from scipy.interpolate import interp1d
+
+from . import conversions
+from . import uvpspec_utils as uvputils
 
 
 def _compute_pspec_scalar(

@@ -1,11 +1,13 @@
-import pytest
-from hera_pspec.data import DATA_PATH
-from hera_pspec import testing, uvpspec, conversions, pspecbeam
-import os
-from pyuvdata import UVData
-import numpy as np
-from hera_cal import redcal
 import copy
+import os
+
+import numpy as np
+import pytest
+from hera_cal import redcal
+from pyuvdata import UVData
+
+from hera_pspec import conversions, pspecbeam, testing, uvpspec
+from hera_pspec.data import DATA_PATH
 
 
 def test_build_vanilla_uvpspec():

@@ -1,9 +1,11 @@
-import numpy as np
 import ast
 from collections import OrderedDict as odict
-from uvtools import dspec
-from . import conversions
+
+import numpy as np
 from scipy.linalg import circulant
+from uvtools import dspec
+
+from . import conversions
 
 
 def calc_P_N(

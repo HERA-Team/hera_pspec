@@ -1,12 +1,13 @@
-import unittest
-import pytest
-import numpy as np
-import os
 import copy
+import os
+import unittest
+
+import numpy as np
+import pytest
 from pyuvdata import UVData
 
+from hera_pspec import conversions, noise, pspecbeam, pspecdata, testing, utils
 from hera_pspec.data import DATA_PATH
-from hera_pspec import conversions, pspecdata, pspecbeam, noise, testing, utils
 
 
 class Test_Sensitivity(unittest.TestCase):

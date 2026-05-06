@@ -1,12 +1,14 @@
-import pytest
-import numpy as np
+import copy
 import os
 import sys
-import copy
-from hera_pspec.data import DATA_PATH
-from hera_pspec import utils, testing, pspecbeam
-from pyuvdata import UVData
+
+import numpy as np
+import pytest
 from hera_cal import redcal
+from pyuvdata import UVData
+
+from hera_pspec import pspecbeam, testing, utils
+from hera_pspec.data import DATA_PATH
 
 
 def test_circular_average():

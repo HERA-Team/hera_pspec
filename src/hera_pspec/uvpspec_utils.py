@@ -1,9 +1,10 @@
-import numpy as np
 import copy
-from collections import OrderedDict as odict
-from pyuvdata.utils import polstr2num, polnum2str
 import json
 import warnings
+from collections import OrderedDict as odict
+
+import numpy as np
+from pyuvdata.utils import polnum2str, polstr2num
 
 from . import utils
 
