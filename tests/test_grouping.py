@@ -96,9 +96,7 @@ def test_grouping_input_validation(vanilla_uvp: UVPSpec):
     with pytest.raises(
         ValueError, match="Cannot specify blpair_weights if blpair_groups is None"
     ):
-        grouping.average_spectra(
-            vanilla_uvp, blpair_weights=[[1.0]], inplace=False
-        )
+        grouping.average_spectra(vanilla_uvp, blpair_weights=[[1.0]], inplace=False)
 
     with pytest.raises(TypeError, match="uvp_in must be a UVPSpec object"):
         grouping.spherical_average(wrong_uvp, np.array([0.1, 0.2]), 0.1)
@@ -107,9 +105,7 @@ def test_grouping_input_validation(vanilla_uvp: UVPSpec):
         grouping.spherical_average(vanilla_uvp, np.array([0.1, 0.2]), 0.1, A=[])
 
     grouping.spherical_average(
-        vanilla_uvp,
-        np.array([0.1, 0.2]),
-        np.array([0.05, 0.05]),
+        vanilla_uvp, np.array([0.1, 0.2]), np.array([0.05, 0.05])
     )
 
     with pytest.raises(TypeError, match="bin_widths must be numeric and array-like"):
@@ -123,7 +119,9 @@ def test_grouping_input_validation(vanilla_uvp: UVPSpec):
     with pytest.raises(TypeError, match="uvp_in must be a UVPSpec object"):
         grouping.spherical_wf_from_uvp(wrong_uvp, np.array([0.1, 0.2]))
 
-    with pytest.raises(TypeError, match="kbin_edges_theory must be numeric and array-like"):
+    with pytest.raises(
+        TypeError, match="kbin_edges_theory must be numeric and array-like"
+    ):
         grouping.spherical_wf_from_uvp(
             vanilla_uvp, np.array([0.1, 0.2]), kbin_edges_theory="bad"
         )

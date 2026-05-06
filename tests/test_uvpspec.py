@@ -796,7 +796,9 @@ class TestUVPSpec:
             UserWarning,
             match="inplace set to False because you are not considering all spectral windows in object.",
         ):
-            uvp_multi.get_exact_window_functions(ftbeam=ft_file, spw_array=0, inplace=True)
+            uvp_multi.get_exact_window_functions(
+                ftbeam=ft_file, spw_array=0, inplace=True
+            )
 
         # give Gaussian beam as input
         widths = -0.0343 * uvp.freq_array / 1e6 + 11.30
