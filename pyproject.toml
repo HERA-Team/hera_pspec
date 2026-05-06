@@ -62,7 +62,6 @@ docs = [
     "ipython>=8.18.0",
     "sphinx_autorun>=2.0.0",
     "numpydoc>=0.8",
-    "mock==1.0.1",
 ]
 tests = [
     "coverage>=7.0",
