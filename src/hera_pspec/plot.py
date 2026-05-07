@@ -485,9 +485,7 @@ def delay_spectrum(
                 _y = np.abs(y)
             else:
                 _y = y
-            cax = ax.errorbar(
-                x, _y, fmt="none", ecolor=c, yerr=item["errs"], **kwargs
-            )
+            cax = ax.errorbar(x, _y, fmt="none", ecolor=c, yerr=item["errs"], **kwargs)
 
     # Set log scale
     if logscale:
