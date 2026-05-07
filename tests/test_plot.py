@@ -274,6 +274,24 @@ class Test_Plot(unittest.TestCase):
         self.assertTrue(axes_contains(f2.axes[0], elements))
         plt.close(f2)
 
+        # Regression test for folded Delta^2 plotting in cosmological units.
+        f3 = plot.delay_spectrum(
+            self.uvp,
+            [blps],
+            spw=0,
+            pol=("xx", "xx"),
+            average_blpairs=True,
+            average_times=True,
+            delay=False,
+            deltasq=True,
+            fold=True,
+            legend=True,
+            label_type="blpair",
+        )
+        elements = [(mpl.lines.Line2D, 1), (mpl.legend.Legend, 1)]
+        self.assertTrue(axes_contains(f3.axes[0], elements))
+        plt.close(f3)
+
     def test_delay_spectrum_misc(self):
         # various other tests for plot.delay_spectrum
 

@@ -230,13 +230,13 @@ def delay_spectrum(
             "Trying to plot > 100 spectra... Set force_plot=True to continue."
         )
 
-    # Fold the power spectra if requested
-    if fold:
-        uvp_plt.fold_spectra()
-
     # Convert to Delta^2 units if requested
     if deltasq and not delay:
         uvp_plt.convert_to_deltasq()
+
+    # Fold the power spectra if requested
+    if fold:
+        uvp_plt.fold_spectra()
 
     # Get x-axis units (delays in ns, or k_parallel in Mpc^-1 or h Mpc^-1)
     if delay:
