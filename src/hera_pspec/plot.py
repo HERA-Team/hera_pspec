@@ -962,6 +962,11 @@ def delay_wedge(
     blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps()
     osort = np.argsort(blpair_seps)
     blpairs, blpair_seps = [blpairs[oi] for oi in osort], blpair_seps[osort]
+    if len(blpairs) < 2:
+        raise ValueError(
+            "delay_wedge requires at least two baseline pairs after selection "
+            "and averaging."
+        )
 
     # Convert to DeltaSq
     if deltasq and not delay:

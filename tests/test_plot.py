@@ -668,6 +668,15 @@ class Test_Plot(unittest.TestCase):
         plt.close()
 
         # test exceptions
+        with pytest.raises(ValueError, match="at least two baseline pairs"):
+            plot.delay_wedge(
+                uvp,
+                0,
+                ("xx", "xx"),
+                blpairs=[uvp.get_blpairs()[-1]],
+                times=uvp.time_avg_array[:1],
+            )
+
         pytest.raises(
             ValueError, plot.delay_wedge, uvp, 0, ("xx", "xx"), component="foo"
         )
