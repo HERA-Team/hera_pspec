@@ -372,6 +372,15 @@ class Test_Plot(unittest.TestCase):
         with pytest.raises(ValueError, match="blpairs.*baseline-pair tuples"):
             plot.delay_spectrum(self.uvp, [(24, 25), (37, 38)], 0, ("xx", "xx"))
 
+        with pytest.raises(ValueError, match="blpairs.*baseline-pair tuples"):
+            plot.delay_spectrum(self.uvp, [[(24, 25)]], 0, ("xx", "xx"))
+
+        with pytest.raises(TypeError, match="blpairs must be an iterable"):
+            plot.delay_spectrum(self.uvp, [None], 0, ("xx", "xx"))
+
+        with pytest.raises(TypeError, match="blpairs must be baseline-pair tuples"):
+            plot.delay_spectrum(self.uvp, [[None]], 0, ("xx", "xx"))
+
     def test_plot_waterfall(self):
         """
         Test that waterfall can be plotted.
