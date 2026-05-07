@@ -348,25 +348,25 @@ def average_spectra(
         blpair_weights += [[1.0] for blp in extra_blpairs]
 
     # Create new data arrays
-    data_array, wgts_array = odict(), odict()
-    ints_array, nsmp_array = odict(), odict()
-    stats_array = odict([[stat, odict()] for stat in stat_l])
+    data_array, wgts_array = {}, {}
+    ints_array, nsmp_array = {}, {}
+    stats_array = dict([[stat, {}] for stat in stat_l])
     # will average covariance array if present
     store_cov = hasattr(uvp, "cov_array_real")
     if store_cov:
-        cov_array_real = odict()
-        cov_array_imag = odict()
+        cov_array_real = {}
+        cov_array_imag = {}
 
     # same for window function
     store_window = hasattr(uvp, "window_function_array")
     if store_window:
-        window_function_array = odict()
-        window_function_kperp, window_function_kpara = odict(), odict()
+        window_function_array = {}
+        window_function_kperp, window_function_kpara = {}, {}
 
     # Iterate over spectral windows
     for spw in range(uvp.Nspws):
         spw_data, spw_wgts, spw_ints, spw_nsmp = [], [], [], []
-        spw_stats = odict([[stat, []] for stat in stat_l])
+        spw_stats = dict([[stat, []] for stat in stat_l])
         if store_window:
             spw_window_function = []
             spw_wf_kperp_bins, spw_wf_kpara_bins = [], []
@@ -376,7 +376,7 @@ def average_spectra(
         # Iterate over polarizations
         for i, p in enumerate(uvp.polpair_array):
             pol_data, pol_wgts, pol_ints, pol_nsmp = [], [], [], []
-            pol_stats = odict([[stat, []] for stat in stat_l])
+            pol_stats = dict([[stat, []] for stat in stat_l])
             if store_window:
                 pol_window_function = []
             if store_cov:
@@ -386,7 +386,7 @@ def average_spectra(
             # Iterate over baseline-pair groups
             for j, blpg in enumerate(blpair_groups):
                 bpg_data, bpg_wgts, bpg_ints, bpg_nsmp = [], [], [], []
-                bpg_stats = odict([[stat, []] for stat in stat_l])
+                bpg_stats = dict([[stat, []] for stat in stat_l])
                 if store_window:
                     bpg_window_function = []
                 if store_cov:
@@ -846,23 +846,18 @@ def spherical_average(
     # initialize blank arrays and dicts
     Nk = len(kbins)
     dlys_array, spw_dlys_array = [], []
-    data_array, wgt_array, integration_array, nsample_array = (
-        odict(),
-        odict(),
-        odict(),
-        odict(),
-    )
+    data_array, wgt_array, integration_array, nsample_array = ({}, {}, {}, {})
     store_stats = hasattr(uvp, "stats_array")
     store_cov = hasattr(uvp, "cov_array_real")
     store_window = hasattr(uvp, "window_function_array") or uvp.exact_windows
     if store_cov:
-        cov_array_real = odict()
-        cov_array_imag = odict()
+        cov_array_real = {}
+        cov_array_imag = {}
         # spherical averaged cov_array_imag is set to be zero
     if store_stats:
-        stats_array = odict([[stat, odict()] for stat in uvp.stats_array.keys()])
+        stats_array = dict([[stat, {}] for stat in uvp.stats_array.keys()])
     if store_window:
-        window_function_array = odict()
+        window_function_array = {}
         # define arrays for theory spherical bins
         if kbins_theory is None:
             kbins_theory = kbins
@@ -1359,7 +1354,7 @@ def spherical_wf_from_uvp(
     )
 
     # initialize blank arrays and dicts
-    window_function_array = odict()
+    window_function_array = {}
 
     # iterate over spectral windows
     for spw in spw_array:
@@ -1894,7 +1889,7 @@ def bootstrap_resampled_error(
 
     # get all keys in uvp_avg and get data from each uvp_boot
     keys = uvp_avg.get_all_keys()
-    uvp_boot_data = odict(
+    uvp_boot_data = dict(
         [(k, np.array([u.get_data(k) for u in uvp_boots])) for k in keys]
     )
 

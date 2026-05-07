@@ -3,14 +3,13 @@ import copy
 import fnmatch
 import os
 import warnings
-from collections import OrderedDict as odict
 from typing import Self
 
 import h5py
 import numpy as np
 from pyuvdata import utils as uvutils
 
-from . import __version__, conversions, grouping, noise, pspecbeam, utils, version
+from . import __version__, conversions, grouping, noise, pspecbeam
 from . import uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
@@ -1130,11 +1129,11 @@ class UVPSpec:
             raise ValueError(errmsg)
 
         if not hasattr(self, "stats_array"):
-            self.stats_array = odict()
+            self.stats_array = {}
 
         dtype = statistic.dtype
         if stat not in self.stats_array.keys():
-            self.stats_array[stat] = odict(
+            self.stats_array[stat] = dict(
                 [
                     [i, np.nan * np.ones(self.data_array[i].shape, dtype=dtype)]
                     for i in range(self.Nspws)
@@ -1580,7 +1579,7 @@ class UVPSpec:
         """
         # assert key length
         assert len(key) == 3, "length of key must be 3: (spw, blpair, polpair)"
-        if isinstance(key, (odict, dict)):
+        if isinstance(key, dict):
             key = (key["spw"], key["blpair"], key["polpair"])
 
         # assign key elements
@@ -2156,7 +2155,7 @@ class UVPSpec:
             self.beam_freqs = new_beam.beam_freqs
 
         # Update cosmo
-        if isinstance(new_cosmo, (dict, odict)):
+        if isinstance(new_cosmo, dict):
             new_cosmo = conversions.Cosmo_Conversions(**new_cosmo)
         if verbose:
             print(f"setting cosmology: \n{new_cosmo}")
@@ -2255,8 +2254,8 @@ class UVPSpec:
             )
 
         # Create new window function array
-        window_function_array = odict()
-        window_function_kperp, window_function_kpara = odict(), odict()
+        window_function_array = {}
+        window_function_kperp, window_function_kpara = {}, {}
 
         # Iterate over spectral windows
         for spw in spw_array:
@@ -2384,7 +2383,7 @@ class UVPSpec:
                                 raise ValueError(err_msg)
                     # dicts
                     elif p in self._dicts:
-                        assert isinstance(getattr(self, p), (dict, odict)), (
+                        assert isinstance(getattr(self, p), dict), (
                             f"attribute {p} needs to be a dictionary"
                         )
                         # iterate over keys
@@ -2404,9 +2403,9 @@ class UVPSpec:
                                 raise AssertionError(err_msg)
 
                     elif p in self._dicts_of_dicts:
-                        assert isinstance(getattr(self, p), (dict, odict))
+                        assert isinstance(getattr(self, p), dict)
                         for k in getattr(self, p).keys():
-                            assert isinstance(getattr(self, p)[k], (dict, odict))
+                            assert isinstance(getattr(self, p)[k], dict)
                             for j in getattr(self, p)[k].keys():
                                 assert isinstance(getattr(self, p)[k][j], np.ndarray)
 
@@ -2624,13 +2623,13 @@ class UVPSpec:
         dlys = self.get_dlys(spw)
 
         # handle Tsys
-        if not isinstance(Tsys, (dict, odict)):
+        if not isinstance(Tsys, dict):
             if not isinstance(Tsys, np.ndarray):
                 Tsys = np.ones(self.Ntpairs) * Tsys
             Tsys = dict([(blp, Tsys) for blp in blpairs])
 
         # Iterate over blpairs to get P_N
-        P_N = odict()
+        P_N = {}
         for i, blp in enumerate(blpairs):
             # get indices
             inds = self.blpair_to_indices(blp)
@@ -3033,23 +3032,23 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     exact_windows = np.all([uvp.exact_windows for uvp in uvps])
     store_stats = np.all([hasattr(uvp, "stats_array") for uvp in uvps])
     # Create new empty data arrays and fill spw arrays
-    u.data_array = odict()
-    u.integration_array = odict()
-    u.wgt_array = odict()
-    u.nsample_array = odict()
+    u.data_array = {}
+    u.integration_array = {}
+    u.wgt_array = {}
+    u.nsample_array = {}
     if store_window:
-        u.window_function_array = odict()
+        u.window_function_array = {}
         if exact_windows:
-            u.window_function_kperp = odict()
-            u.window_function_kpara = odict()
+            u.window_function_kperp = {}
+            u.window_function_kpara = {}
             u.exact_windows = exact_windows
     if store_cov:
         # ensure cov model is the same for all uvps
         if len(set([uvp.cov_model for uvp in uvps])) > 1:
             store_cov = False
         else:
-            u.cov_array_real = odict()
-            u.cov_array_imag = odict()
+            u.cov_array_real = {}
+            u.cov_array_imag = {}
             u.cov_model = uvps[0].cov_model
     if store_stats:
         # get shared stats keys
@@ -3061,7 +3060,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         if len(stored_stats) == 0:
             store_stats = False
         else:
-            u.stats_array = odict([(stat, odict()) for stat in stored_stats])
+            u.stats_array = dict([(stat, {}) for stat in stored_stats])
 
     u.scalar_array = np.empty((Nspws, Npols), float)
     u.freq_array, u.spw_array, u.dly_array = [], [], []
@@ -3532,7 +3531,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
                 )
 
     # get static metadata values
-    static_meta = odict(
+    static_meta = dict(
         [
             (k, getattr(uvps[0], k, None))
             for k in static_meta
@@ -3544,7 +3543,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     unique_spws = []
     unique_blpts = []
     unique_polpairs = []
-    data_concat_axes = odict()
+    data_concat_axes = {}
     blpts_comb = []  # Combined blpair + time
 
     # find unique items
