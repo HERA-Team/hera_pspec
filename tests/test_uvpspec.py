@@ -714,6 +714,22 @@ class TestUVPSpec:
         assert uvp.Ntimes == 1
         assert uvp.Nblpairs == 1
 
+    def test_get_blpair_groups_from_bl_groups_input_validation(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ):
+        with pytest.raises(
+            TypeError, match="blgroups must be a sequence of baseline groups"
+        ):
+            vanilla_uvp.get_blpair_groups_from_bl_groups("bad")
+
+        with pytest.raises(
+            TypeError, match="blgroups must be a sequence of baseline groups"
+        ):
+            vanilla_uvp.get_blpair_groups_from_bl_groups([101102])
+
+        with pytest.raises(ValueError, match="blgroups cannot contain empty groups"):
+            vanilla_uvp.get_blpair_groups_from_bl_groups([[]])
+
     def test_get_exact_window_functions(self, uvp_example_data: uvpspec.UVPSpec):
         ft_file = Path(DATA_PATH) / "FT_beam_HERA_dipole_test"
 
@@ -740,12 +756,48 @@ class TestUVPSpec:
         )
         # raise error if spw not in UVPSpec object
         pytest.raises(
-            AssertionError,
+            ValueError,
             uvp.get_exact_window_functions,
             ftbeam=ft_file,
             spw_array=2,
             inplace=True,
         )
+        pytest.raises(
+            TypeError, uvp.get_exact_window_functions, ftbeam=3.14, inplace=False
+        )
+        uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=[0], inplace=False)
+        pytest.raises(
+            TypeError,
+            uvp.get_exact_window_functions,
+            ftbeam=ft_file,
+            spw_array=["bad"],
+            inplace=False,
+        )
+        pytest.raises(
+            TypeError,
+            uvp.get_exact_window_functions,
+            ftbeam=ft_file,
+            spw_array=3.14,
+            inplace=False,
+        )
+        pytest.raises(
+            TypeError,
+            uvp.get_exact_window_functions,
+            ftbeam=ft_file,
+            x_orientation=1,
+            inplace=False,
+        )
+
+        uvp_multi = copy.deepcopy(uvp_example_data)
+        uvp_multi.spw_array = np.array([0, 1])
+        uvp_multi.Nspws = 2
+        with pytest.warns(
+            UserWarning,
+            match="inplace set to False because you are not considering all spectral windows in object.",
+        ):
+            uvp_multi.get_exact_window_functions(
+                ftbeam=ft_file, spw_array=0, inplace=True
+            )
 
         # give Gaussian beam as input
         widths = -0.0343 * uvp.freq_array / 1e6 + 11.30

@@ -40,6 +40,96 @@ def case_vanilla_uvp_alternating_times(
 #     return uvp_exact_wfs
 
 
+def test_grouping_input_validation(vanilla_uvp: UVPSpec):
+    wrong_uvp = pspecdata.PSpecData(dsets=[], wgts=[])
+    uvp_with_stats = copy.deepcopy(vanilla_uvp)
+    uvp_with_stats.stats_array = {
+        "missing": {
+            spw: np.ones(
+                (uvp_with_stats.Nbltpairs, uvp_with_stats.Ndlys, uvp_with_stats.Npols)
+            )
+            for spw in uvp_with_stats.spw_array
+        }
+    }
+
+    with pytest.raises(TypeError, match="uvp_in must be a UVPSpec object"):
+        grouping.average_spectra(wrong_uvp, inplace=False)
+
+    with pytest.raises(
+        TypeError, match="blpair_groups must be a sequence of baseline-pair groups"
+    ):
+        grouping.average_spectra(vanilla_uvp, blpair_groups="bad", inplace=False)
+
+    with pytest.raises(
+        TypeError, match="blpair_groups must be a sequence of baseline-pair groups"
+    ):
+        grouping.average_spectra(
+            vanilla_uvp, blpair_groups=[101102101102], inplace=False
+        )
+
+    with pytest.raises(ValueError, match="blpair_groups cannot contain empty groups"):
+        grouping.average_spectra(vanilla_uvp, blpair_groups=[[]], inplace=False)
+
+    with pytest.raises(
+        TypeError, match="error_field must be a string or a sequence of strings"
+    ):
+        grouping.average_spectra(vanilla_uvp, error_field=1, inplace=False)
+
+    with pytest.raises(
+        TypeError, match="error_field must be a string or a sequence of strings"
+    ):
+        grouping.average_spectra(vanilla_uvp, error_field=[1], inplace=False)
+
+    with pytest.raises(TypeError, match="error_weights must be a string or None"):
+        grouping.average_spectra(vanilla_uvp, error_weights=1, inplace=False)
+
+    grouping.average_spectra(uvp_with_stats, error_field=["missing"], inplace=False)
+
+    with pytest.raises(ValueError, match="blpair_weights must have the same shape"):
+        grouping.average_spectra(
+            vanilla_uvp,
+            blpair_groups=[[101102101102, 102103102103]],
+            blpair_weights=[[1.0]],
+            inplace=False,
+        )
+
+    with pytest.raises(
+        ValueError, match="Cannot specify blpair_weights if blpair_groups is None"
+    ):
+        grouping.average_spectra(vanilla_uvp, blpair_weights=[[1.0]], inplace=False)
+
+    with pytest.raises(TypeError, match="uvp_in must be a UVPSpec object"):
+        grouping.spherical_average(wrong_uvp, np.array([0.1, 0.2]), 0.1)
+
+    with pytest.raises(TypeError, match="A must be a mutable mapping"):
+        grouping.spherical_average(vanilla_uvp, np.array([0.1, 0.2]), 0.1, A=[])
+
+    grouping.spherical_average(
+        vanilla_uvp, np.array([0.1, 0.2]), np.array([0.05, 0.05])
+    )
+
+    with pytest.raises(TypeError, match="bin_widths must be numeric and array-like"):
+        grouping.spherical_average(vanilla_uvp, np.array([0.1, 0.2]), "bad")
+
+    with pytest.raises(ValueError, match="bin_widths must be one-dimensional"):
+        grouping.spherical_average(
+            vanilla_uvp, np.array([0.1, 0.2]), np.array([[0.05, 0.05]])
+        )
+
+    with pytest.raises(TypeError, match="uvp_in must be a UVPSpec object"):
+        grouping.spherical_wf_from_uvp(wrong_uvp, np.array([0.1, 0.2]))
+
+    with pytest.raises(
+        TypeError, match="kbin_edges_theory must be numeric and array-like"
+    ):
+        grouping.spherical_wf_from_uvp(
+            vanilla_uvp, np.array([0.1, 0.2]), kbin_edges_theory="bad"
+        )
+
+    with pytest.raises(TypeError, match="uvp must be a UVPSpec object"):
+        grouping.fold_spectra("not-a-uvp")
+
+
 class TestGrouping:
     def test_group_baselines(self):
         """
@@ -884,7 +974,7 @@ def test_spherical_wf_from_uvp():
         little_h="h^-3" in uvp.norm_units,
     )
     pytest.raises(
-        AssertionError,
+        TypeError,
         grouping.spherical_wf_from_uvp,
         uvp,
         kbin_edges=kbin_edges,
