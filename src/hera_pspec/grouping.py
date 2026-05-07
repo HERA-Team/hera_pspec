@@ -3,7 +3,6 @@ import copy
 import os
 import random
 import warnings
-from collections import OrderedDict as odict
 from collections.abc import MutableMapping
 
 import numpy as np
