@@ -2844,14 +2844,18 @@ def test_pspec_run():
     # test when no data is loaded in dset
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
-    ds = pspecdata.pspec_run(
-        fnames,
-        "./out.h5",
-        Jy2mK=False,
-        verbose=False,
-        overwrite=True,
-        blpairs=[((500, 501), (600, 601))],
-    )  # blpairs that don't exist
+    with pytest.warns(
+        UserWarning,
+        match="pspec_run produced no output because the selected data contains no matching baseline-pairs.",
+    ):
+        ds = pspecdata.pspec_run(
+            fnames,
+            "./out.h5",
+            Jy2mK=False,
+            verbose=False,
+            overwrite=True,
+            blpairs=[((500, 501), (600, 601))],
+        )  # blpairs that don't exist
     assert ds == None
     assert os.path.exists("./out.h5") == False
 
@@ -2861,29 +2865,37 @@ def test_pspec_run():
         uvd = UVData()
         uvd.read_miriad(f)
         uvds.append(uvd)
-    ds = pspecdata.pspec_run(
-        uvds,
-        "./out.h5",
-        dsets_std=fnames_std,
-        Jy2mK=False,
-        verbose=False,
-        overwrite=True,
-        blpairs=[((500, 501), (600, 601))],
-    )
+    with pytest.warns(
+        UserWarning,
+        match="pspec_run produced no output because the selected data contains no matching baseline-pairs.",
+    ):
+        ds = pspecdata.pspec_run(
+            uvds,
+            "./out.h5",
+            dsets_std=fnames_std,
+            Jy2mK=False,
+            verbose=False,
+            overwrite=True,
+            blpairs=[((500, 501), (600, 601))],
+        )
     assert ds == None
     assert os.path.exists("./out.h5") == False
 
     # test when data is loaded, but no blpairs match
     if os.path.exists("./out.h5"):
         os.remove("./out.h5")
-    ds = pspecdata.pspec_run(
-        fnames,
-        "./out.h5",
-        Jy2mK=False,
-        verbose=False,
-        overwrite=True,
-        blpairs=[((37, 38), (600, 601))],
-    )
+    with pytest.warns(
+        UserWarning,
+        match="pspec_run produced no output because the selected data contains no matching baseline-pairs.",
+    ):
+        ds = pspecdata.pspec_run(
+            fnames,
+            "./out.h5",
+            Jy2mK=False,
+            verbose=False,
+            overwrite=True,
+            blpairs=[((37, 38), (600, 601))],
+        )
     assert isinstance(ds, pspecdata.PSpecData)
     assert os.path.exists("./out.h5") == False
 
