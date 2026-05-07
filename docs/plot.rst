@@ -10,16 +10,18 @@ The following example plots the power spectra from a ``UVPSpec`` object, average
   # Load or generate a UVPSpec object containing delay power spectra
   uvp = ...
 
-  # Set which baseline-pairs should be included in the plot
-  blpairs = list(uvp.blpair_array) # This includes all blpairs!
+  # Set which baseline-pairs should be included in the plot.
+  # uvp.get_blpairs() returns nested tuples like ((ant1, ant2), (ant3, ant4)).
+  blpairs = uvp.get_blpairs()
 
   # Plot the delay spectrum, averaged over all blpairs and times
-  # (for the spectral window with index=0, and polarization 'xx')
-  ax = hp.plot.delay_spectrum(uvp, [blpairs,], spw=0, pol='xx',
-                              average_blpairs=True, average_times=True,
-                              delay=False)
+  # (for the spectral-window index 0, and auto-polarization 'xx')
+  fig = hp.plot.delay_spectrum(uvp, [blpairs], 0, 'xx',
+                               average_blpairs=True, average_times=True,
+                               delay=False)
 
   # Setting delay=False plots the power spectrum in cosmological units
+  # Use times=uvp.time_avg_array[...] to select specific integrations.
 
 For a more extensive worked example, see `this example Jupyter notebook <https://github.com/HERA-Team/hera_pspec/blob/master/examples/Plotting_examples.ipynb>`_.
 

@@ -331,6 +331,29 @@ class Test_Plot(unittest.TestCase):
             label_type="foo",
         )
 
+    def test_delay_spectrum_blpair_input_validation(self):
+        """Exercise the documented blpair input forms for delay_spectrum."""
+        blpair = self.uvp.get_blpairs()[0]
+
+        fig = plot.delay_spectrum(
+            self.uvp,
+            [blpair],
+            0,
+            ("xx", "xx"),
+            times=self.uvp.time_avg_array[:1],
+            legend=True,
+            lines=False,
+            markers=True,
+            logscale=False,
+        )
+        legend = fig.axes[0].get_legend()
+        assert legend is not None
+        assert str(blpair) in legend.get_texts()[0].get_text()
+        plt.close(fig)
+
+        with pytest.raises(ValueError, match="blpairs.*baseline-pair tuples"):
+            plot.delay_spectrum(self.uvp, [(24, 25), (37, 38)], 0, ("xx", "xx"))
+
     def test_plot_waterfall(self):
         """
         Test that waterfall can be plotted.

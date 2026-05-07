@@ -7,6 +7,70 @@ from pyuvdata import UVData
 from . import conversions, utils, uvpspec
 
 
+def _is_antpair_tuple(value):
+    """Return True for a baseline tuple like (ant1, ant2)."""
+    return (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and all(isinstance(ant, (int, np.integer)) for ant in value)
+    )
+
+
+def _is_blpair_tuple(value):
+    """Return True for a blpair tuple like ((ant1, ant2), (ant3, ant4))."""
+    return (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and all(_is_antpair_tuple(antpair) for antpair in value)
+    )
+
+
+def _normalize_plot_blpairs(uvp, blpairs, func_name):
+    """
+    Normalize plotting blpair input to a list of lists of blpair integers.
+    """
+    normalized = []
+    for blpgrp in blpairs:
+        if isinstance(blpgrp, list):
+            group = blpgrp
+        elif isinstance(blpgrp, (int, np.integer)) or _is_blpair_tuple(blpgrp):
+            group = [blpgrp]
+        elif _is_antpair_tuple(blpgrp):
+            raise ValueError(
+                f"{func_name} blpairs must be baseline-pair tuples or groups of "
+                "baseline-pair tuples/integers. For a single blpair, use "
+                "[((ant1, ant2), (ant3, ant4))]; to average a group, use "
+                "[[blpair1, blpair2, ...]]."
+            )
+        else:
+            raise TypeError(
+                f"{func_name} blpairs must be an iterable of baseline-pair tuples, "
+                "blpair integers, or lists of those values."
+            )
+
+        normalized_group = []
+        for blp in group:
+            if isinstance(blp, (int, np.integer)):
+                normalized_group.append(blp)
+            elif _is_blpair_tuple(blp):
+                normalized_group.append(uvp.antnums_to_blpair(blp))
+            elif _is_antpair_tuple(blp):
+                raise ValueError(
+                    f"{func_name} blpairs must be baseline-pair tuples or groups of "
+                    "baseline-pair tuples/integers. For a single blpair, use "
+                    "[((ant1, ant2), (ant3, ant4))]; to average a group, use "
+                    "[[blpair1, blpair2, ...]]."
+                )
+            else:
+                raise TypeError(
+                    f"{func_name} blpairs must be baseline-pair tuples, blpair "
+                    "integers, or lists of those values."
+                )
+        normalized.append(normalized_group)
+
+    return normalized
+
+
 def delay_spectrum(
     uvp,
     blpairs,
@@ -40,11 +104,20 @@ def delay_spectrum(
         UVPSpec object, containing delay spectra for a set of baseline-pairs,
         times, polarizations, and spectral windows.
 
-    blpairs : list of tuples or lists of tuples
-        List of baseline-pair tuples, or groups of baseline-pair tuples.
+    blpairs : sequence of baseline-pair identifiers
+        Sequence of blpair integers, nested baseline-pair tuples like
+        ``((ant1, ant2), (ant3, ant4))``, or lists containing either form.
+        A list element is treated as one plotted/averaged group, so use
+        ``[blpair1, blpair2]`` to plot two blpairs separately and
+        ``[[blpair1, blpair2]]`` to average them together when
+        ``average_blpairs=True``.
 
-    spw, pol : int or str
-        Which spectral window and polarization to plot.
+    spw : int
+        Spectral-window index to plot.
+
+    pol : tuple or str
+        Polarization pair to plot. A string is interpreted as an auto-polarization,
+        e.g. ``"xx"`` becomes ``("xx", "xx")``.
 
     average_blpairs : bool, optional
         If True, average over the baseline pairs within each group.
@@ -93,7 +166,9 @@ def delay_spectrum(
         on bandpowers. Default: None.
 
     times : array_like, optional
-        Float ndarray containing elements from time_avg_array to plot.
+        Values from ``uvp.time_avg_array`` to plot. Use this to select which
+        integrations appear; if ``label_type="blpairt"``, the legend labels
+        include the selected time for each spectrum.
 
     logscale : bool, optional
         If True, put plot on a log-scale. Else linear scale. Default: True.
@@ -134,14 +209,8 @@ def delay_spectrum(
         uvp = uvp.select(times=times, inplace=False)
 
     # Add ungrouped baseline-pairs into a group of their own (expected by the
-    # averaging routines)
-    blpairs_in = blpairs
-    blpairs = []  # Must be a list, not an array
-    for i, blpgrp in enumerate(blpairs_in):
-        if not isinstance(blpgrp, list):
-            blpairs.append([blpairs_in[i]])
-        else:
-            blpairs.append(blpairs_in[i])
+    # averaging routines) and reject malformed baseline tuples up front.
+    blpairs = _normalize_plot_blpairs(uvp, blpairs, "delay_spectrum")
 
     # Average over blpairs or times if requested
     blpairs_in = copy.deepcopy(blpairs)  # Save input blpair list
@@ -189,6 +258,7 @@ def delay_spectrum(
         for blp in blgrp:
             # setup key and casting function
             key = (spw, blp, pol)
+            blp_label = uvp_plt.blpair_to_antnums(blp)
             if component == "real":
                 cast = np.real
             elif component == "imag":
@@ -225,9 +295,9 @@ def delay_spectrum(
                 if label_type == "key":
                     label = f"{key}"
                 elif label_type == "blpair":
-                    label = f"{blp}"
+                    label = f"{blp_label}"
                 elif label_type == "blpairt":
-                    label = f"{blp}, {t:0.5f}"
+                    label = f"{blp_label}, {t:0.5f}"
                 else:
                     raise ValueError(f"Couldn't understand label_type {label_type}")
 
@@ -381,8 +451,13 @@ def delay_waterfall(
         UVPSpec object, containing delay spectra for a set of baseline-pairs,
         times, polarizations, and spectral windows.
 
-    blpairs : list of tuples or lists of tuples
-        List of baseline-pair tuples, or groups of baseline-pair tuples.
+    blpairs : sequence of baseline-pair identifiers
+        Sequence of blpair integers, nested baseline-pair tuples like
+        ``((ant1, ant2), (ant3, ant4))``, or lists containing either form.
+        A list element is treated as one plotted/averaged group, so use
+        ``[blpair1, blpair2]`` to plot two blpairs separately and
+        ``[[blpair1, blpair2]]`` to average them together when
+        ``average_blpairs=True``.
 
     spw, pol : int or str
         Which spectral window and polarization to plot.
@@ -434,7 +509,7 @@ def delay_waterfall(
         unless force_plot == True.
 
     times : array_like, optional
-        Float ndarray containing elements from time_avg_array to plot.
+        Values from ``uvp.time_avg_array`` to plot.
 
     title_type : str, optional
         Type of title to put above plot(s). Options = ['blpair', 'blvec']
@@ -462,27 +537,8 @@ def delay_waterfall(
     fix_negval = component in ["real", "imag"] and log
 
     # Add ungrouped baseline-pairs into a group of their own (expected by the
-    # averaging routines)
-    blpairs_in = blpairs
-    blpairs = []  # Must be a list, not an array
-    for i, blpgrp in enumerate(blpairs_in):
-        if not isinstance(blpgrp, list):
-            blpairs.append([blpairs_in[i]])
-        else:
-            blpairs.append(blpairs_in[i])
-
-    # iterate through and make sure they are blpair integers
-    _blpairs = []
-    for blpgrp in blpairs:
-        _blpgrp = []
-        for blp in blpgrp:
-            if isinstance(blp, tuple):
-                blp_int = uvp.antnums_to_blpair(blp)
-            else:
-                blp_int = blp
-            _blpgrp.append(blp_int)
-        _blpairs.append(_blpgrp)
-    blpairs = _blpairs
+    # averaging routines) and reject malformed baseline tuples up front.
+    blpairs = _normalize_plot_blpairs(uvp, blpairs, "delay_waterfall")
 
     # Select times if requested
     if times is not None:
