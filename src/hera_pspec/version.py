@@ -3,7 +3,7 @@ import warnings
 from . import utils
 
 
-def history_string(notes=""):
+def history_string(notes: str = "") -> str:
     """
     Creates a standardized history string that all functions that write to
     disk can use. Optionally add notes.

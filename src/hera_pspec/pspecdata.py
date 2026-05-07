@@ -7,7 +7,6 @@ import json
 import logging
 import time
 import warnings
-from collections import OrderedDict as odict
 from functools import lru_cache
 
 import hera_cal as hc
@@ -3678,13 +3677,13 @@ class PSpecData:
 
         # initialize empty lists
         # We should really pre-allocate arrays instead.
-        data_array = odict()
-        wgt_array = odict()
-        integration_array = odict()
-        cov_array_real = odict()
-        cov_array_imag = odict()
-        stats_array_cov_model = odict()
-        window_function_array = odict()
+        data_array = {}
+        wgt_array = {}
+        integration_array = {}
+        cov_array_real = {}
+        cov_array_imag = {}
+        stats_array_cov_model = {}
+        window_function_array = {}
         time1 = []
         time2 = []
         lst1 = []
@@ -4254,7 +4253,7 @@ class PSpecData:
             uvp.cov_array_imag = cov_array_imag
             uvp.cov_model = cov_model
         if store_cov_diag:
-            uvp.stats_array = odict()
+            uvp.stats_array = {}
             uvp.stats_array[cov_model + "_diag"] = stats_array_cov_model
 
         # window functions

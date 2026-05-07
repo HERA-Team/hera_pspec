@@ -1,7 +1,6 @@
 import copy
 import json
 import warnings
-from collections import OrderedDict as odict
 
 import numpy as np
 from pyuvdata.utils import polnum2str, polstr2num
@@ -753,16 +752,16 @@ def _select(
     # only load / select heavy data if data_array exists _or_ if h5file is passed
     if h5file is not None or hasattr(uvp, "data_array"):
         # select data arrays
-        data = odict()
-        wgts = odict()
-        ints = odict()
-        nsmp = odict()
-        cov_real = odict()
-        cov_imag = odict()
-        stats = odict()
-        window_function = odict()
-        window_function_kperp = odict()
-        window_function_kpara = odict()
+        data = {}
+        wgts = {}
+        ints = {}
+        nsmp = {}
+        cov_real = {}
+        cov_imag = {}
+        stats = {}
+        window_function = {}
+        window_function_kperp = {}
+        window_function_kpara = {}
 
         # determine if certain arrays are stored
         if h5file is not None:
@@ -818,10 +817,10 @@ def _select(
                 if store_cov:
                     _cov_real = h5file[f"cov_real_spw{s_old}"]
                     _cov_imag = h5file[f"cov_imag_spw{s_old}"]
-                _stat = odict()
+                _stat = {}
                 for statname in statnames:
                     if statname not in stats:
-                        stats[statname] = odict()
+                        stats[statname] = {}
                     _stat[statname] = h5file[f"stats_{statname}_{s_old}"]
 
             # if no h5file, we are performing a select, so use uvp's arrays
@@ -841,10 +840,10 @@ def _select(
                     _cov_real = uvp.cov_array_real[s_old]
                     _cov_imag = uvp.cov_array_imag[s_old]
                 # assign stats array
-                _stat = odict()
+                _stat = {}
                 for statname in statnames:
                     if statname not in stats:
-                        stats[statname] = odict()
+                        stats[statname] = {}
                     _stat[statname] = uvp.stats_array[statname][s_old]
 
             # slice data arrays and assign to dictionaries

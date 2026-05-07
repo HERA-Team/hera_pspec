@@ -1,4 +1,3 @@
-from collections import OrderedDict as odict
 from pathlib import Path
 
 import numpy as np
@@ -664,9 +663,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
             pass
 
         # Should now have two dicts if everything is OK
-        if not isinstance(OmegaP, (odict, dict)) or not isinstance(
-            OmegaPP, (odict, dict)
-        ):
+        if not isinstance(OmegaP, dict) or not isinstance(OmegaPP, dict):
             raise TypeError("OmegaP and OmegaPP must both be either dicts or arrays.")
 
         # Check for disallowed polarizations
