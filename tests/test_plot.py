@@ -348,6 +348,15 @@ class Test_Plot(unittest.TestCase):
             ("xx", "xx"),
             label_type="foo",
         )
+        pytest.raises(
+            KeyError,
+            plot.delay_spectrum,
+            self.uvp,
+            [self.uvp.get_blpairs()[0]],
+            0,
+            ("xx", "xx"),
+            error="not_a_stat",
+        )
 
     def test_delay_spectrum_blpair_input_validation(self):
         """Exercise the documented blpair input forms for delay_spectrum."""
@@ -365,8 +374,8 @@ class Test_Plot(unittest.TestCase):
             logscale=False,
         )
         legend = fig.axes[0].get_legend()
-        assert legend is not None
-        assert str(blpair) in legend.get_texts()[0].get_text()
+        assert legend is None
+        assert f"blpair={blpair}" in fig.axes[0].get_title()
         plt.close(fig)
 
         with pytest.raises(ValueError, match="blpairs.*baseline-pair tuples"):
@@ -380,6 +389,104 @@ class Test_Plot(unittest.TestCase):
 
         with pytest.raises(TypeError, match="blpairs must be baseline-pair tuples"):
             plot.delay_spectrum(self.uvp, [[None]], 0, ("xx", "xx"))
+
+    def test_delay_spectrum_auto_title_legend(self):
+        """Smart title/legend should separate static and varying metadata."""
+        blpair = self.uvp.get_blpairs()[0]
+
+        fig, ax = plt.subplots()
+        plot.delay_spectrum(
+            self.uvp,
+            [blpair],
+            0,
+            ("xx", "xx"),
+            times=self.uvp.time_avg_array[:2],
+            legend=True,
+            ax=ax,
+            lines=False,
+            markers=True,
+            logscale=False,
+        )
+        legend = ax.get_legend()
+        assert legend is not None
+        legend_text = [text.get_text() for text in legend.get_texts()]
+        assert len(legend_text) == 2
+        assert all("lst=" in text for text in legend_text)
+        assert all("blpair=" not in text for text in legend_text)
+        assert all("pol=" not in text for text in legend_text)
+        assert "spw=0" in ax.get_title()
+        assert f"blpair={blpair}" in ax.get_title()
+        assert "pol=('xx', 'xx')" in ax.get_title()
+        assert "lst=" not in ax.get_title()
+        plt.close(fig)
+
+        fig = plot.delay_spectrum(
+            self.uvp,
+            self.uvp.get_blpairs()[:2],
+            0,
+            ("xx", "xx"),
+            times=self.uvp.time_avg_array[:1],
+            legend=True,
+            lines=False,
+            markers=True,
+            logscale=False,
+        )
+        ax = fig.axes[0]
+        legend = ax.get_legend()
+        assert legend is not None
+        legend_text = [text.get_text() for text in legend.get_texts()]
+        assert len(legend_text) == 2
+        assert all("blpair=" in text for text in legend_text)
+        assert "spw=0" in ax.get_title()
+        assert "pol=('xx', 'xx')" in ax.get_title()
+        assert "lst=" in ax.get_title()
+        plt.close(fig)
+
+    def test_delay_spectrum_title_legend_opt_out_and_override(self):
+        """Auto title/legend generation should be suppressible and overridable."""
+        blpair = self.uvp.get_blpairs()[0]
+
+        fig = plot.delay_spectrum(
+            self.uvp,
+            [blpair],
+            0,
+            ("xx", "xx"),
+            times=self.uvp.time_avg_array[:2],
+            legend=True,
+            lines=False,
+            markers=True,
+            logscale=False,
+            title_legend=False,
+        )
+        ax = fig.axes[0]
+        assert ax.get_legend() is None
+        assert ax.get_title() == ""
+        plt.close(fig)
+
+        fig = plot.delay_spectrum(
+            self.uvp,
+            [blpair],
+            0,
+            ("xx", "xx"),
+            times=self.uvp.time_avg_array[:2],
+            legend=True,
+            lines=False,
+            markers=True,
+            logscale=False,
+            label_type="blpairt",
+        )
+        ax = fig.axes[0]
+        legend = ax.get_legend()
+        assert legend is not None
+        assert str(blpair) in legend.get_texts()[0].get_text()
+        plt.close(fig)
+
+        title, labels, show_legend = plot._get_delay_spectrum_title_and_labels(
+            [], "auto", True
+        )
+        assert title == ""
+        assert labels == []
+        assert show_legend is False
 
     def test_plot_waterfall(self):
         """

@@ -71,6 +71,79 @@ def _normalize_plot_blpairs(uvp, blpairs, func_name):
     return normalized
 
 
+def _format_blpair_group_label(uvp, blpair_group):
+    """Format a plotted blpair or averaged blpair group for display."""
+    group = [uvp.blpair_to_antnums(blp) for blp in blpair_group]
+    if len(group) == 1:
+        return str(group[0])
+    return str(group)
+
+
+def _normalize_polpair_label(pol):
+    """Format a polarization input consistently for labels and titles."""
+    if isinstance(pol, str):
+        pol = (pol, pol)
+    return str(pol)
+
+
+def _format_lst_label(lst):
+    """Format an LST in hours for display."""
+    lst_hrs = (lst % (2 * np.pi)) * 12 / np.pi
+    return f"lst={lst_hrs:0.3f} hr"
+
+
+def _format_delay_spectrum_manual_label(label_type, metadata):
+    """Format explicit manual labels for delay_spectrum."""
+    if label_type == "key":
+        return str(metadata["key"])
+    if label_type == "blpair":
+        return f"{metadata['blpair']}"
+    if label_type == "blpairt":
+        return f"{metadata['blpair']}, {metadata['time']:0.5f}"
+    raise ValueError(f"Couldn't understand label_type {label_type}")
+
+
+def _get_delay_spectrum_title_and_labels(series_metadata, label_type, title_legend):
+    """
+    Return the auto-generated title, per-series labels, and legend visibility.
+    """
+    if not title_legend:
+        return "", [None for _ in series_metadata], False
+
+    if label_type != "auto":
+        labels = [
+            _format_delay_spectrum_manual_label(label_type, metadata)
+            for metadata in series_metadata
+        ]
+        return "", labels, True
+
+    if not series_metadata:
+        return "", [], False
+
+    field_order = ("spw", "blpair", "pol", "lst")
+    field_labels = {
+        "spw": lambda value: f"spw={value}",
+        "blpair": lambda value: f"blpair={value}",
+        "pol": lambda value: f"pol={value}",
+        "lst": _format_lst_label,
+    }
+    varying_fields = [
+        field
+        for field in field_order
+        if len({metadata[field] for metadata in series_metadata}) > 1
+    ]
+    static_fields = [field for field in field_order if field not in varying_fields]
+
+    title = " | ".join(
+        field_labels[field](series_metadata[0][field]) for field in static_fields
+    )
+    labels = []
+    for metadata in series_metadata:
+        parts = [field_labels[field](metadata[field]) for field in varying_fields]
+        labels.append(", ".join(parts) if parts else None)
+    return title, labels, any(label is not None for label in labels)
+
+
 def delay_spectrum(
     uvp,
     blpairs,
@@ -83,6 +156,7 @@ def delay_spectrum(
     delay=True,
     deltasq=False,
     legend=False,
+    title_legend=True,
     ax=None,
     component="real",
     lines=True,
@@ -91,7 +165,7 @@ def delay_spectrum(
     times=None,
     logscale=True,
     force_plot=False,
-    label_type="blpairt",
+    label_type="auto",
     plot_stats=None,
     **kwargs,
 ):
@@ -143,11 +217,17 @@ def delay_spectrum(
     legend : bool, optional
         Whether to switch on the plot legend. Default: False.
 
+    title_legend : bool, optional
+        If True, generate delay-spectrum title/legend metadata. When
+        ``label_type="auto"``, static fields are written to the title and
+        varying fields are written to the legend. If False, do not create the
+        title or legend text automatically. Default: True.
+
     ax : matplotlib.axes, optional
         Use this to pass in an existing Axes object, which the power spectra
-        will be added to. (Warning: Labels and legends will not be altered in
-        this case, even if the existing plot has completely different axis
-        labels etc.) If None, a new Axes object will be created. Default: None.
+        will be added to. The smart title/legend behavior also applies when
+        using a provided Axes unless ``title_legend=False``. If None, a new
+        Axes object will be created. Default: None.
 
     component : str, optional
         Component of complex spectra to plot, options=['abs', 'real', 'imag'].
@@ -178,11 +258,12 @@ def delay_spectrum(
         Set this to True to override this large plot error and force plot.
         Default: False.
 
-    label_type : int, optional
-        Line label type in legend, options=['key', 'blpair', 'blpairt'].
-            key : Label lines based on (spw, blpair, pol) key.
-            blpair : Label lines based on blpair.
-            blpairt : Label lines based on blpair-time.
+    label_type : str, optional
+        Line label type in legend. Options are:
+        ``'auto'`` to put static metadata in the title and varying metadata in
+        the legend; ``'key'`` to label lines by ``(spw, blpair, pol)``;
+        ``'blpair'`` to label by blpair; and ``'blpairt'`` to label by
+        blpair-time.
 
     plot_stats : string, optional
         If not None, plot an entry in uvp.stats_array instead
@@ -252,13 +333,16 @@ def delay_spectrum(
             f"specified key {plot_stats} not found in stats_array"
         )
 
-    # Plot power spectra
+    # Collect power spectra and metadata before plotting so smart title/legend
+    # formatting can tell which fields vary across the plotted set.
+    series = []
     for blgrp in blpairs:
+        blgrp_label = _format_blpair_group_label(uvp_plt, blgrp)
         # Loop over blpairs in group and plot power spectrum for each one
         for blp in blgrp:
             # setup key and casting function
             key = (spw, blp, pol)
-            blp_label = uvp_plt.blpair_to_antnums(blp)
+            pol_label = _normalize_polpair_label(pol)
             if component == "real":
                 cast = np.real
             elif component == "imag":
@@ -277,117 +361,143 @@ def delay_spectrum(
             data[flags] = np.nan
 
             # get errs if requessted
+            errs = None
             if error is not None and hasattr(uvp_plt, "stats_array"):
                 if error in uvp_plt.stats_array:
                     errs = uvp_plt.get_stats(error, key)
                     errs[flags] = np.nan
+                else:
+                    raise KeyError(
+                        "Error variable '%s' not found in stats_array of UVPSpec object."
+                        % error
+                    )
+            elif error is not None:
+                raise KeyError(
+                    "Error variable '%s' not found in stats_array of UVPSpec object."
+                    % error
+                )
 
             # get times
             blptimes = uvp_plt.time_avg_array[uvp_plt.blpair_to_indices(blp)]
+            blplsts = uvp_plt.lst_avg_array[uvp_plt.blpair_to_indices(blp)]
 
             # iterate over integrations per blp
-            for i in range(data.shape[0]):
-                # get y data
-                y = data[i]
-                t = blptimes[i]
-
-                # form label
-                if label_type == "key":
-                    label = f"{key}"
-                elif label_type == "blpair":
-                    label = f"{blp_label}"
-                elif label_type == "blpairt":
-                    label = f"{blp_label}, {t:0.5f}"
-                else:
-                    raise ValueError(f"Couldn't understand label_type {label_type}")
-
-                # plot elements
-                cax = None
-                if lines:
-                    if logscale:
-                        _y = np.abs(y)
-                    else:
-                        _y = y
-
-                    (cax,) = ax.plot(x, _y, marker="None", label=label, **kwargs)
-
-                if markers:
-                    if cax is None:
-                        c = None
-                    else:
-                        c = cax.get_color()
-                    if lines:
-                        label = None
-
-                    # plot markers
-                    if logscale:
-                        # plot positive w/ filled circles
-                        (cax,) = ax.plot(
-                            x[y >= 0],
-                            np.abs(y[y >= 0]),
-                            c=c,
-                            ls="None",
-                            marker="o",
-                            markerfacecolor=c,
-                            markeredgecolor=c,
-                            label=label,
-                            **kwargs,
-                        )
-                        # plot negative w/ unfilled circles
-                        c = cax.get_color()
-                        (cax,) = ax.plot(
-                            x[y < 0],
-                            np.abs(y[y < 0]),
-                            c=c,
-                            ls="None",
-                            marker="o",
-                            markerfacecolor="None",
-                            markeredgecolor=c,
-                            **kwargs,
-                        )
-                    else:
-                        (cax,) = ax.plot(
-                            x,
-                            y,
-                            c=c,
-                            ls="None",
-                            marker="o",
-                            markerfacecolor=c,
-                            markeredgecolor=c,
-                            label=label,
-                            **kwargs,
-                        )
-
-                if error is not None and hasattr(uvp_plt, "stats_array"):
-                    if error in uvp_plt.stats_array:
-                        if cax is None:
-                            c = None
-                        else:
-                            c = cax.get_color()
-                        if logscale:
-                            _y = np.abs(y)
-                        else:
-                            _y = y
-                        cax = ax.errorbar(
-                            x, _y, fmt="none", ecolor=c, yerr=cast(errs[i]), **kwargs
-                        )
-                    else:
-                        raise KeyError(
-                            "Error variable '%s' not found in stats_array of UVPSpec object."
-                            % error
-                        )
+            series.extend(
+                {
+                    "y": data[i],
+                    "t": blptimes[i],
+                    "lst": blplsts[i],
+                    "key": (spw, blgrp_label, pol_label),
+                    "blpair": blgrp_label,
+                    "spw": spw,
+                    "pol": pol_label,
+                    "errs": cast(errs[i]) if errs is not None else None,
+                }
+                for i in range(data.shape[0])
+            )
 
             # If blpairs were averaged, only the first blpair in the group
             # exists any more (so skip the rest)
             if average_blpairs:
                 break
 
+    title, labels, show_legend = _get_delay_spectrum_title_and_labels(
+        [
+            {
+                "key": item["key"],
+                "blpair": item["blpair"],
+                "spw": item["spw"],
+                "pol": item["pol"],
+                "time": item["t"],
+                "lst": item["lst"],
+            }
+            for item in series
+        ],
+        label_type,
+        title_legend,
+    )
+
+    for item, label in zip(series, labels, strict=True):
+        y = item["y"]
+
+        # plot elements
+        cax = None
+        if lines:
+            if logscale:
+                _y = np.abs(y)
+            else:
+                _y = y
+
+            (cax,) = ax.plot(x, _y, marker="None", label=label, **kwargs)
+
+        if markers:
+            if cax is None:
+                c = None
+            else:
+                c = cax.get_color()
+            marker_label = None if lines else label
+
+            # plot markers
+            if logscale:
+                # plot positive w/ filled circles
+                (cax,) = ax.plot(
+                    x[y >= 0],
+                    np.abs(y[y >= 0]),
+                    c=c,
+                    ls="None",
+                    marker="o",
+                    markerfacecolor=c,
+                    markeredgecolor=c,
+                    label=marker_label,
+                    **kwargs,
+                )
+                # plot negative w/ unfilled circles
+                c = cax.get_color()
+                (cax,) = ax.plot(
+                    x[y < 0],
+                    np.abs(y[y < 0]),
+                    c=c,
+                    ls="None",
+                    marker="o",
+                    markerfacecolor="None",
+                    markeredgecolor=c,
+                    **kwargs,
+                )
+            else:
+                (cax,) = ax.plot(
+                    x,
+                    y,
+                    c=c,
+                    ls="None",
+                    marker="o",
+                    markerfacecolor=c,
+                    markeredgecolor=c,
+                    label=marker_label,
+                    **kwargs,
+                )
+
+        if item["errs"] is not None:
+            if cax is None:
+                c = None
+            else:
+                c = cax.get_color()
+            if logscale:
+                _y = np.abs(y)
+            else:
+                _y = y
+            cax = ax.errorbar(
+                x, _y, fmt="none", ecolor=c, yerr=item["errs"], **kwargs
+            )
+
     # Set log scale
     if logscale:
         ax.set_yscale("log")
 
+    if title:
+        ax.set_title(title)
+
     # Add legend
-    if legend:
+    if legend and show_legend:
         ax.legend(loc="upper left")
 
     # Add labels with units

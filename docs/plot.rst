@@ -22,6 +22,9 @@ The following example plots the power spectra from a ``UVPSpec`` object, average
 
   # Setting delay=False plots the power spectrum in cosmological units
   # Use times=uvp.time_avg_array[...] to select specific integrations.
+  # By default, static metadata is written to the title and only the
+  # varying metadata is written to the legend. Pass title_legend=False
+  # to disable the automatic title/legend text entirely.
 
 For a more extensive worked example, see `this example Jupyter notebook <https://github.com/HERA-Team/hera_pspec/blob/master/examples/Plotting_examples.ipynb>`_.
 
