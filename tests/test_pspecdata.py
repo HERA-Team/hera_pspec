@@ -1,8 +1,10 @@
 import copy
 import glob
+import json
 import os
 import unittest
 import warnings
+from contextlib import nullcontext
 
 import numpy as np
 import pytest
@@ -267,9 +269,10 @@ class Test_PSpecData(unittest.TestCase):
         pytest.raises(ValueError, ds1.set_symmetric_taper, True)
         # now make sure warnings are raised when we extend filter with
         # symmetric tapering and that symmetric taper is set to false.
-        with warnings.catch_warnings(record=True) as w:
+        with pytest.warns(
+            UserWarning, match="filter_extension\\[[01]\\] exceeds"
+        ):
             self.ds.set_filter_extension((10, 10))
-        assert len(w) > 0
         self.assertTrue(not (self.ds.symmetric_taper))
 
         """
@@ -551,9 +554,10 @@ class Test_PSpecData(unittest.TestCase):
         ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], beam=self.bm)
 
-        with warnings.catch_warnings(record=True) as w:
+        with pytest.warns(
+            UserWarning, match="The beam response could not be calculated"
+        ):
             ds_t.get_integral_beam(pol)
-        assert len(w) > 0
 
         try:
             integral_matrix = ds.get_integral_beam(pol)
@@ -823,8 +827,14 @@ class Test_PSpecData(unittest.TestCase):
                 }
                 self.ds.set_r_param(key1, rpk)
                 self.ds.set_r_param(key2, rpk)
-            for taper in taper_selection:
-                qc = self.ds.cov_q_hat(key1, key2, model="dsets")
+            for taper_idx, taper in enumerate(taper_selection):
+                warn_ctx = (
+                    pytest.warns(UserWarning, match="Poorly conditioned covariance")
+                    if input_data_weight == "iC" and taper_idx == 0
+                    else nullcontext()
+                )
+                with warn_ctx:
+                    qc = self.ds.cov_q_hat(key1, key2, model="dsets")
                 self.assertTrue(
                     np.allclose(
                         np.array(list(qc.shape)),
@@ -974,11 +984,17 @@ class Test_PSpecData(unittest.TestCase):
                 self.ds.set_r_param(key1, rpk)
                 self.ds.set_r_param(key2, rpk)
             # Loop over list of taper functions
-            for taper in taper_selection:
+            for taper_idx, taper in enumerate(taper_selection):
                 self.ds.set_taper(taper)
+                warn_ctx = (
+                    pytest.warns(UserWarning, match="Poorly conditioned covariance")
+                    if input_data_weight == "iC" and taper_idx == 0
+                    else nullcontext()
+                )
 
                 # Calculate q_hat for a pair of baselines and test output shape
-                q_hat_a = self.ds.q_hat(key1, key2)
+                with warn_ctx:
+                    q_hat_a = self.ds.q_hat(key1, key2)
                 self.assertEqual(q_hat_a.shape, (Ndlys, Ntime))
 
                 # Check that swapping x_1 <-> x_2 results in complex conj. only
@@ -1053,11 +1069,17 @@ class Test_PSpecData(unittest.TestCase):
                 }
                 self.ds.set_r_param(key1, rpk)
                 self.ds.set_r_param(key2, rpk)
-            for taper in taper_selection:
+            for taper_idx, taper in enumerate(taper_selection):
                 self.ds.set_taper(taper)
+                warn_ctx = (
+                    pytest.warns(UserWarning, match="Poorly conditioned covariance")
+                    if input_data_weight == "iC" and taper_idx == 0
+                    else nullcontext()
+                )
 
                 self.ds.set_Ndlys(Nfreq // 3)
-                H = self.ds.get_H(key1, key2)
+                with warn_ctx:
+                    H = self.ds.get_H(key1, key2)
                 self.assertEqual(H.shape, (Nfreq // 3, Nfreq // 3))  # Test shape
 
                 self.ds.set_Ndlys()
@@ -1088,9 +1110,15 @@ class Test_PSpecData(unittest.TestCase):
             for taper in taper_selection:
                 self.ds.clear_cache()
                 self.ds.set_taper(taper)
+                warn_ctx = (
+                    pytest.warns(UserWarning, match="Poorly conditioned covariance")
+                    if input_data_weight == "iC"
+                    else nullcontext()
+                )
                 # print 'input_data_weight', input_data_weight
                 self.ds.set_Ndlys(Nfreq - 2)
-                G = self.ds.get_G(key1, key2)
+                with warn_ctx:
+                    G = self.ds.get_G(key1, key2)
                 self.assertEqual(G.shape, (Nfreq - 2, Nfreq - 2))  # Test shape
                 # print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
                 matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
@@ -1225,7 +1253,8 @@ class Test_PSpecData(unittest.TestCase):
         self.assertAlmostEqual(adjustment, 1.0)
         self.ds.set_weighting("iC")
         # if weighting is not identity, then the adjustment should be a vector.
-        adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
+        with pytest.warns(UserWarning, match="Poorly conditioned covariance"):
+            adjustment = self.ds.scalar_delay_adjustment(key1, key2, sampling=True)
         self.assertTrue(len(adjustment) == self.ds.spw_Ndlys)
 
     def test_scalar(self):
@@ -1338,7 +1367,8 @@ class Test_PSpecData(unittest.TestCase):
         uvp1 = ds.pspec(bls, bls, (0, 1), pols=("xx", "xx"), verbose=False)
         # rephase and get pspec
         ds.rephase_to_dset(0)
-        ds2 = ds.rephase_to_dset(0, inplace=False)
+        with pytest.warns(UserWarning, match="Skipping dataset 1 b/c it isn't unprojected"):
+            ds2 = ds.rephase_to_dset(0, inplace=False)
         uvp2 = ds.pspec(bls, bls, (0, 1), pols=("xx", "xx"), verbose=False)
         blp = (0, ((37, 39), (37, 39)), ("xx", "xx"))
         assert np.isclose(np.abs(uvp2.get_data(blp) / uvp1.get_data(blp)), 1.0).min()
@@ -1367,7 +1397,10 @@ class Test_PSpecData(unittest.TestCase):
             wgts=[None, None],
             beam=self.bm,
         )
-        ds2.Jy_to_mK(beam=self.bm)
+        with pytest.warns(
+            UserWarning, match="Feeding a beam model when self.primary_beam already exists"
+        ):
+            ds2.Jy_to_mK(beam=self.bm)
         assert ds.dsets[0] == ds2.dsets[0]
 
         # test vis_units no Jansky
@@ -1379,7 +1412,10 @@ class Test_PSpecData(unittest.TestCase):
             wgts=[None, None],
             beam=self.bm,
         )
-        ds.Jy_to_mK()
+        with pytest.warns(
+            UserWarning, match="Cannot convert dset 1 Jy -> mK because vis_units = UNCALIB"
+        ):
+            ds.Jy_to_mK()
         assert ds.dsets[0].vis_units == "mK"
         assert ds.dsets[1].vis_units == "UNCALIB"
         assert (
@@ -1400,7 +1436,10 @@ class Test_PSpecData(unittest.TestCase):
         ds = pspecdata.PSpecData(
             dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None]
         )
-        ds.trim_dset_lsts()
+        with pytest.warns(
+            UserWarning, match="The lst_array is not self-consistent with the time_array"
+        ):
+            ds.trim_dset_lsts()
         assert ds.dsets[0].Ntimes == 50
         assert ds.dsets[1].Ntimes == 50
 
@@ -2075,14 +2114,17 @@ class Test_PSpecData(unittest.TestCase):
         # pytest.raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pols=[('xx','yy')])
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
-        uvp = ds.pspec(
-            bls,
-            bls,
-            (0, 1),
-            [("xx", "xx"), ("yy", "yy")],
-            spw_ranges=[(10, 24)],
-            verbose=False,
-        )
+        with pytest.warns(
+            UserWarning, match="Polarization pair: \\('yy', 'yy'\\) failed the validation test"
+        ):
+            uvp = ds.pspec(
+                bls,
+                bls,
+                (0, 1),
+                [("xx", "xx"), ("yy", "yy")],
+                spw_ranges=[(10, 24)],
+                verbose=False,
+            )
 
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
@@ -2090,11 +2132,17 @@ class Test_PSpecData(unittest.TestCase):
 
         # test exceptions
         pytest.raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1), ("xx", "xx"))
-        pytest.raises(ValueError, ds.pspec, bls, bls, (0, 1), pols=("yy", "yy"))
+        with pytest.warns(
+            UserWarning, match="Polarization pair: \\('yy', 'yy'\\) failed the validation test"
+        ):
+            pytest.raises(ValueError, ds.pspec, bls, bls, (0, 1), pols=("yy", "yy"))
         uvd1 = copy.deepcopy(self.uvd)
         uvd1.polarization_array = np.array([-6])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd1], wgts=[None, None], beam=self.bm)
-        pytest.raises(ValueError, ds.pspec, bls, bls, (0, 1), ("xx", "xx"))
+        with pytest.warns(
+            UserWarning, match="Polarization pair: \\('xx', 'xx'\\) failed the validation test"
+        ):
+            pytest.raises(ValueError, ds.pspec, bls, bls, (0, 1), ("xx", "xx"))
 
         # test files with more than one polarizations
         uvd1 = copy.deepcopy(self.uvd)
@@ -2114,14 +2162,17 @@ class Test_PSpecData(unittest.TestCase):
         uvd1.polarization_array = np.array([-6])
         uvd2 = self.uvd + uvd1
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
-        uvp = ds.pspec(
-            bls,
-            bls,
-            (0, 1),
-            [("xx", "xx"), ("xy", "xy")],
-            spw_ranges=[(10, 24)],
-            verbose=False,
-        )
+        with pytest.warns(
+            UserWarning, match="Polarization pair: \\('xy', 'xy'\\) failed the validation test"
+        ):
+            uvp = ds.pspec(
+                bls,
+                bls,
+                (0, 1),
+                [("xx", "xx"), ("xy", "xy")],
+                spw_ranges=[(10, 24)],
+                verbose=False,
+            )
 
         # test with nsamp set to zero
         uvd = copy.deepcopy(self.uvd)
@@ -2271,30 +2322,32 @@ class Test_PSpecData(unittest.TestCase):
         baselines1, baselines2, blpairs = utils.construct_blpairs(
             uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
         )
-        uvp_w = ds.pspec(
-            baselines1,
-            baselines2,
-            (0, 1),
-            ("xx", "xx"),
-            spw_ranges=(175, 195),
-            exact_windows=True,
-            ftbeam=os.path.join(DATA_PATH, basename),
-        )
+        with pytest.warns(UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."):
+            uvp_w = ds.pspec(
+                baselines1,
+                baselines2,
+                (0, 1),
+                ("xx", "xx"),
+                spw_ranges=(175, 195),
+                exact_windows=True,
+                ftbeam=os.path.join(DATA_PATH, basename),
+            )
         assert uvp_w.exact_windows
         # give Gaussian beam as input
         widths = -0.0343 * uvd.freq_array.flatten() / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
             freq_array=uvd.freq_array.flatten(), widths=widths, pol="xx"
         )
-        uvp_g = ds.pspec(
-            baselines1,
-            baselines2,
-            (0, 1),
-            ("xx", "xx"),
-            spw_ranges=(175, 195),
-            exact_windows=True,
-            ftbeam=gaussian_beam,
-        )
+        with pytest.warns(UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."):
+            uvp_g = ds.pspec(
+                baselines1,
+                baselines2,
+                (0, 1),
+                ("xx", "xx"),
+                spw_ranges=(175, 195),
+                exact_windows=True,
+                ftbeam=gaussian_beam,
+            )
 
     def test_normalization(self):
         # Test Normalization of pspec() compared to PAPER legacy techniques
@@ -2923,10 +2976,15 @@ def test_pspec_run():
     # test input calibration
     dfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.uvh5")
     cfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.flagged_abs.calfits")
+    uvc = UVCal()
+    uvc.read_calfits(cfile)
+    uvc.gain_scale = "Jy"
+    uvc.pol_convention = "avg"
+    uvc.extra_keywords["filename"] = json.dumps(cfile)
     ds = pspecdata.pspec_run(
         [dfile, dfile],
         "./out.h5",
-        cals=cfile,
+        cals=[copy.deepcopy(uvc), copy.deepcopy(uvc)],
         dsets_std=[dfile, dfile],
         verbose=False,
         overwrite=True,
@@ -2953,7 +3011,7 @@ def test_pspec_run():
     ds = pspecdata.pspec_run(
         [dfile, dfile],
         "./out.h5",
-        cals=cfile,
+        cals=[copy.deepcopy(uvc), copy.deepcopy(uvc)],
         dsets_std=[dfile, dfile],
         verbose=False,
         overwrite=True,
@@ -2995,19 +3053,23 @@ def test_pspec_run():
         os.remove("./out.h5")
     fnames = glob.glob(os.path.join(DATA_PATH, "zen.2458116.*.HH.uvh5"))
     cals = glob.glob(os.path.join(DATA_PATH, "zen.2458116.*.HH.flagged_abs.calfits"))
-    ds = pspecdata.pspec_run(
-        [fnames, fnames],
-        "./out.h5",
-        Jy2mK=False,
-        verbose=False,
-        overwrite=True,
-        file_type="uvh5",
-        bl_len_range=(14, 15),
-        bl_deg_range=(0, 1),
-        psname_ext="_0",
-        spw_ranges=[(0, 25)],
-        cals=[cals, cals],
-    )
+    with pytest.warns(
+        UserWarning,
+        match="gain_scale is not set|pol_convention is not specified on the UVCal object|Neither uvd_pol_convention nor uvc_pol_convention are specified",
+    ):
+        ds = pspecdata.pspec_run(
+            [fnames, fnames],
+            "./out.h5",
+            Jy2mK=False,
+            verbose=False,
+            overwrite=True,
+            file_type="uvh5",
+            bl_len_range=(14, 15),
+            bl_deg_range=(0, 1),
+            psname_ext="_0",
+            spw_ranges=[(0, 25)],
+            cals=[cals, cals],
+        )
     psc = container.PSpecContainer("./out.h5", "rw")
     assert isinstance(psc, container.PSpecContainer)
     assert psc.groups() == ["dset0_dset1"]
@@ -3049,6 +3111,8 @@ def test_input_calibration():
         dfiles[i] = uvd
         uvc = UVCal()
         uvc.read_calfits(f[1])
+        uvc.gain_scale = "Jy"
+        uvc.pol_convention = "avg"
         cfiles[i] = uvc
 
     # test add
