@@ -4211,7 +4211,7 @@ class PSpecData:
             "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n"
             "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n"
             "".format(
-                datetime.datetime.utcnow(),
+                datetime.datetime.now(datetime.UTC),
                 __version__,
                 "-" * 20,
                 filename1,
