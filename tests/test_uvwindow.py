@@ -188,9 +188,10 @@ class test_FTBeam(unittest.TestCase):
         )
 
         # make sure widths are given in degrees (raises warning)
-        test = uvwindow.FTBeam.gaussian(
-            freq_array=self.freq_array, pol=self.pol, widths=0.10
-        )
+        with pytest.warns(UserWarning, match="Small widths"):
+            test = uvwindow.FTBeam.gaussian(
+                freq_array=self.freq_array, pol=self.pol, widths=0.10
+            )
 
     def test_get_bandwidth(self):
 
@@ -529,7 +530,8 @@ class Test_UVWindow(unittest.TestCase):
         # test for array of baseline lengths
         _ = test.get_kperp_bins(self.lens)
         # test for warning if large number of bins (> 200)
-        _ = test.get_kperp_bins(np.r_[1.0, self.lens])
+        with pytest.warns(UserWarning, match="Large number of kperp/kpara bins"):
+            _ = test.get_kperp_bins(np.r_[1.0, self.lens])
 
     def test_get_kpara_bins(self):
 
@@ -542,7 +544,8 @@ class Test_UVWindow(unittest.TestCase):
         # test for correct input
         _ = test.get_kpara_bins(self.freq_array)
         # test for warning if large number of bins (> 200)
-        _ = test.get_kpara_bins(self.HERA_bw)
+        with pytest.warns(UserWarning, match="Large number of kperp/kpara bins"):
+            _ = test.get_kpara_bins(self.HERA_bw)
         # test if cosmo is signature
         test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
         kparas = test.get_kpara_bins(self.freq_array)
@@ -686,9 +689,10 @@ class Test_UVWindow(unittest.TestCase):
         # raise warning if empty bins
         kbins_test = np.arange(2, 5, step=0.5) * test.kunits
         test.verbose = True
-        sph_wf, weighted_k = test.cylindrical_to_spherical(
-            cyl_wf=cyl_wf, kbins=kbins_test, ktot=ktot, bl_lens=bl_len
-        )
+        with pytest.warns(UserWarning, match="Some spherical bins are empty"):
+            sph_wf, weighted_k = test.cylindrical_to_spherical(
+                cyl_wf=cyl_wf, kbins=kbins_test, ktot=ktot, bl_lens=bl_len
+            )
 
         # raise ValueError if kbins not linearly spaced
         kbins_log = np.logspace(-2, 2, 20)
@@ -708,21 +712,26 @@ class Test_UVWindow(unittest.TestCase):
         # initialise object from keywords
         test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
 
-        WF, weighted_k = test.get_spherical_wf(
-            kbins=self.kbins,
-            bl_lens=self.lens[:1],
-            bl_weights=[1],
-            kperp_bins=None,
-            kpara_bins=None,
-            return_weighted_k=True,
-            verbose=True,
-        )
+        with pytest.warns(
+            UserWarning, match="Max spherical k probed is not included in bins"
+        ):
+            WF, weighted_k = test.get_spherical_wf(
+                kbins=self.kbins,
+                bl_lens=self.lens[:1],
+                bl_weights=[1],
+                kperp_bins=None,
+                kpara_bins=None,
+                return_weighted_k=True,
+                verbose=True,
+            )
         kperp_bins = test.get_kperp_bins(self.lens[:1])
         kpara_bins = test.get_kpara_bins(test.freq_array)
-        print(np.diff(kpara_bins), np.diff(kperp_bins))
+        dk = np.diff(self.kbins.value).mean()
+        ktot_max = np.sqrt(kperp_bins.value[:, None] ** 2 + kpara_bins.value**2).max()
+        full_kbins = np.arange(self.kbins.value.min(), ktot_max + dk, step=dk) * test.kunits
 
         WF = test.get_spherical_wf(
-            kbins=self.kbins,
+            kbins=full_kbins,
             kperp_bins=kperp_bins,
             kpara_bins=kpara_bins,
             bl_lens=self.lens[:1],
@@ -758,15 +767,23 @@ class Test_UVWindow(unittest.TestCase):
             test.cosmo.tau_to_kpara(test.avg_z, little_h=test.little_h)
             * abs(test.dly_array).max()
         )
-        WF = test.get_spherical_wf(
-            kbins=self.kbins,
-            kperp_bins=kperp_bins,
-            kpara_bins=np.arange(
-                2.0 * kpara_centre, 10 * kpara_centre, step=kpara_centre
-            )
-            * test.kunits,
-            bl_lens=self.lens[:1],
+        bad_kpara_bins = (
+            np.arange(2.0 * kpara_centre, 10 * kpara_centre, step=kpara_centre)
+            * test.kunits
         )
+        bad_kmax = np.sqrt(kperp_bins.value[:, None] ** 2 + bad_kpara_bins.value**2).max()
+        bad_full_kbins = (
+            np.arange(self.kbins.value.min(), bad_kmax + dk, step=dk) * test.kunits
+        )
+        with pytest.warns(
+            UserWarning, match="The bin centre is not included in the array of kpara bins"
+        ):
+            WF = test.get_spherical_wf(
+                kbins=bad_full_kbins,
+                kperp_bins=kperp_bins,
+                kpara_bins=bad_kpara_bins,
+                bl_lens=self.lens[:1],
+            )
         # ValueError raised if kbins not linearly spaced
         kperp_log = np.logspace(-2, 0, 100)
         pytest.raises(
