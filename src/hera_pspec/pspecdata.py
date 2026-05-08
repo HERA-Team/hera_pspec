@@ -2465,9 +2465,6 @@ class PSpecData:
                 cov_q_imag.extend([cov_q_imag_temp] * self.dsets[0].Ntimes)
                 cov_p_real.extend([cov_p_real_temp] * self.dsets[0].Ntimes)
                 cov_p_imag.extend([cov_p_imag_temp] * self.dsets[0].Ntimes)
-                warnings.warn(
-                    "Producing time-uniform covariance matrices between bandpowers."
-                )
                 break
             else:
                 cov_q_real.append(cov_q_real_temp)
