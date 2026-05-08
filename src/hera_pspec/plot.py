@@ -215,7 +215,12 @@ def delay_spectrum(
         delay=True. Default: False.
 
     legend : bool, optional
-        Whether to switch on the plot legend. Default: False.
+        Whether to enable the plot legend. When ``label_type='auto'`` (the
+        default), a legend is only rendered if there are varying metadata
+        fields across the plotted spectra (e.g., multiple baseline-pairs or
+        LSTs). With any other ``label_type`` value, the legend is always
+        rendered when ``legend=True``. Has no effect when
+        ``title_legend=False``. Default: False.
 
     title_legend : bool, optional
         If True, generate delay-spectrum title/legend metadata. When
@@ -494,7 +499,10 @@ def delay_spectrum(
     if title:
         ax.set_title(title)
 
-    # Add legend
+    # Add legend only when legend=True and show_legend=True. show_legend is
+    # False when label_type='auto' and all metadata fields are identical
+    # (a single spectrum or all blpairs at the same LST), because there is
+    # nothing meaningful to distinguish in the legend entries.
     if legend and show_legend:
         ax.legend(loc="upper left")
 
