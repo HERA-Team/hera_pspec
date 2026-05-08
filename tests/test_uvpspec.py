@@ -751,17 +751,23 @@ class TestUVPSpec:
         # check if result is the same with and without inplace
         assert np.allclose(wf_array[0], uvp.window_function_array[0])
         # obtain exact window functions for one spw only
-        uvp.get_exact_window_functions(
-            ftbeam=ft_file, spw_array=0, inplace=True, verbose=True
-        )
+        with pytest.warns(
+            UserWarning, match="Exact window functions already computed, overwriting"
+        ):
+            uvp.get_exact_window_functions(
+                ftbeam=ft_file, spw_array=0, inplace=True, verbose=True
+            )
         # raise error if spw not in UVPSpec object
-        pytest.raises(
-            ValueError,
-            uvp.get_exact_window_functions,
-            ftbeam=ft_file,
-            spw_array=2,
-            inplace=True,
-        )
+        with pytest.warns(
+            UserWarning, match="Exact window functions already computed, overwriting"
+        ):
+            pytest.raises(
+                ValueError,
+                uvp.get_exact_window_functions,
+                ftbeam=ft_file,
+                spw_array=2,
+                inplace=True,
+            )
         pytest.raises(
             TypeError, uvp.get_exact_window_functions, ftbeam=3.14, inplace=False
         )
@@ -804,9 +810,12 @@ class TestUVPSpec:
         gaussian_beam = uvwindow.FTBeam.gaussian(
             freq_array=uvp_example_data.freq_array, widths=widths, pol="xx"
         )
-        uvp.get_exact_window_functions(
-            ftbeam=gaussian_beam, spw_array=0, inplace=True, verbose=True
-        )
+        with pytest.warns(
+            UserWarning, match="Exact window functions already computed, overwriting"
+        ):
+            uvp.get_exact_window_functions(
+                ftbeam=gaussian_beam, spw_array=0, inplace=True, verbose=True
+            )
 
     @parametrize_with_cases("uvp", cases=".")
     def test_fold_spectra(self, uvp: uvpspec.UVPSpec):

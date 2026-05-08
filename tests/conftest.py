@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from pyuvdata import UVData
 
-from hera_pspec import PSpecBeamUV, PSpecData, UVPSpec, grouping, utils
+from hera_pspec import PSpecBeamUV, PSpecData, UVPSpec, conversions, grouping, utils
 from hera_pspec.data import DATA_PATH
 from hera_pspec.testing import build_vanilla_uvpspec
 
@@ -68,7 +68,7 @@ def uvp_example_data() -> UVPSpec:
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
     # compute ps
-    return ds.pspec(
+    uvp = ds.pspec(
         baselines1,
         baselines2,
         dsets=(0, 1),
@@ -77,6 +77,8 @@ def uvp_example_data() -> UVPSpec:
         taper="bh",
         verbose=False,
     )
+    uvp.cosmo = conversions.Cosmo_Conversions()
+    return uvp
 
 
 @pytest.fixture(scope="session")

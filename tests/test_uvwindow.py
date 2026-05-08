@@ -373,13 +373,14 @@ class Test_UVWindow(unittest.TestCase):
             uvp_crosspol, ipol=0, spw=0, ftbeam=os.path.join(DATA_PATH, basename)
         )
         # if no cosmo, use default
-        uvw_ps = uvwindow.UVWindow.from_uvpspec(
-            uvp_nocosmo,
-            ipol=0,
-            spw=0,
-            verbose=True,
-            ftbeam=os.path.join(DATA_PATH, basename),
-        )
+        with pytest.warns(UserWarning, match="uvp has no cosmo attribute"):
+            uvw_ps = uvwindow.UVWindow.from_uvpspec(
+                uvp_nocosmo,
+                ipol=0,
+                spw=0,
+                verbose=True,
+                ftbeam=os.path.join(DATA_PATH, basename),
+            )
 
         # raise error if no ftbeam as option is not implemented yet
         pytest.raises(
@@ -402,14 +403,15 @@ class Test_UVWindow(unittest.TestCase):
             verbose=False,
         )
         # raise error if spw not within uvp.Nspws
-        pytest.raises(
-            AssertionError,
-            uvwindow.UVWindow.from_uvpspec,
-            uvp=uvp_nocosmo,
-            ipol=0,
-            spw=2,
-            ftbeam=os.path.join(DATA_PATH, basename),
-        )
+        with pytest.warns(UserWarning, match="uvp has no cosmo attribute"):
+            pytest.raises(
+                AssertionError,
+                uvwindow.UVWindow.from_uvpspec,
+                uvp=uvp_nocosmo,
+                ipol=0,
+                spw=2,
+                ftbeam=os.path.join(DATA_PATH, basename),
+            )
 
         # use FTBeam object directly as input
         widths = -0.0343 * self.freq_array / 1e6 + 11.30
