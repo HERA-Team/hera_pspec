@@ -2213,6 +2213,35 @@ def _bin_data_like_array(
     return out
 
 
+def _bin_rms_like_array(
+    d: np.ndarray, kernels: list[np.ndarray], slices: list[slice], axis=1
+):
+    """Bin a standard-deviation-like array over the delay axis.
+
+    This computes the square root of the weighted mean of squares, but rescales each
+    slice before squaring so large finite values do not overflow on the intermediate
+    square.
+    """
+    newshape = list(d.shape)
+    newshape[axis] = len(slices)
+    dswapped = np.abs(d).astype(np.float64, copy=False).swapaxes(-1, axis)
+    out = np.zeros(newshape, dtype=np.result_type(dswapped.dtype, np.float64))
+    outswapped = out.swapaxes(-1, axis)
+
+    for i, (slc, kernel) in enumerate(zip(slices, kernels)):
+        vals = dswapped[..., slc]
+        scale = np.max(vals, axis=-1)
+        scaled = np.divide(
+            vals,
+            scale[..., np.newaxis],
+            out=np.zeros_like(vals, dtype=out.dtype),
+            where=scale[..., np.newaxis] != 0,
+        )
+        outswapped[..., i] = scale * np.sqrt(np.sum((scaled**2) * kernel, axis=-1))
+
+    return out
+
+
 def _bin_cov_like_array(
     cov: np.ndarray, kernels: list[np.ndarray], slices: list[slice]
 ):
@@ -2415,9 +2444,7 @@ def average_in_delay_bins(
         dly_array.append(newdly)
 
         stats = {
-            name: np.sqrt(
-                _bin_data_like_array(stats_array[name][spw] ** 2, kernels, slices)
-            )
+            name: _bin_rms_like_array(stats_array[name][spw], kernels, slices)
             for name in stats_array
             if name not in cov_weighted_stats
         }
