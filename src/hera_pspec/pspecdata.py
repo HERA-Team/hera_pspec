@@ -3994,10 +3994,9 @@ class PSpecData:
                     if store_window:
                         # Wv shape = (nfreqs, nfreqs) ie (64, 64)
                         # qv shape = (nfreqs, ntimes) ie (64, 60)
+                        window_function = np.repeat(Wv[np.newaxis, :, :], qv.shape[1], axis=0)
                         pol_window_function.extend(
-                            np.repeat(Wv[np.newaxis, :, :], qv.shape[1], axis=0).astype(
-                                np.float64
-                            )
+                            np.real(window_function).astype(np.float64, copy=False)
                         )
                         # pol_wf shape = (ntimes, nfreqs, nfreqs) ie (60, 64, 64)
                         # 4 blps so final wf_array shape for each spw is
