@@ -2913,7 +2913,7 @@ class PSpecData:
                     ubl = np.unique(dset.baseline_array)
                     for bl in ubl:
                         # get baseline-times indices
-                        bl_inds = np.where(np.in1d(dset.baseline_array, bl))[0]
+                        bl_inds = np.where(np.isin(dset.baseline_array, bl))[0]
                         # get flag waterfall
                         flags = dset.flag_array[bl_inds, :, i].copy()
                         Ntimes = float(flags.shape[0])
