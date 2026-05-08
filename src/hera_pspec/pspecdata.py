@@ -3994,7 +3994,9 @@ class PSpecData:
                     if store_window:
                         # Wv shape = (nfreqs, nfreqs) ie (64, 64)
                         # qv shape = (nfreqs, ntimes) ie (64, 60)
-                        window_function = np.repeat(Wv[np.newaxis, :, :], qv.shape[1], axis=0)
+                        window_function = np.repeat(
+                            Wv[np.newaxis, :, :], qv.shape[1], axis=0
+                        )
                         pol_window_function.extend(
                             np.real(window_function).astype(np.float64, copy=False)
                         )

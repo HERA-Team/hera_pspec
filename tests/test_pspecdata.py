@@ -269,9 +269,7 @@ class Test_PSpecData(unittest.TestCase):
         pytest.raises(ValueError, ds1.set_symmetric_taper, True)
         # now make sure warnings are raised when we extend filter with
         # symmetric tapering and that symmetric taper is set to false.
-        with pytest.warns(
-            UserWarning, match="filter_extension\\[[01]\\] exceeds"
-        ):
+        with pytest.warns(UserWarning, match="filter_extension\\[[01]\\] exceeds"):
             self.ds.set_filter_extension((10, 10))
         self.assertTrue(not (self.ds.symmetric_taper))
 
@@ -1367,7 +1365,9 @@ class Test_PSpecData(unittest.TestCase):
         uvp1 = ds.pspec(bls, bls, (0, 1), pols=("xx", "xx"), verbose=False)
         # rephase and get pspec
         ds.rephase_to_dset(0)
-        with pytest.warns(UserWarning, match="Skipping dataset 1 b/c it isn't unprojected"):
+        with pytest.warns(
+            UserWarning, match="Skipping dataset 1 b/c it isn't unprojected"
+        ):
             ds2 = ds.rephase_to_dset(0, inplace=False)
         uvp2 = ds.pspec(bls, bls, (0, 1), pols=("xx", "xx"), verbose=False)
         blp = (0, ((37, 39), (37, 39)), ("xx", "xx"))
@@ -1398,7 +1398,8 @@ class Test_PSpecData(unittest.TestCase):
             beam=self.bm,
         )
         with pytest.warns(
-            UserWarning, match="Feeding a beam model when self.primary_beam already exists"
+            UserWarning,
+            match="Feeding a beam model when self.primary_beam already exists",
         ):
             ds2.Jy_to_mK(beam=self.bm)
         assert ds.dsets[0] == ds2.dsets[0]
@@ -1413,7 +1414,8 @@ class Test_PSpecData(unittest.TestCase):
             beam=self.bm,
         )
         with pytest.warns(
-            UserWarning, match="Cannot convert dset 1 Jy -> mK because vis_units = UNCALIB"
+            UserWarning,
+            match="Cannot convert dset 1 Jy -> mK because vis_units = UNCALIB",
         ):
             ds.Jy_to_mK()
         assert ds.dsets[0].vis_units == "mK"
@@ -1437,7 +1439,8 @@ class Test_PSpecData(unittest.TestCase):
             dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None]
         )
         with pytest.warns(
-            UserWarning, match="The lst_array is not self-consistent with the time_array"
+            UserWarning,
+            match="The lst_array is not self-consistent with the time_array",
         ):
             ds.trim_dset_lsts()
         assert ds.dsets[0].Ntimes == 50
@@ -2115,7 +2118,8 @@ class Test_PSpecData(unittest.TestCase):
         uvd = copy.deepcopy(self.uvd)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=self.bm)
         with pytest.warns(
-            UserWarning, match="Polarization pair: \\('yy', 'yy'\\) failed the validation test"
+            UserWarning,
+            match="Polarization pair: \\('yy', 'yy'\\) failed the validation test",
         ):
             uvp = ds.pspec(
                 bls,
@@ -2133,14 +2137,16 @@ class Test_PSpecData(unittest.TestCase):
         # test exceptions
         pytest.raises(AssertionError, ds.pspec, bls1[:1], bls2, (0, 1), ("xx", "xx"))
         with pytest.warns(
-            UserWarning, match="Polarization pair: \\('yy', 'yy'\\) failed the validation test"
+            UserWarning,
+            match="Polarization pair: \\('yy', 'yy'\\) failed the validation test",
         ):
             pytest.raises(ValueError, ds.pspec, bls, bls, (0, 1), pols=("yy", "yy"))
         uvd1 = copy.deepcopy(self.uvd)
         uvd1.polarization_array = np.array([-6])
         ds = pspecdata.PSpecData(dsets=[uvd, uvd1], wgts=[None, None], beam=self.bm)
         with pytest.warns(
-            UserWarning, match="Polarization pair: \\('xx', 'xx'\\) failed the validation test"
+            UserWarning,
+            match="Polarization pair: \\('xx', 'xx'\\) failed the validation test",
         ):
             pytest.raises(ValueError, ds.pspec, bls, bls, (0, 1), ("xx", "xx"))
 
@@ -2163,7 +2169,8 @@ class Test_PSpecData(unittest.TestCase):
         uvd2 = self.uvd + uvd1
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
         with pytest.warns(
-            UserWarning, match="Polarization pair: \\('xy', 'xy'\\) failed the validation test"
+            UserWarning,
+            match="Polarization pair: \\('xy', 'xy'\\) failed the validation test",
         ):
             uvp = ds.pspec(
                 bls,
@@ -2322,7 +2329,9 @@ class Test_PSpecData(unittest.TestCase):
         baselines1, baselines2, blpairs = utils.construct_blpairs(
             uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
         )
-        with pytest.warns(UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."):
+        with pytest.warns(
+            UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."
+        ):
             uvp_w = ds.pspec(
                 baselines1,
                 baselines2,
@@ -2338,7 +2347,9 @@ class Test_PSpecData(unittest.TestCase):
         gaussian_beam = uvwindow.FTBeam.gaussian(
             freq_array=uvd.freq_array.flatten(), widths=widths, pol="xx"
         )
-        with pytest.warns(UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."):
+        with pytest.warns(
+            UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."
+        ):
             uvp_g = ds.pspec(
                 baselines1,
                 baselines2,

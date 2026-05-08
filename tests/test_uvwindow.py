@@ -730,7 +730,9 @@ class Test_UVWindow(unittest.TestCase):
         kpara_bins = test.get_kpara_bins(test.freq_array)
         dk = np.diff(self.kbins.value).mean()
         ktot_max = np.sqrt(kperp_bins.value[:, None] ** 2 + kpara_bins.value**2).max()
-        full_kbins = np.arange(self.kbins.value.min(), ktot_max + dk, step=dk) * test.kunits
+        full_kbins = (
+            np.arange(self.kbins.value.min(), ktot_max + dk, step=dk) * test.kunits
+        )
 
         WF = test.get_spherical_wf(
             kbins=full_kbins,
@@ -773,12 +775,15 @@ class Test_UVWindow(unittest.TestCase):
             np.arange(2.0 * kpara_centre, 10 * kpara_centre, step=kpara_centre)
             * test.kunits
         )
-        bad_kmax = np.sqrt(kperp_bins.value[:, None] ** 2 + bad_kpara_bins.value**2).max()
+        bad_kmax = np.sqrt(
+            kperp_bins.value[:, None] ** 2 + bad_kpara_bins.value**2
+        ).max()
         bad_full_kbins = (
             np.arange(self.kbins.value.min(), bad_kmax + dk, step=dk) * test.kunits
         )
         with pytest.warns(
-            UserWarning, match="The bin centre is not included in the array of kpara bins"
+            UserWarning,
+            match="The bin centre is not included in the array of kpara bins",
         ):
             WF = test.get_spherical_wf(
                 kbins=bad_full_kbins,

@@ -107,8 +107,10 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                             stat1.real**2 + stat2.real**2
                         ) + 1j * np.sqrt(stat1.imag**2 + stat2.imag**2)
 
-                # add cov in quadrature: real and imag separately
-                    if hasattr(uvp1, "cov_array_real") and hasattr(uvp2, "cov_array_real"):
+                    # add cov in quadrature: real and imag separately
+                    if hasattr(uvp1, "cov_array_real") and hasattr(
+                        uvp2, "cov_array_real"
+                    ):
                         if uvp1.cov_model == uvp2.cov_model:
                             cov1r = uvp1.get_cov(key1, component="real")
                             cov2r = uvp2.get_cov(key2, component="real")
