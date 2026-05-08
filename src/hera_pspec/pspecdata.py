@@ -4046,7 +4046,13 @@ class PSpecData:
                     # take inverse avg of integ1 and integ2 to get total integ
                     # inverse avg is done b/c integ ~ 1/noise_var
                     # and due to non-linear operation of V_1 * V_2
-                    pol_ints.extend(1.0 / np.mean([1.0 / integ1, 1.0 / integ2], axis=0))
+                    pol_integ = np.zeros_like(integ1, dtype=float)
+                    valid_integ = (integ1 > 0) & (integ2 > 0)
+                    if np.any(valid_integ):
+                        pol_integ[valid_integ] = 2.0 / (
+                            (1.0 / integ1[valid_integ]) + (1.0 / integ2[valid_integ])
+                        )
+                    pol_ints.extend(pol_integ)
 
                     # combined weight is geometric mean
                     pol_wgts.extend(
