@@ -139,8 +139,6 @@ ignore = [
     "E501",   # line-too-long (1116) — defer to ruff format
     "E701",   # multi-statement on one line, colon (105)
     "E702",   # multi-statement on one line, semicolon (11)
-    "E711",   # none-comparison (13)
-    "E712",   # true-false-comparison (31)
     "E722",   # bare-except (12)
     "E741",   # ambiguous-variable-name (19) — `l`, `I`, `O` are scientific idioms
     "F401",   # unused-import (18) — includes legitimate __init__ re-exports
