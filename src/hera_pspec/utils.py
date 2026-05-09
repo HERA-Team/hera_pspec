@@ -562,7 +562,7 @@ def get_delays(freqs, n_dlys=None):
     Delta_nu = np.median(np.diff(freqs))
     n_freqs = freqs.size
 
-    if n_dlys == None:  # assume that n_dlys = n_freqs if not specified
+    if n_dlys is None:  # assume that n_dlys = n_freqs if not specified
         n_dlys = n_freqs
 
     # Calculate the delays

@@ -1471,9 +1471,9 @@ class Test_PSpecData(unittest.TestCase):
         assert ds.check_key_in_dset((24, 25, "xx"), 0)
 
         # check for non-existing key
-        assert ds.check_key_in_dset("yy", 0) == False
-        assert ds.check_key_in_dset((24, 26), 0) == False
-        assert ds.check_key_in_dset((24, 26, "yy"), 0) == False
+        assert not ds.check_key_in_dset("yy", 0)
+        assert not ds.check_key_in_dset((24, 26), 0)
+        assert not ds.check_key_in_dset((24, 26, "yy"), 0)
 
         # check exception
         pytest.raises(KeyError, ds.check_key_in_dset, (1, 2, 3, 4, 5), 0)
@@ -2409,7 +2409,7 @@ class Test_PSpecData(unittest.TestCase):
             dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None]
         )
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.2)
-        assert ds.dsets[0].get_flags(24, 25)[:, 550:650].any() == False
+        assert not ds.dsets[0].get_flags(24, 25)[:, 550:650].any()
 
         # test w/ no spw selection
         ds = pspecdata.PSpecData(
@@ -2423,7 +2423,7 @@ class Test_PSpecData(unittest.TestCase):
             dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None]
         )
         ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2, unflag=True)
-        assert ds.dsets[0].get_flags(24, 25)[:, :].any() == False
+        assert not ds.dsets[0].get_flags(24, 25)[:, :].any()
 
         # test single integration being flagged within spw
         ds = pspecdata.PSpecData(
@@ -2434,7 +2434,7 @@ class Test_PSpecData(unittest.TestCase):
         ] = True
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.25, unflag=False)
         assert ds.dsets[0].get_flags(24, 25)[3, 400:800].all()
-        assert ds.dsets[0].get_flags(24, 25)[3, :].all() == False
+        assert not ds.dsets[0].get_flags(24, 25)[3, :].all()
 
         # test pspec run sets flagged integration to have zero weight
         uvd.flag_array[uvd.antpair2ind(24, 25, ordered=False), 400, :][3] = True
@@ -2755,10 +2755,9 @@ def test_pspec_run():
     assert ds.dsets[0].get_flags(37, 38)[0, 0:25].all()
 
     # assert first integration flagged *ONLY* across spw
-    assert (
+    assert not (
         ds.dsets[0].get_flags(37, 38)[0, :0].any()
         + ds.dsets[0].get_flags(37, 38)[0, 25:].any()
-        == False
     )
 
     # assert channel 15 flagged for all ints
@@ -2856,8 +2855,8 @@ def test_pspec_run():
             overwrite=True,
             blpairs=[((500, 501), (600, 601))],
         )  # blpairs that don't exist
-    assert ds == None
-    assert os.path.exists("./out.h5") == False
+    assert ds is None
+    assert not os.path.exists("./out.h5")
 
     # same test but with pre-loaded UVDatas
     uvds = []
@@ -2878,8 +2877,8 @@ def test_pspec_run():
             overwrite=True,
             blpairs=[((500, 501), (600, 601))],
         )
-    assert ds == None
-    assert os.path.exists("./out.h5") == False
+    assert ds is None
+    assert not os.path.exists("./out.h5")
 
     # test when data is loaded, but no blpairs match
     if os.path.exists("./out.h5"):
@@ -2897,7 +2896,7 @@ def test_pspec_run():
             blpairs=[((37, 38), (600, 601))],
         )
     assert isinstance(ds, pspecdata.PSpecData)
-    assert os.path.exists("./out.h5") == False
+    assert not os.path.exists("./out.h5")
 
     # test glob-parseable input dataset
     dsets = [

@@ -652,13 +652,11 @@ def test_bootstrap_run(tmp_path):
         assert uvp_avg.get_stats(
             stat, (0, ((37, 38), (38, 39)), ("xx", "xx"))
         ).shape == (1, 50)
-        assert (
-            np.any(
-                np.isnan(
-                    uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ("xx", "xx")))
-                )
+        assert not np.any(
+            np.isnan(
+                uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ("xx", "xx")))
             )
-        ) == False
+        )
         assert (
             uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ("xx", "xx"))).dtype
             == np.complex128
