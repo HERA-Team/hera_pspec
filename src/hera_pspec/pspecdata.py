@@ -2583,7 +2583,7 @@ class PSpecData:
             W = (W.T / W_norm).T
 
         elif mode == "V^-1/2":
-            if np.sum(band_covar) is None:
+            if band_covar is None:
                 raise ValueError("Covariance not supplied for V^-1/2 normalization")
             # First find the eigenvectors and eigenvalues of the unnormalizd covariance
             # Then use it to compute V^-1/2
