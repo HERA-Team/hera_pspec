@@ -441,7 +441,7 @@ class PSpecData:
             key = (key,)
 
         # check key is a tuple
-        if isinstance(key, tuple) == False or len(key) not in (1, 2, 3):
+        if not isinstance(key, tuple) or len(key) not in (1, 2, 3):
             raise KeyError(f"key {key} must be a length 1, 2 or 3 tuple")
 
         try:
@@ -1642,7 +1642,7 @@ class PSpecData:
         G : array_like, complex
             Fisher matrix, with dimensions (Nfreqs, Nfreqs).
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             raise ValueError(
                 "Number of delay bins should have been set"
                 "by now! Cannot be equal to None"
@@ -1743,7 +1743,7 @@ class PSpecData:
         H : array_like, complex
             Dimensions (Nfreqs, Nfreqs).
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             raise ValueError(
                 "Number of delay bins should have been set"
                 "by now! Cannot be equal to None."
@@ -1837,7 +1837,7 @@ class PSpecData:
             Set of E matrices, with dimensions (Ndlys, Nfreqs, Nfreqs).
 
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             raise ValueError(
                 "Number of delay bins should have been set"
                 "by now! Cannot be equal to None"
@@ -2583,7 +2583,7 @@ class PSpecData:
             W = (W.T / W_norm).T
 
         elif mode == "V^-1/2":
-            if np.sum(band_covar) == None:
+            if band_covar is None:
                 raise ValueError("Covariance not supplied for V^-1/2 normalization")
             # First find the eigenvectors and eigenvalues of the unnormalizd covariance
             # Then use it to compute V^-1/2
@@ -2798,7 +2798,7 @@ class PSpecData:
         Q_alt : array_like
             Exponential part of Q (HERA memo #44, Eq. 11).
         """
-        if self.spw_Ndlys == None:
+        if self.spw_Ndlys is None:
             self.set_Ndlys()
         if mode >= self.spw_Ndlys:
             raise IndexError(
@@ -3634,7 +3634,7 @@ class PSpecData:
 
         # if using the whole band in the dataset, then there should just be
         # one n_dly parameter specified
-        if spw_ranges is None and n_dlys != None:
+        if spw_ranges is None and n_dlys is not None:
             assert len(n_dlys) == 1, (
                 "Only one spw, so cannot specify more than one n_dly value"
             )
@@ -3920,7 +3920,7 @@ class PSpecData:
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar
-                    if self.primary_beam != None:
+                    if self.primary_beam is not None:
                         if nper_chunk == 1:
                             logger.info("  Computing and multiplying scalar...")
                         pv *= scalar
@@ -3950,7 +3950,7 @@ class PSpecData:
                             )
                         )
 
-                        if self.primary_beam != None:
+                        if self.primary_beam is not None:
                             cov_real = cov_real * (scalar) ** 2.0
                             cov_imag = cov_imag * (scalar) ** 2.0
 
@@ -5498,9 +5498,9 @@ def validate_blpairs(blpairs, uvd1, uvd2, baseline_tol=1.0, verbose=True):
         If True report feedback to stdout. Default: True.
     """
     # ensure uvd1 and uvd2 are UVData objects
-    if isinstance(uvd1, UVData) == False:
+    if not isinstance(uvd1, UVData):
         raise TypeError("uvd1 must be a UVData instance")
-    if isinstance(uvd2, UVData) == False:
+    if not isinstance(uvd2, UVData):
         raise TypeError("uvd2 must be a UVData instance")
 
     # get antenna position dictionary

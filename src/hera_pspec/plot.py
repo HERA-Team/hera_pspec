@@ -156,7 +156,7 @@ def delay_spectrum(
             uvp_plt.average_spectra(time_avg=True, inplace=True)
 
     # Check plot size
-    if uvp_plt.Ntimes * len(blpairs) > 100 and force_plot == False:
+    if uvp_plt.Ntimes * len(blpairs) > 100 and not force_plot:
         raise ValueError(
             "Trying to plot > 100 spectra... Set force_plot=True to continue."
         )
@@ -553,7 +553,7 @@ def delay_waterfall(
 
     # check for reasonable number of blpairs to plot...
     Nkeys = len(waterfall)
-    if Nkeys > 20 and force_plot == False:
+    if Nkeys > 20 and not force_plot:
         raise ValueError("Nblps > 20 and force_plot == False, quitting...")
 
     # Take logarithm of data if requested
