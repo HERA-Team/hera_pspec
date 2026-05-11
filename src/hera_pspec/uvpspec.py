@@ -1238,7 +1238,7 @@ class UVPSpec:
         # edit units
         uvp.norm_units += " k^3 / (2pi^2)"
 
-        if inplace == False:
+        if not inplace:
             return uvp
 
     def blpair_to_antnums(self, blpair):
@@ -1717,7 +1717,7 @@ class UVPSpec:
 
         if run_check:
             uvp.check()
-        if inplace == False:
+        if not inplace:
             return uvp
 
     def get_ENU_bl_vecs(self):
@@ -2126,7 +2126,7 @@ class UVPSpec:
         verbose : bool, optional
             If True, report feedback to stdout. Default: True.
         """
-        if hasattr(self, "cosmo") and overwrite == False:
+        if hasattr(self, "cosmo") and not overwrite:
             print("self.cosmo exists and overwrite == False, not overwriting...")
             return
         else:
