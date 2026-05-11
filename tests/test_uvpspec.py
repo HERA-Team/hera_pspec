@@ -269,7 +269,7 @@ class TestUVPSpec:
             inplace=False,
             error_field=["..............."],
         )
-        assert hasattr(u3, "stats_array") == False
+        assert not hasattr(u3, "stats_array")
 
         u.write_hdf5(tmp_path / "ex.hdf5")
         u.read_hdf5(tmp_path / "ex.hdf5")
@@ -549,8 +549,8 @@ class TestUVPSpec:
     def test_clear(self, vanilla_uvp: uvpspec.UVPSpec):
         uvp = copy.deepcopy(vanilla_uvp)
         uvp._clear()
-        assert hasattr(uvp, "Ntimes") == False
-        assert hasattr(uvp, "data_array") == False
+        assert not hasattr(uvp, "Ntimes")
+        assert not hasattr(uvp, "data_array")
 
     def test_get_r_params(self):
 
@@ -593,7 +593,7 @@ class TestUVPSpec:
         uvp2 = uvpspec.UVPSpec()
         uvp2.read_hdf5(out, just_meta=True)
         assert hasattr(uvp2, "Ntimes")
-        assert hasattr(uvp2, "data_array") == False
+        assert not hasattr(uvp2, "data_array")
 
         # test exception
         pytest.raises(IOError, uvp.write_hdf5, out, overwrite=False)

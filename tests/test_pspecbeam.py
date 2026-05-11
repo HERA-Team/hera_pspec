@@ -1,5 +1,6 @@
 import os
 import unittest
+import warnings
 
 import numpy as np
 import pytest
@@ -22,6 +23,21 @@ class Test_DataSet(unittest.TestCase):
     def test_init(self):
         beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
         bm = pspecbeam.PSpecBeamUV(beamfile)
+
+    def test_beamfiles_load_without_warnings(self):
+        beamfiles = [
+            "HERA_NF_pstokes_power.beamfits",
+            "HERA_NF_dipole_power.beamfits",
+            "HERA_NF_efield.beamfits",
+            "isotropic_beam.beamfits",
+        ]
+
+        for beamfile in beamfiles:
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, beamfile))
+
+            assert not caught, [str(w.message) for w in caught]
 
     def test_UVbeam(self):
         # Precomputed results in the following tests were done "by hand" using

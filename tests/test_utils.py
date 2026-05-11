@@ -107,7 +107,7 @@ def test_load_config():
     assert "pspec" in cfg.keys()
 
     # Check that boolean values are read in correctly
-    assert cfg["pspec"]["overwrite"] == True
+    assert cfg["pspec"]["overwrite"]
 
     # Check that lists are read in as lists
     assert len(cfg["data"]["subdirs"]) == 1
@@ -118,9 +118,9 @@ def test_load_config():
     # Check 'None' and list of lists become Nones and list of tuples
     assert cfg["data"]["pairs"] == [("xx", "xx"), ("yy", "yy")]
     assert cfg["pspec"]["taper"] == "none"
-    assert cfg["pspec"]["groupname"] == None
+    assert cfg["pspec"]["groupname"] is None
     assert cfg["pspec"]["options"]["bar"] == [("foo", "bar")]
-    assert cfg["pspec"]["options"]["foo"] == None
+    assert cfg["pspec"]["options"]["foo"] is None
 
 
 class Test_Utils:
