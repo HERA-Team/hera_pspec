@@ -132,10 +132,13 @@ select = [
     "YTT",    # flake8-2020 (sys.version usage)
     "ICN",    # flake8-import-conventions
     "FURB",   # refurb
+    "DTZ",    # flake8-datetimez
+    "NPY",    # numpy-specific rules
     "RUF100", # unused-noqa (RUF100 only; rest of RUF deferred)
 ]
 ignore = [
     "UP031",  # printf-string-formatting (69) — manual conversion, deferred to follow-up PR
+    "NPY002", # legacy np.random (31) — RNG-algorithm change, deferred to follow-up PR
     "E501",   # line-too-long (1116) — defer to ruff format
     "E701",   # multi-statement on one line, colon (105)
     "E702",   # multi-statement on one line, semicolon (11)
