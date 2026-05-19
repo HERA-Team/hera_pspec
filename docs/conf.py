@@ -50,7 +50,6 @@ MOCK_MODULES = [
     "pylab",
     "yaml",
     "pyuvdata.utils",
-    "hera_sim",
 ]
 
 for mod_name in MOCK_MODULES:
