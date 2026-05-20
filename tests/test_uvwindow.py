@@ -189,9 +189,7 @@ def test_ftbeam_gaussian(ftbeam_setup):
     )
     # if widths given as unique number, this value is used for all freqs
     test2 = uvwindow.FTBeam.gaussian(
-        freq_array=ftbeam_setup.freq_array,
-        widths=np.mean(widths),
-        pol=ftbeam_setup.pol,
+        freq_array=ftbeam_setup.freq_array, widths=np.mean(widths), pol=ftbeam_setup.pol
     )
 
     # tests on freq_array consistency
@@ -279,9 +277,7 @@ def test_uvwindow_init(uvwindow_setup):
 
     # test on cosmo
     cosmo = conversions.Cosmo_Conversions()
-    test = uvwindow.UVWindow(
-        ftbeam_obj=uvwindow_setup.ft_beam_obj_spw, cosmo=cosmo
-    )
+    test = uvwindow.UVWindow(ftbeam_obj=uvwindow_setup.ft_beam_obj_spw, cosmo=cosmo)
     pytest.raises(
         AssertionError,
         uvwindow.UVWindow,
@@ -296,9 +292,7 @@ def test_uvwindow_init(uvwindow_setup):
     # test on little_h
     test = uvwindow.UVWindow(ftbeam_obj=uvwindow_setup.ft_beam_obj_spw, verbose=True)
     assert test.kunits.is_equivalent(units.h / units.Mpc)
-    test = uvwindow.UVWindow(
-        ftbeam_obj=uvwindow_setup.ft_beam_obj_spw, little_h=False
-    )
+    test = uvwindow.UVWindow(ftbeam_obj=uvwindow_setup.ft_beam_obj_spw, little_h=False)
     assert test.kunits.is_equivalent(units.Mpc ** (-1))
 
 
@@ -353,11 +347,7 @@ def test_uvwindow_from_uvpspec(uvwindow_setup):
     # proper usage
     # initialise with ftfile (read pre-computed FT of the beam in file)
     uvw_ps = uvwindow.UVWindow.from_uvpspec(
-        uvp,
-        ipol=0,
-        spw=0,
-        verbose=True,
-        ftbeam=os.path.join(DATA_PATH, basename),
+        uvp, ipol=0, spw=0, verbose=True, ftbeam=os.path.join(DATA_PATH, basename)
     )
     # if cross polarisation
     test = uvwindow.UVWindow.from_uvpspec(
@@ -405,9 +395,7 @@ def test_uvwindow_from_uvpspec(uvwindow_setup):
     # use FTBeam object directly as input
     widths = -0.0343 * uvwindow_setup.freq_array / 1e6 + 11.30
     gaussian_beam = uvwindow.FTBeam.gaussian(
-        freq_array=uvwindow_setup.freq_array,
-        widths=widths,
-        pol=uvwindow_setup.pol,
+        freq_array=uvwindow_setup.freq_array, widths=widths, pol=uvwindow_setup.pol
     )
     uvw_ps = uvwindow.UVWindow.from_uvpspec(
         uvp, ipol=0, spw=0, verbose=True, ftbeam=gaussian_beam
@@ -494,9 +482,7 @@ def test_uvwindow_take_freq_FT(uvwindow_setup):
     delta_nu = np.median(np.diff(test.freq_array))
     fnu = test._take_freq_FT(interp_ft_beam, delta_nu)
     # test for ft_beam of wrong dimensions
-    pytest.raises(
-        AssertionError, test._take_freq_FT, interp_ft_beam[0, :, :], delta_nu
-    )
+    pytest.raises(AssertionError, test._take_freq_FT, interp_ft_beam[0, :, :], delta_nu)
     pytest.raises(
         AssertionError, test._take_freq_FT, interp_ft_beam[:, :, :].T, delta_nu
     )
@@ -538,9 +524,7 @@ def test_uvwindow_get_kpara_bins(uvwindow_setup):
     test = uvwindow.UVWindow(ftbeam_obj=uvwindow_setup.ft_beam_obj_spw)
     # raise error if empty freq array or length 1
     pytest.raises(
-        AssertionError,
-        test.get_kpara_bins,
-        freq_array=uvwindow_setup.freq_array[2],
+        AssertionError, test.get_kpara_bins, freq_array=uvwindow_setup.freq_array[2]
     )
     # test for correct input
     _ = test.get_kpara_bins(uvwindow_setup.freq_array)
@@ -772,9 +756,7 @@ def test_uvwindow_get_spherical_wf(uvwindow_setup):
     WF = test.get_spherical_wf(
         kbins=uvwindow_setup.kbins,
         kperp_bins=kperp_bins,
-        kpara_bins=np.arange(
-            2.0 * kpara_centre, 10 * kpara_centre, step=kpara_centre
-        )
+        kpara_bins=np.arange(2.0 * kpara_centre, 10 * kpara_centre, step=kpara_centre)
         * test.kunits,
         bl_lens=uvwindow_setup.lens[:1],
     )

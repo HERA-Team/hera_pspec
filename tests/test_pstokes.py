@@ -99,12 +99,7 @@ def test_combine_pol_arrays(pstokes_setup):
     pytest.raises(AssertionError, pstokes._combine_pol_arrays, "XX", "pI", "pI")
     pytest.raises(AssertionError, pstokes._combine_pol_arrays, "pI", "YY", "pI")
     pytest.raises(
-        ValueError,
-        pstokes._combine_pol_arrays,
-        "XX",
-        "YY",
-        "pI",
-        pol_convention="blah",
+        ValueError, pstokes._combine_pol_arrays, "XX", "YY", "pI", pol_convention="blah"
     )
     pytest.raises(
         ValueError,
@@ -171,11 +166,7 @@ def test_construct_pstokes(pstokes_setup):
 
     # check except for same polarizations
     pytest.raises(
-        AssertionError,
-        pstokes.construct_pstokes,
-        dset1=uvd1,
-        dset2=uvd1,
-        pstokes="pI",
+        AssertionError, pstokes.construct_pstokes, dset1=uvd1, dset2=uvd1, pstokes="pI"
     )
 
 

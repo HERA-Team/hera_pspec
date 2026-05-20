@@ -413,9 +413,7 @@ def test_plot_waterfall(plot_setup):
     pytest.raises(
         ValueError, plot.delay_waterfall, uvp, uvp.get_blpairs(), 0, ("xx", "xx")
     )
-    fig = plot.delay_waterfall(
-        uvp, uvp.get_blpairs(), 0, ("xx", "xx"), force_plot=True
-    )
+    fig = plot.delay_waterfall(uvp, uvp.get_blpairs(), 0, ("xx", "xx"), force_plot=True)
     plt.close()
 
 
@@ -626,7 +624,5 @@ def test_delay_wedge(plot_setup):
     plt.close()
 
     # test exceptions
-    pytest.raises(
-        ValueError, plot.delay_wedge, uvp, 0, ("xx", "xx"), component="foo"
-    )
+    pytest.raises(ValueError, plot.delay_wedge, uvp, 0, ("xx", "xx"), component="foo")
     plt.close()

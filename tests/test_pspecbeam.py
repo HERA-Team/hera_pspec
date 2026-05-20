@@ -99,24 +99,14 @@ def test_UVbeam():
 
     # test noise scalar
     sclr = beam.compute_pspec_scalar(
-        lower_freq,
-        upper_freq,
-        num_freqs,
-        pol="pI",
-        num_steps=2000,
-        noise_scalar=True,
+        lower_freq, upper_freq, num_freqs, pol="pI", num_steps=2000, noise_scalar=True
     )
     np.testing.assert_almost_equal(sclr, 71.105979715733)
 
     # Check that invalid polarizations raise an error
     pol = "pZ"
     pytest.raises(
-        KeyError,
-        beam.compute_pspec_scalar,
-        lower_freq,
-        upper_freq,
-        num_freqs,
-        pol=pol,
+        KeyError, beam.compute_pspec_scalar, lower_freq, upper_freq, num_freqs, pol=pol
     )
     pol = "XX"
     pytest.raises(
@@ -156,9 +146,7 @@ def test_UVbeam():
 
 
 def test_Gaussbeam():
-    gauss = pspecbeam.PSpecBeamGauss(
-        0.8, np.linspace(115e6, 130e6, 50, endpoint=False)
-    )
+    gauss = pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))
 
     Om_p = gauss.power_beam_int()
     Om_pp = gauss.power_beam_sq_int()
@@ -206,9 +194,7 @@ def test_BeamFromArray():
     Test PSpecBeamFromArray
     """
     # Get Gaussian beam to use as a reference
-    gauss = pspecbeam.PSpecBeamGauss(
-        0.8, np.linspace(115e6, 130e6, 50, endpoint=False)
-    )
+    gauss = pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))
     Om_P = gauss.power_beam_int()
     Om_PP = gauss.power_beam_sq_int()
     beam_freqs = gauss.beam_freqs
@@ -363,9 +349,7 @@ def test_beam_normalized_response():
     beam = pspecbeam.PSpecBeamUV(beamfile)
     freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
     nside = beam.primary_beam.nside  # uvbeam object
-    beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(
-        beam, pol="xx", freq=freq
-    )
+    beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol="xx", freq=freq)
 
     # tests for dimensions
     assert len(beam_res[1]) == len(freq)

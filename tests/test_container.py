@@ -43,7 +43,9 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
     Test that PSpecContainer works properly.
     """
     # setup, fill and open container
-    group_names, pspec_names = _fill_container(container_setup.fname, container_setup.uvp)
+    group_names, pspec_names = _fill_container(
+        container_setup.fname, container_setup.uvp
+    )
     fname = container_setup.fname
     ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
 
@@ -53,7 +55,10 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
     # Check that power spectra can be overwritten
     for psname in pspec_names:
         ps_store.set_pspec(
-            group=group_names[2], psname=psname, pspec=container_setup.uvp, overwrite=True
+            group=group_names[2],
+            psname=psname,
+            pspec=container_setup.uvp,
+            overwrite=True,
         )
 
     # Check that overwriting fails if overwrite=False
@@ -151,9 +156,7 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
     ps = ps_store.get_pspec(group_names[0], pspec_names[0], just_meta=True)
     assert not hasattr(ps, "data_array")
     assert hasattr(ps, "time_avg_array")
-    ps = ps_store.get_pspec(
-        group_names[0], pspec_names[0], blpairs=[((1, 2), (1, 2))]
-    )
+    ps = ps_store.get_pspec(group_names[0], pspec_names[0], blpairs=[((1, 2), (1, 2))])
     assert hasattr(ps, "data_array")
     assert np.all(np.isclose(ps.blpair_array, 101102101102))
 
@@ -208,7 +211,9 @@ def test_container_transactional_mode(container_setup):
     Test transactional operations on PSpecContainer objects.
     """
     # setup, fill and open container
-    group_names, pspec_names = _fill_container(container_setup.fname, container_setup.uvp)
+    group_names, pspec_names = _fill_container(
+        container_setup.fname, container_setup.uvp
+    )
     fname = container_setup.fname
 
     # Test to see whether concurrent read/write works
@@ -230,7 +235,10 @@ def test_container_transactional_mode(container_setup):
     # Close the non-transactional file; the RW file should now work
     psc_ro_noatom._close()
     psc_rw.set_pspec(
-        group=group_names[0], psname=pspec_names[0], pspec=container_setup.uvp, overwrite=True
+        group=group_names[0],
+        psname=pspec_names[0],
+        pspec=container_setup.uvp,
+        overwrite=True,
     )
 
     # test that write of new group or dataset with SWMR is blocked
