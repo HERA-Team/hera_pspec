@@ -3402,7 +3402,7 @@ class PSpecData:
             matrices) for the unnormalized bandpowers in the UVPSpec object.
 
         store_window : bool, optional
-            If True, store the window function of the bandpowers.
+            If True, store the (real-valued) window function of the bandpowers.
             Default: True
 
         exact_windows : bool, optional
@@ -4050,6 +4050,12 @@ class PSpecData:
                     # and due to non-linear operation of V_1 * V_2
                     pol_integ = np.zeros_like(integ1, dtype=float)
                     valid_integ = (integ1 > 0) & (integ2 > 0)
+                    if np.any((~valid_integ) & (np.sum(wgts1, axis=1) + np.sum(wgts2, axis=1)>0)):
+                        warnings.warn(
+                            "Some integrations have zero nsamples, "
+                            "but non-zero weights. These integrations will be skipped "
+                            "in the power spectrum estimate."
+                        )
                     if np.any(valid_integ):
                         pol_integ[valid_integ] = 2.0 / (
                             (1.0 / integ1[valid_integ]) + (1.0 / integ2[valid_integ])
