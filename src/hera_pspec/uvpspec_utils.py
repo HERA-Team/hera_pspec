@@ -115,13 +115,13 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                             cov1r = uvp1.get_cov(key1, component="real")
                             cov2r = uvp2.get_cov(key2, component="real")
                             uvp1.cov_array_real[i][blp1_inds, :, :, j] = np.sqrt(
-                                cov1r ** 2 + cov2r ** 2
+                                cov1r**2 + cov2r**2
                             )
 
                             cov1i = uvp1.get_cov(key1, component="imag")
                             cov2i = uvp2.get_cov(key2, component="imag")
                             uvp1.cov_array_imag[i][blp1_inds, :, :, j] = np.sqrt(
-                                cov1i ** 2 + cov2i ** 2
+                                cov1i**2 + cov2i**2
                             )
 
                 # same for window function
@@ -131,7 +131,7 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                     window1 = uvp1.get_window_function(key1)
                     window2 = uvp2.get_window_function(key2)
                     uvp1.window_function_array[i][blp1_inds, ..., j] = np.sqrt(
-                        window1 ** 2 + window2 ** 2
+                        window1**2 + window2**2
                     )
 
     # run check

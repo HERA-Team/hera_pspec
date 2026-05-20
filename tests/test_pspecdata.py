@@ -1862,7 +1862,9 @@ class Test_PSpecData(unittest.TestCase):
         # assert this is close to 1.0
         assert np.isclose(np.mean(rms), 1.0, atol=0.1)
 
-    @pytest.mark.filterwarnings("ignore:Some integrations have zero nsamples, but non-zero weights")
+    @pytest.mark.filterwarnings(
+        "ignore:Some integrations have zero nsamples, but non-zero weights"
+    )
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
@@ -2600,7 +2602,7 @@ class Test_PSpecData(unittest.TestCase):
         ).all()
 
         # Test that when flagged, the data within a channel really don't have any effect on the final result
-        
+
         uvd2 = copy.deepcopy(uvd)
         uvd2.flag_array[uvd.antpair2ind(24, 25, ordered=False)] = True
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
@@ -2697,7 +2699,10 @@ class Test_PSpecData(unittest.TestCase):
         blpairs = [((24, 25), (24, 38))]
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
-@pytest.mark.filterwarnings("ignore:Some integrations have zero nsamples, but non-zero weights")
+
+@pytest.mark.filterwarnings(
+    "ignore:Some integrations have zero nsamples, but non-zero weights"
+)
 def test_pspec_run():
     fnames = [
         os.path.join(DATA_PATH, d)

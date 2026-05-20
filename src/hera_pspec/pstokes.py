@@ -293,9 +293,9 @@ def _combine_pol_arrays(
                 "Some nsamples are zero, but are not flagged. These samples will be flagged in the output."
             )
             combined_flags = np.logical_or(combined_flags, ~valid_nsamples)
-            
+
         if np.any(valid_nsamples):
-            # for an explanation of the factor of 4, and why it doesn't depend on 
+            # for an explanation of the factor of 4, and why it doesn't depend on
             # pol_convention, see https://github.com/HERA-Team/hera_pspec/issues/406
             combined_nsamples[valid_nsamples] = 4.0 / (
                 (1.0 / nsamples_list[0][valid_nsamples])
