@@ -22,9 +22,11 @@ class Test_pstokes(unittest.TestCase):
         self.uvd1 = pyuvdata.UVData()
         self.uvd1.read_miriad(dset1)
         setattr(self.uvd1, "vis_units", "Jy")
+        setattr(self.uvd1, "pol_convention", "avg")
         self.uvd2 = pyuvdata.UVData()
         self.uvd2.read_miriad(dset2)
         setattr(self.uvd2, "vis_units", "Jy")
+        setattr(self.uvd2, "pol_convention", "avg")
 
     def tearDown(self):
         pass
@@ -188,6 +190,7 @@ class Test_pstokes(unittest.TestCase):
         uvc = pyuvdata.UVCal()
         uvc.read_calfits(multipol_dset_cal)
         uvc.gain_scale = "Jy"
+        uvc.pol_convention = "avg"
         uvutils.uvcalibrate(uvd, uvc)
         wgts = [(0.5, 0.5), (0.5, -0.5)]
 

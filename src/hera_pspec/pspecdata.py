@@ -2465,9 +2465,6 @@ class PSpecData:
                 cov_q_imag.extend([cov_q_imag_temp] * self.dsets[0].Ntimes)
                 cov_p_real.extend([cov_p_real_temp] * self.dsets[0].Ntimes)
                 cov_p_imag.extend([cov_p_imag_temp] * self.dsets[0].Ntimes)
-                warnings.warn(
-                    "Producing time-uniform covariance matrices between bandpowers."
-                )
                 break
             else:
                 cov_q_real.append(cov_q_real_temp)
@@ -3405,7 +3402,7 @@ class PSpecData:
             matrices) for the unnormalized bandpowers in the UVPSpec object.
 
         store_window : bool, optional
-            If True, store the window function of the bandpowers.
+            If True, store the (real-valued) window function of the bandpowers.
             Default: True
 
         exact_windows : bool, optional
@@ -3997,10 +3994,11 @@ class PSpecData:
                     if store_window:
                         # Wv shape = (nfreqs, nfreqs) ie (64, 64)
                         # qv shape = (nfreqs, ntimes) ie (64, 60)
+                        window_function = np.repeat(
+                            Wv[np.newaxis, :, :], qv.shape[1], axis=0
+                        )
                         pol_window_function.extend(
-                            np.repeat(Wv[np.newaxis, :, :], qv.shape[1], axis=0).astype(
-                                np.float64
-                            )
+                            np.real(window_function).astype(np.float64, copy=False)
                         )
                         # pol_wf shape = (ntimes, nfreqs, nfreqs) ie (60, 64, 64)
                         # 4 blps so final wf_array shape for each spw is
@@ -4050,7 +4048,22 @@ class PSpecData:
                     # take inverse avg of integ1 and integ2 to get total integ
                     # inverse avg is done b/c integ ~ 1/noise_var
                     # and due to non-linear operation of V_1 * V_2
-                    pol_ints.extend(1.0 / np.mean([1.0 / integ1, 1.0 / integ2], axis=0))
+                    pol_integ = np.zeros_like(integ1, dtype=float)
+                    valid_integ = (integ1 > 0) & (integ2 > 0)
+                    if np.any(
+                        (~valid_integ)
+                        & (np.sum(wgts1, axis=1) + np.sum(wgts2, axis=1) > 0)
+                    ):
+                        warnings.warn(
+                            "Some integrations have zero nsamples, "
+                            "but non-zero weights. These integrations will be skipped "
+                            "in the power spectrum estimate."
+                        )
+                    if np.any(valid_integ):
+                        pol_integ[valid_integ] = 2.0 / (
+                            (1.0 / integ1[valid_integ]) + (1.0 / integ2[valid_integ])
+                        )
+                    pol_ints.extend(pol_integ)
 
                     # combined weight is geometric mean
                     pol_wgts.extend(

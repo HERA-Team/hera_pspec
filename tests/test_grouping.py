@@ -945,9 +945,10 @@ def test_spherical_wf_from_uvp():
     )
     assert wf_array2[0].shape == (uvp.Ntimes, Nk, Nk_in, uvp.Npols)
     # little_h
-    wf_array = grouping.spherical_wf_from_uvp(
-        uvp, kbin_edges=kbin_edges / uvp.cosmo.h, little_h=True
-    )
+    with pytest.warns(UserWarning, match="Changed little_h units"):
+        wf_array = grouping.spherical_wf_from_uvp(
+            uvp, kbin_edges=kbin_edges / uvp.cosmo.h, little_h=True
+        )
     # spw_array
     wf_array = grouping.spherical_wf_from_uvp(
         uvp, kbin_edges, spw_array=0, little_h="h^-3" in uvp.norm_units
@@ -979,13 +980,14 @@ def test_spherical_wf_from_uvp():
     )
 
     # raise warning or error if blpair_groups inconsistent with blpair_lens
-    wf_array = grouping.spherical_wf_from_uvp(
-        uvp,
-        kbin_edges,
-        blpair_groups=None,
-        blpair_lens=blpair_lens,
-        little_h="h^-3" in uvp.norm_units,
-    )
+    with pytest.warns(UserWarning, match="blpair_lens given but blpair_groups is None"):
+        wf_array = grouping.spherical_wf_from_uvp(
+            uvp,
+            kbin_edges,
+            blpair_groups=None,
+            blpair_lens=blpair_lens,
+            little_h="h^-3" in uvp.norm_units,
+        )
     wf_array = grouping.spherical_wf_from_uvp(
         uvp,
         kbin_edges,
@@ -1003,12 +1005,13 @@ def test_spherical_wf_from_uvp():
         little_h="h^-3" in uvp.norm_units,
     )
     # error if overlapping bins
-    pytest.raises(
-        AssertionError,
-        grouping.spherical_wf_from_uvp,
-        uvp,
-        kbin_edges=np.array([1.0, 2.0, 1.5]),
-    )
+    with pytest.warns(UserWarning, match="Changed little_h units"):
+        pytest.raises(
+            AssertionError,
+            grouping.spherical_wf_from_uvp,
+            uvp,
+            kbin_edges=np.array([1.0, 2.0, 1.5]),
+        )
     # # blpair_weights
     wf_array = grouping.spherical_wf_from_uvp(
         uvp,
