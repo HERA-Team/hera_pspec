@@ -1862,6 +1862,7 @@ class Test_PSpecData(unittest.TestCase):
         # assert this is close to 1.0
         assert np.isclose(np.mean(rms), 1.0, atol=0.1)
 
+    @pytest.mark.filterwarnings("ignore:Some integrations have zero nsamples, but non-zero weights")
     def test_pspec(self):
         # generate ds
         uvd = copy.deepcopy(self.uvd)
@@ -2599,34 +2600,43 @@ class Test_PSpecData(unittest.TestCase):
         ).all()
 
         # Test that when flagged, the data within a channel really don't have any effect on the final result
+        
         uvd2 = copy.deepcopy(uvd)
         uvd2.flag_array[uvd.antpair2ind(24, 25, ordered=False)] = True
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
-        uvp_flagged = ds.pspec(
-            bls1,
-            bls2,
-            (0, 1),
-            ("xx", "xx"),
-            input_data_weight="identity",
-            norm="I",
-            taper="none",
-            little_h=True,
-            verbose=False,
-        )
+        with pytest.warns(
+            UserWarning,
+            match="Some integrations have zero nsamples, but non-zero weights",
+        ):
+            uvp_flagged = ds.pspec(
+                bls1,
+                bls2,
+                (0, 1),
+                ("xx", "xx"),
+                input_data_weight="identity",
+                norm="I",
+                taper="none",
+                little_h=True,
+                verbose=False,
+            )
 
         uvd2.data_array[uvd.antpair2ind(24, 25, ordered=False)] *= 9234.913
         ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=self.bm)
-        uvp_flagged_mod = ds.pspec(
-            bls1,
-            bls2,
-            (0, 1),
-            ("xx", "xx"),
-            input_data_weight="identity",
-            norm="I",
-            taper="none",
-            little_h=True,
-            verbose=False,
-        )
+        with pytest.warns(
+            UserWarning,
+            match="Some integrations have zero nsamples, but non-zero weights",
+        ):
+            uvp_flagged_mod = ds.pspec(
+                bls1,
+                bls2,
+                (0, 1),
+                ("xx", "xx"),
+                input_data_weight="identity",
+                norm="I",
+                taper="none",
+                little_h=True,
+                verbose=False,
+            )
 
         qe_flagged_mod = uvp_flagged_mod.get_data(
             (0, ((24, 25), (37, 38)), ("xx", "xx"))
@@ -2687,7 +2697,7 @@ class Test_PSpecData(unittest.TestCase):
         blpairs = [((24, 25), (24, 38))]
         pspecdata.validate_blpairs(blpairs, uvd, uvd)
 
-
+@pytest.mark.filterwarnings("ignore:Some integrations have zero nsamples, but non-zero weights")
 def test_pspec_run():
     fnames = [
         os.path.join(DATA_PATH, d)
