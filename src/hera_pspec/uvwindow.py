@@ -1159,8 +1159,8 @@ class UVWindow:
         if verbose is None:
             verbose = self.verbose
 
-        nbls = len(bl_lens)  # number of redudant groups
-        bl_lens = np.array(bl_lens)
+        bl_lens = np.atleast_1d(np.asarray(bl_lens, dtype=float)).reshape(-1)
+        nbls = bl_lens.size  # number of redudant groups
         if bl_weights is not None:
             # check consistency of baseline-related inputs
             assert len(bl_weights) == nbls, (
@@ -1320,8 +1320,8 @@ class UVWindow:
             print(f"{filepath} exists, overwriting...")
             os.remove(filepath)
 
-        nbls = len(bl_lens)  # number of redudant groups
-        bl_lens = np.array(bl_lens)
+        bl_lens = np.atleast_1d(np.asarray(bl_lens, dtype=float)).reshape(-1)
+        nbls = bl_lens.size  # number of redudant groups
         if bl_weights is not None:
             # check consistency of baseline-related inputs
             assert len(bl_weights) == nbls, (

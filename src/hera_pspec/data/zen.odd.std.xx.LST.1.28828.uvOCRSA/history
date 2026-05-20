@@ -2,3 +2,4 @@
   Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.  Git hash: 7fd7a52cb9bdf1f80dc49d50eea821990c9803b0.  Git branch: partial_io_read_miriad.  Git description: v1.2-205-g7fd7a52.  Downselected to specific antennas, times, frequencies using pyuvdata.
   Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.  Git hash: 445e76acdcdbfd37d1468d4d4ed6dddd1725614c.  Git branch: utils_get_miriad_antpos.  Git description: v1.2-259-g445e76a.
   Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.git.  Git hash: 56a03854f58dda615e0f7a96b06ae01545707504.  Git branch: master.  Git description: v1.2-307-g56a0385.
+  Read/written with pyuvdata version: 3.2.6.

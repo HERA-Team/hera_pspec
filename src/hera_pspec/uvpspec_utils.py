@@ -107,20 +107,22 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                             stat1.real**2 + stat2.real**2
                         ) + 1j * np.sqrt(stat1.imag**2 + stat2.imag**2)
 
-                # add cov in quadrature: real and imag separately
-                if hasattr(uvp1, "cov_array_real") and hasattr(uvp2, "cov_array_real"):
-                    if uvp1.cov_model == uvp2.cov_model:
-                        cov1r = uvp1.get_cov(key1, component="real")
-                        cov2r = uvp2.get_cov(key2, component="real")
-                        uvp1.cov_array_real[i][blp1_inds, :, :, j] = np.sqrt(
-                            cov1r.real**2 + cov2r.real**2
-                        ) + 1j * np.sqrt(cov1r.imag**2 + cov2r.imag**2)
+                    # add cov in quadrature: real and imag separately
+                    if hasattr(uvp1, "cov_array_real") and hasattr(
+                        uvp2, "cov_array_real"
+                    ):
+                        if uvp1.cov_model == uvp2.cov_model:
+                            cov1r = uvp1.get_cov(key1, component="real")
+                            cov2r = uvp2.get_cov(key2, component="real")
+                            uvp1.cov_array_real[i][blp1_inds, :, :, j] = np.sqrt(
+                                cov1r**2 + cov2r**2
+                            )
 
-                        cov1i = uvp1.get_cov(key1, component="imag")
-                        cov2i = uvp2.get_cov(key2, component="imag")
-                        uvp1.cov_array_imag[i][blp1_inds, :, :, j] = np.sqrt(
-                            cov1i.real**2 + cov2i.real**2
-                        ) + 1j * np.sqrt(cov1i.imag**2 + cov2i.imag**2)
+                            cov1i = uvp1.get_cov(key1, component="imag")
+                            cov2i = uvp2.get_cov(key2, component="imag")
+                            uvp1.cov_array_imag[i][blp1_inds, :, :, j] = np.sqrt(
+                                cov1i**2 + cov2i**2
+                            )
 
                 # same for window function
                 if hasattr(uvp1, "window_function_array") and hasattr(
@@ -129,8 +131,8 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                     window1 = uvp1.get_window_function(key1)
                     window2 = uvp2.get_window_function(key2)
                     uvp1.window_function_array[i][blp1_inds, ..., j] = np.sqrt(
-                        window1.real**2 + window2.real**2
-                    ) + 1j * np.sqrt(window1.imag**2 + window2.imag**2)
+                        window1**2 + window2**2
+                    )
 
     # run check
     if run_check:
