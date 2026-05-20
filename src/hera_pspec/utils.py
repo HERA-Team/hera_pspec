@@ -5,7 +5,7 @@ import inspect
 import itertools
 import time
 import traceback
-from datetime import datetime
+from datetime import UTC, datetime
 
 import numpy as np
 import uvtools as uvt
@@ -1132,7 +1132,7 @@ def job_monitor(
 
     # run function over jobs
     exit_codes = np.array(list(M(run_func, iterator)))
-    tnow = datetime.utcnow()
+    tnow = datetime.now(UTC)
 
     # check for len-0
     if len(exit_codes) == 0:
