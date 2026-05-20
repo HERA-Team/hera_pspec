@@ -596,7 +596,7 @@ def combine_psc_spectra(
         # Iterate over each unique spectra, and merge all spectra extensions
         for spc in unique_spectra:
             # check for overwrite
-            if spc in spectra and overwrite == False:
+            if spc in spectra and not overwrite:
                 if verbose:
                     print(
                         f"spectra {grp}/{spc} already exists and overwrite == False, "

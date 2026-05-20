@@ -703,7 +703,7 @@ def average_spectra(
     uvp.check()
 
     # Return
-    if inplace == False:
+    if not inplace:
         return uvp
 
 
