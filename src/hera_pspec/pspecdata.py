@@ -4050,7 +4050,10 @@ class PSpecData:
                     # and due to non-linear operation of V_1 * V_2
                     pol_integ = np.zeros_like(integ1, dtype=float)
                     valid_integ = (integ1 > 0) & (integ2 > 0)
-                    if np.any((~valid_integ) & (np.sum(wgts1, axis=1) + np.sum(wgts2, axis=1)>0)):
+                    if np.any(
+                        (~valid_integ)
+                        & (np.sum(wgts1, axis=1) + np.sum(wgts2, axis=1) > 0)
+                    ):
                         warnings.warn(
                             "Some integrations have zero nsamples, "
                             "but non-zero weights. These integrations will be skipped "
