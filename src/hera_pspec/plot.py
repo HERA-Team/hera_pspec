@@ -144,9 +144,7 @@ def _get_delay_spectrum_title_and_labels(
     # When blpairs are being averaged, skip the blpair label from the title
     # even if it is static (one averaged group). The list of all averaged
     # blpairs can be very long and does not help identify the plotted data.
-    title_fields = [
-        f for f in static_fields if not (average_blpairs and f == "blpair")
-    ]
+    title_fields = [f for f in static_fields if not (average_blpairs and f == "blpair")]
 
     title = " | ".join(
         field_labels[field](series_metadata[0][field]) for field in title_fields
