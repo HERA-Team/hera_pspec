@@ -442,6 +442,22 @@ class Test_Plot(unittest.TestCase):
         assert "lst=" in ax.get_title()
         plt.close(fig)
 
+        # When average_blpairs=True, blpair should not appear in the title
+        # even if all series share the same (averaged) blpair group label.
+        all_blpairs = self.uvp.get_blpairs()
+        fig = plot.delay_spectrum(
+            self.uvp,
+            [all_blpairs],
+            0,
+            ("xx", "xx"),
+            average_blpairs=True,
+            average_times=True,
+        )
+        ax = fig.axes[0]
+        assert "blpair=" not in ax.get_title()
+        assert "spw=0" in ax.get_title()
+        plt.close(fig)
+
     def test_delay_spectrum_title_legend_opt_out_and_override(self):
         """Auto title/legend generation should be suppressible and overridable."""
         blpair = self.uvp.get_blpairs()[0]

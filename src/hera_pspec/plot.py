@@ -103,9 +103,16 @@ def _format_delay_spectrum_manual_label(label_type, metadata):
     raise ValueError(f"Couldn't understand label_type {label_type}")
 
 
-def _get_delay_spectrum_title_and_labels(series_metadata, label_type, title_legend):
+def _get_delay_spectrum_title_and_labels(
+    series_metadata, label_type, title_legend, average_blpairs=False
+):
     """
     Return the auto-generated title, per-series labels, and legend visibility.
+
+    When *average_blpairs* is True the ``blpair`` field is never written to
+    the title, because it would produce a very long list of all the averaged
+    baseline-pairs. The blpair label is still used in the legend when multiple
+    averaged groups are present.
     """
     if not title_legend:
         return "", [None for _ in series_metadata], False
@@ -134,8 +141,15 @@ def _get_delay_spectrum_title_and_labels(series_metadata, label_type, title_lege
     ]
     static_fields = [field for field in field_order if field not in varying_fields]
 
+    # When blpairs are being averaged, skip the blpair label from the title
+    # even if it is static (one averaged group). The list of all averaged
+    # blpairs can be very long and does not help identify the plotted data.
+    title_fields = [
+        f for f in static_fields if not (average_blpairs and f == "blpair")
+    ]
+
     title = " | ".join(
-        field_labels[field](series_metadata[0][field]) for field in static_fields
+        field_labels[field](series_metadata[0][field]) for field in title_fields
     )
     labels = []
     for metadata in series_metadata:
@@ -420,6 +434,7 @@ def delay_spectrum(
         ],
         label_type,
         title_legend,
+        average_blpairs=average_blpairs,
     )
 
     for item, label in zip(series, labels, strict=True):
