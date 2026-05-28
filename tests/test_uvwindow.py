@@ -123,7 +123,10 @@ def test_FTBeam_from_file(make_ft_beam_obj, ft_bandwidth):
     assert test.pol == "xx"
 
     # tests related to ftfile
-    with pytest.raises(TypeError, match=r"expected str, bytes or os\.PathLike object, not float|argument should be a str or an os\.PathLike object where __fspath__ returns a str, not 'float'"):
+    with pytest.raises(
+        TypeError,
+        match=r"expected str, bytes or os\.PathLike object, not float|argument should be a str or an os\.PathLike object where __fspath__ returns a str, not 'float'",
+    ):
         uvwindow.FTBeam.from_file(ftfile=12.0)
     with pytest.raises(ValueError, match="Wrong ftfile input"):
         uvwindow.FTBeam.from_file(ftfile="whatever")
