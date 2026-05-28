@@ -3,3 +3,4 @@ CORR-DACQ: created file.
   Read/written with pyuvdata version: 1.2.1.  Git origin: https://github.com/HERA-Team/pyuvdata.  Git hash: 2d13758764f389385aefcf83958eb65c96d4f8d8.  Git branch: master.  Git description: v1.2-118-g2d13758.
   Downselected to specific antennas using pyuvdata.  Downselected to specific frequencies using pyuvdata.  Downselected to specific times using pyuvdata.
   Read/written with pyuvdata version: 1.2.1.  Git origin: git@github.com:HERA-Team/pyuvdata.git.  Git hash: 09fa3885bfedabf019a12b780142f9d2530ed6c9.  Git branch: master.  Git description: v1.2-4-g09fa388.
+  Read/written with pyuvdata version: 3.2.6.
