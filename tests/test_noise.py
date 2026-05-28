@@ -1,6 +1,5 @@
 import copy
 import os
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -11,16 +10,23 @@ from hera_pspec.data import DATA_PATH
 
 
 @pytest.fixture
-def sensitivity_setup():
-    cosmo = conversions.Cosmo_Conversions()
-    beam = pspecbeam.PSpecBeamUV(
+def cosmo():
+    return conversions.Cosmo_Conversions()
+
+
+@pytest.fixture
+def beam():
+    return pspecbeam.PSpecBeamUV(
         os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
     )
-    sense = noise.Sensitivity(beam=beam, cosmo=cosmo)
-    return SimpleNamespace(cosmo=cosmo, beam=beam, sense=sense)
 
 
-def test_set(sensitivity_setup):
+@pytest.fixture
+def sense(beam, cosmo):
+    return noise.Sensitivity(beam=beam, cosmo=cosmo)
+
+
+def test_set(beam, sense):
     sense = noise.Sensitivity()
 
     C = conversions.Cosmo_Conversions()
@@ -30,40 +36,40 @@ def test_set(sensitivity_setup):
     sense.set_cosmology(params)
     assert C.get_params() == sense.cosmo.get_params()
 
-    sense.set_beam(sensitivity_setup.beam)
+    sense.set_beam(beam)
     assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
-    sensitivity_setup.beam.cosmo = C
-    sense.set_beam(sensitivity_setup.beam)
+    beam.cosmo = C
+    sense.set_beam(beam)
     assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
 
-    bm = copy.deepcopy(sensitivity_setup.beam)
+    bm = copy.deepcopy(beam)
     delattr(bm, "cosmo")
     sense.set_beam(bm)
 
 
-def test_scalar(sensitivity_setup):
+def test_scalar(sense):
     freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-    sensitivity_setup.sense.calc_scalar(freqs, "pI", num_steps=5000, little_h=True)
-    assert np.isclose(freqs, sensitivity_setup.sense.subband).all()
-    assert sensitivity_setup.sense.pol == "pI"
+    sense.calc_scalar(freqs, "pI", num_steps=5000, little_h=True)
+    assert np.isclose(freqs, sense.subband).all()
+    assert sense.pol == "pI"
 
 
-def test_calc_P_N(sensitivity_setup):
+def test_calc_P_N(sense):
     # calculate scalar
     freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-    sensitivity_setup.sense.calc_scalar(freqs, "pI", num_steps=5000, little_h=True)
+    sense.calc_scalar(freqs, "pI", num_steps=5000, little_h=True)
 
     # basic execution
     k = np.linspace(0, 3, 10)
     Tsys = 500.0
     t_int = 10.7
-    P_N = sensitivity_setup.sense.calc_P_N(
+    P_N = sense.calc_P_N(
         Tsys, t_int, Ncoherent=1, Nincoherent=1, form="Pk"
     )
     assert isinstance(P_N, float)
     assert np.isclose(P_N, 642386932892.2921)
     # calculate DelSq
-    Dsq = sensitivity_setup.sense.calc_P_N(
+    Dsq = sense.calc_P_N(
         Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form="DelSq"
     )
     assert Dsq.shape == (10,)
