@@ -63,15 +63,11 @@ def test_calc_P_N(sense):
     k = np.linspace(0, 3, 10)
     Tsys = 500.0
     t_int = 10.7
-    P_N = sense.calc_P_N(
-        Tsys, t_int, Ncoherent=1, Nincoherent=1, form="Pk"
-    )
+    P_N = sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, form="Pk")
     assert isinstance(P_N, float)
     assert np.isclose(P_N, 642386932892.2921)
     # calculate DelSq
-    Dsq = sense.calc_P_N(
-        Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form="DelSq"
-    )
+    Dsq = sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form="DelSq")
     assert Dsq.shape == (10,)
     assert Dsq[1] < P_N
 

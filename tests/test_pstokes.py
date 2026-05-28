@@ -59,7 +59,9 @@ def test_combine_pol(uvd1, uvd2):
         pstokes._combine_pol(uvd1, uvd2, "XX", 1)
     # if different polarization conventions
     setattr(uvd1, "pol_convention", "avg")
-    with pytest.raises(ValueError, match="pol_convention of uvd1 and uvd2 are different"):
+    with pytest.raises(
+        ValueError, match="pol_convention of uvd1 and uvd2 are different"
+    ):
         pstokes._combine_pol(uvd1, uvd2, "XX", "YY")
 
 
@@ -120,12 +122,11 @@ def test_combine_pol_arrays(uvd1, uvd2):
             "pI",
             data_list=[uvd1.data_array, uvd1.data_array, uvd1.data_array],
         )
-    with pytest.raises(AssertionError, match="Arrays in list must have identical shape"):
+    with pytest.raises(
+        AssertionError, match="Arrays in list must have identical shape"
+    ):
         pstokes._combine_pol_arrays(
-            "XX",
-            "YY",
-            "pI",
-            data_list=[uvd1.data_array, uvd1.data_array[0]],
+            "XX", "YY", "pI", data_list=[uvd1.data_array, uvd1.data_array[0]]
         )
 
 
@@ -135,32 +136,44 @@ def test_construct_pstokes(uvd1, uvd2):
     uvdQ = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes="pQ")
 
     # check exceptions
-    with pytest.raises(AssertionError, match="dset2 must be fed as a string or UVData object"):
+    with pytest.raises(
+        AssertionError, match="dset2 must be fed as a string or UVData object"
+    ):
         pstokes.construct_pstokes(uvd1, 1)
 
     # check baselines
     uvd3 = uvd2.select(ant_str="auto", inplace=False)
-    with pytest.raises(ValueError, match="dset1 and dset2 must have the same timestamps"):
+    with pytest.raises(
+        ValueError, match="dset1 and dset2 must have the same timestamps"
+    ):
         pstokes.construct_pstokes(dset1=uvd1, dset2=uvd3)
 
     # check frequencies
     uvd3 = uvd2.select(frequencies=np.unique(uvd2.freq_array)[:10], inplace=False)
-    with pytest.raises(ValueError, match="dset1 and dset2 must have the same frequencies"):
+    with pytest.raises(
+        ValueError, match="dset1 and dset2 must have the same frequencies"
+    ):
         pstokes.construct_pstokes(dset1=uvd1, dset2=uvd3)
 
     uvd3 = uvd1.select(frequencies=np.unique(uvd1.freq_array)[:10], inplace=False)
     uvd4 = uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], inplace=False)
-    with pytest.raises(ValueError, match="dset1 and dset2 must have the same frequencies"):
+    with pytest.raises(
+        ValueError, match="dset1 and dset2 must have the same frequencies"
+    ):
         pstokes.construct_pstokes(dset1=uvd3, dset2=uvd4)
 
     # check times
     uvd3 = uvd2.select(times=np.unique(uvd2.time_array)[0:3], inplace=False)
-    with pytest.raises(ValueError, match="dset1 and dset2 must have the same timestamps"):
+    with pytest.raises(
+        ValueError, match="dset1 and dset2 must have the same timestamps"
+    ):
         pstokes.construct_pstokes(dset1=uvd1, dset2=uvd3)
 
     uvd3 = uvd1.select(times=np.unique(uvd1.time_array)[0:3], inplace=False)
     uvd4 = uvd2.select(times=np.unique(uvd2.time_array)[1:4], inplace=False)
-    with pytest.raises(ValueError, match="dset1 and dset2 must have the same timestamps"):
+    with pytest.raises(
+        ValueError, match="dset1 and dset2 must have the same timestamps"
+    ):
         pstokes.construct_pstokes(dset1=uvd3, dset2=uvd4)
 
     # combining two polarizations (dset1 and dset2) together
@@ -202,7 +215,9 @@ def test_filter_dset_on_stokes_pol(uvd1, uvd2):
     out = pstokes.filter_dset_on_stokes_pol(dsets, "pI")
     assert out[0].polarization_array[0] == -5
     assert out[1].polarization_array[0] == -6
-    with pytest.raises(AssertionError, match="necessary input pols.*not found in dsets"):
+    with pytest.raises(
+        AssertionError, match="necessary input pols.*not found in dsets"
+    ):
         pstokes.filter_dset_on_stokes_pol(dsets, "pV")
     dsets = [uvd2, uvd1]
     out2 = pstokes.filter_dset_on_stokes_pol(dsets, "pI")
