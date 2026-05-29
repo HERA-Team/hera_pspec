@@ -94,8 +94,10 @@ def test_UVbeam():
     M = beam.Jy_to_mK(np.linspace(90, 210e6, 11))
 
     # test exception
-    pytest.raises(TypeError, beam.Jy_to_mK, [1])
-    pytest.raises(TypeError, beam.Jy_to_mK, np.array([1]))
+    with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
+        beam.Jy_to_mK([1])
+    with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
+        beam.Jy_to_mK(np.array([1]))
 
     # test noise scalar
     sclr = beam.compute_pspec_scalar(
@@ -103,46 +105,28 @@ def test_UVbeam():
     )
     np.testing.assert_almost_equal(sclr, 71.105979715733)
 
-    # Check that invalid polarizations raise an error
-    pol = "pZ"
-    pytest.raises(
-        KeyError, beam.compute_pspec_scalar, lower_freq, upper_freq, num_freqs, pol=pol
-    )
-    pol = "XX"
-    pytest.raises(
-        ValueError,
-        beam.compute_pspec_scalar,
-        lower_freq,
-        upper_freq,
-        num_freqs,
-        pol=pol,
-    )
+    # Check that invalid polarizations raise an error.
+    # No match= because pyuvdata's polstr2num intercepts the invalid pol string
+    # before pspecbeam's own validation, and the exception type/message varies
+    # across pyuvdata versions (KeyError in older, ValueError in newer).
+    with pytest.raises((KeyError, ValueError)):
+        beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="pZ")
+    with pytest.raises((KeyError, ValueError)):
+        beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
 
     # check dipole beams work
     dipole_beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
     beam = pspecbeam.PSpecBeamUV(dipole_beamfile)
     scalar = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
-    pytest.raises(
-        ValueError,
-        beam.compute_pspec_scalar,
-        lower_freq,
-        upper_freq,
-        num_freqs,
-        pol="pI",
-    )
+    with pytest.raises((KeyError, ValueError)):  # see note above about pyuvdata versions
+        beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="pI")
 
     # check efield beams work
     efield_beamfile = os.path.join(DATA_PATH, "HERA_NF_efield.beamfits")
     beam = pspecbeam.PSpecBeamUV(efield_beamfile)
     scalar = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
-    pytest.raises(
-        ValueError,
-        beam.compute_pspec_scalar,
-        lower_freq,
-        upper_freq,
-        num_freqs,
-        pol="pI",
-    )
+    with pytest.raises((KeyError, ValueError)):  # see note above about pyuvdata versions
+        beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="pI")
 
 
 def test_Gaussbeam():
@@ -244,77 +228,58 @@ def test_BeamFromArray():
     assert abs(scalar / 22123832163.072491 - 1.0) <= 1e-8
 
     # Check that invalid init args raise errors
-    pytest.raises(
-        TypeError,
-        pspecbeam.PSpecBeamFromArray,
-        OmegaP=Om_P,
-        OmegaPP={"pI": Om_PP},
-        beam_freqs=beam_freqs,
-    )
-    pytest.raises(
-        KeyError,
-        pspecbeam.PSpecBeamFromArray,
-        OmegaP={"pI": Om_P, "pQ": Om_P},
-        OmegaPP={"pI": Om_PP},
-        beam_freqs=beam_freqs,
-    )
+    with pytest.raises(TypeError, match="must both be either dicts or arrays"):
+        pspecbeam.PSpecBeamFromArray(
+            OmegaP=Om_P, OmegaPP={"pI": Om_PP}, beam_freqs=beam_freqs
+        )
+    with pytest.raises(KeyError, match="must be specified for both"):
+        pspecbeam.PSpecBeamFromArray(
+            OmegaP={"pI": Om_P, "pQ": Om_P},
+            OmegaPP={"pI": Om_PP},
+            beam_freqs=beam_freqs,
+        )
+    with pytest.raises(KeyError, match="'a'"):
+        pspecbeam.PSpecBeamFromArray(
+            OmegaP={"A": Om_P}, OmegaPP={"A": Om_PP}, beam_freqs=beam_freqs
+        )
+    with pytest.raises(TypeError, match="must both be array_like"):
+        pspecbeam.PSpecBeamFromArray(
+            OmegaP={"pI": Om_P}, OmegaPP={"pI": "string"}, beam_freqs=beam_freqs
+        )
+    with pytest.raises(ValueError, match="same shape as beam_freqs"):
+        pspecbeam.PSpecBeamFromArray(
+            OmegaP={"pI": Om_P}, OmegaPP={"pI": Om_PP[:-2]}, beam_freqs=beam_freqs
+        )
+    with pytest.raises(TypeError, match="must both be either dicts or arrays"):
+        pspecbeam.PSpecBeamFromArray(
+            OmegaP=Om_P, OmegaPP={"pI": Om_PP[:-2]}, beam_freqs=beam_freqs
+        )
+    # No match= on the next four: pyuvdata's polstr2num raises before pspecbeam's
+    # own "Unrecognized polarization" check; exception type/message varies by version.
+    with pytest.raises((KeyError, ValueError)):
+        pspecbeam.PSpecBeamFromArray(
+            OmegaP={"foo": Om_P}, OmegaPP={"pI": Om_PP}, beam_freqs=beam_freqs
+        )
+    with pytest.raises((KeyError, ValueError)):
+        pspecbeam.PSpecBeamFromArray(
+            OmegaP={"pI": Om_P}, OmegaPP={"foo": Om_PP}, beam_freqs=beam_freqs
+        )
 
-    pytest.raises(
-        KeyError,
-        pspecbeam.PSpecBeamFromArray,
-        OmegaP={"A": Om_P},
-        OmegaPP={"A": Om_PP},
-        beam_freqs=beam_freqs,
-    )
-
-    pytest.raises(
-        TypeError,
-        pspecbeam.PSpecBeamFromArray,
-        OmegaP={"pI": Om_P},
-        OmegaPP={"pI": "string"},
-        beam_freqs=beam_freqs,
-    )
-
-    pytest.raises(
-        ValueError,
-        pspecbeam.PSpecBeamFromArray,
-        OmegaP={"pI": Om_P},
-        OmegaPP={"pI": Om_PP[:-2]},
-        beam_freqs=beam_freqs,
-    )
-
-    pytest.raises(
-        TypeError,
-        pspecbeam.PSpecBeamFromArray,
-        OmegaP=Om_P,
-        OmegaPP={"pI": Om_PP[:-2]},
-        beam_freqs=beam_freqs,
-    )
-
-    pytest.raises(
-        KeyError,
-        pspecbeam.PSpecBeamFromArray,
-        OmegaP={"foo": Om_P},
-        OmegaPP={"pI": Om_PP},
-        beam_freqs=beam_freqs,
-    )
-
-    pytest.raises(
-        KeyError,
-        pspecbeam.PSpecBeamFromArray,
-        OmegaP={"pI": Om_P},
-        OmegaPP={"foo": Om_PP},
-        beam_freqs=beam_freqs,
-    )
-
-    pytest.raises(KeyError, psbeam.add_pol, "foo", Om_P, Om_PP)
-    pytest.raises(KeyError, psbeam.power_beam_int, "foo")
-    pytest.raises(KeyError, psbeam.power_beam_sq_int, "foo")
+    # No match= on the next six: same pyuvdata version sensitivity as above.
+    with pytest.raises((KeyError, ValueError)):
+        psbeam.add_pol("foo", Om_P, Om_PP)
+    with pytest.raises((KeyError, ValueError)):
+        psbeam.power_beam_int("foo")
+    with pytest.raises((KeyError, ValueError)):
+        psbeam.power_beam_sq_int("foo")
 
     # Check that invalid method args raise errors
-    pytest.raises(KeyError, psbeam.power_beam_int, pol="blah")
-    pytest.raises(KeyError, psbeam.power_beam_sq_int, pol="blah")
-    pytest.raises(KeyError, psbeam.add_pol, pol="A", OmegaP=Om_P, OmegaPP=Om_PP)
+    with pytest.raises((KeyError, ValueError)):
+        psbeam.power_beam_int(pol="blah")
+    with pytest.raises((KeyError, ValueError)):
+        psbeam.power_beam_sq_int(pol="blah")
+    with pytest.raises((KeyError, ValueError)):
+        psbeam.add_pol(pol="A", OmegaP=Om_P, OmegaPP=Om_PP)
 
     # Check that string works
     assert len(str(psbeam)) > 0
@@ -340,8 +305,10 @@ def test_get_Omegas():
     assert OP.shape == (26, 2)
     assert OPP.shape == (26, 2)
 
-    pytest.raises(TypeError, beam.get_Omegas, "xx")
-    pytest.raises(NotImplementedError, beam.get_Omegas, [("pI", "pQ")])
+    with pytest.raises(TypeError, match="polpairs is not a list"):
+        beam.get_Omegas("xx")
+    with pytest.raises(NotImplementedError, match="does not support cross-correlation"):
+        beam.get_Omegas([("pI", "pQ")])
 
 
 def test_beam_normalized_response():
@@ -357,55 +324,30 @@ def test_beam_normalized_response():
     assert np.shape(beam_res[0]) == (len(freq), (12 * nside**2))
 
     # tests for polarization
-    pytest.raises(
-        ValueError,
-        pspecbeam.PSpecBeamUV.beam_normalized_response,
-        beam,
-        pol="ll",
-        freq=freq,
-    )
+    with pytest.raises(ValueError, match="Do not have the right polarization"):
+        pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol="ll", freq=freq)
 
     # test if it is a power beam
     efield_beamfile = os.path.join(DATA_PATH, "HERA_NF_efield.beamfits")
     beam_efield = pspecbeam.PSpecBeamUV(efield_beamfile)
     beam_efield.primary_beam.beam_type = "voltage"
-    pytest.raises(
-        ValueError,
-        pspecbeam.PSpecBeamUV.beam_normalized_response,
-        beam_efield,
-        pol="xx",
-        freq=freq,
-    )
+    with pytest.raises(ValueError, match="beam_type must be power"):
+        pspecbeam.PSpecBeamUV.beam_normalized_response(beam_efield, pol="xx", freq=freq)
 
     # test for right axes
     beam_efield.primary_beam.beam_type = "power"
     beam_efield.primary_beam.Naxes_vec = 2
-    pytest.raises(
-        ValueError,
-        pspecbeam.PSpecBeamUV.beam_normalized_response,
-        beam_efield,
-        pol="xx",
-        freq=freq,
-    )
+    with pytest.raises(ValueError, match="Expect scalar for power beam"):
+        pspecbeam.PSpecBeamUV.beam_normalized_response(beam_efield, pol="xx", freq=freq)
 
     # test for peak normalization
     beam_efield.primary_beam.Naxes_vec = 1
     beam_efield.primary_beam._data_normalization.value = "area"
-    pytest.raises(
-        ValueError,
-        pspecbeam.PSpecBeamUV.beam_normalized_response,
-        beam_efield,
-        pol="xx",
-        freq=freq,
-    )
+    with pytest.raises(ValueError, match="beam must be peak normalized"):
+        pspecbeam.PSpecBeamUV.beam_normalized_response(beam_efield, pol="xx", freq=freq)
 
     # test for the coordinate system
     beam_efield.primary_beam._data_normalization.value = "peak"
     beam_efield.primary_beam.pixel_coordinate_system = "cartesian"
-    pytest.raises(
-        ValueError,
-        pspecbeam.PSpecBeamUV.beam_normalized_response,
-        beam_efield,
-        pol="xx",
-        freq=freq,
-    )
+    with pytest.raises(ValueError, match="only healpix format supported"):
+        pspecbeam.PSpecBeamUV.beam_normalized_response(beam_efield, pol="xx", freq=freq)
