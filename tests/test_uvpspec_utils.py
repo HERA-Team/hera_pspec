@@ -46,16 +46,15 @@ def test_select_common():
     )
 
     # Check that zero overlap in times raises a ValueError
-    pytest.raises(
-        ValueError,
-        uvputils.select_common,
-        [uvp2, uvp6],
-        spws=True,
-        blpairs=True,
-        times=True,
-        polpairs=True,
-        inplace=False,
-    )
+    with pytest.raises(ValueError, match="No times were found"):
+        uvputils.select_common(
+            [uvp2, uvp6],
+            spws=True,
+            blpairs=True,
+            times=True,
+            polpairs=True,
+            inplace=False,
+        )
 
     # Check that zero overlap in times does *not* raise a ValueError if
     # not selecting on times
@@ -64,16 +63,15 @@ def test_select_common():
     )
 
     # Check that zero overlap in baselines raises a ValueError
-    pytest.raises(
-        ValueError,
-        uvputils.select_common,
-        [uvp3, uvp5],
-        spws=True,
-        blpairs=True,
-        times=True,
-        polpairs=True,
-        inplace=False,
-    )
+    with pytest.raises(ValueError, match="No baseline-pairs were found"):
+        uvputils.select_common(
+            [uvp3, uvp5],
+            spws=True,
+            blpairs=True,
+            times=True,
+            polpairs=True,
+            inplace=False,
+        )
 
     # Check that matching times are ignored when set to False
     uvp_new = uvputils.select_common(
@@ -89,22 +87,26 @@ def test_select_common():
     assert uvp1 == uvp2
 
     # check uvplist > 2
-    pytest.raises(IndexError, uvputils.select_common, uvp_list[:1])
+    with pytest.raises(IndexError, match="uvp_list must contain two or more"):
+        uvputils.select_common(uvp_list[:1])
 
     # check no spw overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.freq_array += 10e6
-    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7], spws=True)
+    with pytest.raises(ValueError, match="No spectral windows were found"):
+        uvputils.select_common([uvp1, uvp7], spws=True)
 
     # check no lst overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.lst_avg_array += 0.1
-    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7], lsts=True)
+    with pytest.raises(ValueError, match="No lsts were found"):
+        uvputils.select_common([uvp1, uvp7], lsts=True)
 
     # check pol overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.polpair_array[0] = 1212  # = (-8,-8)
-    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7], polpairs=True)
+    with pytest.raises(ValueError, match="No polarization-pairs were found"):
+        uvputils.select_common([uvp1, uvp7], polpairs=True)
 
 
 def test_get_blpairs_from_bls():
@@ -202,11 +204,16 @@ def test_polpair_int2tuple():
         assert polpairs[i] == pol_pairs_returned[i]
 
     # Check that errors are raised appropriately
-    pytest.raises(AssertionError, uvputils.polpair_int2tuple, ("xx", "xx"))
-    pytest.raises(AssertionError, uvputils.polpair_int2tuple, "xx")
-    pytest.raises(AssertionError, uvputils.polpair_int2tuple, "pI")
-    pytest.raises(ValueError, uvputils.polpair_int2tuple, 999)
-    pytest.raises(ValueError, uvputils.polpair_int2tuple, [999])
+    with pytest.raises(AssertionError, match="polpair must be integer"):
+        uvputils.polpair_int2tuple(("xx", "xx"))
+    with pytest.raises(AssertionError, match="polpair must be integer"):
+        uvputils.polpair_int2tuple("xx")
+    with pytest.raises(AssertionError, match="polpair must be integer"):
+        uvputils.polpair_int2tuple("pI")
+    with pytest.raises(ValueError, match="polpair integer evaluates to an invalid"):
+        uvputils.polpair_int2tuple(999)
+    with pytest.raises(ValueError, match="polpair integer evaluates to an invalid"):
+        uvputils.polpair_int2tuple([999])
 
 
 def test_subtract_uvp():
@@ -236,7 +243,8 @@ def test_subtract_uvp():
     assert hasattr(uvs, "cov_array_real")
     assert hasattr(uvs, "window_function_array")
     # make sure you cannot combine spectra if only one have been delay averaged
-    pytest.raises(ValueError, uvputils.subtract_uvp, averaged_uvp, uvp)
+    with pytest.raises(ValueError, match="No spectral windows were found"):
+        uvputils.subtract_uvp(averaged_uvp, uvp)
 
     # we subtracted uvp from itself, so data_array should be zero
     assert np.isclose(uvs.data_array[0], 0.0).all()
@@ -262,7 +270,8 @@ def test_conj_blpair():
     assert blpair == 101102104103
     blpair = uvputils._conj_blpair(101102103104, which="both")
     assert blpair == 102101104103
-    pytest.raises(ValueError, uvputils._conj_blpair, 102101103104, which="foo")
+    with pytest.raises(ValueError, match="didn't recognize foo"):
+        uvputils._conj_blpair(102101103104, which="foo")
 
 
 def test_is_in():
