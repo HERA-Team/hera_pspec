@@ -314,7 +314,9 @@ def test_delay_spectrum_misc(plot_setup):
 
     # exceptions
     with pytest.raises(ValueError, match="Couldn't understand label_type foo"):
-        plot.delay_spectrum(uvp, uvp.get_blpairs()[:3], 0, ("xx", "xx"), label_type="foo")
+        plot.delay_spectrum(
+            uvp, uvp.get_blpairs()[:3], 0, ("xx", "xx"), label_type="foo"
+        )
 
 
 def test_plot_waterfall(plot_setup):
@@ -428,6 +430,7 @@ def test_uvdata_waterfalls(plot_setup):
         assert len(figfiles) == 15
         for f in figfiles:
             os.remove(f)
+
 
 def test_delay_wedge(plot_setup):
     """Tests for plot.delay_wedge"""
