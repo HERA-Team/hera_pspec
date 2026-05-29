@@ -429,7 +429,6 @@ def test_uvdata_waterfalls(plot_setup):
         for f in figfiles:
             os.remove(f)
 
-
 def test_delay_wedge(plot_setup):
     """Tests for plot.delay_wedge"""
     # construct new uvp

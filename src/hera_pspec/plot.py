@@ -7,6 +7,155 @@ from pyuvdata import UVData
 from . import conversions, utils, uvpspec
 
 
+def _is_antpair_tuple(value):
+    """Return True for a baseline tuple like (ant1, ant2)."""
+    return (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and all(isinstance(ant, (int, np.integer)) for ant in value)
+    )
+
+
+def _is_blpair_tuple(value):
+    """Return True for a blpair tuple like ((ant1, ant2), (ant3, ant4))."""
+    return (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and all(_is_antpair_tuple(antpair) for antpair in value)
+    )
+
+
+def _normalize_plot_blpairs(uvp, blpairs, func_name):
+    """
+    Normalize plotting blpair input to a list of lists of blpair integers.
+    """
+    normalized = []
+    for blpgrp in blpairs:
+        if isinstance(blpgrp, list):
+            group = blpgrp
+        elif isinstance(blpgrp, (int, np.integer)) or _is_blpair_tuple(blpgrp):
+            group = [blpgrp]
+        elif _is_antpair_tuple(blpgrp):
+            raise ValueError(
+                f"{func_name} blpairs must be baseline-pair tuples or groups of "
+                "baseline-pair tuples/integers. For a single blpair, use "
+                "[((ant1, ant2), (ant3, ant4))]; to average a group, use "
+                "[[blpair1, blpair2, ...]]."
+            )
+        else:
+            raise TypeError(
+                f"{func_name} blpairs must be an iterable of baseline-pair tuples, "
+                "blpair integers, or lists of those values."
+            )
+
+        normalized_group = []
+        for blp in group:
+            if isinstance(blp, (int, np.integer)):
+                normalized_group.append(blp)
+            elif _is_blpair_tuple(blp):
+                normalized_group.append(uvp.antnums_to_blpair(blp))
+            elif _is_antpair_tuple(blp):
+                raise ValueError(
+                    f"{func_name} blpairs must be baseline-pair tuples or groups of "
+                    "baseline-pair tuples/integers. For a single blpair, use "
+                    "[((ant1, ant2), (ant3, ant4))]; to average a group, use "
+                    "[[blpair1, blpair2, ...]]."
+                )
+            else:
+                raise TypeError(
+                    f"{func_name} blpairs must be baseline-pair tuples, blpair "
+                    "integers, or lists of those values."
+                )
+        normalized.append(normalized_group)
+
+    return normalized
+
+
+def _format_blpair_group_label(uvp, blpair_group):
+    """Format a plotted blpair or averaged blpair group for display."""
+    group = [uvp.blpair_to_antnums(blp) for blp in blpair_group]
+    if len(group) == 1:
+        return str(group[0])
+    return str(group)
+
+
+def _normalize_polpair_label(pol):
+    """Format a polarization input consistently for labels and titles."""
+    if isinstance(pol, str):
+        pol = (pol, pol)
+    return str(pol)
+
+
+def _format_lst_label(lst):
+    """Format an LST in hours for display."""
+    lst_hrs = (lst % (2 * np.pi)) * 12 / np.pi
+    return f"lst={lst_hrs:0.3f} hr"
+
+
+def _format_delay_spectrum_manual_label(label_type, metadata):
+    """Format explicit manual labels for delay_spectrum."""
+    if label_type == "key":
+        return str(metadata["key"])
+    if label_type == "blpair":
+        return f"{metadata['blpair']}"
+    if label_type == "blpairt":
+        return f"{metadata['blpair']}, {metadata['time']:0.5f}"
+    raise ValueError(f"Couldn't understand label_type {label_type}")
+
+
+def _get_delay_spectrum_title_and_labels(
+    series_metadata, label_type, title_legend, average_blpairs=False
+):
+    """
+    Return the auto-generated title, per-series labels, and legend visibility.
+
+    When *average_blpairs* is True the ``blpair`` field is never written to
+    the title, because it would produce a very long list of all the averaged
+    baseline-pairs. The blpair label is still used in the legend when multiple
+    averaged groups are present.
+    """
+    if not title_legend:
+        return "", [None for _ in series_metadata], False
+
+    if label_type != "auto":
+        labels = [
+            _format_delay_spectrum_manual_label(label_type, metadata)
+            for metadata in series_metadata
+        ]
+        return "", labels, True
+
+    if not series_metadata:
+        return "", [], False
+
+    field_order = ("spw", "blpair", "pol", "lst")
+    field_labels = {
+        "spw": lambda value: f"spw={value}",
+        "blpair": lambda value: f"blpair={value}",
+        "pol": lambda value: f"pol={value}",
+        "lst": _format_lst_label,
+    }
+    varying_fields = [
+        field
+        for field in field_order
+        if len({metadata[field] for metadata in series_metadata}) > 1
+    ]
+    static_fields = [field for field in field_order if field not in varying_fields]
+
+    # When blpairs are being averaged, skip the blpair label from the title
+    # even if it is static (one averaged group). The list of all averaged
+    # blpairs can be very long and does not help identify the plotted data.
+    title_fields = [f for f in static_fields if not (average_blpairs and f == "blpair")]
+
+    title = " | ".join(
+        field_labels[field](series_metadata[0][field]) for field in title_fields
+    )
+    labels = []
+    for metadata in series_metadata:
+        parts = [field_labels[field](metadata[field]) for field in varying_fields]
+        labels.append(", ".join(parts) if parts else None)
+    return title, labels, any(label is not None for label in labels)
+
+
 def delay_spectrum(
     uvp,
     blpairs,
@@ -19,6 +168,7 @@ def delay_spectrum(
     delay=True,
     deltasq=False,
     legend=False,
+    title_legend=True,
     ax=None,
     component="real",
     lines=True,
@@ -27,7 +177,7 @@ def delay_spectrum(
     times=None,
     logscale=True,
     force_plot=False,
-    label_type="blpairt",
+    label_type="auto",
     plot_stats=None,
     **kwargs,
 ):
@@ -40,11 +190,20 @@ def delay_spectrum(
         UVPSpec object, containing delay spectra for a set of baseline-pairs,
         times, polarizations, and spectral windows.
 
-    blpairs : list of tuples or lists of tuples
-        List of baseline-pair tuples, or groups of baseline-pair tuples.
+    blpairs : sequence of baseline-pair identifiers
+        Sequence of blpair integers, nested baseline-pair tuples like
+        ``((ant1, ant2), (ant3, ant4))``, or lists containing either form.
+        A list element is treated as one plotted/averaged group, so use
+        ``[blpair1, blpair2]`` to plot two blpairs separately and
+        ``[[blpair1, blpair2]]`` to average them together when
+        ``average_blpairs=True``.
 
-    spw, pol : int or str
-        Which spectral window and polarization to plot.
+    spw : int
+        Spectral-window index to plot.
+
+    pol : tuple or str
+        Polarization pair to plot. A string is interpreted as an auto-polarization,
+        e.g. ``"xx"`` becomes ``("xx", "xx")``.
 
     average_blpairs : bool, optional
         If True, average over the baseline pairs within each group.
@@ -68,13 +227,24 @@ def delay_spectrum(
         delay=True. Default: False.
 
     legend : bool, optional
-        Whether to switch on the plot legend. Default: False.
+        Whether to enable the plot legend. When ``label_type='auto'`` (the
+        default), a legend is only rendered if there are varying metadata
+        fields across the plotted spectra (e.g., multiple baseline-pairs or
+        LSTs). With any other ``label_type`` value, the legend is always
+        rendered when ``legend=True``. Has no effect when
+        ``title_legend=False``. Default: False.
+
+    title_legend : bool, optional
+        If True, generate delay-spectrum title/legend metadata. When
+        ``label_type="auto"``, static fields are written to the title and
+        varying fields are written to the legend. If False, do not create the
+        title or legend text automatically. Default: True.
 
     ax : matplotlib.axes, optional
         Use this to pass in an existing Axes object, which the power spectra
-        will be added to. (Warning: Labels and legends will not be altered in
-        this case, even if the existing plot has completely different axis
-        labels etc.) If None, a new Axes object will be created. Default: None.
+        will be added to. The smart title/legend behavior also applies when
+        using a provided Axes unless ``title_legend=False``. If None, a new
+        Axes object will be created. Default: None.
 
     component : str, optional
         Component of complex spectra to plot, options=['abs', 'real', 'imag'].
@@ -93,7 +263,9 @@ def delay_spectrum(
         on bandpowers. Default: None.
 
     times : array_like, optional
-        Float ndarray containing elements from time_avg_array to plot.
+        Values from ``uvp.time_avg_array`` to plot. Use this to select which
+        integrations appear; if ``label_type="blpairt"``, the legend labels
+        include the selected time for each spectrum.
 
     logscale : bool, optional
         If True, put plot on a log-scale. Else linear scale. Default: True.
@@ -103,11 +275,12 @@ def delay_spectrum(
         Set this to True to override this large plot error and force plot.
         Default: False.
 
-    label_type : int, optional
-        Line label type in legend, options=['key', 'blpair', 'blpairt'].
-            key : Label lines based on (spw, blpair, pol) key.
-            blpair : Label lines based on blpair.
-            blpairt : Label lines based on blpair-time.
+    label_type : str, optional
+        Line label type in legend. Options are:
+        ``'auto'`` to put static metadata in the title and varying metadata in
+        the legend; ``'key'`` to label lines by ``(spw, blpair, pol)``;
+        ``'blpair'`` to label by blpair; and ``'blpairt'`` to label by
+        blpair-time.
 
     plot_stats : string, optional
         If not None, plot an entry in uvp.stats_array instead
@@ -134,14 +307,8 @@ def delay_spectrum(
         uvp = uvp.select(times=times, inplace=False)
 
     # Add ungrouped baseline-pairs into a group of their own (expected by the
-    # averaging routines)
-    blpairs_in = blpairs
-    blpairs = []  # Must be a list, not an array
-    for i, blpgrp in enumerate(blpairs_in):
-        if not isinstance(blpgrp, list):
-            blpairs.append([blpairs_in[i]])
-        else:
-            blpairs.append(blpairs_in[i])
+    # averaging routines) and reject malformed baseline tuples up front.
+    blpairs = _normalize_plot_blpairs(uvp, blpairs, "delay_spectrum")
 
     # Average over blpairs or times if requested
     blpairs_in = copy.deepcopy(blpairs)  # Save input blpair list
@@ -161,13 +328,13 @@ def delay_spectrum(
             "Trying to plot > 100 spectra... Set force_plot=True to continue."
         )
 
-    # Fold the power spectra if requested
-    if fold:
-        uvp_plt.fold_spectra()
-
     # Convert to Delta^2 units if requested
     if deltasq and not delay:
         uvp_plt.convert_to_deltasq()
+
+    # Fold the power spectra if requested
+    if fold:
+        uvp_plt.fold_spectra()
 
     # Get x-axis units (delays in ns, or k_parallel in Mpc^-1 or h Mpc^-1)
     if delay:
@@ -183,12 +350,16 @@ def delay_spectrum(
             f"specified key {plot_stats} not found in stats_array"
         )
 
-    # Plot power spectra
+    # Collect power spectra and metadata before plotting so smart title/legend
+    # formatting can tell which fields vary across the plotted set.
+    series = []
     for blgrp in blpairs:
+        blgrp_label = _format_blpair_group_label(uvp_plt, blgrp)
         # Loop over blpairs in group and plot power spectrum for each one
         for blp in blgrp:
             # setup key and casting function
             key = (spw, blp, pol)
+            pol_label = _normalize_polpair_label(pol)
             if component == "real":
                 cast = np.real
             elif component == "imag":
@@ -207,117 +378,145 @@ def delay_spectrum(
             data[flags] = np.nan
 
             # get errs if requessted
+            errs = None
             if error is not None and hasattr(uvp_plt, "stats_array"):
                 if error in uvp_plt.stats_array:
                     errs = uvp_plt.get_stats(error, key)
                     errs[flags] = np.nan
+                else:
+                    raise KeyError(
+                        "Error variable '%s' not found in stats_array of UVPSpec object."
+                        % error
+                    )
+            elif error is not None:
+                raise KeyError(
+                    "Error variable '%s' not found in stats_array of UVPSpec object."
+                    % error
+                )
 
             # get times
             blptimes = uvp_plt.time_avg_array[uvp_plt.blpair_to_indices(blp)]
+            blplsts = uvp_plt.lst_avg_array[uvp_plt.blpair_to_indices(blp)]
 
             # iterate over integrations per blp
-            for i in range(data.shape[0]):
-                # get y data
-                y = data[i]
-                t = blptimes[i]
-
-                # form label
-                if label_type == "key":
-                    label = f"{key}"
-                elif label_type == "blpair":
-                    label = f"{blp}"
-                elif label_type == "blpairt":
-                    label = f"{blp}, {t:0.5f}"
-                else:
-                    raise ValueError(f"Couldn't understand label_type {label_type}")
-
-                # plot elements
-                cax = None
-                if lines:
-                    if logscale:
-                        _y = np.abs(y)
-                    else:
-                        _y = y
-
-                    (cax,) = ax.plot(x, _y, marker="None", label=label, **kwargs)
-
-                if markers:
-                    if cax is None:
-                        c = None
-                    else:
-                        c = cax.get_color()
-                    if lines:
-                        label = None
-
-                    # plot markers
-                    if logscale:
-                        # plot positive w/ filled circles
-                        (cax,) = ax.plot(
-                            x[y >= 0],
-                            np.abs(y[y >= 0]),
-                            c=c,
-                            ls="None",
-                            marker="o",
-                            markerfacecolor=c,
-                            markeredgecolor=c,
-                            label=label,
-                            **kwargs,
-                        )
-                        # plot negative w/ unfilled circles
-                        c = cax.get_color()
-                        (cax,) = ax.plot(
-                            x[y < 0],
-                            np.abs(y[y < 0]),
-                            c=c,
-                            ls="None",
-                            marker="o",
-                            markerfacecolor="None",
-                            markeredgecolor=c,
-                            **kwargs,
-                        )
-                    else:
-                        (cax,) = ax.plot(
-                            x,
-                            y,
-                            c=c,
-                            ls="None",
-                            marker="o",
-                            markerfacecolor=c,
-                            markeredgecolor=c,
-                            label=label,
-                            **kwargs,
-                        )
-
-                if error is not None and hasattr(uvp_plt, "stats_array"):
-                    if error in uvp_plt.stats_array:
-                        if cax is None:
-                            c = None
-                        else:
-                            c = cax.get_color()
-                        if logscale:
-                            _y = np.abs(y)
-                        else:
-                            _y = y
-                        cax = ax.errorbar(
-                            x, _y, fmt="none", ecolor=c, yerr=cast(errs[i]), **kwargs
-                        )
-                    else:
-                        raise KeyError(
-                            "Error variable '%s' not found in stats_array of UVPSpec object."
-                            % error
-                        )
+            series.extend(
+                {
+                    "y": data[i],
+                    "t": blptimes[i],
+                    "lst": blplsts[i],
+                    "key": (spw, blgrp_label, pol_label),
+                    "blpair": blgrp_label,
+                    "spw": spw,
+                    "pol": pol_label,
+                    "errs": cast(errs[i]) if errs is not None else None,
+                }
+                for i in range(data.shape[0])
+            )
 
             # If blpairs were averaged, only the first blpair in the group
             # exists any more (so skip the rest)
             if average_blpairs:
                 break
 
+    title, labels, show_legend = _get_delay_spectrum_title_and_labels(
+        [
+            {
+                "key": item["key"],
+                "blpair": item["blpair"],
+                "spw": item["spw"],
+                "pol": item["pol"],
+                "time": item["t"],
+                "lst": item["lst"],
+            }
+            for item in series
+        ],
+        label_type,
+        title_legend,
+        average_blpairs=average_blpairs,
+    )
+
+    for item, label in zip(series, labels, strict=True):
+        y = item["y"]
+
+        # plot elements
+        cax = None
+        if lines:
+            if logscale:
+                _y = np.abs(y)
+            else:
+                _y = y
+
+            (cax,) = ax.plot(x, _y, marker="None", label=label, **kwargs)
+
+        if markers:
+            if cax is None:
+                c = None
+            else:
+                c = cax.get_color()
+            marker_label = None if lines else label
+
+            # plot markers
+            if logscale:
+                # plot positive w/ filled circles
+                (cax,) = ax.plot(
+                    x[y >= 0],
+                    np.abs(y[y >= 0]),
+                    c=c,
+                    ls="None",
+                    marker="o",
+                    markerfacecolor=c,
+                    markeredgecolor=c,
+                    label=marker_label,
+                    **kwargs,
+                )
+                # plot negative w/ unfilled circles
+                c = cax.get_color()
+                (cax,) = ax.plot(
+                    x[y < 0],
+                    np.abs(y[y < 0]),
+                    c=c,
+                    ls="None",
+                    marker="o",
+                    markerfacecolor="None",
+                    markeredgecolor=c,
+                    **kwargs,
+                )
+            else:
+                (cax,) = ax.plot(
+                    x,
+                    y,
+                    c=c,
+                    ls="None",
+                    marker="o",
+                    markerfacecolor=c,
+                    markeredgecolor=c,
+                    label=marker_label,
+                    **kwargs,
+                )
+
+        if item["errs"] is not None:
+            if cax is None:
+                c = None
+            else:
+                c = cax.get_color()
+            if logscale:
+                _y = np.abs(y)
+            else:
+                _y = y
+            cax = ax.errorbar(x, _y, fmt="none", ecolor=c, yerr=item["errs"], **kwargs)
+
     # Set log scale
     if logscale:
         ax.set_yscale("log")
 
-    # Add legend
-    if legend:
+    if title:
+        ax.set_title(title)
+
+    # Add legend only when legend=True and show_legend=True. show_legend is
+    # False when label_type='auto' and all metadata fields are identical
+    # (a single spectrum or all blpairs at the same LST), because there is
+    # nothing meaningful to distinguish in the legend entries.
+    if legend and show_legend:
         ax.legend(loc="upper left")
 
     # Add labels with units
@@ -381,8 +580,13 @@ def delay_waterfall(
         UVPSpec object, containing delay spectra for a set of baseline-pairs,
         times, polarizations, and spectral windows.
 
-    blpairs : list of tuples or lists of tuples
-        List of baseline-pair tuples, or groups of baseline-pair tuples.
+    blpairs : sequence of baseline-pair identifiers
+        Sequence of blpair integers, nested baseline-pair tuples like
+        ``((ant1, ant2), (ant3, ant4))``, or lists containing either form.
+        A list element is treated as one plotted/averaged group, so use
+        ``[blpair1, blpair2]`` to plot two blpairs separately and
+        ``[[blpair1, blpair2]]`` to average them together when
+        ``average_blpairs=True``.
 
     spw, pol : int or str
         Which spectral window and polarization to plot.
@@ -434,7 +638,7 @@ def delay_waterfall(
         unless force_plot == True.
 
     times : array_like, optional
-        Float ndarray containing elements from time_avg_array to plot.
+        Values from ``uvp.time_avg_array`` to plot.
 
     title_type : str, optional
         Type of title to put above plot(s). Options = ['blpair', 'blvec']
@@ -462,27 +666,8 @@ def delay_waterfall(
     fix_negval = component in ["real", "imag"] and log
 
     # Add ungrouped baseline-pairs into a group of their own (expected by the
-    # averaging routines)
-    blpairs_in = blpairs
-    blpairs = []  # Must be a list, not an array
-    for i, blpgrp in enumerate(blpairs_in):
-        if not isinstance(blpgrp, list):
-            blpairs.append([blpairs_in[i]])
-        else:
-            blpairs.append(blpairs_in[i])
-
-    # iterate through and make sure they are blpair integers
-    _blpairs = []
-    for blpgrp in blpairs:
-        _blpgrp = []
-        for blp in blpgrp:
-            if isinstance(blp, tuple):
-                blp_int = uvp.antnums_to_blpair(blp)
-            else:
-                blp_int = blp
-            _blpgrp.append(blp_int)
-        _blpairs.append(_blpgrp)
-    blpairs = _blpairs
+    # averaging routines) and reject malformed baseline tuples up front.
+    blpairs = _normalize_plot_blpairs(uvp, blpairs, "delay_waterfall")
 
     # Select times if requested
     if times is not None:
@@ -906,6 +1091,11 @@ def delay_wedge(
     blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps()
     osort = np.argsort(blpair_seps)
     blpairs, blpair_seps = [blpairs[oi] for oi in osort], blpair_seps[osort]
+    if len(blpairs) < 2:
+        raise ValueError(
+            "delay_wedge requires at least two baseline pairs after selection "
+            "and averaging."
+        )
 
     # Convert to DeltaSq
     if deltasq and not delay:
