@@ -74,24 +74,13 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
     # Check that wrong pspec types are rejected by the set() method
     with pytest.raises(TypeError, match="pspec must be a UVPSpec object"):
         ps_store.set_pspec(
-            group=group_names[2],
-            psname=psname,
-            pspec=np.arange(11),
-            overwrite=True,
+            group=group_names[2], psname=psname, pspec=np.arange(11), overwrite=True
         )
     with pytest.raises(TypeError, match="pspec must be a UVPSpec object"):
-        ps_store.set_pspec(
-            group=group_names[2],
-            psname=psname,
-            pspec=1,
-            overwrite=True,
-        )
+        ps_store.set_pspec(group=group_names[2], psname=psname, pspec=1, overwrite=True)
     with pytest.raises(TypeError, match="pspec must be a UVPSpec object"):
         ps_store.set_pspec(
-            group=group_names[2],
-            psname=psname,
-            pspec="abc",
-            overwrite=True,
+            group=group_names[2], psname=psname, pspec="abc", overwrite=True
         )
 
     # Check that power spectra can be retrieved one by one
@@ -185,7 +174,9 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
             pspec=[container_setup.uvp, container_setup.uvp, container_setup.uvp],
             overwrite=True,
         )
-    with pytest.raises(TypeError, match="pspec lists must only contain UVPSpec objects"):
+    with pytest.raises(
+        TypeError, match="pspec lists must only contain UVPSpec objects"
+    ):
         ps_store.set_pspec(
             group=group_names[0],
             psname=pspec_names,

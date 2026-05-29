@@ -118,14 +118,18 @@ def test_UVbeam():
     dipole_beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
     beam = pspecbeam.PSpecBeamUV(dipole_beamfile)
     scalar = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
-    with pytest.raises((KeyError, ValueError)):  # see note above about pyuvdata versions
+    with pytest.raises(
+        (KeyError, ValueError)
+    ):  # see note above about pyuvdata versions
         beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="pI")
 
     # check efield beams work
     efield_beamfile = os.path.join(DATA_PATH, "HERA_NF_efield.beamfits")
     beam = pspecbeam.PSpecBeamUV(efield_beamfile)
     scalar = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
-    with pytest.raises((KeyError, ValueError)):  # see note above about pyuvdata versions
+    with pytest.raises(
+        (KeyError, ValueError)
+    ):  # see note above about pyuvdata versions
         beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="pI")
 
 
