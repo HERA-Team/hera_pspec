@@ -54,9 +54,7 @@ def uvd():
 @pytest.fixture
 def pspec_ds(uvd):
     """Build a PSpecData object (beam + two time-interleaved halves of uvd)."""
-    bm = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
+    bm = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
     bm.filename = "HERA_NF_dipole_power.beamfits"
     # Slide the time axis by one integration to avoid noise bias
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
@@ -314,11 +312,7 @@ def test_delay_spectrum_misc(uvp):
         )
     with pytest.raises(KeyError, match="Error variable.*not found in stats_array"):
         plot.delay_spectrum(
-            large_uvp,
-            [large_uvp.get_blpairs()[0]],
-            0,
-            ("xx", "xx"),
-            error="not_a_stat",
+            large_uvp, [large_uvp.get_blpairs()[0]], 0, ("xx", "xx"), error="not_a_stat"
         )
 
 
@@ -411,12 +405,7 @@ def test_delay_spectrum_auto_title_legend(uvp):
     # even if all series share the same (averaged) blpair group label.
     all_blpairs = uvp.get_blpairs()
     fig = plot.delay_spectrum(
-        uvp,
-        [all_blpairs],
-        0,
-        ("xx", "xx"),
-        average_blpairs=True,
-        average_times=True,
+        uvp, [all_blpairs], 0, ("xx", "xx"), average_blpairs=True, average_times=True
     )
     ax = fig.axes[0]
     assert "blpair=" not in ax.get_title()
