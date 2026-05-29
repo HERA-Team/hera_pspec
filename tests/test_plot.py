@@ -296,7 +296,8 @@ def test_delay_spectrum_misc(plot_setup):
         _uvp.time_1_array += (i + 1) ** 2
         _uvp.time_2_array += (i + 1) ** 2
         uvp = uvp + _uvp
-    pytest.raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs(), 0, "xx")
+    with pytest.raises(ValueError, match="Trying to plot > 100 spectra"):
+        plot.delay_spectrum(uvp, uvp.get_blpairs(), 0, "xx")
 
     f2 = plot.delay_spectrum(
         uvp,
@@ -312,15 +313,8 @@ def test_delay_spectrum_misc(plot_setup):
     plt.close(f2)
 
     # exceptions
-    pytest.raises(
-        ValueError,
-        plot.delay_spectrum,
-        uvp,
-        uvp.get_blpairs()[:3],
-        0,
-        ("xx", "xx"),
-        label_type="foo",
-    )
+    with pytest.raises(ValueError, match="Couldn't understand label_type foo"):
+        plot.delay_spectrum(uvp, uvp.get_blpairs()[:3], 0, ("xx", "xx"), label_type="foo")
 
 
 def test_plot_waterfall(plot_setup):
@@ -410,9 +404,8 @@ def test_plot_waterfall(plot_setup):
         _uvp = copy.deepcopy(plot_setup.uvp)
         _uvp.blpair_array += i * 20
         uvp += _uvp
-    pytest.raises(
-        ValueError, plot.delay_waterfall, uvp, uvp.get_blpairs(), 0, ("xx", "xx")
-    )
+    with pytest.raises(ValueError, match="Nblps > 20 and force_plot == False"):
+        plot.delay_waterfall(uvp, uvp.get_blpairs(), 0, ("xx", "xx"))
     fig = plot.delay_waterfall(uvp, uvp.get_blpairs(), 0, ("xx", "xx"), force_plot=True)
     plt.close()
 
@@ -624,5 +617,6 @@ def test_delay_wedge(plot_setup):
     plt.close()
 
     # test exceptions
-    pytest.raises(ValueError, plot.delay_wedge, uvp, 0, ("xx", "xx"), component="foo")
+    with pytest.raises(ValueError, match="Did not understand component foo"):
+        plot.delay_wedge(uvp, 0, ("xx", "xx"), component="foo")
     plt.close()

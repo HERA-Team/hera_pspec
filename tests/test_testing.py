@@ -95,13 +95,12 @@ def test_uvpspec_from_data():
     assert uvp.Nblpairs == 51
 
     # test exceptions
-    pytest.raises(AssertionError, testing.uvpspec_from_data, fname, (37, 38))
-    pytest.raises(
-        AssertionError, testing.uvpspec_from_data, fname, [([37, 38], [38, 39])]
-    )
-    pytest.raises(
-        AssertionError, testing.uvpspec_from_data, fname, [[[37, 38], [38, 39]]]
-    )
+    with pytest.raises(AssertionError, match="bl_grps must be a list"):
+        testing.uvpspec_from_data(fname, (37, 38))
+    with pytest.raises(AssertionError, match="length of bls1 must equal"):
+        testing.uvpspec_from_data(fname, [([37, 38], [38, 39])])
+    with pytest.raises(AssertionError, match="list of lists of tuples"):
+        testing.uvpspec_from_data(fname, [[[37, 38], [38, 39]]])
 
     # test std
     uvp = testing.uvpspec_from_data(
