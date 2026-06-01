@@ -322,3 +322,67 @@ def test_bootstrap_runner_filters_profiling_kwargs(tmp_path, monkeypatch):
     assert captured["kwargs"]["seed"] == 0
     assert "overwrite" in captured["kwargs"]
     assert "time_avg" in captured["kwargs"]
+
+
+def test_auto_noise_help():
+    result = runner.invoke(cli.app, ["auto-noise", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "usage:" in result.output.lower()
+
+
+def test_auto_noise_main_dispatch(monkeypatch):
+    """Verify the auto-noise control flow: load autos → Tsys → loop → save."""
+    args = argparse.Namespace(
+        pspec_container="cont.h5",
+        auto_file="autos.uvh5",
+        beam="beam.fits",
+        groups=None,
+        spectra=None,
+        err_type="P_N",
+    )
+
+    calls = {"noise": [], "set": [], "saved": False}
+
+    class FakeUVData:
+        def read(self, fname):
+            calls["read"] = fname
+
+    class FakeContainer:
+        def __init__(self, *a, **k):
+            pass
+
+        def groups(self):
+            return ["grp1"]
+
+        def spectra(self, group):
+            return ["uvp"]
+
+        def get_pspec(self, group, spec):
+            return f"{group}/{spec}"
+
+        def set_pspec(self, group, spec, uvp, overwrite):
+            calls["set"].append((group, spec, overwrite))
+
+        def save(self):
+            calls["saved"] = True
+
+    def fake_uvd_to_Tsys(uvd, beam):
+        calls["beam"] = beam
+        return "TSYS"
+
+    monkeypatch.setattr(cli, "UVData", FakeUVData)
+    monkeypatch.setattr(cli.utils, "uvd_to_Tsys", fake_uvd_to_Tsys)
+    monkeypatch.setattr(
+        cli.utils,
+        "uvp_noise_error",
+        lambda uvp, tsys, err_type: calls["noise"].append((uvp, tsys, err_type)),
+    )
+    monkeypatch.setattr(cli.container, "PSpecContainer", FakeContainer)
+
+    cli._auto_noise_main(args)
+
+    assert calls["read"] == "autos.uvh5"
+    assert calls["beam"] == "beam.fits"
+    assert calls["noise"] == [("grp1/uvp", "TSYS", "P_N")]
+    assert calls["set"] == [("grp1", "uvp", True)]
+    assert calls["saved"] is True

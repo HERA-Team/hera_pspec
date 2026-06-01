@@ -287,3 +287,33 @@ register_argparse_command(
     runner=_run_bootstrap,
     help_text="Bootstrap over redundant baseline-pair groups (was bootstrap_run.py).",
 )
+
+
+def _auto_noise_main(args) -> None:
+    uvd = UVData()
+    uvd.read(args.auto_file)
+    auto_Tsys = utils.uvd_to_Tsys(uvd, beam=args.beam)
+    psc = container.PSpecContainer(
+        args.pspec_container, keep_open=False, mode="rw", swmr=False
+    )
+    groups = args.groups if args.groups is not None else psc.groups()
+    for group in groups:
+        spectra = args.spectra if args.spectra is not None else psc.spectra(group)
+        for spec in spectra:
+            uvp = psc.get_pspec(group, spec)
+            utils.uvp_noise_error(uvp, auto_Tsys, err_type=args.err_type)
+            psc.set_pspec(group, spec, uvp, overwrite=True)
+    psc.save()
+
+
+def _run_auto_noise(args) -> None:
+    run_with_profiling(_auto_noise_main, args, args)
+
+
+register_argparse_command(
+    app,
+    name="auto-noise",
+    parser_factory=utils.uvp_noise_error_parser,
+    runner=_run_auto_noise,
+    help_text="Compute noise error bars from autocorrelations (was auto_noise_run.py).",
+)
