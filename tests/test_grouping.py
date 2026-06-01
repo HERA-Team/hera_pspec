@@ -40,6 +40,27 @@ def case_vanilla_uvp_alternating_times(
 #     return uvp_exact_wfs
 
 
+@pytest.fixture
+def delay_bins_uvp_nocov(vanilla_uvp_with_beam):
+    """Copy of vanilla_uvp_with_beam with cov arrays removed."""
+    uvp = copy.deepcopy(vanilla_uvp_with_beam)
+    del uvp.cov_array_real
+    del uvp.cov_array_imag
+    return uvp
+
+
+@pytest.fixture
+def delay_bins_exact_wf_uvp(vanilla_uvp_with_beam):
+    """Copy of vanilla_uvp_with_beam with exact window functions."""
+    uvp = copy.deepcopy(vanilla_uvp_with_beam)
+    gaussian_beam = uvwindow.FTBeam.gaussian(
+        freq_array=uvp.freq_array, widths=8.0, pol=1
+    )
+    del uvp.window_function_array
+    uvp.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
+    return uvp
+
+
 def test_grouping_input_validation(vanilla_uvp: UVPSpec):
     wrong_uvp = pspecdata.PSpecData(dsets=[], wgts=[])
     uvp_with_stats = copy.deepcopy(vanilla_uvp)
@@ -130,365 +151,362 @@ def test_grouping_input_validation(vanilla_uvp: UVPSpec):
         grouping.fold_spectra("not-a-uvp")
 
 
-class TestGrouping:
-    def test_group_baselines(self):
-        """
-        Test baseline grouping behavior.
-        """
-        # Generate example lists of baselines
-        bls1 = [(0, i) for i in range(1)]
-        bls2 = [(0, i) for i in range(2)]
-        bls3 = [(0, i) for i in range(4)]
-        bls4 = [(0, i) for i in range(5)]
-        bls5 = [(0, i) for i in range(13)]
-        bls6 = [(0, i) for i in range(521)]
+def test_group_baselines():
+    """
+    Test baseline grouping behavior.
+    """
+    # Generate example lists of baselines
+    bls1 = [(0, i) for i in range(1)]
+    bls2 = [(0, i) for i in range(2)]
+    bls3 = [(0, i) for i in range(4)]
+    bls4 = [(0, i) for i in range(5)]
+    bls5 = [(0, i) for i in range(13)]
+    bls6 = [(0, i) for i in range(521)]
 
-        # Check that error is raised when more groups requested than baselines
-        pytest.raises(ValueError, grouping.group_baselines, bls1, 2)
-        pytest.raises(ValueError, grouping.group_baselines, bls2, 5)
-        pytest.raises(ValueError, grouping.group_baselines, bls4, 6)
+    # Check that error is raised when more groups requested than baselines
+    with pytest.raises(ValueError, match="Can't have more groups than baselines"):
+        grouping.group_baselines(bls1, 2)
+    with pytest.raises(ValueError, match="Can't have more groups than baselines"):
+        grouping.group_baselines(bls2, 5)
+    with pytest.raises(ValueError, match="Can't have more groups than baselines"):
+        grouping.group_baselines(bls4, 6)
 
-        # Check that keep_remainder=False results in equal-sized blocks
-        g1a = grouping.group_baselines(bls4, 2, keep_remainder=False, randomize=False)
-        g1b = grouping.group_baselines(bls5, 5, keep_remainder=False, randomize=False)
-        g1c = grouping.group_baselines(bls6, 10, keep_remainder=False, randomize=False)
-        g2a = grouping.group_baselines(bls4, 2, keep_remainder=False, randomize=True)
-        g2b = grouping.group_baselines(bls5, 5, keep_remainder=False, randomize=True)
-        g2c = grouping.group_baselines(bls6, 10, keep_remainder=False, randomize=True)
+    # Check that keep_remainder=False results in equal-sized blocks
+    g1a = grouping.group_baselines(bls4, 2, keep_remainder=False, randomize=False)
+    g1b = grouping.group_baselines(bls5, 5, keep_remainder=False, randomize=False)
+    g1c = grouping.group_baselines(bls6, 10, keep_remainder=False, randomize=False)
+    g2a = grouping.group_baselines(bls4, 2, keep_remainder=False, randomize=True)
+    g2b = grouping.group_baselines(bls5, 5, keep_remainder=False, randomize=True)
+    g2c = grouping.group_baselines(bls6, 10, keep_remainder=False, randomize=True)
 
-        # Loop over groups and check that blocks are equal in size
-        gs = [g1a, g1b, g1c, g2a, g2b, g2c]
-        for g in gs:
-            assert np.unique([len(grp) for grp in g]).size == 1
+    # Loop over groups and check that blocks are equal in size
+    gs = [g1a, g1b, g1c, g2a, g2b, g2c]
+    for g in gs:
+        assert np.unique([len(grp) for grp in g]).size == 1
 
-        # Check that total no. baselines is preserved with keep_remainder=False
-        for bls in [bls1, bls2, bls3, bls4, bls5, bls6]:
-            for ngrp in [1, 2, 5, 10, 45]:
-                for rand in [True, False]:
-                    try:
-                        g = grouping.group_baselines(
-                            bls, ngrp, keep_remainder=True, randomize=rand
-                        )
-                    except:
-                        continue
-                    count = np.sum([len(_g) for _g in g])
-                    assert count == len(bls)
+    # Check that total no. baselines is preserved with keep_remainder=False
+    for bls in [bls1, bls2, bls3, bls4, bls5, bls6]:
+        for ngrp in [1, 2, 5, 10, 45]:
+            for rand in [True, False]:
+                try:
+                    g = grouping.group_baselines(
+                        bls, ngrp, keep_remainder=True, randomize=rand
+                    )
+                except ValueError:
+                    continue
+                count = np.sum([len(_g) for _g in g])
+                assert count == len(bls)
 
-        # Check that random seed works
-        g1 = grouping.group_baselines(bls5, 3, randomize=True, seed=10)
-        g2 = grouping.group_baselines(bls5, 3, randomize=True, seed=11)
-        g3 = grouping.group_baselines(bls5, 3, randomize=True, seed=10)
-        for i in range(len(g1)):
-            for j in range(len(g1[i])):
-                assert g1[i][j] == g3[i][j]
+    # Check that random seed works
+    g1 = grouping.group_baselines(bls5, 3, randomize=True, seed=10)
+    g2 = grouping.group_baselines(bls5, 3, randomize=True, seed=11)
+    g3 = grouping.group_baselines(bls5, 3, randomize=True, seed=10)
+    for i in range(len(g1)):
+        for j in range(len(g1[i])):
+            assert g1[i][j] == g3[i][j]
 
-    def test_average_spectra(self):
-        """
-        Test average spectra behavior.
-        """
-        ## Start file prep ##
-        dfile = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
-        # Load into UVData objects
-        uvd = UVData()
-        uvd.read_miriad(dfile)
-        cosmo = conversions.Cosmo_Conversions()
-        beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-        # find conversion factor from Jy to mK
-        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
 
-        # reshape to appropriately match a UVData.data_array object and multiply in!
-        uvd.data_array *= Jy_to_mK[None, :, None]
-        # slide the time axis of uvd by one integration
-        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
+def test_average_spectra():
+    """
+    Test average spectra behavior.
+    """
+    ## Start file prep ##
+    dfile = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+    # Load into UVData objects
+    uvd = UVData()
+    uvd.read_miriad(dfile)
+    cosmo = conversions.Cosmo_Conversions()
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
+    # find conversion factor from Jy to mK
+    Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
 
-        # Create a new PSpecData object, and don't forget to feed the beam object
-        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
-        ds.rephase_to_dset(0)
-        # change units of UVData objects
-        ds.dsets[0].vis_units = "mK"
-        ds.dsets[1].vis_units = "mK"
+    # reshape to appropriately match a UVData.data_array object and multiply in!
+    uvd.data_array *= Jy_to_mK[None, :, None]
+    # slide the time axis of uvd by one integration
+    uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
+    uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
 
-        baselines = [(24, 25), (37, 38), (38, 39)]
-        # calculate all baseline pairs from group
-        baselines1, baselines2, blpairs = utils.construct_blpairs(
-            baselines, exclude_auto_bls=True, exclude_permutations=True
+    # Create a new PSpecData object, and don't forget to feed the beam object
+    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+    ds.rephase_to_dset(0)
+    # change units of UVData objects
+    ds.dsets[0].vis_units = "mK"
+    ds.dsets[1].vis_units = "mK"
+
+    baselines = [(24, 25), (37, 38), (38, 39)]
+    # calculate all baseline pairs from group
+    baselines1, baselines2, blpairs = utils.construct_blpairs(
+        baselines, exclude_auto_bls=True, exclude_permutations=True
+    )
+
+    uvp = ds.pspec(
+        baselines1,
+        baselines2,
+        (0, 1),
+        [("xx", "xx")],
+        spw_ranges=[(300, 350)],
+        input_data_weight="identity",
+        norm="I",
+        taper="blackman-harris",
+        store_cov=True,
+        cov_model="autos",
+        verbose=False,
+    )
+    keys = uvp.get_all_keys()
+
+    # Add the analytic noise to stat_array
+    Pn = uvp.generate_noise_spectra(0, "xx", 220)
+    for key in keys:
+        blp = uvp.antnums_to_blpair(key[1])
+        error = Pn[blp]
+        uvp.set_stats("noise", key, error)
+
+    # Add the simple error bar (all are set to be one) to stat_array
+    errs = np.ones((uvp.Ntpairs, uvp.Ndlys))
+    for key in keys:
+        uvp.set_stats("simple", key, errs)
+    blpair_groups = [blpairs]
+    ## End file prep ##
+
+    # begin tests
+    uvp_avg_ints_wgts = grouping.average_spectra(
+        uvp,
+        blpair_groups=blpair_groups,
+        error_field="noise",
+        time_avg=True,
+        inplace=False,
+    )
+
+    uvp_avg_noise_wgts = grouping.average_spectra(
+        uvp,
+        time_avg=True,
+        blpair_groups=blpair_groups,
+        error_weights="noise",
+        inplace=False,
+    )
+    uvp_avg_simple_wgts = grouping.average_spectra(
+        uvp,
+        blpair_groups=blpair_groups,
+        time_avg=True,
+        error_weights="simple",
+        inplace=False,
+    )
+
+    # For using uniform error bars as weights, the error bar on the average
+    # is 1/sqrt{N} times the error bar on one single sample.
+    averaged_stat = uvp_avg_simple_wgts.stats_array["simple"][0][0, 0, 0]
+    initial_stat = (
+        uvp.stats_array["simple"][0][0, 0, 0]
+        / np.sqrt(uvp.Ntpairs)
+        / np.sqrt(len(blpairs))
+    )
+    assert np.all(np.isclose(initial_stat, averaged_stat))
+
+    # For non-uniform weights, we test the error bar on the average power
+    # spectra should be smaller than one on single sample.
+    assert abs(uvp_avg_ints_wgts.stats_array["noise"][0][0, 0, 0]) < abs(
+        uvp.stats_array["noise"][0][0, 0, 0]
+    )
+    assert abs(uvp_avg_noise_wgts.stats_array["noise"][0][0, 0, 0]) < abs(
+        uvp.stats_array["noise"][0][0, 0, 0]
+    )
+
+    # Test stats inf variance for all times, single blpair doesn't result
+    # in nans and that the avg effectively ignores its presence: e.g. check
+    # it matches initial over sqrt(Nblpairs - 1)
+    uvp_inf_var = copy.deepcopy(uvp)
+    initial_stat = uvp.get_stats("simple", (0, blpairs[0], "xx"))
+    inf_var_stat = np.ones((uvp_inf_var.Ntpairs, uvp_inf_var.Ndlys)) * np.inf
+    uvp_inf_var.set_stats("simple", (0, blpairs[1], "xx"), inf_var_stat)
+    uvp_inf_var_avg = uvp_inf_var.average_spectra(
+        blpair_groups=blpair_groups, error_weights="simple", inplace=False
+    )
+    final_stat = uvp_inf_var_avg.get_stats("simple", (0, blpairs[0], "xx"))
+    assert np.isclose(final_stat, initial_stat / np.sqrt(len(blpairs) - 1)).all()
+
+    # Test infinite variance for single time, all blpairs doesn't result in nans
+    # and check that averaged stat for that time is inf (not zero)
+    uvp_inf_var = copy.deepcopy(uvp)
+    initial_stat = uvp.get_stats("simple", (0, blpairs[0], "xx"))
+    inf_var_stat = np.ones((uvp_inf_var.Ntpairs, uvp_inf_var.Ndlys))
+    inf_var_stat[0] = np.inf
+    for blp in blpairs:
+        uvp_inf_var.set_stats("simple", (0, blp, "xx"), inf_var_stat)
+    uvp_inf_var_avg = uvp_inf_var.average_spectra(
+        blpair_groups=blpair_groups, error_weights="simple", inplace=False
+    )
+    final_stat = uvp_inf_var_avg.get_stats("simple", (0, blpairs[0], "xx"))
+    assert np.isclose(
+        final_stat[1:], initial_stat[1:] / np.sqrt(len(blpairs))
+    ).all()
+    assert np.all(~np.isfinite(final_stat[0]))
+
+    # Tests related to exact_windows
+
+    # prep objects
+    uvd = UVData()
+    uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
+    baselines1, baselines2, blpairs = utils.construct_blpairs(
+        uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
+    )
+    # compute ps
+    uvp = ds.pspec(
+        baselines1,
+        baselines2,
+        dsets=(0, 1),
+        pols=[("xx", "xx")],
+        spw_ranges=(175, 195),
+        taper="bh",
+        verbose=False,
+    )
+    # get exact window functions
+    uvp.get_exact_window_functions(
+        ftbeam=os.path.join(DATA_PATH, "FT_beam_HERA_dipole_test"),
+        spw_array=None,
+        inplace=True,
+        verbose=False,
+    )
+
+    # time average
+    uvp_time_avg = grouping.average_spectra(
+        uvp,
+        blpair_groups=None,
+        time_avg=True,
+        blpair_weights=None,
+        error_field=None,
+        error_weights=None,
+        normalize_weights=True,
+        inplace=False,
+        add_to_history="",
+    )
+    assert uvp_time_avg.Nbltpairs == uvp_time_avg.Nblpairs
+    assert uvp_time_avg.window_function_array[0].shape[0] == uvp_time_avg.Nbltpairs
+    blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
+
+    # redundant average
+    uvp_red_avg = grouping.average_spectra(
+        uvp,
+        blpair_groups=blpair_groups,
+        time_avg=False,
+        blpair_weights=None,
+        error_field=None,
+        error_weights=None,
+        normalize_weights=True,
+        inplace=False,
+        add_to_history="",
+    )
+    assert uvp_red_avg.Nbltpairs == uvp_red_avg.Ntpairs
+
+    # both + error_weights
+    keys = uvp.get_all_keys()
+    # Add the analytic noise to stat_array
+    Pn = uvp.generate_noise_spectra(0, "xx", 220)
+    for key in keys:
+        blp = uvp.antnums_to_blpair(key[1])
+        error = Pn[blp]
+        uvp.set_stats("noise", key, error)
+    uvp_avg = grouping.average_spectra(
+        uvp,
+        blpair_groups=blpair_groups,
+        time_avg=True,
+        blpair_weights=None,
+        error_field="noise",
+        error_weights=None,
+        normalize_weights=True,
+        inplace=False,
+        add_to_history="",
+    )
+
+
+def test_sample_baselines():
+    """
+    Test baseline sampling (with replacement) behavior.
+    """
+    # Generate example lists of baselines
+    bls1 = [(0, i) for i in range(1)]
+    bls2 = [(0, i) for i in range(2)]
+    bls3 = [(0, i) for i in range(4)]
+    bls4 = [(0, i) for i in range(5)]
+    bls5 = [(0, i) for i in range(13)]
+    bls6 = [(0, i) for i in range(521)]
+
+    # Example grouped list
+    g1 = grouping.group_baselines(bls5, 3, randomize=False)
+
+    # Check that returned length is the same as input length
+    for bls in [bls1, bls2, bls3, bls4, bls5, bls6]:
+        samp = grouping.sample_baselines(bls)
+        assert len(bls) == len(samp)
+
+    # Check that returned length is the same for groups too
+    samp = grouping.sample_baselines(g1)
+    assert len(g1) == len(samp)
+
+
+@parametrize_with_cases("uvp", cases=".")
+def test_bootstrap_average_blpairs(uvp):
+    """
+    Test bootstrap averaging over power spectra.
+    """
+    # Check that basic bootstrap averaging works
+    blpair_groups = [list(np.unique(uvp.blpair_array))]
+    uvp1, wgts = grouping.bootstrap_average_blpairs(
+        [uvp], blpair_groups, time_avg=False
+    )
+    uvp2, wgts = grouping.bootstrap_average_blpairs(
+        [uvp], blpair_groups, time_avg=True
+    )
+    assert uvp1[0].Nblpairs == 1
+    assert uvp1[0].Ntpairs == uvp.Ntpairs
+    assert uvp2[0].Ntpairs == 1
+
+    # Total of weights assigned should equal total no. of blpairs
+    assert np.sum(wgts) == np.array(blpair_groups).size
+
+    # Check that exceptions are raised when inputs are invalid
+    with pytest.raises(AssertionError, match="uvp_list must be a list of UVPSpec objects"):
+        grouping.bootstrap_average_blpairs(
+            [np.arange(5)], blpair_groups, time_avg=False
         )
+    with pytest.raises(KeyError, match="do not exist in any of the input UVPSpec objects"):
+        grouping.bootstrap_average_blpairs([uvp], [[200200200200]], time_avg=False)
 
-        uvp = ds.pspec(
-            baselines1,
-            baselines2,
-            (0, 1),
-            [("xx", "xx")],
-            spw_ranges=[(300, 350)],
-            input_data_weight="identity",
-            norm="I",
-            taper="blackman-harris",
-            store_cov=True,
-            cov_model="autos",
-            verbose=False,
+    # Reduce UVPSpec to only 3 blpairs and set them all to the same values
+    _blpairs = list(np.unique(uvp.blpair_array)[:3])
+    uvp3 = uvp.select(spws=0, inplace=False, blpairs=_blpairs)
+
+    Nt = uvp3.Ntpairs
+    uvp3.data_array[0][Nt : 2 * Nt] = uvp3.data_array[0][:Nt]
+    uvp3.data_array[0][2 * Nt :] = uvp3.data_array[0][:Nt]
+    uvp3.integration_array[0][Nt : 2 * Nt] = uvp3.integration_array[0][:Nt]
+    uvp3.integration_array[0][2 * Nt :] = uvp3.integration_array[0][:Nt]
+
+    # Test that different bootstrap-sampled averages have the same value as
+    # the normal average (since the data for all blpairs has been set to
+    # the same values for uvp3)
+    np.random.seed(10)
+    uvp_avg = uvp3.average_spectra(
+        blpair_groups=[_blpairs], time_avg=True, inplace=False
+    )
+    blpair = uvp_avg.blpair_array[0]
+    for i in range(5):
+        # Generate multiple samples and make sure that they are all equal
+        # to the regular average (for the cloned data in uvp3)
+        uvp4, wgts = grouping.bootstrap_average_blpairs(
+            [uvp3], blpair_groups=[_blpairs], time_avg=True
         )
-        keys = uvp.get_all_keys()
-
-        # Add the analytic noise to stat_array
-        Pn = uvp.generate_noise_spectra(0, "xx", 220)
-        for key in keys:
-            blp = uvp.antnums_to_blpair(key[1])
-            error = Pn[blp]
-            uvp.set_stats("noise", key, error)
-
-        # Add the simple error bar (all are set to be one) to stat_array
-        errs = np.ones((uvp.Ntpairs, uvp.Ndlys))
-        for key in keys:
-            uvp.set_stats("simple", key, errs)
-        blpair_groups = [blpairs]
-        ## End file prep ##
-
-        # begin tests
-        uvp_avg_ints_wgts = grouping.average_spectra(
-            uvp,
-            blpair_groups=blpair_groups,
-            error_field="noise",
-            time_avg=True,
-            inplace=False,
-        )
-
-        uvp_avg_noise_wgts = grouping.average_spectra(
-            uvp,
-            time_avg=True,
-            blpair_groups=blpair_groups,
-            error_weights="noise",
-            inplace=False,
-        )
-        uvp_avg_simple_wgts = grouping.average_spectra(
-            uvp,
-            blpair_groups=blpair_groups,
-            time_avg=True,
-            error_weights="simple",
-            inplace=False,
-        )
-
-        # For using uniform error bars as weights, the error bar on the average
-        # is 1/sqrt{N} times the error bar on one single sample.
-        averaged_stat = uvp_avg_simple_wgts.stats_array["simple"][0][0, 0, 0]
-        initial_stat = (
-            uvp.stats_array["simple"][0][0, 0, 0]
-            / np.sqrt(uvp.Ntpairs)
-            / np.sqrt(len(blpairs))
-        )
-        assert np.all(np.isclose(initial_stat, averaged_stat))
-
-        # For non-uniform weights, we test the error bar on the average power
-        # spectra should be smaller than one on single sample.
-        assert abs(uvp_avg_ints_wgts.stats_array["noise"][0][0, 0, 0]) < abs(
-            uvp.stats_array["noise"][0][0, 0, 0]
-        )
-        assert abs(uvp_avg_noise_wgts.stats_array["noise"][0][0, 0, 0]) < abs(
-            uvp.stats_array["noise"][0][0, 0, 0]
-        )
-
-        # Test stats inf variance for all times, single blpair doesn't result
-        # in nans and that the avg effectively ignores its presence: e.g. check
-        # it matches initial over sqrt(Nblpairs - 1)
-        uvp_inf_var = copy.deepcopy(uvp)
-        initial_stat = uvp.get_stats("simple", (0, blpairs[0], "xx"))
-        inf_var_stat = np.ones((uvp_inf_var.Ntpairs, uvp_inf_var.Ndlys)) * np.inf
-        uvp_inf_var.set_stats("simple", (0, blpairs[1], "xx"), inf_var_stat)
-        uvp_inf_var_avg = uvp_inf_var.average_spectra(
-            blpair_groups=blpair_groups, error_weights="simple", inplace=False
-        )
-        final_stat = uvp_inf_var_avg.get_stats("simple", (0, blpairs[0], "xx"))
-        assert np.isclose(final_stat, initial_stat / np.sqrt(len(blpairs) - 1)).all()
-
-        # Test infinite variance for single time, all blpairs doesn't result in nans
-        # and check that averaged stat for that time is inf (not zero)
-        uvp_inf_var = copy.deepcopy(uvp)
-        initial_stat = uvp.get_stats("simple", (0, blpairs[0], "xx"))
-        inf_var_stat = np.ones((uvp_inf_var.Ntpairs, uvp_inf_var.Ndlys))
-        inf_var_stat[0] = np.inf
-        for blp in blpairs:
-            uvp_inf_var.set_stats("simple", (0, blp, "xx"), inf_var_stat)
-        uvp_inf_var_avg = uvp_inf_var.average_spectra(
-            blpair_groups=blpair_groups, error_weights="simple", inplace=False
-        )
-        final_stat = uvp_inf_var_avg.get_stats("simple", (0, blpairs[0], "xx"))
-        assert np.isclose(
-            final_stat[1:], initial_stat[1:] / np.sqrt(len(blpairs))
-        ).all()
-        assert np.all(~np.isfinite(final_stat[0]))
-
-        # Tests related to exact_windows
-
-        # prep objects
-        uvd = UVData()
-        uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
-        baselines1, baselines2, blpairs = utils.construct_blpairs(
-            uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
-        )
-        # compute ps
-        uvp = ds.pspec(
-            baselines1,
-            baselines2,
-            dsets=(0, 1),
-            pols=[("xx", "xx")],
-            spw_ranges=(175, 195),
-            taper="bh",
-            verbose=False,
-        )
-        # get exact window functions
-        uvp.get_exact_window_functions(
-            ftbeam=os.path.join(DATA_PATH, "FT_beam_HERA_dipole_test"),
-            spw_array=None,
-            inplace=True,
-            verbose=False,
-        )
-
-        # time average
-        uvp_time_avg = grouping.average_spectra(
-            uvp,
-            blpair_groups=None,
-            time_avg=True,
-            blpair_weights=None,
-            error_field=None,
-            error_weights=None,
-            normalize_weights=True,
-            inplace=False,
-            add_to_history="",
-        )
-        assert uvp_time_avg.Nbltpairs == uvp_time_avg.Nblpairs
-        assert uvp_time_avg.window_function_array[0].shape[0] == uvp_time_avg.Nbltpairs
-        blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
-
-        # redundant average
-        uvp_red_avg = grouping.average_spectra(
-            uvp,
-            blpair_groups=blpair_groups,
-            time_avg=False,
-            blpair_weights=None,
-            error_field=None,
-            error_weights=None,
-            normalize_weights=True,
-            inplace=False,
-            add_to_history="",
-        )
-        assert uvp_red_avg.Nbltpairs == uvp_red_avg.Ntpairs
-
-        # both + error_weights
-        keys = uvp.get_all_keys()
-        # Add the analytic noise to stat_array
-        Pn = uvp.generate_noise_spectra(0, "xx", 220)
-        for key in keys:
-            blp = uvp.antnums_to_blpair(key[1])
-            error = Pn[blp]
-            uvp.set_stats("noise", key, error)
-        uvp_avg = grouping.average_spectra(
-            uvp,
-            blpair_groups=blpair_groups,
-            time_avg=True,
-            blpair_weights=None,
-            error_field="noise",
-            error_weights=None,
-            normalize_weights=True,
-            inplace=False,
-            add_to_history="",
-        )
-
-    def test_sample_baselines(self):
-        """
-        Test baseline sampling (with replacement) behavior.
-        """
-        # Generate example lists of baselines
-        bls1 = [(0, i) for i in range(1)]
-        bls2 = [(0, i) for i in range(2)]
-        bls3 = [(0, i) for i in range(4)]
-        bls4 = [(0, i) for i in range(5)]
-        bls5 = [(0, i) for i in range(13)]
-        bls6 = [(0, i) for i in range(521)]
-
-        # Example grouped list
-        g1 = grouping.group_baselines(bls5, 3, randomize=False)
-
-        # Check that returned length is the same as input length
-        for bls in [bls1, bls2, bls3, bls4, bls5, bls6]:
-            samp = grouping.sample_baselines(bls)
-            assert len(bls) == len(samp)
-
-        # Check that returned length is the same for groups too
-        samp = grouping.sample_baselines(g1)
-        assert len(g1) == len(samp)
-
-    @parametrize_with_cases("uvp", cases=".")
-    def test_bootstrap_average_blpairs(self, uvp):
-        """
-        Test bootstrap averaging over power spectra.
-        """
-        # Check that basic bootstrap averaging works
-        blpair_groups = [list(np.unique(uvp.blpair_array))]
-        uvp1, wgts = grouping.bootstrap_average_blpairs(
-            [uvp], blpair_groups, time_avg=False
-        )
-        uvp2, wgts = grouping.bootstrap_average_blpairs(
-            [uvp], blpair_groups, time_avg=True
-        )
-        assert uvp1[0].Nblpairs == 1
-        assert uvp1[0].Ntpairs == uvp.Ntpairs
-        assert uvp2[0].Ntpairs == 1
-
-        # Total of weights assigned should equal total no. of blpairs
-        assert np.sum(wgts) == np.array(blpair_groups).size
-
-        # Check that exceptions are raised when inputs are invalid
-        pytest.raises(
-            AssertionError,
-            grouping.bootstrap_average_blpairs,
-            [np.arange(5)],
-            blpair_groups,
-            time_avg=False,
-        )
-        pytest.raises(
-            KeyError,
-            grouping.bootstrap_average_blpairs,
-            [uvp],
-            [[200200200200]],
-            time_avg=False,
-        )
-
-        # Reduce UVPSpec to only 3 blpairs and set them all to the same values
-        _blpairs = list(np.unique(uvp.blpair_array)[:3])
-        uvp3 = uvp.select(spws=0, inplace=False, blpairs=_blpairs)
-
-        Nt = uvp3.Ntpairs
-        uvp3.data_array[0][Nt : 2 * Nt] = uvp3.data_array[0][:Nt]
-        uvp3.data_array[0][2 * Nt :] = uvp3.data_array[0][:Nt]
-        uvp3.integration_array[0][Nt : 2 * Nt] = uvp3.integration_array[0][:Nt]
-        uvp3.integration_array[0][2 * Nt :] = uvp3.integration_array[0][:Nt]
-
-        # Test that different bootstrap-sampled averages have the same value as
-        # the normal average (since the data for all blpairs has been set to
-        # the same values for uvp3)
-        np.random.seed(10)
-        uvp_avg = uvp3.average_spectra(
-            blpair_groups=[_blpairs], time_avg=True, inplace=False
-        )
-        blpair = uvp_avg.blpair_array[0]
-        for i in range(5):
-            # Generate multiple samples and make sure that they are all equal
-            # to the regular average (for the cloned data in uvp3)
-            uvp4, wgts = grouping.bootstrap_average_blpairs(
-                [uvp3], blpair_groups=[_blpairs], time_avg=True
-            )
-            try:
-                ps_avg = uvp_avg.get_data((0, blpair, ("xx", "xx")))
-            except:
-                print(uvp_avg.polpair_array)
-                raise
-            ps_boot = uvp4[0].get_data((0, blpair, ("xx", "xx")))
-            np.testing.assert_array_almost_equal(ps_avg, ps_boot)
+        try:
+            ps_avg = uvp_avg.get_data((0, blpair, ("xx", "xx")))
+        except:
+            print(uvp_avg.polpair_array)
+            raise
+        ps_boot = uvp4[0].get_data((0, blpair, ("xx", "xx")))
+        np.testing.assert_array_almost_equal(ps_avg, ps_boot)
 
 
-def test_bootstrap_resampled_error():
+def test_bootstrap_resampled_error(tmp_path):
     # generate a UVPSpec
     visfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
@@ -504,11 +522,10 @@ def test_bootstrap_resampled_error():
 
     # Lots of this function is already tested by bootstrap_run
     # so only test the stuff not already tested
-    if os.path.exists("uvp.h5"):
-        os.remove("uvp.h5")
-    uvp.write_hdf5("uvp.h5", overwrite=True)
+    uvp_file = str(tmp_path / "uvp.h5")
+    uvp.write_hdf5(uvp_file, overwrite=True)
     ua, ub, uw = grouping.bootstrap_resampled_error(
-        "uvp.h5", blpair_groups=None, Nsamples=10, seed=0, verbose=False
+        uvp_file, blpair_groups=None, Nsamples=10, seed=0, verbose=False
     )
 
     # check number of boots
@@ -519,9 +536,6 @@ def test_bootstrap_resampled_error():
     assert uw[0][1][:5] == [2.0, 1.0, 1.0, 6.0, 1.0]
     assert uw[1][0][:5] == [2.0, 2.0, 1.0, 1.0, 2.0]
     assert uw[1][1][:5] == [1.0, 0.0, 1.0, 1.0, 4.0]
-
-    if os.path.exists("uvp.h5"):
-        os.remove("uvp.h5")
 
 
 def test_validate_bootstrap_errorbar():
@@ -666,18 +680,24 @@ def test_bootstrap_run(tmp_path):
     psc = container.PSpecContainer(outfile, mode="rw", keep_open=False, swmr=False)
 
     # test empty groups
-    pytest.raises(AssertionError, grouping.bootstrap_run, outfile)
+    with pytest.raises(AssertionError, match="No groups exist in PSpecContainer"):
+        grouping.bootstrap_run(str(outfile))
 
     # test bad filename
-    pytest.raises(AssertionError, grouping.bootstrap_run, 1)
+    with pytest.raises(
+        AssertionError, match="filename must be a PSpecContainer or filepath"
+    ):
+        grouping.bootstrap_run(1)
 
     # test fed spectra doesn't exist
     psc.set_pspec("grp1", "uvp", uvp)
-    pytest.raises(AssertionError, grouping.bootstrap_run, psc, spectra=["grp1/foo"])
+    with pytest.raises(AssertionError, match="no specified spectra exist in PSpecContainer"):
+        grouping.bootstrap_run(psc, spectra=["grp1/foo"])
 
     # test assertionerror if SWMR
-    psc = container.PSpecContainer("ex.h5", mode="rw", keep_open=False, swmr=True)
-    pytest.raises(AssertionError, grouping.bootstrap_run, psc, spectra=["grp1/foo"])
+    psc = container.PSpecContainer(tmp_path / "ex3.h5", mode="rw", keep_open=False, swmr=True)
+    with pytest.raises(AssertionError, match="should not be in SWMR mode"):
+        grouping.bootstrap_run(psc, spectra=["grp1/foo"])
 
 
 def test_get_bootstrap_run_argparser():
@@ -854,7 +874,8 @@ def test_spherical_average():
     assert np.isfinite(sph.cov_array_real[0]).all()
 
     # exceptions
-    pytest.raises(AssertionError, grouping.spherical_average, uvp, kbins, 1.0)
+    with pytest.raises(AssertionError, match="kbins must not overlap"):
+        grouping.spherical_average(uvp, kbins, 1.0)
 
     # user input kbins theory
     sph2 = grouping.spherical_average(uvp, kbins, bin_widths, kbins_theory=kbins[:4])
@@ -895,7 +916,7 @@ def test_spherical_average():
     )
 
 
-def test_spherical_wf_from_uvp():
+def test_spherical_wf_from_uvp(uvp_exact_wfs):
 
     # parameters
     dk = 0.25
@@ -904,32 +925,7 @@ def test_spherical_wf_from_uvp():
     kbin_edges_theory = np.arange(0.075, 2.9, dk / 2.0)
     Nk_in = kbin_edges_theory.size - 1
 
-    basename = "FT_beam_HERA_dipole_test"
-    # obtain uvp object
-    uvd = UVData()
-    uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
-    # Create a new PSpecData objec
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
-    # choose baselines
-    baselines1, baselines2, _ = utils.construct_blpairs(
-        uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
-    )
-    # compute ps
-    uvp = ds.pspec(
-        baselines1,
-        baselines2,
-        dsets=(0, 1),
-        pols=[("xx", "xx")],
-        spw_ranges=(175, 195),
-        taper="bh",
-        verbose=False,
-    )
-    uvp.cosmo = conversions.Cosmo_Conversions()  # uvp.set_cosmology not overwriting
-
-    # obtain exact_windows (fiducial usage)
-    uvp.get_exact_window_functions(
-        ftbeam=os.path.join(DATA_PATH, basename), inplace=True
-    )
+    uvp = copy.deepcopy(uvp_exact_wfs)
     wf_array = grouping.spherical_wf_from_uvp(
         uvp, kbin_edges=kbin_edges, little_h="h^-3" in uvp.norm_units
     )
@@ -953,14 +949,10 @@ def test_spherical_wf_from_uvp():
     wf_array = grouping.spherical_wf_from_uvp(
         uvp, kbin_edges, spw_array=0, little_h="h^-3" in uvp.norm_units
     )
-    pytest.raises(
-        AssertionError,
-        grouping.spherical_wf_from_uvp,
-        uvp,
-        kbin_edges,
-        spw_array=2,
-        little_h="h^-3" in uvp.norm_units,
-    )
+    with pytest.raises(AssertionError, match="input spw is not in UVPSpec.spw_array"):
+        grouping.spherical_wf_from_uvp(
+            uvp, kbin_edges, spw_array=2, little_h="h^-3" in uvp.norm_units
+        )
     # blpair_groups
     blpair_groups, blpair_lens, _ = uvp.get_red_blpairs()
     wf_array = grouping.spherical_wf_from_uvp(
@@ -970,14 +962,13 @@ def test_spherical_wf_from_uvp():
         blpair_lens=blpair_lens,
         little_h="h^-3" in uvp.norm_units,
     )
-    pytest.raises(
-        TypeError,
-        grouping.spherical_wf_from_uvp,
-        uvp,
-        kbin_edges=kbin_edges,
-        blpair_groups=blpair_groups[0],
-        little_h="h^-3" in uvp.norm_units,
-    )
+    with pytest.raises(TypeError, match="blpair_groups must be a sequence"):
+        grouping.spherical_wf_from_uvp(
+            uvp,
+            kbin_edges=kbin_edges,
+            blpair_groups=blpair_groups[0],
+            little_h="h^-3" in uvp.norm_units,
+        )
 
     # raise warning or error if blpair_groups inconsistent with blpair_lens
     with pytest.warns(UserWarning, match="blpair_lens given but blpair_groups is None"):
@@ -995,23 +986,22 @@ def test_spherical_wf_from_uvp():
         blpair_lens=None,
         little_h="h^-3" in uvp.norm_units,
     )
-    pytest.raises(
-        AssertionError,
-        grouping.spherical_wf_from_uvp,
-        uvp,
-        kbin_edges,
-        blpair_groups=blpair_groups,
-        blpair_lens=[blpair_lens[0], blpair_lens[0]],
-        little_h="h^-3" in uvp.norm_units,
-    )
+    with pytest.raises(
+        AssertionError, match="Baseline-pair groups are inconsistent with baseline lengths"
+    ):
+        grouping.spherical_wf_from_uvp(
+            uvp,
+            kbin_edges,
+            blpair_groups=blpair_groups,
+            blpair_lens=[blpair_lens[0], blpair_lens[0]],
+            little_h="h^-3" in uvp.norm_units,
+        )
     # error if overlapping bins
     with pytest.warns(UserWarning, match="Changed little_h units"):
-        pytest.raises(
-            AssertionError,
-            grouping.spherical_wf_from_uvp,
-            uvp,
-            kbin_edges=np.array([1.0, 2.0, 1.5]),
-        )
+        with pytest.raises(AssertionError, match="kbins must not overlap"):
+            grouping.spherical_wf_from_uvp(
+                uvp, kbin_edges=np.array([1.0, 2.0, 1.5])
+            )
     # # blpair_weights
     wf_array = grouping.spherical_wf_from_uvp(
         uvp,
@@ -1024,171 +1014,172 @@ def test_spherical_wf_from_uvp():
 
     # raise error if uvp.exact_windows is False
     uvp.exact_windows = False
-    pytest.raises(
-        AssertionError,
-        grouping.spherical_wf_from_uvp,
-        uvp,
-        kbin_edges,
-        little_h="h^-3" in uvp.norm_units,
+    with pytest.raises(AssertionError, match="Need to compute exact window functions first"):
+        grouping.spherical_wf_from_uvp(
+            uvp, kbin_edges, little_h="h^-3" in uvp.norm_units
+        )
+
+
+def test_get_delay_slices_errors():
+    with pytest.raises(ValueError, match="nzero must be odd!"):
+        grouping._get_delay_slices(
+            dly=np.linspace(0, 1, 10),
+            kernel=np.array([1, 1, 1]),
+            zero_kernel=np.array([1, 0, 1, 0]),
+        )
+
+
+def test_exceptions(vanilla_uvp_with_beam):
+    """Test that proper exceptions are raised for bad inputs."""
+    with pytest.raises(ValueError, match="The kernel must be 1D"):
+        grouping.average_in_delay_bins(
+            vanilla_uvp_with_beam, kernel=np.array([[1, 1, 1]])
+        )
+
+    with pytest.raises(
+        ValueError, match="The kernel size must be smaller than half"
+    ):
+        grouping.average_in_delay_bins(
+            vanilla_uvp_with_beam, kernel=np.zeros(vanilla_uvp_with_beam.Ndlys)
+        )
+
+    with pytest.raises(ValueError, match="The zero bin kernel must be symmetric"):
+        grouping.average_in_delay_bins(
+            vanilla_uvp_with_beam,
+            kernel=np.array([1, 1]),
+            zero_bin_kernel=np.array([1, 0, 1, 0]),
+        )
+
+
+def test_happy_path(vanilla_uvp_with_beam):
+    new = grouping.average_in_delay_bins(
+        vanilla_uvp_with_beam, kernel=np.array([1, 1, 1])
+    )
+    assert len(new.get_dlys(0)) - 1 == (len(vanilla_uvp_with_beam.get_dlys(0)) - 1) // 3
+
+
+def test_propagation(vanilla_uvp_with_beam, delay_bins_exact_wf_uvp):
+    """
+    Check if the delay average is properly propagated to UVPSpec properties.
+    """
+    new = grouping.average_in_delay_bins(
+        vanilla_uvp_with_beam, kernel=np.array([1, 1, 1])
+    )
+
+    # window functions propagation
+    assert np.allclose(
+        np.mean(vanilla_uvp_with_beam.window_function_array[0][:, 1:4], axis=1),
+        new.window_function_array[0][:, 0, :, :],
+    )
+
+    # folding
+    ispw = 0
+    folded_uvp = copy.deepcopy(vanilla_uvp_with_beam)
+    grouping.fold_spectra(folded_uvp)
+    Ndlys = vanilla_uvp_with_beam.data_array[ispw].shape[1]
+    assert not folded_uvp.window_function_array[ispw][:, : Ndlys // 2].any(), (
+        "Window functions wrongly propagated by grouping.fold_spectra"
+    )
+
+    # time and redundant-average
+    averaged_uvp = grouping.average_spectra(
+        vanilla_uvp_with_beam, time_avg=True, inplace=False
+    )
+    averaged_new = grouping.average_spectra(new, time_avg=True, inplace=False)
+    assert np.allclose(
+        np.mean(averaged_uvp.window_function_array[0][:, 1:4], axis=1),
+        averaged_new.window_function_array[0][:, 0, :, :],
+    ), "Window functions wrongly propagated by grouping.average_spectra"
+
+    # spherical average
+    dk = 0.08959223 * 3.0
+    kbin_left = np.arange(dk / 3 / 2, 2.3, dk)
+    kbin_right = kbin_left + dk
+    kbins = (kbin_left + kbin_right) / 2.0
+    sph_uvp = grouping.spherical_average(
+        vanilla_uvp_with_beam, kbins, dk, time_avg=True
+    )
+    sph_new = grouping.spherical_average(new, kbins, dk, time_avg=True)
+    assert np.allclose(
+        sph_uvp.window_function_array[0][0, :, :-1, 0],
+        # given the bin edges, the final bin is empty in the delay averaged spectrum
+        sph_new.window_function_array[0][0, :, :-1, 0],
+    ), "Window functions wrongly propagated by grouping.spherical_average"
+    # if theory kbins are given by the user
+    sph_uvp2 = grouping.spherical_average(
+        vanilla_uvp_with_beam, kbins, bin_widths=dk, kbins_theory=kbins[::2], time_avg=True
+    )
+    sph_new2 = grouping.spherical_average(
+        new, kbins, bin_widths=dk, kbins_theory=kbins[::2], time_avg=True
+    )
+    # window functions propagation
+    assert np.allclose(
+        sph_uvp2.window_function_array[0][0, :, :-1, 0],
+        # given the bin edges, the final bin is empty in the delay averaged spectrum
+        sph_new2.window_function_array[0][0, :, :-1, 0],
+    ), "Window functions wrongly propagated by grouping.spherical_average"
+
+    # tests with exact window functions
+    new2 = grouping.average_in_delay_bins(
+        delay_bins_exact_wf_uvp, kernel=np.array([1, 1, 1])
+    )
+    # delay array propagation
+    assert np.isclose(new2.dly_array[0], np.mean(delay_bins_exact_wf_uvp.dly_array[1:4]))
+    # window functions propagation
+    assert np.allclose(
+        np.mean(delay_bins_exact_wf_uvp.window_function_array[0][:, 1:4], axis=1),
+        new2.window_function_array[0][:, 0, ...],
+    ), (
+        "Window functions wrongly propagated by "
+        "grouping.average_in_delay_bins with exact window functions"
     )
 
 
-class TestAverageDelayBins:
-    """Tests of the average_in_delay_bins function."""
+@pytest.mark.parametrize("with_cov", [True, False])
+@pytest.mark.parametrize("cov_weighted_stats", [(), ("P_N",)])
+def test_pn_weighting(
+    vanilla_uvp_with_beam, delay_bins_uvp_nocov, with_cov: bool, cov_weighted_stats
+):
+    if with_cov:
+        uvp = copy.deepcopy(vanilla_uvp_with_beam)
+    else:
+        uvp = copy.deepcopy(delay_bins_uvp_nocov)
 
-    def setup_class(self):
-        beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-        self.beam = pspecbeam.PSpecBeamUV(beamfile)
-        uvp, _ = testing.build_vanilla_uvpspec(
-            beam=self.beam, Ndlys=None
-        )  # None means take Nfreqs
-        self.uvp = uvp
+    uvp.stats_array = {
+        "P_N": {spw: np.ones_like(uvp.data_array[spw]) for spw in uvp.spw_array}
+    }
 
-        self.uvp_nocov = copy.deepcopy(self.uvp)
-        del self.uvp_nocov.cov_array_real
-        del self.uvp_nocov.cov_array_imag
+    new = grouping.average_in_delay_bins(
+        uvp,
+        kernel=np.array([1, 1, 1]),
+        zero_bin_kernel=np.array([1, 1, 1]),
+        cov_weighted_stats=cov_weighted_stats,
+    )
+    assert new.stats_array["P_N"][0].shape == new.data_array[0].shape
+    np.testing.assert_allclose(
+        new.stats_array["P_N"][0],
+        1 / np.sqrt(3) if (with_cov and cov_weighted_stats) else 1,
+    )
 
-        self.uvp2 = copy.deepcopy(self.uvp)
-        gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=self.uvp2.freq_array, widths=8.0, pol=1
-        )
-        del self.uvp2.window_function_array
-        self.uvp2.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
 
-    def test_get_delay_slices_errors(self):
-        with pytest.raises(ValueError, match="nzero must be odd!"):
-            grouping._get_delay_slices(
-                dly=np.linspace(0, 1, 10),
-                kernel=np.array([1, 1, 1]),
-                zero_kernel=np.array([1, 0, 1, 0]),
-            )
+def test_without_cov_array(delay_bins_uvp_nocov):
+    """Test that the function works without cov_array."""
+    new = grouping.average_in_delay_bins(
+        delay_bins_uvp_nocov, kernel=np.array([1, 1, 1])
+    )
 
-    def test_exceptions(self):
-        """Test that proper exceptions are raised for bad inputs."""
-        with pytest.raises(ValueError, match="The kernel must be 1D"):
-            grouping.average_in_delay_bins(self.uvp, kernel=np.array([[1, 1, 1]]))
+    assert len(new.get_dlys(0)) - 1 == (len(delay_bins_uvp_nocov.get_dlys(0)) - 1) // 3
 
-        with pytest.raises(
-            ValueError, match="The kernel size must be smaller than half"
-        ):
-            grouping.average_in_delay_bins(self.uvp, kernel=np.zeros(self.uvp.Ndlys))
+    # Check that the stats_array is empty
+    assert new.stats_array == {}
 
-        with pytest.raises(ValueError, match="The zero bin kernel must be symmetric"):
-            grouping.average_in_delay_bins(
-                self.uvp,
-                kernel=np.array([1, 1]),
-                zero_bin_kernel=np.array([1, 0, 1, 0]),
-            )
 
-    def test_happy_path(self):
-        new = grouping.average_in_delay_bins(self.uvp, kernel=np.array([1, 1, 1]))
+def test_exact_window_functions(delay_bins_exact_wf_uvp):
+    new = grouping.average_in_delay_bins(
+        delay_bins_exact_wf_uvp, kernel=np.array([0, 1, 1, 0])
+    )
+    oldshape = delay_bins_exact_wf_uvp.window_function_array[0].shape
+    newshape = list(oldshape)
+    newshape[1] = len(new.get_dlys(0))
 
-        assert len(new.get_dlys(0)) - 1 == (len(self.uvp.get_dlys(0)) - 1) // 3
-
-    def test_propagation(self):
-        """
-        Check if the delay average is properly propagated to UVPSpec properties.
-        """
-        new = grouping.average_in_delay_bins(self.uvp, kernel=np.array([1, 1, 1]))
-
-        # window functions propagation
-        assert np.allclose(
-            np.mean(self.uvp.window_function_array[0][:, 1:4], axis=1),
-            new.window_function_array[0][:, 0, :, :],
-        )
-
-        # folding
-        ispw = 0
-        folded_uvp = copy.deepcopy(self.uvp)
-        grouping.fold_spectra(folded_uvp)
-        Ndlys = self.uvp.data_array[ispw].shape[1]
-        assert not folded_uvp.window_function_array[ispw][:, : Ndlys // 2].any(), (
-            "Window functions wrongly propagated by grouping.fold_spectra"
-        )
-
-        # time and redundant-average
-        averaged_uvp = grouping.average_spectra(self.uvp, time_avg=True, inplace=False)
-        averaged_new = grouping.average_spectra(new, time_avg=True, inplace=False)
-        assert np.allclose(
-            np.mean(averaged_uvp.window_function_array[0][:, 1:4], axis=1),
-            averaged_new.window_function_array[0][:, 0, :, :],
-        ), "Window functions wrongly propagated by grouping.average_spectra"
-
-        # spherical average
-        dk = 0.08959223 * 3.0
-        kbin_left = np.arange(dk / 3 / 2, 2.3, dk)
-        kbin_right = kbin_left + dk
-        kbins = (kbin_left + kbin_right) / 2.0
-        sph_uvp = grouping.spherical_average(self.uvp, kbins, dk, time_avg=True)
-        sph_new = grouping.spherical_average(new, kbins, dk, time_avg=True)
-        assert np.allclose(
-            sph_uvp.window_function_array[0][0, :, :-1, 0],
-            # given the bin edges, the final bin is empty in the delay averaged spectrum
-            sph_new.window_function_array[0][0, :, :-1, 0],
-        ), "Window functions wrongly propagated by grouping.spherical_average"
-        # if theory kbins are given by the user
-        sph_uvp2 = grouping.spherical_average(
-            self.uvp, kbins, bin_widths=dk, kbins_theory=kbins[::2], time_avg=True
-        )
-        sph_new2 = grouping.spherical_average(
-            new, kbins, bin_widths=dk, kbins_theory=kbins[::2], time_avg=True
-        )
-        # window functions propagation
-        assert np.allclose(
-            sph_uvp2.window_function_array[0][0, :, :-1, 0],
-            # given the bin edges, the final bin is empty in the delay averaged spectrum
-            sph_new2.window_function_array[0][0, :, :-1, 0],
-        ), "Window functions wrongly propagated by grouping.spherical_average"
-
-        # tests with exact window functions
-        new2 = grouping.average_in_delay_bins(self.uvp2, kernel=np.array([1, 1, 1]))
-        # delay array propagation
-        assert np.isclose(new2.dly_array[0], np.mean(self.uvp2.dly_array[1:4]))
-        # window functions propagation
-        assert np.allclose(
-            np.mean(self.uvp2.window_function_array[0][:, 1:4], axis=1),
-            new2.window_function_array[0][:, 0, ...],
-        ), (
-            "Window functions wrongly propagated by grouping.average_in_delay_bins with exact window functions"
-        )
-
-    @pytest.mark.parametrize("with_cov", [True, False])
-    @pytest.mark.parametrize("cov_weighted_stats", [(), ("P_N",)])
-    def test_pn_weighting(self, with_cov: bool, cov_weighted_stats):
-        if with_cov:
-            uvp = copy.deepcopy(self.uvp)
-        else:
-            uvp = copy.deepcopy(self.uvp_nocov)
-
-        uvp.stats_array = {
-            "P_N": {spw: np.ones_like(uvp.data_array[spw]) for spw in uvp.spw_array}
-        }
-
-        new = grouping.average_in_delay_bins(
-            uvp,
-            kernel=np.array([1, 1, 1]),
-            zero_bin_kernel=np.array([1, 1, 1]),
-            cov_weighted_stats=cov_weighted_stats,
-        )
-        assert new.stats_array["P_N"][0].shape == new.data_array[0].shape
-        np.testing.assert_allclose(
-            new.stats_array["P_N"][0],
-            1 / np.sqrt(3) if (with_cov and cov_weighted_stats) else 1,
-        )
-
-    def test_without_cov_array(self):
-        """Test that the function works without cov_array."""
-        new = grouping.average_in_delay_bins(self.uvp_nocov, kernel=np.array([1, 1, 1]))
-
-        assert len(new.get_dlys(0)) - 1 == (len(self.uvp_nocov.get_dlys(0)) - 1) // 3
-
-        # Check that the stats_array is empty
-        assert new.stats_array == {}
-
-    def test_exact_window_functions(self):
-        new = grouping.average_in_delay_bins(self.uvp2, kernel=np.array([0, 1, 1, 0]))
-        oldshape = self.uvp2.window_function_array[0].shape
-        newshape = list(oldshape)
-        newshape[1] = len(new.get_dlys(0))
-
-        assert new.window_function_array[0].shape == tuple(newshape)
+    assert new.window_function_array[0].shape == tuple(newshape)
