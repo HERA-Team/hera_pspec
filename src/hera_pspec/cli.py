@@ -311,3 +311,29 @@ register_argparse_command(
     runner=_run_auto_noise,
     help_text="Compute noise error bars from autocorrelations (was auto_noise_run.py).",
 )
+
+
+def _run_generate_pstokes(args) -> None:
+    uvd = UVData()
+    uvd.read(args.inputdata)
+    outputdata = args.outputdata if args.outputdata is not None else args.inputdata
+    if args.keep_vispols:
+        # append new pstokes onto a copy of the existing data
+        uvd_output = copy.deepcopy(uvd)
+    else:
+        # output does not contain the original polarizations
+        uvd_output = pstokes.construct_pstokes(uvd, uvd, args.pstokes[0])
+    for p in args.pstokes:
+        if pyuvdata.utils.polstr2num(p) not in uvd_output.polarization_array:
+            uvd_output += pstokes.construct_pstokes(uvd, uvd, pstokes=p)
+    uvd_output.write_uvh5(outputdata, clobber=args.clobber)
+
+
+register_argparse_command(
+    app,
+    name="generate-pstokes",
+    parser_factory=pstokes.generate_pstokes_argparser,
+    runner=_run_generate_pstokes,
+    with_profiling=False,
+    help_text="Generate pseudo-Stokes visibilities (was generate_pstokes_run.py).",
+)
