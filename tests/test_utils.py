@@ -148,7 +148,8 @@ def test_spw_range_from_freqs(uvd, vanilla_uvp):
         with pytest.raises(ValueError, match="Upper bound of spectral window is above"):
             utils.spw_range_from_freqs(obj, freq_range=(190e6, 202e6))  # upper bound
         with pytest.raises(
-            ValueError, match="Upper bound of spectral window is less than the lower bound"
+            ValueError,
+            match="Upper bound of spectral window is less than the lower bound",
         ):
             utils.spw_range_from_freqs(obj, freq_range=(190e6, 180e6))  # wrong order
 
@@ -189,9 +190,12 @@ def test_spw_range_from_redshifts(uvd, vanilla_uvp):
         with pytest.raises(ValueError, match="Upper bound of spectral window is above"):
             utils.spw_range_from_redshifts(obj, z_range=(5.0, 8.0))  # upper freq bound
         with pytest.raises(ValueError, match="Lower bound of spectral window is below"):
-            utils.spw_range_from_redshifts(obj, z_range=(10.0, 20.0))  # lower freq bound
+            utils.spw_range_from_redshifts(
+                obj, z_range=(10.0, 20.0)
+            )  # lower freq bound
         with pytest.raises(
-            ValueError, match="Upper bound of spectral window is less than the lower bound"
+            ValueError,
+            match="Upper bound of spectral window is less than the lower bound",
         ):
             utils.spw_range_from_redshifts(obj, z_range=(11.0, 10.0))  # wrong order
 
@@ -311,10 +315,10 @@ def test_calc_blpair_reds():
         AssertionError, match="antenna positions from uvd1 and uvd2 do not agree"
     ):
         utils.calc_blpair_reds(uvd, uvd2)
-    with pytest.raises(AssertionError, match="Can't exclude both auto and cross blpairs"):
-        utils.calc_blpair_reds(
-            uvd, uvd, exclude_auto_bls=True, exclude_cross_bls=True
-        )
+    with pytest.raises(
+        AssertionError, match="Can't exclude both auto and cross blpairs"
+    ):
+        utils.calc_blpair_reds(uvd, uvd, exclude_auto_bls=True, exclude_cross_bls=True)
 
 
 def test_calc_blpair_reds_autos_only():
@@ -354,10 +358,7 @@ def test_get_reds():
     xants = [0, 1, 2]
     r, l, a = utils.get_reds(fname, xants=xants)
     assert np.all(
-        [
-            np.all([bl[0] not in xants and bl[1] not in xants for bl in _r])
-            for _r in r
-        ]
+        [np.all([bl[0] not in xants and bl[1] not in xants for bl in _r]) for _r in r]
     )
     assert len(r) == len(a) == len(l)
     assert len(r) == 104
@@ -371,9 +372,7 @@ def test_get_reds():
     # restrict
     bl_len_range = (14, 16)
     bl_deg_range = (55, 65)
-    r, l, a = utils.get_reds(
-        uvd, bl_len_range=bl_len_range, bl_deg_range=bl_deg_range
-    )
+    r, l, a = utils.get_reds(uvd, bl_len_range=bl_len_range, bl_deg_range=bl_deg_range)
     assert np.all([_l > bl_len_range[0] and _l < bl_len_range[1] for _l in l])
     assert np.all([_a > bl_deg_range[0] and _a < bl_deg_range[1] for _a in a])
 
@@ -456,10 +455,7 @@ def test_config_pspec_blpairs():
     # test exceptions
     with pytest.raises(AssertionError, match="must equal len"):
         utils.config_pspec_blpairs(
-            uv_template,
-            [("xx", "xx"), ("xx", "xx")],
-            [("even", "odd")],
-            verbose=False,
+            uv_template, [("xx", "xx"), ("xx", "xx")], [("even", "odd")], verbose=False
         )
 
 
@@ -479,10 +475,14 @@ def test_uvd_to_Tsys(uvd, beam_nf_dipole, vanilla_uvp):
 
     # CHECK ERROR CALLS
     # uvp called for beam has no beam information
-    with pytest.raises(ValueError, match="UVPSpec must have OmegaP and OmegaPP to make a beam"):
+    with pytest.raises(
+        ValueError, match="UVPSpec must have OmegaP and OmegaPP to make a beam"
+    ):
         utils.uvd_to_Tsys(uvd, vanilla_uvp)
     # beam has wrong format
-    with pytest.raises(ValueError, match="beam must be a string, PSpecBeamBase subclass"):
+    with pytest.raises(
+        ValueError, match="beam must be a string, PSpecBeamBase subclass"
+    ):
         utils.uvd_to_Tsys(uvd, 12.0)
 
 
