@@ -28,13 +28,7 @@ from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
 def register_argparse_command(
-    app,
-    *,
-    name,
-    parser_factory,
-    runner,
-    with_profiling=True,
-    help_text=None,
+    app, *, name, parser_factory, runner, with_profiling=True, help_text=None
 ):
     """Register an existing argparse parser as a ``pspec`` subcommand.
 
