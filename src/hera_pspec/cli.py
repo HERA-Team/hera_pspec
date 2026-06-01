@@ -1,7 +1,9 @@
 """A CLI interface for hera_pspec."""
 
+import copy
 import glob
 import pickle
+import sys
 from pathlib import Path
 
 import h5py
@@ -13,8 +15,77 @@ cns = Console()
 
 app = typer.Typer()
 # typer pattern: register subcommands after app is constructed
-from . import container  # noqa: E402
+import pyuvdata  # noqa: E402
+from hera_cal._cli_tools import (  # noqa: E402
+    filter_kwargs,
+    parse_args,
+    run_with_profiling,
+)
+from pyuvdata import UVData  # noqa: E402
+
+from . import container, grouping, pspecdata, pstokes, utils  # noqa: E402
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
+
+
+def register_argparse_command(
+    app,
+    *,
+    name,
+    parser_factory,
+    runner,
+    with_profiling=True,
+    help_text=None,
+):
+    """Register an existing argparse parser as a ``pspec`` subcommand.
+
+    The ``get_*_argparser`` factories remain the single source of truth for the
+    command-line flags. This bridge forwards every CLI token to the parser, so there is
+    no flag duplication. When ``with_profiling`` is True, the profiling/logging argument
+    groups from ``hera_cal._cli_tools`` are added to the parser; the supplied ``runner``
+    is then responsible for calling ``run_with_profiling`` itself (matching the historical
+    script pattern).
+
+    Parameters
+    ----------
+    app
+        The :class:`typer.Typer` application to register the command on.
+    name
+        The subcommand name (e.g. ``"run"`` → ``pspec run``).
+    parser_factory
+        Zero-argument callable returning a fresh :class:`argparse.ArgumentParser`.
+    runner
+        Callable taking the parsed :class:`argparse.Namespace` and executing the command.
+    with_profiling
+        If True, add and honor the ``--profile``/logging arguments via ``_cli_tools``.
+    help_text
+        Short help string shown in ``pspec --help``.
+    """
+
+    @app.command(
+        name=name,
+        help=help_text,
+        context_settings={
+            "allow_extra_args": True,
+            "ignore_unknown_options": True,
+            "help_option_names": [],
+        },
+    )
+    def _command(ctx: typer.Context) -> None:
+        parser = parser_factory()
+        # NOTE: sys.argv mutation below is not thread-safe; fine for single-process CLI use.
+        original_argv = sys.argv
+        try:
+            # argparse (and _cli_tools.parse_args) read sys.argv; point it at the
+            # tokens Typer did not consume so the existing parser sees exactly the
+            # user-supplied arguments.
+            sys.argv = [name, *ctx.args]
+            if with_profiling:
+                args = parse_args(parser)
+            else:
+                args = parser.parse_args(ctx.args)
+        finally:
+            sys.argv = original_argv
+        runner(args)
 
 
 @app.command()

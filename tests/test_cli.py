@@ -1,13 +1,23 @@
+"""Tests for the hera_pspec `pspec` CLI (scripts → cli migration, #467)."""
+
+import argparse
+import os
 import pickle
+import subprocess
+import sys
 from pathlib import Path
 
 import h5py
 import pytest
+import typer
 from typer.testing import CliRunner
 
-from hera_pspec import cli, testing
+from hera_pspec import cli, container, testing
 from hera_pspec.container import PSpecContainer
+from hera_pspec.data import DATA_PATH
 from hera_pspec.uvpspec import UVPSpec
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(scope="module")
@@ -181,3 +191,61 @@ def test_dummy_command():
 
     result = runner.invoke(cli.app, args=["hello"])
     assert "Hi" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Adapter tests (Task 1 — register_argparse_command)
+# ---------------------------------------------------------------------------
+
+runner = CliRunner()
+
+
+def _toy_app(with_profiling):
+    """Build a 2-command Typer app exposing one adapter-registered `toy` command.
+
+    A second no-op command is required because Typer only treats commands as named
+    subcommands when at least two are registered.
+    """
+    app = typer.Typer()
+
+    @app.command()
+    def _noop():  # pragma: no cover - exists only to force subcommand mode
+        pass
+
+    captured = {}
+
+    def factory():
+        p = argparse.ArgumentParser()
+        p.add_argument("x")
+        p.add_argument("--y", default="dy")
+        return p
+
+    def run(args):
+        captured["x"] = args.x
+        captured["y"] = args.y
+        captured["has_profile"] = hasattr(args, "profile")
+
+    cli.register_argparse_command(
+        app,
+        name="toy",
+        parser_factory=factory,
+        runner=run,
+        with_profiling=with_profiling,
+    )
+    return app, captured
+
+
+def test_adapter_forwards_args_without_profiling():
+    app, captured = _toy_app(with_profiling=False)
+    result = runner.invoke(app, ["toy", "hello", "--y", "bye"])
+    assert result.exit_code == 0, result.output
+    assert captured == {"x": "hello", "y": "bye", "has_profile": False}
+
+
+def test_adapter_adds_profiling_args():
+    app, captured = _toy_app(with_profiling=True)
+    result = runner.invoke(app, ["toy", "hello"])
+    assert result.exit_code == 0, result.output
+    assert captured["x"] == "hello"
+    assert captured["y"] == "dy"
+    assert captured["has_profile"] is True
