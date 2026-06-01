@@ -257,8 +257,7 @@ def test_stats_array(vanilla_uvp_with_beam: uvpspec.UVPSpec, tmp_path: Path):
     )
     assert np.all(
         np.isclose(
-            u.get_stats("errors", keys[0])[0],
-            np.ones(u.Ndlys) / np.sqrt(len(blpairs)),
+            u.get_stats("errors", keys[0])[0], np.ones(u.Ndlys) / np.sqrt(len(blpairs))
         )
     )
     for key in keys:
@@ -275,10 +274,7 @@ def test_stats_array(vanilla_uvp_with_beam: uvpspec.UVPSpec, tmp_path: Path):
     u3 = uvp.average_spectra([blpairs], time_avg=True, inplace=False)
     with pytest.raises(KeyError, match="not found in stats_array keys"):
         uvp.average_spectra(
-            [blpairs],
-            time_avg=True,
-            inplace=False,
-            error_field=["..............."],
+            [blpairs], time_avg=True, inplace=False, error_field=["..............."]
         )
     assert not hasattr(u3, "stats_array")
 
@@ -299,9 +295,7 @@ def test_stats_array(vanilla_uvp_with_beam: uvpspec.UVPSpec, tmp_path: Path):
         ],
         axis=0,
     ) ** (-0.5)
-    np.testing.assert_array_almost_equal(
-        uvp.get_stats("test", keys[0]), folded_errs
-    )
+    np.testing.assert_array_almost_equal(uvp.get_stats("test", keys[0]), folded_errs)
 
     # test set_stats_slice
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
@@ -380,15 +374,11 @@ def test_indices_funcs(uvp: uvpspec.UVPSpec):
     spw, blpairts, pol = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
     assert spw == 0
     assert pol == 0
-    assert np.isclose(
-        blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
-    ).min()
+    assert np.isclose(blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])).min()
     spw, blpairts, pol = uvp.key_to_indices((0, 101102101102, ("xx", "xx")))
     assert spw == 0
     assert pol == 0
-    assert np.isclose(
-        blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
-    ).min()
+    assert np.isclose(blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])).min()
 
     # Check different polpair specification methods give the same results
     s1, b1, p1 = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
@@ -561,7 +551,9 @@ def test_check(uvp: uvpspec.UVPSpec):
 
     uvp.Ntimes = nt
     uvp.data_array = list(uvp.data_array.values())[0]
-    with pytest.raises(AssertionError, match="attribute data_array needs to be a dictionary"):
+    with pytest.raises(
+        AssertionError, match="attribute data_array needs to be a dictionary"
+    ):
         uvp.check()
 
 
@@ -621,11 +613,7 @@ def test_write_read_hdf5(uvp: uvpspec.UVPSpec, tmp_path: Path):
     # test partial I/O
     uvp.read_hdf5(out, blpairs=uvp.blpair_array[:1])
     assert uvp.Nblpairs == 1
-    assert uvp.data_array[0].shape == (
-        uvp.Nbltpairs,
-        uvp.get_dlys(0).size,
-        uvp.Npols,
-    )
+    assert uvp.data_array[0].shape == (uvp.Nbltpairs, uvp.get_dlys(0).size, uvp.Npols)
 
 
 def test_sense(vanilla_uvp_with_beam):
@@ -646,9 +634,7 @@ def test_sense(vanilla_uvp_with_beam):
     assert (P_N[101102101102] < P_N2[101102101102]).all()
 
     # test Dsq
-    Dsq = uvp.generate_noise_spectra(
-        0, polpair, 500, form="DelSq", component="real"
-    )
+    Dsq = uvp.generate_noise_spectra(0, polpair, 500, form="DelSq", component="real")
     assert Dsq[101102101102].shape == (uvp.Ntimes, Ndlys)
     assert Dsq[101102101102][0, 1] < P_N[101102101102][0, 1]
 
@@ -701,10 +687,7 @@ def test_average_spectra(uvp: uvpspec.UVPSpec):
         blpair_groups=blpairs, time_avg=False, blpair_weights=None, inplace=False
     )
     uvp3b = uvp.average_spectra(
-        blpair_groups=blpairs,
-        time_avg=False,
-        blpair_weights=blpair_wgts,
-        inplace=False,
+        blpair_groups=blpairs, time_avg=False, blpair_weights=blpair_wgts, inplace=False
     )
     assert np.isclose(
         uvp3a.get_data((0, 101102101102, ("xx", "xx"))),
@@ -714,9 +697,7 @@ def test_average_spectra(uvp: uvpspec.UVPSpec):
     # test time averaging
     uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
     assert uvp2.Ntimes == 1
-    assert np.isclose(
-        uvp2.get_nsamples((0, 101102101102, ("xx", "xx"))), 10.0
-    ).all()
+    assert np.isclose(uvp2.get_nsamples((0, 101102101102, ("xx", "xx"))), 10.0).all()
     assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (1, Ndlys)
     # ensure averaging works when multiple repeated baselines are present, but only
     # if time_avg = True
@@ -781,32 +762,16 @@ def test_get_exact_window_functions(uvp_example_data: uvpspec.UVPSpec):
         UserWarning, match="Exact window functions already computed, overwriting"
     ):
         with pytest.raises(ValueError, match="input spw is not in UVPSpec.spw_array"):
-            uvp.get_exact_window_functions(
-                ftbeam=ft_file,
-                spw_array=2,
-                inplace=True,
-            )
+            uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=2, inplace=True)
     with pytest.raises(TypeError, match="ftbeam must be a path-like object"):
         uvp.get_exact_window_functions(ftbeam=3.14, inplace=False)
     uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=[0], inplace=False)
     with pytest.raises(TypeError, match="spw_array must be an integer or a sequence"):
-        uvp.get_exact_window_functions(
-            ftbeam=ft_file,
-            spw_array=["bad"],
-            inplace=False,
-        )
+        uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=["bad"], inplace=False)
     with pytest.raises(TypeError, match="spw_array must be an integer or a sequence"):
-        uvp.get_exact_window_functions(
-            ftbeam=ft_file,
-            spw_array=3.14,
-            inplace=False,
-        )
+        uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=3.14, inplace=False)
     with pytest.raises(TypeError, match="x_orientation must be a string or None"):
-        uvp.get_exact_window_functions(
-            ftbeam=ft_file,
-            x_orientation=1,
-            inplace=False,
-        )
+        uvp.get_exact_window_functions(ftbeam=ft_file, x_orientation=1, inplace=False)
 
     uvp_multi = copy.deepcopy(uvp_example_data)
     uvp_multi.spw_array = np.array([0, 1])
@@ -815,9 +780,7 @@ def test_get_exact_window_functions(uvp_example_data: uvpspec.UVPSpec):
         UserWarning,
         match="inplace set to False because you are not considering all spectral windows in object.",
     ):
-        uvp_multi.get_exact_window_functions(
-            ftbeam=ft_file, spw_array=0, inplace=True
-        )
+        uvp_multi.get_exact_window_functions(ftbeam=ft_file, spw_array=0, inplace=True)
 
     # give Gaussian beam as input
     widths = -0.0343 * uvp.freq_array / 1e6 + 11.30
@@ -911,15 +874,12 @@ def test_compute_scalar(
 
     # test no beam (vanilla_uvp has cosmo but no OmegaP/OmegaPP/beam_freqs)
     with pytest.raises(
-        AssertionError,
-        match="self.OmegaP, self.OmegaPP and self.beam_freqs must exist",
+        AssertionError, match="self.OmegaP, self.OmegaPP and self.beam_freqs must exist"
     ):
         vanilla_uvp.compute_scalar(0, -5)
 
 
-def test_set_cosmology(
-    vanilla_uvp_with_beam: uvpspec.UVPSpec, beam_nf_dipole
-):
+def test_set_cosmology(vanilla_uvp_with_beam: uvpspec.UVPSpec, beam_nf_dipole):
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
     new_cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
 
@@ -1018,7 +978,9 @@ def test_combine_uvpspec(tmp_path: Path):
     assert np.allclose(combined_new.data_array[0], new.data_array[0]), (
         "There was an issue combining two delay-averaged UVPSpec objects."
     )
-    with pytest.raises(AssertionError, match="non-overlapping across multiple data axes"):
+    with pytest.raises(
+        AssertionError, match="non-overlapping across multiple data axes"
+    ):
         uvpspec.combine_uvpspec([uvp1, new2])
 
     # optionals
@@ -1052,9 +1014,7 @@ def test_combine_uvpspec(tmp_path: Path):
         uvd, bls, beam=beam, spw_ranges=[(20, 30), (60, 90)], n_dlys=[5, 15]
     )
     print(
-        "test",
-        uvp4.window_function_array[0].shape,
-        uvp4.window_function_array[1].shape,
+        "test", uvp4.window_function_array[0].shape, uvp4.window_function_array[1].shape
     )
     uvp4b = copy.deepcopy(uvp4)
     uvp4b.polpair_array[0] = 1414
@@ -1072,9 +1032,7 @@ def test_combine_uvpspec(tmp_path: Path):
     assert "batwing" in out.history and "foobar" in out.history
 
     # w/o merge
-    out = uvpspec.combine_uvpspec(
-        [uvp_a, uvp_b], merge_history=False, verbose=False
-    )
+    out = uvpspec.combine_uvpspec([uvp_a, uvp_b], merge_history=False, verbose=False)
     assert "batwing" in out.history and "foobar" not in out.history
 
     # test no cov_array if cov_model is not consistent
@@ -1120,10 +1078,7 @@ def test_combine_uvpspec_errors():
 
     # test partial data overlap failure
     uvp2 = testing.uvpspec_from_data(
-        uvd,
-        [(37, 38), (38, 39), (53, 54)],
-        spw_ranges=[(20, 30), (60, 90)],
-        beam=beam,
+        uvd, [(37, 38), (38, 39), (53, 54)], spw_ranges=[(20, 30), (60, 90)], beam=beam
     )
     with pytest.raises(AssertionError, match="partial overlap"):
         uvpspec.combine_uvpspec([uvp1, uvp2])
@@ -1349,8 +1304,7 @@ def test_recursive_combine_uvpspec_multiple(uvp):
 def test_recursive_combine_uvpspec_empty():
     """Test recursive_combine_uvpspec with an empty list."""
     with pytest.raises(
-        ValueError,
-        match="Cannot run recursive_combine_uvpspec on length-0 objects.",
+        ValueError, match="Cannot run recursive_combine_uvpspec on length-0 objects."
     ):
         uvpspec.recursive_combine_uvpspec([])
 
