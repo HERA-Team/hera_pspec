@@ -61,8 +61,8 @@ The library is organized around three persistent object types and a computation 
 
 There are two parallel entry-point styles:
 
-- The new `pspec` Typer app (`src/hera_pspec/cli.py`) — currently exposes `hello` and `fast_merge_baselines`. Add new subcommands here.
-- The historical `scripts/*.py` (e.g. `pspec_run.py`, `bootstrap_run.py`, `pspec_red.py`) — installed via `script-files` and built around `argparse` parsers returned from inside the package (e.g. `pspecdata.get_pspec_run_argparser`). `pyproject.toml` notes this is discouraged; new commands should be added under `cli.py` rather than as fresh scripts.
+- The new `pspec` Typer app (`src/hera_pspec/cli.py`) — exposes `hello`, `fast_merge_baselines`, and the migrated pipeline commands `run`, `bootstrap`, `auto-noise`, and `generate-pstokes` (registered via the `register_argparse_command` adapter, which reuses the existing `get_*_argparser()` factories). Add new subcommands here.
+- The historical `scripts/*.py` — `pspec_run.py`, `bootstrap_run.py`, `generate_pstokes_run.py`, and `auto_noise_run.py` are now **deprecated shims** that emit a `DeprecationWarning` and forward to the `pspec` subcommands above (kept working for `hera_opm`/makeflow back-compat). `pspec_red.py` and `psc_merge_spectra.py` are not yet migrated. New commands should be added under `cli.py`, never as fresh scripts.
 
 ## Conventions to respect
 

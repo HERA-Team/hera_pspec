@@ -79,8 +79,9 @@ dev = [
 pspec = "hera_pspec.cli:app"
 
 [tool.setuptools]
-# Doing this is discouraged, and we should package these CLI commands into the above
-# `scripts` section.
+# These are now deprecated shims that forward to the `pspec` Typer CLI (see #467); they
+# remain installed for backward-compatibility with downstream pipelines and will be
+# removed in a future release. pspec_red.py is the only non-shim left to migrate.
 script-files = [
     "scripts/pspec_run.py",
     "scripts/pspec_red.py",
