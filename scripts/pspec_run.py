@@ -1,27 +1,18 @@
 #!/usr/bin/env python
+"""Deprecated shim. Use ``pspec run`` instead."""
+
 import sys
+import warnings
 
-from hera_cal._cli_tools import filter_kwargs, parse_args, run_with_profiling
+from hera_pspec.cli import app
 
-from hera_pspec import pspecdata
-
-# parse args
-args = pspecdata.get_pspec_run_argparser()
-a = parse_args(args)
-
-# turn into dictionary
-kwargs = filter_kwargs(vars(a))
-
-# get arguments
-dsets = kwargs.pop("dsets")
-filename = kwargs.pop("filename")
-# we want to compute cross-corr power spectra by default so feed
-# the inverse of the include_autocorrs arg.
-kwargs["include_crosscorrs"] = not (kwargs.pop("exclude_crosscorrs"))
-# get special kwargs
-history = " ".join(sys.argv)
-
-# run pspec
-run_with_profiling(
-    pspecdata.pspec_run, a, dsets=dsets, filename=filename, history=history, **kwargs
+warnings.warn(
+    "scripts/pspec_run.py is deprecated and will be removed in a future release; "
+    "use `pspec run` instead.",
+    DeprecationWarning,
+    stacklevel=1,
 )
+
+if __name__ == "__main__":
+    sys.argv = ["pspec", "run", *sys.argv[1:]]
+    app()

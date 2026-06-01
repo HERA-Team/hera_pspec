@@ -1,20 +1,18 @@
 #!/usr/bin/env python
-"""
-Pipeline script to load a PSpecContainer and bootstrap over redundant baseline-
-pair groups to produce errorbars.
-"""
+"""Deprecated shim. Use ``pspec bootstrap`` instead."""
 
-from hera_cal._cli_tools import parse_args, run_with_profiling
+import sys
+import warnings
 
-from hera_pspec import grouping
+from hera_pspec.cli import app
 
-# Parse commandline args
-args = grouping.get_bootstrap_run_argparser()
-a = parse_args(args)
-kwargs = vars(a)  # dict of args
+warnings.warn(
+    "scripts/bootstrap_run.py is deprecated and will be removed in a future release; "
+    "use `pspec bootstrap` instead.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
-# Get arguments
-filename = kwargs.pop("filename")
-
-# Run bootstrap
-run_with_profiling(grouping.bootstrap_run, a, filename=filename, **kwargs)
+if __name__ == "__main__":
+    sys.argv = ["pspec", "bootstrap", *sys.argv[1:]]
+    app()

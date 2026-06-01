@@ -476,3 +476,33 @@ def test_generate_pstokes_dispatch_keep_vispols(monkeypatch):
     assert calls["deepcopy"] == 1  # deepcopy branch taken, not construct-for-base
     assert calls["construct"] == 1  # one missing pol constructed in the loop
     assert calls["write"] == ("in.uvh5", True)
+
+
+@pytest.mark.parametrize(
+    ("script", "subcommand", "marker"),
+    [
+        ("pspec_run.py", "run", "--spw_ranges"),
+        ("bootstrap_run.py", "bootstrap", "--Nsamples"),
+        ("generate_pstokes_run.py", "generate-pstokes", "--keep_vispols"),
+        ("auto_noise_run.py", "auto-noise", "--err_type"),
+    ],
+)
+def test_deprecated_shim_warns_and_forwards(script, subcommand, marker):
+    script_path = REPO_ROOT / "scripts" / script
+    # No -W flag: verify the deprecation warning surfaces under Python's DEFAULT
+    # warning filter, which is what a real pipeline invocation gets.
+    proc = subprocess.run(
+        [sys.executable, str(script_path), "--help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert proc.returncode == 0, (
+        f"{script} --help failed:\nstdout: {proc.stdout}\nstderr: {proc.stderr}"
+    )
+    assert "deprecated" in proc.stderr.lower()
+    # the warning names the correct replacement subcommand
+    assert f"pspec {subcommand}" in proc.stderr
+    # forwarded to the right subcommand's parser (distinctive flag in its --help)
+    assert "usage:" in proc.stdout.lower()
+    assert marker in proc.stdout
