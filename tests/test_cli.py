@@ -506,3 +506,57 @@ def test_deprecated_shim_warns_and_forwards(script, subcommand, marker):
     # forwarded to the right subcommand's parser (distinctive flag in its --help)
     assert "usage:" in proc.stdout.lower()
     assert marker in proc.stdout
+
+
+def test_auto_noise_main_dispatch_explicit_spectra(monkeypatch):
+    """When --spectra is given, it is used directly.
+
+    Regression: the original auto_noise_run.py left ``spectra`` unbound whenever
+    ``args.spectra`` was not None, raising NameError on the first iteration.
+    """
+    args = argparse.Namespace(
+        pspec_container="cont.h5",
+        auto_file="autos.uvh5",
+        beam="beam.fits",
+        groups=["grp1"],
+        spectra=["uvp"],
+        err_type="P_N",
+    )
+
+    calls = {"set": [], "saved": False, "spectra_called": False}
+
+    class FakeUVData:
+        def read(self, fname):
+            calls["read"] = fname
+
+    class FakeContainer:
+        def __init__(self, *a, **k):
+            pass
+
+        def groups(self):
+            return ["grp1"]
+
+        def spectra(self, group):
+            calls["spectra_called"] = True
+            return ["SHOULD_NOT_BE_USED"]
+
+        def get_pspec(self, group, spec):
+            return f"{group}/{spec}"
+
+        def set_pspec(self, group, spec, uvp, overwrite):
+            calls["set"].append((group, spec, overwrite))
+
+        def save(self):
+            calls["saved"] = True
+
+    monkeypatch.setattr(cli, "UVData", FakeUVData)
+    monkeypatch.setattr(cli.utils, "uvd_to_Tsys", lambda uvd, beam: "TSYS")
+    monkeypatch.setattr(cli.utils, "uvp_noise_error", lambda uvp, tsys, err_type: None)
+    monkeypatch.setattr(cli.container, "PSpecContainer", FakeContainer)
+
+    cli._auto_noise_main(args)
+
+    # the explicit --spectra list is used; psc.spectra() is NOT consulted
+    assert calls["spectra_called"] is False
+    assert calls["set"] == [("grp1", "uvp", True)]
+    assert calls["saved"] is True
