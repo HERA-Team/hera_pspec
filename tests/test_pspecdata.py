@@ -174,13 +174,16 @@ def bm(beam_nf_dipole):
 def w():
     return [None, None]
 
+
 def test_init(uvd):
     # Test creating empty PSpecData
     ds = pspecdata.PSpecData()
 
     # Test whether unequal no. of weights is picked up
     with pytest.raises(AssertionError):
-        pspecdata.PSpecData([uv.UVData(), uv.UVData(), uv.UVData()], [uv.UVData(), uv.UVData()])
+        pspecdata.PSpecData(
+            [uv.UVData(), uv.UVData(), uv.UVData()], [uv.UVData(), uv.UVData()]
+        )
 
     # Test passing data and weights of the wrong type
     d_arr = np.ones((6, 8))
@@ -222,6 +225,7 @@ def test_init(uvd):
         ds.get_G(key, key)
     with pytest.raises(ValueError):
         ds.get_H(key, key)
+
 
 def test_add_data(d):
     """
@@ -269,6 +273,7 @@ def test_add_data(d):
         ds.add([uv], None, cals=[None, None])
     with pytest.raises(AssertionError):
         ds.add([uv], None, labels=["foo", "bar"])
+
 
 def test_set_symmetric_taper(d, w):
     """
@@ -346,13 +351,12 @@ def test_set_symmetric_taper(d, w):
         filter_half_widths=[100e-9],
         filter_factors=[1e-9],
     )
-    wmat = np.outer(
-        np.diag(np.sqrt(ds.Y(key1))), np.diag(np.sqrt(ds.Y(key1)))
-    )
+    wmat = np.outer(np.diag(np.sqrt(ds.Y(key1))), np.diag(np.sqrt(ds.Y(key1))))
     rmat = np.linalg.pinv(wmat * rmat)
     assert np.all(np.isclose(rmat_symmetric, bh_taper.T * rmat * bh_taper, atol=1e-6))
     assert np.all(np.isclose(rmat_a, bh_taper.T**2.0 * rmat, atol=1e-6))
     assert not np.all(np.isclose(rmat_symmetric, rmat_a, atol=1e-6))
+
 
 def test_labels(d, w):
     """
@@ -360,9 +364,7 @@ def test_labels(d, w):
     """
     # Check that specifying labels does work
     psd = pspecdata.PSpecData(
-        dsets=[d[0], d[1]],
-        wgts=[w[0], w[1]],
-        labels=["red", "blue"],
+        dsets=[d[0], d[1]], wgts=[w[0], w[1]], labels=["red", "blue"]
     )
     np.testing.assert_array_equal(psd.x(("red", 24, 38)), psd.x((0, 24, 38)))
 
@@ -375,6 +377,7 @@ def test_labels(d, w):
     # Check that invalid labels raise errors
     with pytest.raises(KeyError):
         psd.x(("green", 24, 38))
+
 
 def test_parse_blkey(uvd):
     # make a double-pol UVData
@@ -397,6 +400,7 @@ def test_parse_blkey(uvd):
     assert ds.w(("red", (24, 25))).shape == (2, 64, 60)
     assert ds.w(("red", (24, 25), "xx")).shape == (64, 60)
 
+
 def test_str(uvd):
     """
     Check that strings can be output.
@@ -405,6 +409,7 @@ def test_str(uvd):
     print(ds)  # print empty psd
     ds.add(uvd, None)
     print(ds)  # print populated psd
+
 
 def test_get_Q_alt():
     """
@@ -489,6 +494,7 @@ def test_get_Q_alt():
     # Check for error handling
     with pytest.raises(ValueError):
         ds.set_Ndlys(vect_length + 100)
+
 
 def test_get_Q(uvd):
     """
@@ -582,6 +588,7 @@ def test_get_Q(uvd):
     with pytest.raises(IndexError):
         ds.get_Q(vect_length - 1)
 
+
 def test_get_integral_beam(bm, uvd):
     """
     Test the integral of the beam and tapering function in Q.
@@ -592,9 +599,7 @@ def test_get_integral_beam(bm, uvd):
     ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], beam=bm)
 
-    with pytest.warns(
-        UserWarning, match="The beam response could not be calculated"
-    ):
+    with pytest.warns(UserWarning, match="The beam response could not be calculated"):
         ds_t.get_integral_beam(pol)
 
     try:
@@ -607,6 +612,7 @@ def test_get_integral_beam(bm, uvd):
 
     # Test that integral matrix has the right shape
     assert integral_matrix.shape == (ds.spw_Nfreqs, ds.spw_Nfreqs)
+
 
 def test_get_unnormed_E(bm, uvd):
     """
@@ -681,6 +687,7 @@ def test_get_unnormed_E(bm, uvd):
                 else:
                     np.testing.assert_almost_equal(matrix[i, j], 0.5)
 
+
 def test_cross_covar_model(uvd):
     uvd = copy.deepcopy(uvd)
     ds = pspecdata.PSpecData(
@@ -729,6 +736,7 @@ def test_cross_covar_model(uvd):
             np.testing.assert_almost_equal(conj1_real2.conj()[k, j], conj2_real1[j, k])
             np.testing.assert_almost_equal(real1_conj2.conj()[k, j], real2_conj1[j, k])
 
+
 def test_get_unnormed_V(d, w):
     ds = pspecdata.PSpecData(dsets=d, wgts=w, labels=["red", "blue"])
     key1 = ("red", (24, 25), "xx")
@@ -745,6 +753,7 @@ def test_get_unnormed_V(d, w):
     for i in range(ds.spw_Ndlys):
         for j in range(ds.spw_Ndlys):
             assert frac_non_herm[i, j] <= tol
+
 
 def test_get_MW():
     ds = pspecdata.PSpecData()
@@ -790,9 +799,7 @@ def test_get_MW():
             with pytest.raises(ValueError):
                 ds.get_MW(random_G, random_H, mode=mode)
             # Test that the error covariance is diagonal
-            M, W = ds.get_MW(
-                random_G, random_H, mode=mode, band_covar=random_V
-            )
+            M, W = ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V)
             band_covar = np.dot(M, np.dot(random_V, M.T))
             assert diagonal_or_not(band_covar) == True
 
@@ -815,6 +822,7 @@ def test_get_MW():
         for norm in test_norm:
             np.testing.assert_almost_equal(norm, 1.0)
 
+
 def test_cov_q(d, d_std, w, ndlys=13):
     """
     Test that q_hat_cov has the right shape and accepts keys in correct
@@ -828,17 +836,14 @@ def test_cov_q(d, d_std, w, ndlys=13):
     for _d_std in dlist_std:
         _d_std.flag_array[:] = False
         _d_std.select(
-            times=np.unique(_d_std.time_array)[:10],
-            frequencies=_d_std.freq_array[:16],
+            times=np.unique(_d_std.time_array)[:10], frequencies=_d_std.freq_array[:16]
         )
     ds = pspecdata.PSpecData(dsets=dlist, wgts=w, dsets_std=dlist_std)
     Ntime = ds.Ntimes
     ds.set_Ndlys(ndlys)
     # Here is the analytic covariance matrix...
     chan_x, chan_y = np.meshgrid(range(ds.Nfreqs), range(ds.Nfreqs))
-    cov_analytic = np.zeros(
-        (ds.spw_Ndlys, ds.spw_Ndlys), dtype=np.complex128
-    )
+    cov_analytic = np.zeros((ds.spw_Ndlys, ds.spw_Ndlys), dtype=np.complex128)
     for alpha in range(ds.spw_Ndlys):
         for beta in range(ds.spw_Ndlys):
             cov_analytic[alpha, beta] = np.exp(
@@ -869,26 +874,39 @@ def test_cov_q(d, d_std, w, ndlys=13):
             )
             with warn_ctx:
                 qc = ds.cov_q_hat(key1, key2, model="dsets")
-            assert np.allclose( np.array(list(qc.shape)), np.array( [ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys] ), atol=1e-6, )
+            assert np.allclose(
+                np.array(list(qc.shape)),
+                np.array([ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys]),
+                atol=1e-6,
+            )
             qc = ds.cov_q_hat(key1, key2, model="empirical")
-            assert np.allclose( np.array(list(qc.shape)), np.array( [ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys] ), atol=1e-6, )
+            assert np.allclose(
+                np.array(list(qc.shape)),
+                np.array([ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys]),
+                atol=1e-6,
+            )
 
     """
     Now test that analytic Error calculation gives Nchan^2
     """
     ds.set_weighting("identity")
     qc = ds.cov_q_hat(key1, key2, model="dsets")
-    assert np.allclose( qc, np.repeat(cov_analytic[np.newaxis, :, :], ds.Ntimes, axis=0), atol=1e-6, )
+    assert np.allclose(
+        qc, np.repeat(cov_analytic[np.newaxis, :, :], ds.Ntimes, axis=0), atol=1e-6
+    )
     """
     Test lists of keys
     """
     ds.set_weighting("identity")
     qc = ds.cov_q_hat([key1], [key2], time_indices=[0], model="dsets")
-    assert np.allclose( qc, np.repeat(cov_analytic[np.newaxis, :, :], ds.Ntimes, axis=0), atol=1e-6, )
+    assert np.allclose(
+        qc, np.repeat(cov_analytic[np.newaxis, :, :], ds.Ntimes, axis=0), atol=1e-6
+    )
     with pytest.raises(ValueError):
         ds.cov_q_hat(key1, key2, time_indices=200)
     with pytest.raises(ValueError):
         ds.cov_q_hat(key1, key2, time_indices="watch out!")
+
 
 def test_cov_p_hat(d, d_std, w):
     """
@@ -904,6 +922,7 @@ def test_cov_p_hat(d, d_std, w):
                 assert np.isclose(30.0, cov_p[0, p, q], atol=1e-6)
             else:
                 assert np.isclose(0.0, cov_p[0, p, q], atol=1e-6)
+
 
 def test_R_truncation(d, w):
     """
@@ -961,6 +980,7 @@ def test_R_truncation(d, w):
     ds1.set_filter_extension([10, 10])
     rm1 = ds1.R(key1)
 
+
 def test_q_hat(d, w):
     """
     Test that q_hat has right shape and accepts keys in the right format.
@@ -1009,8 +1029,12 @@ def test_q_hat(d, w):
             q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
             for i in range(Ndlys):
                 for j in range(Ntime):
-                    np.testing.assert_almost_equal(q_hat_diff[i, j].real, q_hat_diff[i, j].real)
-                    np.testing.assert_almost_equal(q_hat_diff[i, j].imag, q_hat_diff[i, j].imag)
+                    np.testing.assert_almost_equal(
+                        q_hat_diff[i, j].real, q_hat_diff[i, j].real
+                    )
+                    np.testing.assert_almost_equal(
+                        q_hat_diff[i, j].imag, q_hat_diff[i, j].imag
+                    )
 
             # Check that lists of keys are handled properly
             q_hat_aa = ds.q_hat(key1, key4)  # q_hat(x1, x2+x2)
@@ -1020,8 +1044,12 @@ def test_q_hat(d, w):
             # Effectively checks that q_hat(2*x1, 2*x2) = 4*q_hat(x1, x2)
             for i in range(Ndlys):
                 for j in range(Ntime):
-                    np.testing.assert_almost_equal(q_hat_a[i, j].real, 0.25 * q_hat_cc[i, j].real)
-                    np.testing.assert_almost_equal(q_hat_a[i, j].imag, 0.25 * q_hat_cc[i, j].imag)
+                    np.testing.assert_almost_equal(
+                        q_hat_a[i, j].real, 0.25 * q_hat_cc[i, j].real
+                    )
+                    np.testing.assert_almost_equal(
+                        q_hat_a[i, j].imag, 0.25 * q_hat_cc[i, j].imag
+                    )
 
     ds.spw_Ndlys = Nfreq
     # Check that the slow method is the same as the FFT method
@@ -1038,6 +1066,7 @@ def test_q_hat(d, w):
     # Test if error is raised when one tried FFT approach on exact_norm
     with pytest.raises(NotImplementedError):
         ds.q_hat(key1, key2, exact_norm=True, allow_fft=True)
+
 
 def test_get_H(d, w):
     """
@@ -1077,6 +1106,7 @@ def test_get_H(d, w):
             ds.set_Ndlys()
             H = ds.get_H(key1, key2)
             assert H.shape == (Nfreq, Nfreq)  # Test shape
+
 
 def test_get_G(d, w):
     """
@@ -1155,6 +1185,7 @@ def test_get_G(d, w):
                     G_diff_norm = np.linalg.norm(G - G_swapped.T)
                     assert G_diff_norm <= matrix_scale * multiplicative_tolerance
 
+
 r"""
 Under Construction
 def test_parseval(ds, d, d_std, w, bm, bm_Q, uvd, uvd_std):
@@ -1224,6 +1255,7 @@ def test_parseval(ds, d, d_std, w, bm, bm_Q, uvd, uvd_std):
     np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
 """
 
+
 def test_scalar_delay_adjustment(d, w, bm):
     ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=bm)
     key1 = (0, 24, 38)
@@ -1242,12 +1274,11 @@ def test_scalar_delay_adjustment(d, w, bm):
         adjustment = ds.scalar_delay_adjustment(key1, key2, sampling=True)
     assert len(adjustment == ds.spw_Ndlys)
 
+
 def test_scalar(d, w, bm):
     ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=bm)
 
-    gauss = pspecbeam.PSpecBeamGauss(
-        0.8, np.linspace(115e6, 130e6, 50, endpoint=False)
-    )
+    gauss = pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))
     ds2 = pspecdata.PSpecData(dsets=d, wgts=w, beam=gauss)
 
     # Check normal execution
@@ -1268,6 +1299,7 @@ def test_scalar(d, w, bm):
 
     # FIXME: Remove this when pyuvdata support for the above is ready
     # self.assertRaises(NotImplementedError, ds.scalar)
+
 
 def test_validate_datasets(d):
     # test freq exception
@@ -1308,8 +1340,7 @@ def test_validate_datasets(d):
     uvd = copy.deepcopy(d[0])
     uvd2 = copy.deepcopy(d[0])
     uvd.select(
-        frequencies=np.unique(uvd.freq_array)[:10],
-        times=np.unique(uvd.time_array)[:10],
+        frequencies=np.unique(uvd.freq_array)[:10], times=np.unique(uvd.time_array)[:10]
     )
     uvd2.select(
         frequencies=np.unique(uvd2.freq_array)[10:20],
@@ -1345,6 +1376,7 @@ def test_validate_datasets(d):
     with pytest.raises(ValueError):
         ds2.validate_datasets()
 
+
 def test_rephase_to_dset(uvd):
     # get uvd
     uvd1 = copy.deepcopy(uvd)
@@ -1361,40 +1393,33 @@ def test_rephase_to_dset(uvd):
     uvp1 = ds.pspec(bls, bls, (0, 1), pols=("xx", "xx"), verbose=False)
     # rephase and get pspec
     ds.rephase_to_dset(0)
-    with pytest.warns(
-        UserWarning, match="Skipping dataset 1 b/c it isn't unprojected"
-    ):
+    with pytest.warns(UserWarning, match="Skipping dataset 1 b/c it isn't unprojected"):
         ds2 = ds.rephase_to_dset(0, inplace=False)
     uvp2 = ds.pspec(bls, bls, (0, 1), pols=("xx", "xx"), verbose=False)
     blp = (0, ((37, 39), (37, 39)), ("xx", "xx"))
     assert np.isclose(np.abs(uvp2.get_data(blp) / uvp1.get_data(blp)), 1.0).min()
 
+
 def test_Jy_to_mK(bm, uvd):
     # test basic execution
     uvd.vis_units = "Jy"
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
-        wgts=[None, None],
-        beam=bm,
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None], beam=bm
     )
     ds.Jy_to_mK()
     assert ds.dsets[0].vis_units == "mK"
     assert ds.dsets[1].vis_units == "mK"
     assert (
-        uvd.get_data(24, 25, "xx")[30, 30]
-        / ds.dsets[0].get_data(24, 25, "xx")[30, 30]
+        uvd.get_data(24, 25, "xx")[30, 30] / ds.dsets[0].get_data(24, 25, "xx")[30, 30]
         < 1.0
     )
 
     # test feeding beam
     ds2 = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
-        wgts=[None, None],
-        beam=bm,
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None], beam=bm
     )
     with pytest.warns(
-        UserWarning,
-        match="Feeding a beam model when self.primary_beam already exists",
+        UserWarning, match="Feeding a beam model when self.primary_beam already exists"
     ):
         ds2.Jy_to_mK(beam=bm)
     assert ds.dsets[0] == ds2.dsets[0]
@@ -1404,13 +1429,10 @@ def test_Jy_to_mK(bm, uvd):
     uvd2.polarization_array[0] = -6
     uvd2.vis_units = "UNCALIB"
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)],
-        wgts=[None, None],
-        beam=bm,
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)], wgts=[None, None], beam=bm
     )
     with pytest.warns(
-        UserWarning,
-        match="Cannot convert dset 1 Jy -> mK because vis_units = UNCALIB",
+        UserWarning, match="Cannot convert dset 1 Jy -> mK because vis_units = UNCALIB"
     ):
         ds.Jy_to_mK()
     assert ds.dsets[0].vis_units == "mK"
@@ -1419,6 +1441,7 @@ def test_Jy_to_mK(bm, uvd):
         ds.dsets[0].get_data(24, 25, "xx")[30, 30]
         != ds.dsets[1].get_data(24, 25, "yy")[30, 30]
     )
+
 
 def test_trim_dset_lsts():
     fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
@@ -1434,8 +1457,7 @@ def test_trim_dset_lsts():
         dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None]
     )
     with pytest.warns(
-        UserWarning,
-        match="The lst_array is not self-consistent with the time_array",
+        UserWarning, match="The lst_array is not self-consistent with the time_array"
     ):
         ds.trim_dset_lsts()
     assert ds.dsets[0].Ntimes == 50
@@ -1454,6 +1476,7 @@ def test_trim_dset_lsts():
         ds.trim_dset_lsts()
     assert ds.dsets[0].Ntimes == 60
     assert ds.dsets[1].Ntimes == 60
+
 
 def test_get_Q_alt_tensor():
     fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
@@ -1474,6 +1497,7 @@ def test_get_Q_alt_tensor():
     Qalt = ds.get_Q_alt_tensor()
     assert ds.spw_Ndlys == ndly
 
+
 def test_units(bm, uvd):
     ds = pspecdata.PSpecData()
     # test exception
@@ -1485,11 +1509,10 @@ def test_units(bm, uvd):
     vis_u, norm_u = ds.units()
     assert vis_u == "UNCALIB"
     assert norm_u == "Hz str [beam normalization not specified]"
-    ds_b = pspecdata.PSpecData(
-        dsets=[uvd, uvd], wgts=[None, None], beam=bm
-    )
+    ds_b = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=bm)
     vis_u, norm_u = ds_b.units(little_h=False)
     assert norm_u == "Mpc^3"
+
 
 def test_delays(uvd):
     ds = pspecdata.PSpecData()
@@ -1499,6 +1522,7 @@ def test_delays(uvd):
     ds.add([uvd, uvd], [None, None])
     d = ds.delays()
     assert len(d) == ds.dsets[0].Nfreqs
+
 
 def test_check_in_dset(d):
     # generate ds
@@ -1522,6 +1546,7 @@ def test_check_in_dset(d):
     # test dset_idx
     with pytest.raises(TypeError):
         ds.dset_idx((1, 2))
+
 
 def test_C_model():
     # test the key format in ds._C and the shape of stored covariance
@@ -1564,10 +1589,7 @@ def test_C_model():
         True,
     ) in ds._C.keys()
     for Ckey in ds._C.keys():
-        assert ds._C[Ckey].shape == (
-            spws[0][1] - spws[0][0],
-            spws[0][1] - spws[0][0],
-        )
+        assert ds._C[Ckey].shape == (spws[0][1] - spws[0][0], spws[0][1] - spws[0][0])
 
     ds.set_spw(spws[1])
     key = (0, bls1[0], "xx")
@@ -1585,6 +1607,7 @@ def test_C_model():
     ds.C_model(key, model="known", time_index=0, known_cov=known_cov)
     assert Ckey in ds._C.keys()
     assert ds._C[Ckey].shape == (spws[1][1] - spws[1][0], spws[1][1] - spws[1][0])
+
 
 def test_get_analytic_covariance():
     uvd = UVData()
@@ -1658,16 +1681,8 @@ def test_get_analytic_covariance():
     ds.set_spw((60, 90))
     M_ = np.diag(np.ones(ds.spw_Ndlys))
     for model in ["autos", "empirical"]:
-        (cov_q_real, cov_q_imag, cov_p_real, cov_p_imag) = (
-            ds.get_analytic_covariance(
-                key1,
-                key2,
-                M=M_,
-                exact_norm=False,
-                pol=False,
-                model=model,
-                known_cov=None,
-            )
+        (cov_q_real, cov_q_imag, cov_p_real, cov_p_imag) = ds.get_analytic_covariance(
+            key1, key2, M=M_, exact_norm=False, pol=False, model=model, known_cov=None
         )
         # assert these arrays are effectively real-valued, even though they are complex type.
         # some numerical noise can leak-in, so check to within a dynamic range of peak real power.
@@ -1696,77 +1711,27 @@ def test_get_analytic_covariance():
                 key2 = (1, blpair[1], "xx")
                 dset2, bl2 = ds.parse_blkey(key2)
 
-                Ckey = ((dset1, dset1), (bl1, bl1)) + (
-                    model,
-                    time_index,
-                    False,
-                    True,
-                )
+                Ckey = ((dset1, dset1), (bl1, bl1)) + (model, time_index, False, True)
                 known_cov_test[Ckey] = C_n_11
-                Ckey = ((dset1, dset1), (bl1, bl1)) + (
-                    model,
-                    time_index,
-                    False,
-                    False,
-                )
+                Ckey = ((dset1, dset1), (bl1, bl1)) + (model, time_index, False, False)
                 known_cov_test[Ckey] = P_n_11
-                Ckey = ((dset1, dset1), (bl1, bl1)) + (
-                    model,
-                    time_index,
-                    True,
-                    True,
-                )
+                Ckey = ((dset1, dset1), (bl1, bl1)) + (model, time_index, True, True)
                 known_cov_test[Ckey] = S_n_11
 
-                Ckey = ((dset2, dset2), (bl2, bl2)) + (
-                    model,
-                    time_index,
-                    False,
-                    True,
-                )
+                Ckey = ((dset2, dset2), (bl2, bl2)) + (model, time_index, False, True)
                 known_cov_test[Ckey] = C_n_11
-                Ckey = ((dset2, dset2), (bl2, bl2)) + (
-                    model,
-                    time_index,
-                    False,
-                    False,
-                )
+                Ckey = ((dset2, dset2), (bl2, bl2)) + (model, time_index, False, False)
                 known_cov_test[Ckey] = P_n_11
-                Ckey = ((dset2, dset2), (bl2, bl2)) + (
-                    model,
-                    time_index,
-                    True,
-                    True,
-                )
+                Ckey = ((dset2, dset2), (bl2, bl2)) + (model, time_index, True, True)
                 known_cov_test[Ckey] = S_n_11
 
-                Ckey = ((dset1, dset2), (bl1, bl2)) + (
-                    model,
-                    time_index,
-                    False,
-                    True,
-                )
+                Ckey = ((dset1, dset2), (bl1, bl2)) + (model, time_index, False, True)
                 known_cov_test[Ckey] = C_n_12
-                Ckey = ((dset2, dset1), (bl2, bl1)) + (
-                    model,
-                    time_index,
-                    False,
-                    True,
-                )
+                Ckey = ((dset2, dset1), (bl2, bl1)) + (model, time_index, False, True)
                 known_cov_test[Ckey] = C_n_12
-                Ckey = ((dset2, dset1), (bl2, bl1)) + (
-                    model,
-                    time_index,
-                    False,
-                    False,
-                )
+                Ckey = ((dset2, dset1), (bl2, bl1)) + (model, time_index, False, False)
                 known_cov_test[Ckey] = P_n_12
-                Ckey = ((dset2, dset1), (bl2, bl1)) + (
-                    model,
-                    time_index,
-                    True,
-                    True,
-                )
+                Ckey = ((dset2, dset1), (bl2, bl1)) + (model, time_index, True, True)
                 known_cov_test[Ckey] = S_n_12
 
     uvp_dsets_cov = ds.pspec(
@@ -1795,9 +1760,7 @@ def test_get_analytic_covariance():
     )
     # check their cov_array are equal
     assert np.allclose(
-        uvp_dsets_cov.cov_array_real[0],
-        uvp_fiducial_cov.cov_array_real[0],
-        rtol=1e-05,
+        uvp_dsets_cov.cov_array_real[0], uvp_fiducial_cov.cov_array_real[0], rtol=1e-05
     )
 
     # check noise floor computation from auto correlations
@@ -1817,9 +1780,7 @@ def test_get_analytic_covariance():
     rms = [
         np.std(
             uvp_auto_cov.get_data(key).real
-            / np.sqrt(
-                np.diagonal(uvp_auto_cov.get_cov(key).real, axis1=1, axis2=2)
-            ),
+            / np.sqrt(np.diagonal(uvp_auto_cov.get_cov(key).real, axis1=1, axis2=2)),
             axis=0,
         )
         for key in uvp_auto_cov.get_all_keys()
@@ -1849,9 +1810,9 @@ def test_get_analytic_covariance():
                 uvp_fgdep_cov.get_data(key)[:, ~noise_dlys].real
                 / np.sqrt(
                     np.mean(
-                        np.diagonal(
-                            uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2
-                        )[:, ~noise_dlys],
+                        np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2)[
+                            :, ~noise_dlys
+                        ],
                         axis=0,
                     )
                 ),
@@ -1861,6 +1822,7 @@ def test_get_analytic_covariance():
     rms = np.mean(rms, axis=0)
     # assert this is close to 1.0
     assert np.isclose(np.mean(rms), 1.0, atol=0.1)
+
 
 @pytest.mark.filterwarnings(
     "ignore:Some integrations have zero nsamples, but non-zero weights"
@@ -1923,11 +1885,27 @@ def test_pspec(bm, bm_Q, uvd, uvd_std):
 
     # test value error
     with pytest.raises(ValueError):
-        ds.pspec(bls, bls, (0, 1), ("xx", "xx"), spw_ranges=(10, 20), input_data_weight="dayenu", r_params={})
+        ds.pspec(
+            bls,
+            bls,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=(10, 20),
+            input_data_weight="dayenu",
+            r_params={},
+        )
 
     # test value error no dset1 keys
     with pytest.raises(ValueError):
-        ds.pspec(bls, bls, (0, 1), ("xx", "xx"), spw_ranges=(10, 20), input_data_weight="dayenu", r_params=my_r_params_dset0_only)
+        ds.pspec(
+            bls,
+            bls,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=(10, 20),
+            input_data_weight="dayenu",
+            r_params=my_r_params_dset0_only,
+        )
 
     # assert error if baselines are not provided in the right format
     with pytest.raises(NotImplementedError):
@@ -2048,18 +2026,11 @@ def test_pspec(bm, bm_Q, uvd, uvd_std):
     uvd_temp = copy.deepcopy(uvd)
     ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm)
     uvp = ds.pspec(
-        bls1,
-        bls2,
-        (0, 1),
-        ("xx", "xx"),
-        spw_ranges=[(20, 30), (30, 40)],
-        verbose=False,
+        bls1, bls2, (0, 1), ("xx", "xx"), spw_ranges=[(20, 30), (30, 40)], verbose=False
     )
     assert uvp.Nblpairs == 16
     assert uvp.Nspws == 2
-    uvp2 = uvp.select(
-        spws=0, bls=[(24, 25)], only_pairs_in_bls=False, inplace=False
-    )
+    uvp2 = uvp.select(spws=0, bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
     assert uvp2.Nspws == 1
     assert uvp2.Nblpairs == 7
     uvp.select(spws=0, bls=(24, 25), only_pairs_in_bls=True, inplace=True)
@@ -2090,9 +2061,7 @@ def test_pspec(bm, bm_Q, uvd, uvd_std):
     # test polarization pairs
     uvd_temp = copy.deepcopy(uvd)
     ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm)
-    uvp = ds.pspec(
-        bls, bls, (0, 1), ("xx", "xx"), spw_ranges=[(10, 24)], verbose=False
-    )
+    uvp = ds.pspec(bls, bls, (0, 1), ("xx", "xx"), spw_ranges=[(10, 24)], verbose=False)
     # pytest.raises(NotImplementedError, ds.pspec, bls, bls, (0, 1), pols=[('xx','yy')])
     uvd_temp = copy.deepcopy(uvd)
     ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm)
@@ -2260,9 +2229,7 @@ def test_pspec(bm, bm_Q, uvd, uvd_std):
 
     # test identity_Y caching works
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
-        wgts=[None, None],
-        beam=bm,
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None], beam=bm
     )
     # assert caching is used when appropriate
     uvp = ds.pspec(
@@ -2281,9 +2248,7 @@ def test_pspec(bm, bm_Q, uvd, uvd_std):
     assert list(ds._identity_Y.keys())[0] == ((0, 24, 25, "xx"), (1, 24, 25, "xx"))
 
     # assert caching is not used when inappropriate
-    ds.dsets[0].flag_array[
-        ds.dsets[0].antpair2ind(37, 38, ordered=False), 25, :
-    ] = True
+    ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), 25, :] = True
     uvp = ds.pspec(
         [(24, 25), (37, 38)],
         [(24, 25), (37, 38)],
@@ -2344,6 +2309,7 @@ def test_pspec(bm, bm_Q, uvd, uvd_std):
             ftbeam=gaussian_beam,
         )
 
+
 def test_normalization(bm, uvd):
     # Test Normalization of pspec() compared to PAPER legacy techniques
     d1 = uvd.select(
@@ -2378,10 +2344,7 @@ def test_normalization(bm, uvd):
     NEB = 1.0
     Bp = np.median(np.diff(freqs)) * len(freqs)
     scalar = (
-        cosmo.X2Y(np.mean(cosmo.f2z(freqs)))
-        * np.mean(OmegaP**2 / OmegaPP)
-        * Bp
-        * NEB
+        cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2 / OmegaPP) * Bp * NEB
     )
     data1 = d1.get_data(bls1[0])
     data2 = d2.get_data(bls2[0])
@@ -2414,10 +2377,7 @@ def test_normalization(bm, uvd):
     window = windows.blackmanharris(len(freqs))
     NEB = Bp / trapezoid(window**2, x=freqs)
     scalar = (
-        cosmo.X2Y(np.mean(cosmo.f2z(freqs)))
-        * np.mean(OmegaP**2 / OmegaPP)
-        * Bp
-        * NEB
+        cosmo.X2Y(np.mean(cosmo.f2z(freqs))) * np.mean(OmegaP**2 / OmegaPP) * Bp * NEB
     )
     data1 = d1.get_data(bls1[0])
     data2 = d2.get_data(bls2[0])
@@ -2444,6 +2404,7 @@ def test_normalization(bm, uvd):
 
     # assert answers are same to within 3%
     assert np.isclose(np.real(oqe) / np.real(legacy), 1, atol=0.03, rtol=0.03).all()
+
 
 def test_broadcast_dset_flags():
     # setup
@@ -2513,9 +2474,7 @@ def test_broadcast_dset_flags():
         inplace=False,
     )
     # repeat but change data in flagged portion
-    ds.dsets[0].data_array[uvd.antpair2ind(24, 25, ordered=False), 400:450, :][
-        3
-    ] *= 100
+    ds.dsets[0].data_array[uvd.antpair2ind(24, 25, ordered=False), 400:450, :][3] *= 100
     uvp2 = ds.pspec(
         [(24, 25), (37, 38), (38, 39)],
         [(24, 25), (37, 38), (38, 39)],
@@ -2531,6 +2490,7 @@ def test_broadcast_dset_flags():
     )
     # assert average before and after are the same!
     assert avg_uvp == avg_uvp2
+
 
 def test_RFI_flag_propagation(bm, uvd):
     # generate ds and weights
@@ -2572,9 +2532,7 @@ def test_RFI_flag_propagation(bm, uvd):
         verbose=False,
     )
 
-    qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[
-        0
-    ]
+    qe_unflagged = uvp_unflagged.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[0]
     qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[0]
 
     # assert answers are same to within 0.1%
@@ -2588,8 +2546,7 @@ def test_RFI_flag_propagation(bm, uvd):
     uvd2.flag_array[uvd.antpair2ind(24, 25, ordered=False)] = True
     ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=bm)
     with pytest.warns(
-        UserWarning,
-        match="Some integrations have zero nsamples, but non-zero weights",
+        UserWarning, match="Some integrations have zero nsamples, but non-zero weights"
     ):
         uvp_flagged = ds.pspec(
             bls1,
@@ -2606,8 +2563,7 @@ def test_RFI_flag_propagation(bm, uvd):
     uvd2.data_array[uvd.antpair2ind(24, 25, ordered=False)] *= 9234.913
     ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=bm)
     with pytest.warns(
-        UserWarning,
-        match="Some integrations have zero nsamples, but non-zero weights",
+        UserWarning, match="Some integrations have zero nsamples, but non-zero weights"
     ):
         uvp_flagged_mod = ds.pspec(
             bls1,
@@ -2621,9 +2577,9 @@ def test_RFI_flag_propagation(bm, uvd):
             verbose=False,
         )
 
-    qe_flagged_mod = uvp_flagged_mod.get_data(
-        (0, ((24, 25), (37, 38)), ("xx", "xx"))
-    )[0]
+    qe_flagged_mod = uvp_flagged_mod.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[
+        0
+    ]
     qe_flagged = uvp_flagged.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[0]
 
     # assert answers are same to within 0.1%
@@ -2655,6 +2611,7 @@ def test_RFI_flag_propagation(bm, uvd):
 
     # print(uvd.data_array.shape)
 
+
 def test_validate_blpairs(uvd):
     # test exceptions
     uvd = copy.deepcopy(uvd)
@@ -2680,7 +2637,7 @@ def test_validate_blpairs(uvd):
 
 
 @pytest.mark.filterwarnings(
-"ignore:Some integrations have zero nsamples, but non-zero weights"
+    "ignore:Some integrations have zero nsamples, but non-zero weights"
 )
 def test_pspec_run(tmp_path):
     fnames = [
@@ -3034,11 +2991,23 @@ def test_pspec_run(tmp_path):
     with pytest.raises(AssertionError):
         pspecdata.pspec_run("foo", str(tmp_path / str(tmp_path / "out.h5")))
     with pytest.raises(AssertionError):
-        pspecdata.pspec_run(fnames, str(tmp_path / str(tmp_path / "out.h5")), blpairs=(1, 2), verbose=False)
+        pspecdata.pspec_run(
+            fnames,
+            str(tmp_path / str(tmp_path / "out.h5")),
+            blpairs=(1, 2),
+            verbose=False,
+        )
     with pytest.raises(AssertionError):
-        pspecdata.pspec_run(fnames, str(tmp_path / str(tmp_path / "out.h5")), blpairs=[1, 2], verbose=False)
+        pspecdata.pspec_run(
+            fnames,
+            str(tmp_path / str(tmp_path / "out.h5")),
+            blpairs=[1, 2],
+            verbose=False,
+        )
     with pytest.raises(AssertionError):
-        pspecdata.pspec_run(fnames, str(tmp_path / str(tmp_path / "out.h5")), beam=1, verbose=False)
+        pspecdata.pspec_run(
+            fnames, str(tmp_path / str(tmp_path / "out.h5")), beam=1, verbose=False
+        )
 
     # test execution with list of files for each dataset and list of cals
     if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
@@ -3144,7 +3113,9 @@ def test_input_calibration():
     # test exceptions
     pd = pspecdata.PSpecData()
     with pytest.raises(TypeError):
-        pd.add({"one": copy.deepcopy(dfiles[0])}, {"one": None}, cals="foo", cal_flag=False)
+        pd.add(
+            {"one": copy.deepcopy(dfiles[0])}, {"one": None}, cals="foo", cal_flag=False
+        )
     with pytest.raises(AssertionError):
         pd.add(dfiles, [None], cals=[None, None])
     with pytest.raises(TypeError):
