@@ -1401,7 +1401,9 @@ def test_Jy_to_mK(beam_nf_dipole, uvd):
     # test basic execution
     uvd.vis_units = "Jy"
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None], beam=beam_nf_dipole
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
+        wgts=[None, None],
+        beam=beam_nf_dipole,
     )
     ds.Jy_to_mK()
     assert ds.dsets[0].vis_units == "mK"
@@ -1413,7 +1415,9 @@ def test_Jy_to_mK(beam_nf_dipole, uvd):
 
     # test feeding beam
     ds2 = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None], beam=beam_nf_dipole
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
+        wgts=[None, None],
+        beam=beam_nf_dipole,
     )
     with pytest.warns(
         UserWarning, match="Feeding a beam model when self.primary_beam already exists"
@@ -1426,7 +1430,9 @@ def test_Jy_to_mK(beam_nf_dipole, uvd):
     uvd2.polarization_array[0] = -6
     uvd2.vis_units = "UNCALIB"
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)], wgts=[None, None], beam=beam_nf_dipole
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd2)],
+        wgts=[None, None],
+        beam=beam_nf_dipole,
     )
     with pytest.warns(
         UserWarning, match="Cannot convert dset 1 Jy -> mK because vis_units = UNCALIB"
@@ -1824,8 +1830,15 @@ def test_get_analytic_covariance():
 def test_pspec_basic_execution(pspec_ds):
     """Test basic pspec() execution: output shapes, dtypes, and input parameter variants."""
     uvp = pspec_ds.pspec(
-        pspec_bls, pspec_bls, (0, 1), ("xx", "xx"),
-        input_data_weight="identity", norm="I", taper="none", little_h=True, verbose=False,
+        pspec_bls,
+        pspec_bls,
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        little_h=True,
+        verbose=False,
     )
     assert len(uvp.bl_array) == len(pspec_bls)
     assert uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array
@@ -1835,13 +1848,19 @@ def test_pspec_basic_execution(pspec_ds):
 
     # verify spw_ranges and n_dlys input variants all accepted
     pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), spw_ranges=(10, 20))
-    pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), n_dlys=10, spw_ranges=[(10, 20)])
+    pspec_ds.pspec(
+        pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), n_dlys=10, spw_ranges=[(10, 20)]
+    )
     pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), n_dlys=1)
 
 
 def test_pspec_dayenu_weighting(pspec_ds):
     """Test dayenu (inverse-sinc) weighting: successful run and error handling for bad r_params."""
-    rp = {"filter_centers": [0.0], "filter_half_widths": [250e-9], "filter_factors": [1e-9]}
+    rp = {
+        "filter_centers": [0.0],
+        "filter_half_widths": [250e-9],
+        "filter_factors": [1e-9],
+    }
     my_r_params = {}
     my_r_params_dset0_only = {}
     for bl in pspec_bls:
@@ -1850,22 +1869,45 @@ def test_pspec_dayenu_weighting(pspec_ds):
         my_r_params_dset0_only[(0,) + bl + ("xx",)] = rp
 
     # successful dayenu run
-    pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), spw_ranges=(10, 20),
-                   input_data_weight="dayenu", r_params=my_r_params)
+    pspec_ds.pspec(
+        pspec_bls,
+        pspec_bls,
+        (0, 1),
+        ("xx", "xx"),
+        spw_ranges=(10, 20),
+        input_data_weight="dayenu",
+        r_params=my_r_params,
+    )
 
     # error: empty r_params dict
     with pytest.raises(ValueError):
-        pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), spw_ranges=(10, 20),
-                       input_data_weight="dayenu", r_params={})
+        pspec_ds.pspec(
+            pspec_bls,
+            pspec_bls,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=(10, 20),
+            input_data_weight="dayenu",
+            r_params={},
+        )
 
     # error: r_params missing keys for dset 1
     with pytest.raises(ValueError):
-        pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), spw_ranges=(10, 20),
-                       input_data_weight="dayenu", r_params=my_r_params_dset0_only)
+        pspec_ds.pspec(
+            pspec_bls,
+            pspec_bls,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=(10, 20),
+            input_data_weight="dayenu",
+            r_params=my_r_params_dset0_only,
+        )
 
     # error: grouped baseline format with more than one pair per group is not supported
     with pytest.raises(NotImplementedError):
-        pspec_ds.pspec([[(24, 25), (38, 39)]], [[(24, 25), (38, 39)]], (0, 1), [("xx", "xx")])
+        pspec_ds.pspec(
+            [[(24, 25), (38, 39)]], [[(24, 25), (38, 39)]], (0, 1), [("xx", "xx")]
+        )
 
 
 def test_pspec_isotropic_beam_norm(bm_Q, uvd):
@@ -1874,8 +1916,17 @@ def test_pspec_isotropic_beam_norm(bm_Q, uvd):
     uvd_temp = copy.deepcopy(uvd)
     bls_Q = [(24, 25)]
     ds_Q = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm_Q)
-    ds_Q.pspec(bls_Q, bls_Q, (0, 1), [("xx", "xx")],
-               input_data_weight="identity", norm="I", taper="none", verbose=False, exact_norm=False)
+    ds_Q.pspec(
+        bls_Q,
+        bls_Q,
+        (0, 1),
+        [("xx", "xx")],
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        verbose=False,
+        exact_norm=False,
+    )
 
     Q_sample = ds_Q.get_integral_beam("xx")
     assert np.shape(Q_sample) == (
@@ -1887,12 +1938,28 @@ def test_pspec_isotropic_beam_norm(bm_Q, uvd):
 
     # exact_norm=True vs exact_norm=False should agree to within 5%
     ds_t = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm_Q)
-    uvp_new = ds_t.pspec(bls_Q, bls_Q, (0, 1), [("xx", "xx")],
-                         input_data_weight="identity", norm="I", taper="none",
-                         verbose=False, exact_norm=True)
-    uvp_ext = ds_t.pspec(bls_Q, bls_Q, (0, 1), [("xx", "xx")],
-                         input_data_weight="identity", norm="I", taper="none",
-                         verbose=False, exact_norm=False)
+    uvp_new = ds_t.pspec(
+        bls_Q,
+        bls_Q,
+        (0, 1),
+        [("xx", "xx")],
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        verbose=False,
+        exact_norm=True,
+    )
+    uvp_ext = ds_t.pspec(
+        bls_Q,
+        bls_Q,
+        (0, 1),
+        [("xx", "xx")],
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        verbose=False,
+        exact_norm=False,
+    )
     key = (0, (bls_Q[0], bls_Q[0]), "xx")
     diff = np.median(
         (np.real(uvp_new.get_data(key)) - np.real(uvp_ext.get_data(key)))
@@ -1909,8 +1976,17 @@ def test_pspec_baseline_formats(pspec_ds):
     antpos = dict(zip(ants, antpos))
     red_bls = [sorted(blg) for blg in redcal.get_pos_reds(antpos)][2]
     bls1, bls2, _ = utils.construct_blpairs(red_bls, exclude_permutations=True)
-    uvp = pspec_ds.pspec(bls1, bls2, (0, 1), ("xx", "xx"),
-                         input_data_weight="identity", norm="I", taper="none", little_h=True, verbose=False)
+    uvp = pspec_ds.pspec(
+        bls1,
+        bls2,
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        little_h=True,
+        verbose=False,
+    )
     assert uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array
     assert uvp.Nblpairs == 10
     assert uvp.antnums_to_blpair(((24, 25), (52, 53))) in uvp.blpair_array
@@ -1919,19 +1995,34 @@ def test_pspec_baseline_formats(pspec_ds):
     # mixed grouped/ungrouped format: [[(bl,)], bl]
     bls1_mixed = [[(24, 25)], (52, 53)]
     bls2_mixed = [[(24, 25)], (52, 53)]
-    pspec_ds.pspec(bls1_mixed, bls2_mixed, (0, 1), ("xx", "xx"),
-                   input_data_weight="identity", norm="I", taper="none", little_h=True, verbose=False)
+    pspec_ds.pspec(
+        bls1_mixed,
+        bls2_mixed,
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        little_h=True,
+        verbose=False,
+    )
 
 
 def test_pspec_multiple_spws_and_select(beam_nf_dipole, uvd):
     """Test pspec() with multiple spectral windows and verify that select() works
     correctly on the resulting UVPSpec."""
-    bls1, bls2, _ = utils.construct_blpairs(pspec_bls, exclude_permutations=False, exclude_auto_bls=False)
+    bls1, bls2, _ = utils.construct_blpairs(
+        pspec_bls, exclude_permutations=False, exclude_auto_bls=False
+    )
 
     # two spectral windows + blpair-level select
     uvd_temp = copy.deepcopy(uvd)
-    ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole)
-    uvp = ds.pspec(bls1, bls2, (0, 1), ("xx", "xx"), spw_ranges=[(20, 30), (30, 40)], verbose=False)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
+    )
+    uvp = ds.pspec(
+        bls1, bls2, (0, 1), ("xx", "xx"), spw_ranges=[(20, 30), (30, 40)], verbose=False
+    )
     assert uvp.Nblpairs == 16
     assert uvp.Nspws == 2
     uvp2 = uvp.select(spws=0, bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
@@ -1943,9 +2034,17 @@ def test_pspec_multiple_spws_and_select(beam_nf_dipole, uvd):
 
     # three spectral windows: verify Nspws, Nspwdlys, shapes, and spw-level select
     uvd_temp = copy.deepcopy(uvd)
-    ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole)
-    uvp = ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"),
-                   spw_ranges=[(10, 24), (30, 40), (45, 64)], verbose=False)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
+    )
+    uvp = ds.pspec(
+        pspec_bls,
+        pspec_bls,
+        (0, 1),
+        ("xx", "xx"),
+        spw_ranges=[(10, 24), (30, 40), (45, 64)],
+        verbose=False,
+    )
     assert uvp.Nspws == 3
     assert uvp.Nspwdlys == 43
     assert uvp.data_array[0].shape == (240, 14, 1)
@@ -1961,34 +2060,62 @@ def test_pspec_polarizations(beam_nf_dipole, uvd):
     warnings for unavailable pols, and errors when all pols fail validation."""
     # single available pol
     uvd_temp = copy.deepcopy(uvd)
-    ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole)
-    ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), spw_ranges=[(10, 24)], verbose=False)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
+    )
+    ds.pspec(
+        pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), spw_ranges=[(10, 24)], verbose=False
+    )
 
     # warn and skip unavailable pol in a multi-pol request
     uvd_temp = copy.deepcopy(uvd)
-    ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole)
-    with pytest.warns(UserWarning, match="Polarization pair: \\('yy', 'yy'\\) failed the validation test"):
-        ds.pspec(pspec_bls, pspec_bls, (0, 1), [("xx", "xx"), ("yy", "yy")], spw_ranges=[(10, 24)], verbose=False)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
+    )
+    with pytest.warns(
+        UserWarning,
+        match="Polarization pair: \\('yy', 'yy'\\) failed the validation test",
+    ):
+        ds.pspec(
+            pspec_bls,
+            pspec_bls,
+            (0, 1),
+            [("xx", "xx"), ("yy", "yy")],
+            spw_ranges=[(10, 24)],
+            verbose=False,
+        )
 
     # integer pol code
     uvd_temp = copy.deepcopy(uvd)
-    ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole)
-    ds.pspec(pspec_bls, pspec_bls, (0, 1), (-5, -5), spw_ranges=[(10, 24)], verbose=False)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
+    )
+    ds.pspec(
+        pspec_bls, pspec_bls, (0, 1), (-5, -5), spw_ranges=[(10, 24)], verbose=False
+    )
 
     # error: mismatched bls1/bls2 lengths
     with pytest.raises(AssertionError):
         ds.pspec(pspec_bls[:1], pspec_bls, (0, 1), ("xx", "xx"))
 
     # error: all requested pols fail validation (yy not present)
-    with pytest.warns(UserWarning, match="Polarization pair: \\('yy', 'yy'\\) failed the validation test"):
+    with pytest.warns(
+        UserWarning,
+        match="Polarization pair: \\('yy', 'yy'\\) failed the validation test",
+    ):
         with pytest.raises(ValueError):
             ds.pspec(pspec_bls, pspec_bls, (0, 1), pols=("yy", "yy"))
 
     # error: dsets have mismatched polarizations
     uvd1 = copy.deepcopy(uvd)
     uvd1.polarization_array = np.array([-6])
-    ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd1], wgts=[None, None], beam=beam_nf_dipole)
-    with pytest.warns(UserWarning, match="Polarization pair: \\('xx', 'xx'\\) failed the validation test"):
+    ds = pspecdata.PSpecData(
+        dsets=[uvd_temp, uvd1], wgts=[None, None], beam=beam_nf_dipole
+    )
+    with pytest.warns(
+        UserWarning,
+        match="Polarization pair: \\('xx', 'xx'\\) failed the validation test",
+    ):
         with pytest.raises(ValueError):
             ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"))
 
@@ -1997,19 +2124,40 @@ def test_pspec_polarizations(beam_nf_dipole, uvd):
     uvd1.polarization_array = np.array([-6])
     uvd2 = uvd + uvd1
     ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=beam_nf_dipole)
-    ds.pspec(pspec_bls, pspec_bls, (0, 1), [("xx", "xx"), ("yy", "yy")], spw_ranges=[(10, 24)], verbose=False)
+    ds.pspec(
+        pspec_bls,
+        pspec_bls,
+        (0, 1),
+        [("xx", "xx"), ("yy", "yy")],
+        spw_ranges=[(10, 24)],
+        verbose=False,
+    )
 
     # warn and skip xy pol when not present in multi-pol UVData
-    with pytest.warns(UserWarning, match="Polarization pair: \\('xy', 'xy'\\) failed the validation test"):
-        ds.pspec(pspec_bls, pspec_bls, (0, 1), [("xx", "xx"), ("xy", "xy")], spw_ranges=[(10, 24)], verbose=False)
+    with pytest.warns(
+        UserWarning,
+        match="Polarization pair: \\('xy', 'xy'\\) failed the validation test",
+    ):
+        ds.pspec(
+            pspec_bls,
+            pspec_bls,
+            (0, 1),
+            [("xx", "xx"), ("xy", "xy")],
+            spw_ranges=[(10, 24)],
+            verbose=False,
+        )
 
 
-@pytest.mark.filterwarnings("ignore:Some integrations have zero nsamples, but non-zero weights")
+@pytest.mark.filterwarnings(
+    "ignore:Some integrations have zero nsamples, but non-zero weights"
+)
 def test_pspec_zero_nsamples(beam_nf_dipole, uvd):
     """Test that baselines with nsample_array=0 produce integration_array=0 in the output."""
     uvd_temp = copy.deepcopy(uvd)
     uvd_temp.nsample_array[uvd_temp.antpair2ind(24, 25, ordered=False)] = 0.0
-    ds = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
+    )
     uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [("xx", "xx")])
     assert np.all(np.isclose(uvp.integration_array[0], 0.0))
 
@@ -2017,7 +2165,9 @@ def test_pspec_zero_nsamples(beam_nf_dipole, uvd):
 def test_pspec_covariance_models(beam_nf_dipole, uvd, uvd_std):
     """Test pspec() covariance storage: empirical, dsets, and foreground_dependent cov_model,
     store_cov and store_cov_diag options, and that dsets/fiducial paths produce equal results."""
-    bls1, bls2, _ = utils.construct_blpairs(pspec_bls, exclude_permutations=False, exclude_auto_bls=False)
+    bls1, bls2, _ = utils.construct_blpairs(
+        pspec_bls, exclude_permutations=False, exclude_auto_bls=False
+    )
     key = (0, (bls1[0], bls2[0]), "xx")
 
     uvd_temp = copy.deepcopy(uvd)
@@ -2031,32 +2181,72 @@ def test_pspec_covariance_models(beam_nf_dipole, uvd, uvd_std):
 
     # empirical covariance: should be uniform along time axis
     uvp = ds.pspec(
-        bls1[:1], bls2[:1], (0, 1), ("xx", "xx"),
-        input_data_weight="identity", norm="I", taper="none", little_h=True, verbose=False,
-        spw_ranges=[(10, 20)], filter_extensions=[(2, 2)], symmetric_taper=False,
-        store_cov=True, cov_model="empirical",
+        bls1[:1],
+        bls2[:1],
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        little_h=True,
+        verbose=False,
+        spw_ranges=[(10, 20)],
+        filter_extensions=[(2, 2)],
+        symmetric_taper=False,
+        store_cov=True,
+        cov_model="empirical",
     )
     assert hasattr(uvp, "cov_array_real")
     assert np.allclose(uvp.get_cov(key)[0], uvp.get_cov(key)[-1])
 
     # dsets covariance
     uvp = ds.pspec(
-        bls1[:1], bls2[:1], (0, 1), ("xx", "xx"),
-        input_data_weight="identity", norm="I", taper="none", little_h=True, verbose=False,
-        spw_ranges=[(10, 20)], exact_norm=True, store_cov=True, cov_model="dsets",
+        bls1[:1],
+        bls2[:1],
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        little_h=True,
+        verbose=False,
+        spw_ranges=[(10, 20)],
+        exact_norm=True,
+        store_cov=True,
+        cov_model="dsets",
     )
     assert hasattr(uvp, "cov_array_real")
 
     # foreground_dependent: store_cov and store_cov_diag should agree on diagonal
     uvp_cov = ds.pspec(
-        bls1[:1], bls2[:1], (0, 1), ("xx", "xx"),
-        input_data_weight="identity", norm="I", taper="none", little_h=True, verbose=False,
-        spw_ranges=[(10, 20)], exact_norm=True, store_cov=True, cov_model="foreground_dependent",
+        bls1[:1],
+        bls2[:1],
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        little_h=True,
+        verbose=False,
+        spw_ranges=[(10, 20)],
+        exact_norm=True,
+        store_cov=True,
+        cov_model="foreground_dependent",
     )
     uvp_cov_diag = ds.pspec(
-        bls1[:1], bls2[:1], (0, 1), ("xx", "xx"),
-        input_data_weight="identity", norm="I", taper="none", little_h=True, verbose=False,
-        spw_ranges=[(10, 20)], exact_norm=True, store_cov_diag=True, cov_model="foreground_dependent",
+        bls1[:1],
+        bls2[:1],
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        little_h=True,
+        verbose=False,
+        spw_ranges=[(10, 20)],
+        exact_norm=True,
+        store_cov_diag=True,
+        cov_model="foreground_dependent",
     )
     assert np.isclose(
         np.diagonal(uvp_cov.get_cov(key), axis1=1, axis2=2),
@@ -2068,21 +2258,39 @@ def test_pspec_identity_caching(beam_nf_dipole, uvd):
     """Test that _identity_Y/G/H matrices are cached when baselines are identical
     and unflagged, and not reused when baselines differ in their flag patterns."""
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None], beam=beam_nf_dipole
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
+        wgts=[None, None],
+        beam=beam_nf_dipole,
     )
 
     # identical unflagged baselines: only one cache entry expected
-    ds.pspec([(24, 25), (24, 25)], [(24, 25), (24, 25)], (0, 1), ("xx", "xx"),
-             input_data_weight="identity", norm="I", taper="none", verbose=False,
-             spw_ranges=[(20, 30)])
+    ds.pspec(
+        [(24, 25), (24, 25)],
+        [(24, 25), (24, 25)],
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        verbose=False,
+        spw_ranges=[(20, 30)],
+    )
     assert len(ds._identity_Y) == len(ds._identity_G) == len(ds._identity_H) == 1
     assert list(ds._identity_Y.keys())[0] == ((0, 24, 25, "xx"), (1, 24, 25, "xx"))
 
     # flagging one baseline breaks the symmetry: two cache entries expected
     ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), 25, :] = True
-    ds.pspec([(24, 25), (37, 38)], [(24, 25), (37, 38)], (0, 1), ("xx", "xx"),
-             input_data_weight="identity", norm="I", taper="none", verbose=False,
-             spw_ranges=[(20, 30)])
+    ds.pspec(
+        [(24, 25), (37, 38)],
+        [(24, 25), (37, 38)],
+        (0, 1),
+        ("xx", "xx"),
+        input_data_weight="identity",
+        norm="I",
+        taper="none",
+        verbose=False,
+        spw_ranges=[(20, 30)],
+    )
     assert len(ds._identity_Y) == len(ds._identity_G) == len(ds._identity_H) == 2
     assert ((0, 24, 25, "xx"), (1, 24, 25, "xx")) in ds._identity_Y.keys()
     assert ((0, 37, 38, "xx"), (1, 37, 38, "xx")) in ds._identity_Y.keys()
@@ -2100,10 +2308,16 @@ def test_pspec_exact_windows():
     )
 
     # FT beam from file
-    with pytest.warns(UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."):
+    with pytest.warns(
+        UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."
+    ):
         uvp_w = ds.pspec(
-            baselines1, baselines2, (0, 1), ("xx", "xx"),
-            spw_ranges=(175, 195), exact_windows=True,
+            baselines1,
+            baselines2,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=(175, 195),
+            exact_windows=True,
             ftbeam=os.path.join(DATA_PATH, "FT_beam_HERA_dipole_test"),
         )
     assert uvp_w.exact_windows
@@ -2113,10 +2327,17 @@ def test_pspec_exact_windows():
     gaussian_beam = uvwindow.FTBeam.gaussian(
         freq_array=uvd1.freq_array.flatten(), widths=widths, pol="xx"
     )
-    with pytest.warns(UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."):
+    with pytest.warns(
+        UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."
+    ):
         ds.pspec(
-            baselines1, baselines2, (0, 1), ("xx", "xx"),
-            spw_ranges=(175, 195), exact_windows=True, ftbeam=gaussian_beam,
+            baselines1,
+            baselines2,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=(175, 195),
+            exact_windows=True,
+            ftbeam=gaussian_beam,
         )
 
 
