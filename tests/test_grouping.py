@@ -337,9 +337,7 @@ def test_average_spectra():
         blpair_groups=blpair_groups, error_weights="simple", inplace=False
     )
     final_stat = uvp_inf_var_avg.get_stats("simple", (0, blpairs[0], "xx"))
-    assert np.isclose(
-        final_stat[1:], initial_stat[1:] / np.sqrt(len(blpairs))
-    ).all()
+    assert np.isclose(final_stat[1:], initial_stat[1:] / np.sqrt(len(blpairs))).all()
     assert np.all(~np.isfinite(final_stat[0]))
 
     # Tests related to exact_windows
@@ -455,9 +453,7 @@ def test_bootstrap_average_blpairs(uvp):
     uvp1, wgts = grouping.bootstrap_average_blpairs(
         [uvp], blpair_groups, time_avg=False
     )
-    uvp2, wgts = grouping.bootstrap_average_blpairs(
-        [uvp], blpair_groups, time_avg=True
-    )
+    uvp2, wgts = grouping.bootstrap_average_blpairs([uvp], blpair_groups, time_avg=True)
     assert uvp1[0].Nblpairs == 1
     assert uvp1[0].Ntpairs == uvp.Ntpairs
     assert uvp2[0].Ntpairs == 1
@@ -466,11 +462,15 @@ def test_bootstrap_average_blpairs(uvp):
     assert np.sum(wgts) == np.array(blpair_groups).size
 
     # Check that exceptions are raised when inputs are invalid
-    with pytest.raises(AssertionError, match="uvp_list must be a list of UVPSpec objects"):
+    with pytest.raises(
+        AssertionError, match="uvp_list must be a list of UVPSpec objects"
+    ):
         grouping.bootstrap_average_blpairs(
             [np.arange(5)], blpair_groups, time_avg=False
         )
-    with pytest.raises(KeyError, match="do not exist in any of the input UVPSpec objects"):
+    with pytest.raises(
+        KeyError, match="do not exist in any of the input UVPSpec objects"
+    ):
         grouping.bootstrap_average_blpairs([uvp], [[200200200200]], time_avg=False)
 
     # Reduce UVPSpec to only 3 blpairs and set them all to the same values
@@ -691,11 +691,15 @@ def test_bootstrap_run(tmp_path):
 
     # test fed spectra doesn't exist
     psc.set_pspec("grp1", "uvp", uvp)
-    with pytest.raises(AssertionError, match="no specified spectra exist in PSpecContainer"):
+    with pytest.raises(
+        AssertionError, match="no specified spectra exist in PSpecContainer"
+    ):
         grouping.bootstrap_run(psc, spectra=["grp1/foo"])
 
     # test assertionerror if SWMR
-    psc = container.PSpecContainer(tmp_path / "ex3.h5", mode="rw", keep_open=False, swmr=True)
+    psc = container.PSpecContainer(
+        tmp_path / "ex3.h5", mode="rw", keep_open=False, swmr=True
+    )
     with pytest.raises(AssertionError, match="should not be in SWMR mode"):
         grouping.bootstrap_run(psc, spectra=["grp1/foo"])
 
@@ -987,7 +991,8 @@ def test_spherical_wf_from_uvp(uvp_exact_wfs):
         little_h="h^-3" in uvp.norm_units,
     )
     with pytest.raises(
-        AssertionError, match="Baseline-pair groups are inconsistent with baseline lengths"
+        AssertionError,
+        match="Baseline-pair groups are inconsistent with baseline lengths",
     ):
         grouping.spherical_wf_from_uvp(
             uvp,
@@ -999,9 +1004,7 @@ def test_spherical_wf_from_uvp(uvp_exact_wfs):
     # error if overlapping bins
     with pytest.warns(UserWarning, match="Changed little_h units"):
         with pytest.raises(AssertionError, match="kbins must not overlap"):
-            grouping.spherical_wf_from_uvp(
-                uvp, kbin_edges=np.array([1.0, 2.0, 1.5])
-            )
+            grouping.spherical_wf_from_uvp(uvp, kbin_edges=np.array([1.0, 2.0, 1.5]))
     # # blpair_weights
     wf_array = grouping.spherical_wf_from_uvp(
         uvp,
@@ -1014,7 +1017,9 @@ def test_spherical_wf_from_uvp(uvp_exact_wfs):
 
     # raise error if uvp.exact_windows is False
     uvp.exact_windows = False
-    with pytest.raises(AssertionError, match="Need to compute exact window functions first"):
+    with pytest.raises(
+        AssertionError, match="Need to compute exact window functions first"
+    ):
         grouping.spherical_wf_from_uvp(
             uvp, kbin_edges, little_h="h^-3" in uvp.norm_units
         )
@@ -1036,9 +1041,7 @@ def test_exceptions(vanilla_uvp_with_beam):
             vanilla_uvp_with_beam, kernel=np.array([[1, 1, 1]])
         )
 
-    with pytest.raises(
-        ValueError, match="The kernel size must be smaller than half"
-    ):
+    with pytest.raises(ValueError, match="The kernel size must be smaller than half"):
         grouping.average_in_delay_bins(
             vanilla_uvp_with_beam, kernel=np.zeros(vanilla_uvp_with_beam.Ndlys)
         )
@@ -1107,7 +1110,11 @@ def test_propagation(vanilla_uvp_with_beam, delay_bins_exact_wf_uvp):
     ), "Window functions wrongly propagated by grouping.spherical_average"
     # if theory kbins are given by the user
     sph_uvp2 = grouping.spherical_average(
-        vanilla_uvp_with_beam, kbins, bin_widths=dk, kbins_theory=kbins[::2], time_avg=True
+        vanilla_uvp_with_beam,
+        kbins,
+        bin_widths=dk,
+        kbins_theory=kbins[::2],
+        time_avg=True,
     )
     sph_new2 = grouping.spherical_average(
         new, kbins, bin_widths=dk, kbins_theory=kbins[::2], time_avg=True
@@ -1124,7 +1131,9 @@ def test_propagation(vanilla_uvp_with_beam, delay_bins_exact_wf_uvp):
         delay_bins_exact_wf_uvp, kernel=np.array([1, 1, 1])
     )
     # delay array propagation
-    assert np.isclose(new2.dly_array[0], np.mean(delay_bins_exact_wf_uvp.dly_array[1:4]))
+    assert np.isclose(
+        new2.dly_array[0], np.mean(delay_bins_exact_wf_uvp.dly_array[1:4])
+    )
     # window functions propagation
     assert np.allclose(
         np.mean(delay_bins_exact_wf_uvp.window_function_array[0][:, 1:4], axis=1),
