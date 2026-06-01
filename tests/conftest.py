@@ -25,7 +25,7 @@ def beam_nf_dipole() -> PSpecBeamUV:
 
 @pytest.fixture(scope="session")
 def vanilla_uvp() -> UVPSpec:
-    return build_vanilla_uvpspec(equal_time_arrays=True)[0]
+    return build_vanilla_uvpspec()[0]
 
 
 @pytest.fixture(scope="session")
