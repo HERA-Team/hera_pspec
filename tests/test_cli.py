@@ -281,3 +281,44 @@ def test_run_end_to_end(tmp_path):
     psc = container.PSpecContainer(str(out), mode="r")
     assert psc.groups() == ["dset0_dset1"]
     assert psc.spectra("dset0_dset1") == ["dset0_x_dset1_0"]
+
+
+def test_bootstrap_help():
+    result = runner.invoke(cli.app, ["bootstrap", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "usage:" in result.output.lower()
+
+
+def test_bootstrap_runner_filters_profiling_kwargs(tmp_path, monkeypatch):
+    """Regression: the runner must strip profiling/logging keys before dispatch.
+
+    Reproduces the args object that _cli_tools.parse_args would produce, then asserts
+    _run_bootstrap does not forward 'profile'/'log_*' to grouping.bootstrap_run.
+    """
+    from hera_cal._cli_tools import add_logging_args, add_profiling_args
+
+    from hera_pspec import grouping
+
+    parser = grouping.get_bootstrap_run_argparser()
+    add_profiling_args(parser)
+    add_logging_args(parser)
+    args = parser.parse_args([str(tmp_path / "x.h5"), "--Nsamples", "5"])
+
+    captured = {}
+
+    def fake_bootstrap_run(filename, **kwargs):
+        captured["filename"] = filename
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
+    cli._run_bootstrap(args)
+
+    assert captured["filename"] == str(tmp_path / "x.h5")
+    assert "profile" not in captured["kwargs"]
+    assert not any(k.startswith("profile_") for k in captured["kwargs"])
+    assert not any(k.startswith("log_") for k in captured["kwargs"])
+    assert captured["kwargs"]["Nsamples"] == 5
+    # real bootstrap kwargs must still be forwarded
+    assert captured["kwargs"]["seed"] == 0
+    assert "overwrite" in captured["kwargs"]
+    assert "time_avg" in captured["kwargs"]

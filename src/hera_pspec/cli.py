@@ -269,3 +269,21 @@ register_argparse_command(
     runner=_run_pspec,
     help_text="Run OQE power-spectrum estimation over datasets (was pspec_run.py).",
 )
+
+
+def _run_bootstrap(args) -> None:
+    # NOTE: filter_kwargs is required. Without it the profiling/logging keys added by
+    # _cli_tools.parse_args are forwarded to grouping.bootstrap_run (no **kwargs) and
+    # raise TypeError — the bug the old scripts/bootstrap_run.py shipped with.
+    kwargs = filter_kwargs(vars(args))
+    filename = kwargs.pop("filename")
+    run_with_profiling(grouping.bootstrap_run, args, filename=filename, **kwargs)
+
+
+register_argparse_command(
+    app,
+    name="bootstrap",
+    parser_factory=grouping.get_bootstrap_run_argparser,
+    runner=_run_bootstrap,
+    help_text="Bootstrap over redundant baseline-pair groups (was bootstrap_run.py).",
+)
