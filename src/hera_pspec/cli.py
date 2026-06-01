@@ -88,6 +88,24 @@ def register_argparse_command(
         runner(args)
 
 
+def _run_pspec(args) -> None:
+    kwargs = filter_kwargs(vars(args))
+    dsets = kwargs.pop("dsets")
+    filename = kwargs.pop("filename")
+    # The argparser exposes the inverse flag (exclude_crosscorrs); pspec_run wants
+    # include_crosscorrs. Default behavior is to compute cross-correlations.
+    kwargs["include_crosscorrs"] = not kwargs.pop("exclude_crosscorrs")
+    history = " ".join(sys.argv)
+    run_with_profiling(
+        pspecdata.pspec_run,
+        args,
+        dsets=dsets,
+        filename=filename,
+        history=history,
+        **kwargs,
+    )
+
+
 @app.command()
 def hello() -> None:
     # This is a test command which we need for the CLI interface to be broken into
@@ -242,3 +260,12 @@ def fast_merge_baselines(
         with open(fname, "wb") as f:
             pickle.dump(extra, f)
         cns.print(f"Wrote {fname}")
+
+
+register_argparse_command(
+    app,
+    name="run",
+    parser_factory=pspecdata.get_pspec_run_argparser,
+    runner=_run_pspec,
+    help_text="Run OQE power-spectrum estimation over datasets (was pspec_run.py).",
+)

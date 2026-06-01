@@ -249,3 +249,35 @@ def test_adapter_adds_profiling_args():
     assert captured["x"] == "hello"
     assert captured["y"] == "dy"
     assert captured["has_profile"] is True
+
+
+def test_run_help():
+    result = runner.invoke(cli.app, ["run", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "usage:" in result.output.lower()
+
+
+def test_run_end_to_end(tmp_path):
+    f0 = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    f1 = os.path.join(DATA_PATH, "zen.odd.xx.LST.1.28828.uvOCRSA")
+    out = tmp_path / "out.h5"
+    result = runner.invoke(
+        cli.app,
+        [
+            "run",
+            f0,
+            f1,
+            str(out),
+            "--overwrite",
+            "--dset_pairs", "0~1",
+            "--bl_len_range", "14", "15",
+            "--bl_deg_range", "50", "70",
+            "--psname_ext", "_0",
+            "--spw_ranges", "0~25",
+            "--file_type", "miriad",
+        ],
+    )
+    assert result.exit_code == 0, f"{result.output}\n{result.exception}"
+    psc = container.PSpecContainer(str(out), mode="r")
+    assert psc.groups() == ["dset0_dset1"]
+    assert psc.spectra("dset0_dset1") == ["dset0_x_dset1_0"]
