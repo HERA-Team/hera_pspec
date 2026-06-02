@@ -1,24 +1,16 @@
 """Tests for loss functions in hera_pspec."""
 
-import os
+import copy
 
 import numpy as np
 import pytest
 
-from hera_pspec import loss, pspecbeam, testing
-from hera_pspec.data import DATA_PATH
+from hera_pspec import loss
 
 
-@pytest.fixture
-def uvp():
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-    return uvp
-
-
-def test_total_bias_notinplace(uvp):
+def test_total_bias_notinplace(vanilla_uvp_with_beam):
     # Get rid of all the stats and covariances, to test if it works still
+    uvp = copy.deepcopy(vanilla_uvp_with_beam)
     del uvp.cov_array_real
     del uvp.cov_array_imag
     # del uvp.stats_array
@@ -31,7 +23,8 @@ def test_total_bias_notinplace(uvp):
         np.testing.assert_allclose(uvp2.data_array[spw], 2 * uvp.data_array[spw])
 
 
-def test_total_bias_notinplace_covs(uvp):
+def test_total_bias_notinplace_covs(vanilla_uvp_with_beam):
+    uvp = copy.deepcopy(vanilla_uvp_with_beam)
     uvp.stats_array = {"P_N": {spw: 1 for spw in uvp.spw_array}}
 
     uvp2 = loss.apply_bias_correction(
@@ -53,7 +46,8 @@ def test_total_bias_notinplace_covs(uvp):
             )
 
 
-def test_data_bias_inplace(uvp):
+def test_data_bias_inplace(vanilla_uvp_with_beam):
+    uvp = copy.deepcopy(vanilla_uvp_with_beam)
     data = {spw: dd.copy() for spw, dd in uvp.data_array.items()}
 
     loss.apply_bias_correction(

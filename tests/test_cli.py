@@ -5,19 +5,13 @@ import h5py
 import pytest
 from typer.testing import CliRunner
 
-from hera_pspec import cli, testing
+from hera_pspec import cli
 from hera_pspec.container import PSpecContainer
 from hera_pspec.uvpspec import UVPSpec
 
 
 @pytest.fixture(scope="module")
-def vanilla_uvp() -> UVPSpec:
-    uvp, _ = testing.build_vanilla_uvpspec()
-    return uvp
-
-
-@pytest.fixture(scope="module")
-def single_baseline_files(tmp_path_factory, vanilla_uvp: UVPSpec) -> list[Path]:
+def single_baseline_files(tmp_path_factory, vanilla_uvp) -> list[Path]:
     # Set up by writing out some one-blpair files.
     tmp_path = tmp_path_factory.mktemp("single-bl-files")
 
@@ -41,7 +35,7 @@ def single_baseline_files(tmp_path_factory, vanilla_uvp: UVPSpec) -> list[Path]:
     return files
 
 
-def test_happy_path(vanilla_uvp, single_baseline_files: list[Path]):
+def test_happy_path(vanilla_uvp: UVPSpec, single_baseline_files: list[Path]):
     runner = CliRunner()
 
     pth = single_baseline_files[0].parent
