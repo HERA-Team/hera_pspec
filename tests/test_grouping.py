@@ -246,7 +246,9 @@ def test_average_spectra(beam_nf_dipole_wcosmo):
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
 
     # Create a new PSpecData object, and don't forget to feed the beam object
-    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd1, uvd2], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+    )
     ds.rephase_to_dset(0)
     # change units of UVData objects
     ds.dsets[0].vis_units = "mK"
@@ -363,7 +365,9 @@ def test_average_spectra(beam_nf_dipole_wcosmo):
     # prep objects
     uvd = UVData()
     uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+    )
     baselines1, baselines2, blpairs = utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
@@ -735,11 +739,19 @@ def test_spherical_average(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo):
     # get reds and make UVPSpec
     reds = [r[:2] for r in redundant_blpairs]
     uvp = testing.uvpspec_from_data(
-        uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam_nf_dipole_wcosmo, cosmo=cosmo
+        uvd,
+        reds,
+        spw_ranges=[(50, 75), (100, 125)],
+        beam=beam_nf_dipole_wcosmo,
+        cosmo=cosmo,
     )
     uvd.polarization_array[0] = -6
     uvp += testing.uvpspec_from_data(
-        uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam_nf_dipole_wcosmo, cosmo=cosmo
+        uvd,
+        reds,
+        spw_ranges=[(50, 75), (100, 125)],
+        beam=beam_nf_dipole_wcosmo,
+        cosmo=cosmo,
     )
 
     # insert cov_array and stats_array
@@ -883,7 +895,9 @@ def test_spherical_average(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo):
     # tests related to exact_windows
     uvd = UVData()
     uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+    )
     baselines1, baselines2, blpairs = utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )

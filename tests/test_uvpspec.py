@@ -64,7 +64,9 @@ def uvp_with_covariance(beam_nf_dipole_wcosmo) -> uvpspec.UVPSpec:
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[: uvd.Ntimes // 2], inplace=False)
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[uvd.Ntimes // 2 :], inplace=False)
 
-    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd1, uvd2], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+    )
     ds.rephase_to_dset(0)
 
     spws = utils.spw_range_from_freqs(
