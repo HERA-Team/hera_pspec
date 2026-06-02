@@ -39,7 +39,7 @@ The library is organized around three persistent object types and a computation 
 
 ### Core objects
 
-- **`PSpecData`** (`pspecdata.py`, ~4.6k lines) — the estimator. Holds a list of `pyuvdata.UVData` datasets (`dsets`), matching weight/std datasets, an optional `PSpecBeam`, and `UVCal` calibration. The `pspec()` method is the main entry point: it iterates baseline pairs, polarization pairs, and spectral windows and computes power spectra into a `UVPSpec`. State on the instance (`spw_range`, `spw_Ndlys`, `data_weighting`, `taper`, `r_params`, `filter_extension`, `cov_regularization`, `symmetric_taper`) controls the estimator and is mutated by helper methods rather than passed through every call — be careful when refactoring not to break that implicit contract. `pspec_run()` is the high-level batch driver used by `scripts/pspec_run.py`.
+- **`PSpecData`** (`pspecdata.py`, ~4.6k lines) — the estimator. Holds a list of `pyuvdata.UVData` datasets (`dsets`), matching weight/std datasets, an optional `PSpecBeam`, and `UVCal` calibration. The `pspec()` method is the main entry point: it iterates baseline pairs, polarization pairs, and spectral windows and computes power spectra into a `UVPSpec`. State on the instance (`spw_range`, `spw_Ndlys`, `data_weighting`, `taper`, `r_params`, `filter_extension`, `cov_regularization`, `symmetric_taper`) controls the estimator and is mutated by helper methods rather than passed through every call — be careful when refactoring not to break that implicit contract. `pspec_run()` is the high-level batch driver behind the `pspec run` CLI command (`src/hera_pspec/cli.py`).
 
 - **`UVPSpec`** (`uvpspec.py`, ~3k lines) — the output container for a set of power spectra plus metadata. Attributes are declared as `PSpecParam` descriptors (`parameter.py`), each carrying a `description`, `expected_type`, and array `form` — this is what enables `check()` validation and HDF5 round-tripping. Heavy operations (averaging, redundancy grouping, delay binning, fold, exact window functions) live partly here and partly in `grouping.py` and `uvpspec_utils.py` (imported as `uvputils`). Note the comment near the top of `UVPSpec.__init__`: `Ntimes` and `Ntpairs` are now identical aliases (post-v0.5); pre-v0.5 files used a different convention.
 
@@ -61,8 +61,8 @@ The library is organized around three persistent object types and a computation 
 
 There are two parallel entry-point styles:
 
-- The new `pspec` Typer app (`src/hera_pspec/cli.py`) — currently exposes `hello` and `fast_merge_baselines`. Add new subcommands here.
-- The historical `scripts/*.py` (e.g. `pspec_run.py`, `bootstrap_run.py`, `pspec_red.py`) — installed via `script-files` and built around `argparse` parsers returned from inside the package (e.g. `pspecdata.get_pspec_run_argparser`). `pyproject.toml` notes this is discouraged; new commands should be added under `cli.py` rather than as fresh scripts.
+- The new `pspec` Typer app (`src/hera_pspec/cli.py`) — currently exposes `hello`, `fast-merge-baselines`, `run`, `bootstrap`, `auto-noise`, and `generate-pstokes`. Add new subcommands here.
+- The historical `scripts/*.py` — installed via `script-files` and built around `argparse` parsers returned from inside the package. The `pspec_run.py`, `bootstrap_run.py`, `auto_noise_run.py`, and `generate_pstokes_run.py` scripts have been **removed** and replaced by the corresponding `pspec` subcommands (`run`, `bootstrap`, `auto-noise`, `generate-pstokes`) — a breaking change to their CLI syntax (profiling via `hera_cal._cli_tools` was dropped pending typer support in hera-cli-utils). The remaining `scripts/pspec_red.py` and `scripts/psc_merge_spectra.py` are not yet migrated and stay installed via `script-files`; new commands should be added under `cli.py` rather than as fresh scripts.
 
 ## Conventions to respect
 

@@ -82,11 +82,7 @@ pspec = "hera_pspec.cli:app"
 # Doing this is discouraged, and we should package these CLI commands into the above
 # `scripts` section.
 script-files = [
-    "scripts/pspec_run.py",
     "scripts/pspec_red.py",
-    "scripts/bootstrap_run.py",
-    "scripts/generate_pstokes_run.py",
-    "scripts/auto_noise_run.py",
 ]
 
 [tool.setuptools.packages.find]
