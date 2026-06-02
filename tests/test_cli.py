@@ -276,3 +276,47 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert captured["blpairs"] == [((1, 2), (3, 4)), ((5, 6), (7, 8))]
+
+
+def test_bootstrap_help():
+    result = runner.invoke(cli.app, ["bootstrap", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "bootstrap" in result.output.lower()
+
+
+def test_bootstrap_bool_flags_round_trip(monkeypatch):
+    """Regression: time_avg/normal_std/robust_std are real bool flags, not type=bool."""
+    captured = {}
+
+    def fake_bootstrap_run(filename, **kwargs):
+        captured["filename"] = filename
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
+    result = runner.invoke(
+        cli.app,
+        ["bootstrap", "x.h5", "--time-avg", "--no-normal-std", "--nsamples", "5"],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["filename"] == "x.h5"
+    assert captured["time_avg"] is True
+    assert captured["normal_std"] is False
+    assert captured["robust_std"] is False  # argparser default
+    assert captured["Nsamples"] == 5
+    assert captured["seed"] == 0
+
+
+def test_bootstrap_blpair_group_parsed(monkeypatch):
+    """--blpair-group tokens parse to list[list[int]]."""
+    captured = {}
+
+    def fake_bootstrap_run(filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
+    result = runner.invoke(
+        cli.app,
+        ["bootstrap", "x.h5", "--blpair-group", "101 102", "--blpair-group", "103"],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["blpair_groups"] == [[101, 102], [103]]

@@ -15,7 +15,7 @@ cns = Console()
 
 app = typer.Typer()
 # typer pattern: register subcommands after app is constructed
-from . import container, pspecdata  # noqa: E402
+from . import container, grouping, pspecdata  # noqa: E402
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
@@ -377,4 +377,69 @@ def run(
         store_window=store_window,
         allow_fft=allow_fft,
         history=history,
+    )
+
+
+@app.command()
+def bootstrap(
+    filename: Path = typer.Argument(
+        ..., help="HDF5 PSpecContainer with the input power spectra."
+    ),
+    spectra: list[str] | None = typer.Option(
+        None,
+        help="Power-spectrum names (with group prefix) to bootstrap over (repeatable).",
+    ),
+    blpair_group: list[str] | None = typer.Option(
+        None,
+        "--blpair-group",
+        help="A baseline-pair group as space-separated blpair integers, e.g. "
+        "--blpair-group '101 102' (repeatable). Default: solve for redundant groups.",
+    ),
+    time_avg: bool = typer.Option(
+        False, help="Perform a time-average in the averaging step."
+    ),
+    nsamples: int = typer.Option(
+        100, "--nsamples", help="Number of bootstrap resamples."
+    ),
+    seed: int = typer.Option(0, help="Random seed for bootstrap resampling."),
+    normal_std: bool = typer.Option(True, help="Calculate a 'normal' std (np.std)."),
+    robust_std: bool = typer.Option(
+        False, help="Calculate a 'robust' std (biweight_midvariance)."
+    ),
+    cintervals: list[float] | None = typer.Option(
+        None, help="Confidence intervals (0<ci<100) to calculate (repeatable)."
+    ),
+    keep_samples: bool = typer.Option(
+        False, help="Store bootstrap resamples with a *_bs# extension."
+    ),
+    bl_error_tol: float = typer.Option(
+        1.0, help="Baseline-redundancy tolerance when computing redundant groups."
+    ),
+    overwrite: bool = typer.Option(False, help="Overwrite outputs if they exist."),
+    add_to_history: str = typer.Option(
+        "", help="String to add to the power-spectra history."
+    ),
+    verbose: bool = typer.Option(False, help="Report feedback to stdout."),
+) -> None:
+    """Bootstrap over redundant baseline-pair groups (was bootstrap_run.py)."""
+    blpair_groups = (
+        [[int(tok) for tok in grp.split()] for grp in blpair_group]
+        if blpair_group is not None
+        else None
+    )
+    grouping.bootstrap_run(
+        str(filename),
+        spectra=spectra,
+        blpair_groups=blpair_groups,
+        time_avg=time_avg,
+        Nsamples=nsamples,
+        seed=seed,
+        normal_std=normal_std,
+        robust_std=robust_std,
+        cintervals=cintervals,
+        keep_samples=keep_samples,
+        bl_error_tol=bl_error_tol,
+        overwrite=overwrite,
+        add_to_history=add_to_history,
+        verbose=verbose,
     )
