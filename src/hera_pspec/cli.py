@@ -1,5 +1,6 @@
 """A CLI interface for hera_pspec."""
 
+import copy
 import glob
 import pickle
 import sys
@@ -15,9 +16,10 @@ cns = Console()
 
 app = typer.Typer()
 # typer pattern: register subcommands after app is constructed
+import pyuvdata  # noqa: E402
 from pyuvdata import UVData  # noqa: E402
 
-from . import container, grouping, pspecdata, utils  # noqa: E402
+from . import container, grouping, pspecdata, pstokes, utils  # noqa: E402
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
@@ -484,3 +486,38 @@ def auto_noise(
             utils.uvp_noise_error(uvp, auto_Tsys, err_type=err_type)
             psc.set_pspec(group, spec, uvp, overwrite=True)
     psc.save()
+
+
+@app.command()
+def generate_pstokes(
+    inputdata: Path = typer.Argument(
+        ..., help="UVData file with linearly polarized data to add pseudo-Stokes to."
+    ),
+    pstokes_params: list[str] = typer.Option(
+        ["pI"],
+        "--pstokes",  # param can't be named `pstokes`: that shadows the imported pstokes module
+        help="Pseudo-Stokes parameters to calculate (repeatable). Default ['pI'].",
+    ),
+    outputdata: Path | None = typer.Option(
+        None,
+        help="Output filename. Defaults to inputdata (appends pstokes to linpols).",
+    ),
+    clobber: bool = typer.Option(False, help="Overwrite the output file if it exists."),
+    keep_vispols: bool = typer.Option(
+        False, help="Keep the original linear polarizations in the output."
+    ),
+) -> None:
+    """Generate pseudo-Stokes visibilities from linpol files (was generate_pstokes_run.py)."""
+    uvd = UVData()
+    uvd.read(str(inputdata))
+    out_path = str(outputdata) if outputdata is not None else str(inputdata)
+    if keep_vispols:
+        # if inplace, append new pstokes onto existing file.
+        uvd_output = copy.deepcopy(uvd)
+    else:
+        # otherwise, output uvd does not contain original polarizations.
+        uvd_output = pstokes.construct_pstokes(uvd, uvd, pstokes_params[0])
+    for p in pstokes_params:
+        if pyuvdata.utils.polstr2num(p) not in uvd_output.polarization_array:
+            uvd_output += pstokes.construct_pstokes(uvd, uvd, pstokes=p)
+    uvd_output.write_uvh5(out_path, clobber=clobber)

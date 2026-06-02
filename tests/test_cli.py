@@ -415,3 +415,79 @@ def test_auto_noise_multiple_err_types(monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N", "P_SN"))]
+
+
+def test_generate_pstokes_help():
+    result = runner.invoke(cli.app, ["generate-pstokes", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "generate-pstokes" in result.output.lower()
+
+
+def test_generate_pstokes_default_pstokes_is_list(monkeypatch):
+    """Regression: --pstokes default is ['pI'] (a list), not the string 'pI'."""
+    calls = {"construct": 0}
+
+    class FakeOut:
+        polarization_array = []  # pI absent -> construct path taken
+
+        def __iadd__(self, other):
+            return self
+
+        def write_uvh5(self, outputdata, clobber):
+            calls["write"] = (outputdata, clobber)
+
+    class FakeUVData:
+        def read(self, fname):
+            calls["read"] = fname
+
+    def fake_construct(uvd1, uvd2, pstokes):
+        calls["construct"] += 1
+        calls["first_pstokes"] = pstokes  # must be 'pI', never 'p'
+        return FakeOut()
+
+    monkeypatch.setattr(cli, "UVData", FakeUVData)
+    monkeypatch.setattr(cli.pstokes, "construct_pstokes", fake_construct)
+
+    result = runner.invoke(cli.app, ["generate-pstokes", "in.uvh5", "--clobber"])
+    assert result.exit_code == 0, result.output
+    assert calls["read"] == "in.uvh5"
+    assert calls["first_pstokes"] == "pI"
+    assert calls["write"] == ("in.uvh5", True)
+
+
+def test_generate_pstokes_keep_vispols(monkeypatch):
+    """keep_vispols=True takes the deepcopy branch, not the construct-for-base branch."""
+    calls = {"deepcopy": 0, "construct": 0}
+
+    class FakeOut:
+        polarization_array = []
+
+        def __iadd__(self, other):
+            return self
+
+        def write_uvh5(self, outputdata, clobber):
+            calls["write"] = (outputdata, clobber)
+
+    class FakeUVData:
+        def read(self, fname):
+            calls["read"] = fname
+
+    def fake_deepcopy(obj):
+        calls["deepcopy"] += 1
+        return FakeOut()
+
+    def fake_construct(*a, **k):
+        calls["construct"] += 1
+        return FakeOut()
+
+    monkeypatch.setattr(cli, "UVData", FakeUVData)
+    monkeypatch.setattr(cli.copy, "deepcopy", fake_deepcopy)
+    monkeypatch.setattr(cli.pstokes, "construct_pstokes", fake_construct)
+
+    result = runner.invoke(
+        cli.app, ["generate-pstokes", "in.uvh5", "--keep-vispols", "--clobber"]
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["deepcopy"] == 1
+    assert calls["construct"] == 1  # one missing pol constructed in the loop
+    assert calls["write"] == ("in.uvh5", True)
