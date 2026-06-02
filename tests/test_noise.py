@@ -143,7 +143,7 @@ def test_noise_validation():
     assert np.abs(P_rms - P_N) / P_N < 0.02
 
 
-def test_analytic_noise():
+def test_analytic_noise(tmp_path):
     """
     Test the two forms of analytic noise calculation
     one using QE propagated from auto-correlation
@@ -206,9 +206,8 @@ def test_analytic_noise():
 
         # get P_N estimate
         auto_Tsys = utils.uvd_to_Tsys(
-            uvd, beam, os.path.join(DATA_PATH, "test_uvd.uvh5")
+            uvd, beam, str(tmp_path / "test_uvd.uvh5")
         )
-        assert os.path.exists(os.path.join(DATA_PATH, "test_uvd.uvh5"))
         utils.uvp_noise_error(
             uvp, auto_Tsys, err_type=["P_N", "P_SN"], P_SN_correction=False
         )
@@ -259,8 +258,6 @@ def test_analytic_noise():
         select = np.abs(dlys) > 3000
         assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
 
-        # clean up
-        os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
 
 
 def check_corr_matrix(m: np.ndarray):

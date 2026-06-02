@@ -9,18 +9,12 @@ from hera_pspec.data import DATA_PATH
 
 
 @pytest.fixture
-def container_setup():
-    fname = os.path.join(DATA_PATH, "_test_container.hdf5")
+def container_setup(tmp_path):
+    fname = tmp_path / "_test_container.hdf5"
     uvp, cosmo = testing.build_vanilla_uvpspec()
-    if os.path.exists(fname):
-        os.remove(fname)
     ps_store = PSpecContainer(fname, mode="rw", swmr=False)
     del ps_store
     yield SimpleNamespace(fname=fname, uvp=uvp, cosmo=cosmo)
-    try:
-        os.remove(fname)
-    except Exception:
-        print("No HDF5 file to remove.")
 
 
 def _fill_container(fname, uvp):
@@ -261,37 +255,31 @@ def test_container_transactional_mode(container_setup):
         psc._close()
 
 
-def test_combine_psc_spectra():
+def test_combine_psc_spectra(tmp_path):
     fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
     uvp1 = testing.uvpspec_from_data(fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
     uvp2 = testing.uvpspec_from_data(fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
 
     # test basic execution
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
-    psc = PSpecContainer("ex.h5", mode="rw")
+    psc = PSpecContainer(tmp_path / "ex1.h5", mode="rw")
     psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "uvp_b", uvp2, overwrite=True)
     container.combine_psc_spectra(psc, dset_split_str=None, ext_split_str="_")
     assert psc.spectra("grp1") == ["uvp"]
 
     # test dset name handling
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
-    psc = PSpecContainer("ex.h5", mode="rw")
+    psc = PSpecContainer(tmp_path / "ex2.h5", mode="rw")
     psc.set_pspec("grp1", "d1_x_d2_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "d1_x_d2_b", uvp2, overwrite=True)
     psc.set_pspec("grp1", "d2_x_d3_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "d2_x_d3_b", uvp2, overwrite=True)
-    container.combine_psc_spectra("ex.h5", dset_split_str="_x_", ext_split_str="_")
+    container.combine_psc_spectra(str(tmp_path / "ex2.h5"), dset_split_str="_x_", ext_split_str="_")
     spec_list = psc.spectra("grp1")
     spec_list.sort()
     assert spec_list == ["d1_x_d2", "d2_x_d3"]
 
     # test exceptions
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
-    psc = PSpecContainer("ex.h5", mode="rw")
+    psc = PSpecContainer(tmp_path / "ex3.h5", mode="rw")
     # test no group exception
     with pytest.raises(AssertionError, match="no specified groups exist"):
         container.combine_psc_spectra(psc)
@@ -300,9 +288,6 @@ def test_combine_psc_spectra():
     psc.set_pspec("grp1", "d1_x_d2_b", uvp1, overwrite=True)
     container.combine_psc_spectra(psc, dset_split_str="_x_", ext_split_str="_")
     assert psc.spectra("grp1") == ["d1_x_d2_a", "d1_x_d2_b"]
-
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
 
 
 def test_combine_psc_spectra_argparser():

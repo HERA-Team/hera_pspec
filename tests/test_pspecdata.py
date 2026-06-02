@@ -2680,11 +2680,10 @@ def test_pspec_run(tmp_path):
     ]
 
     # test basic execution
-    if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
-        os.remove(str(tmp_path / str(tmp_path / "out.h5")))
+
     ds = pspecdata.pspec_run(
         fnames,
-        str(tmp_path / str(tmp_path / "out.h5")),
+        str(tmp_path / "out.h5"),
         Jy2mK=False,
         verbose=False,
         overwrite=True,
@@ -2694,19 +2693,18 @@ def test_pspec_run(tmp_path):
         psname_ext="_0",
         spw_ranges=[(0, 25)],
     )
-    psc = container.PSpecContainer(str(tmp_path / str(tmp_path / "out.h5")))
+    psc = container.PSpecContainer(str(tmp_path / "out.h5"), keep_open=False)
     assert isinstance(psc, container.PSpecContainer)
     assert psc.groups() == ["dset0_dset1"]
     assert psc.spectra(psc.groups()[0]) == ["dset0_x_dset1_0"]
-    assert os.path.exists(str(tmp_path / str(tmp_path / "out.h5")))
+    assert os.path.exists(str(tmp_path / "out.h5"))
 
     # test Jy2mK, blpairs, cosmo, cov_array, spw_ranges, dset labeling
     cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
-    if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
-        os.remove(str(tmp_path / str(tmp_path / "out.h5")))
+
     ds = pspecdata.pspec_run(
         fnames,
-        str(tmp_path / str(tmp_path / "out.h5")),
+        str(tmp_path / "out.h5"),
         dsets_std=fnames_std,
         Jy2mK=True,
         beam=beamfile,
@@ -2726,7 +2724,7 @@ def test_pspec_run(tmp_path):
     )
 
     # assert groupname is dset1_dset2
-    psc = container.PSpecContainer(str(tmp_path / str(tmp_path / "out.h5")))
+    psc = container.PSpecContainer(str(tmp_path / "out.h5"), keep_open=False)
     assert "foo_bar" in psc.groups()
 
     # assert uvp names are labeled by dset_pairs
@@ -2765,11 +2763,9 @@ def test_pspec_run(tmp_path):
     uvd.flag_array[uvd.antpair2ind(37, 38, ordered=False), 15, 0][:3] = True
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[::2], inplace=False)
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
-    if os.path.exists("./out2.h5"):
-        os.remove("./out2.h5")
     ds = pspecdata.pspec_run(
         [copy.deepcopy(uvd)],
-        "./out2.h5",
+        str(tmp_path / "out2.h5"),
         blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
         interleave_times=True,
         verbose=False,
@@ -2779,11 +2775,10 @@ def test_pspec_run(tmp_path):
         broadcast_dset_flags=True,
         time_thresh=0.3,
     )
-    psc = container.PSpecContainer("./out2.h5")
+    psc = container.PSpecContainer(str(tmp_path / "out2.h5"), keep_open=False)
     assert isinstance(psc, container.PSpecContainer)
     assert psc.groups() == ["dset0_dset1"]
     assert psc.spectra(psc.groups()[0]) == ["dset0_x_dset1"]
-    assert os.path.exists("./out2.h5")
 
     # assert dsets are properly interleaved
     assert np.isclose(
@@ -2813,11 +2808,9 @@ def test_pspec_run(tmp_path):
     # test without using future array shape
     uvd_non_future = UVData()
     uvd_non_future.read_miriad(fnames[0])
-    if os.path.exists("./out2.h5"):
-        os.remove("./out2.h5")
     ds = pspecdata.pspec_run(
         [copy.deepcopy(uvd_non_future)],
-        "./out2.h5",
+        str(tmp_path / "out2.h5"),
         dsets_std=[copy.deepcopy(uvd_non_future)],
         blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
         interleave_times=True,
@@ -2829,18 +2822,14 @@ def test_pspec_run(tmp_path):
         time_thresh=0.3,
     )
     # assert ds passes validation
-    psc = container.PSpecContainer("./out2.h5")
+    psc = container.PSpecContainer(str(tmp_path / "out2.h5"), keep_open=False)
     assert ds.dsets_std[0] is not None
     ds.validate_datasets()
-    assert os.path.exists("./out2.h5")
-    os.remove("./out2.h5")
 
     # repeat feeding dsets_std and wgts
-    if os.path.exists("./out2.h5"):
-        os.remove("./out2.h5")
     ds = pspecdata.pspec_run(
         [copy.deepcopy(uvd)],
-        "./out2.h5",
+        str(tmp_path / "out2.h5"),
         dsets_std=[copy.deepcopy(uvd)],
         blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
         interleave_times=True,
@@ -2852,20 +2841,16 @@ def test_pspec_run(tmp_path):
         time_thresh=0.3,
     )
     # assert ds passes validation
-    psc = container.PSpecContainer("./out2.h5")
+    psc = container.PSpecContainer(str(tmp_path / "out2.h5"), keep_open=False)
     assert ds.dsets_std[0] is not None
     ds.validate_datasets()
-    assert os.path.exists("./out2.h5")
-    os.remove("./out2.h5")
 
     # test lst trimming
-    if os.path.exists("./out2.h5"):
-        os.remove("./out2.h5")
     uvd1 = copy.deepcopy(uvd)
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[2:], inplace=False)
     ds = pspecdata.pspec_run(
         [copy.deepcopy(uvd1), copy.deepcopy(uvd2)],
-        "./out2.h5",
+        str(tmp_path / "out2.h5"),
         blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
         verbose=False,
         overwrite=True,
@@ -2873,30 +2858,26 @@ def test_pspec_run(tmp_path):
         trim_dset_lsts=True,
     )
     # assert first uvd1 lst_array got trimmed by 2 integrations
-    psc = container.PSpecContainer("./out2.h5")
+    psc = container.PSpecContainer(str(tmp_path / "out2.h5"), keep_open=False)
     assert ds.dsets[0].Ntimes == 8
     assert np.isclose(np.unique(ds.dsets[0].lst_array), np.unique(uvd2.lst_array)).all()
 
-    if os.path.exists("./out2.h5"):
-        os.remove("./out2.h5")
-
     # test when no data is loaded in dset
-    if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
-        os.remove(str(tmp_path / str(tmp_path / "out.h5")))
+
     with pytest.warns(
         UserWarning,
         match="pspec_run produced no output because the selected data contains no matching baseline-pairs.",
     ):
         ds = pspecdata.pspec_run(
             fnames,
-            str(tmp_path / str(tmp_path / "out.h5")),
+            str(tmp_path / "out_nobl.h5"),
             Jy2mK=False,
             verbose=False,
             overwrite=True,
             blpairs=[((500, 501), (600, 601))],
         )  # blpairs that don't exist
     assert ds is None
-    assert not os.path.exists(str(tmp_path / str(tmp_path / "out.h5")))
+    assert not os.path.exists(str(tmp_path / "out_nobl.h5"))
 
     # same test but with pre-loaded UVDatas
     uvds = []
@@ -2910,7 +2891,7 @@ def test_pspec_run(tmp_path):
     ):
         ds = pspecdata.pspec_run(
             uvds,
-            str(tmp_path / str(tmp_path / "out.h5")),
+            str(tmp_path / "out_nobl.h5"),
             dsets_std=fnames_std,
             Jy2mK=False,
             verbose=False,
@@ -2918,46 +2899,43 @@ def test_pspec_run(tmp_path):
             blpairs=[((500, 501), (600, 601))],
         )
     assert ds is None
-    assert not os.path.exists(str(tmp_path / str(tmp_path / "out.h5")))
+    assert not os.path.exists(str(tmp_path / "out_nobl.h5"))
 
     # test when data is loaded, but no blpairs match
-    if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
-        os.remove(str(tmp_path / str(tmp_path / "out.h5")))
+
     with pytest.warns(
         UserWarning,
         match="pspec_run produced no output because the selected data contains no matching baseline-pairs.",
     ):
         ds = pspecdata.pspec_run(
             fnames,
-            str(tmp_path / str(tmp_path / "out.h5")),
+            str(tmp_path / "out_nobl.h5"),
             Jy2mK=False,
             verbose=False,
             overwrite=True,
             blpairs=[((37, 38), (600, 601))],
         )
     assert isinstance(ds, pspecdata.PSpecData)
-    assert not os.path.exists(str(tmp_path / str(tmp_path / "out.h5")))
+    assert not os.path.exists(str(tmp_path / "out_nobl.h5"))
 
     # test glob-parseable input dataset
     dsets = [
         os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA"),
         os.path.join(DATA_PATH, "zen.2458042.?????.xx.HH.uvXA"),
     ]
-    if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
-        os.remove(str(tmp_path / str(tmp_path / "out.h5")))
+
     ds = pspecdata.pspec_run(
         dsets,
-        str(tmp_path / str(tmp_path / "out.h5")),
+        str(tmp_path / "out.h5"),
         Jy2mK=False,
         verbose=True,
         overwrite=True,
         blpairs=[((24, 25), (37, 38))],
     )
-    psc = container.PSpecContainer(str(tmp_path / str(tmp_path / "out.h5")), "rw")
+    psc = container.PSpecContainer(str(tmp_path / "out.h5"), "rw", keep_open=False)
     uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
     assert uvp.Ntimes == 120
-    if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
-        os.remove(str(tmp_path / str(tmp_path / "out.h5")))
+
 
     # test input calibration
     dfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.uvh5")
@@ -2969,7 +2947,7 @@ def test_pspec_run(tmp_path):
     uvc.extra_keywords["filename"] = json.dumps(cfile)
     ds = pspecdata.pspec_run(
         [dfile, dfile],
-        str(tmp_path / str(tmp_path / "out.h5")),
+        str(tmp_path / "out.h5"),
         cals=[copy.deepcopy(uvc), copy.deepcopy(uvc)],
         dsets_std=[dfile, dfile],
         verbose=False,
@@ -2981,7 +2959,7 @@ def test_pspec_run(tmp_path):
         spw_ranges=[(100, 150)],
         cal_flag=True,
     )
-    psc = container.PSpecContainer(str(tmp_path / str(tmp_path / "out.h5")), "rw")
+    psc = container.PSpecContainer(str(tmp_path / "out.h5"), "rw", keep_open=False)
     uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
     # test calibration flags were propagated to test that cal was applied
     assert ds.dsets[0].flag_array.any()
@@ -2996,7 +2974,7 @@ def test_pspec_run(tmp_path):
     dfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.uvh5")
     ds = pspecdata.pspec_run(
         [dfile, dfile],
-        str(tmp_path / str(tmp_path / "out.h5")),
+        str(tmp_path / "out.h5"),
         cals=[copy.deepcopy(uvc), copy.deepcopy(uvc)],
         dsets_std=[dfile, dfile],
         verbose=False,
@@ -3008,35 +2986,34 @@ def test_pspec_run(tmp_path):
         spw_ranges=[(100, 150)],
         cal_flag=True,
     )
-    psc = container.PSpecContainer(str(tmp_path / str(tmp_path / "out.h5")), "rw")
+    psc = container.PSpecContainer(str(tmp_path / "out.h5"), "rw", keep_open=False)
     uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
     assert uvp.Nblpairs == 1
 
     # test exceptions
     with pytest.raises(AssertionError):
-        pspecdata.pspec_run("foo", str(tmp_path / str(tmp_path / "out.h5")))
+        pspecdata.pspec_run("foo", str(tmp_path / "out.h5"))
     with pytest.raises(AssertionError):
         pspecdata.pspec_run(
             fnames,
-            str(tmp_path / str(tmp_path / "out.h5")),
+            str(tmp_path / "out.h5"),
             blpairs=(1, 2),
             verbose=False,
         )
     with pytest.raises(AssertionError):
         pspecdata.pspec_run(
             fnames,
-            str(tmp_path / str(tmp_path / "out.h5")),
+            str(tmp_path / "out.h5"),
             blpairs=[1, 2],
             verbose=False,
         )
     with pytest.raises(AssertionError):
         pspecdata.pspec_run(
-            fnames, str(tmp_path / str(tmp_path / "out.h5")), beam=1, verbose=False
+            fnames, str(tmp_path / "out.h5"), beam=1, verbose=False
         )
 
     # test execution with list of files for each dataset and list of cals
-    if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
-        os.remove(str(tmp_path / str(tmp_path / "out.h5")))
+
     fnames = glob.glob(os.path.join(DATA_PATH, "zen.2458116.*.HH.uvh5"))
     cals = glob.glob(os.path.join(DATA_PATH, "zen.2458116.*.HH.flagged_abs.calfits"))
     with pytest.warns(
@@ -3045,7 +3022,7 @@ def test_pspec_run(tmp_path):
     ):
         ds = pspecdata.pspec_run(
             [fnames, fnames],
-            str(tmp_path / str(tmp_path / "out.h5")),
+            str(tmp_path / "out5.h5"),
             Jy2mK=False,
             verbose=False,
             overwrite=True,
@@ -3056,20 +3033,19 @@ def test_pspec_run(tmp_path):
             spw_ranges=[(0, 25)],
             cals=[cals, cals],
         )
-    psc = container.PSpecContainer(str(tmp_path / str(tmp_path / "out.h5")), "rw")
+    psc = container.PSpecContainer(str(tmp_path / "out5.h5"), "rw", keep_open=False)
     assert isinstance(psc, container.PSpecContainer)
     assert psc.groups() == ["dset0_dset1"]
     assert psc.spectra(psc.groups()[0]) == ["dset0_x_dset1_0"]
-    assert os.path.exists(str(tmp_path / str(tmp_path / "out.h5")))
+    assert os.path.exists(str(tmp_path / "out.h5"))
 
-    if os.path.exists(str(tmp_path / str(tmp_path / "out.h5"))):
-        os.remove(str(tmp_path / str(tmp_path / "out.h5")))
+
 
     # test with cov_model that requires autos w/ fname as filepath
     fnames = glob.glob(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
     pspecdata.pspec_run(
         [fnames],
-        str(tmp_path / str(tmp_path / "out.h5")),
+        str(tmp_path / "out.h5"),
         spw_ranges=[(50, 70)],
         dset_pairs=[(0, 0)],
         verbose=False,
@@ -3083,7 +3059,6 @@ def test_pspec_run(tmp_path):
     psc = container.PSpecContainer(str(tmp_path / "out.h5"), keep_open=False)
     uvp = psc.get_pspec("dset0", "dset0_x_dset0")
     assert hasattr(uvp, "cov_array_real")
-    os.remove(str(tmp_path / "out.h5"))
 
 
 def test_input_calibration():

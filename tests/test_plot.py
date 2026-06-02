@@ -550,22 +550,19 @@ def test_plot_waterfall(uvp):
     plt.close()
 
 
-def test_uvdata_waterfalls(uvd):
+def test_uvdata_waterfalls(uvd, tmp_path):
     """
     Test waterfall plotter
     """
-    basename = "test_waterfall_plots_3423523923_{bl}_{pol}"
-
     for d in ["data", "flags", "nsamples"]:
-        print(f"running on {d}")
+        outdir = tmp_path / d
+        outdir.mkdir()
+        basename = str(outdir / "waterfall_{bl}_{pol}")
         plot.plot_uvdata_waterfalls(
             uvd, basename, vmin=0, vmax=100, data=d, plot_mode="real"
         )
-
-        figfiles = glob.glob("test_waterfall_plots_3423523923_*_*.png")
+        figfiles = glob.glob(str(outdir / "waterfall_*_*.png"))
         assert len(figfiles) == 15
-        for f in figfiles:
-            os.remove(f)
 
 
 def test_delay_wedge(pspec_ds):
