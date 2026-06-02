@@ -2936,7 +2936,6 @@ def test_pspec_run(tmp_path):
     uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
     assert uvp.Ntimes == 120
 
-
     # test input calibration
     dfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.uvh5")
     cfile = os.path.join(DATA_PATH, "zen.2458116.30448.HH.flagged_abs.calfits")
@@ -2995,22 +2994,14 @@ def test_pspec_run(tmp_path):
         pspecdata.pspec_run("foo", str(tmp_path / "out.h5"))
     with pytest.raises(AssertionError):
         pspecdata.pspec_run(
-            fnames,
-            str(tmp_path / "out.h5"),
-            blpairs=(1, 2),
-            verbose=False,
+            fnames, str(tmp_path / "out.h5"), blpairs=(1, 2), verbose=False
         )
     with pytest.raises(AssertionError):
         pspecdata.pspec_run(
-            fnames,
-            str(tmp_path / "out.h5"),
-            blpairs=[1, 2],
-            verbose=False,
+            fnames, str(tmp_path / "out.h5"), blpairs=[1, 2], verbose=False
         )
     with pytest.raises(AssertionError):
-        pspecdata.pspec_run(
-            fnames, str(tmp_path / "out.h5"), beam=1, verbose=False
-        )
+        pspecdata.pspec_run(fnames, str(tmp_path / "out.h5"), beam=1, verbose=False)
 
     # test execution with list of files for each dataset and list of cals
 
@@ -3038,8 +3029,6 @@ def test_pspec_run(tmp_path):
     assert psc.groups() == ["dset0_dset1"]
     assert psc.spectra(psc.groups()[0]) == ["dset0_x_dset1_0"]
     assert os.path.exists(str(tmp_path / "out.h5"))
-
-
 
     # test with cov_model that requires autos w/ fname as filepath
     fnames = glob.glob(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))

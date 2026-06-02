@@ -205,9 +205,7 @@ def test_analytic_noise(tmp_path):
         )
 
         # get P_N estimate
-        auto_Tsys = utils.uvd_to_Tsys(
-            uvd, beam, str(tmp_path / "test_uvd.uvh5")
-        )
+        auto_Tsys = utils.uvd_to_Tsys(uvd, beam, str(tmp_path / "test_uvd.uvh5"))
         utils.uvp_noise_error(
             uvp, auto_Tsys, err_type=["P_N", "P_SN"], P_SN_correction=False
         )
@@ -257,7 +255,6 @@ def test_analytic_noise(tmp_path):
         dlys = uvp.get_dlys(0) * 1e9
         select = np.abs(dlys) > 3000
         assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
-
 
 
 def check_corr_matrix(m: np.ndarray):

@@ -273,7 +273,9 @@ def test_combine_psc_spectra(tmp_path):
     psc.set_pspec("grp1", "d1_x_d2_b", uvp2, overwrite=True)
     psc.set_pspec("grp1", "d2_x_d3_a", uvp1, overwrite=True)
     psc.set_pspec("grp1", "d2_x_d3_b", uvp2, overwrite=True)
-    container.combine_psc_spectra(str(tmp_path / "ex2.h5"), dset_split_str="_x_", ext_split_str="_")
+    container.combine_psc_spectra(
+        str(tmp_path / "ex2.h5"), dset_split_str="_x_", ext_split_str="_"
+    )
     spec_list = psc.spectra("grp1")
     spec_list.sort()
     assert spec_list == ["d1_x_d2", "d2_x_d3"]
