@@ -320,3 +320,98 @@ def test_bootstrap_blpair_group_parsed(monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert captured["blpair_groups"] == [[101, 102], [103]]
+
+
+def test_auto_noise_help():
+    result = runner.invoke(cli.app, ["auto-noise", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "auto-noise" in result.output.lower()
+
+
+def _auto_noise_fakes(monkeypatch, calls):
+    class FakeUVData:
+        def read(self, fname):
+            calls["read"] = fname
+
+    class FakeContainer:
+        def __init__(self, *a, **k):
+            pass
+
+        def groups(self):
+            return ["grp1"]
+
+        def spectra(self, group):
+            return ["auto_spec"]
+
+        def get_pspec(self, group, spec):
+            return f"{group}/{spec}"
+
+        def set_pspec(self, group, spec, uvp, overwrite):
+            calls["set"].append((group, spec, overwrite))
+
+        def save(self):
+            calls["saved"] = True
+
+    monkeypatch.setattr(cli, "UVData", FakeUVData)
+    monkeypatch.setattr(cli.utils, "uvd_to_Tsys", lambda uvd, beam: "TSYS")
+    monkeypatch.setattr(
+        cli.utils,
+        "uvp_noise_error",
+        lambda uvp, tsys, err_type: calls["noise"].append((uvp, tsys, tuple(err_type))),
+    )
+    monkeypatch.setattr(cli.container, "PSpecContainer", FakeContainer)
+
+
+def test_auto_noise_default_spectra(monkeypatch):
+    calls = {"noise": [], "set": [], "saved": False}
+    _auto_noise_fakes(monkeypatch, calls)
+    result = runner.invoke(
+        cli.app, ["auto-noise", "cont.h5", "autos.uvh5", "beam.fits"]
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["read"] == "autos.uvh5"
+    assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N",))]
+    assert calls["set"] == [("grp1", "auto_spec", True)]
+    assert calls["saved"] is True
+
+
+def test_auto_noise_explicit_spectra_does_not_raise(monkeypatch):
+    """Regression: passing --spectra used to leave `spectra` unbound -> NameError."""
+    calls = {"noise": [], "set": [], "saved": False}
+    _auto_noise_fakes(monkeypatch, calls)
+    result = runner.invoke(
+        cli.app,
+        [
+            "auto-noise",
+            "cont.h5",
+            "autos.uvh5",
+            "beam.fits",
+            "--spectra",
+            "s1",
+            "--spectra",
+            "s2",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["set"] == [("grp1", "s1", True), ("grp1", "s2", True)]
+
+
+def test_auto_noise_multiple_err_types(monkeypatch):
+    """--err-type is repeatable and the full list reaches uvp_noise_error."""
+    calls = {"noise": [], "set": [], "saved": False}
+    _auto_noise_fakes(monkeypatch, calls)
+    result = runner.invoke(
+        cli.app,
+        [
+            "auto-noise",
+            "cont.h5",
+            "autos.uvh5",
+            "beam.fits",
+            "--err-type",
+            "P_N",
+            "--err-type",
+            "P_SN",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N", "P_SN"))]

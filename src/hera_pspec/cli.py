@@ -15,7 +15,9 @@ cns = Console()
 
 app = typer.Typer()
 # typer pattern: register subcommands after app is constructed
-from . import container, grouping, pspecdata  # noqa: E402
+from pyuvdata import UVData  # noqa: E402
+
+from . import container, grouping, pspecdata, utils  # noqa: E402
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
@@ -443,3 +445,42 @@ def bootstrap(
         add_to_history=add_to_history,
         verbose=verbose,
     )
+
+
+@app.command()
+def auto_noise(
+    pspec_container: Path = typer.Argument(
+        ..., help="HDF5 PSpecContainer with the input power spectra."
+    ),
+    auto_file: Path = typer.Argument(
+        ..., help="UVData file of autocorr baselines for thermal-noise estimation."
+    ),
+    beam: Path = typer.Argument(..., help="UVBeam file storing the primary beam."),
+    groups: list[str] | None = typer.Option(
+        None,
+        help="Power-spectrum groups to compute noise for (repeatable). Default: all.",
+    ),
+    spectra: list[str] | None = typer.Option(
+        None,
+        help="Power-spectrum names to compute noise for (repeatable). Default: all in group.",
+    ),
+    err_type: list[str] = typer.Option(
+        ["P_N"],
+        "--err-type",
+        help="Noise components to compute: 'P_N' and/or 'P_SN' (repeatable).",
+    ),
+) -> None:
+    """Compute noise error bars from autocorrelations (was auto_noise_run.py)."""
+    uvd = UVData()
+    uvd.read(str(auto_file))
+    auto_Tsys = utils.uvd_to_Tsys(uvd, beam=str(beam))
+    psc = container.PSpecContainer(
+        str(pspec_container), keep_open=False, mode="rw", swmr=False
+    )
+    for group in groups if groups is not None else psc.groups():
+        specs = spectra if spectra is not None else psc.spectra(group)
+        for spec in specs:
+            uvp = psc.get_pspec(group, spec)
+            utils.uvp_noise_error(uvp, auto_Tsys, err_type=err_type)
+            psc.set_pspec(group, spec, uvp, overwrite=True)
+    psc.save()
