@@ -10,9 +10,7 @@ from pyuvdata import UVData
 from hera_pspec import (
     UVPSpec,
     container,
-    conversions,
     grouping,
-    pspecbeam,
     pspecdata,
     testing,
     utils,
@@ -38,6 +36,29 @@ def case_vanilla_uvp_alternating_times(
 
 # def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):
 #     return uvp_exact_wfs
+
+
+@pytest.fixture(scope="session")
+def redundant_blpairs() -> list:
+    """Redundant baseline groups from zen.even.xx.LST.1.28828.uvOCRSA."""
+    uvd = UVData()
+    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
+    ap, a = uvd.get_enu_data_ants()
+    return redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)
+
+
+@pytest.fixture(scope="session")
+def uvp_from_miriad(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo) -> UVPSpec:
+    """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA, first 3 redundant groups."""
+    uvd = UVData()
+    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
+    return testing.uvpspec_from_data(
+        uvd,
+        redundant_blpairs[:3],
+        spw_ranges=[(50, 100)],
+        beam=beam_nf_dipole_wcosmo,
+        cosmo=cosmo,
+    )
 
 
 @pytest.fixture
@@ -206,7 +227,7 @@ def test_group_baselines():
             assert g1[i][j] == g3[i][j]
 
 
-def test_average_spectra():
+def test_average_spectra(beam_nf_dipole_wcosmo):
     """
     Test average spectra behavior.
     """
@@ -215,11 +236,8 @@ def test_average_spectra():
     # Load into UVData objects
     uvd = UVData()
     uvd.read_miriad(dfile)
-    cosmo = conversions.Cosmo_Conversions()
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
     # find conversion factor from Jy to mK
-    Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
+    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
 
     # reshape to appropriately match a UVData.data_array object and multiply in!
     uvd.data_array *= Jy_to_mK[None, :, None]
@@ -228,7 +246,7 @@ def test_average_spectra():
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
 
     # Create a new PSpecData object, and don't forget to feed the beam object
-    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
+    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
     ds.rephase_to_dset(0)
     # change units of UVData objects
     ds.dsets[0].vis_units = "mK"
@@ -345,7 +363,7 @@ def test_average_spectra():
     # prep objects
     uvd = UVData()
     uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
     baselines1, baselines2, blpairs = utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
@@ -506,19 +524,9 @@ def test_bootstrap_average_blpairs(uvp):
         np.testing.assert_array_almost_equal(ps_avg, ps_boot)
 
 
-def test_bootstrap_resampled_error(tmp_path):
+def test_bootstrap_resampled_error(tmp_path, uvp_from_miriad):
     # generate a UVPSpec
-    visfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    cosmo = conversions.Cosmo_Conversions()
-    beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-    uvd = UVData()
-    uvd.read_miriad(visfile)
-    ap, a = uvd.get_enu_data_ants()
-    reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
-    uvp = testing.uvpspec_from_data(
-        uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo
-    )
+    uvp = copy.deepcopy(uvp_from_miriad)
 
     # Lots of this function is already tested by bootstrap_run
     # so only test the stuff not already tested
@@ -605,19 +613,9 @@ def test_validate_bootstrap_errorbar():
     assert np.abs(1.0 - zscr_imag) < 1 / np.sqrt(Nsamples)
 
 
-def test_bootstrap_run(tmp_path):
+def test_bootstrap_run(tmp_path, uvp_from_miriad):
     # generate a UVPSpec and container
-    visfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    cosmo = conversions.Cosmo_Conversions()
-    beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-    uvd = UVData()
-    uvd.read_miriad(visfile)
-    ap, a = uvd.get_enu_data_ants()
-    reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)[:3]
-    uvp = testing.uvpspec_from_data(
-        uvd, reds, spw_ranges=[(50, 100)], beam=beam, cosmo=cosmo
-    )
+    uvp = copy.deepcopy(uvp_from_miriad)
     outfile = tmp_path / "ex.h5"
     psc = container.PSpecContainer(outfile, mode="rw", keep_open=False, swmr=False)
     psc.set_pspec("grp1", "uvp", uvp)
@@ -729,24 +727,19 @@ def test_get_bootstrap_run_argparser():
     assert a.cintervals == [16.0, 84.0]
 
 
-def test_spherical_average():
+def test_spherical_average(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo):
     # create two polarization data
     uvd = UVData()
     uvd.read(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
 
-    # load other data, get reds and make UVPSpec
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    cosmo = conversions.Cosmo_Conversions()
-    beam = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-    ap, a = uvd.get_enu_data_ants()
-    reds = redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)
-    reds = [r[:2] for r in reds]
+    # get reds and make UVPSpec
+    reds = [r[:2] for r in redundant_blpairs]
     uvp = testing.uvpspec_from_data(
-        uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo
+        uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam_nf_dipole_wcosmo, cosmo=cosmo
     )
     uvd.polarization_array[0] = -6
     uvp += testing.uvpspec_from_data(
-        uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam, cosmo=cosmo
+        uvd, reds, spw_ranges=[(50, 75), (100, 125)], beam=beam_nf_dipole_wcosmo, cosmo=cosmo
     )
 
     # insert cov_array and stats_array
@@ -890,7 +883,7 @@ def test_spherical_average():
     # tests related to exact_windows
     uvd = UVData()
     uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam)
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
     baselines1, baselines2, blpairs = utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )

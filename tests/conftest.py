@@ -18,6 +18,18 @@ DATA_PATH = Path(DATA_PATH)
 
 
 @pytest.fixture(scope="session")
+def cosmo() -> conversions.Cosmo_Conversions:
+    return conversions.Cosmo_Conversions()
+
+
+@pytest.fixture(scope="session")
+def beam_nf_dipole_wcosmo(cosmo: conversions.Cosmo_Conversions) -> PSpecBeamUV:
+    """PSpecBeamUV for HERA NF dipole with a Cosmo_Conversions instance wired in."""
+    beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
+    return PSpecBeamUV(str(beamfile), cosmo=cosmo)
+
+
+@pytest.fixture(scope="session")
 def beam_nf_dipole() -> PSpecBeamUV:
     beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
     return PSpecBeamUV(beamfile)

@@ -10,6 +10,15 @@ from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.data import DATA_PATH
 
 
+@pytest.fixture
+def uvp_with_stats(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
+    """Copy of vanilla_uvp_with_beam with a 'mystat' stats_array set for all keys."""
+    uvp = copy.deepcopy(vanilla_uvp_with_beam)
+    for k in uvp.get_all_keys():
+        uvp.set_stats("mystat", k, np.ones_like(uvp.get_data(k), dtype=complex))
+    return uvp
+
+
 def test_select_common():
     """
     Test selecting power spectra that two UVPSpec objects have in common.
@@ -216,17 +225,11 @@ def test_polpair_int2tuple():
         uvputils.polpair_int2tuple([999])
 
 
-def test_subtract_uvp():
+def test_subtract_uvp(uvp_with_stats):
     """
     Test subtraction of two UVPSpec objects
     """
-    # setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-    # add a dummy stats_array
-    for k in uvp.get_all_keys():
-        uvp.set_stats("mystat", k, np.ones_like(uvp.get_data(k), dtype=complex))
+    uvp = uvp_with_stats
 
     # test execution
     uvs = uvputils.subtract_uvp(uvp, uvp, run_check=True)

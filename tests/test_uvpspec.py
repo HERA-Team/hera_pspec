@@ -51,6 +51,46 @@ def case_uvp_exact_wfs(uvp_example_data, uvp_exact_wfs: UVPSpec):
     return uvp_exact_wfs
 
 
+@pytest.fixture
+def uvp_with_covariance(beam_nf_dipole_wcosmo) -> uvpspec.UVPSpec:
+    """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA with covariance computed (store_cov=True)."""
+    dfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    uvd = UVData()
+    uvd.read(dfile)
+
+    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
+    uvd.data_array *= Jy_to_mK[None, :, None]
+
+    uvd1 = uvd.select(times=np.unique(uvd.time_array)[: uvd.Ntimes // 2], inplace=False)
+    uvd2 = uvd.select(times=np.unique(uvd.time_array)[uvd.Ntimes // 2 :], inplace=False)
+
+    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
+    ds.rephase_to_dset(0)
+
+    spws = utils.spw_range_from_freqs(
+        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
+    )
+    antpos, ants = uvd.get_enu_data_ants()
+    red_bls = redcal.get_pos_reds(dict(zip(ants, antpos)), bl_error_tol=1.0)
+    bls1, bls2, _ = utils.construct_blpairs(
+        red_bls[3], exclude_auto_bls=True, exclude_permutations=True
+    )
+
+    return ds.pspec(
+        bls1,
+        bls2,
+        (0, 1),
+        [("xx", "xx")],
+        spw_ranges=spws,
+        input_data_weight="identity",
+        norm="I",
+        taper="blackman-harris",
+        store_cov=True,
+        cov_model="autos",
+        verbose=False,
+    )
+
+
 def _add_optionals(uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
     """Add dummy optional cov_array and stats_array to uvp."""
     uvp.cov_array_real = {}
@@ -173,67 +213,20 @@ def test_get_funcs(uvp: uvpspec.UVPSpec):
     ).shape == (8,)
 
 
-def test_get_covariance():
-    dfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd = UVData()
-    uvd.read(dfile)
-
-    cosmo = conversions.Cosmo_Conversions()
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=cosmo)
-
-    Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
-    uvd.data_array *= Jy_to_mK[None, :, None]
-
-    uvd1 = uvd.select(
-        times=np.unique(uvd.time_array)[: (uvd.Ntimes // 2) : 1], inplace=False
-    )
-    uvd2 = uvd.select(
-        times=np.unique(uvd.time_array)[
-            (uvd.Ntimes // 2) : (uvd.Ntimes // 2 + uvd.Ntimes // 2) : 1
-        ],
-        inplace=False,
-    )
-
-    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=uvb)
-    ds.rephase_to_dset(0)
-
-    spws = utils.spw_range_from_freqs(
-        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
-    )
-    antpos, ants = uvd.get_enu_data_ants()
-    antpos = dict(zip(ants, antpos))
-    red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
-    bls1, bls2, blpairs = utils.construct_blpairs(
-        red_bls[3], exclude_auto_bls=True, exclude_permutations=True
-    )
-
-    uvp = ds.pspec(
-        bls1,
-        bls2,
-        (0, 1),
-        [("xx", "xx")],
-        spw_ranges=spws,
-        input_data_weight="identity",
-        norm="I",
-        taper="blackman-harris",
-        store_cov=True,
-        cov_model="autos",
-        verbose=False,
-    )
-
+def test_get_covariance(uvp_with_covariance):
+    blpairs = uvp_with_covariance.get_blpairs()
     key = (0, blpairs[0], "xx")
 
-    cov_real = uvp.get_cov(key, component="real")
+    cov_real = uvp_with_covariance.get_cov(key, component="real")
     assert cov_real[0].shape == (50, 50)
-    cov_imag = uvp.get_cov(key, component="imag")
+    cov_imag = uvp_with_covariance.get_cov(key, component="imag")
     assert cov_imag[0].shape == (50, 50)
 
-    uvp.fold_spectra()
+    uvp_with_covariance.fold_spectra()
 
-    cov_real = uvp.get_cov(key, component="real")
+    cov_real = uvp_with_covariance.get_cov(key, component="real")
     assert cov_real[0].shape == (24, 24)
-    cov_imag = uvp.get_cov(key, component="imag")
+    cov_imag = uvp_with_covariance.get_cov(key, component="imag")
     assert cov_imag[0].shape == (24, 24)
 
 

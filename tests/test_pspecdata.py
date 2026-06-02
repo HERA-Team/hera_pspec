@@ -165,6 +165,25 @@ def w():
 
 
 @pytest.fixture
+def dayenu_r_params() -> dict:
+    """Standard dayenu r_params used across tests."""
+    return {
+        "filter_centers": [0.0],
+        "filter_half_widths": [100e-9],
+        "filter_factors": [1e-9],
+    }
+
+
+@pytest.fixture
+def pspec_blpairs() -> tuple:
+    """Standard (bls1, bls2, blpairs) derived from pspec_bls."""
+    bls1, bls2, blpairs = utils.construct_blpairs(
+        pspec_bls, exclude_auto_bls=True, exclude_permutations=True
+    )
+    return bls1, bls2, blpairs
+
+
+@pytest.fixture
 def pspec_ds(beam_nf_dipole, uvd):
     """PSpecData with two cross-products of uvd, NF dipole beam, and dataset labels."""
     return pspecdata.PSpecData(
@@ -272,7 +291,7 @@ def test_add_data(d):
         ds.add([uv], None, labels=["foo", "bar"])
 
 
-def test_set_symmetric_taper(d, w):
+def test_set_symmetric_taper(d, w, dayenu_r_params):
     """
     Make sure that you can't set a symmtric taper with an truncated R matrix
     """
@@ -288,19 +307,9 @@ def test_set_symmetric_taper(d, w):
     key3 = [(0, 24, 38), (0, 24, 38)]
     key4 = [(1, 25, 38), (1, 25, 38)]
 
-    rpk1 = {
-        "filter_centers": [0.0],
-        "filter_half_widths": [100e-9],
-        "filter_factors": [1e-9],
-    }
-    rpk2 = {
-        "filter_centers": [0.0],
-        "filter_half_widths": [100e-9],
-        "filter_factors": [1e-9],
-    }
     ds.set_weighting("dayenu")
-    ds.set_r_param(key1, rpk1)
-    ds.set_r_param(key2, rpk2)
+    ds.set_r_param(key1, dayenu_r_params)
+    ds.set_r_param(key2, dayenu_r_params)
     ds1 = copy.deepcopy(ds)
     ds1.set_spw((10, Nfreq - 10))
     ds1.set_symmetric_taper(False)
@@ -327,14 +336,9 @@ def test_set_symmetric_taper(d, w):
     key1 = (0, 24, 38)
     key2 = (1, 25, 38)
 
-    rpk1 = {
-        "filter_centers": [0.0],
-        "filter_half_widths": [100e-9],
-        "filter_factors": [1e-9],
-    }
     ds.set_weighting("dayenu")
     ds.set_taper("bh7")
-    ds.set_r_param(key1, rpk1)
+    ds.set_r_param(key1, dayenu_r_params)
     # get the symmetric tapering
     rmat_symmetric = ds.R(key1)
     # now set taper to be asymmetric
@@ -921,7 +925,7 @@ def test_cov_p_hat(d, d_std, w):
                 assert np.isclose(0.0, cov_p[0, p, q], atol=1e-6)
 
 
-def test_R_truncation(d, w):
+def test_R_truncation(d, w, dayenu_r_params):
     """
     Test truncation of R-matrices. These should give a q_hat that is all
     zeros outside of the with f-start and f-end.
@@ -938,19 +942,9 @@ def test_R_truncation(d, w):
     key3 = [(0, 24, 38), (0, 24, 38)]
     key4 = [(1, 25, 38), (1, 25, 38)]
 
-    rpk1 = {
-        "filter_centers": [0.0],
-        "filter_half_widths": [100e-9],
-        "filter_factors": [1e-9],
-    }
-    rpk2 = {
-        "filter_centers": [0.0],
-        "filter_half_widths": [100e-9],
-        "filter_factors": [1e-9],
-    }
     ds.set_weighting("dayenu")
-    ds.set_r_param(key1, rpk1)
-    ds.set_r_param(key2, rpk2)
+    ds.set_r_param(key1, dayenu_r_params)
+    ds.set_r_param(key2, dayenu_r_params)
     ds1 = copy.deepcopy(ds)
     ds1.set_spw((10, Nfreq - 10))
     ds1.set_symmetric_taper(False)
