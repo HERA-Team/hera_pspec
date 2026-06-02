@@ -798,12 +798,12 @@ def test_get_MW():
             # Test that the error covariance is diagonal
             M, W = ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V)
             band_covar = np.dot(M, np.dot(random_V, M.T))
-            assert diagonal_or_not(band_covar) == True
+            assert diagonal_or_not(band_covar)
 
         elif mode == "I":
             # Test that the norm matrix is diagonal
             M, W = ds.get_MW(random_G, random_H, mode=mode)
-            assert diagonal_or_not(M) == True
+            assert diagonal_or_not(M)
         elif mode == "L^-1":
             # Test that Cholesky mode is disabled
             with pytest.raises(NotImplementedError):
