@@ -486,7 +486,7 @@ def test_uvd_to_Tsys(uvd, beam_nf_dipole, vanilla_uvp):
         utils.uvd_to_Tsys(uvd, 12.0)
 
 
-def test_log():
+def test_log(tmp_path):
     """
     Test that log() prints output.
     """
@@ -495,23 +495,22 @@ def test_log():
     utils.log("message", lvl=2)
 
     # logfile
-    logf = open("logf.log", "w")
+    logf = open(tmp_path / "logf.log", "w")
     utils.log("message", f=logf, verbose=False)
     logf.close()
-    with open("logf.log") as f:
+    with open(tmp_path / "logf.log") as f:
         assert f.readlines()[0] == "message"
 
     # traceback
-    logf = open("logf.log", "w")
+    logf = open(tmp_path / "logf.log", "w")
     try:
         raise NameError
     except NameError:
         utils.log("raised an exception", f=logf, tb=sys.exc_info(), verbose=False)
     logf.close()
-    with open("logf.log") as f:
+    with open(tmp_path / "logf.log") as f:
         log = "".join(f.readlines())
         assert "NameError" in log and "raised an exception" in log
-    os.remove("logf.log")
 
 
 def test_get_blvec_reds():
@@ -564,9 +563,9 @@ def test_uvp_noise_error_arser():
     assert args.spectra is None
 
 
-def test_job_monitor():
+def test_job_monitor(tmp_path):
     # open empty files
-    datafiles = [f"./{i}" for i in ["a", "b", "c", "d"]]
+    datafiles = [str(tmp_path / i) for i in ["a", "b", "c", "d"]]
     for df in datafiles:
         with open(df, "w") as f:
             pass
@@ -602,6 +601,3 @@ def test_job_monitor():
     # assert no failures now
     assert len(failures) == 0
 
-    # remove files
-    for df in datafiles:
-        os.remove(df)
