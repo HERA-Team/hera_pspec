@@ -1088,7 +1088,7 @@ def test_get_H(d, w, input_data_weight, taper):
     ds.set_taper(taper)
     warn_ctx = (
         pytest.warns(UserWarning, match="Poorly conditioned covariance")
-        if input_data_weight == "iC" and taper == "none"
+        if input_data_weight == "iC"
         else nullcontext()
     )
 

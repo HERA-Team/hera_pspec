@@ -977,7 +977,9 @@ class UVWindow:
 
         # normalisation of window functions
         sum_per_bin = np.sum(cyl_wf, axis=(1, 2))[:, None, None]
-        cyl_wf = np.divide(cyl_wf, sum_per_bin, where=sum_per_bin != 0)
+        cyl_wf = np.divide(
+            cyl_wf, sum_per_bin, out=np.zeros_like(cyl_wf), where=sum_per_bin != 0
+        )
 
         if (return_bins == "unweighted") or return_bins:
             return kperp_bins, kpara_bins, cyl_wf
@@ -1085,11 +1087,9 @@ class UVWindow:
                         if np.any(mask):  # cannot compute mean if zero elements
                             wf_spherical[m1, m] = np.mean(wf_temp[mask])
                     # normalisation
-                    wf_spherical[m1, :] = np.divide(
-                        wf_spherical[m1, :],
-                        np.sum(wf_spherical[m1, :]),
-                        where=np.sum(wf_spherical[m1, :]) != 0,
-                    )
+                    row_sum = np.sum(wf_spherical[m1, :])
+                    if row_sum != 0:
+                        wf_spherical[m1, :] /= row_sum
 
         if np.any(kweights == 0.0) and self.verbose:
             warnings.warn(
