@@ -600,4 +600,3 @@ def test_job_monitor(tmp_path):
     )
     # assert no failures now
     assert len(failures) == 0
-

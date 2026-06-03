@@ -676,7 +676,9 @@ def test_UVWindow_run_and_write(uvwindow_obj, lens, tmp_path):
 
     # raise error if file already exists and clobber is False
     with pytest.raises(IOError, match="exists, not overwriting"):
-        uvwindow_obj.run_and_write(filepath=str(tmp_path / outfile), bl_lens=lens[:1], clobber=False)
+        uvwindow_obj.run_and_write(
+            filepath=str(tmp_path / outfile), bl_lens=lens[:1], clobber=False
+        )
     # does not raise if clobber is True
     uvwindow_obj.run_and_write(
         filepath=str(tmp_path / outfile),
@@ -691,7 +693,10 @@ def test_UVWindow_run_and_write(uvwindow_obj, lens, tmp_path):
         AssertionError, match="bl_weights and bl_lens must have same length"
     ):
         uvwindow_obj.run_and_write(
-            filepath=str(tmp_path / outfile), bl_lens=lens[:1], bl_weights=[1.0, 1.0], clobber=True
+            filepath=str(tmp_path / outfile),
+            bl_lens=lens[:1],
+            bl_weights=[1.0, 1.0],
+            clobber=True,
         )
     with pytest.raises(AttributeError, match="Feed k array with units"):
         uvwindow_obj.run_and_write(
