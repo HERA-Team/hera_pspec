@@ -197,7 +197,7 @@ def test_init(uvd):
     ds = pspecdata.PSpecData()
 
     # Test whether unequal no. of weights is picked up
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="The dsets and wgts lists must have equal length"):
         pspecdata.PSpecData(
             [uv.UVData(), uv.UVData(), uv.UVData()], [uv.UVData(), uv.UVData()]
         )
@@ -207,17 +207,21 @@ def test_init(uvd):
     d_lst = [[0, 1, 2] for i in range(5)]
     d_float = 12.0
     d_dict = {"(0,1)": np.arange(5), "(0,2)": np.arange(5)}
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="dsets, dsets_std, wgts and cals must be UVData"):
         pspecdata.PSpecData(d_arr, d_arr)
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
         pspecdata.PSpecData(d_lst, d_lst)
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="object of type 'float' has no len\\(\\)"):
         pspecdata.PSpecData(d_float, d_float)
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
+        pspecdata.PSpecData([d_float], [d_float])
+    with pytest.raises(TypeError, match='Only UVData objects can be used as datasets.'):
         pspecdata.PSpecData(d_dict, d_dict)
+    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
+        pspecdata.PSpecData([d_dict], [d_dict])
 
     # Test exception when not a UVData instance
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
         ds.add([1], [None])
 
     # Test get weights when fed a UVData for weights
@@ -238,9 +242,9 @@ def test_init(uvd):
 
     # Test some exceptions
     ds = pspecdata.PSpecData()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Number of delay bins should have been set"):
         ds.get_G(key, key)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Number of delay bins should have been set"):
         ds.get_H(key, key)
 
 
@@ -254,41 +258,41 @@ def test_add_data(d):
     ds1 = copy.deepcopy(ds)
     ds1.add(dsets=[uv], wgts=None, labels=None)
     # test adding non list objects
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="object of type 'int' has no len\\(\\)"):
         ds.add(1, 1)
     # test adding non UVData objects
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
         ds.add([1], None)
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVData objects .or None. can be used as weights"):
         ds.add([uv], [1])
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVData objects .or None. can be used as error sets"):
         ds.add([uv], None, dsets_std=[1])
     # test adding UVData object with old array shape
     ds2 = copy.deepcopy(uv)
     ds2.data_array = np.tile(uv.data_array, [1, 1, 1, 1])
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVData objects .or None. can be used as weights"):
         ds.add([uv], [1])
     # test adding non UVCal for cals
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVCal objects can be used for calibration"):
         ds.add([uv], None, cals=[1])
     # test TypeError if dsets is dict but other inputs are not
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="If 'dsets' is a dict, 'wgts' must also be a dict"):
         ds.add({"d": uv}, [0])
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="If 'dsets' is a dict, 'dsets_std' must also be a dict"):
         ds.add({"d": uv}, {"d": uv}, dsets_std=[0])
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="If 'cals' is a dict, 'cals' must also be a dict"):
         ds.add({"d": uv}, {"d": uv}, cals=[0])
     # specifying labels when dsets is a dict is a ValueError
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="If 'dsets' is a dict, 'labels' cannot be specified"):
         ds.add({"d": uv}, None, labels=["d"])
     # use lists, but not appropriate lengths
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="The dsets and wgts lists must have equal length"):
         ds.add([uv], [uv, uv])
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="The dsets and dsets_std lists must have equal length"):
         ds.add([uv], None, dsets_std=[uv, uv])
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="The dsets and cals lists must have equal length"):
         ds.add([uv], None, cals=[None, None])
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="If labels are specified, the dsets and labels lists must have equal length"):
         ds.add([uv], None, labels=["foo", "bar"])
 
 
@@ -373,11 +377,11 @@ def test_labels(d, w):
     # Check specifying labels using dicts
     dsdict = {"a": d[0], "b": d[1]}
     psd = pspecdata.PSpecData(dsets=dsdict, wgts=dsdict)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="If 'dsets' is a dict, 'labels' cannot be specified"):
         pspecdata.PSpecData(dsets=dsdict, wgts=dsdict, labels=["a", "b"])
 
     # Check that invalid labels raise errors
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match="not found"):
         psd.x(("green", 24, 38))
 
 
@@ -479,7 +483,7 @@ def test_get_Q_alt():
 
     # Make sure that error is raised when asking for a delay mode outside
     # of the range of delay bins
-    with pytest.raises(IndexError):
+    with pytest.raises(IndexError, match="Cannot compute Q matrix for a mode outside"):
         ds.get_Q_alt(vect_length - 1)
 
     # Ensure that in the special case where the number of channels equals
@@ -494,7 +498,7 @@ def test_get_Q_alt():
         assert Q_diff_norm <= multiplicative_tolerance
 
     # Check for error handling
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Cannot estimate more delays than there are frequency channels"):
         ds.set_Ndlys(vect_length + 100)
 
 
@@ -626,7 +630,7 @@ def test_get_unnormed_E(beam_nf_dipole, uvd):
         dsets=[uvd, uvd], wgts=[None, None], labels=["red", "blue"]
     )
     ds.spw_Ndlys = None
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Number of delay bins should have been set"):
         ds.get_unnormed_E("placeholder", "placeholder")
 
     # Test that if R1 = R2, then the result is Hermitian
@@ -697,9 +701,9 @@ def test_cross_covar_model(uvd):
     )
     key1 = ("red", (24, 25), "xx")
     key2 = ("blue", (25, 38), "xx")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="didn't recognize model"):
         ds.cross_covar_model(key1, key2, model="other_string")
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="key2 must be fed as a tuple"):
         ds.cross_covar_model(key1, "a_string")
 
     conj1_conj1 = ds.cross_covar_model(key1, key1, conj_1=True, conj_2=True)
@@ -766,7 +770,7 @@ def test_get_MW():
     random_V = generate_pos_def_all_pos(n)
     with pytest.raises(AssertionError):
         ds.get_MW(random_G, random_H, mode="L^3")
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError, match="Exact norm is not supported for non-I modes"):
         ds.get_MW(random_G, random_H, mode="H^-1", exact_norm=True)
 
     for mode in ["H^-1", "V^-1/2", "I", "L^-1"]:
@@ -798,7 +802,7 @@ def test_get_MW():
 
         elif mode == "V^-1/2":
             # Test that we are checking for the presence of a covariance matrix
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="Covariance not supplied for V.-1/2 normalization"):
                 ds.get_MW(random_G, random_H, mode=mode)
             # Test that the error covariance is diagonal
             M, W = ds.get_MW(random_G, random_H, mode=mode, band_covar=random_V)
@@ -811,7 +815,7 @@ def test_get_MW():
             assert diagonal_or_not(M)
         elif mode == "L^-1":
             # Test that Cholesky mode is disabled
-            with pytest.raises(NotImplementedError):
+            with pytest.raises(NotImplementedError, match="Cholesky decomposition mode not currently supported"):
                 ds.get_MW(random_G, random_H, mode=mode)
 
         # Test sizes for everyone
@@ -907,9 +911,9 @@ def test_cov_q_analytic(cov_q_setup):
     assert np.allclose(
         qc, np.repeat(cov_analytic[np.newaxis, :, :], ds.Ntimes, axis=0), atol=1e-6
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid time index provided"):
         ds.cov_q_hat(key1, key2, time_indices=200)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="time_indices must be an integer or list of integers"):
         ds.cov_q_hat(key1, key2, time_indices="watch out!")
 
 
@@ -996,7 +1000,7 @@ def test_q_hat(d, w):
     for input_data_weight in weight_selection:
         ds.set_weighting(input_data_weight)
         if input_data_weight == "dayenu":
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="r_param not set"):
                 ds.R(key1)
             rpk = {
                 "filter_centers": [0.0],
@@ -1059,7 +1063,7 @@ def test_q_hat(d, w):
             assert np.isclose(np.imag(q_hat_a / q_hat_a_slow), 0, atol=1e-6).all()
 
     # Test if error is raised when one tried FFT approach on exact_norm
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError, match="Exact normalization does not support FFT approach"):
         ds.q_hat(key1, key2, exact_norm=True, allow_fft=True)
 
 
@@ -1281,7 +1285,7 @@ def test_scalar(d, w, beam_nf_dipole):
     scalar = ds.scalar(1515)  # polpair-integer = ('xx', 'xx')
     scalar = ds.scalar(("xx", "xx"), taper_override="none")
     scalar = ds.scalar(("xx", "xx"), beam=gauss)
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError, match="Polarizations don't match"):
         ds.scalar(("xx", "yy"))
 
     # Precomputed results in the following test were done "by hand"
@@ -1299,33 +1303,33 @@ def test_validate_datasets(d):
     uvd = copy.deepcopy(d[0])
     uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10], inplace=False)
     ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="all dsets must have the same Nfreqs"):
         ds.validate_datasets()
 
     # test time exception
     uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
     ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="all dsets must have the same Ntimes"):
         ds.validate_datasets()
 
     # test label exception
     _labels = ds.labels
     ds.labels = ds.labels[:1]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="self.labels does not have same len"):
         ds.validate_datasets()
     ds.labels = _labels
 
     # test std exception
     _std = ds.dsets_std
     ds.dsets_std = ds.dsets_std[:1]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="self.dsets_std does not have the same len"):
         ds.validate_datasets()
     ds.dsets_std = _std
 
     # test wgt exception
     _wgts = ds.wgts
     ds.wgts = ds.wgts[:1]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="self.wgts does not have same len"):
         ds.validate_datasets()
     ds.wgts = _wgts
 
@@ -1347,7 +1351,7 @@ def test_validate_datasets(d):
     uvd2 = copy.deepcopy(d[0])
     uvd.phase_to_time(Time(2458042, format="jd"))
     ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="all datasets must have the same phase type"):
         ds.validate_datasets()
     uvd2.phase_to_time(Time(2458042.5, format="jd"))
     ds.validate_datasets()
@@ -1355,7 +1359,7 @@ def test_validate_datasets(d):
     uvd3 = copy.deepcopy(d[0])
     uvd3.phase_center_catalog[1] = uvd3.phase_center_catalog[0]
     ds2 = pspecdata.PSpecData(dsets=[uvd, uvd3], wgts=[None, None])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="phase_center_catalog should contain only one entry"):
         ds2.validate_datasets()
     # phased data
     uvd4 = copy.deepcopy(d[0])
@@ -1366,7 +1370,7 @@ def test_validate_datasets(d):
     # test channel widths
     uvd2.channel_width *= 2.0
     ds2 = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="all dsets must have the same channel_widths"):
         ds2.validate_datasets()
 
 
@@ -1471,7 +1475,7 @@ def test_trim_dset_lsts():
     ds = pspecdata.PSpecData(
         dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None]
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Not all datasets in self.dsets are on the same LST grid"):
         ds.trim_dset_lsts()
     assert ds.dsets[0].Ntimes == 60
     assert ds.dsets[1].Ntimes == 60
@@ -1500,7 +1504,7 @@ def test_get_Q_alt_tensor():
 def test_units(beam_nf_dipole, uvd):
     ds = pspecdata.PSpecData()
     # test exception
-    with pytest.raises(IndexError):
+    with pytest.raises(IndexError, match="No datasets have been added yet"):
         ds.units()
     ds.add(uvd, None)
     # test basic execution
@@ -1516,7 +1520,7 @@ def test_units(beam_nf_dipole, uvd):
 def test_delays(uvd):
     ds = pspecdata.PSpecData()
     # test exception
-    with pytest.raises(IndexError):
+    with pytest.raises(IndexError, match="No datasets have been added yet"):
         ds.delays()
     ds.add([uvd, uvd], [None, None])
     d = ds.delays()
@@ -1539,11 +1543,11 @@ def test_check_in_dset(d):
     assert not ds.check_key_in_dset((24, 26, "yy"), 0)
 
     # check exception
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match="must be a length 1, 2 or 3 tuple"):
         ds.check_key_in_dset((1, 2, 3, 4, 5), 0)
 
     # test dset_idx
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="dset must be either an int or string"):
         ds.dset_idx((1, 2))
 
 
@@ -1876,7 +1880,7 @@ def test_pspec_dayenu_weighting(pspec_ds):
     )
 
     # error: empty r_params dict
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="No r_param dictionary supplied for baseline *"):
         pspec_ds.pspec(
             pspec_bls,
             pspec_bls,
@@ -1888,7 +1892,7 @@ def test_pspec_dayenu_weighting(pspec_ds):
         )
 
     # error: r_params missing keys for dset 1
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="No r_param dictionary supplied for baseline *"):
         pspec_ds.pspec(
             pspec_bls,
             pspec_bls,
@@ -1900,7 +1904,7 @@ def test_pspec_dayenu_weighting(pspec_ds):
         )
 
     # error: grouped baseline format with more than one pair per group is not supported
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(NotImplementedError, match="Baseline lists bls1 and bls2"):
         pspec_ds.pspec(
             [[(24, 25), (38, 39)]], [[(24, 25), (38, 39)]], (0, 1), [("xx", "xx")]
         )
@@ -2091,7 +2095,7 @@ def test_pspec_polarizations(beam_nf_dipole, uvd):
     )
 
     # error: mismatched bls1/bls2 lengths
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="length of bls1 must equal length of bls2"):
         ds.pspec(pspec_bls[:1], pspec_bls, (0, 1), ("xx", "xx"))
 
     # error: all requested pols fail validation (yy not present)
@@ -2099,7 +2103,7 @@ def test_pspec_polarizations(beam_nf_dipole, uvd):
         UserWarning,
         match="Polarization pair: \\('yy', 'yy'\\) failed the validation test",
     ):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="None of the specified polarization pairs"):
             ds.pspec(pspec_bls, pspec_bls, (0, 1), pols=("yy", "yy"))
 
     # error: dsets have mismatched polarizations
@@ -2112,7 +2116,7 @@ def test_pspec_polarizations(beam_nf_dipole, uvd):
         UserWarning,
         match="Polarization pair: \\('xx', 'xx'\\) failed the validation test",
     ):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="None of the specified polarization pairs"):
             ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"))
 
     # multi-pol UVData: both xx and yy present
@@ -2642,9 +2646,9 @@ def test_RFI_flag_propagation(beam_nf_dipole, uvd):
 def test_validate_blpairs(uvd):
     # test exceptions
     uvd = copy.deepcopy(uvd)
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="uvd1 must be a UVData instance"):
         pspecdata.validate_blpairs([((1, 2), (2, 3))], None, uvd)
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="uvd2 must be a UVData instance"):
         pspecdata.validate_blpairs([((1, 2), (2, 3))], uvd, None)
 
     bls = [(24, 25), (37, 38)]
@@ -2992,13 +2996,13 @@ def test_pspec_run(tmp_path):
     assert uvp.Nblpairs == 1
 
     # test exceptions
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="dsets must be fed as a list"):
         pspecdata.pspec_run("foo", str(tmp_path / "out.h5"))
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="blpairs must be fed as a list of baseline-pair tuples"):
         pspecdata.pspec_run(
             fnames, str(tmp_path / "out.h5"), blpairs=(1, 2), verbose=False
         )
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="blpairs must be fed as a list of baseline-pair tuples"):
         pspecdata.pspec_run(
             fnames, str(tmp_path / "out.h5"), blpairs=[1, 2], verbose=False
         )
@@ -3103,13 +3107,13 @@ def test_input_calibration():
 
     # test exceptions
     pd = pspecdata.PSpecData()
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="If 'cals' is a dict, 'cals' must also be a dict"):
         pd.add(
             {"one": copy.deepcopy(dfiles[0])}, {"one": None}, cals="foo", cal_flag=False
         )
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="The dsets and cals lists must have equal length"):
         pd.add(dfiles, [None], cals=[None, None])
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="Only UVCal objects can be used for calibration"):
         pd.add(dfiles, [None], cals=["foo"])
 
 
