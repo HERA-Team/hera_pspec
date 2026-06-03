@@ -1,5 +1,4 @@
 import os
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -9,12 +8,12 @@ from hera_pspec.data import DATA_PATH
 
 
 @pytest.fixture
-def container_setup(tmp_path):
+def container_fname(tmp_path):
+    """Empty PSpecContainer HDF5 file at a temporary path."""
     fname = tmp_path / "_test_container.hdf5"
-    uvp, cosmo = testing.build_vanilla_uvpspec()
     ps_store = PSpecContainer(fname, mode="rw", swmr=False)
     del ps_store
-    yield SimpleNamespace(fname=fname, uvp=uvp, cosmo=cosmo)
+    return fname
 
 
 def _fill_container(fname, uvp):
@@ -32,15 +31,13 @@ def _fill_container(fname, uvp):
 @pytest.mark.parametrize(
     "keep_open,swmr", [(True, False), (False, True)], ids=["default", "transactional"]
 )
-def test_PSpecContainer(container_setup, keep_open, swmr):
+def test_PSpecContainer(container_fname, vanilla_uvp, keep_open, swmr):
     """
     Test that PSpecContainer works properly.
     """
     # setup, fill and open container
-    group_names, pspec_names = _fill_container(
-        container_setup.fname, container_setup.uvp
-    )
-    fname = container_setup.fname
+    group_names, pspec_names = _fill_container(container_fname, vanilla_uvp)
+    fname = container_fname
     ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
 
     # Make sure that invalid mode arguments are caught
@@ -52,7 +49,7 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
         ps_store.set_pspec(
             group=group_names[2],
             psname=psname,
-            pspec=container_setup.uvp,
+            pspec=vanilla_uvp,
             overwrite=True,
         )
 
@@ -61,7 +58,7 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
         ps_store.set_pspec(
             group=group_names[2],
             psname=psname,
-            pspec=container_setup.uvp,
+            pspec=vanilla_uvp,
             overwrite=False,
         )
 
@@ -115,7 +112,7 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
         ps_readonly.set_pspec(
             group=group_names[2],
             psname=pspec_names[2],
-            pspec=container_setup.uvp,
+            pspec=vanilla_uvp,
             overwrite=True,
         )
 
@@ -151,21 +148,21 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
         ps_store.set_pspec(
             group=group_names[:2],
             psname=pspec_names[0],
-            pspec=container_setup.uvp,
+            pspec=vanilla_uvp,
             overwrite=True,
         )
     with pytest.raises(ValueError, match="If psname is a list"):
         ps_store.set_pspec(
             group=group_names[0],
             psname=pspec_names,
-            pspec=container_setup.uvp,
+            pspec=vanilla_uvp,
             overwrite=True,
         )
     with pytest.raises(ValueError, match="If pspec is a list"):
         ps_store.set_pspec(
             group=group_names[0],
             psname=pspec_names[0],
-            pspec=[container_setup.uvp, container_setup.uvp, container_setup.uvp],
+            pspec=[vanilla_uvp, vanilla_uvp, vanilla_uvp],
             overwrite=True,
         )
     with pytest.raises(
@@ -174,7 +171,7 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
         ps_store.set_pspec(
             group=group_names[0],
             psname=pspec_names,
-            pspec=[container_setup.uvp, None, container_setup.uvp],
+            pspec=[vanilla_uvp, None, vanilla_uvp],
             overwrite=True,
         )
 
@@ -182,7 +179,7 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
     ps_store.set_pspec(
         group=group_names[0],
         psname=pspec_names,
-        pspec=[container_setup.uvp, container_setup.uvp, container_setup.uvp],
+        pspec=[vanilla_uvp, vanilla_uvp, vanilla_uvp],
         overwrite=True,
     )
 
@@ -190,15 +187,13 @@ def test_PSpecContainer(container_setup, keep_open, swmr):
     ps_store.save()
 
 
-def test_container_transactional_mode(container_setup):
+def test_container_transactional_mode(container_fname, vanilla_uvp):
     """
     Test transactional operations on PSpecContainer objects.
     """
     # setup, fill and open container
-    group_names, pspec_names = _fill_container(
-        container_setup.fname, container_setup.uvp
-    )
-    fname = container_setup.fname
+    group_names, pspec_names = _fill_container(container_fname, vanilla_uvp)
+    fname = container_fname
 
     # Test to see whether concurrent read/write works
     psc_rw = PSpecContainer(fname, mode="rw", keep_open=False, swmr=True)
@@ -223,7 +218,7 @@ def test_container_transactional_mode(container_setup):
     psc_rw.set_pspec(
         group=group_names[0],
         psname=pspec_names[0],
-        pspec=container_setup.uvp,
+        pspec=vanilla_uvp,
         overwrite=True,
     )
 
@@ -232,14 +227,14 @@ def test_container_transactional_mode(container_setup):
         psc_rw.set_pspec(
             group="new_group",
             psname=pspec_names[0],
-            pspec=container_setup.uvp,
+            pspec=vanilla_uvp,
             overwrite=True,
         )
     with pytest.raises(ValueError, match="Cannot write new group or dataset with SWMR"):
         psc_rw.set_pspec(
             group=group_names[0],
             psname="new_psname",
-            pspec=container_setup.uvp,
+            pspec=vanilla_uvp,
             overwrite=True,
         )
 
