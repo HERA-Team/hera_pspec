@@ -1045,7 +1045,9 @@ class UVWindow:
             )
             cyl_wf = cyl_wf[None]
         # check shapes are consistent
-        assert bl_lens.size == cyl_wf.shape[0]
+        assert bl_lens.size == cyl_wf.shape[0], (
+            "bl_lens size must match cyl_wf.shape[0]"
+        )
         assert ktot.shape == cyl_wf.shape[2:], (
             "k magnitude grid does not match (kperp,kpara) grid in cyl_wf"
         )
