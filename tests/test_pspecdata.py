@@ -34,6 +34,7 @@ dfiles_std = ["zen.2458042.12552.std.xx.HH.uvXAA", "zen.2458042.12552.std.xx.HH.
 
 # List of tapering function to use in tests
 taper_selection = ["none", "bh7"]
+weight_selection = ["identity", "iC", "dayenu"]
 
 # Baseline list shared by the pspec tests
 pspec_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
@@ -824,15 +825,14 @@ def test_get_MW():
             np.testing.assert_almost_equal(norm, 1.0)
 
 
-def test_cov_q(d, d_std, w, ndlys=13):
-    """
-    Test that q_hat_cov has the right shape and accepts keys in correct
-    format. Also validate with arbitrary number of delays.
-    """
+@pytest.fixture
+def cov_q_setup(d, d_std, w):
+    """PSpecData + analytic covariance matrix for test_cov_q tests."""
+    ndlys = 13
     dlist = copy.deepcopy(d)
     dlist_std = copy.deepcopy(d_std)
     for _d in dlist:
-        _d.flag_array[:] = False  # ensure that there are no flags!
+        _d.flag_array[:] = False
         _d.select(times=np.unique(_d.time_array)[:10], frequencies=_d.freq_array[:16])
     for _d_std in dlist_std:
         _d_std.flag_array[:] = False
@@ -840,9 +840,7 @@ def test_cov_q(d, d_std, w, ndlys=13):
             times=np.unique(_d_std.time_array)[:10], frequencies=_d_std.freq_array[:16]
         )
     ds = pspecdata.PSpecData(dsets=dlist, wgts=w, dsets_std=dlist_std)
-    Ntime = ds.Ntimes
     ds.set_Ndlys(ndlys)
-    # Here is the analytic covariance matrix...
     chan_x, chan_y = np.meshgrid(range(ds.Nfreqs), range(ds.Nfreqs))
     cov_analytic = np.zeros((ds.spw_Ndlys, ds.spw_Ndlys), dtype=np.complex128)
     for alpha in range(ds.spw_Ndlys):
@@ -852,53 +850,59 @@ def test_cov_q(d, d_std, w, ndlys=13):
             ).sum()
     key1 = (0, 24, 38)
     key2 = (1, 25, 38)
-    # print(cov_analytic)
+    return ds, cov_analytic, key1, key2
 
-    for input_data_weight in ["identity", "iC", "dayenu"]:
-        ds.set_weighting(input_data_weight)
-        # check error raised
-        if input_data_weight == "dayenu":
-            with pytest.raises(ValueError):
-                ds.R(key1)
-            rpk = {
-                "filter_centers": [0.0],
-                "filter_half_widths": [0.0],
-                "filter_factors": [0.0],
-            }
-            ds.set_r_param(key1, rpk)
-            ds.set_r_param(key2, rpk)
-        for taper_idx, taper in enumerate(taper_selection):
-            warn_ctx = (
-                pytest.warns(UserWarning, match="Poorly conditioned covariance")
-                if input_data_weight == "iC" and taper_idx == 0
-                else nullcontext()
-            )
-            with warn_ctx:
-                qc = ds.cov_q_hat(key1, key2, model="dsets")
-            assert np.allclose(
-                np.array(list(qc.shape)),
-                np.array([ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys]),
-                atol=1e-6,
-            )
-            qc = ds.cov_q_hat(key1, key2, model="empirical")
-            assert np.allclose(
-                np.array(list(qc.shape)),
-                np.array([ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys]),
-                atol=1e-6,
-            )
 
+@pytest.mark.parametrize("input_data_weight", weight_selection)
+def test_cov_q(cov_q_setup, input_data_weight):
     """
-    Now test that analytic Error calculation gives Nchan^2
+    Test that q_hat_cov has the right shape and accepts keys in correct
+    format. Also validate with arbitrary number of delays.
     """
+    ds, _, key1, key2 = cov_q_setup
+
+    ds.set_weighting(input_data_weight)
+    if input_data_weight == "dayenu":
+        with pytest.raises(ValueError):
+            ds.R(key1)
+        rpk = {
+            "filter_centers": [0.0],
+            "filter_half_widths": [0.0],
+            "filter_factors": [0.0],
+        }
+        ds.set_r_param(key1, rpk)
+        ds.set_r_param(key2, rpk)
+    # Run twice: first call may warn for iC (poorly conditioned R), second uses cache.
+    for taper_idx in range(len(taper_selection)):
+        warn_ctx = (
+            pytest.warns(UserWarning, match="Poorly conditioned covariance")
+            if input_data_weight == "iC" and taper_idx == 0
+            else nullcontext()
+        )
+        with warn_ctx:
+            qc = ds.cov_q_hat(key1, key2, model="dsets")
+        assert np.allclose(
+            np.array(list(qc.shape)),
+            np.array([ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys]),
+            atol=1e-6,
+        )
+        qc = ds.cov_q_hat(key1, key2, model="empirical")
+        assert np.allclose(
+            np.array(list(qc.shape)),
+            np.array([ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys]),
+            atol=1e-6,
+        )
+
+
+def test_cov_q_analytic(cov_q_setup):
+    """Test that analytic covariance gives Nchan^2, and validate key-list API."""
+    ds, cov_analytic, key1, key2 = cov_q_setup
+
     ds.set_weighting("identity")
     qc = ds.cov_q_hat(key1, key2, model="dsets")
     assert np.allclose(
         qc, np.repeat(cov_analytic[np.newaxis, :, :], ds.Ntimes, axis=0), atol=1e-6
     )
-    """
-    Test lists of keys
-    """
-    ds.set_weighting("identity")
     qc = ds.cov_q_hat([key1], [key2], time_indices=[0], model="dsets")
     assert np.allclose(
         qc, np.repeat(cov_analytic[np.newaxis, :, :], ds.Ntimes, axis=0), atol=1e-6
@@ -989,7 +993,7 @@ def test_q_hat(d, w):
     key3 = [(0, 24, 38), (0, 24, 38)]
     key4 = [(1, 25, 38), (1, 25, 38)]
 
-    for input_data_weight in ["identity", "iC", "dayenu"]:
+    for input_data_weight in weight_selection:
         ds.set_weighting(input_data_weight)
         if input_data_weight == "dayenu":
             with pytest.raises(ValueError):
@@ -1044,7 +1048,7 @@ def test_q_hat(d, w):
 
     ds.spw_Ndlys = Nfreq
     # Check that the slow method is the same as the FFT method
-    for input_data_weight in ["identity", "iC", "dayenu"]:
+    for input_data_weight in weight_selection:
         ds.set_weighting(input_data_weight)
         # Loop over list of taper functions
         for taper in taper_selection:
@@ -1059,7 +1063,48 @@ def test_q_hat(d, w):
         ds.q_hat(key1, key2, exact_norm=True, allow_fft=True)
 
 
-def test_get_H(d, w):
+@pytest.mark.parametrize("taper", taper_selection)
+@pytest.mark.parametrize("input_data_weight", weight_selection)
+def test_get_H(d, w, input_data_weight, taper):
+    """
+    Test Fisher/weight matrix calculation.
+    """
+    ds = pspecdata.PSpecData(dsets=d, wgts=w)
+    Nfreq = ds.Nfreqs
+    key1 = (0, 24, 38)
+    key2 = (1, 25, 38)
+
+    ds.set_weighting(input_data_weight)
+    if input_data_weight == "dayenu":
+        with pytest.raises(ValueError):
+            ds.R(key1)
+        rpk = {
+            "filter_centers": [0.0],
+            "filter_half_widths": [0.0],
+            "filter_factors": [0.0],
+        }
+        ds.set_r_param(key1, rpk)
+        ds.set_r_param(key2, rpk)
+    ds.set_taper(taper)
+    warn_ctx = (
+        pytest.warns(UserWarning, match="Poorly conditioned covariance")
+        if input_data_weight == "iC" and taper == "none"
+        else nullcontext()
+    )
+
+    ds.set_Ndlys(Nfreq // 3)
+    with warn_ctx:
+        H = ds.get_H(key1, key2)
+    assert H.shape == (Nfreq // 3, Nfreq // 3)
+
+    ds.set_Ndlys()
+    H = ds.get_H(key1, key2)
+    assert H.shape == (Nfreq, Nfreq)
+
+
+@pytest.mark.parametrize("taper", taper_selection)
+@pytest.mark.parametrize("input_data_weight", weight_selection)
+def test_get_G(d, w, input_data_weight, taper):
     """
     Test Fisher/weight matrix calculation.
     """
@@ -1069,112 +1114,69 @@ def test_get_H(d, w):
     key1 = (0, 24, 38)
     key2 = (1, 25, 38)
 
-    for input_data_weight in ["identity", "iC", "dayenu"]:
-        ds.set_weighting(input_data_weight)
-        if input_data_weight == "dayenu":
-            with pytest.raises(ValueError):
-                ds.R(key1)
-            rpk = {
-                "filter_centers": [0.0],
-                "filter_half_widths": [0.0],
-                "filter_factors": [0.0],
-            }
-            ds.set_r_param(key1, rpk)
-            ds.set_r_param(key2, rpk)
-        for taper_idx, taper in enumerate(taper_selection):
-            ds.set_taper(taper)
-            warn_ctx = (
-                pytest.warns(UserWarning, match="Poorly conditioned covariance")
-                if input_data_weight == "iC" and taper_idx == 0
-                else nullcontext()
-            )
+    ds.set_weighting(input_data_weight)
+    if input_data_weight == "dayenu":
+        with pytest.raises(ValueError):
+            ds.R(key1)
+        rpk = {
+            "filter_centers": [0.0],
+            "filter_half_widths": [0.0],
+            "filter_factors": [0.0],
+        }
+        ds.set_r_param(key1, rpk)
+        ds.set_r_param(key2, rpk)
+    ds.clear_cache()
+    ds.set_taper(taper)
+    warn_ctx = (
+        pytest.warns(UserWarning, match="Poorly conditioned covariance")
+        if input_data_weight == "iC"
+        else nullcontext()
+    )
+    ds.set_Ndlys(Nfreq - 2)
+    with warn_ctx:
+        G = ds.get_G(key1, key2)
+    assert G.shape == (Nfreq - 2, Nfreq - 2)  # Test shape
+    matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
 
-            ds.set_Ndlys(Nfreq // 3)
-            with warn_ctx:
-                H = ds.get_H(key1, key2)
-            assert H.shape == (Nfreq // 3, Nfreq // 3)  # Test shape
+    if input_data_weight == "identity":
+        # In the identity case, there are three special properties
+        # that are respected:
+        # i) Symmetry: G_ab = G_ba
+        # ii) Cylic property: G = (1/2) tr[R1 Q_a R2 Q_b]
+        #                       = (1/2) tr[R2 Q_b R1 Q_a]
+        # iii) All elements of G are positive.
 
-            ds.set_Ndlys()
-            H = ds.get_H(key1, key2)
-            assert H.shape == (Nfreq, Nfreq)  # Test shape
+        # Test symmetry
+        anti_sym_norm = np.linalg.norm(G - G.T)
+        assert anti_sym_norm <= matrix_scale * multiplicative_tolerance
 
+        # Test cyclic property of trace, where key1 and key2 can be
+        # swapped without changing the matrix. This is secretly the
+        # same test as the symmetry test, but perhaps there are
+        # creative ways to break the code to break one test but not
+        # the other.
+        G_swapped = ds.get_G(key2, key1)
+        G_diff_norm = np.linalg.norm(G - G_swapped)
+        assert G_diff_norm <= matrix_scale * multiplicative_tolerance
+        min_diagonal = np.min(np.diagonal(G))
 
-def test_get_G(d, w):
-    """
-    Test Fisher/weight matrix calculation.
-    """
-    ds = pspecdata.PSpecData(dsets=d, wgts=w)
-    Nfreq = ds.Nfreqs
-    multiplicative_tolerance = 1.0
-    key1 = (0, 24, 38)
-    key2 = (1, 25, 38)
-
-    for input_data_weight in ["identity", "iC", "dayenu"]:
-        ds.set_weighting(input_data_weight)
-        if input_data_weight == "dayenu":
-            with pytest.raises(ValueError):
-                ds.R(key1)
-            rpk = {
-                "filter_centers": [0.0],
-                "filter_half_widths": [0.0],
-                "filter_factors": [0.0],
-            }
-            ds.set_r_param(key1, rpk)
-            ds.set_r_param(key2, rpk)
-        for taper in taper_selection:
-            ds.clear_cache()
-            ds.set_taper(taper)
-            warn_ctx = (
-                pytest.warns(UserWarning, match="Poorly conditioned covariance")
-                if input_data_weight == "iC"
-                else nullcontext()
-            )
-            # print 'input_data_weight', input_data_weight
-            ds.set_Ndlys(Nfreq - 2)
-            with warn_ctx:
-                G = ds.get_G(key1, key2)
-            assert G.shape == (Nfreq - 2, Nfreq - 2)  # Test shape
-            # print np.min(np.abs(G)), np.min(np.abs(np.linalg.eigvalsh(G)))
-            matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
-
-            if input_data_weight == "identity":
-                # In the identity case, there are three special properties
-                # that are respected:
-                # i) Symmetry: G_ab = G_ba
-                # ii) Cylic property: G = (1/2) tr[R1 Q_a R2 Q_b]
-                #                       = (1/2) tr[R2 Q_b R1 Q_a]
-                # iii) All elements of G are positive.
-
-                # Test symmetry
-                anti_sym_norm = np.linalg.norm(G - G.T)
-                assert anti_sym_norm <= matrix_scale * multiplicative_tolerance
-
-                # Test cyclic property of trace, where key1 and key2 can be
-                # swapped without changing the matrix. This is secretly the
-                # same test as the symmetry test, but perhaps there are
-                # creative ways to break the code to break one test but not
-                # the other.
-                G_swapped = ds.get_G(key2, key1)
-                G_diff_norm = np.linalg.norm(G - G_swapped)
-                assert G_diff_norm <= matrix_scale * multiplicative_tolerance
-                min_diagonal = np.min(np.diagonal(G))
-
-                # Test that all elements of G are positive up to numerical
-                # noise with the threshold set to 10 orders of magnitude
-                # down from the smallest value on the diagonal
-                for i in range(Nfreq - 2):
-                    for j in range(Nfreq - 2):
-                        assert G[i, j] >= -min_diagonal * multiplicative_tolerance
-            else:
-                # In general, when R_1 != R_2, there is a more restricted
-                # symmetry where swapping R_1 and R_2 *and* taking the
-                # transpose gives the same result
-                # UPDATE: Taper now occurs after filter so this
-                # symmetry only holds when taper = 'none'.
-                if taper_selection == "none":
-                    G_swapped = ds.get_G(key2, key1)
-                    G_diff_norm = np.linalg.norm(G - G_swapped.T)
-                    assert G_diff_norm <= matrix_scale * multiplicative_tolerance
+        # Test that all elements of G are positive up to numerical
+        # noise with the threshold set to 10 orders of magnitude
+        # down from the smallest value on the diagonal
+        for i in range(Nfreq - 2):
+            for j in range(Nfreq - 2):
+                assert G[i, j] >= -min_diagonal * multiplicative_tolerance
+    else:
+        # In general, when R_1 != R_2, there is a more restricted
+        # symmetry where swapping R_1 and R_2 *and* taking the
+        # transpose gives the same result
+        # UPDATE: Taper now occurs after filter so this
+        # symmetry only holds when taper = 'none'.
+        # iC uses pseudo-inverse when poorly conditioned, breaking this symmetry.
+        if taper == "none" and input_data_weight != "iC":
+            G_swapped = ds.get_G(key2, key1)
+            G_diff_norm = np.linalg.norm(G - G_swapped.T)
+            assert G_diff_norm <= matrix_scale * multiplicative_tolerance
 
 
 r"""
