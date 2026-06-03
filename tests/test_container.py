@@ -47,19 +47,13 @@ def test_PSpecContainer(container_fname, vanilla_uvp, keep_open, swmr):
     # Check that power spectra can be overwritten
     for psname in pspec_names:
         ps_store.set_pspec(
-            group=group_names[2],
-            psname=psname,
-            pspec=vanilla_uvp,
-            overwrite=True,
+            group=group_names[2], psname=psname, pspec=vanilla_uvp, overwrite=True
         )
 
     # Check that overwriting fails if overwrite=False
     with pytest.raises(AttributeError, match="already exists and overwrite=False"):
         ps_store.set_pspec(
-            group=group_names[2],
-            psname=psname,
-            pspec=vanilla_uvp,
-            overwrite=False,
+            group=group_names[2], psname=psname, pspec=vanilla_uvp, overwrite=False
         )
 
     # Check that wrong pspec types are rejected by the set() method
@@ -153,10 +147,7 @@ def test_PSpecContainer(container_fname, vanilla_uvp, keep_open, swmr):
         )
     with pytest.raises(ValueError, match="If psname is a list"):
         ps_store.set_pspec(
-            group=group_names[0],
-            psname=pspec_names,
-            pspec=vanilla_uvp,
-            overwrite=True,
+            group=group_names[0], psname=pspec_names, pspec=vanilla_uvp, overwrite=True
         )
     with pytest.raises(ValueError, match="If pspec is a list"):
         ps_store.set_pspec(
@@ -216,26 +207,17 @@ def test_container_transactional_mode(container_fname, vanilla_uvp):
     # Close the non-transactional file; the RW file should now work
     psc_ro_noatom._close()
     psc_rw.set_pspec(
-        group=group_names[0],
-        psname=pspec_names[0],
-        pspec=vanilla_uvp,
-        overwrite=True,
+        group=group_names[0], psname=pspec_names[0], pspec=vanilla_uvp, overwrite=True
     )
 
     # test that write of new group or dataset with SWMR is blocked
     with pytest.raises(ValueError, match="Cannot write new group or dataset with SWMR"):
         psc_rw.set_pspec(
-            group="new_group",
-            psname=pspec_names[0],
-            pspec=vanilla_uvp,
-            overwrite=True,
+            group="new_group", psname=pspec_names[0], pspec=vanilla_uvp, overwrite=True
         )
     with pytest.raises(ValueError, match="Cannot write new group or dataset with SWMR"):
         psc_rw.set_pspec(
-            group=group_names[0],
-            psname="new_psname",
-            pspec=vanilla_uvp,
-            overwrite=True,
+            group=group_names[0], psname="new_psname", pspec=vanilla_uvp, overwrite=True
         )
 
     # ensure SWMR attr is propagated
