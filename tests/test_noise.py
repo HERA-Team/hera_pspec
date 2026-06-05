@@ -3,9 +3,8 @@ import os
 
 import numpy as np
 import pytest
-from pyuvdata import UVData
 
-from hera_pspec import conversions, noise, pspecbeam, pspecdata, testing, utils
+from hera_pspec import conversions, noise, pspecdata, testing, utils
 from hera_pspec.data import DATA_PATH
 
 
@@ -61,22 +60,20 @@ def test_calc_P_N(sense):
     assert Dsq[1] < P_N
 
 
-def test_noise_validation():
+def test_noise_validation(beam_nf_dipole):
     """
     make sure that the noise.py code produces
     correct noise 1-sigma amplitude using a
     noise simulation.
     """
     # get simulated noise in Jy
-    bfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(bfile)
     uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     Tsys = 300.0  # Kelvin
 
     # generate noise
     seed = 0
     uvd = testing.noise_sim(
-        uvfile, Tsys, beam, seed=seed, whiten=True, inplace=False, Nextend=9
+        uvfile, Tsys, beam_nf_dipole, seed=seed, whiten=True, inplace=False, Nextend=9
     )
 
     # get redundant baseline group
@@ -89,7 +86,9 @@ def test_noise_validation():
 
     # setup PSpecData
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None], beam=beam
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
+        wgts=[None, None],
+        beam=beam_nf_dipole,
     )
     ds.Jy_to_mK()
 
@@ -132,23 +131,19 @@ def test_noise_validation():
     assert np.abs(P_rms - P_N) / P_N < 0.02
 
 
-def test_analytic_noise(tmp_path):
+def test_analytic_noise(tmp_path, beam_nf_dipole, uvd_zen_even_xx):
     """
     Test the two forms of analytic noise calculation
     one using QE propagated from auto-correlation
     second using P_N from Tsys estimate
     """
-    bfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(bfile)
-    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd = UVData()
-    uvd.read(uvfile)
+    uvd = copy.deepcopy(uvd_zen_even_xx)
 
     # setup PSpecData
     ds = pspecdata.PSpecData(
         dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
         wgts=[None, None],
-        beam=beam,
+        beam=beam_nf_dipole,
         dsets_std=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
     )
     ds.Jy_to_mK()
@@ -194,7 +189,7 @@ def test_analytic_noise(tmp_path):
         )
 
         # get P_N estimate
-        auto_Tsys = utils.uvd_to_Tsys(uvd, beam, str(tmp_path / "test_uvd.uvh5"))
+        auto_Tsys = utils.uvd_to_Tsys(uvd, beam_nf_dipole, str(tmp_path / "test_uvd.uvh5"))
         utils.uvp_noise_error(
             uvp, auto_Tsys, err_type=["P_N", "P_SN"], P_SN_correction=False
         )
