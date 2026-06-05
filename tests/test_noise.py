@@ -189,7 +189,9 @@ def test_analytic_noise(tmp_path, beam_nf_dipole, uvd_zen_even_xx):
         )
 
         # get P_N estimate
-        auto_Tsys = utils.uvd_to_Tsys(uvd, beam_nf_dipole, str(tmp_path / "test_uvd.uvh5"))
+        auto_Tsys = utils.uvd_to_Tsys(
+            uvd, beam_nf_dipole, str(tmp_path / "test_uvd.uvh5")
+        )
         utils.uvp_noise_error(
             uvp, auto_Tsys, err_type=["P_N", "P_SN"], P_SN_correction=False
         )
