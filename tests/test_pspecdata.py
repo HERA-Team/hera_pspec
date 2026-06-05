@@ -1342,8 +1342,6 @@ def test_scalar(d, w, beam_nf_dipole):
     # scalar = ds.scalar()
     # np.testing.assert_almost_equal(scalar, 3732415176.85 / 10.**9)
 
-    # FIXME: Remove this when pyuvdata support for the above is ready
-    # self.assertRaises(NotImplementedError, ds.scalar)
 
 
 def test_validate_datasets(d):
