@@ -558,7 +558,8 @@ class UVWindow:
             Array of k_perp values to match to the FT of the beam.
 
         """
-        assert freq / 1e6 >= 1.0, "Frequency must be given in Hz."
+        if freq / 1e6 < 1.0:
+            raise ValueError("Frequency must be given in Hz.")
         assert (freq <= self.freq_array.max()) and (freq >= self.freq_array.min()), (
             "Choose frequency within spectral window."
         )

@@ -511,7 +511,7 @@ def test_UVWindow_kperp4bl_freq_outside_spectral_window(
 
 def test_UVWindow_kperp4bl_freq_not_in_hz(uvwindow_obj, lens, make_ft_beam_obj):
     ngrid = make_ft_beam_obj().ft_beam.shape[-1]
-    with pytest.raises(AssertionError, match="Frequency must be given in Hz"):
+    with pytest.raises(ValueError, match="Frequency must be given in Hz"):
         uvwindow_obj._kperp4bl_freq(
             freq=uvwindow_obj.freq_array[12] / 1e6, bl_len=lens[12], ngrid=ngrid
         )
