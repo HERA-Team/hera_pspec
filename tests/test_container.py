@@ -10,15 +10,14 @@ DATA_PATH = Path(DATA_PATH)
 
 
 @pytest.fixture
-def container_fname(tmp_path):
+def container_fname(tmp_path: Path) -> Path:
     """Empty PSpecContainer HDF5 file at a temporary path."""
     fname = tmp_path / "_test_container.hdf5"
-    ps_store = PSpecContainer(fname, mode="rw", swmr=False)
-    del ps_store
+    _ = PSpecContainer(fname, mode="rw", swmr=False)
     return fname
 
 
-def _fill_container(fname, uvp):
+def _fill_container(fname: Path, uvp: UVPSpec) -> tuple[list[str], list[str]]:
     """Helper: populate container and return (group_names, pspec_names)."""
     group_names = ["group1", "group2", "group3"]
     pspec_names = ["pspec_dset(0,1)", "pspec_dset(1,0)", "pspec_dset(1,1)"]
@@ -26,14 +25,13 @@ def _fill_container(fname, uvp):
     for grp in group_names:
         for psname in pspec_names:
             ps_store.set_pspec(group=grp, psname=psname, pspec=uvp, overwrite=False)
-    del ps_store
     return group_names, pspec_names
 
 
 @pytest.mark.parametrize(
     "keep_open,swmr", [(True, False), (False, True)], ids=["default", "transactional"]
 )
-def test_PSpecContainer(container_fname, vanilla_uvp, keep_open, swmr):
+def test_PSpecContainer(container_fname: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool) -> None:
     """
     Test that PSpecContainer works properly.
     """
@@ -180,7 +178,7 @@ def test_PSpecContainer(container_fname, vanilla_uvp, keep_open, swmr):
     ps_store.save()
 
 
-def test_container_transactional_mode(container_fname, vanilla_uvp):
+def test_container_transactional_mode(container_fname: Path, vanilla_uvp: UVPSpec) -> None:
     """
     Test transactional operations on PSpecContainer objects.
     """
@@ -234,7 +232,7 @@ def test_container_transactional_mode(container_fname, vanilla_uvp):
         psc._close()
 
 
-def test_combine_psc_spectra(tmp_path):
+def test_combine_psc_spectra(tmp_path: Path) -> None:
     fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
     uvp1 = testing.uvpspec_from_data(fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
     uvp2 = testing.uvpspec_from_data(fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
@@ -271,7 +269,7 @@ def test_combine_psc_spectra(tmp_path):
     assert psc.spectra("grp1") == ["d1_x_d2_a", "d1_x_d2_b"]
 
 
-def test_combine_psc_spectra_argparser():
+def test_combine_psc_spectra_argparser() -> None:
     args = container.get_combine_psc_spectra_argparser()
     a = args.parse_args(["filename", "--dset_split_str", "_x_", "--ext_split_str", "_"])
     assert a.filename == "filename"
