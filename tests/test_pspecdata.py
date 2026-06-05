@@ -1343,7 +1343,6 @@ def test_scalar(d, w, beam_nf_dipole):
     # np.testing.assert_almost_equal(scalar, 3732415176.85 / 10.**9)
 
 
-
 def test_validate_datasets(d):
     # test freq exception
     uvd = copy.deepcopy(d[0])
