@@ -46,7 +46,9 @@ def redundant_blpairs(uvd_zen_even_xx) -> list:
 
 
 @pytest.fixture(scope="session")
-def uvp_from_miriad(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo, uvd_zen_even_xx) -> UVPSpec:
+def uvp_from_miriad(
+    redundant_blpairs, beam_nf_dipole_wcosmo, cosmo, uvd_zen_even_xx
+) -> UVPSpec:
     """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA, first 3 redundant groups."""
     return testing.uvpspec_from_data(
         uvd_zen_even_xx,
@@ -727,7 +729,9 @@ def test_get_bootstrap_run_argparser():
     assert a.cintervals == [16.0, 84.0]
 
 
-def test_spherical_average(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo, uvd_zen_even_xx):
+def test_spherical_average(
+    redundant_blpairs, beam_nf_dipole_wcosmo, cosmo, uvd_zen_even_xx
+):
     # create two polarization data
     uvd = copy.deepcopy(uvd_zen_even_xx)
 

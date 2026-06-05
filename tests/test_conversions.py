@@ -35,15 +35,21 @@ def test_distances(custom_cosmo):
     np.testing.assert_almost_equal(custom_cosmo.f2z(100e6), 13.20405751)
     np.testing.assert_almost_equal(custom_cosmo.f2z(0.1, ghz=True), 13.20405751)
     np.testing.assert_almost_equal(custom_cosmo.z2f(10.0), 129127795.54545455)
-    np.testing.assert_almost_equal(custom_cosmo.z2f(10.0, ghz=True), 0.12912779554545455)
+    np.testing.assert_almost_equal(
+        custom_cosmo.z2f(10.0, ghz=True), 0.12912779554545455
+    )
     np.testing.assert_almost_equal(custom_cosmo.E(10.0), 20.450997530682947)
     np.testing.assert_almost_equal(custom_cosmo.DC(10.0), 6499.708111027144)
-    np.testing.assert_almost_equal(custom_cosmo.DC(10.0, little_h=False), 6499.708111027144)
+    np.testing.assert_almost_equal(
+        custom_cosmo.DC(10.0, little_h=False), 6499.708111027144
+    )
     np.testing.assert_almost_equal(custom_cosmo.DM(10.0), 6510.2536925709637)
     np.testing.assert_almost_equal(custom_cosmo.DA(10.0), 591.84124477917851)
     np.testing.assert_almost_equal(custom_cosmo.dRperp_dtheta(10.0), 6510.2536925709637)
     np.testing.assert_almost_equal(custom_cosmo.dRpara_df(10.0), 1.2487605057418872e-05)
-    np.testing.assert_almost_equal(custom_cosmo.dRpara_df(10.0, ghz=True), 12487.605057418872)
+    np.testing.assert_almost_equal(
+        custom_cosmo.dRpara_df(10.0, ghz=True), 12487.605057418872
+    )
     np.testing.assert_almost_equal(custom_cosmo.X2Y(10.0), 529.26719942209002)
 
 

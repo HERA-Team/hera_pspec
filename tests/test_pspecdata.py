@@ -1601,7 +1601,11 @@ def test_check_in_dset(d):
 
 
 def test_C_model(uvd_zen_even_xx, beam_nf_dipole_wcosmo):
-    ds = pspecdata.PSpecData(dsets=[uvd_zen_even_xx, uvd_zen_even_xx], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
+    ds = pspecdata.PSpecData(
+        dsets=[uvd_zen_even_xx, uvd_zen_even_xx],
+        wgts=[None, None],
+        beam=beam_nf_dipole_wcosmo,
+    )
 
     spws = utils.spw_range_from_freqs(
         uvd_zen_even_xx, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
@@ -1712,7 +1716,9 @@ def test_get_analytic_covariance(uvd_zen_even_xx, beam_nf_dipole_wcosmo):
     )
 
     # setup ds
-    ds = pspecdata.PSpecData(dsets=[sim1, sim2], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
+    ds = pspecdata.PSpecData(
+        dsets=[sim1, sim2], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+    )
     ds.Jy_to_mK()
 
     # assert that imag component of covariance is near zero
@@ -3180,7 +3186,9 @@ def test_window_funcs(uvd_zen_even_xx, beam_nf_dipole):
     This is complementary to test_get_MW above.
     """
     # get a PSpecData
-    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd_zen_even_xx)], beam=beam_nf_dipole)
+    ds = pspecdata.PSpecData(
+        dsets=[copy.deepcopy(uvd_zen_even_xx)], beam=beam_nf_dipole
+    )
     ds.set_spw((0, 20))
     ds.set_taper("bh")
     bl = (37, 38)
