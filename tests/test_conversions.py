@@ -35,9 +35,7 @@ def test_distances(cosmo_h100):
     np.testing.assert_almost_equal(cosmo_h100.f2z(100e6), 13.20405751)
     np.testing.assert_almost_equal(cosmo_h100.f2z(0.1, ghz=True), 13.20405751)
     np.testing.assert_almost_equal(cosmo_h100.z2f(10.0), 129127795.54545455)
-    np.testing.assert_almost_equal(
-        cosmo_h100.z2f(10.0, ghz=True), 0.12912779554545455
-    )
+    np.testing.assert_almost_equal(cosmo_h100.z2f(10.0, ghz=True), 0.12912779554545455)
     np.testing.assert_almost_equal(cosmo_h100.E(10.0), 20.450997530682947)
     np.testing.assert_almost_equal(cosmo_h100.DC(10.0), 6499.708111027144)
     np.testing.assert_almost_equal(
