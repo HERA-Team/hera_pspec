@@ -1600,20 +1600,13 @@ def test_check_in_dset(d):
         ds.dset_idx((1, 2))
 
 
-def test_C_model():
-    # test the key format in ds._C and the shape of stored covariance
-    uvd = UVData()
-    uvd.read(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    cosmo = conversions.Cosmo_Conversions()
-    uvb = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"), cosmo=cosmo
-    )
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
+def test_C_model(uvd_zen_even_xx, beam_nf_dipole_wcosmo):
+    ds = pspecdata.PSpecData(dsets=[uvd_zen_even_xx, uvd_zen_even_xx], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
 
     spws = utils.spw_range_from_freqs(
-        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
+        uvd_zen_even_xx, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
     )
-    antpos, ants = uvd.get_enu_data_ants()
+    antpos, ants = uvd_zen_even_xx.get_enu_data_ants()
     antpos = dict(zip(ants, antpos))
     red_bls = redcal.get_pos_reds(antpos, bl_error_tol=1.0)
     bls1, bls2, blpairs = utils.construct_blpairs(
@@ -1655,21 +1648,16 @@ def test_C_model():
         False,
         True,
     )
-    known_cov[Ckey] = np.diag(np.ones(uvd.Nfreqs))
+    known_cov[Ckey] = np.diag(np.ones(uvd_zen_even_xx.Nfreqs))
     ds.C_model(key, model="known", time_index=0, known_cov=known_cov)
     assert Ckey in ds._C.keys()
     assert ds._C[Ckey].shape == (spws[1][1] - spws[1][0], spws[1][1] - spws[1][0])
 
 
-def test_get_analytic_covariance():
-    uvd = UVData()
-    uvd.read(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
+def test_get_analytic_covariance(uvd_zen_even_xx, beam_nf_dipole_wcosmo):
+    uvd = copy.deepcopy(uvd_zen_even_xx)
     uvd.nsample_array[:] = 1.0
     uvd.flag_array[:] = False
-    cosmo = conversions.Cosmo_Conversions()
-    uvb = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"), cosmo=cosmo
-    )
 
     # extend time axis by factor of 4
     for i in range(2):
@@ -1703,7 +1691,7 @@ def test_get_analytic_covariance():
     np.random.seed(0)
     sim1 = testing.sky_noise_sim(
         uvd,
-        uvb,
+        beam_nf_dipole_wcosmo,
         cov_amp=1000,
         cov_length_scale=10,
         constant_per_bl=True,
@@ -1714,7 +1702,7 @@ def test_get_analytic_covariance():
     np.random.seed(0)
     sim2 = testing.sky_noise_sim(
         uvd,
-        uvb,
+        beam_nf_dipole_wcosmo,
         cov_amp=1000,
         cov_length_scale=10,
         constant_per_bl=True,
@@ -1724,7 +1712,7 @@ def test_get_analytic_covariance():
     )
 
     # setup ds
-    ds = pspecdata.PSpecData(dsets=[sim1, sim2], wgts=[None, None], beam=uvb)
+    ds = pspecdata.PSpecData(dsets=[sim1, sim2], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
     ds.Jy_to_mK()
 
     # assert that imag component of covariance is near zero
@@ -3186,23 +3174,18 @@ def test_input_calibration():
         pd.add(dfiles, [None], cals=["foo"])
 
 
-def test_window_funcs():
+def test_window_funcs(uvd_zen_even_xx, beam_nf_dipole):
     """
     Test window function computation in ds.pspec()
     This is complementary to test_get_MW above.
     """
     # get a PSpecData
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
-    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd)], beam=beam)
+    ds = pspecdata.PSpecData(dsets=[copy.deepcopy(uvd_zen_even_xx)], beam=beam_nf_dipole)
     ds.set_spw((0, 20))
     ds.set_taper("bh")
     bl = (37, 38)
     key = (0, bl, "xx")
-    d = uvd.get_data(bl)
+    d = uvd_zen_even_xx.get_data(bl)
     C = np.cov(d[:, :20].T).real
     iC = np.linalg.pinv(C)
     # iterate over various R and M matrices and ensure

@@ -1,13 +1,11 @@
 import copy
 import json
-import os
 
 import numpy as np
 import pytest
 
-from hera_pspec import UVPSpec, grouping, pspecbeam, testing
+from hera_pspec import UVPSpec, grouping
 from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec.data import DATA_PATH
 
 
 @pytest.fixture
@@ -19,14 +17,11 @@ def uvp_with_stats(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
     return uvp
 
 
-def test_select_common():
+def test_select_common(vanilla_uvp_with_beam: UVPSpec):
     """
     Test selecting power spectra that two UVPSpec objects have in common.
     """
-    # setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
+    uvp = vanilla_uvp_with_beam
     # Carve up some example UVPSpec objects
     uvp1 = uvp.select(times=np.unique(uvp.time_avg_array)[:-1], inplace=False)
     uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[1:], inplace=False)
@@ -118,30 +113,22 @@ def test_select_common():
         uvputils.select_common([uvp1, uvp7], polpairs=True)
 
 
-def test_get_blpairs_from_bls():
+def test_get_blpairs_from_bls(vanilla_uvp_with_beam: UVPSpec):
     """
     Test conversion of bls to set of blpairs.
     """
-    # setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-
+    uvp = vanilla_uvp_with_beam
     # Check that bls can be specified in several different ways
     blps = uvputils._get_blpairs_from_bls(uvp, bls=101102)
     blps = uvputils._get_blpairs_from_bls(uvp, bls=(101, 102))
     blps = uvputils._get_blpairs_from_bls(uvp, bls=[101102, 101103])
 
 
-def test_get_red_bls():
+def test_get_red_bls(vanilla_uvp_with_beam: UVPSpec):
     """
     Test retrieval of redundant baseline groups.
     """
-    # Setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-
+    uvp = vanilla_uvp_with_beam
     # Get redundant baseline groups
     bls, lens, angs = uvp.get_red_bls()
 
@@ -157,15 +144,11 @@ def test_get_red_bls():
     assert num_bls == np.unique(uvp.bl_array).size
 
 
-def test_get_red_blpairs():
+def test_get_red_blpairs(vanilla_uvp_with_beam: UVPSpec):
     """
     Test retrieval of redundant baseline groups for baseline-pairs.
     """
-    # Setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-
+    uvp = vanilla_uvp_with_beam
     # Get redundant baseline groups
     blps, lens, angs = uvp.get_red_blpairs()
 

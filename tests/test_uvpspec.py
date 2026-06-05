@@ -52,11 +52,9 @@ def case_uvp_exact_wfs(uvp_example_data, uvp_exact_wfs: UVPSpec):
 
 
 @pytest.fixture
-def uvp_with_covariance(beam_nf_dipole_wcosmo) -> uvpspec.UVPSpec:
+def uvp_with_covariance(beam_nf_dipole_wcosmo, uvd_zen_even_xx) -> uvpspec.UVPSpec:
     """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA with covariance computed (store_cov=True)."""
-    dfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd = UVData()
-    uvd.read(dfile)
+    uvd = copy.deepcopy(uvd_zen_even_xx)
 
     Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
     uvd.data_array *= Jy_to_mK[None, :, None]
@@ -306,21 +304,15 @@ def test_stats_array(vanilla_uvp_with_beam: uvpspec.UVPSpec, tmp_path: Path):
     ).all()
 
 
-def test_convert_deltasq():
-    # setup uvp build
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
-    uvd_std = copy.deepcopy(uvd)  # dummy uvd_std
+def test_convert_deltasq(uvd_zen_even_xx, beam_nf_dipole):
+    uvd_std = copy.deepcopy(uvd_zen_even_xx)  # dummy uvd_std
     uvd_std.data_array[:] = 1.0
     bls = [(37, 38), (38, 39), (52, 53)]
     uvp = testing.uvpspec_from_data(
-        uvd, bls, data_std=uvd_std, spw_ranges=[(20, 30), (60, 90)], beam=beam
+        uvd_zen_even_xx, bls, data_std=uvd_std, spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole
     )
     # dummy stats_array build
-    Tsys = utils.uvd_to_Tsys(uvd, beam)
+    Tsys = utils.uvd_to_Tsys(uvd_zen_even_xx, beam_nf_dipole)
     utils.uvp_noise_error(uvp, Tsys)
 
     # testing
@@ -552,19 +544,14 @@ def test_check(uvp: uvpspec.UVPSpec):
         uvp.check()
 
 
-def test_clear(vanilla_uvp: uvpspec.UVPSpec):
-    uvp = copy.deepcopy(vanilla_uvp)
+def test_clear(mutable_uvp: uvpspec.UVPSpec):
+    uvp = mutable_uvp
     uvp._clear()
     assert not hasattr(uvp, "Ntimes")
     assert not hasattr(uvp, "data_array")
 
 
-def test_get_r_params():
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
+def test_get_r_params(uvd_zen_even_xx, beam_nf_dipole):
     bls = [(37, 38), (38, 39), (52, 53)]
     rp = {
         "filter_centers": [0.0],
@@ -576,7 +563,7 @@ def test_get_r_params():
         key1 = bl + ("xx",)
         r_params[key1] = rp
     uvp = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam, r_params=r_params
+        uvd_zen_even_xx, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole, r_params=r_params
     )
     assert r_params == uvp.get_r_params()
 
@@ -611,8 +598,8 @@ def test_write_read_hdf5(uvp: uvpspec.UVPSpec, tmp_path: Path):
     assert uvp.data_array[0].shape == (uvp.Nbltpairs, uvp.get_dlys(0).size, uvp.Npols)
 
 
-def test_sense(vanilla_uvp_with_beam):
-    uvp = copy.deepcopy(vanilla_uvp_with_beam)
+def test_sense(mutable_uvp_with_beam):
+    uvp = mutable_uvp_with_beam
     Ndlys = uvp.get_dlys(0).size
 
     # test generate noise spectra
@@ -808,18 +795,12 @@ def test_fold_spectra(uvp: uvpspec.UVPSpec):
     assert np.isclose(uvp1.nsample_array[0], 2.0).all()
 
 
-def test_fold_spectra_odd_cases():
+def test_fold_spectra_odd_cases(uvd_zen_even_xx, beam_nf_dipole):
     # also run the odd case
-    uvd = UVData()
-    uvd_std = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    uvd_std.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
+    uvd_std = copy.deepcopy(uvd_zen_even_xx)
     bls = [(37, 38), (38, 39), (52, 53)]
     uvp1 = testing.uvpspec_from_data(
-        uvd, bls, data_std=uvd_std, spw_ranges=[(0, 17)], beam=beam
+        uvd_zen_even_xx, bls, data_std=uvd_std, spw_ranges=[(0, 17)], beam=beam_nf_dipole
     )
     uvp1.fold_spectra()
     cov_folded = uvp1.get_cov((0, ((37, 38), (38, 39)), ("xx", "xx")))
@@ -827,7 +808,7 @@ def test_fold_spectra_odd_cases():
 
     # Test fold_spectra method is consistent with average_spectra()
     uvp = testing.uvpspec_from_data(
-        uvd, bls, data_std=uvd_std, spw_ranges=[(0, 17)], beam=beam
+        uvd_zen_even_xx, bls, data_std=uvd_std, spw_ranges=[(0, 17)], beam=beam_nf_dipole
     )
     # Average then fold
     uvp_avg = uvp.average_spectra(time_avg=True, inplace=False)
@@ -874,8 +855,8 @@ def test_compute_scalar(
         vanilla_uvp.compute_scalar(0, -5)
 
 
-def test_set_cosmology(vanilla_uvp_with_beam: uvpspec.UVPSpec, beam_nf_dipole):
-    uvp = copy.deepcopy(vanilla_uvp_with_beam)
+def test_set_cosmology(mutable_uvp_with_beam: uvpspec.UVPSpec, beam_nf_dipole):
+    uvp = mutable_uvp_with_beam
     new_cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
 
     # test no overwrite
@@ -901,16 +882,10 @@ def test_set_cosmology(vanilla_uvp_with_beam: uvpspec.UVPSpec, beam_nf_dipole):
     assert hasattr(uvp, "OmegaP")
 
 
-def test_combine_uvpspec(tmp_path: Path):
-    # setup uvp build
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
+def test_combine_uvpspec(tmp_path: Path, uvd_zen_even_xx, beam_nf_dipole):
     bls = [(37, 38), (38, 39), (52, 53)]
     uvp1 = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam
+        uvd_zen_even_xx, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole
     )
     uvp1 = _add_optionals(uvp1)
 
@@ -943,7 +918,7 @@ def test_combine_uvpspec(tmp_path: Path):
         assert out.cov_model == "empirical"
 
     # test concat across spw
-    uvp2 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(85, 101)], beam=beam)
+    uvp2 = testing.uvpspec_from_data(uvd_zen_even_xx, bls, spw_ranges=[(85, 101)], beam=beam_nf_dipole)
     uvp2 = _add_optionals(uvp2)
 
     out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
@@ -958,7 +933,7 @@ def test_combine_uvpspec(tmp_path: Path):
 
     # test concat across blpairts
     uvp2 = testing.uvpspec_from_data(
-        uvd, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 90)], beam=beam
+        uvd_zen_even_xx, [(53, 54), (67, 68)], spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole
     )
     uvp2 = _add_optionals(uvp2)
     out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
@@ -986,7 +961,7 @@ def test_combine_uvpspec(tmp_path: Path):
         assert out.window_function_array[spw].shape == (40, ndlys, ndlys, 1)
 
     # test feed as strings
-    uvp1 = testing.uvpspec_from_data(uvd, bls, spw_ranges=[(20, 30)], beam=beam)
+    uvp1 = testing.uvpspec_from_data(uvd_zen_even_xx, bls, spw_ranges=[(20, 30)], beam=beam_nf_dipole)
     uvp2 = copy.deepcopy(uvp1)
     uvp2.polpair_array[0] = 1414
     uvp1.write_hdf5(str(tmp_path / "uvp1.hdf5"), overwrite=True)
@@ -1006,7 +981,7 @@ def test_combine_uvpspec(tmp_path: Path):
 
     # Test whether n_dlys != Nfreqs works
     uvp4 = testing.uvpspec_from_data(
-        uvd, bls, beam=beam, spw_ranges=[(20, 30), (60, 90)], n_dlys=[5, 15]
+        uvd_zen_even_xx, bls, beam=beam_nf_dipole, spw_ranges=[(20, 30), (60, 90)], n_dlys=[5, 15]
     )
     print(
         "test", uvp4.window_function_array[0].shape, uvp4.window_function_array[1].shape
@@ -1047,16 +1022,10 @@ def test_combine_uvpspec_exact_windows(uvp_exact_wfs):
     uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
 
 
-def test_combine_uvpspec_errors():
-    # setup uvp build
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
+def test_combine_uvpspec_errors(uvd_zen_even_xx, beam_nf_dipole):
     bls = [(37, 38), (38, 39), (52, 53)]
     uvp1 = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam
+        uvd_zen_even_xx, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole
     )
 
     # test failure due to overlapping data
@@ -1073,12 +1042,12 @@ def test_combine_uvpspec_errors():
 
     # test partial data overlap failure
     uvp2 = testing.uvpspec_from_data(
-        uvd, [(37, 38), (38, 39), (53, 54)], spw_ranges=[(20, 30), (60, 90)], beam=beam
+        uvd_zen_even_xx, [(37, 38), (38, 39), (53, 54)], spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole
     )
     with pytest.raises(AssertionError, match="partial overlap"):
         uvpspec.combine_uvpspec([uvp1, uvp2])
     uvp2 = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(20, 30), (60, 105)], beam=beam
+        uvd_zen_even_xx, bls, spw_ranges=[(20, 30), (60, 105)], beam=beam_nf_dipole
     )
     with pytest.raises(AssertionError, match="partial overlap"):
         uvpspec.combine_uvpspec([uvp1, uvp2])
@@ -1099,13 +1068,7 @@ def test_combine_uvpspec_errors():
         uvpspec.combine_uvpspec([uvp1, uvp2])
 
 
-def test_combine_uvpspec_r_params():
-    # setup uvp build
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
+def test_combine_uvpspec_r_params(uvd_zen_even_xx, beam_nf_dipole):
     bls = [(37, 38), (38, 39), (52, 53)]
 
     rp = {
@@ -1125,7 +1088,7 @@ def test_combine_uvpspec_r_params():
     r_params[key1]["filter_half_widths"] = [100e-9]
 
     uvp1 = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam, r_params=r_params
+        uvd_zen_even_xx, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole, r_params=r_params
     )
 
     # test failure due to overlapping data
@@ -1154,18 +1117,11 @@ def test_combine_uvpspec_r_params():
         uvpspec.combine_uvpspec([uvp1, uvp5])
 
 
-def test_combine_uvpspec_std(tmp_path: Path):
-    # setup uvp build
-    uvd = UVData()
-    uvd_std = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    uvd_std.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
+def test_combine_uvpspec_std(tmp_path: Path, uvd_zen_even_xx, beam_nf_dipole):
+    uvd_std = copy.deepcopy(uvd_zen_even_xx)
     bls = [(37, 38), (38, 39), (52, 53)]
     uvp1 = testing.uvpspec_from_data(
-        uvd, bls, data_std=uvd_std, spw_ranges=[(20, 24), (64, 68)], beam=beam
+        uvd_zen_even_xx, bls, data_std=uvd_std, spw_ranges=[(20, 24), (64, 68)], beam=beam_nf_dipole
     )
     # test failure due to overlapping data
     uvp2 = copy.deepcopy(uvp1)
@@ -1185,16 +1141,16 @@ def test_combine_uvpspec_std(tmp_path: Path):
 
     # test partial data overlap failure
     uvp2 = testing.uvpspec_from_data(
-        uvd,
+        uvd_zen_even_xx,
         [(37, 38), (38, 39), (53, 54)],
         data_std=uvd_std,
         spw_ranges=[(20, 24), (64, 68)],
-        beam=beam,
+        beam=beam_nf_dipole,
     )
     with pytest.raises(AssertionError, match="partial overlap"):
         uvpspec.combine_uvpspec([uvp1, uvp2])
     uvp2 = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(20, 24), (64, 68)], data_std=uvd_std, beam=beam
+        uvd_zen_even_xx, bls, spw_ranges=[(20, 24), (64, 68)], data_std=uvd_std, beam=beam_nf_dipole
     )
     with pytest.raises(AssertionError, match="completely overlapping data"):
         uvpspec.combine_uvpspec([uvp1, uvp2])
@@ -1206,7 +1162,7 @@ def test_combine_uvpspec_std(tmp_path: Path):
 
     # test concat across spw
     uvp2 = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(85, 91)], data_std=uvd_std, beam=beam
+        uvd_zen_even_xx, bls, spw_ranges=[(85, 91)], data_std=uvd_std, beam=beam_nf_dipole
     )
     out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
     assert out.Nspws == 3
@@ -1215,11 +1171,11 @@ def test_combine_uvpspec_std(tmp_path: Path):
 
     # test concat across blpairts
     uvp2 = testing.uvpspec_from_data(
-        uvd,
+        uvd_zen_even_xx,
         [(53, 54), (67, 68)],
         spw_ranges=[(20, 24), (64, 68)],
         data_std=uvd_std,
-        beam=beam,
+        beam=beam_nf_dipole,
     )
     out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
     assert out.Nblpairs == 4
@@ -1237,7 +1193,7 @@ def test_combine_uvpspec_std(tmp_path: Path):
 
     # test feed as strings
     uvp1 = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(20, 30)], data_std=uvd_std, beam=beam
+        uvd_zen_even_xx, bls, spw_ranges=[(20, 30)], data_std=uvd_std, beam=beam_nf_dipole
     )
     uvp2 = copy.deepcopy(uvp1)
     uvp2.polpair_array[0] = 1414

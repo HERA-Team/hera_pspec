@@ -10,23 +10,11 @@ from hera_pspec.data import DATA_PATH
 
 
 @pytest.fixture
-def cosmo():
-    return conversions.Cosmo_Conversions()
+def sense(beam_nf_pstokes, cosmo):
+    return noise.Sensitivity(beam=beam_nf_pstokes, cosmo=cosmo)
 
 
-@pytest.fixture
-def beam():
-    return pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
-    )
-
-
-@pytest.fixture
-def sense(beam, cosmo):
-    return noise.Sensitivity(beam=beam, cosmo=cosmo)
-
-
-def test_set(beam, sense):
+def test_set(beam_nf_pstokes, sense):
     sense = noise.Sensitivity()
 
     C = conversions.Cosmo_Conversions()
@@ -36,6 +24,7 @@ def test_set(beam, sense):
     sense.set_cosmology(params)
     assert C.get_params() == sense.cosmo.get_params()
 
+    beam = copy.deepcopy(beam_nf_pstokes)
     sense.set_beam(beam)
     assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
     beam.cosmo = C

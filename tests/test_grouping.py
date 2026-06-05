@@ -39,21 +39,17 @@ def case_vanilla_uvp_alternating_times(
 
 
 @pytest.fixture(scope="session")
-def redundant_blpairs() -> list:
+def redundant_blpairs(uvd_zen_even_xx) -> list:
     """Redundant baseline groups from zen.even.xx.LST.1.28828.uvOCRSA."""
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    ap, a = uvd.get_enu_data_ants()
+    ap, a = uvd_zen_even_xx.get_enu_data_ants()
     return redcal.get_pos_reds(dict(zip(a, ap)), bl_error_tol=1.0)
 
 
 @pytest.fixture(scope="session")
-def uvp_from_miriad(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo) -> UVPSpec:
+def uvp_from_miriad(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo, uvd_zen_even_xx) -> UVPSpec:
     """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA, first 3 redundant groups."""
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
     return testing.uvpspec_from_data(
-        uvd,
+        uvd_zen_even_xx,
         redundant_blpairs[:3],
         spw_ranges=[(50, 100)],
         beam=beam_nf_dipole_wcosmo,
@@ -731,10 +727,9 @@ def test_get_bootstrap_run_argparser():
     assert a.cintervals == [16.0, 84.0]
 
 
-def test_spherical_average(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo):
+def test_spherical_average(redundant_blpairs, beam_nf_dipole_wcosmo, cosmo, uvd_zen_even_xx):
     # create two polarization data
-    uvd = UVData()
-    uvd.read(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
+    uvd = copy.deepcopy(uvd_zen_even_xx)
 
     # get reds and make UVPSpec
     reds = [r[:2] for r in redundant_blpairs]
