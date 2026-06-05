@@ -1,43 +1,38 @@
 import copy
-import os
+from pathlib import Path
 
 import numpy as np
 import pytest
 from hera_cal import redcal
-from pyuvdata import UVData
 
-from hera_pspec import conversions, pspecbeam, testing, uvpspec
+from hera_pspec import conversions, testing, uvpspec
 from hera_pspec.data import DATA_PATH
 
+DATA_PATH = Path(DATA_PATH)
 
-def test_build_vanilla_uvpspec():
+
+def test_build_vanilla_uvpspec(beam_nf_dipole):
     uvp, cosmo = testing.build_vanilla_uvpspec()
     assert isinstance(uvp, uvpspec.UVPSpec)
     assert isinstance(cosmo, conversions.Cosmo_Conversions)
     assert uvp.cosmo == cosmo
 
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-    beam_OP = beam.get_Omegas(uvp.polpair_array[0])[0]
+    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam_nf_dipole)
+    beam_OP = beam_nf_dipole.get_Omegas(uvp.polpair_array[0])[0]
     assert beam_OP.tolist() == uvp.OmegaP.tolist()
 
 
-def test_uvpspec_from_data():
+def test_uvpspec_from_data(beam_nf_dipole, uvd_zen_even_xx):
     # get data
-    fname = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    fname_std = os.path.join(DATA_PATH, "zen.even.std.xx.LST.1.28828.uvOCRSA")
-    uvd = UVData()
-    uvd.read_miriad(fname)
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
+    fname = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
+    fname_std = str(DATA_PATH / "zen.even.std.xx.LST.1.28828.uvOCRSA")
+    uvd = copy.deepcopy(uvd_zen_even_xx)
 
     # test basic execution
     uvp = testing.uvpspec_from_data(
         fname,
         [(37, 38), (38, 39), (52, 53), (53, 54)],
-        beam=beam,
+        beam=beam_nf_dipole,
         spw_ranges=[(50, 100)],
     )
     assert uvp.Nfreqs == 50
@@ -52,7 +47,7 @@ def test_uvpspec_from_data():
     uvp2 = testing.uvpspec_from_data(
         uvd,
         [(37, 38), (38, 39), (52, 53), (53, 54)],
-        beam=beamfile,
+        beam=str(DATA_PATH / "HERA_NF_dipole_power.beamfits"),
         spw_ranges=[(50, 100)],
     )
     uvp.history = ""
@@ -62,7 +57,7 @@ def test_uvpspec_from_data():
     # test multiple bl groups
     antpos, ants = uvd.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
-    uvp = testing.uvpspec_from_data(fname, reds[:3], beam=beam, spw_ranges=[(50, 100)])
+    uvp = testing.uvpspec_from_data(fname, reds[:3], beam=beam_nf_dipole, spw_ranges=[(50, 100)])
     assert (
         len(
             set(uvp.bl_array)
@@ -107,20 +102,16 @@ def test_uvpspec_from_data():
         fname,
         [(37, 38), (38, 39), (52, 53), (53, 54)],
         data_std=fname_std,
-        beam=beam,
+        beam=beam_nf_dipole,
         spw_ranges=[(20, 28)],
     )
 
 
-def test_noise_sim():
-    uvd = UVData()
-    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd.read_miriad(uvfile)
-
+def test_noise_sim(uvd_zen_even_xx):
     # test noise amplitude
-    uvd2 = copy.deepcopy(uvd)
+    uvd2 = copy.deepcopy(uvd_zen_even_xx)
     uvd2.polarization_array[0] = 1
-    uvd2 += uvd
+    uvd2 += uvd_zen_even_xx
     uvn = testing.noise_sim(uvd2, 300.0, seed=0, whiten=True, inplace=False)
     assert uvn.Ntimes == uvd2.Ntimes
     assert uvn.Nfreqs == uvd2.Nfreqs
@@ -145,9 +136,9 @@ def test_noise_sim():
     assert uvn == uvn2
 
     # Test with a beam!
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    beamfile = str(DATA_PATH / "HERA_NF_dipole_power.beamfits")
     uvn = testing.noise_sim(
-        copy.deepcopy(uvd), 300.0, beamfile, seed=0, whiten=True, inplace=False
+        copy.deepcopy(uvd_zen_even_xx), 300.0, beamfile, seed=0, whiten=True, inplace=False
     )
     assert uvn.vis_units == "Jy"
 
@@ -161,24 +152,18 @@ def test_noise_sim():
     )
 
     # test Nextend
-    uvn = testing.noise_sim(uvd, 300.0, seed=0, whiten=True, inplace=False, Nextend=4)
-    assert uvn.Ntimes == uvd.Ntimes * 5
-    assert uvn.Nfreqs == uvd.Nfreqs
-    assert uvn.Nbls == uvd.Nbls
-    assert uvn.Npols == uvd.Npols
+    uvn = testing.noise_sim(uvd_zen_even_xx, 300.0, seed=0, whiten=True, inplace=False, Nextend=4)
+    assert uvn.Ntimes == uvd_zen_even_xx.Ntimes * 5
+    assert uvn.Nfreqs == uvd_zen_even_xx.Nfreqs
+    assert uvn.Nbls == uvd_zen_even_xx.Nbls
+    assert uvn.Npols == uvd_zen_even_xx.Npols
 
 
-def test_sky_noise_jy_autos():
-
+def test_sky_noise_jy_autos(uvd_zen_even_xx):
     # Load data
-    uvd = UVData()
-    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd.read_miriad(uvfile)
-
-    # Get input arrays
-    lsts = np.unique(uvd.lst_array)
-    freqs = np.unique(uvd.freq_array)
-    int_time = np.median(uvd.integration_time)
+    lsts = np.unique(uvd_zen_even_xx.lst_array)
+    freqs = np.unique(uvd_zen_even_xx.freq_array)
+    int_time = np.median(uvd_zen_even_xx.integration_time)
     channel_width = np.mean(np.diff(freqs))
 
     # Callable beam function
@@ -200,12 +185,10 @@ def test_sky_noise_jy_autos():
     assert np.all(~np.isinf(n))
 
 
-def test_sky_noise_sim():
-    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd = UVData()
-    uvd.read_miriad(uvfile)
-    beam = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam_ps = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
+def test_sky_noise_sim(uvd_zen_even_xx):
+    uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
+    beam = str(DATA_PATH / "HERA_NF_dipole_power.beamfits")
+    beam_ps = str(DATA_PATH / "HERA_NF_pstokes_power.beamfits")
 
     # basic test
     np.random.seed(0)
@@ -220,11 +203,11 @@ def test_sky_noise_sim():
     # assert something was inserted
     for bl in sim.get_antpairpols():
         if bl[0] != bl[1]:
-            assert np.all(~np.isclose(sim.get_data(bl), uvd.get_data(bl)))
+            assert np.all(~np.isclose(sim.get_data(bl), uvd_zen_even_xx.get_data(bl)))
 
     # try with psuedo stokes
     np.random.seed(0)
-    uvd2, uvd2b = copy.deepcopy(uvd), copy.deepcopy(uvd)
+    uvd2, uvd2b = copy.deepcopy(uvd_zen_even_xx), copy.deepcopy(uvd_zen_even_xx)
     uvd2.polarization_array[0] = 1
     uvd2b.polarization_array[0] = 2
     uvd2 += uvd2b
@@ -243,7 +226,7 @@ def test_sky_noise_sim():
 
     # try divide by nsamp : set cov_amp=0 so we are only probing noise
     sim3 = testing.sky_noise_sim(
-        uvd,
+        uvd_zen_even_xx,
         beam,
         cov_amp=0,
         cov_length_scale=10,
@@ -255,7 +238,7 @@ def test_sky_noise_sim():
     assert np.isclose(sim3.get_data(53, 69)[:, 104], 0).all()
 
     # test constant across time and bl
-    sim3 = copy.deepcopy(uvd)
+    sim3 = copy.deepcopy(uvd_zen_even_xx)
     sim3.integration_time[:] = (
         np.inf
     )  # set int_time to zero so we are only probing fg signal

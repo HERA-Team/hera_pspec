@@ -1,5 +1,5 @@
 import copy
-import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -9,10 +9,12 @@ import pyuvdata.utils as uvutils
 from hera_pspec import pstokes
 from hera_pspec.data import DATA_PATH
 
-dset1 = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
-dset2 = os.path.join(DATA_PATH, "zen.all.yy.LST.1.06964.uvA")
-multipol_dset = os.path.join(DATA_PATH, "zen.2458116.31193.HH.uvh5")
-multipol_dset_cal = os.path.join(DATA_PATH, "zen.2458116.31193.HH.flagged_abs.calfits")
+DATA_PATH = Path(DATA_PATH)
+
+dset1 = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
+dset2 = str(DATA_PATH / "zen.all.yy.LST.1.06964.uvA")
+multipol_dset = DATA_PATH / "zen.2458116.31193.HH.uvh5"
+multipol_dset_cal = DATA_PATH / "zen.2458116.31193.HH.flagged_abs.calfits"
 
 
 def _load_uvd(path):

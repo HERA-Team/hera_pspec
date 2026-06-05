@@ -72,17 +72,20 @@ def vanilla_uvp_delay_binned() -> UVPSpec:
 
 
 @pytest.fixture(scope="session")
-def uvp_example_data() -> UVPSpec:
-    # obtain uvp object
-    datafile = DATA_PATH / "zen.2458116.31939.HH.uvh5"
+def uvd_zen_2458116() -> UVData:
+    """Session-cached UVData from zen.2458116.31939.HH.uvh5."""
+    return UVData.from_file(DATA_PATH / "zen.2458116.31939.HH.uvh5")
 
-    # read datafile
-    uvd = UVData.from_file(datafile)
+
+@pytest.fixture(scope="session")
+def uvp_example_data(uvd_zen_2458116: UVData) -> UVPSpec:
+    # obtain uvp object
+    uvd = copy.deepcopy(uvd_zen_2458116)
     # Create a new PSpecData objec
     ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
 
     # choose baselines
-    baselines1, baselines2, blpairs = utils.construct_blpairs(
+    baselines1, baselines2, _ = utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
     # compute ps

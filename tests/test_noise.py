@@ -1,11 +1,13 @@
 import copy
-import os
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from hera_pspec import conversions, noise, pspecdata, testing, utils
 from hera_pspec.data import DATA_PATH
+
+DATA_PATH = Path(DATA_PATH)
 
 
 @pytest.fixture
@@ -67,7 +69,7 @@ def test_noise_validation(beam_nf_dipole):
     noise simulation.
     """
     # get simulated noise in Jy
-    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
     Tsys = 300.0  # Kelvin
 
     # generate noise

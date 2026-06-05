@@ -4,6 +4,7 @@ import json
 import os
 import warnings
 from contextlib import nullcontext
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -27,6 +28,8 @@ from hera_pspec import (
     uvwindow,
 )
 from hera_pspec.data import DATA_PATH
+
+DATA_PATH = Path(DATA_PATH)
 
 # Data files to use in tests
 dfiles = ["zen.2458042.12552.xx.HH.uvXAA", "zen.2458042.12552.xx.HH.uvXAA"]
@@ -2349,12 +2352,10 @@ def test_pspec_identity_caching(beam_nf_dipole, uvd):
     assert ((0, 37, 38, "xx"), (1, 37, 38, "xx")) in ds._identity_Y.keys()
 
 
-def test_pspec_exact_windows():
+def test_pspec_exact_windows(uvd_zen_2458116):
     """Test pspec() with exact_windows=True using both a pre-computed FT beam file
     and a Gaussian beam object."""
-    datafile = os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5")
-    uvd1 = UVData()
-    uvd1.read_uvh5(datafile)
+    uvd1 = copy.deepcopy(uvd_zen_2458116)
     ds = pspecdata.PSpecData(dsets=[uvd1, uvd1], wgts=[None, None])
     baselines1, baselines2, _ = utils.construct_blpairs(
         uvd1.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
@@ -2723,13 +2724,12 @@ def test_validate_blpairs(uvd):
 @pytest.mark.filterwarnings(
     "ignore:Some integrations have zero nsamples, but non-zero weights"
 )
-def test_pspec_run(tmp_path):
+def test_pspec_run(tmp_path, beam_nf_dipole):
     fnames = [
         os.path.join(DATA_PATH, d)
         for d in ["zen.even.xx.LST.1.28828.uvOCRSA", "zen.odd.xx.LST.1.28828.uvOCRSA"]
     ]
 
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
     fnames_std = [
         os.path.join(DATA_PATH, d)
         for d in [
@@ -2766,7 +2766,7 @@ def test_pspec_run(tmp_path):
         str(tmp_path / "out.h5"),
         dsets_std=fnames_std,
         Jy2mK=True,
-        beam=beamfile,
+        beam=beam_nf_dipole,
         blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
         verbose=False,
         overwrite=True,

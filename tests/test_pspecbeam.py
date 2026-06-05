@@ -1,5 +1,5 @@
-import os
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -8,9 +8,11 @@ from pyuvdata import UVBeam
 from hera_pspec import conversions, pspecbeam
 from hera_pspec.data import DATA_PATH
 
+DATA_PATH = Path(DATA_PATH)
+
 
 def test_init():
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
     bm = pspecbeam.PSpecBeamUV(beamfile)
 
 
@@ -25,15 +27,15 @@ def test_beamfiles_load_without_warnings():
     for beamfile in beamfiles:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, beamfile))
+            pspecbeam.PSpecBeamUV(DATA_PATH / beamfile)
 
         assert not caught, [str(w.message) for w in caught]
 
 
-def test_UVbeam():
+def test_UVbeam(beam_nf_dipole):
     # Precomputed results in the following tests were done "by hand" using
     # iPython notebook "Scalar_dev2.ipynb" in tests directory
-    pstokes_beamfile = os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
+    pstokes_beamfile = DATA_PATH / "HERA_NF_pstokes_power.beamfits"
     uvb = UVBeam()
     uvb.read_beamfits(pstokes_beamfile)
     beam = pspecbeam.PSpecBeamUV(uvb)
@@ -115,16 +117,14 @@ def test_UVbeam():
         beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
 
     # check dipole beams work
-    dipole_beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(dipole_beamfile)
-    scalar = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
+    scalar = beam_nf_dipole.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
     with pytest.raises(
         (KeyError, ValueError)
     ):  # see note above about pyuvdata versions
-        beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="pI")
+        beam_nf_dipole.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="pI")
 
     # check efield beams work
-    efield_beamfile = os.path.join(DATA_PATH, "HERA_NF_efield.beamfits")
+    efield_beamfile = DATA_PATH / "HERA_NF_efield.beamfits"
     beam = pspecbeam.PSpecBeamUV(efield_beamfile)
     scalar = beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
     with pytest.raises(
@@ -299,28 +299,24 @@ def test_PSpecBeamBase():
     bm2 = pspecbeam.PSpecBeamBase(cosmo=conversions.Cosmo_Conversions())
 
 
-def test_get_Omegas():
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    OP, OPP = beam.get_Omegas(("xx", "xx"))
+def test_get_Omegas(beam_nf_dipole):
+    OP, OPP = beam_nf_dipole.get_Omegas(("xx", "xx"))
     assert OP.shape == (26, 1)
     assert OPP.shape == (26, 1)
-    OP, OPP = beam.get_Omegas([(-5, -5), (-6, -6)])
+    OP, OPP = beam_nf_dipole.get_Omegas([(-5, -5), (-6, -6)])
     assert OP.shape == (26, 2)
     assert OPP.shape == (26, 2)
 
     with pytest.raises(TypeError, match="polpairs is not a list"):
-        beam.get_Omegas("xx")
+        beam_nf_dipole.get_Omegas("xx")
     with pytest.raises(NotImplementedError, match="does not support cross-correlation"):
-        beam.get_Omegas([("pI", "pQ")])
+        beam_nf_dipole.get_Omegas([("pI", "pQ")])
 
 
-def test_beam_normalized_response():
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
+def test_beam_normalized_response(beam_nf_dipole):
     freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
-    nside = beam.primary_beam.nside  # uvbeam object
-    beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol="xx", freq=freq)
+    nside = beam_nf_dipole.primary_beam.nside  # uvbeam object
+    beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(beam_nf_dipole, pol="xx", freq=freq)
 
     # tests for dimensions
     assert len(beam_res[1]) == len(freq)
@@ -329,10 +325,10 @@ def test_beam_normalized_response():
 
     # tests for polarization
     with pytest.raises(ValueError, match="Do not have the right polarization"):
-        pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol="ll", freq=freq)
+        pspecbeam.PSpecBeamUV.beam_normalized_response(beam_nf_dipole, pol="ll", freq=freq)
 
     # test if it is a power beam
-    efield_beamfile = os.path.join(DATA_PATH, "HERA_NF_efield.beamfits")
+    efield_beamfile = DATA_PATH / "HERA_NF_efield.beamfits"
     beam_efield = pspecbeam.PSpecBeamUV(efield_beamfile)
     beam_efield.primary_beam.beam_type = "voltage"
     with pytest.raises(ValueError, match="beam_type must be power"):

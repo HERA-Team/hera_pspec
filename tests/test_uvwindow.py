@@ -1,5 +1,5 @@
 import copy
-import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -7,8 +7,10 @@ from astropy import units
 from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 
-from hera_pspec import PSpecData, conversions, pspecbeam, utils, uvwindow
+from hera_pspec import PSpecData, conversions, utils, uvwindow
 from hera_pspec.data import DATA_PATH
+
+DATA_PATH = Path(DATA_PATH)
 
 # Data files to use in tests
 dfile = "zen.2458116.31939.HH.uvh5"
@@ -21,7 +23,7 @@ outfile = "test.hdf5"
 def make_ft_beam_obj():
     def _factory(spw_range=None):
         return uvwindow.FTBeam.from_file(
-            ftfile=os.path.join(DATA_PATH, ftfile), spw_range=spw_range
+            ftfile=DATA_PATH / ftfile, spw_range=spw_range
         )
 
     return _factory
@@ -35,7 +37,7 @@ def ft_beam_spw(make_ft_beam_obj):
 
 @pytest.fixture()
 def ft_bandwidth():
-    return uvwindow.FTBeam.get_bandwidth(os.path.join(DATA_PATH, ftfile))
+    return uvwindow.FTBeam.get_bandwidth(DATA_PATH / ftfile)
 
 
 @pytest.fixture()
@@ -57,7 +59,7 @@ def uvwindow_obj(ft_beam_spw, cosmo):
 @pytest.fixture()
 def lens():
     uvd = UVData()
-    uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
+    uvd.read(DATA_PATH / dfile, read_data=False)
     return utils.get_reds(uvd, bl_error_tol=1.0, pick_data_ants=False)[1]
 
 
@@ -79,15 +81,13 @@ def cyl_wf_result(uvwindow_obj, lens):
 
 
 @pytest.fixture(scope="session")
-def uvp_for_uvwindow():
+def uvp_for_uvwindow(beam_nf_dipole):
     """UVPSpec objects (uvp, uvp_nocosmo, uvp_crosspol) for UVWindow.from_uvpspec tests."""
-    datafile = os.path.join(DATA_PATH, dfile)
+    datafile = DATA_PATH / dfile
     uvd = UVData()
     uvd.read_uvh5(datafile)
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=None)
-    uvd.data_array *= uvb.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")[None, :, None]
-    ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
+    uvd.data_array *= beam_nf_dipole.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")[None, :, None]
+    ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
     ds_nocosmo = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
     baselines1, baselines2, _ = utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
@@ -218,7 +218,7 @@ def test_FTBeam_from_beam_not_implemented():
 
 def test_FTBeam_from_file_happy_path():
     test = uvwindow.FTBeam.from_file(
-        ftfile=os.path.join(DATA_PATH, ftfile),
+        ftfile=DATA_PATH / ftfile,
         spw_range=(5, 25),
         verbose=False,
         x_orientation="east",
@@ -241,7 +241,7 @@ def test_FTBeam_from_file_invalid_ftfile_path():
 
 
 def test_FTBeam_from_file_spw_range_matches_fixture(make_ft_beam_obj):
-    ft_file = os.path.join(DATA_PATH, ftfile)
+    ft_file = DATA_PATH / ftfile
     spw_range = (5, 25)
     test = uvwindow.FTBeam.from_file(ftfile=ft_file, spw_range=spw_range)
     assert np.allclose(
@@ -251,7 +251,7 @@ def test_FTBeam_from_file_spw_range_matches_fixture(make_ft_beam_obj):
 
 def test_FTBeam_from_file_no_spw_range_uses_full_bandwidth(ft_bandwidth):
     test = uvwindow.FTBeam.from_file(
-        ftfile=os.path.join(DATA_PATH, ftfile), spw_range=None
+        ftfile=DATA_PATH / ftfile, spw_range=None
     )
     assert np.allclose(test.freq_array, ft_bandwidth)
 
@@ -260,7 +260,7 @@ def test_FTBeam_from_file_no_spw_range_uses_full_bandwidth(ft_bandwidth):
 def test_FTBeam_from_file_invalid_spw_range(bad_spw):
     with pytest.raises(AssertionError, match="Wrong spw range format"):
         uvwindow.FTBeam.from_file(
-            spw_range=bad_spw, ftfile=os.path.join(DATA_PATH, ftfile)
+            spw_range=bad_spw, ftfile=DATA_PATH / ftfile
         )
 
 
@@ -316,7 +316,7 @@ def test_FTBeam_gaussian_small_widths_warns(ft_beam_spw):
 
 
 def test_FTBeam_get_bandwidth_matches_fixture(ft_bandwidth):
-    result = uvwindow.FTBeam.get_bandwidth(os.path.join(DATA_PATH, ftfile))
+    result = uvwindow.FTBeam.get_bandwidth(DATA_PATH / ftfile)
     assert np.all(result == ft_bandwidth)
 
 
@@ -332,7 +332,7 @@ def test_FTBeam_get_bandwidth_invalid_file():
 
 def test_FTBeam_update_spw_happy_path():
     test = uvwindow.FTBeam.from_file(
-        ftfile=os.path.join(DATA_PATH, ftfile), spw_range=None
+        ftfile=DATA_PATH / ftfile, spw_range=None
     )
     test.update_spw((5, 25))
 
@@ -340,7 +340,7 @@ def test_FTBeam_update_spw_happy_path():
 @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
 def test_FTBeam_update_spw_invalid_range(bad_spw):
     test = uvwindow.FTBeam.from_file(
-        ftfile=os.path.join(DATA_PATH, ftfile), spw_range=None
+        ftfile=DATA_PATH / ftfile, spw_range=None
     )
     with pytest.raises(AssertionError, match="Wrong spw range format"):
         test.update_spw(spw_range=bad_spw)
@@ -425,14 +425,14 @@ def test_UVWindow_init_little_h_false(ft_beam_spw):
 def test_UVWindow_from_uvpspec_happy_path(uvp_for_uvwindow):
     uvp, _, _ = uvp_for_uvwindow
     _ = uvwindow.UVWindow.from_uvpspec(
-        uvp, ipol=0, spw=0, verbose=True, ftbeam=os.path.join(DATA_PATH, basename)
+        uvp, ipol=0, spw=0, verbose=True, ftbeam=DATA_PATH / basename
     )
 
 
 def test_UVWindow_from_uvpspec_crosspol(uvp_for_uvwindow):
     _, _, uvp_crosspol = uvp_for_uvwindow
     _ = uvwindow.UVWindow.from_uvpspec(
-        uvp_crosspol, ipol=0, spw=0, ftbeam=os.path.join(DATA_PATH, basename)
+        uvp_crosspol, ipol=0, spw=0, ftbeam=DATA_PATH / basename
     )
 
 
@@ -444,7 +444,7 @@ def test_UVWindow_from_uvpspec_no_cosmo_warns(uvp_for_uvwindow):
             ipol=0,
             spw=0,
             verbose=True,
-            ftbeam=os.path.join(DATA_PATH, basename),
+            ftbeam=DATA_PATH / basename,
         )
 
 
@@ -468,7 +468,7 @@ def test_UVWindow_from_uvpspec_spw_out_of_range(uvp_for_uvwindow):
     uvp, _, _ = uvp_for_uvwindow
     with pytest.raises(AssertionError, match="Input spw must be smaller or equal"):
         uvwindow.UVWindow.from_uvpspec(
-            uvp=uvp, ipol=0, spw=2, ftbeam=os.path.join(DATA_PATH, basename)
+            uvp=uvp, ipol=0, spw=2, ftbeam=DATA_PATH / basename
         )
 
 
@@ -737,7 +737,7 @@ def test_UVWindow_get_cylindrical_wf_nonlinear_kpara_error(uvwindow_obj, lens):
 
 def test_UVWindow_get_cylindrical_wf_odd_number_of_delays(lens):
     ft_beam_test = uvwindow.FTBeam.from_file(
-        ftfile=os.path.join(DATA_PATH, ftfile), spw_range=(5, 24)
+        ftfile=DATA_PATH / ftfile, spw_range=(5, 24)
     )
     test = uvwindow.UVWindow(ftbeam_obj=ft_beam_test)
     kperp, kpara, cyl_wf = test.get_cylindrical_wf(lens[12], return_bins="unweighted")

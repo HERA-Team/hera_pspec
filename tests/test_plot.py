@@ -1,6 +1,6 @@
 import copy
 import glob
-import os
+from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -8,8 +8,10 @@ import numpy as np
 import pytest
 from pyuvdata import UVData
 
-from hera_pspec import conversions, grouping, plot, pspecbeam, pspecdata, utils
+from hera_pspec import conversions, grouping, plot, pspecdata, utils
 from hera_pspec.data import DATA_PATH
+
+DATA_PATH = Path(DATA_PATH)
 
 # Data files to use in tests
 dfiles = ["zen.all.xx.LST.1.06964.uvA"]
@@ -47,14 +49,14 @@ def axes_contains(ax, obj_list):
 def uvd():
     """Load the raw UVData from the test data file."""
     uvdata = UVData()
-    uvdata.read_miriad(os.path.join(DATA_PATH, dfiles[0]))
+    uvdata.read_miriad(str(DATA_PATH / dfiles[0]))
     return uvdata
 
 
 @pytest.fixture
-def pspec_ds(uvd):
+def pspec_ds(uvd, beam_nf_dipole):
     """Build a PSpecData object (beam + two time-interleaved halves of uvd)."""
-    bm = pspecbeam.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
+    bm = copy.deepcopy(beam_nf_dipole)
     bm.filename = "HERA_NF_dipole_power.beamfits"
     # Slide the time axis by one integration to avoid noise bias
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)

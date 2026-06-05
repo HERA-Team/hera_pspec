@@ -1,5 +1,4 @@
 import copy
-import os
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +21,8 @@ from hera_pspec import (
 )
 from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.data import DATA_PATH
+
+DATA_PATH = Path(DATA_PATH)
 
 
 # Setup Test Cases for this module
@@ -424,7 +425,7 @@ def test_indices_funcs(uvp: uvpspec.UVPSpec):
 
 
 @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-def test_select(uvp: uvpspec.UVPSpec):
+def test_select(uvp: uvpspec.UVPSpec, beam_nf_dipole, uvd_zen_even_xx):
     Ndlys = uvp.get_dlys(0).size
     # bl group select
     uvp1 = copy.deepcopy(uvp)
@@ -436,11 +437,6 @@ def test_select(uvp: uvpspec.UVPSpec):
     )
 
     # inplace vs not inplace, spw selection
-    uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-    beam = pspecbeam.PSpecBeamUV(
-        os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    )
     bls = [(37, 38), (38, 39), (52, 53)]
     rp = {
         "filter_centers": [0.0],
@@ -453,7 +449,7 @@ def test_select(uvp: uvpspec.UVPSpec):
         r_params[key1] = rp
 
     uvp1 = testing.uvpspec_from_data(
-        uvd, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam, r_params=r_params
+        uvd_zen_even_xx, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole, r_params=r_params
     )
     uvp2 = uvp1.select(spws=0, inplace=False)
     assert uvp2.Nspws == 1
@@ -723,7 +719,7 @@ def test_get_blpair_groups_from_bl_groups_input_validation(
 
 
 def test_get_exact_window_functions(uvp_example_data: uvpspec.UVPSpec):
-    ft_file = Path(DATA_PATH) / "FT_beam_HERA_dipole_test"
+    ft_file = DATA_PATH / "FT_beam_HERA_dipole_test"
 
     uvp = copy.deepcopy(uvp_example_data)
 
@@ -1319,7 +1315,7 @@ def test_backwards_compatibility_read():
     """
     # test read in of a static test file dated 8/2019
     uvp = uvpspec.UVPSpec()
-    uvp.read_hdf5(os.path.join(DATA_PATH, "test_uvp.h5"))
+    uvp.read_hdf5(DATA_PATH / "test_uvp.h5")
     for dattr in uvp._meta_deprecated:
         with pytest.raises(AttributeError) as excinfo:
             raise AttributeError("'UVPSpec' object has no attribute")
@@ -1334,7 +1330,7 @@ def test_backwards_compatibility_read():
 
 def test_add_approximate_cov():
     uvp = uvpspec.UVPSpec()
-    uvp.read_hdf5(os.path.join(DATA_PATH, "test_uvp.h5"))
+    uvp.read_hdf5(DATA_PATH / "test_uvp.h5")
     uvp.stats_array = {
         "P_N": {
             spw: np.ones((uvp.Nbltpairs, len(uvp.get_dlys(spw)), uvp.Npols))

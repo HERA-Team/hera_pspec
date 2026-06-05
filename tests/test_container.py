@@ -1,10 +1,12 @@
-import os
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from hera_pspec import PSpecContainer, UVPSpec, container, testing
 from hera_pspec.data import DATA_PATH
+
+DATA_PATH = Path(DATA_PATH)
 
 
 @pytest.fixture
@@ -233,7 +235,7 @@ def test_container_transactional_mode(container_fname, vanilla_uvp):
 
 
 def test_combine_psc_spectra(tmp_path):
-    fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
+    fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
     uvp1 = testing.uvpspec_from_data(fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
     uvp2 = testing.uvpspec_from_data(fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
 

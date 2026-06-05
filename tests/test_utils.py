@@ -1,5 +1,5 @@
 import copy
-import os
+from pathlib import Path
 import sys
 
 import numpy as np
@@ -10,11 +10,13 @@ from pyuvdata import UVData
 from hera_pspec import testing, utils
 from hera_pspec.data import DATA_PATH
 
+DATA_PATH = Path(DATA_PATH)
+
 
 @pytest.fixture
 def uvd():
     uvdata = UVData()
-    uvdata.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+    uvdata.read_miriad(str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA"))
     return uvdata
 
 
@@ -81,7 +83,7 @@ def test_circular_average():
 def test_cov():
     # load another data file
     uvd = UVData()
-    uvd.read_miriad(os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA"))
+    uvd.read_miriad(str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA"))
 
     # test basic execution
     d1 = uvd.get_data(24, 25)
@@ -109,7 +111,7 @@ def test_load_config():
     """
     Check YAML config file handling.
     """
-    fname = os.path.join(DATA_PATH, "_test_utils.yaml")
+    fname = DATA_PATH / "_test_utils.yaml"
     cfg = utils.load_config(fname)
 
     # Check that expected keys exist
@@ -222,7 +224,7 @@ def test_spw_range_from_redshifts(uvd, vanilla_uvp):
 
 
 def test_calc_blpair_reds():
-    fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+    fname = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
 
     uvd = UVData()
     uvd.read_miriad(fname)
@@ -323,7 +325,7 @@ def test_calc_blpair_reds():
 
 def test_calc_blpair_reds_autos_only():
     # test include_crosscorrs selection option being set to false.
-    fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+    fname = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
     uvd = UVData()
     uvd.read_miriad(fname)
     # basic execution
@@ -348,7 +350,7 @@ def test_get_delays():
 
 
 def test_get_reds():
-    fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+    fname = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
     uvd = UVData()
     uvd.read_miriad(fname, read_data=False)
     antpos = uvd.telescope.get_enu_antpos()
@@ -393,7 +395,7 @@ def test_get_reds():
 
 
 def test_get_reds_autos_only():
-    fname = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+    fname = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
     uvd = UVData()
     uvd.read_miriad(fname, read_data=False)
     antpos = uvd.telescope.get_enu_antpos()
@@ -407,7 +409,7 @@ def test_get_reds_autos_only():
 
 def test_config_pspec_blpairs():
     # test basic execution
-    uv_template = os.path.join(DATA_PATH, "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
+    uv_template = str(DATA_PATH / "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
     groupings = utils.config_pspec_blpairs(
         uv_template,
         [("xx", "xx")],
@@ -466,7 +468,7 @@ def test_uvd_to_Tsys(uvd, beam_nf_dipole, vanilla_uvp):
     # with or without future array shapes
     tsys_estimate = utils.uvd_to_Tsys(uvd, beam_nf_dipole)
     tsys_estimate2 = utils.uvd_to_Tsys(
-        uvd, os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+        uvd, str(DATA_PATH / "HERA_NF_dipole_power.beamfits")
     )
     assert np.allclose(tsys_estimate.data_array, tsys_estimate2.data_array)
     uvp2, _ = testing.build_vanilla_uvpspec(beam=beam_nf_dipole)
@@ -514,7 +516,7 @@ def test_log(tmp_path):
 
 
 def test_get_blvec_reds():
-    fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
+    fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
     uvd = UVData()
     uvd.read_miriad(fname)
     antpos, ants = uvd.get_enu_data_ants()

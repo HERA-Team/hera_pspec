@@ -1,5 +1,5 @@
 import copy
-import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -18,6 +18,8 @@ from hera_pspec import (
     uvwindow,
 )
 from hera_pspec.data import DATA_PATH
+
+DATA_PATH = Path(DATA_PATH)
 
 
 def case_vanilla_uvp(vanilla_uvp: UVPSpec):
@@ -225,12 +227,12 @@ def test_group_baselines():
             assert g1[i][j] == g3[i][j]
 
 
-def test_average_spectra(beam_nf_dipole_wcosmo):
+def test_average_spectra(beam_nf_dipole_wcosmo, uvd_zen_2458116):
     """
     Test average spectra behavior.
     """
     ## Start file prep ##
-    dfile = os.path.join(DATA_PATH, "zen.all.xx.LST.1.06964.uvA")
+    dfile = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
     # Load into UVData objects
     uvd = UVData()
     uvd.read_miriad(dfile)
@@ -361,13 +363,11 @@ def test_average_spectra(beam_nf_dipole_wcosmo):
     # Tests related to exact_windows
 
     # prep objects
-    uvd = UVData()
-    uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
     ds = pspecdata.PSpecData(
-        dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+        dsets=[uvd_zen_2458116, uvd_zen_2458116], wgts=[None, None], beam=beam_nf_dipole_wcosmo
     )
     baselines1, baselines2, blpairs = utils.construct_blpairs(
-        uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
+        uvd_zen_2458116.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
     # compute ps
     uvp = ds.pspec(
@@ -381,7 +381,7 @@ def test_average_spectra(beam_nf_dipole_wcosmo):
     )
     # get exact window functions
     uvp.get_exact_window_functions(
-        ftbeam=os.path.join(DATA_PATH, "FT_beam_HERA_dipole_test"),
+        ftbeam=DATA_PATH / "FT_beam_HERA_dipole_test",
         spw_array=None,
         inplace=True,
         verbose=False,
@@ -556,7 +556,7 @@ def test_validate_bootstrap_errorbar():
     have a standard deviation that converges to 1.
     """
     # get simulated noise in K-str
-    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
     Tsys = 300.0  # Kelvin
 
     # generate complex gaussian noise
@@ -730,7 +730,7 @@ def test_get_bootstrap_run_argparser():
 
 
 def test_spherical_average(
-    redundant_blpairs, beam_nf_dipole_wcosmo, cosmo, uvd_zen_even_xx
+    redundant_blpairs, beam_nf_dipole_wcosmo, cosmo, uvd_zen_even_xx, uvd_zen_2458116
 ):
     # create two polarization data
     uvd = copy.deepcopy(uvd_zen_even_xx)
@@ -892,13 +892,11 @@ def test_spherical_average(
     )
 
     # tests related to exact_windows
-    uvd = UVData()
-    uvd.read_uvh5(os.path.join(DATA_PATH, "zen.2458116.31939.HH.uvh5"))
     ds = pspecdata.PSpecData(
-        dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+        dsets=[uvd_zen_2458116, uvd_zen_2458116], wgts=[None, None], beam=beam_nf_dipole_wcosmo
     )
     baselines1, baselines2, blpairs = utils.construct_blpairs(
-        uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
+        uvd_zen_2458116.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
     # compute ps
     uvp = ds.pspec(
@@ -912,7 +910,7 @@ def test_spherical_average(
     )
     # get exact window functions
     uvp.get_exact_window_functions(
-        ftbeam=os.path.join(DATA_PATH, "FT_beam_HERA_dipole_test"),
+        ftbeam=DATA_PATH / "FT_beam_HERA_dipole_test",
         spw_array=None,
         inplace=True,
         verbose=False,
