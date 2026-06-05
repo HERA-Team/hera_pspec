@@ -45,7 +45,7 @@ def test_uvpspec_from_data(beam_nf_dipole, uvd_zen_even_xx):
         152153153154,
     ]
     uvp2 = testing.uvpspec_from_data(
-        uvd,
+        uvd_zen_even_xx,
         [(37, 38), (38, 39), (52, 53), (53, 54)],
         beam=str(DATA_PATH / "HERA_NF_dipole_power.beamfits"),
         spw_ranges=[(50, 100)],
@@ -55,7 +55,7 @@ def test_uvpspec_from_data(beam_nf_dipole, uvd_zen_even_xx):
     assert uvp == uvp2
 
     # test multiple bl groups
-    antpos, ants = uvd.get_enu_data_ants()
+    antpos, ants = uvd_zen_even_xx.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
     uvp = testing.uvpspec_from_data(
         fname, reds[:3], beam=beam_nf_dipole, spw_ranges=[(50, 100)]
