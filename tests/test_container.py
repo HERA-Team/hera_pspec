@@ -31,7 +31,9 @@ def _fill_container(fname: Path, uvp: UVPSpec) -> tuple[list[str], list[str]]:
 @pytest.mark.parametrize(
     "keep_open,swmr", [(True, False), (False, True)], ids=["default", "transactional"]
 )
-def test_PSpecContainer(container_fname: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool) -> None:
+def test_PSpecContainer(
+    container_fname: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+) -> None:
     """
     Test that PSpecContainer works properly.
     """
@@ -178,7 +180,9 @@ def test_PSpecContainer(container_fname: Path, vanilla_uvp: UVPSpec, keep_open: 
     ps_store.save()
 
 
-def test_container_transactional_mode(container_fname: Path, vanilla_uvp: UVPSpec) -> None:
+def test_container_transactional_mode(
+    container_fname: Path, vanilla_uvp: UVPSpec
+) -> None:
     """
     Test transactional operations on PSpecContainer objects.
     """
