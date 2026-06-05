@@ -22,9 +22,7 @@ outfile = "test.hdf5"
 @pytest.fixture()
 def make_ft_beam_obj():
     def _factory(spw_range=None):
-        return uvwindow.FTBeam.from_file(
-            ftfile=DATA_PATH / ftfile, spw_range=spw_range
-        )
+        return uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=spw_range)
 
     return _factory
 
@@ -86,7 +84,9 @@ def uvp_for_uvwindow(beam_nf_dipole):
     datafile = DATA_PATH / dfile
     uvd = UVData()
     uvd.read_uvh5(datafile)
-    uvd.data_array *= beam_nf_dipole.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")[None, :, None]
+    uvd.data_array *= beam_nf_dipole.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")[
+        None, :, None
+    ]
     ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
     ds_nocosmo = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
     baselines1, baselines2, _ = utils.construct_blpairs(
@@ -250,18 +250,14 @@ def test_FTBeam_from_file_spw_range_matches_fixture(make_ft_beam_obj):
 
 
 def test_FTBeam_from_file_no_spw_range_uses_full_bandwidth(ft_bandwidth):
-    test = uvwindow.FTBeam.from_file(
-        ftfile=DATA_PATH / ftfile, spw_range=None
-    )
+    test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
     assert np.allclose(test.freq_array, ft_bandwidth)
 
 
 @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
 def test_FTBeam_from_file_invalid_spw_range(bad_spw):
     with pytest.raises(AssertionError, match="Wrong spw range format"):
-        uvwindow.FTBeam.from_file(
-            spw_range=bad_spw, ftfile=DATA_PATH / ftfile
-        )
+        uvwindow.FTBeam.from_file(spw_range=bad_spw, ftfile=DATA_PATH / ftfile)
 
 
 # ---------------------------------------------------------------------------
@@ -331,17 +327,13 @@ def test_FTBeam_get_bandwidth_invalid_file():
 
 
 def test_FTBeam_update_spw_happy_path():
-    test = uvwindow.FTBeam.from_file(
-        ftfile=DATA_PATH / ftfile, spw_range=None
-    )
+    test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
     test.update_spw((5, 25))
 
 
 @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
 def test_FTBeam_update_spw_invalid_range(bad_spw):
-    test = uvwindow.FTBeam.from_file(
-        ftfile=DATA_PATH / ftfile, spw_range=None
-    )
+    test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
     with pytest.raises(AssertionError, match="Wrong spw range format"):
         test.update_spw(spw_range=bad_spw)
 
@@ -440,11 +432,7 @@ def test_UVWindow_from_uvpspec_no_cosmo_warns(uvp_for_uvwindow):
     _, uvp_nocosmo, _ = uvp_for_uvwindow
     with pytest.warns(UserWarning, match="uvp has no cosmo attribute"):
         _ = uvwindow.UVWindow.from_uvpspec(
-            uvp_nocosmo,
-            ipol=0,
-            spw=0,
-            verbose=True,
-            ftbeam=DATA_PATH / basename,
+            uvp_nocosmo, ipol=0, spw=0, verbose=True, ftbeam=DATA_PATH / basename
         )
 
 

@@ -449,7 +449,11 @@ def test_select(uvp: uvpspec.UVPSpec, beam_nf_dipole, uvd_zen_even_xx):
         r_params[key1] = rp
 
     uvp1 = testing.uvpspec_from_data(
-        uvd_zen_even_xx, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole, r_params=r_params
+        uvd_zen_even_xx,
+        bls,
+        spw_ranges=[(20, 30), (60, 90)],
+        beam=beam_nf_dipole,
+        r_params=r_params,
     )
     uvp2 = uvp1.select(spws=0, inplace=False)
     assert uvp2.Nspws == 1

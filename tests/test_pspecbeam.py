@@ -117,7 +117,9 @@ def test_UVbeam(beam_nf_dipole):
         beam.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
 
     # check dipole beams work
-    scalar = beam_nf_dipole.compute_pspec_scalar(lower_freq, upper_freq, num_freqs, pol="XX")
+    scalar = beam_nf_dipole.compute_pspec_scalar(
+        lower_freq, upper_freq, num_freqs, pol="XX"
+    )
     with pytest.raises(
         (KeyError, ValueError)
     ):  # see note above about pyuvdata versions
@@ -316,7 +318,9 @@ def test_get_Omegas(beam_nf_dipole):
 def test_beam_normalized_response(beam_nf_dipole):
     freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
     nside = beam_nf_dipole.primary_beam.nside  # uvbeam object
-    beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(beam_nf_dipole, pol="xx", freq=freq)
+    beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(
+        beam_nf_dipole, pol="xx", freq=freq
+    )
 
     # tests for dimensions
     assert len(beam_res[1]) == len(freq)
@@ -325,7 +329,9 @@ def test_beam_normalized_response(beam_nf_dipole):
 
     # tests for polarization
     with pytest.raises(ValueError, match="Do not have the right polarization"):
-        pspecbeam.PSpecBeamUV.beam_normalized_response(beam_nf_dipole, pol="ll", freq=freq)
+        pspecbeam.PSpecBeamUV.beam_normalized_response(
+            beam_nf_dipole, pol="ll", freq=freq
+        )
 
     # test if it is a power beam
     efield_beamfile = DATA_PATH / "HERA_NF_efield.beamfits"

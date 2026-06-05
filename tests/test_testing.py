@@ -57,7 +57,9 @@ def test_uvpspec_from_data(beam_nf_dipole, uvd_zen_even_xx):
     # test multiple bl groups
     antpos, ants = uvd.get_enu_data_ants()
     reds = redcal.get_pos_reds(dict(zip(ants, antpos)))
-    uvp = testing.uvpspec_from_data(fname, reds[:3], beam=beam_nf_dipole, spw_ranges=[(50, 100)])
+    uvp = testing.uvpspec_from_data(
+        fname, reds[:3], beam=beam_nf_dipole, spw_ranges=[(50, 100)]
+    )
     assert (
         len(
             set(uvp.bl_array)
@@ -138,7 +140,12 @@ def test_noise_sim(uvd_zen_even_xx):
     # Test with a beam!
     beamfile = str(DATA_PATH / "HERA_NF_dipole_power.beamfits")
     uvn = testing.noise_sim(
-        copy.deepcopy(uvd_zen_even_xx), 300.0, beamfile, seed=0, whiten=True, inplace=False
+        copy.deepcopy(uvd_zen_even_xx),
+        300.0,
+        beamfile,
+        seed=0,
+        whiten=True,
+        inplace=False,
     )
     assert uvn.vis_units == "Jy"
 
@@ -152,7 +159,9 @@ def test_noise_sim(uvd_zen_even_xx):
     )
 
     # test Nextend
-    uvn = testing.noise_sim(uvd_zen_even_xx, 300.0, seed=0, whiten=True, inplace=False, Nextend=4)
+    uvn = testing.noise_sim(
+        uvd_zen_even_xx, 300.0, seed=0, whiten=True, inplace=False, Nextend=4
+    )
     assert uvn.Ntimes == uvd_zen_even_xx.Ntimes * 5
     assert uvn.Nfreqs == uvd_zen_even_xx.Nfreqs
     assert uvn.Nbls == uvd_zen_even_xx.Nbls

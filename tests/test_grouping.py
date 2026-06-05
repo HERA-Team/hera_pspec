@@ -364,10 +364,14 @@ def test_average_spectra(beam_nf_dipole_wcosmo, uvd_zen_2458116):
 
     # prep objects
     ds = pspecdata.PSpecData(
-        dsets=[uvd_zen_2458116, uvd_zen_2458116], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+        dsets=[uvd_zen_2458116, uvd_zen_2458116],
+        wgts=[None, None],
+        beam=beam_nf_dipole_wcosmo,
     )
     baselines1, baselines2, blpairs = utils.construct_blpairs(
-        uvd_zen_2458116.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
+        uvd_zen_2458116.get_antpairs()[1:],
+        exclude_permutations=False,
+        exclude_auto_bls=True,
     )
     # compute ps
     uvp = ds.pspec(
@@ -893,10 +897,14 @@ def test_spherical_average(
 
     # tests related to exact_windows
     ds = pspecdata.PSpecData(
-        dsets=[uvd_zen_2458116, uvd_zen_2458116], wgts=[None, None], beam=beam_nf_dipole_wcosmo
+        dsets=[uvd_zen_2458116, uvd_zen_2458116],
+        wgts=[None, None],
+        beam=beam_nf_dipole_wcosmo,
     )
     baselines1, baselines2, blpairs = utils.construct_blpairs(
-        uvd_zen_2458116.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
+        uvd_zen_2458116.get_antpairs()[1:],
+        exclude_permutations=False,
+        exclude_auto_bls=True,
     )
     # compute ps
     uvp = ds.pspec(
