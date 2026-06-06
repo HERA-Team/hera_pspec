@@ -1,17 +1,53 @@
+import contextlib
+import io
 import os
 import pickle
+from dataclasses import dataclass
 from pathlib import Path
 
 import h5py
 import pytest
-from typer.testing import CliRunner
 
 from hera_pspec import cli, container, testing
 from hera_pspec.container import PSpecContainer
 from hera_pspec.data import DATA_PATH
 from hera_pspec.uvpspec import UVPSpec
 
-runner = CliRunner()
+
+@dataclass
+class Result:
+    """Minimal stand-in for a CliRunner-style invocation result."""
+
+    exit_code: int
+    output: str
+    exception: BaseException | None
+
+    @property
+    def stdout(self) -> str:  # tests use .stdout and .output interchangeably
+        return self.output
+
+
+def invoke(args: list[str]) -> Result:
+    """Invoke the cyclopts app like CliRunner.invoke, returning a Result.
+
+    Always pass an explicit token list (never bare ``cli.app()``) so the strict
+    ``-Werror`` warnings job does not trip cyclopts' "Did you mean app([])?" warning.
+    """
+    buf = io.StringIO()
+    exc: BaseException | None = None
+    code = 0
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            # exit_on_error=False -> parse errors raise instead of SystemExit(1);
+            # print_error=False  -> no rich error panel leaks into captured output.
+            cli.app(args, exit_on_error=False, print_error=False)
+    except SystemExit as e:  # --help (and any version-style exit) lands here
+        code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+        exc = e
+    except BaseException as e:  # cyclopts CoercionError/MissingArgumentError/...
+        code = 1
+        exc = e
+    return Result(exit_code=code, output=buf.getvalue(), exception=exc)
 
 
 @pytest.fixture(scope="module")
@@ -47,13 +83,10 @@ def single_baseline_files(tmp_path_factory, vanilla_uvp: UVPSpec) -> list[Path]:
 
 class TestFastMergeBaselines:
     def test_happy_path(self, vanilla_uvp, single_baseline_files: list[Path]):
-        runner = CliRunner()
-
         pth = single_baseline_files[0].parent
 
-        result = runner.invoke(
-            cli.app,
-            args=[
+        result = invoke(
+            [
                 "fast-merge-baselines",
                 "--pattern",
                 f"{pth}/blpair.*.h5",
@@ -70,11 +103,11 @@ class TestFastMergeBaselines:
                 "extra0",
                 "--extras",
                 "extra1",
-            ],
+            ]
         )
 
         if result.exit_code != 0:
-            print(result.exc_info)
+            print(result.exception)
             print(result.stdout)
             assert result.exit_code == 0
 
@@ -93,14 +126,11 @@ class TestFastMergeBaselines:
 
     def test_batch_processing(self, vanilla_uvp, single_baseline_files: list[Path]):
         """Test that batch processing produces the same result as loading all at once."""
-        runner = CliRunner()
-
         pth = single_baseline_files[0].parent
 
         # Run with batch_size=2 (small batches to test the batching logic)
-        result = runner.invoke(
-            cli.app,
-            args=[
+        result = invoke(
+            [
                 "fast-merge-baselines",
                 "--pattern",
                 f"{pth}/blpair.*.h5",
@@ -119,11 +149,11 @@ class TestFastMergeBaselines:
                 "extra1",
                 "--batch-size",
                 "2",
-            ],
+            ]
         )
 
         if result.exit_code != 0:
-            print(result.exc_info)
+            print(result.exception)
             print(result.stdout)
             assert result.exit_code == 0
 
@@ -145,14 +175,11 @@ class TestFastMergeBaselines:
 
     def test_single_batch(self, vanilla_uvp, single_baseline_files: list[Path]):
         """Test that batch_size=1 works correctly (edge case)."""
-        runner = CliRunner()
-
         pth = single_baseline_files[0].parent
 
         # Run with batch_size=1 (most extreme batching)
-        result = runner.invoke(
-            cli.app,
-            args=[
+        result = invoke(
+            [
                 "fast-merge-baselines",
                 "--pattern",
                 f"{pth}/blpair.*.h5",
@@ -165,11 +192,11 @@ class TestFastMergeBaselines:
                 "--no-progress",
                 "--batch-size",
                 "1",
-            ],
+            ]
         )
 
         if result.exit_code != 0:
-            print(result.exc_info)
+            print(result.exception)
             print(result.stdout)
             assert result.exit_code == 0
 
@@ -181,14 +208,12 @@ class TestFastMergeBaselines:
 
 
 def test_dummy_command():
-    runner = CliRunner()
-
-    result = runner.invoke(cli.app, args=["hello"])
+    result = invoke(["hello"])
     assert "Hi" in result.stdout
 
 
 def test_run_help():
-    result = runner.invoke(cli.app, ["run", "--help"])
+    result = invoke(["run", "--help"])
     assert result.exit_code == 0, result.output
     assert "run" in result.output.lower()
 
@@ -197,8 +222,7 @@ def test_run_end_to_end(tmp_path):
     f0 = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
     f1 = os.path.join(DATA_PATH, "zen.odd.xx.LST.1.28828.uvOCRSA")
     out = tmp_path / "out.h5"
-    result = runner.invoke(
-        cli.app,
+    result = invoke(
         [
             "run",
             f0,
@@ -222,7 +246,7 @@ def test_run_end_to_end(tmp_path):
             "25",
             "--file-type",
             "miriad",
-        ],
+        ]
     )
     assert result.exit_code == 0, f"{result.output}\n{result.exception}"
     psc = container.PSpecContainer(str(out), mode="r")
@@ -238,9 +262,8 @@ def test_run_symmetric_taper_flag_passes_bool(monkeypatch, tmp_path):
         captured.update(kwargs)
 
     monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
-    result = runner.invoke(
-        cli.app,
-        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--no-symmetric-taper"],
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--no-symmetric-taper"]
     )
     assert result.exit_code == 0, result.output
     assert captured["symmetric_taper"] is False
@@ -255,8 +278,7 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
         captured.update(kwargs)
 
     monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
-    result = runner.invoke(
-        cli.app,
+    result = invoke(
         [
             "run",
             "a.uvh5",
@@ -272,14 +294,14 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
             "6",
             "7",
             "8",
-        ],
+        ]
     )
     assert result.exit_code == 0, result.output
     assert captured["blpairs"] == [((1, 2), (3, 4)), ((5, 6), (7, 8))]
 
 
 def test_bootstrap_help():
-    result = runner.invoke(cli.app, ["bootstrap", "--help"])
+    result = invoke(["bootstrap", "--help"])
     assert result.exit_code == 0, result.output
     assert "bootstrap" in result.output.lower()
 
@@ -293,9 +315,8 @@ def test_bootstrap_bool_flags_round_trip(monkeypatch):
         captured.update(kwargs)
 
     monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
-    result = runner.invoke(
-        cli.app,
-        ["bootstrap", "x.h5", "--time-avg", "--no-normal-std", "--nsamples", "5"],
+    result = invoke(
+        ["bootstrap", "x.h5", "--time-avg", "--no-normal-std", "--nsamples", "5"]
     )
     assert result.exit_code == 0, result.output
     assert captured["filename"] == "x.h5"
@@ -314,16 +335,15 @@ def test_bootstrap_blpair_group_parsed(monkeypatch):
         captured.update(kwargs)
 
     monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
-    result = runner.invoke(
-        cli.app,
-        ["bootstrap", "x.h5", "--blpair-group", "101 102", "--blpair-group", "103"],
+    result = invoke(
+        ["bootstrap", "x.h5", "--blpair-group", "101 102", "--blpair-group", "103"]
     )
     assert result.exit_code == 0, result.output
     assert captured["blpair_groups"] == [[101, 102], [103]]
 
 
 def test_auto_noise_help():
-    result = runner.invoke(cli.app, ["auto-noise", "--help"])
+    result = invoke(["auto-noise", "--help"])
     assert result.exit_code == 0, result.output
     assert "auto-noise" in result.output.lower()
 
@@ -365,9 +385,7 @@ def _auto_noise_fakes(monkeypatch, calls):
 def test_auto_noise_default_spectra(monkeypatch):
     calls = {"noise": [], "set": [], "saved": False}
     _auto_noise_fakes(monkeypatch, calls)
-    result = runner.invoke(
-        cli.app, ["auto-noise", "cont.h5", "autos.uvh5", "beam.fits"]
-    )
+    result = invoke(["auto-noise", "cont.h5", "autos.uvh5", "beam.fits"])
     assert result.exit_code == 0, result.output
     assert calls["read"] == "autos.uvh5"
     assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N",))]
@@ -379,8 +397,7 @@ def test_auto_noise_explicit_spectra_does_not_raise(monkeypatch):
     """Regression: passing --spectra used to leave `spectra` unbound -> NameError."""
     calls = {"noise": [], "set": [], "saved": False}
     _auto_noise_fakes(monkeypatch, calls)
-    result = runner.invoke(
-        cli.app,
+    result = invoke(
         [
             "auto-noise",
             "cont.h5",
@@ -390,7 +407,7 @@ def test_auto_noise_explicit_spectra_does_not_raise(monkeypatch):
             "s1",
             "--spectra",
             "s2",
-        ],
+        ]
     )
     assert result.exit_code == 0, result.output
     assert calls["set"] == [("grp1", "s1", True), ("grp1", "s2", True)]
@@ -400,8 +417,7 @@ def test_auto_noise_multiple_err_types(monkeypatch):
     """--err-type is repeatable and the full list reaches uvp_noise_error."""
     calls = {"noise": [], "set": [], "saved": False}
     _auto_noise_fakes(monkeypatch, calls)
-    result = runner.invoke(
-        cli.app,
+    result = invoke(
         [
             "auto-noise",
             "cont.h5",
@@ -411,14 +427,14 @@ def test_auto_noise_multiple_err_types(monkeypatch):
             "P_N",
             "--err-type",
             "P_SN",
-        ],
+        ]
     )
     assert result.exit_code == 0, result.output
     assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N", "P_SN"))]
 
 
 def test_generate_pstokes_help():
-    result = runner.invoke(cli.app, ["generate-pstokes", "--help"])
+    result = invoke(["generate-pstokes", "--help"])
     assert result.exit_code == 0, result.output
     assert "generate-pstokes" in result.output.lower()
 
@@ -448,7 +464,7 @@ def test_generate_pstokes_default_pstokes_is_list(monkeypatch):
     monkeypatch.setattr(cli, "UVData", FakeUVData)
     monkeypatch.setattr(cli.pstokes, "construct_pstokes", fake_construct)
 
-    result = runner.invoke(cli.app, ["generate-pstokes", "in.uvh5", "--clobber"])
+    result = invoke(["generate-pstokes", "in.uvh5", "--clobber"])
     assert result.exit_code == 0, result.output
     assert calls["read"] == "in.uvh5"
     assert calls["first_pstokes"] == "pI"
@@ -484,9 +500,7 @@ def test_generate_pstokes_keep_vispols(monkeypatch):
     monkeypatch.setattr(cli.copy, "deepcopy", fake_deepcopy)
     monkeypatch.setattr(cli.pstokes, "construct_pstokes", fake_construct)
 
-    result = runner.invoke(
-        cli.app, ["generate-pstokes", "in.uvh5", "--keep-vispols", "--clobber"]
-    )
+    result = invoke(["generate-pstokes", "in.uvh5", "--keep-vispols", "--clobber"])
     assert result.exit_code == 0, result.output
     assert calls["deepcopy"] == 1
     assert calls["construct"] == 1  # one missing pol constructed in the loop

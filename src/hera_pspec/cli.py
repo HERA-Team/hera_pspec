@@ -5,17 +5,17 @@ import glob
 import pickle
 import sys
 from pathlib import Path
+from typing import Annotated, Literal
 
-import click
 import h5py
-import typer
+from cyclopts import App, Parameter
 from rich.console import Console
 from tqdm import tqdm
 
 cns = Console()
 
-app = typer.Typer()
-# typer pattern: register subcommands after app is constructed
+app = App(name="pspec", version_flags=[], help_flags=["--help"])
+# cyclopts pattern: register subcommands after app is constructed
 import pyuvdata  # noqa: E402
 from pyuvdata import UVData  # noqa: E402
 
@@ -23,78 +23,57 @@ from . import container, grouping, pspecdata, pstokes, utils  # noqa: E402
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
-@app.command()
+@app.command
 def hello() -> None:
-    # This is a test command which we need for the CLI interface to be broken into
-    # subcommands (at least two commands need to be defined for it to be used as subc's)
+    # A trivial command, kept so the app stays a multi-command app.
     cns.print("Hi! :wave:")
 
 
-_pattern_help = ()
-_group_help = """The group name wihtin the PSpecContainer in which the UVPSpec objects
-that you wish to merge are stored.
-"""
-
-
-@app.command()
+@app.command
 def fast_merge_baselines(
-    pattern: str = typer.Option(
-        help=(
-            "A glob pattern to match the files to be merged. For example, "
-            "'/path/to/files/blpair.*.h5'. Each file should be a valid PspecContainer "
-            "file."
-        )
-    ),
-    group: str = typer.Option(
-        help=(
-            "The group name wihtin the PSpecContainer in which the UVPSpec objects "
-            "that you wish to merge are stored."
-        )
-    ),
-    names: list[str] = typer.Option(
-        help=(
-            "The names of the UVPSpec objects within the group to be merged. "
-            "These should be the same for all files. Multiple names can be provided (via "
-            "multiple --names flags), and they will be merged into the same file."
-        )
-    ),
-    outpath: Path = typer.Option(
-        help=(
-            "The basename of the output file. This can be a full path, but note that "
-            "the final output pspec file will have an extension of '.pspec.h5' added to it."
-            "An --extras specified will be written to separate files with the same basename"
-            "but a suffix of '.{extraname}.pkl'."
-        )
-    ),
-    progress: bool = typer.Option(
-        default=True,
-        help=(
-            "Whether to show a progress bar while loading the files. This is useful "
-            "for large datasets, but can be turned off for small datasets."
-        ),
-    ),
-    extras: list[str] | None = typer.Option(
-        default=None,
-        help=(
-            "A list of extra attributes to be saved from the header of the files. "
-            "These will be saved to separate files with the same basename as the output "
-            "file, but with a suffix of '.{extraname}.pkl'. This is useful for saving "
-            "metadata that is not stored in the UVPSpec objects themselves."
-        ),
-    ),
-    batch_size: int | None = typer.Option(
-        default=None,
-        help=(
-            "Number of files to load and merge at a time. Smaller batch sizes use less "
-            "memory but may be slightly slower. If None (default), all files are loaded "
-            "at once. Adjust this based on available RAM and file sizes."
-        ),
-    ),
+    *,
+    pattern: str,
+    group: str,
+    names: list[str],
+    outpath: Path,
+    progress: bool = True,
+    extras: list[str] | None = None,
+    batch_size: int | None = None,
 ) -> None:
     """Merge a set of hera_pspec files each representing a single baseline, into one.
 
     This can be useful because reading a single file with many baselines is much much
     faster than reading many files each with a single baseline currently.
+
+    Parameters
+    ----------
+    pattern
+        A glob pattern to match the files to be merged. For example,
+        '/path/to/files/blpair.*.h5'. Each file should be a valid PspecContainer file.
+    group
+        The group name wihtin the PSpecContainer in which the UVPSpec objects that you
+        wish to merge are stored.
+    names
+        The names of the UVPSpec objects within the group to be merged. These should be
+        the same for all files. Multiple names can be provided (via multiple --names
+        flags), and they will be merged into the same file.
+    outpath
+        The basename of the output file. This can be a full path, but note that the
+        final output pspec file will have an extension of '.pspec.h5' added to it.An
+        --extras specified will be written to separate files with the same basenamebut
+        a suffix of '.{extraname}.pkl'.
+    progress
+        Whether to show a progress bar while loading the files. This is useful for large
+        datasets, but can be turned off for small datasets.
+    extras
+        A list of extra attributes to be saved from the header of the files. These will
+        be saved to separate files with the same basename as the output file, but with a
+        suffix of '.{extraname}.pkl'. This is useful for saving metadata that is not
+        stored in the UVPSpec objects themselves.
+    batch_size
+        Number of files to load and merge at a time. Smaller batch sizes use less memory
+        but may be slightly slower. If None (default), all files are loaded at once.
+        Adjust this based on available RAM and file sizes.
     """
     if extras is None:
         extras = []
@@ -179,159 +158,147 @@ def fast_merge_baselines(
         cns.print(f"Wrote {fname}")
 
 
-@app.command()
+@app.command
 def run(
-    dsets: list[Path] = typer.Argument(
-        ...,
-        help="Input UVData files (miriad/uvh5 paths) to estimate power spectra from.",
-    ),
-    output: Path = typer.Option(
-        ..., "--output", "-o", help="Output filename of the HDF5 PSpecContainer."
-    ),
-    dset_std: list[Path] | None = typer.Option(
-        None, "--dset-std", help="Visibility-stddev files, one --dset-std per dataset."
-    ),
-    groupname: str | None = typer.Option(
-        None, help="Groupname for the UVPSpec objects in the HDF5 container."
-    ),
-    # typer 0.25.1 rejects `list[tuple[int, int]]` annotations, so we annotate the
-    # repeatable tuple options as list[str] and supply the real element types via
-    # click_type=click.Tuple([...]).
-    dset_pair: list[str] | None = typer.Option(
-        None,
-        "--dset-pair",
-        click_type=click.Tuple([int, int]),
-        help="Dataset pairing for OQE, e.g. --dset-pair 0 1 (repeatable).",
-    ),
-    dset_label: list[str] | None = typer.Option(
-        None, "--dset-label", help="String label for each input dataset (repeatable)."
-    ),
-    spw_range: list[str] | None = typer.Option(
-        None,
-        "--spw-range",
-        click_type=click.Tuple([int, int]),
-        help="Spectral-window channel selection, e.g. --spw-range 200 300 (repeatable).",
-    ),
-    n_dlys: list[int] | None = typer.Option(
-        None, "--n-dlys", help="Number of delays per spectral window (repeatable)."
-    ),
-    pol_pair: list[str] | None = typer.Option(
-        None,
-        "--pol-pair",
-        click_type=click.Tuple([str, str]),
-        help="Polarization-string pair, e.g. --pol-pair xx xx (repeatable).",
-    ),
-    blpair: list[str] | None = typer.Option(
-        None,
-        "--blpair",
-        click_type=click.Tuple([int, int, int, int]),
-        help="Baseline-pair antennas, e.g. --blpair 1 2 3 4 -> ((1,2),(3,4)) (repeatable).",
-    ),
-    input_data_weight: str = typer.Option(
-        "identity", help="Data weighting for OQE. See PSpecData.pspec."
-    ),
-    norm: str = typer.Option("I", help="M-matrix normalization type for OQE."),
-    taper: str = typer.Option(
-        "none", help="Taper function for the OQE delay transform."
-    ),
-    beam: Path | None = typer.Option(
-        None, help="Filepath to a UVBeam healpix beam map."
-    ),
-    cosmo: list[float] | None = typer.Option(
-        None,
-        help="Cosmology [Om_L, Om_b, Om_c, H0, Om_M, Om_k] (repeatable, 6 values).",
-    ),
-    rephase_to_dset: int | None = typer.Option(
-        None, help="Dataset index to phase all other dsets to. Default: no rephasing."
-    ),
-    trim_dset_lsts: bool = typer.Option(
-        False, help="Trim non-overlapping dataset LSTs."
-    ),
-    broadcast_dset_flags: bool = typer.Option(
-        False, help="Broadcast dataset flags across time per time_thresh."
-    ),
-    time_thresh: float = typer.Option(
-        0.2, help="Fractional time-flagging threshold to trigger flag broadcast."
-    ),
-    jy2mk: bool = typer.Option(
-        False,
-        "--Jy2mK/--no-Jy2mK",
-        help="Convert datasets from Jy to mK if a beam is given.",
-    ),
-    exclude_auto_bls: bool = typer.Option(
-        False, help="If blpairs not given, exclude baselines paired with themselves."
-    ),
-    exclude_cross_bls: bool = typer.Option(
-        False,
-        help="If blpairs not given, exclude baselines paired with a different baseline.",
-    ),
-    exclude_permutations: bool = typer.Option(
-        False, help="If blpairs not given, exclude baseline-pair permutations."
-    ),
-    nblps_per_group: int | None = typer.Option(
-        None,
-        "--nblps-per-group",
-        help="If blpairs not given and grouping, blpairs per group.",
-    ),
-    bl_len_range: tuple[float, float] = typer.Option(
-        (0.0, 1e10), help="If blpairs not given, min/max baseline length in meters."
-    ),
-    bl_deg_range: tuple[float, float] = typer.Option(
-        (0.0, 180.0), help="If blpairs not given, min/max baseline angle (ENU degrees)."
-    ),
-    bl_error_tol: float = typer.Option(
-        1.0, help="If blpairs not given, redundant-group error tolerance in meters."
-    ),
-    store_cov: bool = typer.Option(
-        False, help="Compute and store bandpower covariance."
-    ),
-    store_cov_diag: bool = typer.Option(
-        False, help="Compute and store QE-formalism error bars."
-    ),
-    return_q: bool = typer.Option(False, help="Return unnormalized bandpowers."),
-    overwrite: bool = typer.Option(False, help="Overwrite output if it exists."),
-    cov_model: str = typer.Option(
-        "empirical", help="Covariance model: 'empirical' or 'dsets'."
-    ),
-    psname_ext: str = typer.Option(
-        "", help="Extension for pspectra name in the container."
-    ),
-    verbose: bool = typer.Option(False, help="Report feedback to stdout."),
-    file_type: str = typer.Option(
-        "uvh5", help="Filetype of input UVData. Default 'uvh5'."
-    ),
-    filter_extension: list[str] | None = typer.Option(
-        None,
-        "--filter-extension",
-        click_type=click.Tuple([int, int]),
-        help="Per-spw filter extension, e.g. --filter-extension 20 20 (repeatable).",
-    ),
-    symmetric_taper: bool = typer.Option(
-        True,
-        "--symmetric-taper/--no-symmetric-taper",
-        help="Apply sqrt(taper) before and after filtering (True) vs full taper after (False).",
-    ),
-    include_autocorrs: bool = typer.Option(
-        False,
-        "--include-autocorrs/--no-include-autocorrs",
-        help="Include power spectra of autocorr visibilities.",
-    ),
-    include_crosscorrs: bool = typer.Option(
-        True,
-        "--include-crosscorrs/--no-include-crosscorrs",
-        help="Include cross-correlations in power spectra.",
-    ),
-    interleave_times: bool = typer.Option(
-        False, help="Cross-multiply even/odd time intervals."
-    ),
-    xant_flag_thresh: float = typer.Option(
-        0.95,
-        help="Flagged-fraction of a baseline waterfall to exclude the whole baseline.",
-    ),
-    store_window: bool = typer.Option(False, help="Store the window-function array."),
-    allow_fft: bool = typer.Option(False, help="Use an FFT to compute q-hat."),
+    dsets: list[Path],
+    /,
+    *,
+    output: Annotated[Path, Parameter(name=["--output", "-o"])],
+    dset_std: list[Path] | None = None,
+    groupname: str | None = None,
+    dset_pair: list[tuple[int, int]] | None = None,
+    dset_label: list[str] | None = None,
+    spw_range: list[tuple[int, int]] | None = None,
+    n_dlys: list[int] | None = None,
+    pol_pair: list[tuple[str, str]] | None = None,
+    blpair: list[tuple[int, int, int, int]] | None = None,
+    input_data_weight: Literal["identity", "iC", "dayenu"] = "identity",
+    norm: Literal["I", "H^-1", "V^-1/2"] = "I",
+    taper: str = "none",
+    beam: Path | None = None,
+    cosmo: list[float] | None = None,
+    rephase_to_dset: int | None = None,
+    trim_dset_lsts: bool = False,
+    broadcast_dset_flags: bool = False,
+    time_thresh: float = 0.2,
+    jy2mk: Annotated[bool, Parameter(name="--Jy2mK", negative="--no-Jy2mK")] = False,
+    exclude_auto_bls: bool = False,
+    exclude_cross_bls: bool = False,
+    exclude_permutations: bool = False,
+    nblps_per_group: int | None = None,
+    bl_len_range: tuple[float, float] = (0.0, 1e10),
+    bl_deg_range: tuple[float, float] = (0.0, 180.0),
+    bl_error_tol: float = 1.0,
+    store_cov: bool = False,
+    store_cov_diag: bool = False,
+    return_q: bool = False,
+    overwrite: bool = False,
+    cov_model: Literal[
+        "empirical", "dsets", "autos", "foreground_dependent"
+    ] = "empirical",
+    psname_ext: str = "",
+    verbose: bool = False,
+    file_type: str = "uvh5",
+    filter_extension: list[tuple[int, int]] | None = None,
+    symmetric_taper: bool = True,
+    include_autocorrs: bool = False,
+    include_crosscorrs: bool = True,
+    interleave_times: bool = False,
+    xant_flag_thresh: float = 0.95,
+    store_window: bool = False,
+    allow_fft: bool = False,
 ) -> None:
-    """Run OQE power-spectrum estimation over datasets (was pspec_run.py)."""
+    """Run OQE power-spectrum estimation over datasets (was pspec_run.py).
+
+    Parameters
+    ----------
+    dsets
+        Input UVData files (miriad/uvh5 paths) to estimate power spectra from.
+    output
+        Output filename of the HDF5 PSpecContainer.
+    dset_std
+        Visibility-stddev files, one --dset-std per dataset.
+    groupname
+        Groupname for the UVPSpec objects in the HDF5 container.
+    dset_pair
+        Dataset pairing for OQE, e.g. --dset-pair 0 1 (repeatable).
+    dset_label
+        String label for each input dataset (repeatable).
+    spw_range
+        Spectral-window channel selection, e.g. --spw-range 200 300 (repeatable).
+    n_dlys
+        Number of delays per spectral window (repeatable).
+    pol_pair
+        Polarization-string pair, e.g. --pol-pair xx xx (repeatable).
+    blpair
+        Baseline-pair antennas, e.g. --blpair 1 2 3 4 -> ((1,2),(3,4)) (repeatable).
+    input_data_weight
+        Data weighting for OQE. See PSpecData.pspec.
+    norm
+        M-matrix normalization type for OQE.
+    taper
+        Taper function for the OQE delay transform.
+    beam
+        Filepath to a UVBeam healpix beam map.
+    cosmo
+        Cosmology [Om_L, Om_b, Om_c, H0, Om_M, Om_k] (repeatable, 6 values).
+    rephase_to_dset
+        Dataset index to phase all other dsets to. Default: no rephasing.
+    trim_dset_lsts
+        Trim non-overlapping dataset LSTs.
+    broadcast_dset_flags
+        Broadcast dataset flags across time per time_thresh.
+    time_thresh
+        Fractional time-flagging threshold to trigger flag broadcast.
+    jy2mk
+        Convert datasets from Jy to mK if a beam is given.
+    exclude_auto_bls
+        If blpairs not given, exclude baselines paired with themselves.
+    exclude_cross_bls
+        If blpairs not given, exclude baselines paired with a different baseline.
+    exclude_permutations
+        If blpairs not given, exclude baseline-pair permutations.
+    nblps_per_group
+        If blpairs not given and grouping, blpairs per group.
+    bl_len_range
+        If blpairs not given, min/max baseline length in meters.
+    bl_deg_range
+        If blpairs not given, min/max baseline angle (ENU degrees).
+    bl_error_tol
+        If blpairs not given, redundant-group error tolerance in meters.
+    store_cov
+        Compute and store bandpower covariance.
+    store_cov_diag
+        Compute and store QE-formalism error bars.
+    return_q
+        Return unnormalized bandpowers.
+    overwrite
+        Overwrite output if it exists.
+    cov_model
+        Covariance model: 'empirical' or 'dsets'.
+    psname_ext
+        Extension for pspectra name in the container.
+    verbose
+        Report feedback to stdout.
+    file_type
+        Filetype of input UVData. Default 'uvh5'.
+    filter_extension
+        Per-spw filter extension, e.g. --filter-extension 20 20 (repeatable).
+    symmetric_taper
+        Apply sqrt(taper) before and after filtering (True) vs full taper after (False).
+    include_autocorrs
+        Include power spectra of autocorr visibilities.
+    include_crosscorrs
+        Include cross-correlations in power spectra.
+    interleave_times
+        Cross-multiply even/odd time intervals.
+    xant_flag_thresh
+        Flagged-fraction of a baseline waterfall to exclude the whole baseline.
+    store_window
+        Store the window-function array.
+    allow_fft
+        Use an FFT to compute q-hat.
+    """
     blpairs = (
         [((a, b), (c, d)) for (a, b, c, d) in blpair] if blpair is not None else None
     )
@@ -384,48 +351,59 @@ def run(
     )
 
 
-@app.command()
+@app.command
 def bootstrap(
-    filename: Path = typer.Argument(
-        ..., help="HDF5 PSpecContainer with the input power spectra."
-    ),
-    spectra: list[str] | None = typer.Option(
-        None,
-        help="Power-spectrum names (with group prefix) to bootstrap over (repeatable).",
-    ),
-    blpair_group: list[str] | None = typer.Option(
-        None,
-        "--blpair-group",
-        help="A baseline-pair group as space-separated blpair integers, e.g. "
-        "--blpair-group '101 102' (repeatable). Default: solve for redundant groups.",
-    ),
-    time_avg: bool = typer.Option(
-        False, help="Perform a time-average in the averaging step."
-    ),
-    nsamples: int = typer.Option(
-        100, "--nsamples", help="Number of bootstrap resamples."
-    ),
-    seed: int = typer.Option(0, help="Random seed for bootstrap resampling."),
-    normal_std: bool = typer.Option(True, help="Calculate a 'normal' std (np.std)."),
-    robust_std: bool = typer.Option(
-        False, help="Calculate a 'robust' std (biweight_midvariance)."
-    ),
-    cintervals: list[float] | None = typer.Option(
-        None, help="Confidence intervals (0<ci<100) to calculate (repeatable)."
-    ),
-    keep_samples: bool = typer.Option(
-        False, help="Store bootstrap resamples with a *_bs# extension."
-    ),
-    bl_error_tol: float = typer.Option(
-        1.0, help="Baseline-redundancy tolerance when computing redundant groups."
-    ),
-    overwrite: bool = typer.Option(False, help="Overwrite outputs if they exist."),
-    add_to_history: str = typer.Option(
-        "", help="String to add to the power-spectra history."
-    ),
-    verbose: bool = typer.Option(False, help="Report feedback to stdout."),
+    filename: Path,
+    /,
+    *,
+    spectra: list[str] | None = None,
+    blpair_group: list[str] | None = None,
+    time_avg: bool = False,
+    nsamples: int = 100,
+    seed: int = 0,
+    normal_std: bool = True,
+    robust_std: bool = False,
+    cintervals: list[float] | None = None,
+    keep_samples: bool = False,
+    bl_error_tol: float = 1.0,
+    overwrite: bool = False,
+    add_to_history: str = "",
+    verbose: bool = False,
 ) -> None:
-    """Bootstrap over redundant baseline-pair groups (was bootstrap_run.py)."""
+    """Bootstrap over redundant baseline-pair groups (was bootstrap_run.py).
+
+    Parameters
+    ----------
+    filename
+        HDF5 PSpecContainer with the input power spectra.
+    spectra
+        Power-spectrum names (with group prefix) to bootstrap over (repeatable).
+    blpair_group
+        A baseline-pair group as space-separated blpair integers, e.g.
+        --blpair-group '101 102' (repeatable). Default: solve for redundant groups.
+    time_avg
+        Perform a time-average in the averaging step.
+    nsamples
+        Number of bootstrap resamples.
+    seed
+        Random seed for bootstrap resampling.
+    normal_std
+        Calculate a 'normal' std (np.std).
+    robust_std
+        Calculate a 'robust' std (biweight_midvariance).
+    cintervals
+        Confidence intervals (0<ci<100) to calculate (repeatable).
+    keep_samples
+        Store bootstrap resamples with a *_bs# extension.
+    bl_error_tol
+        Baseline-redundancy tolerance when computing redundant groups.
+    overwrite
+        Overwrite outputs if they exist.
+    add_to_history
+        String to add to the power-spectra history.
+    verbose
+        Report feedback to stdout.
+    """
     blpair_groups = (
         [[int(tok) for tok in grp.split()] for grp in blpair_group]
         if blpair_group is not None
@@ -449,30 +427,36 @@ def bootstrap(
     )
 
 
-@app.command()
+@app.command
 def auto_noise(
-    pspec_container: Path = typer.Argument(
-        ..., help="HDF5 PSpecContainer with the input power spectra."
-    ),
-    auto_file: Path = typer.Argument(
-        ..., help="UVData file of autocorr baselines for thermal-noise estimation."
-    ),
-    beam: Path = typer.Argument(..., help="UVBeam file storing the primary beam."),
-    groups: list[str] | None = typer.Option(
-        None,
-        help="Power-spectrum groups to compute noise for (repeatable). Default: all.",
-    ),
-    spectra: list[str] | None = typer.Option(
-        None,
-        help="Power-spectrum names to compute noise for (repeatable). Default: all in group.",
-    ),
-    err_type: list[str] = typer.Option(
-        ["P_N"],
-        "--err-type",
-        help="Noise components to compute: 'P_N' and/or 'P_SN' (repeatable).",
-    ),
+    pspec_container: Path,
+    auto_file: Path,
+    beam: Path,
+    /,
+    *,
+    groups: list[str] | None = None,
+    spectra: list[str] | None = None,
+    err_type: list[str] | None = None,
 ) -> None:
-    """Compute noise error bars from autocorrelations (was auto_noise_run.py)."""
+    """Compute noise error bars from autocorrelations (was auto_noise_run.py).
+
+    Parameters
+    ----------
+    pspec_container
+        HDF5 PSpecContainer with the input power spectra.
+    auto_file
+        UVData file of autocorr baselines for thermal-noise estimation.
+    beam
+        UVBeam file storing the primary beam.
+    groups
+        Power-spectrum groups to compute noise for (repeatable). Default: all.
+    spectra
+        Power-spectrum names to compute noise for (repeatable). Default: all in group.
+    err_type
+        Noise components to compute: 'P_N' and/or 'P_SN' (repeatable). Default ['P_N'].
+    """
+    if err_type is None:
+        err_type = ["P_N"]
     uvd = UVData()
     uvd.read(str(auto_file))
     auto_Tsys = utils.uvd_to_Tsys(uvd, beam=str(beam))
@@ -488,26 +472,33 @@ def auto_noise(
     psc.save()
 
 
-@app.command()
+@app.command
 def generate_pstokes(
-    inputdata: Path = typer.Argument(
-        ..., help="UVData file with linearly polarized data to add pseudo-Stokes to."
-    ),
-    pstokes_params: list[str] = typer.Option(
-        ["pI"],
-        "--pstokes",  # param can't be named `pstokes`: that shadows the imported pstokes module
-        help="Pseudo-Stokes parameters to calculate (repeatable). Default ['pI'].",
-    ),
-    outputdata: Path | None = typer.Option(
-        None,
-        help="Output filename. Defaults to inputdata (appends pstokes to linpols).",
-    ),
-    clobber: bool = typer.Option(False, help="Overwrite the output file if it exists."),
-    keep_vispols: bool = typer.Option(
-        False, help="Keep the original linear polarizations in the output."
-    ),
+    inputdata: Path,
+    /,
+    *,
+    pstokes_params: Annotated[list[str] | None, Parameter(name="--pstokes")] = None,
+    outputdata: Path | None = None,
+    clobber: bool = False,
+    keep_vispols: bool = False,
 ) -> None:
-    """Generate pseudo-Stokes visibilities from linpol files (was generate_pstokes_run.py)."""
+    """Generate pseudo-Stokes visibilities from linpol files (was generate_pstokes_run.py).
+
+    Parameters
+    ----------
+    inputdata
+        UVData file with linearly polarized data to add pseudo-Stokes to.
+    pstokes_params
+        Pseudo-Stokes parameters to calculate (repeatable). Default ['pI'].
+    outputdata
+        Output filename. Defaults to inputdata (appends pstokes to linpols).
+    clobber
+        Overwrite the output file if it exists.
+    keep_vispols
+        Keep the original linear polarizations in the output.
+    """
+    if pstokes_params is None:
+        pstokes_params = ["pI"]
     uvd = UVData()
     uvd.read(str(inputdata))
     out_path = str(outputdata) if outputdata is not None else str(inputdata)
