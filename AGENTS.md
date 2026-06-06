@@ -19,7 +19,7 @@ The project uses **uv** for environment and lockfile management (matching CI). P
   - To bypass coverage while iterating: `uv run pytest --no-cov tests/test_pspecdata.py::test_name`.
 - Warnings job (matches `warnings-tests.yml`, fails on any warning): `MPLBACKEND=agg uv run pytest -Werror`. New code must not emit warnings under this run.
 - Build docs locally: `uv run --group docs sphinx-build docs docs/_build/html` (RTD config at `.readthedocs.yaml`).
-- CLI entrypoint installed as `pspec` (defined at `src/hera_pspec/cli.py`, `app = typer.Typer()`); the legacy `scripts/*.py` shims are also installed via `tool.setuptools.script-files`.
+- CLI entrypoint installed as `pspec` (defined at `src/hera_pspec/cli.py`, `app = cyclopts.App()`); the legacy `scripts/*.py` shims are also installed via `tool.setuptools.script-files`.
 
 ## Linting
 
@@ -61,7 +61,7 @@ The library is organized around three persistent object types and a computation 
 
 There are two parallel entry-point styles:
 
-- The new `pspec` Typer app (`src/hera_pspec/cli.py`) — currently exposes `hello`, `fast-merge-baselines`, `run`, `bootstrap`, `auto-noise`, and `generate-pstokes`. Add new subcommands here.
+- The `pspec` cyclopts app (`src/hera_pspec/cli.py`, `app = cyclopts.App()`) — currently exposes `hello`, `fast-merge-baselines`, `run`, `bootstrap`, `auto-noise`, and `generate-pstokes`. Add new subcommands here.
 - The historical `scripts/*.py` — installed via `script-files` and built around `argparse` parsers returned from inside the package. The `pspec_run.py`, `bootstrap_run.py`, `auto_noise_run.py`, and `generate_pstokes_run.py` scripts have been **removed** and replaced by the corresponding `pspec` subcommands (`run`, `bootstrap`, `auto-noise`, `generate-pstokes`) — a breaking change to their CLI syntax (profiling via `hera_cal._cli_tools` was dropped pending typer support in hera-cli-utils). The remaining `scripts/pspec_red.py` and `scripts/psc_merge_spectra.py` are not yet migrated and stay installed via `script-files`; new commands should be added under `cli.py` rather than as fresh scripts.
 
 ## Conventions to respect
