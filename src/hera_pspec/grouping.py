@@ -1955,8 +1955,8 @@ def bootstrap_run(
 
     Note: PSpecContainers should not be opened in SWMR mode for this function.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     filename : str or PSpecContainer object
         PSpecContainer object to run bootstrapping on.
 
