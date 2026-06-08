@@ -207,11 +207,6 @@ class TestFastMergeBaselines:
         assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
 
 
-def test_dummy_command():
-    result = invoke(["hello"])
-    assert "Hi" in result.stdout
-
-
 def test_run_help():
     result = invoke(["run", "--help"])
     assert result.exit_code == 0, result.output
@@ -230,7 +225,7 @@ def test_run_end_to_end(tmp_path):
             "--output",
             str(out),
             "--overwrite",
-            "--dset-pair",
+            "--dset-pairs",
             "0",
             "1",
             "--bl-len-range",
@@ -241,7 +236,7 @@ def test_run_end_to_end(tmp_path):
             "70",
             "--psname-ext",
             "_0",
-            "--spw-range",
+            "--spw-ranges",
             "0",
             "25",
             "--file-type",
@@ -271,7 +266,7 @@ def test_run_symmetric_taper_flag_passes_bool(monkeypatch, tmp_path):
 
 
 def test_run_blpair_reshaped(monkeypatch, tmp_path):
-    """--blpair 1 2 3 4 must reshape to ((1, 2), (3, 4))."""
+    """--blpairs 1 2 3 4 must reshape to ((1, 2), (3, 4))."""
     captured = {}
 
     def fake_pspec_run(dsets, filename, **kwargs):
@@ -284,12 +279,12 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
             "a.uvh5",
             "--output",
             str(tmp_path / "o.h5"),
-            "--blpair",
+            "--blpairs",
             "1",
             "2",
             "3",
             "4",
-            "--blpair",
+            "--blpairs",
             "5",
             "6",
             "7",

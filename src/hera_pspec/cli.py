@@ -24,12 +24,6 @@ from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
 @app.command
-def hello() -> None:
-    # A trivial command, kept so the app stays a multi-command app.
-    cns.print("Hi! :wave:")
-
-
-@app.command
 def fast_merge_baselines(
     *,
     pattern: str,
@@ -158,20 +152,25 @@ def fast_merge_baselines(
         cns.print(f"Wrote {fname}")
 
 
+# `run` and `bootstrap` are thin wrappers: their parameters deliberately use the
+# wrapped library function's names so cyclopts maps each option's --help text from
+# the reused __doc__ (assigned just after each definition). Annotated
+# Parameter(name=...) preserves the original CLI flag spelling (e.g. --output/-o,
+# --blpair-group) even though the Python parameter was renamed to the library name.
 @app.command
 def run(
     dsets: list[Path],
     /,
     *,
-    output: Annotated[Path, Parameter(name=["--output", "-o"])],
-    dset_std: list[Path] | None = None,
+    filename: Annotated[Path, Parameter(name=["--output", "-o"])],
+    dsets_std: list[Path] | None = None,
     groupname: str | None = None,
-    dset_pair: list[tuple[int, int]] | None = None,
-    dset_label: list[str] | None = None,
-    spw_range: list[tuple[int, int]] | None = None,
+    dset_pairs: list[tuple[int, int]] | None = None,
+    dset_labels: list[str] | None = None,
+    spw_ranges: list[tuple[int, int]] | None = None,
     n_dlys: list[int] | None = None,
-    pol_pair: list[tuple[str, str]] | None = None,
-    blpair: list[tuple[int, int, int, int]] | None = None,
+    pol_pairs: list[tuple[str, str]] | None = None,
+    blpairs: list[tuple[int, int, int, int]] | None = None,
     input_data_weight: Literal["identity", "iC", "dayenu"] = "identity",
     norm: Literal["I", "H^-1", "V^-1/2"] = "I",
     taper: str = "none",
@@ -181,11 +180,11 @@ def run(
     trim_dset_lsts: bool = False,
     broadcast_dset_flags: bool = False,
     time_thresh: float = 0.2,
-    jy2mk: Annotated[bool, Parameter(name="--Jy2mK", negative="--no-Jy2mK")] = False,
+    Jy2mK: bool = False,
     exclude_auto_bls: bool = False,
     exclude_cross_bls: bool = False,
     exclude_permutations: bool = False,
-    nblps_per_group: int | None = None,
+    Nblps_per_group: int | None = None,
     bl_len_range: tuple[float, float] = (0.0, 1e10),
     bl_deg_range: tuple[float, float] = (0.0, 180.0),
     bl_error_tol: float = 1.0,
@@ -199,7 +198,7 @@ def run(
     psname_ext: str = "",
     verbose: bool = False,
     file_type: str = "uvh5",
-    filter_extension: list[tuple[int, int]] | None = None,
+    filter_extensions: list[tuple[int, int]] | None = None,
     symmetric_taper: bool = True,
     include_autocorrs: bool = False,
     include_crosscorrs: bool = True,
@@ -208,112 +207,21 @@ def run(
     store_window: bool = False,
     allow_fft: bool = False,
 ) -> None:
-    """Run OQE power-spectrum estimation over datasets (was pspec_run.py).
-
-    Parameters
-    ----------
-    dsets
-        Input UVData files (miriad/uvh5 paths) to estimate power spectra from.
-    output
-        Output filename of the HDF5 PSpecContainer.
-    dset_std
-        Visibility-stddev files, one --dset-std per dataset.
-    groupname
-        Groupname for the UVPSpec objects in the HDF5 container.
-    dset_pair
-        Dataset pairing for OQE, e.g. --dset-pair 0 1 (repeatable).
-    dset_label
-        String label for each input dataset (repeatable).
-    spw_range
-        Spectral-window channel selection, e.g. --spw-range 200 300 (repeatable).
-    n_dlys
-        Number of delays per spectral window (repeatable).
-    pol_pair
-        Polarization-string pair, e.g. --pol-pair xx xx (repeatable).
-    blpair
-        Baseline-pair antennas, e.g. --blpair 1 2 3 4 -> ((1,2),(3,4)) (repeatable).
-    input_data_weight
-        Data weighting for OQE. See PSpecData.pspec.
-    norm
-        M-matrix normalization type for OQE.
-    taper
-        Taper function for the OQE delay transform.
-    beam
-        Filepath to a UVBeam healpix beam map.
-    cosmo
-        Cosmology [Om_L, Om_b, Om_c, H0, Om_M, Om_k] (repeatable, 6 values).
-    rephase_to_dset
-        Dataset index to phase all other dsets to. Default: no rephasing.
-    trim_dset_lsts
-        Trim non-overlapping dataset LSTs.
-    broadcast_dset_flags
-        Broadcast dataset flags across time per time_thresh.
-    time_thresh
-        Fractional time-flagging threshold to trigger flag broadcast.
-    jy2mk
-        Convert datasets from Jy to mK if a beam is given.
-    exclude_auto_bls
-        If blpairs not given, exclude baselines paired with themselves.
-    exclude_cross_bls
-        If blpairs not given, exclude baselines paired with a different baseline.
-    exclude_permutations
-        If blpairs not given, exclude baseline-pair permutations.
-    nblps_per_group
-        If blpairs not given and grouping, blpairs per group.
-    bl_len_range
-        If blpairs not given, min/max baseline length in meters.
-    bl_deg_range
-        If blpairs not given, min/max baseline angle (ENU degrees).
-    bl_error_tol
-        If blpairs not given, redundant-group error tolerance in meters.
-    store_cov
-        Compute and store bandpower covariance.
-    store_cov_diag
-        Compute and store QE-formalism error bars.
-    return_q
-        Return unnormalized bandpowers.
-    overwrite
-        Overwrite output if it exists.
-    cov_model
-        Covariance model: 'empirical' or 'dsets'.
-    psname_ext
-        Extension for pspectra name in the container.
-    verbose
-        Report feedback to stdout.
-    file_type
-        Filetype of input UVData. Default 'uvh5'.
-    filter_extension
-        Per-spw filter extension, e.g. --filter-extension 20 20 (repeatable).
-    symmetric_taper
-        Apply sqrt(taper) before and after filtering (True) vs full taper after (False).
-    include_autocorrs
-        Include power spectra of autocorr visibilities.
-    include_crosscorrs
-        Include cross-correlations in power spectra.
-    interleave_times
-        Cross-multiply even/odd time intervals.
-    xant_flag_thresh
-        Flagged-fraction of a baseline waterfall to exclude the whole baseline.
-    store_window
-        Store the window-function array.
-    allow_fft
-        Use an FFT to compute q-hat.
-    """
-    blpairs = (
-        [((a, b), (c, d)) for (a, b, c, d) in blpair] if blpair is not None else None
-    )
-    history = " ".join(sys.argv)
     pspecdata.pspec_run(
         dsets=[str(d) for d in dsets],
-        filename=str(output),
-        dsets_std=[str(d) for d in dset_std] if dset_std is not None else None,
+        filename=str(filename),
+        dsets_std=[str(d) for d in dsets_std] if dsets_std is not None else None,
         groupname=groupname,
-        dset_pairs=dset_pair,
-        dset_labels=dset_label,
-        spw_ranges=spw_range,
+        dset_pairs=dset_pairs,
+        dset_labels=dset_labels,
+        spw_ranges=spw_ranges,
         n_dlys=n_dlys,
-        pol_pairs=pol_pair,
-        blpairs=blpairs,
+        pol_pairs=pol_pairs,
+        blpairs=(
+            [((a, b), (c, d)) for (a, b, c, d) in blpairs]
+            if blpairs is not None
+            else None
+        ),
         input_data_weight=input_data_weight,
         norm=norm,
         taper=taper,
@@ -323,11 +231,11 @@ def run(
         trim_dset_lsts=trim_dset_lsts,
         broadcast_dset_flags=broadcast_dset_flags,
         time_thresh=time_thresh,
-        Jy2mK=jy2mk,
+        Jy2mK=Jy2mK,
         exclude_auto_bls=exclude_auto_bls,
         exclude_cross_bls=exclude_cross_bls,
         exclude_permutations=exclude_permutations,
-        Nblps_per_group=nblps_per_group,
+        Nblps_per_group=Nblps_per_group,
         bl_len_range=bl_len_range,
         bl_deg_range=bl_deg_range,
         bl_error_tol=bl_error_tol,
@@ -339,7 +247,7 @@ def run(
         psname_ext=psname_ext,
         verbose=verbose,
         file_type=file_type,
-        filter_extensions=filter_extension,
+        filter_extensions=filter_extensions,
         symmetric_taper=symmetric_taper,
         include_autocorrs=include_autocorrs,
         include_crosscorrs=include_crosscorrs,
@@ -347,8 +255,11 @@ def run(
         xant_flag_thresh=xant_flag_thresh,
         store_window=store_window,
         allow_fft=allow_fft,
-        history=history,
+        history=" ".join(sys.argv),
     )
+
+
+run.__doc__ = pspecdata.pspec_run.__doc__
 
 
 @app.command
@@ -357,9 +268,9 @@ def bootstrap(
     /,
     *,
     spectra: list[str] | None = None,
-    blpair_group: list[str] | None = None,
+    blpair_groups: Annotated[list[str] | None, Parameter(name="--blpair-group")] = None,
     time_avg: bool = False,
-    nsamples: int = 100,
+    Nsamples: int = 100,
     seed: int = 0,
     normal_std: bool = True,
     robust_std: bool = False,
@@ -370,51 +281,16 @@ def bootstrap(
     add_to_history: str = "",
     verbose: bool = False,
 ) -> None:
-    """Bootstrap over redundant baseline-pair groups (was bootstrap_run.py).
-
-    Parameters
-    ----------
-    filename
-        HDF5 PSpecContainer with the input power spectra.
-    spectra
-        Power-spectrum names (with group prefix) to bootstrap over (repeatable).
-    blpair_group
-        A baseline-pair group as space-separated blpair integers, e.g.
-        --blpair-group '101 102' (repeatable). Default: solve for redundant groups.
-    time_avg
-        Perform a time-average in the averaging step.
-    nsamples
-        Number of bootstrap resamples.
-    seed
-        Random seed for bootstrap resampling.
-    normal_std
-        Calculate a 'normal' std (np.std).
-    robust_std
-        Calculate a 'robust' std (biweight_midvariance).
-    cintervals
-        Confidence intervals (0<ci<100) to calculate (repeatable).
-    keep_samples
-        Store bootstrap resamples with a *_bs# extension.
-    bl_error_tol
-        Baseline-redundancy tolerance when computing redundant groups.
-    overwrite
-        Overwrite outputs if they exist.
-    add_to_history
-        String to add to the power-spectra history.
-    verbose
-        Report feedback to stdout.
-    """
-    blpair_groups = (
-        [[int(tok) for tok in grp.split()] for grp in blpair_group]
-        if blpair_group is not None
-        else None
-    )
     grouping.bootstrap_run(
         str(filename),
         spectra=spectra,
-        blpair_groups=blpair_groups,
+        blpair_groups=(
+            [[int(tok) for tok in grp.split()] for grp in blpair_groups]
+            if blpair_groups is not None
+            else None
+        ),
         time_avg=time_avg,
-        Nsamples=nsamples,
+        Nsamples=Nsamples,
         seed=seed,
         normal_std=normal_std,
         robust_std=robust_std,
@@ -425,6 +301,9 @@ def bootstrap(
         add_to_history=add_to_history,
         verbose=verbose,
     )
+
+
+bootstrap.__doc__ = grouping.bootstrap_run.__doc__
 
 
 @app.command
