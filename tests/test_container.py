@@ -108,7 +108,9 @@ class TestSetPSpec:
                 pspec=[vanilla_uvp, vanilla_uvp, vanilla_uvp],
                 overwrite=True,
             )
-        with pytest.raises(TypeError, match="pspec lists must only contain UVPSpec objects"):
+        with pytest.raises(
+            TypeError, match="pspec lists must only contain UVPSpec objects"
+        ):
             ps_store.set_pspec(
                 group=_GROUP_NAMES[0],
                 psname=_PSPEC_NAMES,
@@ -148,7 +150,12 @@ class TestGetPSpec:
     @_MODES
     @pytest.mark.parametrize("bad_group", ["x", 1, ["x", "y"]])
     def test_invalid_group_key(
-        self, tmp_path: Path, vanilla_uvp: UVPSpec, bad_group, keep_open: bool, swmr: bool
+        self,
+        tmp_path: Path,
+        vanilla_uvp: UVPSpec,
+        bad_group,
+        keep_open: bool,
+        swmr: bool,
     ) -> None:
         fname = _container_fname(tmp_path)
         _fill_container(fname, vanilla_uvp)
@@ -159,7 +166,12 @@ class TestGetPSpec:
     @_MODES
     @pytest.mark.parametrize("bad_pspec", ["x", 1, ["x", "y"]])
     def test_invalid_pspec_key(
-        self, tmp_path: Path, vanilla_uvp: UVPSpec, bad_pspec, keep_open: bool, swmr: bool
+        self,
+        tmp_path: Path,
+        vanilla_uvp: UVPSpec,
+        bad_pspec,
+        keep_open: bool,
+        swmr: bool,
     ) -> None:
         fname = _container_fname(tmp_path)
         _fill_container(fname, vanilla_uvp)
@@ -282,14 +294,18 @@ class TestSWMR:
         fname = _container_fname(tmp_path)
         _fill_container(fname, vanilla_uvp)
         psc_rw = PSpecContainer(fname, mode="rw", keep_open=False, swmr=True)
-        with pytest.raises(ValueError, match="Cannot write new group or dataset with SWMR"):
+        with pytest.raises(
+            ValueError, match="Cannot write new group or dataset with SWMR"
+        ):
             psc_rw.set_pspec(
                 group="new_group",
                 psname=_PSPEC_NAMES[0],
                 pspec=vanilla_uvp,
                 overwrite=True,
             )
-        with pytest.raises(ValueError, match="Cannot write new group or dataset with SWMR"):
+        with pytest.raises(
+            ValueError, match="Cannot write new group or dataset with SWMR"
+        ):
             psc_rw.set_pspec(
                 group=_GROUP_NAMES[0],
                 psname="new_psname",
@@ -321,18 +337,22 @@ class TestSWMR:
 class TestCombinePscSpectra:
     def test_basic(self, tmp_path: Path) -> None:
         fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
-        uvp1 = testing.uvpspec_from_data(fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
-        uvp2 = testing.uvpspec_from_data(fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
+        uvp1 = testing.uvpspec_from_data(
+            fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)]
+        )
+        uvp2 = testing.uvpspec_from_data(
+            fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)]
+        )
         psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
         psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
         psc.set_pspec("grp1", "uvp_b", uvp2, overwrite=True)
         container.combine_psc_spectra(psc, dset_split_str=None, ext_split_str="_")
         assert psc.spectra("grp1") == ["uvp"]
 
-    @pytest.mark.parametrize("name_a,name_b,expected", [
-        ("d1_x_d2_a", "d1_x_d2_b", "d1_x_d2"),
-        ("d2_x_d3_a", "d2_x_d3_b", "d2_x_d3"),
-    ])
+    @pytest.mark.parametrize(
+        "name_a,name_b,expected",
+        [("d1_x_d2_a", "d1_x_d2_b", "d1_x_d2"), ("d2_x_d3_a", "d2_x_d3_b", "d2_x_d3")],
+    )
     def test_dset_names(
         self, tmp_path: Path, name_a: str, name_b: str, expected: str
     ) -> None:
@@ -353,7 +373,9 @@ class TestCombinePscSpectra:
 
     def test_errors(self, tmp_path: Path) -> None:
         fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
-        uvp1 = testing.uvpspec_from_data(fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
+        uvp1 = testing.uvpspec_from_data(
+            fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)]
+        )
         psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
         with pytest.raises(AssertionError, match="no specified groups exist"):
             container.combine_psc_spectra(psc)
