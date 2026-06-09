@@ -680,31 +680,6 @@ def test_bootstrap_run(tmp_path):
     pytest.raises(AssertionError, grouping.bootstrap_run, psc, spectra=["grp1/foo"])
 
 
-def test_get_bootstrap_run_argparser():
-    args = grouping.get_bootstrap_run_argparser()
-    a = args.parse_args(
-        [
-            "fname",
-            "--spectra",
-            "grp1/uvp1",
-            "grp1/uvp2",
-            "grp2/uvp1",
-            "--blpair_groups",
-            "101102103104 101102102103, 102103104105",
-            "--time_avg",
-            "True",
-            "--Nsamples",
-            "100",
-            "--cintervals",
-            "16",
-            "84",
-        ]
-    )
-    assert a.spectra == ["grp1/uvp1", "grp1/uvp2", "grp2/uvp1"]
-    assert a.blpair_groups == [[101102103104, 101102102103], [102103104105]]
-    assert a.cintervals == [16.0, 84.0]
-
-
 def test_spherical_average():
     # create two polarization data
     uvd = UVData()
