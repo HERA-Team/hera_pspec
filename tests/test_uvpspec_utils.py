@@ -1,23 +1,27 @@
 import copy
 import json
-import os
 
 import numpy as np
 import pytest
 
-from hera_pspec import UVPSpec, grouping, pspecbeam, testing
+from hera_pspec import UVPSpec, grouping
 from hera_pspec import uvpspec_utils as uvputils
-from hera_pspec.data import DATA_PATH
 
 
-def test_select_common():
+@pytest.fixture
+def uvp_with_stats(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
+    """Copy of vanilla_uvp_with_beam with a 'mystat' stats_array set for all keys."""
+    uvp = copy.deepcopy(vanilla_uvp_with_beam)
+    for k in uvp.get_all_keys():
+        uvp.set_stats("mystat", k, np.ones_like(uvp.get_data(k), dtype=complex))
+    return uvp
+
+
+def test_select_common(vanilla_uvp_with_beam: UVPSpec):
     """
     Test selecting power spectra that two UVPSpec objects have in common.
     """
-    # setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
+    uvp = vanilla_uvp_with_beam
     # Carve up some example UVPSpec objects
     uvp1 = uvp.select(times=np.unique(uvp.time_avg_array)[:-1], inplace=False)
     uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[1:], inplace=False)
@@ -46,16 +50,15 @@ def test_select_common():
     )
 
     # Check that zero overlap in times raises a ValueError
-    pytest.raises(
-        ValueError,
-        uvputils.select_common,
-        [uvp2, uvp6],
-        spws=True,
-        blpairs=True,
-        times=True,
-        polpairs=True,
-        inplace=False,
-    )
+    with pytest.raises(ValueError, match="No times were found"):
+        uvputils.select_common(
+            [uvp2, uvp6],
+            spws=True,
+            blpairs=True,
+            times=True,
+            polpairs=True,
+            inplace=False,
+        )
 
     # Check that zero overlap in times does *not* raise a ValueError if
     # not selecting on times
@@ -64,16 +67,15 @@ def test_select_common():
     )
 
     # Check that zero overlap in baselines raises a ValueError
-    pytest.raises(
-        ValueError,
-        uvputils.select_common,
-        [uvp3, uvp5],
-        spws=True,
-        blpairs=True,
-        times=True,
-        polpairs=True,
-        inplace=False,
-    )
+    with pytest.raises(ValueError, match="No baseline-pairs were found"):
+        uvputils.select_common(
+            [uvp3, uvp5],
+            spws=True,
+            blpairs=True,
+            times=True,
+            polpairs=True,
+            inplace=False,
+        )
 
     # Check that matching times are ignored when set to False
     uvp_new = uvputils.select_common(
@@ -89,48 +91,44 @@ def test_select_common():
     assert uvp1 == uvp2
 
     # check uvplist > 2
-    pytest.raises(IndexError, uvputils.select_common, uvp_list[:1])
+    with pytest.raises(IndexError, match="uvp_list must contain two or more"):
+        uvputils.select_common(uvp_list[:1])
 
     # check no spw overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.freq_array += 10e6
-    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7], spws=True)
+    with pytest.raises(ValueError, match="No spectral windows were found"):
+        uvputils.select_common([uvp1, uvp7], spws=True)
 
     # check no lst overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.lst_avg_array += 0.1
-    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7], lsts=True)
+    with pytest.raises(ValueError, match="No lsts were found"):
+        uvputils.select_common([uvp1, uvp7], lsts=True)
 
     # check pol overlap
     uvp7 = copy.deepcopy(uvp1)
     uvp7.polpair_array[0] = 1212  # = (-8,-8)
-    pytest.raises(ValueError, uvputils.select_common, [uvp1, uvp7], polpairs=True)
+    with pytest.raises(ValueError, match="No polarization-pairs were found"):
+        uvputils.select_common([uvp1, uvp7], polpairs=True)
 
 
-def test_get_blpairs_from_bls():
+def test_get_blpairs_from_bls(vanilla_uvp_with_beam: UVPSpec):
     """
     Test conversion of bls to set of blpairs.
     """
-    # setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-
+    uvp = vanilla_uvp_with_beam
     # Check that bls can be specified in several different ways
     blps = uvputils._get_blpairs_from_bls(uvp, bls=101102)
     blps = uvputils._get_blpairs_from_bls(uvp, bls=(101, 102))
     blps = uvputils._get_blpairs_from_bls(uvp, bls=[101102, 101103])
 
 
-def test_get_red_bls():
+def test_get_red_bls(vanilla_uvp_with_beam: UVPSpec):
     """
     Test retrieval of redundant baseline groups.
     """
-    # Setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-
+    uvp = vanilla_uvp_with_beam
     # Get redundant baseline groups
     bls, lens, angs = uvp.get_red_bls()
 
@@ -146,15 +144,11 @@ def test_get_red_bls():
     assert num_bls == np.unique(uvp.bl_array).size
 
 
-def test_get_red_blpairs():
+def test_get_red_blpairs(vanilla_uvp_with_beam: UVPSpec):
     """
     Test retrieval of redundant baseline groups for baseline-pairs.
     """
-    # Setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-
+    uvp = vanilla_uvp_with_beam
     # Get redundant baseline groups
     blps, lens, angs = uvp.get_red_blpairs()
 
@@ -202,24 +196,23 @@ def test_polpair_int2tuple():
         assert polpairs[i] == pol_pairs_returned[i]
 
     # Check that errors are raised appropriately
-    pytest.raises(AssertionError, uvputils.polpair_int2tuple, ("xx", "xx"))
-    pytest.raises(AssertionError, uvputils.polpair_int2tuple, "xx")
-    pytest.raises(AssertionError, uvputils.polpair_int2tuple, "pI")
-    pytest.raises(ValueError, uvputils.polpair_int2tuple, 999)
-    pytest.raises(ValueError, uvputils.polpair_int2tuple, [999])
+    with pytest.raises(AssertionError, match="polpair must be integer"):
+        uvputils.polpair_int2tuple(("xx", "xx"))
+    with pytest.raises(AssertionError, match="polpair must be integer"):
+        uvputils.polpair_int2tuple("xx")
+    with pytest.raises(AssertionError, match="polpair must be integer"):
+        uvputils.polpair_int2tuple("pI")
+    with pytest.raises(ValueError, match="polpair integer evaluates to an invalid"):
+        uvputils.polpair_int2tuple(999)
+    with pytest.raises(ValueError, match="polpair integer evaluates to an invalid"):
+        uvputils.polpair_int2tuple([999])
 
 
-def test_subtract_uvp():
+def test_subtract_uvp(uvp_with_stats):
     """
     Test subtraction of two UVPSpec objects
     """
-    # setup uvp
-    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(beamfile)
-    uvp, cosmo = testing.build_vanilla_uvpspec(beam=beam)
-    # add a dummy stats_array
-    for k in uvp.get_all_keys():
-        uvp.set_stats("mystat", k, np.ones_like(uvp.get_data(k), dtype=complex))
+    uvp = uvp_with_stats
 
     # test execution
     uvs = uvputils.subtract_uvp(uvp, uvp, run_check=True)
@@ -236,7 +229,8 @@ def test_subtract_uvp():
     assert hasattr(uvs, "cov_array_real")
     assert hasattr(uvs, "window_function_array")
     # make sure you cannot combine spectra if only one have been delay averaged
-    pytest.raises(ValueError, uvputils.subtract_uvp, averaged_uvp, uvp)
+    with pytest.raises(ValueError, match="No spectral windows were found"):
+        uvputils.subtract_uvp(averaged_uvp, uvp)
 
     # we subtracted uvp from itself, so data_array should be zero
     assert np.isclose(uvs.data_array[0], 0.0).all()
@@ -262,7 +256,8 @@ def test_conj_blpair():
     assert blpair == 101102104103
     blpair = uvputils._conj_blpair(101102103104, which="both")
     assert blpair == 102101104103
-    pytest.raises(ValueError, uvputils._conj_blpair, 102101103104, which="foo")
+    with pytest.raises(ValueError, match="didn't recognize foo"):
+        uvputils._conj_blpair(102101103104, which="foo")
 
 
 def test_is_in():

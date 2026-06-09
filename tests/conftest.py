@@ -18,14 +18,32 @@ DATA_PATH = Path(DATA_PATH)
 
 
 @pytest.fixture(scope="session")
+def cosmo() -> conversions.Cosmo_Conversions:
+    return conversions.Cosmo_Conversions()
+
+
+@pytest.fixture(scope="session")
+def beam_nf_dipole_wcosmo(cosmo: conversions.Cosmo_Conversions) -> PSpecBeamUV:
+    """PSpecBeamUV for HERA NF dipole with a Cosmo_Conversions instance wired in."""
+    beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
+    return PSpecBeamUV(str(beamfile), cosmo=cosmo)
+
+
+@pytest.fixture(scope="session")
 def beam_nf_dipole() -> PSpecBeamUV:
     beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
     return PSpecBeamUV(beamfile)
 
 
 @pytest.fixture(scope="session")
+def beam_nf_pstokes() -> PSpecBeamUV:
+    beamfile = DATA_PATH / "HERA_NF_pstokes_power.beamfits"
+    return PSpecBeamUV(beamfile)
+
+
+@pytest.fixture(scope="session")
 def vanilla_uvp() -> UVPSpec:
-    return build_vanilla_uvpspec(equal_time_arrays=True)[0]
+    return build_vanilla_uvpspec()[0]
 
 
 @pytest.fixture(scope="session")
@@ -54,17 +72,20 @@ def vanilla_uvp_delay_binned() -> UVPSpec:
 
 
 @pytest.fixture(scope="session")
-def uvp_example_data() -> UVPSpec:
-    # obtain uvp object
-    datafile = DATA_PATH / "zen.2458116.31939.HH.uvh5"
+def uvd_zen_2458116() -> UVData:
+    """Session-cached UVData from zen.2458116.31939.HH.uvh5."""
+    return UVData.from_file(DATA_PATH / "zen.2458116.31939.HH.uvh5")
 
-    # read datafile
-    uvd = UVData.from_file(datafile)
+
+@pytest.fixture(scope="session")
+def uvp_example_data(uvd_zen_2458116: UVData) -> UVPSpec:
+    # obtain uvp object
+    uvd = copy.deepcopy(uvd_zen_2458116)
     # Create a new PSpecData objec
     ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
 
     # choose baselines
-    baselines1, baselines2, blpairs = utils.construct_blpairs(
+    baselines1, baselines2, _ = utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
     # compute ps
@@ -89,3 +110,23 @@ def uvp_exact_wfs(uvp_example_data) -> UVPSpec:
     uvp.get_exact_window_functions(ftbeam=ft_file, inplace=True)
     uvp.check()
     return uvp
+
+
+@pytest.fixture(scope="session")
+def uvd_zen_even_xx() -> UVData:
+    """Session-cached UVData from zen.even.xx.LST.1.28828.uvOCRSA."""
+    uvd = UVData()
+    uvd.read_miriad(str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA"))
+    return uvd
+
+
+@pytest.fixture
+def mutable_uvp(vanilla_uvp: UVPSpec) -> UVPSpec:
+    """Function-scoped deep copy of vanilla_uvp for tests that mutate the object."""
+    return copy.deepcopy(vanilla_uvp)
+
+
+@pytest.fixture
+def mutable_uvp_with_beam(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
+    """Function-scoped deep copy of vanilla_uvp_with_beam for tests that mutate."""
+    return copy.deepcopy(vanilla_uvp_with_beam)

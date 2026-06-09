@@ -558,10 +558,11 @@ class UVWindow:
             Array of k_perp values to match to the FT of the beam.
 
         """
+        if freq / 1e6 < 1.0:
+            raise ValueError("Frequency must be given in Hz.")
         assert (freq <= self.freq_array.max()) and (freq >= self.freq_array.min()), (
             "Choose frequency within spectral window."
         )
-        assert freq / 1e6 >= 1.0, "Frequency must be given in Hz."
 
         z = self.cosmo.f2z(freq)
         R = self.cosmo.DM(z, little_h=self.little_h)  # Mpc
@@ -977,7 +978,9 @@ class UVWindow:
 
         # normalisation of window functions
         sum_per_bin = np.sum(cyl_wf, axis=(1, 2))[:, None, None]
-        cyl_wf = np.divide(cyl_wf, sum_per_bin, where=sum_per_bin != 0)
+        cyl_wf = np.divide(
+            cyl_wf, sum_per_bin, out=np.zeros_like(cyl_wf), where=sum_per_bin != 0
+        )
 
         if (return_bins == "unweighted") or return_bins:
             return kperp_bins, kpara_bins, cyl_wf
@@ -1043,7 +1046,9 @@ class UVWindow:
             )
             cyl_wf = cyl_wf[None]
         # check shapes are consistent
-        assert bl_lens.size == cyl_wf.shape[0]
+        assert bl_lens.size == cyl_wf.shape[0], (
+            "bl_lens size must match cyl_wf.shape[0]"
+        )
         assert ktot.shape == cyl_wf.shape[2:], (
             "k magnitude grid does not match (kperp,kpara) grid in cyl_wf"
         )
@@ -1085,11 +1090,9 @@ class UVWindow:
                         if np.any(mask):  # cannot compute mean if zero elements
                             wf_spherical[m1, m] = np.mean(wf_temp[mask])
                     # normalisation
-                    wf_spherical[m1, :] = np.divide(
-                        wf_spherical[m1, :],
-                        np.sum(wf_spherical[m1, :]),
-                        where=np.sum(wf_spherical[m1, :]) != 0,
-                    )
+                    row_sum = np.sum(wf_spherical[m1, :])
+                    if row_sum != 0:
+                        wf_spherical[m1, :] /= row_sum
 
         if np.any(kweights == 0.0) and self.verbose:
             warnings.warn(

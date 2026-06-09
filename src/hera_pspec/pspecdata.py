@@ -4995,6 +4995,7 @@ def pspec_run(
     if beam is not None:
         assert isinstance(beam, pspecbeam.PSpecBeamBase)
         if cosmo is not None:
+            beam = copy.copy(beam)
             beam.cosmo = cosmo
 
     # package into PSpecData

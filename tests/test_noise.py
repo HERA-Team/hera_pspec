@@ -1,96 +1,81 @@
 import copy
-import os
-import unittest
+from pathlib import Path
 
 import numpy as np
 import pytest
-from pyuvdata import UVData
 
-from hera_pspec import conversions, noise, pspecbeam, pspecdata, testing, utils
+from hera_pspec import conversions, noise, pspecdata, testing, utils
 from hera_pspec.data import DATA_PATH
 
-
-class Test_Sensitivity(unittest.TestCase):
-    """
-    Test noise.Sensitivity object
-    """
-
-    def setUp(self):
-        self.cosmo = conversions.Cosmo_Conversions()
-        self.beam = pspecbeam.PSpecBeamUV(
-            os.path.join(DATA_PATH, "HERA_NF_pstokes_power.beamfits")
-        )
-        self.sense = noise.Sensitivity(beam=self.beam, cosmo=self.cosmo)
-
-    def tearDown(self):
-        pass
-
-    def runTest(self):
-        pass
-
-    def test_set(self):
-        sense = noise.Sensitivity()
-
-        C = conversions.Cosmo_Conversions()
-        sense.set_cosmology(C)
-        assert C.get_params() == sense.cosmo.get_params()
-        params = str(C.get_params())
-        sense.set_cosmology(params)
-        assert C.get_params() == sense.cosmo.get_params()
-
-        sense.set_beam(self.beam)
-        assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
-        self.beam.cosmo = C
-        sense.set_beam(self.beam)
-        assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
-
-        bm = copy.deepcopy(self.beam)
-        delattr(bm, "cosmo")
-        sense.set_beam(bm)
-
-    def test_scalar(self):
-        freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        self.sense.calc_scalar(freqs, "pI", num_steps=5000, little_h=True)
-        assert np.isclose(freqs, self.sense.subband).all()
-        assert self.sense.pol == "pI"
-
-    def test_calc_P_N(self):
-
-        # calculate scalar
-        freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        self.sense.calc_scalar(freqs, "pI", num_steps=5000, little_h=True)
-
-        # basic execution
-        k = np.linspace(0, 3, 10)
-        Tsys = 500.0
-        t_int = 10.7
-        P_N = self.sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, form="Pk")
-        assert isinstance(P_N, float)
-        assert np.isclose(P_N, 642386932892.2921)
-        # calculate DelSq
-        Dsq = self.sense.calc_P_N(
-            Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form="DelSq"
-        )
-        assert Dsq.shape == (10,)
-        assert Dsq[1] < P_N
+DATA_PATH = Path(DATA_PATH)
 
 
-def test_noise_validation():
+@pytest.fixture
+def sense(beam_nf_pstokes, cosmo):
+    return noise.Sensitivity(beam=beam_nf_pstokes, cosmo=cosmo)
+
+
+def test_set(beam_nf_pstokes, sense):
+    sense = noise.Sensitivity()
+
+    C = conversions.Cosmo_Conversions()
+    sense.set_cosmology(C)
+    assert C.get_params() == sense.cosmo.get_params()
+    params = str(C.get_params())
+    sense.set_cosmology(params)
+    assert C.get_params() == sense.cosmo.get_params()
+
+    beam = copy.deepcopy(beam_nf_pstokes)
+    sense.set_beam(beam)
+    assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
+    beam.cosmo = C
+    sense.set_beam(beam)
+    assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
+
+    bm = copy.deepcopy(beam)
+    delattr(bm, "cosmo")
+    sense.set_beam(bm)
+
+
+def test_scalar(sense):
+    freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
+    sense.calc_scalar(freqs, "pI", num_steps=5000, little_h=True)
+    assert np.isclose(freqs, sense.subband).all()
+    assert sense.pol == "pI"
+
+
+def test_calc_P_N(sense):
+    # calculate scalar
+    freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
+    sense.calc_scalar(freqs, "pI", num_steps=5000, little_h=True)
+
+    # basic execution
+    k = np.linspace(0, 3, 10)
+    Tsys = 500.0
+    t_int = 10.7
+    P_N = sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, form="Pk")
+    assert isinstance(P_N, float)
+    assert np.isclose(P_N, 642386932892.2921)
+    # calculate DelSq
+    Dsq = sense.calc_P_N(Tsys, t_int, k=k, Ncoherent=1, Nincoherent=1, form="DelSq")
+    assert Dsq.shape == (10,)
+    assert Dsq[1] < P_N
+
+
+def test_noise_validation(beam_nf_dipole):
     """
     make sure that the noise.py code produces
     correct noise 1-sigma amplitude using a
     noise simulation.
     """
     # get simulated noise in Jy
-    bfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(bfile)
-    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
     Tsys = 300.0  # Kelvin
 
     # generate noise
     seed = 0
     uvd = testing.noise_sim(
-        uvfile, Tsys, beam, seed=seed, whiten=True, inplace=False, Nextend=9
+        uvfile, Tsys, beam_nf_dipole, seed=seed, whiten=True, inplace=False, Nextend=9
     )
 
     # get redundant baseline group
@@ -103,7 +88,9 @@ def test_noise_validation():
 
     # setup PSpecData
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None], beam=beam
+        dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
+        wgts=[None, None],
+        beam=beam_nf_dipole,
     )
     ds.Jy_to_mK()
 
@@ -146,23 +133,19 @@ def test_noise_validation():
     assert np.abs(P_rms - P_N) / P_N < 0.02
 
 
-def test_analytic_noise():
+def test_analytic_noise(tmp_path, beam_nf_dipole, uvd_zen_even_xx):
     """
     Test the two forms of analytic noise calculation
     one using QE propagated from auto-correlation
     second using P_N from Tsys estimate
     """
-    bfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-    beam = pspecbeam.PSpecBeamUV(bfile)
-    uvfile = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
-    uvd = UVData()
-    uvd.read(uvfile)
+    uvd = copy.deepcopy(uvd_zen_even_xx)
 
     # setup PSpecData
     ds = pspecdata.PSpecData(
         dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
         wgts=[None, None],
-        beam=beam,
+        beam=beam_nf_dipole,
         dsets_std=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
     )
     ds.Jy_to_mK()
@@ -209,9 +192,8 @@ def test_analytic_noise():
 
         # get P_N estimate
         auto_Tsys = utils.uvd_to_Tsys(
-            uvd, beam, os.path.join(DATA_PATH, "test_uvd.uvh5")
+            uvd, beam_nf_dipole, str(tmp_path / "test_uvd.uvh5")
         )
-        assert os.path.exists(os.path.join(DATA_PATH, "test_uvd.uvh5"))
         utils.uvp_noise_error(
             uvp, auto_Tsys, err_type=["P_N", "P_SN"], P_SN_correction=False
         )
@@ -262,21 +244,18 @@ def test_analytic_noise():
         select = np.abs(dlys) > 3000
         assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
 
-        # clean up
-        os.remove(os.path.join(DATA_PATH, "test_uvd.uvh5"))
+
+def check_corr_matrix(m: np.ndarray):
+    """Perform checks of a matrix that establish it as a reasonable correlation."""
+    assert m.ndim == 2
+    assert m.shape[0] == m.shape[1]
+    assert np.all(np.diag(m) == 1)
+    assert np.all(m - np.eye(m.shape[0]) <= 1)
+    np.testing.assert_array_almost_equal(m.T, m)
 
 
-class TestGetApproximateCorr:
-    def check_corr_matrix(self, m: np.ndarray):
-        """Perform checks of a matrix that establish it as a reasonable correlation."""
-        assert m.ndim == 2
-        assert m.shape[0] == m.shape[1]
-        assert np.all(np.diag(m) == 1)
-        assert np.all(m - np.eye(m.shape[0]) <= 1)
-        np.testing.assert_array_almost_equal(m.T, m)
-
-    @pytest.mark.parametrize("n", [1, 6, 7])
-    @pytest.mark.parametrize("taper", ["blackmanharris", "none"])
-    def test_get_approximate_corr(self, n, taper):
-        corr = noise.get_approximate_delay_delay_corr_matrix(taper, n)
-        self.check_corr_matrix(corr)
+@pytest.mark.parametrize("n", [1, 6, 7])
+@pytest.mark.parametrize("taper", ["blackmanharris", "none"])
+def test_get_approximate_corr(n, taper):
+    corr = noise.get_approximate_delay_delay_corr_matrix(taper, n)
+    check_corr_matrix(corr)
