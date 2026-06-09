@@ -186,27 +186,41 @@ class TestGroupBaselines:
         with pytest.raises(ValueError, match="Can't have more groups than baselines"):
             grouping.group_baselines(bls, ngrps)
 
-    @pytest.mark.parametrize("n,ngrps,randomize", [
-        (5, 2, False), (13, 5, False), (521, 10, False),
-        (5, 2, True), (13, 5, True), (521, 10, True),
-    ])
+    @pytest.mark.parametrize(
+        "n,ngrps,randomize",
+        [
+            (5, 2, False),
+            (13, 5, False),
+            (521, 10, False),
+            (5, 2, True),
+            (13, 5, True),
+            (521, 10, True),
+        ],
+    )
     def test_equal_sized_blocks(self, n: int, ngrps: int, randomize: bool) -> None:
         """Check that keep_remainder=False produces groups of equal size."""
         bls = [(0, i) for i in range(n)]
-        g = grouping.group_baselines(bls, ngrps, keep_remainder=False, randomize=randomize)
+        g = grouping.group_baselines(
+            bls, ngrps, keep_remainder=False, randomize=randomize
+        )
         assert np.unique([len(grp) for grp in g]).size == 1
 
-    @pytest.mark.parametrize("n,ngrp,randomize", [
-        (n, ngrp, rand)
-        for n in [1, 2, 4, 5, 13, 521]
-        for ngrp in [1, 2, 5, 10, 45]
-        for rand in [True, False]
-        if ngrp <= n
-    ])
+    @pytest.mark.parametrize(
+        "n,ngrp,randomize",
+        [
+            (n, ngrp, rand)
+            for n in [1, 2, 4, 5, 13, 521]
+            for ngrp in [1, 2, 5, 10, 45]
+            for rand in [True, False]
+            if ngrp <= n
+        ],
+    )
     def test_preserves_count(self, n: int, ngrp: int, randomize: bool) -> None:
         """Check that keep_remainder=True preserves the total number of baselines across all groups."""
         bls = [(0, i) for i in range(n)]
-        g = grouping.group_baselines(bls, ngrp, keep_remainder=True, randomize=randomize)
+        g = grouping.group_baselines(
+            bls, ngrp, keep_remainder=True, randomize=randomize
+        )
         assert np.sum([len(_g) for _g in g]) == len(bls)
 
     def test_random_seed(self) -> None:
@@ -272,7 +286,9 @@ def uvp_with_stats(beam_nf_dipole_wcosmo: PSpecBeamUV) -> tuple[UVPSpec, list]:
 
 
 @pytest.fixture(scope="session")
-def uvp_with_exact_wf(beam_nf_dipole_wcosmo: PSpecBeamUV, uvd_zen_2458116: UVData) -> tuple[UVPSpec, list]:
+def uvp_with_exact_wf(
+    beam_nf_dipole_wcosmo: PSpecBeamUV, uvd_zen_2458116: UVData
+) -> tuple[UVPSpec, list]:
     """UVPSpec from uvd_zen_2458116 with exact window functions."""
     ds = pspecdata.PSpecData(
         dsets=[uvd_zen_2458116, uvd_zen_2458116],
@@ -306,7 +322,9 @@ def uvp_with_exact_wf(beam_nf_dipole_wcosmo: PSpecBeamUV, uvd_zen_2458116: UVDat
 
 
 class TestAverageSpectra:
-    def test_uniform_weights_reduce_errors(self, uvp_with_stats: tuple[UVPSpec, list]) -> None:
+    def test_uniform_weights_reduce_errors(
+        self, uvp_with_stats: tuple[UVPSpec, list]
+    ) -> None:
         """Check that uniform error weights reduce the averaged error bar by 1/√N."""
         uvp, blpairs = uvp_with_stats
         blpair_groups = [blpairs]
@@ -327,7 +345,9 @@ class TestAverageSpectra:
         )
         assert np.all(np.isclose(initial_stat, averaged_stat))
 
-    def test_nonuniform_weights_reduce_errors(self, uvp_with_stats: tuple[UVPSpec, list]) -> None:
+    def test_nonuniform_weights_reduce_errors(
+        self, uvp_with_stats: tuple[UVPSpec, list]
+    ) -> None:
         """Check that noise-based error weights yield a smaller averaged error bar than any single sample."""
         uvp, blpairs = uvp_with_stats
         blpair_groups = [blpairs]
@@ -354,7 +374,9 @@ class TestAverageSpectra:
             uvp.stats_array["noise"][0][0, 0, 0]
         )
 
-    def test_inf_variance_single_blpair(self, uvp_with_stats: tuple[UVPSpec, list]) -> None:
+    def test_inf_variance_single_blpair(
+        self, uvp_with_stats: tuple[UVPSpec, list]
+    ) -> None:
         """Check that a single blpair with infinite variance is ignored and the average matches 1/√(N−1)."""
         # Test stats inf variance for all times, single blpair doesn't result
         # in nans and that the avg effectively ignores its presence: e.g. check
@@ -371,7 +393,9 @@ class TestAverageSpectra:
         final_stat = uvp_inf_var_avg.get_stats("simple", (0, blpairs[0], "xx"))
         assert np.isclose(final_stat, initial_stat / np.sqrt(len(blpairs) - 1)).all()
 
-    def test_inf_variance_single_time(self, uvp_with_stats: tuple[UVPSpec, list]) -> None:
+    def test_inf_variance_single_time(
+        self, uvp_with_stats: tuple[UVPSpec, list]
+    ) -> None:
         """Check that all-infinite variance at one time integration propagates as inf rather than NaN or zero."""
         # Test infinite variance for single time, all blpairs doesn't result in nans
         # and check that averaged stat for that time is inf (not zero)
@@ -387,10 +411,14 @@ class TestAverageSpectra:
             blpair_groups=blpair_groups, error_weights="simple", inplace=False
         )
         final_stat = uvp_inf_var_avg.get_stats("simple", (0, blpairs[0], "xx"))
-        assert np.isclose(final_stat[1:], initial_stat[1:] / np.sqrt(len(blpairs))).all()
+        assert np.isclose(
+            final_stat[1:], initial_stat[1:] / np.sqrt(len(blpairs))
+        ).all()
         assert np.all(~np.isfinite(final_stat[0]))
 
-    def test_exact_wf_time_average(self, uvp_with_exact_wf: tuple[UVPSpec, list]) -> None:
+    def test_exact_wf_time_average(
+        self, uvp_with_exact_wf: tuple[UVPSpec, list]
+    ) -> None:
         """Check that time-averaging with exact window functions collapses Ntpairs to Nblpairs and preserves the WF array shape."""
         uvp, _ = uvp_with_exact_wf
         # time average
@@ -408,7 +436,9 @@ class TestAverageSpectra:
         assert uvp_time_avg.Nbltpairs == uvp_time_avg.Nblpairs
         assert uvp_time_avg.window_function_array[0].shape[0] == uvp_time_avg.Nbltpairs
 
-    def test_exact_wf_redundant_average(self, uvp_with_exact_wf: tuple[UVPSpec, list]) -> None:
+    def test_exact_wf_redundant_average(
+        self, uvp_with_exact_wf: tuple[UVPSpec, list]
+    ) -> None:
         """Check that redundant-baseline averaging with exact window functions gives Nbltpairs == Ntpairs."""
         uvp, blpair_groups = uvp_with_exact_wf
         # redundant average
@@ -425,7 +455,9 @@ class TestAverageSpectra:
         )
         assert uvp_red_avg.Nbltpairs == uvp_red_avg.Ntpairs
 
-    def test_exact_wf_combined_average(self, uvp_with_exact_wf: tuple[UVPSpec, list]) -> None:
+    def test_exact_wf_combined_average(
+        self, uvp_with_exact_wf: tuple[UVPSpec, list]
+    ) -> None:
         """Check that combined time and redundant averaging with error_field runs without error."""
         uvp, blpair_groups = uvp_with_exact_wf
         uvp = copy.deepcopy(uvp)  # don't mutate the shared session fixture
@@ -660,12 +692,19 @@ class TestBootstrapRun:
             list(uvp_avg.stats_array.keys()),
         )
 
-        for stat in ["bs_cinterval_16.00", "bs_cinterval_84.00", "bs_robust_std", "bs_std"]:
+        for stat in [
+            "bs_cinterval_16.00",
+            "bs_cinterval_84.00",
+            "bs_robust_std",
+            "bs_std",
+        ]:
             assert uvp_avg.get_stats(
                 stat, (0, ((37, 38), (38, 39)), ("xx", "xx"))
             ).shape == (1, 50)
             assert not np.any(
-                np.isnan(uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ("xx", "xx"))))
+                np.isnan(
+                    uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ("xx", "xx")))
+                )
             )
             assert (
                 uvp_avg.get_stats(stat, (0, ((37, 38), (38, 39)), ("xx", "xx"))).dtype
@@ -802,7 +841,11 @@ class TestSpherical:
         Nk = len(self.KBINS)
         A = {}
         sph = grouping.spherical_average(
-            uvp_spherical, self.KBINS, self.BIN_WIDTHS, add_to_history="checking 1 2 3", A=A
+            uvp_spherical,
+            self.KBINS,
+            self.BIN_WIDTHS,
+            add_to_history="checking 1 2 3",
+            A=A,
         )
         for spw in sph.spw_array:
             # binning and normalization
@@ -831,7 +874,10 @@ class TestSpherical:
         """Check that little_h=False with scaled kbins gives identical kparas as the default."""
         sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
         sph2 = grouping.spherical_average(
-            uvp_spherical, self.KBINS * cosmo.h, self.BIN_WIDTHS * cosmo.h, little_h=False
+            uvp_spherical,
+            self.KBINS * cosmo.h,
+            self.BIN_WIDTHS * cosmo.h,
+            little_h=False,
         )
         for spw in sph.spw_array:
             assert np.isclose(sph.get_kparas(spw), sph2.get_kparas(spw)).all()
@@ -867,7 +913,9 @@ class TestSpherical:
         """Check that infinite-variance stats zero out low-k modes and leave valid WF normalization at higher k."""
         uvp2 = copy.deepcopy(uvp_spherical)
         uvp2.set_stats_slice("err", 0, 1000, above=False, val=np.inf)
-        sph2 = grouping.spherical_average(uvp2, self.KBINS, self.BIN_WIDTHS, error_weights="err")
+        sph2 = grouping.spherical_average(
+            uvp2, self.KBINS, self.BIN_WIDTHS, error_weights="err"
+        )
         # assert low k modes are zeroed!
         assert np.isclose(sph2.data_array[0][:, :3, :], 0).all()
         # assert bins that weren't nulled still have proper window normalization
@@ -887,7 +935,9 @@ class TestSpherical:
             sph.select(spws=[0], inplace=False),
             sph.select(spws=[1], inplace=False),
         )
-        sph_c = uvpspec.combine_uvpspec([sph_a, sph_b], merge_history=False, verbose=False)
+        sph_c = uvpspec.combine_uvpspec(
+            [sph_a, sph_b], merge_history=False, verbose=False
+        )
         # bug check: in the past, combine after spherical average erroneously changed dly_array
         assert sph == sph_c
 
@@ -914,11 +964,15 @@ class TestSpherical:
             sph.window_function_array[0][:, :, :4, :], sph2.window_function_array[0]
         )
 
-    def test_average_exact_windows(self, uvp_with_exact_wf: tuple[UVPSpec, list]) -> None:
+    def test_average_exact_windows(
+        self, uvp_with_exact_wf: tuple[UVPSpec, list]
+    ) -> None:
         """Check that spherical_average runs for a UVPSpec with exact window functions, with and without blpair_groups."""
         uvp, blpair_groups = uvp_with_exact_wf
         grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS)
-        grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS, blpair_groups=blpair_groups)
+        grouping.spherical_average(
+            uvp, self.KBINS, self.BIN_WIDTHS, blpair_groups=blpair_groups
+        )
 
     def test_wf_shape(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that spherical_wf_from_uvp returns an array with the expected (Ntimes, Nk, Nk, Npols) shape."""
@@ -926,7 +980,9 @@ class TestSpherical:
         kbin_edges = np.arange(0.075, 2.9, dk)
         Nk = kbin_edges.size - 1
         wf_array = grouping.spherical_wf_from_uvp(
-            uvp_exact_wfs, kbin_edges=kbin_edges, little_h="h^-3" in uvp_exact_wfs.norm_units
+            uvp_exact_wfs,
+            kbin_edges=kbin_edges,
+            little_h="h^-3" in uvp_exact_wfs.norm_units,
         )
         assert wf_array[0].shape == (uvp_exact_wfs.Ntimes, Nk, Nk, uvp_exact_wfs.Npols)
 
@@ -943,7 +999,12 @@ class TestSpherical:
             kbin_edges_theory=kbin_edges_theory,
             little_h="h^-3" in uvp_exact_wfs.norm_units,
         )
-        assert wf_array2[0].shape == (uvp_exact_wfs.Ntimes, Nk, Nk_in, uvp_exact_wfs.Npols)
+        assert wf_array2[0].shape == (
+            uvp_exact_wfs.Ntimes,
+            Nk,
+            Nk_in,
+            uvp_exact_wfs.Npols,
+        )
 
     def test_wf_little_h(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that mismatched little_h raises a UserWarning about unit conversion."""
@@ -951,7 +1012,9 @@ class TestSpherical:
         kbin_edges = np.arange(0.075, 2.9, dk)
         with pytest.warns(UserWarning, match="Changed little_h units"):
             grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs, kbin_edges=kbin_edges / uvp_exact_wfs.cosmo.h, little_h=True
+                uvp_exact_wfs,
+                kbin_edges=kbin_edges / uvp_exact_wfs.cosmo.h,
+                little_h=True,
             )
 
     def test_wf_spw_array(self, uvp_exact_wfs: UVPSpec) -> None:
@@ -959,11 +1022,19 @@ class TestSpherical:
         dk = 0.25
         kbin_edges = np.arange(0.075, 2.9, dk)
         grouping.spherical_wf_from_uvp(
-            uvp_exact_wfs, kbin_edges, spw_array=0, little_h="h^-3" in uvp_exact_wfs.norm_units
+            uvp_exact_wfs,
+            kbin_edges,
+            spw_array=0,
+            little_h="h^-3" in uvp_exact_wfs.norm_units,
         )
-        with pytest.raises(AssertionError, match="input spw is not in UVPSpec.spw_array"):
+        with pytest.raises(
+            AssertionError, match="input spw is not in UVPSpec.spw_array"
+        ):
             grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs, kbin_edges, spw_array=2, little_h="h^-3" in uvp_exact_wfs.norm_units
+                uvp_exact_wfs,
+                kbin_edges,
+                spw_array=2,
+                little_h="h^-3" in uvp_exact_wfs.norm_units,
             )
 
     def test_wf_blpair_groups(self, uvp_exact_wfs: UVPSpec) -> None:
@@ -992,7 +1063,9 @@ class TestSpherical:
         kbin_edges = np.arange(0.075, 2.9, dk)
         blpair_groups, blpair_lens, _ = uvp_exact_wfs.get_red_blpairs()
         # blpair_lens given without blpair_groups → warning
-        with pytest.warns(UserWarning, match="blpair_lens given but blpair_groups is None"):
+        with pytest.warns(
+            UserWarning, match="blpair_lens given but blpair_groups is None"
+        ):
             grouping.spherical_wf_from_uvp(
                 uvp_exact_wfs,
                 kbin_edges,
@@ -1025,7 +1098,9 @@ class TestSpherical:
         """Check that overlapping kbin_edges raise an AssertionError (with a little_h warning)."""
         with pytest.warns(UserWarning, match="Changed little_h units"):
             with pytest.raises(AssertionError, match="kbins must not overlap"):
-                grouping.spherical_wf_from_uvp(uvp_exact_wfs, kbin_edges=np.array([1.0, 2.0, 1.5]))
+                grouping.spherical_wf_from_uvp(
+                    uvp_exact_wfs, kbin_edges=np.array([1.0, 2.0, 1.5])
+                )
 
     def test_wf_no_exact_windows(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that spherical_wf_from_uvp raises an AssertionError when exact_windows=False."""
@@ -1058,7 +1133,9 @@ class TestAverageInDelayBins:
                 vanilla_uvp_with_beam, kernel=np.array([[1, 1, 1]])
             )
 
-        with pytest.raises(ValueError, match="The kernel size must be smaller than half"):
+        with pytest.raises(
+            ValueError, match="The kernel size must be smaller than half"
+        ):
             grouping.average_in_delay_bins(
                 vanilla_uvp_with_beam, kernel=np.zeros(vanilla_uvp_with_beam.Ndlys)
             )
@@ -1075,7 +1152,10 @@ class TestAverageInDelayBins:
         new = grouping.average_in_delay_bins(
             vanilla_uvp_with_beam, kernel=np.array([1, 1, 1])
         )
-        assert len(new.get_dlys(0)) - 1 == (len(vanilla_uvp_with_beam.get_dlys(0)) - 1) // 3
+        assert (
+            len(new.get_dlys(0)) - 1
+            == (len(vanilla_uvp_with_beam.get_dlys(0)) - 1) // 3
+        )
 
     def test_wf_propagation(self, vanilla_uvp_with_beam: UVPSpec) -> None:
         """Check that average_in_delay_bins averages window functions over the kernel."""
@@ -1111,7 +1191,9 @@ class TestAverageInDelayBins:
             averaged_new.window_function_array[0][:, 0, :, :],
         ), "Window functions wrongly propagated by grouping.average_spectra"
 
-    def test_spherical_average_propagation(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+    def test_spherical_average_propagation(
+        self, vanilla_uvp_with_beam: UVPSpec
+    ) -> None:
         """Check that spherical_average correctly propagates delay-binned window functions, with and without theory kbins."""
         new = grouping.average_in_delay_bins(
             vanilla_uvp_with_beam, kernel=np.array([1, 1, 1])
@@ -1201,7 +1283,9 @@ class TestAverageInDelayBins:
             delay_bins_uvp_nocov, kernel=np.array([1, 1, 1])
         )
 
-        assert len(new.get_dlys(0)) - 1 == (len(delay_bins_uvp_nocov.get_dlys(0)) - 1) // 3
+        assert (
+            len(new.get_dlys(0)) - 1 == (len(delay_bins_uvp_nocov.get_dlys(0)) - 1) // 3
+        )
 
         # Check that the stats_array is empty
         assert new.stats_array == {}
