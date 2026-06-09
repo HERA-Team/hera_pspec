@@ -132,36 +132,41 @@ def test_eq(uvp: uvpspec.UVPSpec):
     assert uvp == uvp
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        (0, ((1, 2), (1, 2)), ("xx", "xx")),
+        (0, ((1, 2), (1, 2)), 1515),
+        (0, 101102101102, 1515),
+    ],
+)
 @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-def test_get_funcs(uvp: uvpspec.UVPSpec):
-    # get_data
-    d = uvp.get_data((0, ((1, 2), (1, 2)), ("xx", "xx")))
+def test_get_data_key_formats(uvp: uvpspec.UVPSpec, key):
+    d = uvp.get_data(key)
     assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
     assert d.dtype == complex
     np.testing.assert_almost_equal(d[0, 0], (101.1021011020000001 + 0j))
-    d = uvp.get_data((0, ((1, 2), (1, 2)), 1515))
-    np.testing.assert_almost_equal(d[0, 0], (101.1021011020000001 + 0j))
-    d = uvp.get_data((0, 101102101102, 1515))
-    np.testing.assert_almost_equal(d[0, 0], (101.1021011020000001 + 0j))
 
-    # get_wgts
-    w = uvp.get_wgts((0, ((1, 2), (1, 2)), ("xx", "xx")))
-    assert w.shape == (10, 50, 2)  # should have Nfreq dim, not Ndlys
-    assert w.dtype == float
-    assert w[0, 0, 0] == 1.0
 
-    # get_integrations
-    i = uvp.get_integrations((0, ((1, 2), (1, 2)), ("xx", "xx")))
-    assert i.shape == (10,)
-    assert i.dtype == float
-    np.testing.assert_almost_equal(i[0], 1.0)
+@pytest.mark.parametrize(
+    "method,expected_shape,first_idx",
+    [
+        ("get_wgts", (10, 50, 2), (0, 0, 0)),  # Nfreq dim, not Ndlys
+        ("get_integrations", (10,), (0,)),
+        ("get_nsamples", (10,), (0,)),
+    ],
+)
+@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+def test_get_array_funcs(uvp: uvpspec.UVPSpec, method, expected_shape, first_idx):
+    key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
+    result = getattr(uvp, method)(key)
+    assert result.shape == expected_shape
+    assert result.dtype == float
+    np.testing.assert_almost_equal(result[first_idx], 1.0)
 
-    # get nsample
-    n = uvp.get_nsamples((0, ((1, 2), (1, 2)), ("xx", "xx")))
-    assert n.shape == (10,)
-    assert n.dtype == float
-    np.testing.assert_almost_equal(n[0], 1.0)
 
+@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+def test_get_funcs(uvp: uvpspec.UVPSpec):
     # get dly
     d = uvp.get_dlys(0)
     assert len(d) == uvp.get_dlys(0).size
