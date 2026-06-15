@@ -11,6 +11,10 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.11"
+  # nbsphinx converts the example notebooks' Markdown cells with pandoc, which is
+  # required even though notebooks are rendered from saved outputs (not executed).
+  apt_packages:
+    - pandoc
   jobs:
       pre_create_environment:
         - asdf plugin add uv
