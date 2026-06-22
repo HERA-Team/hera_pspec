@@ -18,7 +18,7 @@ The project uses **uv** for environment and lockfile management (matching CI). P
 - Run a single test file / test: `uv run pytest tests/test_pspecdata.py` or `uv run pytest tests/test_pspecdata.py::test_name`.
   - To bypass coverage while iterating: `uv run pytest --no-cov tests/test_pspecdata.py::test_name`.
 - Warnings job (matches `warnings-tests.yml`, fails on any warning): `MPLBACKEND=agg uv run pytest -Werror`. New code must not emit warnings under this run.
-- Build docs locally: `uv run --group docs sphinx-build docs docs/_build/html` (RTD config at `.readthedocs.yaml`).
+- Build docs locally: `uv run --group docs sphinx-build docs docs/_build/html` (RTD config at `.readthedocs.yaml`). Requires `pandoc` on your `PATH` (e.g. `brew install pandoc`) for `nbsphinx` to convert the example notebooks; the Read the Docs image already ships it.
 - CLI entrypoint installed as `pspec` (defined at `src/hera_pspec/cli.py`, `app = cyclopts.App()`); the legacy `scripts/pspec_red.py` shim is also installed via `tool.setuptools.script-files`.
 
 ## Linting
