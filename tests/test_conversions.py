@@ -81,12 +81,7 @@ class TestCosmoConversions:
             ("DA", (10.0,), {"little_h": True}, 591.84124477917851),
             ("dRperp_dtheta", (10.0,), {"little_h": True}, 6510.2536925709637),
             ("dRpara_df", (10.0,), {"little_h": True}, 1.2487605057418872e-05),
-            (
-                "dRpara_df",
-                (10.0,),
-                {"ghz": True, "little_h": True},
-                12487.605057418872,
-            ),
+            ("dRpara_df", (10.0,), {"ghz": True, "little_h": True}, 12487.605057418872),
             ("X2Y", (10.0,), {"little_h": True}, 529.26719942209002),
         ],
     )

@@ -87,11 +87,7 @@ class TestPSpecBeamUV:
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         scalar_large_Nsteps = pstokes_beam.compute_pspec_scalar(
-            LOWER_FREQ,
-            UPPER_FREQ,
-            NUM_FREQS,
-            pol="pI",
-            num_steps=10000,
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=10000
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
@@ -115,11 +111,7 @@ class TestPSpecBeamUV:
     def test_taper(self, pstokes_beam: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with a taper against a precomputed reference value."""
         scalar = pstokes_beam.compute_pspec_scalar(
-            LOWER_FREQ,
-            UPPER_FREQ,
-            NUM_FREQS,
-            num_steps=5000,
-            taper="blackman",
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
         )
         assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
 
@@ -164,10 +156,10 @@ class TestPSpecBeamUV:
 
     def test_dipole_beam(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that dipole (linear-pol) beams compute a scalar for XX but raise for pI."""
-        beam_nf_dipole.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
-        )
-        with pytest.raises((KeyError, ValueError)):  # see note above re pyuvdata versions
+        beam_nf_dipole.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
+        with pytest.raises(
+            (KeyError, ValueError)
+        ):  # see note above re pyuvdata versions
             beam_nf_dipole.compute_pspec_scalar(
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
             )
@@ -175,13 +167,11 @@ class TestPSpecBeamUV:
     def test_efield_beam(self) -> None:
         """Check that efield beams compute a scalar for XX but raise for pI."""
         beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
-        beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
-        )
-        with pytest.raises((KeyError, ValueError)):  # see note above re pyuvdata versions
-            beam.compute_pspec_scalar(
-                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
-            )
+        beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
+        with pytest.raises(
+            (KeyError, ValueError)
+        ):  # see note above re pyuvdata versions
+            beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI")
 
     def test_get_omegas_single_polpair(
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV
@@ -385,11 +375,7 @@ class TestPSpecBeamFromArray:
             beam_freqs=gauss_beam.beam_freqs,
         )
         scalar = psbeam.compute_pspec_scalar(
-            LOWER_FREQ,
-            UPPER_FREQ,
-            NUM_FREQS,
-            num_steps=5000,
-            taper="blackman",
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
         )
         assert abs(scalar / 22123832163.072491 - 1.0) <= 1e-8
 
@@ -498,7 +484,9 @@ class TestPSpecBeamFromArray:
             lambda psbeam, Om_P, Om_PP: psbeam.power_beam_sq_int("foo"),
             lambda psbeam, Om_P, Om_PP: psbeam.power_beam_int(pol="blah"),
             lambda psbeam, Om_P, Om_PP: psbeam.power_beam_sq_int(pol="blah"),
-            lambda psbeam, Om_P, Om_PP: psbeam.add_pol(pol="A", OmegaP=Om_P, OmegaPP=Om_PP),
+            lambda psbeam, Om_P, Om_PP: psbeam.add_pol(
+                pol="A", OmegaP=Om_P, OmegaPP=Om_PP
+            ),
         ],
         ids=[
             "add_pol_positional_foo",

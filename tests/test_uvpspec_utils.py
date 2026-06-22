@@ -41,9 +41,7 @@ def common_select_uvps(
 
 
 class TestSelectCommon:
-    def test_common_times(
-        self, common_select_uvps: tuple[UVPSpec, ...]
-    ) -> None:
+    def test_common_times(self, common_select_uvps: tuple[UVPSpec, ...]) -> None:
         """Check that selecting on common times gives identical, time-aligned UVPSpecs."""
         uvp1, uvp2, _, _, _ = common_select_uvps
         uvp_new = uvputils.select_common(
@@ -59,9 +57,7 @@ class TestSelectCommon:
             uvp_new[0].time_avg_array, uvp_new[1].time_avg_array
         )
 
-    def test_common_blpairs(
-        self, common_select_uvps: tuple[UVPSpec, ...]
-    ) -> None:
+    def test_common_blpairs(self, common_select_uvps: tuple[UVPSpec, ...]) -> None:
         """Check that selecting on common baseline-pairs gives identical, time-aligned UVPSpecs."""
         uvp1, uvp2, uvp3, _, _ = common_select_uvps
         uvp_new = uvputils.select_common(
@@ -140,19 +136,12 @@ class TestSelectCommon:
         assert np.sum(uvp_new[0].time_avg_array - uvp_new[1].time_avg_array) != 0.0
         assert len(uvp_new) == 2
 
-    def test_inplace_selection(
-        self, common_select_uvps: tuple[UVPSpec, ...]
-    ) -> None:
+    def test_inplace_selection(self, common_select_uvps: tuple[UVPSpec, ...]) -> None:
         """Check that inplace=True mutates the input UVPSpecs to match."""
         uvp1, uvp2, _, _, _ = common_select_uvps
         uvp_list = [uvp1, uvp2]
         uvputils.select_common(
-            uvp_list,
-            spws=True,
-            blpairs=True,
-            times=True,
-            polpairs=True,
-            inplace=True,
+            uvp_list, spws=True, blpairs=True, times=True, polpairs=True, inplace=True
         )
         assert uvp1 == uvp2
 
@@ -200,7 +189,9 @@ def test_get_blpairs_from_bls(vanilla_uvp_with_beam: UVPSpec) -> None:
     blp_select_int = uvputils._get_blpairs_from_bls(vanilla_uvp_with_beam, bls=101102)
     # baseline ints encode antnums as (ant+100) concatenated, so (1, 2) <-> 101102
     blp_select_tuple = uvputils._get_blpairs_from_bls(vanilla_uvp_with_beam, bls=(1, 2))
-    blp_select_list = uvputils._get_blpairs_from_bls(vanilla_uvp_with_beam, bls=[101102, 101103])
+    blp_select_list = uvputils._get_blpairs_from_bls(
+        vanilla_uvp_with_beam, bls=[101102, 101103]
+    )
 
     assert blp_select_int.any()
     # an integer baseline and the equivalent antenna-pair tuple select the same blpairs
@@ -272,9 +263,7 @@ class TestPolpairInt2Tuple:
         assert uvputils.polpair_int2tuple(pol_int, pol_strings=True) == polpair
 
     @pytest.mark.parametrize(
-        "value",
-        [("xx", "xx"), "xx", "pI"],
-        ids=["tuple", "single_str", "stokes_str"],
+        "value", [("xx", "xx"), "xx", "pI"], ids=["tuple", "single_str", "stokes_str"]
     )
     def test_int2tuple_raises_on_non_integer_input(self, value) -> None:
         """Check that non-integer inputs raise an AssertionError."""
@@ -284,9 +273,7 @@ class TestPolpairInt2Tuple:
     @pytest.mark.parametrize("value", [999, [999]], ids=["scalar", "list"])
     def test_int2tuple_raises_on_invalid_code(self, value) -> None:
         """Check that an integer not corresponding to a valid polpair code raises a ValueError."""
-        with pytest.raises(
-            ValueError, match="polpair integer evaluates to an invalid"
-        ):
+        with pytest.raises(ValueError, match="polpair integer evaluates to an invalid"):
             uvputils.polpair_int2tuple(value)
 
 

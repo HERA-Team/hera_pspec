@@ -67,9 +67,7 @@ class TestUvpspecFromData:
         ]
 
     def test_string_and_object_inputs_equivalent(
-        self,
-        beam_nf_dipole: PSpecBeamUV,
-        uvd_zen_even_xx: UVData,
+        self, beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData
     ) -> None:
         """Check that filename/UVData and beam-object/beam-path inputs are interchangeable."""
         uvp = testing.uvpspec_from_data(
@@ -151,9 +149,7 @@ class TestUvpspecFromData:
 class TestNoiseSim:
     def test_amplitude(self, uvd_dual_pol: UVData) -> None:
         """Check that noise_sim produces noise with the expected std and 1/sqrt(2) auto/cross-pol scaling."""
-        uvn = testing.noise_sim(
-            uvd_dual_pol, 300.0, seed=0, whiten=True, inplace=False
-        )
+        uvn = testing.noise_sim(uvd_dual_pol, 300.0, seed=0, whiten=True, inplace=False)
         assert uvn.Ntimes == uvd_dual_pol.Ntimes
         assert uvn.Nfreqs == uvd_dual_pol.Nfreqs
         assert uvn.Nbls == uvd_dual_pol.Nbls
@@ -172,9 +168,7 @@ class TestNoiseSim:
 
     def test_seed_and_inplace(self, uvd_dual_pol: UVData) -> None:
         """Check that seed=0 matches np.random.seed(0) global state used with seed=None and inplace=True."""
-        uvn = testing.noise_sim(
-            uvd_dual_pol, 300.0, seed=0, whiten=True, inplace=False
-        )
+        uvn = testing.noise_sim(uvd_dual_pol, 300.0, seed=0, whiten=True, inplace=False)
 
         np.random.seed(0)
         uvn2 = copy.deepcopy(uvd_dual_pol)

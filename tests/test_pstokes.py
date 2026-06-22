@@ -177,9 +177,7 @@ class TestCombinePolArrays:
         self, uvd1: pyuvdata.UVData, n_arrays: int
     ) -> None:
         """Check that data_list must contain exactly two arrays."""
-        data_list = (
-            uvd1.data_array if n_arrays == 1 else [uvd1.data_array] * n_arrays
-        )
+        data_list = uvd1.data_array if n_arrays == 1 else [uvd1.data_array] * n_arrays
         with pytest.raises(ValueError, match="Can only combine two arrays"):
             pstokes._combine_pol_arrays("XX", "YY", "pI", data_list=data_list)
 
@@ -195,8 +193,7 @@ class TestCombinePolArrays:
 
 class TestConstructPstokes:
     @pytest.mark.parametrize(
-        "pstokes_str,pstokes_num,weight2",
-        [("pI", 1, 1.0), ("pQ", 2, -1.0)],
+        "pstokes_str,pstokes_num,weight2", [("pI", 1, 1.0), ("pQ", 2, -1.0)]
     )
     def test_basic_execution(
         self,
@@ -245,9 +242,7 @@ class TestConstructPstokes:
     ) -> None:
         """Check that non-overlapping frequency subsets on both datasets raise a frequency-mismatch error."""
         uvd3 = uvd1.select(frequencies=np.unique(uvd1.freq_array)[:10], inplace=False)
-        uvd4 = uvd2.select(
-            frequencies=np.unique(uvd2.freq_array)[10:20], inplace=False
-        )
+        uvd4 = uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], inplace=False)
         with pytest.raises(
             ValueError, match="dset1 and dset2 must have the same frequencies"
         ):
@@ -274,9 +269,7 @@ class TestConstructPstokes:
         ):
             pstokes.construct_pstokes(dset1=uvd3, dset2=uvd4)
 
-    def test_dual_pol_input(
-        self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData
-    ) -> None:
+    def test_dual_pol_input(self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData) -> None:
         """Check that pI can be constructed from a single dual-polarization UVData object."""
         uvd3 = uvd1 + uvd2
         pstokes.construct_pstokes(dset1=uvd3, dset2=uvd3, pstokes="pI")
@@ -289,8 +282,7 @@ class TestConstructPstokes:
             pstokes.construct_pstokes(dset1=uvd1, dset2=uvd1, pstokes="pI")
 
     @pytest.mark.parametrize(
-        "i,ps,weights",
-        [(0, "pI", (0.5, 0.5)), (1, "pQ", (0.5, -0.5))],
+        "i,ps,weights", [(0, "pI", (0.5, 0.5)), (1, "pQ", (0.5, -0.5))]
     )
     def test_multipol(
         self,
