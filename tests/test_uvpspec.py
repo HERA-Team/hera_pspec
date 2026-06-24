@@ -1337,7 +1337,8 @@ class TestRecursiveCombineUvpspec:
     def test_empty(self) -> None:
         """Test recursive_combine_uvpspec with an empty list."""
         with pytest.raises(
-            ValueError, match="Cannot run recursive_combine_uvpspec on length-0 objects."
+            ValueError,
+            match="Cannot run recursive_combine_uvpspec on length-0 objects.",
         ):
             uvpspec.recursive_combine_uvpspec([])
 

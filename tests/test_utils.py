@@ -130,7 +130,7 @@ class TestLoadConfig:
         assert cfg["pspec"]["overwrite"]
         # Check that lists are read in as lists
         assert len(cfg["data"]["subdirs"]) == 1
-         # Check 'None' and list of lists become Nones and list of tuples
+        # Check 'None' and list of lists become Nones and list of tuples
         assert cfg["data"]["pairs"] == [("xx", "xx"), ("yy", "yy")]
         assert cfg["pspec"]["taper"] == "none"
         assert cfg["pspec"]["groupname"] is None
@@ -153,13 +153,12 @@ class TestSpwRange:
         ids=["freqs", "redshifts"],
     )
     def test_raises_on_object_without_freq_array(
-        self,
-        func: Callable,
-        kwarg: str,
-        range_value: tuple[float, float],
+        self, func: Callable, kwarg: str, range_value: tuple[float, float]
     ) -> None:
         """Check that an object lacking a freq_array attribute raises an AttributeError, for both freq- and redshift-range lookups."""
-        with pytest.raises(AttributeError, match="does not have a freq_array attribute"):
+        with pytest.raises(
+            AttributeError, match="does not have a freq_array attribute"
+        ):
             func(np.arange(3), **{kwarg: range_value})
 
     @pytest.mark.parametrize("obj_name", ["uvd", "vanilla_uvp"])
@@ -478,7 +477,9 @@ class TestGetReds:
 
     def test_min_ew_cut(self, uvd_zen_all_xx_meta: UVData) -> None:
         """Check that min_EW_cut restricts to baselines along (or near) the EW axis."""
-        r, l, a = utils.get_reds(uvd_zen_all_xx_meta, bl_len_range=(14, 16), min_EW_cut=14)
+        r, l, a = utils.get_reds(
+            uvd_zen_all_xx_meta, bl_len_range=(14, 16), min_EW_cut=14
+        )
         assert len(l) == len(a) == 1
         assert np.isclose(a[0] % 180, 0, atol=1)
 
@@ -648,7 +649,9 @@ def uvp_two_red_grps(blvec_reds: list) -> UVPSpec:
 class TestGetBlvecReds:
     def test_with_dict_input(self, uvp_two_red_grps: UVPSpec) -> None:
         """Check that get_blvec_reds groups a dict of baseline vectors into the expected redundant tags."""
-        blvecs = dict(zip(uvp_two_red_grps.bl_array, uvp_two_red_grps.get_ENU_bl_vecs()))
+        blvecs = dict(
+            zip(uvp_two_red_grps.bl_array, uvp_two_red_grps.get_ENU_bl_vecs())
+        )
         red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag = utils.get_blvec_reds(
             blvecs, bl_error_tol=1.0
         )
