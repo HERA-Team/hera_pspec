@@ -1,5 +1,6 @@
 import copy
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -7,553 +8,683 @@ import pytest
 from hera_cal import redcal
 from pyuvdata import UVData
 
-from hera_pspec import testing, utils
+from hera_pspec import PSpecBeamUV, UVPSpec, testing, utils
 from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
 
+# Path to the zen.2458042.17772.xx.HH.uvXA miriad data file.
+ZEN_2458042_XX_PATH = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
+# Path to the zen.all.xx.LST.1.06964.uvA miriad data file.
+ZEN_ALL_XX_PATH = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
 
-@pytest.fixture
-def uvd():
+
+@pytest.fixture(scope="module")
+def uvd() -> UVData:
+    """zen.2458042.17772.xx.HH.uvXA, read with full data."""
     uvdata = UVData()
-    uvdata.read_miriad(str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA"))
+    uvdata.read_miriad(ZEN_2458042_XX_PATH)
     return uvdata
 
 
-def test_circular_average():
-    """
-    Test circular averaging function for angles in radians.
-    """
-    # Test case 1: Wrapping scenario near 2*pi
-    # Angles near 2*pi (6.2) and just after wrap (0.1)
-    angles_wrap = np.array([6.2, 0.1])
-    result = utils.circular_average(angles_wrap)
+@pytest.fixture(scope="module")
+def uvd_zen_all_xx() -> UVData:
+    """zen.all.xx.LST.1.06964.uvA, read with full data."""
+    uvdata = UVData()
+    uvdata.read_miriad(ZEN_ALL_XX_PATH)
+    return uvdata
 
-    # Result should be near 0 or 2*pi, NOT near pi
-    assert (result < 0.5) or (result > 5.5), (
-        f"Circular mean near wrap should avoid pi region, got {result}"
+
+@pytest.fixture(scope="module")
+def uvd_zen_all_xx_meta() -> UVData:
+    """zen.all.xx.LST.1.06964.uvA, metadata only (read_data=False)."""
+    uvdata = UVData()
+    uvdata.read_miriad(ZEN_ALL_XX_PATH, read_data=False)
+    return uvdata
+
+
+class TestCircularAverage:
+    def test_handles_wrap_near_2pi(self) -> None:
+        """Check that wrapping near 2*pi averages near 0/2*pi rather than pi."""
+        angles_wrap = np.array([6.2, 0.1])
+        result = utils.circular_average(angles_wrap)
+        assert (result < 0.5) or (result > 5.5)
+
+        # Verify the buggy arithmetic mean would give the wrong (pi-region) result
+        buggy_result = np.mean(angles_wrap)
+        assert 2.5 < buggy_result < 3.5
+
+    def test_matches_arithmetic_mean_without_wrap(self) -> None:
+        """Check that circular and arithmetic means agree when there's no wrap."""
+        angles_no_wrap = np.array([1.0, 1.5, 2.0])
+        circular_result = utils.circular_average(angles_no_wrap)
+        arithmetic_result = np.mean(angles_no_wrap)
+        assert np.isclose(circular_result, arithmetic_result, atol=1e-10)
+
+    def test_handles_multiple_wrapping_values(self) -> None:
+        """Check that multiple angles spanning the wrap point still average near 0/2*pi."""
+        angles_multi = np.array([6.28, 0.01, 6.25, 0.05])
+        result_multi = utils.circular_average(angles_multi)
+        assert (result_multi < 0.5) or (result_multi > 5.5)
+
+    def test_averages_along_axis(self) -> None:
+        """Check that averaging a 2D array along axis=0 wraps per-column where needed."""
+        angles_2d = np.array([[6.2, 1.0, 3.0], [0.1, 1.5, 3.5]])
+        result_2d = utils.circular_average(angles_2d, axis=0)
+        assert result_2d.shape == (3,)
+        assert (result_2d[0] < 0.5) or (result_2d[0] > 5.5)
+        assert np.isclose(result_2d[1], 1.25, atol=1e-10)
+        assert np.isclose(result_2d[2], 3.25, atol=1e-10)
+
+    def test_single_value_returns_itself(self) -> None:
+        """Check that averaging a single angle returns that angle unchanged."""
+        single_angle = np.array([1.5])
+        result_single = utils.circular_average(single_angle)
+        assert np.isclose(result_single, 1.5, atol=1e-10)
+
+
+class TestCov:
+    def test_basic_execution(self, uvd: UVData) -> None:
+        """Check that cov() returns a complex Nfreq x Nfreq matrix for both auto- and cross-baseline inputs."""
+        d1 = uvd.get_data(24, 25)
+        w1 = (~uvd.get_flags(24, 25)).astype(float)
+        cov = utils.cov(d1, w1)
+        assert cov.shape == (60, 60)
+        assert cov.dtype == complex
+
+        d2 = uvd.get_data(37, 38)
+        w2 = (~uvd.get_flags(37, 38)).astype(float)
+        cov = utils.cov(d1, w2, d2=d2, w2=w2)
+        assert cov.shape == (60, 60)
+        assert cov.dtype == complex
+
+    def test_raises_on_complex_weights(self, uvd: UVData) -> None:
+        """Check that complex-valued weight matrices raise a TypeError."""
+        d1 = uvd.get_data(24, 25)
+        w1 = (~uvd.get_flags(24, 25)).astype(float)
+        d2 = uvd.get_data(37, 38)
+        w2 = (~uvd.get_flags(37, 38)).astype(float)
+        with pytest.raises(TypeError, match="Weight matrices must be real"):
+            utils.cov(d1, w1 * 1j)
+        with pytest.raises(TypeError, match="Weight matrices must be real"):
+            utils.cov(d1, w1, d2=d2, w2=w2 * 1j)
+
+    def test_raises_on_negative_weights(self, uvd: UVData) -> None:
+        """Check that a negative weight matrix raises a ValueError."""
+        d1 = uvd.get_data(24, 25)
+        w1 = -(~uvd.get_flags(24, 25)).astype(float)
+        with pytest.raises(ValueError, match="Weight matrices must be positive"):
+            utils.cov(d1, w1)
+
+
+class TestLoadConfig:
+    def test_parses_expected_structure(self) -> None:
+        """Check that load_config reads keys, bools, lists, Nones, and list-of-lists-as-tuples correctly."""
+        fname = DATA_PATH / "_test_utils.yaml"
+        cfg = utils.load_config(fname)
+
+        # Check that expected keys exist
+        assert "data" in cfg.keys()
+        assert "pspec" in cfg.keys()
+        # Check that boolean values are read in correctly
+        assert cfg["pspec"]["overwrite"]
+        # Check that lists are read in as lists
+        assert len(cfg["data"]["subdirs"]) == 1
+         # Check 'None' and list of lists become Nones and list of tuples
+        assert cfg["data"]["pairs"] == [("xx", "xx"), ("yy", "yy")]
+        assert cfg["pspec"]["taper"] == "none"
+        assert cfg["pspec"]["groupname"] is None
+        assert cfg["pspec"]["options"]["bar"] == [("foo", "bar")]
+        assert cfg["pspec"]["options"]["foo"] is None
+
+    def test_raises_on_missing_file(self) -> None:
+        """Check that a missing config file raises an IOError."""
+        with pytest.raises(IOError, match="No such file or directory"):
+            utils.load_config("file_that_doesnt_exist")
+
+
+class TestSpwRange:
+    @pytest.mark.parametrize(
+        "func,kwarg,range_value",
+        [
+            (utils.spw_range_from_freqs, "freq_range", (100e6, 110e6)),
+            (utils.spw_range_from_redshifts, "z_range", (9.7, 12.1)),
+        ],
+        ids=["freqs", "redshifts"],
     )
+    def test_raises_on_object_without_freq_array(
+        self,
+        func: Callable,
+        kwarg: str,
+        range_value: tuple[float, float],
+    ) -> None:
+        """Check that an object lacking a freq_array attribute raises an AttributeError, for both freq- and redshift-range lookups."""
+        with pytest.raises(AttributeError, match="does not have a freq_array attribute"):
+            func(np.arange(3), **{kwarg: range_value})
 
-    # Verify the buggy arithmetic mean would give wrong result
-    buggy_result = np.mean(angles_wrap)
-    assert 2.5 < buggy_result < 3.5, (
-        "This verifies arithmetic mean gives wrong result near wrap"
+    @pytest.mark.parametrize("obj_name", ["uvd", "vanilla_uvp"])
+    @pytest.mark.parametrize(
+        "func,kwarg,range_value,match",
+        [
+            (
+                utils.spw_range_from_freqs,
+                "freq_range",
+                (98e6, 110e6),
+                "Lower bound of spectral window is below",
+            ),
+            (
+                utils.spw_range_from_freqs,
+                "freq_range",
+                (190e6, 202e6),
+                "Upper bound of spectral window is above",
+            ),
+            (
+                utils.spw_range_from_freqs,
+                "freq_range",
+                (190e6, 180e6),
+                "Upper bound of spectral window is less than the lower bound",
+            ),
+            (
+                utils.spw_range_from_redshifts,
+                "z_range",
+                (10.0, 20.0),
+                "Lower bound of spectral window is below",
+            ),
+            (
+                utils.spw_range_from_redshifts,
+                "z_range",
+                (5.0, 8.0),
+                "Upper bound of spectral window is above",
+            ),
+            (
+                utils.spw_range_from_redshifts,
+                "z_range",
+                (11.0, 10.0),
+                "Upper bound of spectral window is less than the lower bound",
+            ),
+        ],
+        ids=[
+            "freqs_lower",
+            "freqs_upper",
+            "freqs_order",
+            "redshifts_lower",
+            "redshifts_upper",
+            "redshifts_order",
+        ],
     )
+    def test_raises_on_invalid_range(
+        self,
+        request: pytest.FixtureRequest,
+        obj_name: str,
+        func: Callable,
+        kwarg: str,
+        range_value: tuple[float, float],
+        match: str,
+    ) -> None:
+        """Check that out-of-bounds or inverted ranges raise descriptive ValueErrors, for both freq/redshift lookups and UVData/UVPSpec inputs."""
+        obj = request.getfixturevalue(obj_name)
+        with pytest.raises(ValueError, match=match):
+            func(obj, **{kwarg: range_value})
 
-    # Test case 2: No wrapping - should match arithmetic mean
-    angles_no_wrap = np.array([1.0, 1.5, 2.0])
-    circular_result = utils.circular_average(angles_no_wrap)
-    arithmetic_result = np.mean(angles_no_wrap)
-
-    assert np.isclose(circular_result, arithmetic_result, atol=1e-10), (
-        f"Circular and arithmetic mean should agree when not wrapping, got {circular_result} vs {arithmetic_result}"
+    @pytest.mark.parametrize(
+        "func,kwarg,range_value,range_list,bounds_false_value,equiv_value",
+        [
+            (
+                utils.spw_range_from_freqs,
+                "freq_range",
+                (110e6, 130e6),
+                [(100e6, 120e6), (120e6, 140e6), (140e6, 160e6)],
+                (98e6, 120e6),
+                (100e6, 120e6),
+            ),
+            (
+                utils.spw_range_from_redshifts,
+                "z_range",
+                (7.0, 8.0),
+                [(6.5, 7.5), (7.5, 8.5), (8.5, 9.5)],
+                (12.0, 14.0),
+                (6.2, 7.2),
+            ),
+        ],
+        ids=["freqs", "redshifts"],
     )
-
-    # Test case 3: Multiple wrapping scenarios
-    # Values that span 0 in different directions
-    angles_multi = np.array([6.28, 0.01, 6.25, 0.05])
-    result_multi = utils.circular_average(angles_multi)
-    assert (result_multi < 0.5) or (result_multi > 5.5), (
-        f"Multiple angles near wrap should avoid pi region, got {result_multi}"
-    )
-
-    # Test case 4: 2D array averaging along axis 0
-    angles_2d = np.array([[6.2, 1.0, 3.0], [0.1, 1.5, 3.5]])
-    result_2d = utils.circular_average(angles_2d, axis=0)
-
-    assert result_2d.shape == (3,), f"Expected shape (3,), got {result_2d.shape}"
-    assert (result_2d[0] < 0.5) or (result_2d[0] > 5.5), (
-        f"First element should handle wrapping, got {result_2d[0]}"
-    )
-    assert np.isclose(result_2d[1], 1.25, atol=1e-10), (
-        f"Second element should be 1.25, got {result_2d[1]}"
-    )
-    assert np.isclose(result_2d[2], 3.25, atol=1e-10), (
-        f"Third element should be 3.25, got {result_2d[2]}"
-    )
-
-    # Test case 5: Single value
-    single_angle = np.array([1.5])
-    result_single = utils.circular_average(single_angle)
-    assert np.isclose(result_single, 1.5, atol=1e-10), (
-        f"Single angle should return itself, got {result_single}"
-    )
-
-
-def test_cov():
-    # load another data file
-    uvd = UVData()
-    uvd.read_miriad(str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA"))
-
-    # test basic execution
-    d1 = uvd.get_data(24, 25)
-    w1 = (~uvd.get_flags(24, 25)).astype(float)
-    cov = utils.cov(d1, w1)
-    assert cov.shape == (60, 60)
-    assert cov.dtype == complex
-    d2 = uvd.get_data(37, 38)
-    w2 = (~uvd.get_flags(37, 38)).astype(float)
-    cov = utils.cov(d1, w2, d2=d2, w2=w2)
-    assert cov.shape == (60, 60)
-    assert cov.dtype == complex
-
-    # test exception
-    with pytest.raises(TypeError, match="Weight matrices must be real"):
-        utils.cov(d1, w1 * 1j)
-    with pytest.raises(TypeError, match="Weight matrices must be real"):
-        utils.cov(d1, w1, d2=d2, w2=w2 * 1j)
-    w1 *= -1.0
-    with pytest.raises(ValueError, match="Weight matrices must be positive"):
-        utils.cov(d1, w1)
-
-
-def test_load_config():
-    """
-    Check YAML config file handling.
-    """
-    fname = DATA_PATH / "_test_utils.yaml"
-    cfg = utils.load_config(fname)
-
-    # Check that expected keys exist
-    assert "data" in cfg.keys()
-    assert "pspec" in cfg.keys()
-
-    # Check that boolean values are read in correctly
-    assert cfg["pspec"]["overwrite"]
-
-    # Check that lists are read in as lists
-    assert len(cfg["data"]["subdirs"]) == 1
-
-    # Check that missing files cause an error
-    with pytest.raises(IOError, match="No such file or directory"):
-        utils.load_config("file_that_doesnt_exist")
-
-    # Check 'None' and list of lists become Nones and list of tuples
-    assert cfg["data"]["pairs"] == [("xx", "xx"), ("yy", "yy")]
-    assert cfg["pspec"]["taper"] == "none"
-    assert cfg["pspec"]["groupname"] is None
-    assert cfg["pspec"]["options"]["bar"] == [("foo", "bar")]
-    assert cfg["pspec"]["options"]["foo"] is None
-
-
-def test_spw_range_from_freqs(uvd, vanilla_uvp):
-    """
-    Test that spectral window ranges are correctly recovered from UVData and
-    UVPSpec files.
-    """
-    # Check that type errors and bounds errors are raised
-    with pytest.raises(AttributeError, match="does not have a freq_array attribute"):
-        utils.spw_range_from_freqs(np.arange(3), freq_range=(100e6, 110e6))
-    for obj in [uvd, vanilla_uvp]:
-        with pytest.raises(ValueError, match="Lower bound of spectral window is below"):
-            utils.spw_range_from_freqs(obj, freq_range=(98e6, 110e6))  # lower bound
-        with pytest.raises(ValueError, match="Upper bound of spectral window is above"):
-            utils.spw_range_from_freqs(obj, freq_range=(190e6, 202e6))  # upper bound
-        with pytest.raises(
-            ValueError,
-            match="Upper bound of spectral window is less than the lower bound",
-        ):
-            utils.spw_range_from_freqs(obj, freq_range=(190e6, 180e6))  # wrong order
-
-    # Check that valid frequency ranges are returned
-    # with and without future array shapes
-    freq_list = [(100e6, 120e6), (120e6, 140e6), (140e6, 160e6)]
-    for obj in [uvd]:
-        spw1 = utils.spw_range_from_freqs(obj, freq_range=(110e6, 130e6))
-        spw2 = utils.spw_range_from_freqs(obj, freq_range=freq_list)
-        spw3 = utils.spw_range_from_freqs(
-            obj, freq_range=(98e6, 120e6), bounds_error=False
-        )
-        spw4 = utils.spw_range_from_freqs(obj, freq_range=(100e6, 120e6))
+    def test_valid_range_returns_correct_types(
+        self,
+        uvd: UVData,
+        func: Callable,
+        kwarg: str,
+        range_value: tuple[float, float],
+        range_list: list[tuple[float, float]],
+        bounds_false_value: tuple[float, float],
+        equiv_value: tuple[float, float],
+    ) -> None:
+        """Check that tuple vs. list range arguments return the right output types, and bounds_error=False matches the equivalent in-bounds call."""
+        spw1 = func(uvd, **{kwarg: range_value})
+        spw2 = func(uvd, **{kwarg: range_list})
+        spw3 = func(uvd, **{kwarg: bounds_false_value}, bounds_error=False)
+        spw4 = func(uvd, **{kwarg: equiv_value})
 
         # Make sure tuple vs. list arguments were handled correctly
         assert isinstance(spw1, tuple)
         assert isinstance(spw2, list)
-        assert len(spw2) == len(freq_list)
-
+        assert len(spw2) == len(range_list)
         # Make sure that bounds_error=False works
-        assert spw3 == spw4
+        if kwarg == "freq_range":
+            assert spw3 == spw4
 
-    # Make sure that this also works for UVPSpec objects
-    spw5 = utils.spw_range_from_freqs(vanilla_uvp, freq_range=(100e6, 104e6))
-    assert isinstance(spw5, tuple)
-    assert spw5[0] is not None
+    @pytest.mark.parametrize(
+        "func,kwarg,range_value",
+        [
+            (utils.spw_range_from_freqs, "freq_range", (100.1e6, 100.74e6)),
+            (utils.spw_range_from_redshifts, "z_range", (13.1, 13.2)),
+        ],
+        ids=["freqs", "redshifts"],
+    )
+    def test_works_for_uvpspec_input(
+        self,
+        vanilla_uvp: UVPSpec,
+        func: Callable,
+        kwarg: str,
+        range_value: tuple[float, float],
+    ) -> None:
+        """Check that both spw_range_from_freqs and spw_range_from_redshifts accept a UVPSpec object."""
+        spw5 = func(vanilla_uvp, **{kwarg: range_value})
+        assert isinstance(spw5, tuple)
+        assert spw5 == (1, 7)
 
 
-def test_spw_range_from_redshifts(uvd, vanilla_uvp):
-    """
-    Test that spectral window ranges are correctly recovered from UVData and
-    UVPSpec files (when redshift range is specified).
-    """
-    # Check that type errors and bounds errors are raised
-    with pytest.raises(AttributeError, match="does not have a freq_array attribute"):
-        utils.spw_range_from_redshifts(np.arange(3), z_range=(9.7, 12.1))
-    for obj in [uvd, vanilla_uvp]:
-        with pytest.raises(ValueError, match="Upper bound of spectral window is above"):
-            utils.spw_range_from_redshifts(obj, z_range=(5.0, 8.0))  # upper freq bound
-        with pytest.raises(ValueError, match="Lower bound of spectral window is below"):
-            utils.spw_range_from_redshifts(
-                obj, z_range=(10.0, 20.0)
-            )  # lower freq bound
+class TestCalcBlpairReds:
+    def test_basic_execution(self, uvd_zen_all_xx: UVData) -> None:
+        """Check basic baseline-pair-redundancy calculation, including grouping/length/angle bookkeeping."""
+        (bls1, bls2, blps, xants1, xants2, rgrps, lens, angs) = utils.calc_blpair_reds(
+            uvd_zen_all_xx,
+            uvd_zen_all_xx,
+            filter_blpairs=True,
+            extra_info=True,
+            exclude_auto_bls=False,
+            exclude_permutations=True,
+        )
+        assert len(bls1) == len(bls2) == 15
+        assert blps == list(zip(bls1, bls2))
+        assert xants1 == xants2
+        assert len(xants1) == 42
+        assert len(rgrps) == len(bls1)  # assert rgrps matches bls1 shape
+        assert np.max(rgrps) == len(lens) - 1  # assert rgrps indexes lens / angs
+
+    def test_xant_flag_thresh(self, uvd_zen_all_xx: UVData) -> None:
+        """Check that a zero xant_flag_thresh excludes every antenna."""
+        (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
+            uvd_zen_all_xx,
+            uvd_zen_all_xx,
+            filter_blpairs=True,
+            exclude_auto_bls=True,
+            exclude_permutations=True,
+            xant_flag_thresh=0.0,
+        )
+        assert len(bls1) == len(bls2) == 0
+
+    def test_bl_len_range(self, uvd_zen_all_xx: UVData) -> None:
+        """Check that bl_len_range filters baselines, with and without excluding auto-baselines."""
+        (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
+            uvd_zen_all_xx,
+            uvd_zen_all_xx,
+            filter_blpairs=True,
+            exclude_auto_bls=False,
+            exclude_permutations=True,
+            bl_len_range=(0, 15.0),
+        )
+        assert len(bls1) == len(bls2) == 12
+
+        (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
+            uvd_zen_all_xx,
+            uvd_zen_all_xx,
+            filter_blpairs=True,
+            exclude_auto_bls=True,
+            exclude_permutations=True,
+            bl_len_range=(0, 15.0),
+        )
+        assert len(bls1) == len(bls2) == 5
+        assert np.all([bls1[i] != bls2[i] for i in range(len(blps))])
+
+    def test_grouping(self, uvd_zen_all_xx: UVData) -> None:
+        """Check that Nblps_per_group batches blpairs into lists of the requested size."""
+        (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
+            uvd_zen_all_xx,
+            uvd_zen_all_xx,
+            filter_blpairs=True,
+            exclude_auto_bls=False,
+            exclude_permutations=True,
+            Nblps_per_group=2,
+        )
+        assert len(blps) == 10
+        assert isinstance(blps[0], list)
+        assert blps[0] == [((24, 37), (25, 38)), ((24, 37), (24, 37))]
+
+    def test_baseline_select_on_input_uvd(self, uvd_zen_all_xx: UVData) -> None:
+        """Check that pre-selecting baselines on the input UVData restricts the output blpairs accordingly."""
+        uvd2 = copy.deepcopy(uvd_zen_all_xx)
+        uvd2.select(bls=[(24, 25), (37, 38), (24, 39)])
+        (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
+            uvd2,
+            uvd2,
+            filter_blpairs=True,
+            exclude_auto_bls=True,
+            exclude_permutations=True,
+            bl_len_range=(10.0, 20.0),
+        )
+        assert blps == [((24, 25), (37, 38))]
+
+    def test_exclude_cross_bls(self, uvd_zen_all_xx: UVData) -> None:
+        """Check that exclude_cross_bls keeps only auto-baseline pairs."""
+        (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
+            uvd_zen_all_xx, uvd_zen_all_xx, filter_blpairs=True, exclude_cross_bls=True
+        )
+        for bl1, bl2 in blps:
+            assert bl1 == bl2
+
+    def test_raises_on_mismatched_antenna_positions(
+        self, uvd_zen_all_xx: UVData
+    ) -> None:
+        """Check that differing antenna positions between uvd1 and uvd2 raise an AssertionError."""
+        uvd2 = copy.deepcopy(uvd_zen_all_xx)
+        uvd2.telescope.antenna_positions[0] += 2
         with pytest.raises(
-            ValueError,
-            match="Upper bound of spectral window is less than the lower bound",
+            AssertionError, match="antenna positions from uvd1 and uvd2 do not agree"
         ):
-            utils.spw_range_from_redshifts(obj, z_range=(11.0, 10.0))  # wrong order
+            utils.calc_blpair_reds(uvd_zen_all_xx, uvd2)
 
-    # Check that valid frequency ranges are returned
-    # with and without future array shapes
-    z_list = [(6.5, 7.5), (7.5, 8.5), (8.5, 9.5)]
-    for obj in [uvd]:
-        spw1 = utils.spw_range_from_redshifts(obj, z_range=(7.0, 8.0))
-        spw2 = utils.spw_range_from_redshifts(obj, z_range=z_list)
-        spw3 = utils.spw_range_from_redshifts(
-            obj, z_range=(12.0, 14.0), bounds_error=False
+    def test_raises_on_exclude_both_auto_and_cross(
+        self, uvd_zen_all_xx: UVData
+    ) -> None:
+        """Check that excluding both auto and cross blpairs simultaneously raises an AssertionError."""
+        with pytest.raises(
+            AssertionError, match="Can't exclude both auto and cross blpairs"
+        ):
+            utils.calc_blpair_reds(
+                uvd_zen_all_xx,
+                uvd_zen_all_xx,
+                exclude_auto_bls=True,
+                exclude_cross_bls=True,
+            )
+
+    def test_autos_only(self, uvd_zen_all_xx: UVData) -> None:
+        """Check that include_crosscorrs=False, include_autocorrs=True restricts output to auto-baselines."""
+        (bls1, bls2, blps, xants1, xants2, rgrps, lens, angs) = utils.calc_blpair_reds(
+            uvd_zen_all_xx,
+            uvd_zen_all_xx,
+            filter_blpairs=True,
+            extra_info=True,
+            exclude_auto_bls=False,
+            exclude_permutations=True,
+            include_crosscorrs=False,
+            include_autocorrs=True,
         )
-        spw4 = utils.spw_range_from_redshifts(obj, z_range=(6.2, 7.2))
-
-        # Make sure tuple vs. list arguments were handled correctly
-        assert isinstance(spw1, tuple)
-        assert isinstance(spw2, list)
-        assert len(spw2) == len(z_list)
-
-    # Make sure that this also works for UVPSpec objects
-    spw5 = utils.spw_range_from_redshifts(vanilla_uvp, z_range=(13.1, 13.2))
-    assert isinstance(spw5, tuple)
-    assert spw5[0] is not None
+        assert len(bls1) > 0
+        for bl1, bl2 in zip(bls1, bls2):
+            assert bl1[0] == bl1[1]
+            assert bl2[0] == bl2[1]
 
 
-def test_calc_blpair_reds():
-    fname = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
-
-    uvd = UVData()
-    uvd.read_miriad(fname)
-
-    # basic execution
-    (bls1, bls2, blps, xants1, xants2, rgrps, lens, angs) = utils.calc_blpair_reds(
-        uvd,
-        uvd,
-        filter_blpairs=True,
-        extra_info=True,
-        exclude_auto_bls=False,
-        exclude_permutations=True,
-    )
-    assert len(bls1) == len(bls2) == 15
-    assert blps == list(zip(bls1, bls2))
-    assert xants1 == xants2
-    assert len(xants1) == 42
-    assert len(rgrps) == len(bls1)  # assert rgrps matches bls1 shape
-    assert np.max(rgrps) == len(lens) - 1  # assert rgrps indexes lens / angs
-
-    # test xant_flag_thresh
-    (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
-        uvd,
-        uvd,
-        filter_blpairs=True,
-        exclude_auto_bls=True,
-        exclude_permutations=True,
-        xant_flag_thresh=0.0,
-    )
-    assert len(bls1) == len(bls2) == 0
-
-    # test bl_len_range
-    (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
-        uvd,
-        uvd,
-        filter_blpairs=True,
-        exclude_auto_bls=False,
-        exclude_permutations=True,
-        bl_len_range=(0, 15.0),
-    )
-    assert len(bls1) == len(bls2) == 12
-    (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
-        uvd,
-        uvd,
-        filter_blpairs=True,
-        exclude_auto_bls=True,
-        exclude_permutations=True,
-        bl_len_range=(0, 15.0),
-    )
-    assert len(bls1) == len(bls2) == 5
-    assert np.all([bls1[i] != bls2[i] for i in range(len(blps))])
-
-    # test grouping
-    (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
-        uvd,
-        uvd,
-        filter_blpairs=True,
-        exclude_auto_bls=False,
-        exclude_permutations=True,
-        Nblps_per_group=2,
-    )
-    assert len(blps) == 10
-    assert isinstance(blps[0], list)
-    assert blps[0] == [((24, 37), (25, 38)), ((24, 37), (24, 37))]
-
-    # test baseline select on uvd
-    uvd2 = copy.deepcopy(uvd)
-    uvd2.select(bls=[(24, 25), (37, 38), (24, 39)])
-    (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
-        uvd2,
-        uvd2,
-        filter_blpairs=True,
-        exclude_auto_bls=True,
-        exclude_permutations=True,
-        bl_len_range=(10.0, 20.0),
-    )
-    assert blps == [((24, 25), (37, 38))]
-
-    # test exclude_cross_bls
-    (bls1, bls2, blps, xants1, xants2) = utils.calc_blpair_reds(
-        uvd, uvd, filter_blpairs=True, exclude_cross_bls=True
-    )
-    for bl1, bl2 in blps:
-        assert bl1 == bl2
-
-    # test exceptions
-    uvd2 = copy.deepcopy(uvd)
-    uvd2.telescope.antenna_positions[0] += 2
-    with pytest.raises(
-        AssertionError, match="antenna positions from uvd1 and uvd2 do not agree"
-    ):
-        utils.calc_blpair_reds(uvd, uvd2)
-    with pytest.raises(
-        AssertionError, match="Can't exclude both auto and cross blpairs"
-    ):
-        utils.calc_blpair_reds(uvd, uvd, exclude_auto_bls=True, exclude_cross_bls=True)
+@pytest.mark.parametrize("n_dlys", [None, 30])
+def test_get_delays(n_dlys: int | None) -> None:
+    """Check that get_delays returns a sorted array of delays with the requested (or default) length."""
+    freqs = np.linspace(100.0, 200.0, 50) * 1e6
+    delays = utils.get_delays(freqs, n_dlys=n_dlys)
+    assert delays.size == (n_dlys if n_dlys is not None else freqs.size)
+    assert np.isclose(delays[0], -2.450e-07, atol=1e-10)
 
 
-def test_calc_blpair_reds_autos_only():
-    # test include_crosscorrs selection option being set to false.
-    fname = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
-    uvd = UVData()
-    uvd.read_miriad(fname)
-    # basic execution
-    (bls1, bls2, blps, xants1, xants2, rgrps, lens, angs) = utils.calc_blpair_reds(
-        uvd,
-        uvd,
-        filter_blpairs=True,
-        extra_info=True,
-        exclude_auto_bls=False,
-        exclude_permutations=True,
-        include_crosscorrs=False,
-        include_autocorrs=True,
-    )
-    assert len(bls1) > 0
-    for bl1, bl2 in zip(bls1, bls2):
-        assert bl1[0] == bl1[1]
-        assert bl2[0] == bl2[1]
-
-
-def test_get_delays():
-    utils.get_delays(np.linspace(100.0, 200.0, 50) * 1e6)
-
-
-def test_get_reds():
-    fname = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
-    uvd = UVData()
-    uvd.read_miriad(fname, read_data=False)
-    antpos = uvd.telescope.get_enu_antpos()
-    antpos_d = dict(list(zip(uvd.telescope.antenna_numbers, antpos)))
-
-    # test basic execution
-    xants = [0, 1, 2]
-    r, l, a = utils.get_reds(fname, xants=xants)
-    assert np.all(
-        [np.all([bl[0] not in xants and bl[1] not in xants for bl in _r]) for _r in r]
-    )
-    assert len(r) == len(a) == len(l)
-    assert len(r) == 104
-
-    r2, l2, a2 = utils.get_reds(uvd, xants=xants)
-    _ = [np.testing.assert_array_equal(_r1, _r2) for _r1, _r2 in zip(r, r2)]
-
-    r2, l2, a2 = utils.get_reds(antpos_d, xants=xants)
-    _ = [np.testing.assert_array_equal(_r1, _r2) for _r1, _r2 in zip(r, r2)]
-
-    # restrict
-    bl_len_range = (14, 16)
-    bl_deg_range = (55, 65)
-    r, l, a = utils.get_reds(uvd, bl_len_range=bl_len_range, bl_deg_range=bl_deg_range)
-    assert np.all([_l > bl_len_range[0] and _l < bl_len_range[1] for _l in l])
-    assert np.all([_a > bl_deg_range[0] and _a < bl_deg_range[1] for _a in a])
-
-    # min EW cut
-    r, l, a = utils.get_reds(uvd, bl_len_range=(14, 16), min_EW_cut=14)
-    assert len(l) == len(a) == 1
-    assert np.isclose(a[0] % 180, 0, atol=1)
-
-    # autos
-    r, l, a = utils.get_reds(fname, xants=xants, add_autos=True)
-    np.testing.assert_almost_equal(l[0], 0)
-    np.testing.assert_almost_equal(a[0], 0)
-    assert len(r) == 105
-
-    # Check errors when wrong types input
-    with pytest.raises(TypeError, match="uvd must be a UVData object"):
-        utils.get_reds([1.0, 2.0])
-
-
-def test_get_reds_autos_only():
-    fname = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
-    uvd = UVData()
-    uvd.read_miriad(fname, read_data=False)
-    antpos = uvd.telescope.get_enu_antpos()
-    antpos_d = dict(list(zip(uvd.telescope.antenna_numbers, antpos)))
-    xants = [0, 1, 2]
-    r, l, a = utils.get_reds(fname, xants=xants, autos_only=True, add_autos=True)
-    assert len(r) == 1
-    for bl in r[0]:
-        assert bl[0] == bl[1]
-
-
-def test_config_pspec_blpairs():
-    # test basic execution
-    uv_template = str(DATA_PATH / "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
-    groupings = utils.config_pspec_blpairs(
-        uv_template,
-        [("xx", "xx")],
-        [("even", "odd")],
-        verbose=False,
-        exclude_auto_bls=True,
-    )
-    assert len(groupings) == 1
-    assert list(groupings.keys())[0] == (("even", "odd"), ("xx", "xx"))
-    assert len(list(groupings.values())[0]) == 11833
-
-    # test multiple, some non-existant pairs
-    groupings = utils.config_pspec_blpairs(
-        uv_template,
-        [("xx", "xx"), ("yy", "yy")],
-        [("even", "odd"), ("even", "odd")],
-        verbose=False,
-        exclude_auto_bls=True,
-    )
-    assert len(groupings) == 1
-    assert list(groupings.keys())[0] == (("even", "odd"), ("xx", "xx"))
-
-    # test xants
-    groupings = utils.config_pspec_blpairs(
-        uv_template,
-        [("xx", "xx")],
-        [("even", "odd")],
-        xants=[0, 1, 2],
-        verbose=False,
-        exclude_auto_bls=True,
-    )
-    assert len(list(groupings.values())[0]) == 9735
-
-    # test exclude_patterns
-    groupings = utils.config_pspec_blpairs(
-        uv_template,
-        [("xx", "xx"), ("yy", "yy")],
-        [("even", "odd"), ("even", "odd")],
-        exclude_patterns=["1.288"],
-        verbose=False,
-        exclude_auto_bls=True,
-    )
-    assert len(groupings) == 0
-
-    # test exceptions
-    with pytest.raises(AssertionError, match="must equal len"):
-        utils.config_pspec_blpairs(
-            uv_template, [("xx", "xx"), ("xx", "xx")], [("even", "odd")], verbose=False
+class TestGetReds:
+    def test_basic_execution(self) -> None:
+        """Check that excluded antennas are absent from every redundant group, and group counts match."""
+        xants = [0, 1, 2]
+        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants)
+        assert np.all(
+            [
+                np.all([bl[0] not in xants and bl[1] not in xants for bl in _r])
+                for _r in r
+            ]
         )
+        assert len(r) == len(a) == len(l)
+        assert len(r) == 104
+
+    @pytest.mark.parametrize("input_type", ["uvdata", "antpos_dict"])
+    def test_input_types_are_equivalent(
+        self, uvd_zen_all_xx_meta: UVData, input_type: str
+    ) -> None:
+        """Check that UVData and antenna-position-dict inputs give the same redundant groups as a filename."""
+        xants = [0, 1, 2]
+        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants)
+
+        if input_type == "uvdata":
+            other = uvd_zen_all_xx_meta
+        else:
+            antpos = uvd_zen_all_xx_meta.telescope.get_enu_antpos()
+            other = dict(zip(uvd_zen_all_xx_meta.telescope.antenna_numbers, antpos))
+
+        r2, l2, a2 = utils.get_reds(other, xants=xants)
+        for _r1, _r2 in zip(r, r2):
+            np.testing.assert_array_equal(_r1, _r2)
+
+    def test_bl_len_and_deg_range(self, uvd_zen_all_xx_meta: UVData) -> None:
+        """Check that bl_len_range/bl_deg_range restrict the returned lengths/angles accordingly."""
+        bl_len_range = (14, 16)
+        bl_deg_range = (55, 65)
+        r, l, a = utils.get_reds(
+            uvd_zen_all_xx_meta, bl_len_range=bl_len_range, bl_deg_range=bl_deg_range
+        )
+        assert np.all([_l > bl_len_range[0] and _l < bl_len_range[1] for _l in l])
+        assert np.all([_a > bl_deg_range[0] and _a < bl_deg_range[1] for _a in a])
+
+    def test_min_ew_cut(self, uvd_zen_all_xx_meta: UVData) -> None:
+        """Check that min_EW_cut restricts to baselines along (or near) the EW axis."""
+        r, l, a = utils.get_reds(uvd_zen_all_xx_meta, bl_len_range=(14, 16), min_EW_cut=14)
+        assert len(l) == len(a) == 1
+        assert np.isclose(a[0] % 180, 0, atol=1)
+
+    def test_add_autos(self) -> None:
+        """Check that add_autos prepends a zero-length, zero-angle auto-correlation group."""
+        xants = [0, 1, 2]
+        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants, add_autos=True)
+        np.testing.assert_almost_equal(l[0], 0)
+        np.testing.assert_almost_equal(a[0], 0)
+        assert len(r) == 105
+
+    def test_raises_on_invalid_uvd_type(self) -> None:
+        """Check that a non-UVData, non-path, non-dict input raises a TypeError."""
+        with pytest.raises(TypeError, match="uvd must be a UVData object"):
+            utils.get_reds([1.0, 2.0])
+
+    def test_autos_only(self) -> None:
+        """Check that autos_only restricts every returned group to auto-correlation baselines."""
+        xants = [0, 1, 2]
+        r, l, a = utils.get_reds(
+            ZEN_ALL_XX_PATH, xants=xants, autos_only=True, add_autos=True
+        )
+        assert len(r) == 1
+        for bl in r[0]:
+            assert bl[0] == bl[1]
 
 
-def test_uvd_to_Tsys(uvd, beam_nf_dipole, vanilla_uvp):
+class TestConfigPspecBlpairs:
+    UV_TEMPLATE = str(DATA_PATH / "zen.{group}.{pol}.LST.1.28828.uvOCRSA")
 
-    # PROPER USAGE
-    # check different ways to call method work and are equivalent
-    # with or without future array shapes
-    tsys_estimate = utils.uvd_to_Tsys(uvd, beam_nf_dipole)
-    tsys_estimate2 = utils.uvd_to_Tsys(
-        uvd, str(DATA_PATH / "HERA_NF_dipole_power.beamfits")
-    )
-    assert np.allclose(tsys_estimate.data_array, tsys_estimate2.data_array)
-    uvp2, _ = testing.build_vanilla_uvpspec(beam=beam_nf_dipole)
-    tsys_estimate3 = utils.uvd_to_Tsys(uvd, uvp2)
-    assert np.allclose(tsys_estimate.data_array, tsys_estimate3.data_array)
+    def test_basic_execution(self) -> None:
+        """Check that a single (group, pol) pairing returns the expected blpair count."""
+        groupings = utils.config_pspec_blpairs(
+            self.UV_TEMPLATE,
+            [("xx", "xx")],
+            [("even", "odd")],
+            verbose=False,
+            exclude_auto_bls=True,
+        )
+        assert len(groupings) == 1
+        assert list(groupings.keys())[0] == (("even", "odd"), ("xx", "xx"))
+        assert len(list(groupings.values())[0]) == 11833
 
-    # CHECK ERROR CALLS
-    # uvp called for beam has no beam information
-    with pytest.raises(
-        ValueError, match="UVPSpec must have OmegaP and OmegaPP to make a beam"
-    ):
-        utils.uvd_to_Tsys(uvd, vanilla_uvp)
-    # beam has wrong format
-    with pytest.raises(
-        ValueError, match="beam must be a string, PSpecBeamBase subclass"
-    ):
-        utils.uvd_to_Tsys(uvd, 12.0)
+    def test_drops_pairs_with_missing_files(self) -> None:
+        """Check that requesting a (group, pol) combination with no matching files drops it from the result."""
+        groupings = utils.config_pspec_blpairs(
+            self.UV_TEMPLATE,
+            [("xx", "xx"), ("yy", "yy")],
+            [("even", "odd"), ("even", "odd")],
+            verbose=False,
+            exclude_auto_bls=True,
+        )
+        assert len(groupings) == 1
+        assert list(groupings.keys())[0] == (("even", "odd"), ("xx", "xx"))
+
+    def test_xants(self) -> None:
+        """Check that excluding antennas reduces the blpair count."""
+        groupings = utils.config_pspec_blpairs(
+            self.UV_TEMPLATE,
+            [("xx", "xx")],
+            [("even", "odd")],
+            xants=[0, 1, 2],
+            verbose=False,
+            exclude_auto_bls=True,
+        )
+        assert len(list(groupings.values())[0]) == 9735
+
+    def test_exclude_patterns(self) -> None:
+        """Check that exclude_patterns filters out all matching files, leaving an empty result."""
+        groupings = utils.config_pspec_blpairs(
+            self.UV_TEMPLATE,
+            [("xx", "xx"), ("yy", "yy")],
+            [("even", "odd"), ("even", "odd")],
+            exclude_patterns=["1.288"],
+            verbose=False,
+            exclude_auto_bls=True,
+        )
+        assert len(groupings) == 0
+
+    def test_raises_on_mismatched_pol_and_group_lengths(self) -> None:
+        """Check that mismatched pol-pair and group-pair list lengths raise an AssertionError."""
+        with pytest.raises(AssertionError, match="must equal len"):
+            utils.config_pspec_blpairs(
+                self.UV_TEMPLATE,
+                [("xx", "xx"), ("xx", "xx")],
+                [("even", "odd")],
+                verbose=False,
+            )
 
 
-def test_log(tmp_path):
-    """
-    Test that log() prints output.
-    """
-    # print
-    utils.log("message")
-    utils.log("message", lvl=2)
+class TestUvdToTsys:
+    def test_equivalent_beam_inputs(
+        self, uvd: UVData, beam_nf_dipole: PSpecBeamUV
+    ) -> None:
+        """Check that PSpecBeamBase, beamfits-path, and UVPSpec-with-beam inputs give equivalent Tsys estimates."""
+        tsys_estimate = utils.uvd_to_Tsys(uvd, beam_nf_dipole)
+        tsys_estimate2 = utils.uvd_to_Tsys(
+            uvd, str(DATA_PATH / "HERA_NF_dipole_power.beamfits")
+        )
+        assert np.allclose(tsys_estimate.data_array, tsys_estimate2.data_array)
 
-    # logfile
-    logf = open(tmp_path / "logf.log", "w")
-    utils.log("message", f=logf, verbose=False)
-    logf.close()
-    with open(tmp_path / "logf.log") as f:
-        assert f.readlines()[0] == "message"
+        uvp2, _ = testing.build_vanilla_uvpspec(beam=beam_nf_dipole)
+        tsys_estimate3 = utils.uvd_to_Tsys(uvd, uvp2)
+        assert np.allclose(tsys_estimate.data_array, tsys_estimate3.data_array)
 
-    # traceback
-    logf = open(tmp_path / "logf.log", "w")
-    try:
-        raise NameError
-    except NameError:
-        utils.log("raised an exception", f=logf, tb=sys.exc_info(), verbose=False)
-    logf.close()
-    with open(tmp_path / "logf.log") as f:
-        log = "".join(f.readlines())
+    def test_raises_on_uvpspec_without_beam(
+        self, uvd: UVData, vanilla_uvp: UVPSpec
+    ) -> None:
+        """Check that a UVPSpec without OmegaP/OmegaPP raises a ValueError."""
+        with pytest.raises(
+            ValueError, match="UVPSpec must have OmegaP and OmegaPP to make a beam"
+        ):
+            utils.uvd_to_Tsys(uvd, vanilla_uvp)
+
+    def test_raises_on_invalid_beam_type(self, uvd: UVData) -> None:
+        """Check that a beam argument of the wrong type raises a ValueError."""
+        with pytest.raises(
+            ValueError, match="beam must be a string, PSpecBeamBase subclass"
+        ):
+            utils.uvd_to_Tsys(uvd, 12.0)
+
+
+class TestLog:
+    def test_prints_message(self) -> None:
+        """Check that log() runs without raising for both default and explicit verbosity levels."""
+        utils.log("message")
+        utils.log("message", lvl=2)
+
+    def test_writes_to_logfile(self, tmp_path: Path) -> None:
+        """Check that log() writes the message verbatim to a given file handle."""
+        logf_path = tmp_path / "logf.log"
+        with open(logf_path, "w") as logf:
+            utils.log("message", f=logf, verbose=False)
+        with open(logf_path) as f:
+            assert f.readlines()[0] == "message"
+
+    def test_writes_traceback_to_logfile(self, tmp_path: Path) -> None:
+        """Check that log() includes the exception traceback when tb= is passed."""
+        logf_path = tmp_path / "logf.log"
+        with open(logf_path, "w") as logf:
+            try:
+                raise NameError
+            except NameError:
+                utils.log(
+                    "raised an exception", f=logf, tb=sys.exc_info(), verbose=False
+                )
+        with open(logf_path) as f:
+            log = "".join(f.readlines())
         assert "NameError" in log and "raised an exception" in log
 
 
-def test_get_blvec_reds():
-    fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
-    uvd = UVData()
-    uvd.read_miriad(fname)
+@pytest.fixture(scope="module")
+def blvec_reds(uvd: UVData) -> list:
+    """Redundant-baseline groups (by antenna position) for zen.2458042.17772.xx.HH.uvXA."""
     antpos, ants = uvd.get_enu_data_ants()
-    reds = redcal.get_pos_reds(dict(list(zip(ants, antpos))))
-    uvp = testing.uvpspec_from_data(fname, reds[:2], spw_ranges=[(10, 40)])
+    return redcal.get_pos_reds(dict(zip(ants, antpos)))
 
-    # test execution w/ dictionary
-    blvecs = dict(list(zip(uvp.bl_array, uvp.get_ENU_bl_vecs())))
-    (red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag) = utils.get_blvec_reds(
-        blvecs, bl_error_tol=1.0
+
+@pytest.fixture(scope="module")
+def uvp_two_red_grps(blvec_reds: list) -> UVPSpec:
+    """UVPSpec built from the first two redundant baseline groups, for get_blvec_reds tests."""
+    return testing.uvpspec_from_data(
+        ZEN_2458042_XX_PATH, blvec_reds[:2], spw_ranges=[(10, 40)]
     )
-    assert len(red_bl_grp) == 2
-    assert red_bl_tag == ["015_060", "015_120"]
-
-    # test w/ a UVPSpec
-    (red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag) = utils.get_blvec_reds(
-        uvp, bl_error_tol=1.0
-    )
-    assert len(red_bl_grp) == 2
-    assert red_bl_tag == ["015_060", "015_120"]
-
-    # test w/ zero tolerance: each blpair is its own group
-    (red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag) = utils.get_blvec_reds(
-        uvp, bl_error_tol=0.0
-    )
-    assert len(red_bl_grp) == uvp.Nblpairs
-
-    # test combine angles
-    uvp = testing.uvpspec_from_data(fname, reds[:3], spw_ranges=[(10, 40)])
-    (red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag) = utils.get_blvec_reds(
-        uvp, bl_error_tol=1.0, match_bl_lens=True
-    )
-    assert len(red_bl_grp) == 1
 
 
-def test_uvp_noise_error_arser():
-    # test argparser for noise error bars.
+class TestGetBlvecReds:
+    def test_with_dict_input(self, uvp_two_red_grps: UVPSpec) -> None:
+        """Check that get_blvec_reds groups a dict of baseline vectors into the expected redundant tags."""
+        blvecs = dict(zip(uvp_two_red_grps.bl_array, uvp_two_red_grps.get_ENU_bl_vecs()))
+        red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag = utils.get_blvec_reds(
+            blvecs, bl_error_tol=1.0
+        )
+        assert len(red_bl_grp) == 2
+        assert red_bl_tag == ["015_060", "015_120"]
+
+    def test_with_uvpspec_input(self, uvp_two_red_grps: UVPSpec) -> None:
+        """Check that get_blvec_reds gives the same grouping when fed a UVPSpec directly."""
+        red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag = utils.get_blvec_reds(
+            uvp_two_red_grps, bl_error_tol=1.0
+        )
+        assert len(red_bl_grp) == 2
+        assert red_bl_tag == ["015_060", "015_120"]
+
+    def test_zero_tolerance_separates_every_baseline(
+        self, uvp_two_red_grps: UVPSpec
+    ) -> None:
+        """Check that bl_error_tol=0.0 puts every blpair into its own group."""
+        red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag = utils.get_blvec_reds(
+            uvp_two_red_grps, bl_error_tol=0.0
+        )
+        assert len(red_bl_grp) == uvp_two_red_grps.Nblpairs
+
+    def test_match_bl_lens_combines_angles(self, blvec_reds: list) -> None:
+        """Check that match_bl_lens=True combines same-length groups across different angles."""
+        uvp = testing.uvpspec_from_data(
+            ZEN_2458042_XX_PATH, blvec_reds[:3], spw_ranges=[(10, 40)]
+        )
+        red_bl_grp, red_bl_len, red_bl_ang, red_bl_tag = utils.get_blvec_reds(
+            uvp, bl_error_tol=1.0, match_bl_lens=True
+        )
+        assert len(red_bl_grp) == 1
+
+
+def test_uvp_noise_error_parser() -> None:
+    """Check that the noise-error argparser parses container/auto-file/beam/groups arguments."""
     ap = utils.uvp_noise_error_parser()
     args = ap.parse_args(
         ["container.hdf5", "autos.uvh5", "beam.uvbeam", "--groups", "dset0_dset1"]
@@ -565,40 +696,60 @@ def test_uvp_noise_error_arser():
     assert args.spectra is None
 
 
-def test_job_monitor(tmp_path):
-    # open empty files
-    datafiles = [str(tmp_path / i) for i in ["a", "b", "c", "d"]]
+@pytest.fixture
+def job_monitor_datafiles(tmp_path: Path) -> list[str]:
+    """Four empty files for job_monitor's run_func to write into."""
+    datafiles = [str(tmp_path / name) for name in ["a", "b", "c", "d"]]
     for df in datafiles:
-        with open(df, "w") as f:
-            pass
+        open(df, "w").close()
+    return datafiles
 
-    def run_func(i, datafiles=datafiles):
-        # open file, perform action, finish
-        # if rand_num is above 0.7, fail!
+
+def _make_run_func(datafiles: list[str]) -> Callable[[int], int]:
+    """A run_func that writes to datafiles[i], failing ~30% of the time (raises ValueError above rand=0.7)."""
+
+    def run_func(i: int) -> int:
         try:
             rand_num = np.random.rand(1)[0]
             if rand_num > 0.7:
                 raise ValueError
-            df = datafiles[i]
-            with open(df, "a") as f:
+            with open(datafiles[i], "a") as f:
                 f.write("Hello World")
-        except:
+        except ValueError:
             return 1
-
         return 0
 
-    # set seed
-    np.random.seed(0)
-    # run over datafiles
-    failures = utils.job_monitor(
-        run_func, range(len(datafiles)), "test", maxiter=1, verbose=False
-    )
-    # assert job 1 failed
-    np.testing.assert_array_equal(failures, np.array([1]))
-    # try with reruns
-    np.random.seed(0)
-    failures = utils.job_monitor(
-        run_func, range(len(datafiles)), "test", maxiter=10, verbose=False
-    )
-    # assert no failures now
-    assert len(failures) == 0
+    return run_func
+
+
+class TestJobMonitor:
+    def test_records_failures_without_rerun(
+        self, job_monitor_datafiles: list[str]
+    ) -> None:
+        """Check that a single pass (maxiter=1) records the seeded random failure."""
+        np.random.seed(0)
+        # run over datafiles
+        run_func = _make_run_func(job_monitor_datafiles)
+        failures = utils.job_monitor(
+            run_func,
+            range(len(job_monitor_datafiles)),
+            "test",
+            maxiter=1,
+            verbose=False,
+        )
+        # assert job 1 failed
+        np.testing.assert_array_equal(failures, np.array([1]))
+
+    def test_reruns_clear_failures(self, job_monitor_datafiles: list[str]) -> None:
+        """Check that allowing reruns (maxiter=10) eventually clears all failures."""
+        np.random.seed(0)
+        run_func = _make_run_func(job_monitor_datafiles)
+        failures = utils.job_monitor(
+            run_func,
+            range(len(job_monitor_datafiles)),
+            "test",
+            maxiter=10,
+            verbose=False,
+        )
+        # assert no failures now
+        assert len(failures) == 0
