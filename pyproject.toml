@@ -65,7 +65,10 @@ docs = [
 ]
 tests = [
     "coverage>=7.0",
-    "pytest>=8.0",
+    # Upper bound: pytest 9.1 removed a parameter from the internal IdMaker
+    # class, which pytest-cases (<=3.10.1, the latest release) calls with the
+    # old signature, breaking collection. Relax once pytest-cases supports 9.1.
+    "pytest>=8.0,<9.1",
     "pytest-cov>=5.0",
     "pytest-cases>=3.8.0",
 ]

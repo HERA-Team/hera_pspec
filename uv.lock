@@ -786,7 +786,7 @@ dev = [
     { name = "nbsphinx", specifier = ">=0.9.0" },
     { name = "numpydoc", specifier = ">=0.8" },
     { name = "prek", specifier = ">=0.3.11" },
-    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest", specifier = ">=8.0,<9.1" },
     { name = "pytest-cases", specifier = ">=3.8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "readthedocs-sphinx-search", specifier = ">=0.1.1" },
@@ -805,7 +805,7 @@ docs = [
 ]
 tests = [
     { name = "coverage", specifier = ">=7.0" },
-    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest", specifier = ">=8.0,<9.1" },
     { name = "pytest-cases", specifier = ">=3.8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
 ]
