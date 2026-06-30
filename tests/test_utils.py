@@ -244,7 +244,9 @@ class TestSpwRange:
         """Check that tuple vs. list range arguments return the right output types, and bounds_error=False matches the equivalent in-bounds call."""
         spw1 = func(uvd_zen_2458042_xx, **{kwarg: range_value})
         spw2 = func(uvd_zen_2458042_xx, **{kwarg: range_list})
-        spw3 = func(uvd_zen_2458042_xx, **{kwarg: bounds_false_value}, bounds_error=False)
+        spw3 = func(
+            uvd_zen_2458042_xx, **{kwarg: bounds_false_value}, bounds_error=False
+        )
         spw4 = func(uvd_zen_2458042_xx, **{kwarg: equiv_value})
 
         # Make sure tuple vs. list arguments were handled correctly

@@ -2767,9 +2767,7 @@ class TestBroadcastDsetFlags:
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.2)
         assert not ds.dsets[0].get_flags(24, 25)[:, 550:650].any()
 
-    def test_no_spw_selection_broadcasts_globally(
-        self, uvd_zen_all_xx: UVData
-    ) -> None:
+    def test_no_spw_selection_broadcasts_globally(self, uvd_zen_all_xx: UVData) -> None:
         ds = pspecdata.PSpecData(
             dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
             wgts=[None, None],
