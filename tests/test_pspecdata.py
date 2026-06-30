@@ -1153,7 +1153,7 @@ class TestQHat:
         ds.set_taper(taper)
         warn_ctx = (
             pytest.warns(UserWarning, match="Poorly conditioned covariance")
-            if input_data_weight == "iC" and taper == taper_selection[0]
+            if input_data_weight == "iC"
             else nullcontext()
         )
 
@@ -1211,7 +1211,13 @@ class TestQHat:
             ds.set_r_param(key1, rpk)
             ds.set_r_param(key2, rpk)
         ds.set_taper(taper)
-        q_hat_a_slow = ds.q_hat(key1, key2, allow_fft=False)
+        warn_ctx = (
+            pytest.warns(UserWarning, match="Poorly conditioned covariance")
+            if input_data_weight == "iC"
+            else nullcontext()
+        )
+        with warn_ctx:
+            q_hat_a_slow = ds.q_hat(key1, key2, allow_fft=False)
         q_hat_a = ds.q_hat(key1, key2, allow_fft=True)
         assert np.isclose(np.real(q_hat_a / q_hat_a_slow), 1).all()
         assert np.isclose(np.imag(q_hat_a / q_hat_a_slow), 0, atol=1e-6).all()
