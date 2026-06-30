@@ -2094,22 +2094,22 @@ class TestGetAnalyticCovariance:
         # get_dlys() depends only on the spw/taper grid, not the cov_model,
         # so this matches what test_noise_floor_from_autos computes.
         noise_dlys = np.abs(uvp_fgdep_cov.get_dlys(0) * 1e9) > 1000
-        rms = []
-        for key in uvp_fgdep_cov.get_all_keys():
-            rms.append(
-                np.std(
-                    uvp_fgdep_cov.get_data(key)[:, ~noise_dlys].real
-                    / np.sqrt(
-                        np.mean(
-                            np.diagonal(
-                                uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2
-                            )[:, ~noise_dlys],
-                            axis=0,
-                        )
-                    ),
-                    axis=0,
-                )
+
+        rms = [
+            np.std(
+                uvp_fgdep_cov.get_data(key)[:, ~noise_dlys].real
+                / np.sqrt(
+                    np.mean(
+                        np.diagonal(
+                            uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2
+                        )[:, ~noise_dlys],
+                        axis=0,
+                    )
+                ),
+                axis=0,
             )
+            for key in uvp_fgdep_cov.get_all_keys()
+        ]
         rms = np.mean(rms, axis=0)
         assert np.isclose(np.mean(rms), 1.0, atol=0.1)
 
