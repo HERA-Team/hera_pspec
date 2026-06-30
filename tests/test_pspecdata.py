@@ -894,9 +894,7 @@ class TestGetMW:
         ):
             ds.get_MW(random_G, random_H, mode="H^-1", exact_norm=True)
 
-    def test_h_inv_mode(
-        self, random_G: np.ndarray, random_H: np.ndarray
-    ) -> None:
+    def test_h_inv_mode(self, random_G: np.ndarray, random_H: np.ndarray) -> None:
         ds = pspecdata.PSpecData()
         n = MW_TEST_N
         mode = "H^-1"
@@ -1879,9 +1877,7 @@ def analytic_covariance_setup(
 
 class TestGetAnalyticCovariance:
     @staticmethod
-    def _build_known_cov_test(
-        ds: pspecdata.PSpecData, bls1: list, bls2: list
-    ) -> dict:
+    def _build_known_cov_test(ds: pspecdata.PSpecData, bls1: list, bls2: list) -> dict:
         """Build a known_cov dict covering both the 'dsets' and 'fiducial'
         cov_models, for the diagonal-optimized-vs-general code path
         comparison."""
@@ -2140,7 +2136,6 @@ class TestPspec:
         )
         pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), n_dlys=1)
 
-
     def test_pspec_dayenu_weighting(self, pspec_ds) -> None:
         """Test dayenu (inverse-sinc) weighting: successful run and error handling for bad r_params."""
         rp = {
@@ -2200,13 +2195,14 @@ class TestPspec:
                 [[(24, 25), (38, 39)]], [[(24, 25), (38, 39)]], (0, 1), [("xx", "xx")]
             )
 
-
     def test_pspec_isotropic_beam_norm(self, bm_Q, uvd: UVData) -> None:
         """Test pspec() normalization with an isotropic beam: checks Q integral shape and
         that exact_norm=True and exact_norm=False agree to within 5%."""
         uvd_temp = copy.deepcopy(uvd)
         bls_Q = [(24, 25)]
-        ds_Q = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm_Q)
+        ds_Q = pspecdata.PSpecData(
+            dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm_Q
+        )
         ds_Q.pspec(
             bls_Q,
             bls_Q,
@@ -2228,7 +2224,9 @@ class TestPspec:
         assert np.allclose(np.real(estimated_Q), np.real(Q_sample), rtol=1e-05)
 
         # exact_norm=True vs exact_norm=False should agree to within 5%
-        ds_t = pspecdata.PSpecData(dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm_Q)
+        ds_t = pspecdata.PSpecData(
+            dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm_Q
+        )
         uvp_new = ds_t.pspec(
             bls_Q,
             bls_Q,
@@ -2257,7 +2255,6 @@ class TestPspec:
             / np.real(uvp_ext.get_data(key))
         )
         assert diff <= 0.05
-
 
     def test_pspec_baseline_formats(self, pspec_ds) -> None:
         """Test pspec() with redundant baseline groups from redcal and with mixed
@@ -2298,7 +2295,6 @@ class TestPspec:
             verbose=False,
         )
 
-
     def test_pspec_multiple_spws_and_select(self, beam_nf_dipole, uvd: UVData) -> None:
         """Test pspec() with multiple spectral windows and verify that select() works
         correctly on the resulting UVPSpec."""
@@ -2312,11 +2308,18 @@ class TestPspec:
             dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
         )
         uvp = ds.pspec(
-            bls1, bls2, (0, 1), ("xx", "xx"), spw_ranges=[(20, 30), (30, 40)], verbose=False
+            bls1,
+            bls2,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=[(20, 30), (30, 40)],
+            verbose=False,
         )
         assert uvp.Nblpairs == 16
         assert uvp.Nspws == 2
-        uvp2 = uvp.select(spws=0, bls=[(24, 25)], only_pairs_in_bls=False, inplace=False)
+        uvp2 = uvp.select(
+            spws=0, bls=[(24, 25)], only_pairs_in_bls=False, inplace=False
+        )
         assert uvp2.Nspws == 1
         assert uvp2.Nblpairs == 7
         uvp.select(spws=0, bls=(24, 25), only_pairs_in_bls=True, inplace=True)
@@ -2345,7 +2348,6 @@ class TestPspec:
         assert uvp.Ndlys == 10
         assert len(uvp.data_array) == 1
 
-
     def test_pspec_polarizations(self, beam_nf_dipole, uvd: UVData) -> None:
         """Test pspec() polarization handling: single pol, multi-pol, integer pol codes,
         warnings for unavailable pols, and errors when all pols fail validation."""
@@ -2355,7 +2357,12 @@ class TestPspec:
             dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
         )
         ds.pspec(
-            pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), spw_ranges=[(10, 24)], verbose=False
+            pspec_bls,
+            pspec_bls,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=[(10, 24)],
+            verbose=False,
         )
 
         # warn and skip unavailable pol in a multi-pol request
@@ -2420,7 +2427,9 @@ class TestPspec:
         uvd1 = copy.deepcopy(uvd)
         uvd1.polarization_array = np.array([-6])
         uvd2 = uvd + uvd1
-        ds = pspecdata.PSpecData(dsets=[uvd2, uvd2], wgts=[None, None], beam=beam_nf_dipole)
+        ds = pspecdata.PSpecData(
+            dsets=[uvd2, uvd2], wgts=[None, None], beam=beam_nf_dipole
+        )
         ds.pspec(
             pspec_bls,
             pspec_bls,
@@ -2444,7 +2453,6 @@ class TestPspec:
                 verbose=False,
             )
 
-
     @pytest.mark.filterwarnings(
         "ignore:Some integrations have zero nsamples, but non-zero weights"
     )
@@ -2458,8 +2466,9 @@ class TestPspec:
         uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [("xx", "xx")])
         assert np.all(np.isclose(uvp.integration_array[0], 0.0))
 
-
-    def test_pspec_covariance_models(self, beam_nf_dipole, uvd: UVData, uvd_std: UVData) -> None:
+    def test_pspec_covariance_models(
+        self, beam_nf_dipole, uvd: UVData, uvd_std: UVData
+    ) -> None:
         """Test pspec() covariance storage: empirical, dsets, and foreground_dependent cov_model,
         store_cov and store_cov_diag options, and that dsets/fiducial paths produce equal results."""
         bls1, bls2, _ = utils.construct_blpairs(
@@ -2550,7 +2559,6 @@ class TestPspec:
             np.real(uvp_cov_diag.get_stats("foreground_dependent_diag", key)) ** 2,
         ).all()
 
-
     def test_pspec_identity_caching(self, beam_nf_dipole, uvd: UVData) -> None:
         """Test that _identity_Y/G/H matrices are cached when baselines are identical
         and unflagged, and not reused when baselines differ in their flag patterns."""
@@ -2576,7 +2584,9 @@ class TestPspec:
         assert list(ds._identity_Y.keys())[0] == ((0, 24, 25, "xx"), (1, 24, 25, "xx"))
 
         # flagging one baseline breaks the symmetry: two cache entries expected
-        ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(37, 38, ordered=False), 25, :] = True
+        ds.dsets[0].flag_array[
+            ds.dsets[0].antpair2ind(37, 38, ordered=False), 25, :
+        ] = True
         ds.pspec(
             [(24, 25), (37, 38)],
             [(24, 25), (37, 38)],
@@ -2591,7 +2601,6 @@ class TestPspec:
         assert len(ds._identity_Y) == len(ds._identity_G) == len(ds._identity_H) == 2
         assert ((0, 24, 25, "xx"), (1, 24, 25, "xx")) in ds._identity_Y.keys()
         assert ((0, 37, 38, "xx"), (1, 37, 38, "xx")) in ds._identity_Y.keys()
-
 
     def test_pspec_exact_windows(self, uvd_zen_2458116) -> None:
         """Test pspec() with exact_windows=True using both a pre-computed FT beam file
@@ -2637,9 +2646,7 @@ class TestPspec:
 
 
 @pytest.fixture
-def normalization_setup(
-    beam_nf_dipole: PSpecBeamUV, uvd: UVData
-) -> tuple:
+def normalization_setup(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> tuple:
     """Interleaved-time, mK-scaled datasets and beam-derived OmegaP/OmegaPP, for
     comparing pspec() to PAPER-legacy OQE normalization."""
     d1 = uvd.select(
@@ -2710,9 +2717,7 @@ class TestNormalization:
         oqe = uvp.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[0]
 
         # assert answers are same to within 3%
-        assert np.isclose(
-            np.real(oqe) / np.real(legacy), 1, atol=0.03, rtol=0.03
-        ).all()
+        assert np.isclose(np.real(oqe) / np.real(legacy), 1, atol=0.03, rtol=0.03).all()
 
     def test_blackman_harris_taper_matches_legacy(
         self, normalization_setup: tuple
@@ -2751,9 +2756,7 @@ class TestNormalization:
         oqe = uvp.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[0]
 
         # assert answers are same to within 3%
-        assert np.isclose(
-            np.real(oqe) / np.real(legacy), 1, atol=0.03, rtol=0.03
-        ).all()
+        assert np.isclose(np.real(oqe) / np.real(legacy), 1, atol=0.03, rtol=0.03).all()
 
 
 @pytest.fixture
@@ -2874,9 +2877,7 @@ class TestRFIFlagPropagation:
     def test_r_shape(self, beam_nf_dipole: PSpecBeamUV, uvd_unflagged: UVData) -> None:
         Nfreq = uvd_unflagged.data_array.shape[1]
         ds = pspecdata.PSpecData(
-            dsets=[uvd_unflagged, uvd_unflagged],
-            wgts=[None, None],
-            beam=beam_nf_dipole,
+            dsets=[uvd_unflagged, uvd_unflagged], wgts=[None, None], beam=beam_nf_dipole
         )
         test_R = ds.R((1, 37, 38, "XX"))
         assert test_R.shape == (Nfreq, Nfreq)
@@ -3152,10 +3153,7 @@ class TestPspecRun:
         # assert spw_ranges and n_dlys specification worked
         np.testing.assert_array_equal(
             uvp.get_spw_ranges(),
-            [
-                (163476562.5, 165917968.75, 25, 20),
-                (170312500.0, 172265625.0, 20, 20),
-            ],
+            [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)],
         )
 
     def test_interleave_times_rephases_and_broadcasts_flags(
@@ -3183,9 +3181,7 @@ class TestPspecRun:
 
         # assert dsets are properly interleaved
         assert np.isclose(
-            (np.unique(ds.dsets[0].time_array) - np.unique(ds.dsets[1].time_array))[
-                0
-            ],
+            (np.unique(ds.dsets[0].time_array) - np.unique(ds.dsets[1].time_array))[0],
             -np.diff(np.unique(uvd.time_array))[0],
         )
 
@@ -3285,9 +3281,7 @@ class TestPspecRun:
         assert ds is None
         assert not os.path.exists(str(tmp_path / "out_nobl.h5"))
 
-    def test_warns_and_returns_none_with_preloaded_uvdata(
-        self, tmp_path: Path
-    ) -> None:
+    def test_warns_and_returns_none_with_preloaded_uvdata(self, tmp_path: Path) -> None:
         """Same as test_warns_and_returns_none_when_no_data_loaded but with
         pre-loaded UVDatas."""
         uvds = []

@@ -304,10 +304,7 @@ class TestStatsArray:
         u3 = uvp.average_spectra([blpairs], time_avg=True, inplace=False)
         with pytest.raises(KeyError, match="not found in stats_array keys"):
             uvp.average_spectra(
-                [blpairs],
-                time_avg=True,
-                inplace=False,
-                error_field=["..............."],
+                [blpairs], time_avg=True, inplace=False, error_field=["..............."]
             )
         assert not hasattr(u3, "stats_array")
 
@@ -606,9 +603,7 @@ class TestSelect:
             _uvp.polpair_array[0] = i
             uvp1 += _uvp
 
-        uvp1.select(
-            polpairs=[1414, 1313, 1212], blpairs=[101102101102, 102103102103]
-        )
+        uvp1.select(polpairs=[1414, 1313, 1212], blpairs=[101102101102, 102103102103])
         assert uvp1.Npols == 3
         assert uvp1.Nblpairs == 2
 
@@ -885,9 +880,7 @@ class TestGetExactWindowFunctions:
                 ftbeam=self.FT_FILE, spw_array=0, inplace=True, verbose=True
             )
 
-    def test_raises_on_spw_not_in_object(
-        self, uvp_exact_wfs: uvpspec.UVPSpec
-    ) -> None:
+    def test_raises_on_spw_not_in_object(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
         """Check that an out-of-range spw raises a ValueError (after the overwrite warning fires)."""
         uvp = copy.deepcopy(uvp_exact_wfs)
         with pytest.warns(
@@ -906,9 +899,7 @@ class TestGetExactWindowFunctions:
         with pytest.raises(TypeError, match="ftbeam must be a path-like object"):
             uvp_example_data.get_exact_window_functions(ftbeam=3.14, inplace=False)
 
-    def test_accepts_spw_array_as_list(
-        self, uvp_example_data: uvpspec.UVPSpec
-    ) -> None:
+    def test_accepts_spw_array_as_list(self, uvp_example_data: uvpspec.UVPSpec) -> None:
         """Check that spw_array can be fed as a single-element list."""
         uvp_example_data.get_exact_window_functions(
             ftbeam=self.FT_FILE, spw_array=[0], inplace=False

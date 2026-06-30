@@ -106,7 +106,12 @@ class TestDelaySpectrum:
 
         # Plot the spectra averaged over baseline-pairs and times
         f1 = plot.delay_spectrum(
-            uvp, [blps], spw=0, pol=("xx", "xx"), average_blpairs=True, average_times=True
+            uvp,
+            [blps],
+            spw=0,
+            pol=("xx", "xx"),
+            average_blpairs=True,
+            average_times=True,
         )
         elements = [(mpl.lines.Line2D, 1)]
         assert axes_contains(f1.axes[0], elements)
@@ -114,7 +119,12 @@ class TestDelaySpectrum:
 
         # Average over baseline-pairs but keep the time bins intact
         f2 = plot.delay_spectrum(
-            uvp, [blps], spw=0, pol=("xx", "xx"), average_blpairs=True, average_times=False
+            uvp,
+            [blps],
+            spw=0,
+            pol=("xx", "xx"),
+            average_blpairs=True,
+            average_times=False,
         )
         elements = [(mpl.lines.Line2D, uvp.Ntpairs)]
         assert axes_contains(f2.axes[0], elements)
@@ -122,7 +132,12 @@ class TestDelaySpectrum:
 
         # Average over times, but keep the baseline-pairs separate
         f3 = plot.delay_spectrum(
-            uvp, [blps], spw=0, pol=("xx", "xx"), average_blpairs=False, average_times=True
+            uvp,
+            [blps],
+            spw=0,
+            pol=("xx", "xx"),
+            average_blpairs=False,
+            average_times=True,
         )
         elements = [(mpl.lines.Line2D, uvp.Nblpairs)]
         assert axes_contains(f3.axes[0], elements)
@@ -317,11 +332,19 @@ class TestDelaySpectrum:
         # exceptions
         with pytest.raises(ValueError, match="Couldn't understand label_type foo"):
             plot.delay_spectrum(
-                large_uvp, large_uvp.get_blpairs()[:3], 0, ("xx", "xx"), label_type="foo"
+                large_uvp,
+                large_uvp.get_blpairs()[:3],
+                0,
+                ("xx", "xx"),
+                label_type="foo",
             )
         with pytest.raises(KeyError, match="Error variable.*not found in stats_array"):
             plot.delay_spectrum(
-                large_uvp, [large_uvp.get_blpairs()[0]], 0, ("xx", "xx"), error="not_a_stat"
+                large_uvp,
+                [large_uvp.get_blpairs()[0]],
+                0,
+                ("xx", "xx"),
+                error="not_a_stat",
             )
 
     def test_blpair_input_validation(self, uvp: UVPSpec) -> None:
@@ -412,7 +435,12 @@ class TestDelaySpectrum:
         # even if all series share the same (averaged) blpair group label.
         all_blpairs = uvp.get_blpairs()
         fig = plot.delay_spectrum(
-            uvp, [all_blpairs], 0, ("xx", "xx"), average_blpairs=True, average_times=True
+            uvp,
+            [all_blpairs],
+            0,
+            ("xx", "xx"),
+            average_blpairs=True,
+            average_times=True,
         )
         ax = fig.axes[0]
         assert "blpair=" not in ax.get_title()
@@ -755,9 +783,7 @@ class TestDelayWedge:
         )
         plt.close()
 
-    def test_raises_with_fewer_than_two_blpairs(
-        self, delay_wedge_uvp: UVPSpec
-    ) -> None:
+    def test_raises_with_fewer_than_two_blpairs(self, delay_wedge_uvp: UVPSpec) -> None:
         uvp = delay_wedge_uvp
         with pytest.raises(ValueError, match="at least two baseline pairs"):
             plot.delay_wedge(
