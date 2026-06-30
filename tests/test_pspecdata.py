@@ -2100,9 +2100,9 @@ class TestGetAnalyticCovariance:
                 uvp_fgdep_cov.get_data(key)[:, ~noise_dlys].real
                 / np.sqrt(
                     np.mean(
-                        np.diagonal(
-                            uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2
-                        )[:, ~noise_dlys],
+                        np.diagonal(uvp_fgdep_cov.get_cov(key).real, axis1=1, axis2=2)[
+                            :, ~noise_dlys
+                        ],
                         axis=0,
                     )
                 ),
