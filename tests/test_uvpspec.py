@@ -175,58 +175,75 @@ def test_get_array_funcs(
     np.testing.assert_almost_equal(result[first_idx], 1.0)
 
 
-@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-def test_get_funcs(uvp: uvpspec.UVPSpec) -> None:
-    # get dly
-    d = uvp.get_dlys(0)
-    assert len(d) == uvp.get_dlys(0).size
+class TestGetFuncs:
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_dlys(self, uvp: uvpspec.UVPSpec) -> None:
+        d = uvp.get_dlys(0)
+        assert len(d) == uvp.get_dlys(0).size
 
-    # get blpair seps
-    blp = uvp.get_blpair_seps()
-    assert len(blp) == 30
-    assert np.isclose(blp, 14.60, rtol=1e-1, atol=1e-1).all()
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_blpair_seps(self, uvp: uvpspec.UVPSpec) -> None:
+        blp = uvp.get_blpair_seps()
+        assert len(blp) == 30
+        assert np.isclose(blp, 14.60, rtol=1e-1, atol=1e-1).all()
 
-    # get kvecs
-    k_perp, k_para = uvp.get_kperps(0), uvp.get_kparas(0)
-    assert len(k_perp) == 30
-    assert len(k_para) == uvp.get_dlys(0).size
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_kperps_and_kparas(self, uvp: uvpspec.UVPSpec) -> None:
+        k_perp, k_para = uvp.get_kperps(0), uvp.get_kparas(0)
+        assert len(k_perp) == 30
+        assert len(k_para) == uvp.get_dlys(0).size
 
-    # test key expansion
-    key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
-    d = uvp.get_data(key)
-    assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_data_tuple_key(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check that get_data accepts a (spw, blpair, polpair) tuple key."""
+        key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
+        d = uvp.get_data(key)
+        assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
 
-    # test key as dictionary
-    key = {"spw": 0, "blpair": ((1, 2), (1, 2)), "polpair": ("xx", "xx")}
-    d = uvp.get_data(key)
-    assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_data_dict_key(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check that get_data accepts an equivalent {spw, blpair, polpair} dict key."""
+        key = {"spw": 0, "blpair": ((1, 2), (1, 2)), "polpair": ("xx", "xx")}
+        d = uvp.get_data(key)
+        assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
 
-    # test get_blpairs
-    blps = uvp.get_blpairs()
-    assert blps == [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))]
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_blpairs(self, uvp: uvpspec.UVPSpec) -> None:
+        blps = uvp.get_blpairs()
+        assert blps == [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))]
 
-    # test get_blpair_vecs
-    blp_vecs = uvp.get_blpair_blvecs()
-    assert blp_vecs.shape == (uvp.Nblpairs, 3)
-    blp_vecs2 = uvp.get_blpair_blvecs(use_second_bl=True)
-    assert np.isclose(blp_vecs, blp_vecs2).all()
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_blpair_blvecs(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check get_blpair_blvecs' output shape, and that use_second_bl gives the same vectors here."""
+        blp_vecs = uvp.get_blpair_blvecs()
+        assert blp_vecs.shape == (uvp.Nblpairs, 3)
+        blp_vecs2 = uvp.get_blpair_blvecs(use_second_bl=True)
+        assert np.isclose(blp_vecs, blp_vecs2).all()
 
-    # test get_polpairs
-    polpairs = uvp.get_polpairs()
-    assert polpairs == [("xx", "xx")]
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_polpairs(self, uvp: uvpspec.UVPSpec) -> None:
+        polpairs = uvp.get_polpairs()
+        assert polpairs == [("xx", "xx")]
 
-    # test get all keys
-    keys = uvp.get_all_keys()
-    assert keys == [
-        (0, ((1, 2), (1, 2)), ("xx", "xx")),
-        (0, ((2, 3), (2, 3)), ("xx", "xx")),
-        (0, ((1, 3), (1, 3)), ("xx", "xx")),
-    ]
-    # test omit_flags
-    uvp.integration_array[0][uvp.blpair_to_indices(((1, 2), (1, 2)))[:2]] = 0.0
-    assert uvp.get_integrations(
-        (0, ((1, 2), (1, 2)), ("xx", "xx")), omit_flags=True
-    ).shape == (8,)
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_all_keys(self, uvp: uvpspec.UVPSpec) -> None:
+        keys = uvp.get_all_keys()
+        assert keys == [
+            (0, ((1, 2), (1, 2)), ("xx", "xx")),
+            (0, ((2, 3), (2, 3)), ("xx", "xx")),
+            (0, ((1, 3), (1, 3)), ("xx", "xx")),
+        ]
+
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_get_integrations_omit_flags(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check that omit_flags drops zero-integration entries from the returned array."""
+        # deepcopy: case_* functions return the shared session-scoped fixture directly,
+        # and this test mutates integration_array in place.
+        uvp = copy.deepcopy(uvp)
+        uvp.integration_array[0][uvp.blpair_to_indices(((1, 2), (1, 2)))[:2]] = 0.0
+        assert uvp.get_integrations(
+            (0, ((1, 2), (1, 2)), ("xx", "xx")), omit_flags=True
+        ).shape == (8,)
 
 
 def test_get_covariance(uvp_with_covariance: uvpspec.UVPSpec) -> None:
@@ -246,78 +263,90 @@ def test_get_covariance(uvp_with_covariance: uvpspec.UVPSpec) -> None:
     assert cov_imag[0].shape == (24, 24)
 
 
-def test_stats_array(vanilla_uvp_with_beam: uvpspec.UVPSpec, tmp_path: Path) -> None:
-    # test get_data and set_data
-    uvp = copy.deepcopy(vanilla_uvp_with_beam)
-    keys = uvp.get_all_keys()
-    with pytest.raises(ValueError, match="must match data_array shape"):
-        uvp.set_stats("errors", keys[0], np.linspace(0, 1, 2))
-    with pytest.raises(AttributeError, match="No stats have been entered"):
-        uvp.get_stats("__", keys[0])
-    errs = np.ones((uvp.Ntimes, uvp.get_dlys(0).size))
-    for key in keys:
-        uvp.set_stats("errors", key, errs)
-    uvp.get_stats("errors", keys[0])
-    assert np.all(uvp.get_stats("errors", keys[0]) == errs)
+class TestStatsArray:
+    def test_set_get_average_and_io(
+        self, vanilla_uvp_with_beam: uvpspec.UVPSpec, tmp_path: Path
+    ) -> None:
+        """Check set_stats/get_stats validation, error-weighted averaging, and stats round-tripping through HDF5."""
+        uvp = copy.deepcopy(vanilla_uvp_with_beam)
+        keys = uvp.get_all_keys()
+        with pytest.raises(ValueError, match="must match data_array shape"):
+            uvp.set_stats("errors", keys[0], np.linspace(0, 1, 2))
+        with pytest.raises(AttributeError, match="No stats have been entered"):
+            uvp.get_stats("__", keys[0])
+        errs = np.ones((uvp.Ntimes, uvp.get_dlys(0).size))
+        for key in keys:
+            uvp.set_stats("errors", key, errs)
+        uvp.get_stats("errors", keys[0])
+        assert np.all(uvp.get_stats("errors", keys[0]) == errs)
 
-    blpairs = uvp.get_blpairs()
-    u = uvp.average_spectra(
-        [blpairs], time_avg=False, error_weights="errors", inplace=False
-    )
-    assert np.all(
-        np.isclose(
-            u.get_stats("errors", keys[0])[0], np.ones(u.Ndlys) / np.sqrt(len(blpairs))
+        blpairs = uvp.get_blpairs()
+        u = uvp.average_spectra(
+            [blpairs], time_avg=False, error_weights="errors", inplace=False
         )
-    )
-    for key in keys:
-        uvp.set_stats("who?", key, errs)
-    u = uvp.average_spectra(
-        [blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False
-    )
-    uvp.average_spectra(
-        [blpairs], time_avg=True, error_field=["errors", "who?"], inplace=False
-    )
-    assert np.all(u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0]))
-    u.select(times=np.unique(u.time_avg_array)[:20])
-
-    u3 = uvp.average_spectra([blpairs], time_avg=True, inplace=False)
-    with pytest.raises(KeyError, match="not found in stats_array keys"):
+        assert np.all(
+            np.isclose(
+                u.get_stats("errors", keys[0])[0],
+                np.ones(u.Ndlys) / np.sqrt(len(blpairs)),
+            )
+        )
+        for key in keys:
+            uvp.set_stats("who?", key, errs)
+        u = uvp.average_spectra(
+            [blpairs], time_avg=False, error_field=["errors", "who?"], inplace=False
+        )
         uvp.average_spectra(
-            [blpairs], time_avg=True, inplace=False, error_field=["..............."]
+            [blpairs], time_avg=True, error_field=["errors", "who?"], inplace=False
         )
-    assert not hasattr(u3, "stats_array")
+        assert np.all(u.get_stats("errors", keys[0]) == u.get_stats("who?", keys[0]))
+        u.select(times=np.unique(u.time_avg_array)[:20])
 
-    u.write_hdf5(tmp_path / "ex.hdf5")
-    u.read_hdf5(tmp_path / "ex.hdf5")
+        u3 = uvp.average_spectra([blpairs], time_avg=True, inplace=False)
+        with pytest.raises(KeyError, match="not found in stats_array keys"):
+            uvp.average_spectra(
+                [blpairs],
+                time_avg=True,
+                inplace=False,
+                error_field=["..............."],
+            )
+        assert not hasattr(u3, "stats_array")
 
-    # test folding
-    uvp = copy.deepcopy(vanilla_uvp_with_beam)
-    Ndlys = uvp.get_dlys(0).size
-    errs = np.repeat(np.arange(1, Ndlys + 1)[None], uvp.Ntimes, axis=0)
-    uvp.set_stats("test", keys[0], errs)
-    uvp.fold_spectra()
-    # fold by summing in inverse quadrature
-    folded_errs = np.sum(
-        [
-            1 / errs[:, 1 : Ndlys // 2][:, ::-1] ** 2.0,
-            1 / errs[:, Ndlys // 2 + 1 :] ** 2.0,
-        ],
-        axis=0,
-    ) ** (-0.5)
-    np.testing.assert_array_almost_equal(uvp.get_stats("test", keys[0]), folded_errs)
+        u.write_hdf5(tmp_path / "ex.hdf5")
+        u.read_hdf5(tmp_path / "ex.hdf5")
 
-    # test set_stats_slice
-    uvp = copy.deepcopy(vanilla_uvp_with_beam)
-    key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
-    uvp.set_stats("err", key, np.ones((uvp.Ntimes, uvp.get_dlys(0).size)))
-    uvp.set_stats_slice("err", 50, 0, above=True, val=10)
-    # ensure all dlys above 50 * 15 ns are set to 10 and all others set to 1
-    assert np.isclose(
-        uvp.get_stats("err", key)[:, np.abs(uvp.get_dlys(0) * 1e9) > 15 * 50], 10
-    ).all()
-    assert np.isclose(
-        uvp.get_stats("err", key)[:, np.abs(uvp.get_dlys(0) * 1e9) < 15 * 50], 1
-    ).all()
+    def test_fold_propagates_stats_in_inverse_quadrature(
+        self, vanilla_uvp_with_beam: uvpspec.UVPSpec
+    ) -> None:
+        """Check that fold_spectra combines stats_array errors by summing in inverse quadrature."""
+        uvp = copy.deepcopy(vanilla_uvp_with_beam)
+        key = uvp.get_all_keys()[0]
+        Ndlys = uvp.get_dlys(0).size
+        errs = np.repeat(np.arange(1, Ndlys + 1)[None], uvp.Ntimes, axis=0)
+        uvp.set_stats("test", key, errs)
+        uvp.fold_spectra()
+        # fold by summing in inverse quadrature
+        folded_errs = np.sum(
+            [
+                1 / errs[:, 1 : Ndlys // 2][:, ::-1] ** 2.0,
+                1 / errs[:, Ndlys // 2 + 1 :] ** 2.0,
+            ],
+            axis=0,
+        ) ** (-0.5)
+        np.testing.assert_array_almost_equal(uvp.get_stats("test", key), folded_errs)
+
+    def test_set_stats_slice(self, vanilla_uvp_with_beam: uvpspec.UVPSpec) -> None:
+        """Check that set_stats_slice sets values above a delay threshold while leaving values below it untouched."""
+        uvp = copy.deepcopy(vanilla_uvp_with_beam)
+        key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
+        uvp.set_stats("err", key, np.ones((uvp.Ntimes, uvp.get_dlys(0).size)))
+        uvp.set_stats_slice("err", 50, 0, above=True, val=10)
+        # ensure all dlys above 50 * 15 ns are set to 10 and all others set to 1
+        assert np.isclose(
+            uvp.get_stats("err", key)[:, np.abs(uvp.get_dlys(0) * 1e9) > 15 * 50], 10
+        ).all()
+        assert np.isclose(
+            uvp.get_stats("err", key)[:, np.abs(uvp.get_dlys(0) * 1e9) < 15 * 50], 1
+        ).all()
 
 
 def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> None:
@@ -375,170 +404,213 @@ def test_blpair_conversions(vanilla_uvp: uvpspec.UVPSpec) -> None:
     assert bp == 101102
 
 
-@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-def test_indices_funcs(uvp: uvpspec.UVPSpec) -> None:
-    # key to indices
-    spw, blpairts, pol = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
-    assert spw == 0
-    assert pol == 0
-    assert np.isclose(blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])).min()
-    spw, blpairts, pol = uvp.key_to_indices((0, 101102101102, ("xx", "xx")))
-    assert spw == 0
-    assert pol == 0
-    assert np.isclose(blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])).min()
+class TestIndicesFuncs:
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_key_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+        spw, blpairts, pol = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
+        assert spw == 0
+        assert pol == 0
+        assert np.isclose(
+            blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
+        ).min()
+        spw, blpairts, pol = uvp.key_to_indices((0, 101102101102, ("xx", "xx")))
+        assert spw == 0
+        assert pol == 0
+        assert np.isclose(
+            blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
+        ).min()
 
-    # Check different polpair specification methods give the same results
-    s1, b1, p1 = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
-    s2, b2, p2 = uvp.key_to_indices((0, ((1, 2), (1, 2)), ("xx", "xx")))
-    s3, b3, p3 = uvp.key_to_indices((0, ((1, 2), (1, 2)), "xx"))
-    assert p1 == p2 == p3
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_key_to_indices_polpair_formats_agree(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check that int, tuple, and single-pol-string polpair specs give the same indices."""
+        s1, b1, p1 = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
+        s2, b2, p2 = uvp.key_to_indices((0, ((1, 2), (1, 2)), ("xx", "xx")))
+        s3, b3, p3 = uvp.key_to_indices((0, ((1, 2), (1, 2)), "xx"))
+        assert p1 == p2 == p3
 
-    # spw to indices
-    spw1 = uvp.spw_to_dly_indices(0)
-    assert len(spw1) == uvp.get_dlys(0).size
-    spw2 = uvp.spw_to_freq_indices(0)
-    assert len(spw2) == uvp.Nfreqs
-    spw3 = uvp.spw_indices(0)
-    assert len(spw3) == uvp.Nspws
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_spw_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+        spw1 = uvp.spw_to_dly_indices(0)
+        assert len(spw1) == uvp.get_dlys(0).size
+        spw2 = uvp.spw_to_freq_indices(0)
+        assert len(spw2) == uvp.Nfreqs
+        spw3 = uvp.spw_indices(0)
+        assert len(spw3) == uvp.Nspws
 
-    # use spw tuple instead of spw index
-    spw1b = uvp.spw_to_dly_indices(uvp.get_spw_ranges()[0])
-    spw2b = uvp.spw_to_freq_indices(uvp.get_spw_ranges()[0])
-    spw3b = uvp.spw_indices(uvp.get_spw_ranges()[0])
-    np.testing.assert_array_equal(spw1, spw1b)
-    np.testing.assert_array_equal(spw2, spw2b)
-    np.testing.assert_array_equal(spw3, spw3b)
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_spw_to_indices_accepts_spw_tuple(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check that feeding a spw tuple (from get_spw_ranges()) matches feeding the spw index."""
+        spw1b = uvp.spw_to_dly_indices(uvp.get_spw_ranges()[0])
+        spw2b = uvp.spw_to_freq_indices(uvp.get_spw_ranges()[0])
+        spw3b = uvp.spw_indices(uvp.get_spw_ranges()[0])
+        np.testing.assert_array_equal(uvp.spw_to_dly_indices(0), spw1b)
+        np.testing.assert_array_equal(uvp.spw_to_freq_indices(0), spw2b)
+        np.testing.assert_array_equal(uvp.spw_indices(0), spw3b)
 
-    # pol to indices
-    pol = uvp.polpair_to_indices(("xx", "xx"))
-    assert len(pol) == 1
-    pol = uvp.polpair_to_indices(1515)
-    assert len(pol) == 1
-    pol = uvp.polpair_to_indices([("xx", "xx"), ("xx", "xx")])
-    assert len(pol) == 1
-    with pytest.raises(TypeError, match="polpair must be list of tuple or int or str"):
-        uvp.polpair_to_indices(3.14)
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_polpair_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+        pol = uvp.polpair_to_indices(("xx", "xx"))
+        print(pol)
+        assert len(pol) == 1
+        pol = uvp.polpair_to_indices(1515)
+        print(pol)
+        assert len(pol) == 1
+        pol = uvp.polpair_to_indices([("xx", "xx"), ("xx", "xx")])
+        print(pol)
+        assert len(pol) == 1
 
-    # test blpair to indices
-    inds = uvp.blpair_to_indices(101102101102)
-    assert np.isclose(inds, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])).min()
-    inds = uvp.blpair_to_indices(((1, 2), (1, 2)))
-    assert np.isclose(inds, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])).min()
-    inds = uvp.blpair_to_indices([101102101102, 101102101102])
-    inds = uvp.blpair_to_indices([((1, 2), (1, 2)), ((1, 2), (1, 2))])
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_polpair_to_indices_raises_on_invalid_type(
+        self, uvp: uvpspec.UVPSpec
+    ) -> None:
+        with pytest.raises(
+            TypeError, match="polpair must be list of tuple or int or str"
+        ):
+            uvp.polpair_to_indices(3.14)
 
-    # test time to indices
-    time = uvp.time_avg_array[5]
-    blpair = 101102101102
-    inds = uvp.time_to_indices(time=time)
-    assert len(inds) == 3
-    assert np.isclose(uvp.time_avg_array[inds], time, rtol=1e-10).all()
-    inds = uvp.time_to_indices(time=time, blpairs=[blpair])
-    assert len(inds) == 1
-    assert uvp.blpair_array[inds] == blpair
-    inds = uvp.time_to_indices(time=time, blpairs=blpair)
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_blpair_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check blpair_to_indices for scalar int/tuple inputs, and that list-of-duplicates inputs agree with the scalar result."""
+        expected = np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
+        inds = uvp.blpair_to_indices(101102101102)
+        assert np.isclose(inds, expected).min()
+        inds_tuple = uvp.blpair_to_indices(((1, 2), (1, 2)))
+        assert np.isclose(inds_tuple, expected).min()
+
+        inds_list = uvp.blpair_to_indices([101102101102, 101102101102])
+        np.testing.assert_array_equal(inds_list, inds)
+        inds_tuple_list = uvp.blpair_to_indices([((1, 2), (1, 2)), ((1, 2), (1, 2))])
+        np.testing.assert_array_equal(inds_tuple_list, inds_tuple)
+
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_time_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+        time = uvp.time_avg_array[5]
+        blpair = 101102101102
+        inds = uvp.time_to_indices(time=time)
+        assert len(inds) == 3
+        assert np.isclose(uvp.time_avg_array[inds], time, rtol=1e-10).all()
+        inds_blp = uvp.time_to_indices(time=time, blpairs=[blpair])
+        assert len(inds_blp) == 1
+        assert uvp.blpair_array[inds_blp] == blpair
+        # a scalar blpair should be equivalent to a single-element list
+        inds_scalar = uvp.time_to_indices(time=time, blpairs=blpair)
+        np.testing.assert_array_equal(inds_scalar, inds_blp)
 
 
-@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-def test_select(
-    uvp: uvpspec.UVPSpec, beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData
-) -> None:
-    Ndlys = uvp.get_dlys(0).size
-    # bl group select
-    uvp1 = copy.deepcopy(uvp)
-    uvp1.select(bls=[(1, 2)], inplace=True)
-    assert uvp1.Nblpairs == 1
-    assert uvp1.data_array[0].shape == (uvp.Ntimes, uvp.get_dlys(0).size, 1)
-    np.testing.assert_almost_equal(
-        uvp.data_array[0][0, 0, 0], (101.1021011020000001 + 0j)
-    )
+class TestSelect:
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_bl_group_select(self, uvp: uvpspec.UVPSpec) -> None:
+        uvp1 = copy.deepcopy(uvp)
+        uvp1.select(bls=[(1, 2)], inplace=True)
+        assert uvp1.Nblpairs == 1
+        assert uvp1.data_array[0].shape == (uvp.Ntimes, uvp.get_dlys(0).size, 1)
+        np.testing.assert_almost_equal(
+            uvp.data_array[0][0, 0, 0], (101.1021011020000001 + 0j)
+        )
 
-    # inplace vs not inplace, spw selection
-    bls = [(37, 38), (38, 39), (52, 53)]
-    rp = {
-        "filter_centers": [0.0],
-        "filter_half_widths": [250e-9],
-        "filter_factors": [1e-9],
-    }
-    r_params = {}
-    for bl in bls:
-        key1 = bl + ("xx",)
-        r_params[key1] = rp
+    def test_spw_and_bl_select_with_r_params(
+        self, beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData
+    ) -> None:
+        """Check chained spw- then bl-select (inplace=False), including that get_r_params follows the selection."""
+        bls = [(37, 38), (38, 39), (52, 53)]
+        rp = {
+            "filter_centers": [0.0],
+            "filter_half_widths": [250e-9],
+            "filter_factors": [1e-9],
+        }
+        r_params = {bl + ("xx",): rp for bl in bls}
 
-    uvp1 = testing.uvpspec_from_data(
-        uvd_zen_even_xx,
-        bls,
-        spw_ranges=[(20, 30), (60, 90)],
-        beam=beam_nf_dipole,
-        r_params=r_params,
-    )
-    uvp2 = uvp1.select(spws=0, inplace=False)
-    assert uvp2.Nspws == 1
-    uvp2 = uvp2.select(bls=[(37, 38), (38, 39)], inplace=False)
-    assert uvp2.Nblpairs == 1
-    assert uvp2.data_array[0].shape == (10, 10, 1)
-    np.testing.assert_almost_equal(
-        uvp2.data_array[0][0, 0, 0], (-3831605.3903496987 + 8103523.9604128916j)
-    )
-    assert len(uvp2.get_r_params().keys()) == 2
-    for rpkey in uvp2.get_r_params():
-        assert rpkey == (37, 38, "xx") or rpkey == (38, 39, "xx")
+        uvp1 = testing.uvpspec_from_data(
+            uvd_zen_even_xx,
+            bls,
+            spw_ranges=[(20, 30), (60, 90)],
+            beam=beam_nf_dipole,
+            r_params=r_params,
+        )
+        uvp2 = uvp1.select(spws=0, inplace=False)
+        assert uvp2.Nspws == 1
+        uvp2 = uvp2.select(bls=[(37, 38), (38, 39)], inplace=False)
+        assert uvp2.Nblpairs == 1
+        assert uvp2.data_array[0].shape == (10, 10, 1)
+        np.testing.assert_almost_equal(
+            uvp2.data_array[0][0, 0, 0], (-3831605.3903496987 + 8103523.9604128916j)
+        )
+        assert len(uvp2.get_r_params().keys()) == 2
+        for rpkey in uvp2.get_r_params():
+            assert rpkey == (37, 38, "xx") or rpkey == (38, 39, "xx")
 
-    # blpair select
-    uvp1 = copy.deepcopy(uvp)
-    uvp2 = uvp1.select(blpairs=[101102101102, 102103102103], inplace=False)
-    assert uvp2.Nblpairs == 2
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_blpair_select(self, uvp: uvpspec.UVPSpec) -> None:
+        uvp1 = copy.deepcopy(uvp)
+        uvp2 = uvp1.select(blpairs=[101102101102, 102103102103], inplace=False)
+        assert uvp2.Nblpairs == 2
 
-    # pol select
-    uvp2 = uvp.select(polpairs=[1515], inplace=False)
-    assert uvp2.polpair_array[0] == 1515
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_polpair_select(self, uvp: uvpspec.UVPSpec) -> None:
+        uvp2 = uvp.select(polpairs=[1515], inplace=False)
+        assert uvp2.polpair_array[0] == 1515
 
-    # time select
-    uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[:1], inplace=False)
-    assert uvp2.Ntimes == 1
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_time_select(self, uvp: uvpspec.UVPSpec) -> None:
+        uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[:1], inplace=False)
+        assert uvp2.Ntimes == 1
 
-    # test pol and blpair select, and check dimensionality of output
-    uvp1 = copy.deepcopy(uvp)
-    uvp1.set_stats(
-        "hi",
-        uvp.get_all_keys()[0],
-        np.ones(Ndlys * uvp1.Ntimes).reshape(uvp1.Ntimes, Ndlys),
-    )
-    uvp2 = uvp1.select(
-        blpairs=uvp1.get_blpairs(), polpairs=uvp1.polpair_array, inplace=False
-    )
-    assert uvp2.data_array[0].shape == (uvp1.Nbltpairs, Ndlys, 1)
-    assert uvp2.stats_array["hi"][0].shape == (uvp1.Nbltpairs, Ndlys, 1)
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_blpair_and_polpair_select_preserves_stats_shape(
+        self, uvp: uvpspec.UVPSpec
+    ) -> None:
+        """Check that selecting on the full blpair/polpair set preserves data_array and stats_array shapes."""
+        Ndlys = uvp.get_dlys(0).size
+        uvp1 = copy.deepcopy(uvp)
+        uvp1.set_stats(
+            "hi",
+            uvp.get_all_keys()[0],
+            np.ones(Ndlys * uvp1.Ntimes).reshape(uvp1.Ntimes, Ndlys),
+        )
+        uvp2 = uvp1.select(
+            blpairs=uvp1.get_blpairs(), polpairs=uvp1.polpair_array, inplace=False
+        )
+        assert uvp2.data_array[0].shape == (uvp1.Nbltpairs, Ndlys, 1)
+        assert uvp2.stats_array["hi"][0].shape == (uvp1.Nbltpairs, Ndlys, 1)
 
-    # test when both blp and pol array are non-sliceable
-    uvp2, uvp3, uvp4 = copy.deepcopy(uvp), copy.deepcopy(uvp), copy.deepcopy(uvp)
-    print(uvp.window_function_array[0].shape, uvp2.window_function_array[0].shape)
-    uvp2.polpair_array[0] = 1414
-    uvp3.polpair_array[0] = 1313
-    uvp4.polpair_array[0] = 1212
-    uvp1 = uvp + uvp2 + uvp3 + uvp4
-    uvp5 = uvp1.select(
-        blpairs=[101102101102], polpairs=[1515, 1414, 1313], inplace=False
-    )
-    assert uvp5.data_array[0].shape == (uvp.Ntimes * 1, Ndlys, 3)
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_non_sliceable_select_single_blpair_multi_pol(
+        self, uvp: uvpspec.UVPSpec
+    ) -> None:
+        """Check select() on a non-sliceable combination of one blpair and a subset of polpairs."""
+        Ndlys = uvp.get_dlys(0).size
+        uvp2, uvp3, uvp4 = copy.deepcopy(uvp), copy.deepcopy(uvp), copy.deepcopy(uvp)
+        uvp2.polpair_array[0] = 1414
+        uvp3.polpair_array[0] = 1313
+        uvp4.polpair_array[0] = 1212
+        uvp1 = uvp + uvp2 + uvp3 + uvp4
+        uvp5 = uvp1.select(
+            blpairs=[101102101102], polpairs=[1515, 1414, 1313], inplace=False
+        )
+        assert uvp5.data_array[0].shape == (uvp.Ntimes * 1, Ndlys, 3)
 
-    # select only on lst
-    uvp1 = copy.deepcopy(uvp)
-    uvp2 = uvp.select(lsts=np.unique(uvp1.lst_avg_array), inplace=False)
-    assert uvp1 == uvp2
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_lst_select(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check that selecting on the full set of lsts is a no-op."""
+        uvp2 = uvp.select(lsts=np.unique(uvp.lst_avg_array), inplace=False)
+        assert uvp == uvp2
 
-    # check non-sliceable select: both pol and blpairs are non-sliceable
-    uvp1 = copy.deepcopy(uvp)
-    # extend polpair_array axis
-    for i in [1414, 1313, 1212]:
-        _uvp = copy.deepcopy(uvp)
-        _uvp.polpair_array[0] = i
-        uvp1 += _uvp
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_non_sliceable_select_multi_blpair_multi_pol(
+        self, uvp: uvpspec.UVPSpec
+    ) -> None:
+        """Check select() on a non-sliceable combination of multiple blpairs and multiple polpairs."""
+        uvp1 = copy.deepcopy(uvp)
+        for i in [1414, 1313, 1212]:
+            _uvp = copy.deepcopy(uvp)
+            _uvp.polpair_array[0] = i
+            uvp1 += _uvp
 
-    # create a purposely non-sliceable select across *both* pol and blpair
-    uvp1.select(polpairs=[1414, 1313, 1212], blpairs=[101102101102, 102103102103])
-    assert uvp1.Npols == 3
-    assert uvp1.Nblpairs == 2
+        uvp1.select(
+            polpairs=[1414, 1313, 1212], blpairs=[101102101102, 102103102103]
+        )
+        assert uvp1.Npols == 3
+        assert uvp1.Nblpairs == 2
 
 
 def test_get_ENU_bl_vecs(vanilla_uvp: uvpspec.UVPSpec) -> None:
@@ -623,103 +695,146 @@ def test_write_read_hdf5(uvp: uvpspec.UVPSpec, tmp_path: Path) -> None:
     assert uvp.data_array[0].shape == (uvp.Nbltpairs, uvp.get_dlys(0).size, uvp.Npols)
 
 
-def test_sense(mutable_uvp_with_beam: uvpspec.UVPSpec) -> None:
-    uvp = mutable_uvp_with_beam
-    Ndlys = uvp.get_dlys(0).size
+class TestSense:
+    BASE_TSYS = 500
+    POLPAIR = ("xx", "xx")
 
-    # test generate noise spectra
-    polpair = ("xx", "xx")
-    P_N = uvp.generate_noise_spectra(0, polpair, 500, form="Pk", component="real")
-    assert P_N[101102101102].shape == (uvp.Ntimes, Ndlys)
+    def test_basic_execution(self, mutable_uvp_with_beam: uvpspec.UVPSpec) -> None:
+        """Check that generate_noise_spectra returns a P_N array of shape (Ntimes, Ndlys)."""
+        Ndlys = mutable_uvp_with_beam.get_dlys(0).size
+        P_N = mutable_uvp_with_beam.generate_noise_spectra(
+            0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="real"
+        )
+        assert P_N[101102101102].shape == (mutable_uvp_with_beam.Ntimes, Ndlys)
 
-    # test smaller system temp
-    P_N2 = uvp.generate_noise_spectra(0, polpair, 400, form="Pk", component="real")
-    assert (P_N[101102101102] > P_N2[101102101102]).all()
+    def test_lower_tsys_gives_lower_noise(
+        self, mutable_uvp_with_beam: uvpspec.UVPSpec
+    ) -> None:
+        """Check that a lower system temperature gives a lower noise power."""
+        P_N = mutable_uvp_with_beam.generate_noise_spectra(
+            0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="real"
+        )
+        P_N2 = mutable_uvp_with_beam.generate_noise_spectra(
+            0, self.POLPAIR, self.BASE_TSYS - 100, form="Pk", component="real"
+        )
+        assert (P_N[101102101102] > P_N2[101102101102]).all()
 
-    # test complex
-    P_N2 = uvp.generate_noise_spectra(0, polpair, 500, form="Pk", component="abs")
-    assert (P_N[101102101102] < P_N2[101102101102]).all()
+    def test_abs_component_exceeds_real(
+        self, mutable_uvp_with_beam: uvpspec.UVPSpec
+    ) -> None:
+        """Check that the abs() component is larger than the real component."""
+        P_N = mutable_uvp_with_beam.generate_noise_spectra(
+            0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="real"
+        )
+        P_N_abs = mutable_uvp_with_beam.generate_noise_spectra(
+            0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="abs"
+        )
+        assert (P_N[101102101102] < P_N_abs[101102101102]).all()
 
-    # test Dsq
-    Dsq = uvp.generate_noise_spectra(0, polpair, 500, form="DelSq", component="real")
-    assert Dsq[101102101102].shape == (uvp.Ntimes, Ndlys)
-    assert Dsq[101102101102][0, 1] < P_N[101102101102][0, 1]
+    def test_delsq_form(self, mutable_uvp_with_beam: uvpspec.UVPSpec) -> None:
+        """Check that the DelSq form has the right shape and is smaller than Pk at low k."""
+        Ndlys = mutable_uvp_with_beam.get_dlys(0).size
+        P_N = mutable_uvp_with_beam.generate_noise_spectra(
+            0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="real"
+        )
+        Dsq = mutable_uvp_with_beam.generate_noise_spectra(
+            0, self.POLPAIR, self.BASE_TSYS, form="DelSq", component="real"
+        )
+        assert Dsq[101102101102].shape == (mutable_uvp_with_beam.Ntimes, Ndlys)
+        assert Dsq[101102101102][0, 1] < P_N[101102101102][0, 1]
 
-    # test a blpair selection and int polpair
-    blpairs = uvp.get_blpairs()[:1]
-    P_N = uvp.generate_noise_spectra(
-        0, 1515, 500, form="Pk", blpairs=blpairs, component="real"
-    )
-    assert P_N[101102101102].shape == (uvp.Ntimes, Ndlys)
+    def test_blpair_selection_and_int_polpair(
+        self, mutable_uvp_with_beam: uvpspec.UVPSpec
+    ) -> None:
+        """Check that blpairs= restricts output and an integer polpair code is accepted."""
+        Ndlys = mutable_uvp_with_beam.get_dlys(0).size
+        blpairs = mutable_uvp_with_beam.get_blpairs()[:1]
+        P_N = mutable_uvp_with_beam.generate_noise_spectra(
+            0, 1515, self.BASE_TSYS, form="Pk", blpairs=blpairs, component="real"
+        )
+        assert P_N[101102101102].shape == (mutable_uvp_with_beam.Ntimes, Ndlys)
 
-    # test as a dictionary of arrays
-    Tsys = dict(
-        [
-            (
-                uvp.antnums_to_blpair(k),
-                500
-                * np.ones((uvp.Ntimes, Ndlys))
-                * np.linspace(1, 2, uvp.Ntimes)[:, None],
-            )
+    def test_tsys_as_dict_of_arrays_captures_time_gradient(
+        self, mutable_uvp_with_beam: uvpspec.UVPSpec
+    ) -> None:
+        """Check that a per-time Tsys array propagates: 2x Tsys gives 4x P_N."""
+        uvp = mutable_uvp_with_beam
+        blpairs = uvp.get_blpairs()[:1]
+        Tsys = {
+            uvp.antnums_to_blpair(k): self.BASE_TSYS
+            * np.ones((uvp.Ntimes, uvp.get_dlys(0).size))
+            * np.linspace(1, 2, uvp.Ntimes)[:, None]
             for k in uvp.get_blpairs()
-        ]
-    )
-    P_N = uvp.generate_noise_spectra(
-        0, 1515, Tsys, form="Pk", blpairs=blpairs, component="real"
-    )
-    # assert time gradient is captured: 2 * Tsys results in 4 * P_N
-    assert np.isclose(P_N[101102101102][0, 0] * 4, P_N[101102101102][-1, 0])
+        }
+        P_N = uvp.generate_noise_spectra(
+            0, 1515, Tsys, form="Pk", blpairs=blpairs, component="real"
+        )
+        # assert time gradient is captured: 2 * Tsys results in 4 * P_N
+        assert np.isclose(P_N[101102101102][0, 0] * 4, P_N[101102101102][-1, 0])
 
 
-@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-def test_average_spectra(uvp: uvpspec.UVPSpec) -> None:
-    uvp = copy.deepcopy(uvp)
-    Ndlys = uvp.get_dlys(0).size
+class TestAverageSpectra:
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_blpair_averaging(self, uvp: uvpspec.UVPSpec) -> None:
+        uvp1 = copy.deepcopy(uvp)
+        Ndlys = uvp1.get_dlys(0).size
+        blpairs = uvp1.get_blpair_groups_from_bl_groups(
+            [[101102, 102103, 101103]], only_pairs_in_bls=False
+        )
+        uvp2 = uvp1.average_spectra(
+            blpair_groups=blpairs, time_avg=False, inplace=False
+        )
+        assert uvp2.Nblpairs == 1
+        assert np.isclose(uvp2.get_nsamples((0, 101102101102, ("xx", "xx"))), 3.0).all()
+        assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (10, Ndlys)
 
-    # test blpair averaging
-    blpairs = uvp.get_blpair_groups_from_bl_groups(
-        [[101102, 102103, 101103]], only_pairs_in_bls=False
-    )
-    uvp2 = uvp.average_spectra(blpair_groups=blpairs, time_avg=False, inplace=False)
-    assert uvp2.Nblpairs == 1
-    assert np.isclose(uvp2.get_nsamples((0, 101102101102, ("xx", "xx"))), 3.0).all()
-    assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (10, Ndlys)
-
-    # Test blpair averaging (with baseline-pair weights)
-    # Results should be identical with different weights here, as the data
-    # are all the same)
-    blpairs = [[101102101102, 101102101102]]
-    blpair_wgts = [[2.0, 0.0]]
-    uvp3a = uvp.average_spectra(
-        blpair_groups=blpairs, time_avg=False, blpair_weights=None, inplace=False
-    )
-    uvp3b = uvp.average_spectra(
-        blpair_groups=blpairs, time_avg=False, blpair_weights=blpair_wgts, inplace=False
-    )
-    assert np.isclose(
-        uvp3a.get_data((0, 101102101102, ("xx", "xx"))),
-        uvp3b.get_data((0, 101102101102, ("xx", "xx"))),
-    ).all()
-
-    # test time averaging
-    uvp2 = uvp.average_spectra(time_avg=True, inplace=False)
-    assert uvp2.Ntimes == 1
-    assert np.isclose(uvp2.get_nsamples((0, 101102101102, ("xx", "xx"))), 10.0).all()
-    assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (1, Ndlys)
-    # ensure averaging works when multiple repeated baselines are present, but only
-    # if time_avg = True
-    uvp.blpair_array[uvp.blpair_to_indices(102103102103)] = 101102101102
-    with pytest.raises(ValueError):
-        uvp.average_spectra(
-            blpair_groups=[list(np.unique(uvp.blpair_array))],
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_blpair_averaging_with_weights(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check that blpair_weights don't change the result here, since the weighted baselines hold identical data."""
+        uvp1 = copy.deepcopy(uvp)
+        blpairs = [[101102101102, 101102101102]]
+        blpair_wgts = [[2.0, 0.0]]
+        uvp3a = uvp1.average_spectra(
+            blpair_groups=blpairs, time_avg=False, blpair_weights=None, inplace=False
+        )
+        uvp3b = uvp1.average_spectra(
+            blpair_groups=blpairs,
             time_avg=False,
+            blpair_weights=blpair_wgts,
             inplace=False,
         )
-    uvp.average_spectra(
-        blpair_groups=[list(np.unique(uvp.blpair_array))], time_avg=True
-    )
-    assert uvp.Ntimes == 1
-    assert uvp.Nblpairs == 1
+        assert np.isclose(
+            uvp3a.get_data((0, 101102101102, ("xx", "xx"))),
+            uvp3b.get_data((0, 101102101102, ("xx", "xx"))),
+        ).all()
+
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_time_averaging(self, uvp: uvpspec.UVPSpec) -> None:
+        uvp1 = copy.deepcopy(uvp)
+        Ndlys = uvp1.get_dlys(0).size
+        uvp2 = uvp1.average_spectra(time_avg=True, inplace=False)
+        assert uvp2.Ntimes == 1
+        assert np.isclose(
+            uvp2.get_nsamples((0, 101102101102, ("xx", "xx"))), 10.0
+        ).all()
+        assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (1, Ndlys)
+
+    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    def test_repeated_baselines_require_time_avg(self, uvp: uvpspec.UVPSpec) -> None:
+        """Check that averaging repeated baselines without time_avg raises, but works (and collapses Nblpairs) with time_avg=True."""
+        uvp1 = copy.deepcopy(uvp)
+        uvp1.blpair_array[uvp1.blpair_to_indices(102103102103)] = 101102101102
+        with pytest.raises(ValueError):
+            uvp1.average_spectra(
+                blpair_groups=[list(np.unique(uvp1.blpair_array))],
+                time_avg=False,
+                inplace=False,
+            )
+        uvp1.average_spectra(
+            blpair_groups=[list(np.unique(uvp1.blpair_array))], time_avg=True
+        )
+        assert uvp1.Ntimes == 1
+        assert uvp1.Nblpairs == 1
 
 
 def test_get_blpair_groups_from_bl_groups_input_validation(
@@ -739,67 +854,117 @@ def test_get_blpair_groups_from_bl_groups_input_validation(
         vanilla_uvp.get_blpair_groups_from_bl_groups([[]])
 
 
-def test_get_exact_window_functions(uvp_example_data: uvpspec.UVPSpec) -> None:
-    ft_file = DATA_PATH / "FT_beam_HERA_dipole_test"
+class TestGetExactWindowFunctions:
+    FT_FILE = DATA_PATH / "FT_beam_HERA_dipole_test"
 
-    uvp = copy.deepcopy(uvp_example_data)
+    def test_basic_execution(self, uvp_example_data: uvpspec.UVPSpec) -> None:
+        """Check that the fiducial inplace call sets exact_windows and the right array shape."""
+        uvp = copy.deepcopy(uvp_example_data)
+        uvp.get_exact_window_functions(ftbeam=self.FT_FILE, inplace=True)
+        assert uvp.exact_windows
+        assert uvp.window_function_array[0].shape[0] == uvp.Nbltpairs
+        # if not exact window function, array dim is 4
+        assert uvp.window_function_array[0].ndim == 5
 
-    # obtain exact_windows (fiducial usage)
-    uvp.get_exact_window_functions(ftbeam=ft_file, inplace=True)
-    assert uvp.exact_windows
-    assert uvp.window_function_array[0].shape[0] == uvp.Nbltpairs
-    # if not exact window function, array dim is 4
-    assert uvp.window_function_array[0].ndim == 5
-
-    # output exact_window functions but does not make them attributes
-    kperp_bins, kpara_bins, wf_array = uvp.get_exact_window_functions(
-        ftbeam=ft_file, inplace=False
-    )
-    # check if result is the same with and without inplace
-    assert np.allclose(wf_array[0], uvp.window_function_array[0])
-    # obtain exact window functions for one spw only
-    with pytest.warns(
-        UserWarning, match="Exact window functions already computed, overwriting"
-    ):
-        uvp.get_exact_window_functions(
-            ftbeam=ft_file, spw_array=0, inplace=True, verbose=True
+    def test_inplace_false_matches_inplace_true(
+        self, uvp_exact_wfs: uvpspec.UVPSpec
+    ) -> None:
+        """Check that inplace=False returns the same window functions as the inplace=True attribute."""
+        kperp_bins, kpara_bins, wf_array = uvp_exact_wfs.get_exact_window_functions(
+            ftbeam=self.FT_FILE, inplace=False
         )
-    # raise error if spw not in UVPSpec object
-    with pytest.warns(
-        UserWarning, match="Exact window functions already computed, overwriting"
-    ):
-        with pytest.raises(ValueError, match="input spw is not in UVPSpec.spw_array"):
-            uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=2, inplace=True)
-    with pytest.raises(TypeError, match="ftbeam must be a path-like object"):
-        uvp.get_exact_window_functions(ftbeam=3.14, inplace=False)
-    uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=[0], inplace=False)
-    with pytest.raises(TypeError, match="spw_array must be an integer or a sequence"):
-        uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=["bad"], inplace=False)
-    with pytest.raises(TypeError, match="spw_array must be an integer or a sequence"):
-        uvp.get_exact_window_functions(ftbeam=ft_file, spw_array=3.14, inplace=False)
-    with pytest.raises(TypeError, match="x_orientation must be a string or None"):
-        uvp.get_exact_window_functions(ftbeam=ft_file, x_orientation=1, inplace=False)
+        assert np.allclose(wf_array[0], uvp_exact_wfs.window_function_array[0])
 
-    uvp_multi = copy.deepcopy(uvp_example_data)
-    uvp_multi.spw_array = np.array([0, 1])
-    uvp_multi.Nspws = 2
-    with pytest.warns(
-        UserWarning,
-        match="inplace set to False because you are not considering all spectral windows in object.",
-    ):
-        uvp_multi.get_exact_window_functions(ftbeam=ft_file, spw_array=0, inplace=True)
+    def test_recompute_single_spw_warns(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
+        """Check that recomputing for one spw on an object with exact_windows already set warns."""
+        uvp = copy.deepcopy(uvp_exact_wfs)
+        with pytest.warns(
+            UserWarning, match="Exact window functions already computed, overwriting"
+        ):
+            uvp.get_exact_window_functions(
+                ftbeam=self.FT_FILE, spw_array=0, inplace=True, verbose=True
+            )
 
-    # give Gaussian beam as input
-    widths = -0.0343 * uvp.freq_array / 1e6 + 11.30
-    gaussian_beam = uvwindow.FTBeam.gaussian(
-        freq_array=uvp_example_data.freq_array, widths=widths, pol="xx"
-    )
-    with pytest.warns(
-        UserWarning, match="Exact window functions already computed, overwriting"
-    ):
-        uvp.get_exact_window_functions(
-            ftbeam=gaussian_beam, spw_array=0, inplace=True, verbose=True
+    def test_raises_on_spw_not_in_object(
+        self, uvp_exact_wfs: uvpspec.UVPSpec
+    ) -> None:
+        """Check that an out-of-range spw raises a ValueError (after the overwrite warning fires)."""
+        uvp = copy.deepcopy(uvp_exact_wfs)
+        with pytest.warns(
+            UserWarning, match="Exact window functions already computed, overwriting"
+        ):
+            with pytest.raises(
+                ValueError, match="input spw is not in UVPSpec.spw_array"
+            ):
+                uvp.get_exact_window_functions(
+                    ftbeam=self.FT_FILE, spw_array=2, inplace=True
+                )
+
+    def test_raises_on_invalid_ftbeam_type(
+        self, uvp_example_data: uvpspec.UVPSpec
+    ) -> None:
+        with pytest.raises(TypeError, match="ftbeam must be a path-like object"):
+            uvp_example_data.get_exact_window_functions(ftbeam=3.14, inplace=False)
+
+    def test_accepts_spw_array_as_list(
+        self, uvp_example_data: uvpspec.UVPSpec
+    ) -> None:
+        """Check that spw_array can be fed as a single-element list."""
+        uvp_example_data.get_exact_window_functions(
+            ftbeam=self.FT_FILE, spw_array=[0], inplace=False
         )
+
+    @pytest.mark.parametrize(
+        "bad_spw_array", [["bad"], 3.14], ids=["list_of_str", "float"]
+    )
+    def test_raises_on_invalid_spw_array_type(
+        self, uvp_example_data: uvpspec.UVPSpec, bad_spw_array
+    ) -> None:
+        with pytest.raises(
+            TypeError, match="spw_array must be an integer or a sequence"
+        ):
+            uvp_example_data.get_exact_window_functions(
+                ftbeam=self.FT_FILE, spw_array=bad_spw_array, inplace=False
+            )
+
+    def test_raises_on_invalid_x_orientation_type(
+        self, uvp_example_data: uvpspec.UVPSpec
+    ) -> None:
+        with pytest.raises(TypeError, match="x_orientation must be a string or None"):
+            uvp_example_data.get_exact_window_functions(
+                ftbeam=self.FT_FILE, x_orientation=1, inplace=False
+            )
+
+    def test_partial_spw_selection_forces_inplace_false_warns(
+        self, uvp_example_data: uvpspec.UVPSpec
+    ) -> None:
+        """Check that requesting one spw of a multi-spw object silently overrides inplace=True to False, with a warning."""
+        uvp_multi = copy.deepcopy(uvp_example_data)
+        uvp_multi.spw_array = np.array([0, 1])
+        uvp_multi.Nspws = 2
+        with pytest.warns(
+            UserWarning,
+            match="inplace set to False because you are not considering all spectral windows in object.",
+        ):
+            uvp_multi.get_exact_window_functions(
+                ftbeam=self.FT_FILE, spw_array=0, inplace=True
+            )
+
+    def test_gaussian_beam_input_warns_on_recompute(
+        self, uvp_exact_wfs: uvpspec.UVPSpec
+    ) -> None:
+        """Check that an FTBeam.gaussian object is accepted as ftbeam, and recomputation still warns."""
+        uvp = copy.deepcopy(uvp_exact_wfs)
+        widths = -0.0343 * uvp.freq_array / 1e6 + 11.30
+        gaussian_beam = uvwindow.FTBeam.gaussian(
+            freq_array=uvp.freq_array, widths=widths, pol="xx"
+        )
+        with pytest.warns(
+            UserWarning, match="Exact window functions already computed, overwriting"
+        ):
+            uvp.get_exact_window_functions(
+                ftbeam=gaussian_beam, spw_array=0, inplace=True, verbose=True
+            )
 
 
 class TestFoldSpectra:
@@ -919,21 +1084,61 @@ def test_set_cosmology(
     assert hasattr(uvp, "OmegaP")
 
 
+@pytest.fixture
+def uvp1_with_optionals(
+    uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+) -> uvpspec.UVPSpec:
+    """uvp1 (bls=[(37,38),(38,39),(52,53)], spw_ranges=[(20,30),(60,90)]) with dummy cov/stats/window-function optionals, for combine_uvpspec tests."""
+    uvp1 = testing.uvpspec_from_data(
+        uvd_zen_even_xx,
+        [(37, 38), (38, 39), (52, 53)],
+        spw_ranges=[(20, 30), (60, 90)],
+        beam=beam_nf_dipole,
+    )
+    return _add_optionals(uvp1)
+
+
+@pytest.fixture
+def uvp1_no_optionals(
+    uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+) -> uvpspec.UVPSpec:
+    """uvp1 (bls=[(37,38),(38,39),(52,53)], spw_ranges=[(20,30)]) without optionals, for combine_uvpspec __add__/history/cov_model tests."""
+    return testing.uvpspec_from_data(
+        uvd_zen_even_xx,
+        [(37, 38), (38, 39), (52, 53)],
+        spw_ranges=[(20, 30)],
+        beam=beam_nf_dipole,
+    )
+
+
+@pytest.fixture
+def uvp1_uvp2_blpairts_combined(
+    uvp1_with_optionals: uvpspec.UVPSpec,
+    uvd_zen_even_xx: UVData,
+    beam_nf_dipole: PSpecBeamUV,
+) -> tuple[uvpspec.UVPSpec, uvpspec.UVPSpec, uvpspec.UVPSpec]:
+    """(uvp1, uvp2, out): uvp2 extends uvp1's baselines with two new (non-overlapping) baselines, and out is their combine_uvpspec result."""
+    uvp2 = testing.uvpspec_from_data(
+        uvd_zen_even_xx,
+        [(53, 54), (67, 68)],
+        spw_ranges=[(20, 30), (60, 90)],
+        beam=beam_nf_dipole,
+    )
+    uvp2 = _add_optionals(uvp2)
+    out = uvpspec.combine_uvpspec([uvp1_with_optionals, uvp2], verbose=False)
+    return uvp1_with_optionals, uvp2, out
+
+
 class TestCombineUvpspec:
-    def test_combine_uvpspec(
-        self, tmp_path: Path, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+    def test_single_uvpspec_returned_unchanged(
+        self, uvp1_with_optionals: uvpspec.UVPSpec
     ) -> None:
-        bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(
-            uvd_zen_even_xx, bls, spw_ranges=[(20, 30), (60, 90)], beam=beam_nf_dipole
-        )
-        uvp1 = _add_optionals(uvp1)
+        """Check that combining a length-1 list returns the same object, not a copy."""
+        out = uvpspec.combine_uvpspec([uvp1_with_optionals], verbose=False)
+        assert id(out) == id(uvp1_with_optionals)
 
-        # test single UVPSpec
-        out = uvpspec.combine_uvpspec([uvp1], verbose=False)
-        assert id(out) == id(uvp1)
-
-        # test concat across pol
+    def test_concat_across_pol(self, uvp1_with_optionals: uvpspec.UVPSpec) -> None:
+        uvp1 = uvp1_with_optionals
         uvp2 = copy.deepcopy(uvp1)
         uvp2.polpair_array[0] = 1414
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
@@ -957,13 +1162,19 @@ class TestCombineUvpspec:
             assert out.window_function_array[spw].shape == (30, ndlys, ndlys, 2)
             assert out.cov_model == "empirical"
 
-        # test concat across spw
+    def test_concat_across_spw(
+        self,
+        uvp1_with_optionals: uvpspec.UVPSpec,
+        uvd_zen_even_xx: UVData,
+        beam_nf_dipole: PSpecBeamUV,
+    ) -> None:
+        bls = [(37, 38), (38, 39), (52, 53)]
         uvp2 = testing.uvpspec_from_data(
             uvd_zen_even_xx, bls, spw_ranges=[(85, 101)], beam=beam_nf_dipole
         )
         uvp2 = _add_optionals(uvp2)
 
-        out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
+        out = uvpspec.combine_uvpspec([uvp1_with_optionals, uvp2], verbose=False)
         assert out.Nspws == 3
         assert out.Nfreqs == 51
         assert out.Nspwdlys == 56
@@ -973,19 +1184,24 @@ class TestCombineUvpspec:
         assert len(out.window_function_array) == 3
         assert len(out.cov_array_real) == 3
 
-        # test concat across blpairts
-        uvp2 = testing.uvpspec_from_data(
-            uvd_zen_even_xx,
-            [(53, 54), (67, 68)],
-            spw_ranges=[(20, 30), (60, 90)],
-            beam=beam_nf_dipole,
-        )
-        uvp2 = _add_optionals(uvp2)
-        out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
+    def test_concat_across_blpairts(
+        self,
+        uvp1_uvp2_blpairts_combined: tuple[
+            uvpspec.UVPSpec, uvpspec.UVPSpec, uvpspec.UVPSpec
+        ],
+    ) -> None:
+        _, _, out = uvp1_uvp2_blpairts_combined
         assert out.Nblpairs == 4
         assert out.Nbls == 5
 
-        # test with delay averaging
+    def test_combine_with_delay_averaging(
+        self,
+        uvp1_uvp2_blpairts_combined: tuple[
+            uvpspec.UVPSpec, uvpspec.UVPSpec, uvpspec.UVPSpec
+        ],
+    ) -> None:
+        """Check that combine-then-delay-average matches delay-average-then-combine, and that combining mismatched delay-averaging raises."""
+        uvp1, uvp2, out = uvp1_uvp2_blpairts_combined
         new = grouping.average_in_delay_bins(out, kernel=np.array([1, 1, 1]))
         new1 = grouping.average_in_delay_bins(uvp1, kernel=np.array([1, 1, 1]))
         new2 = grouping.average_in_delay_bins(uvp2, kernel=np.array([1, 1, 1]))
@@ -1005,10 +1221,11 @@ class TestCombineUvpspec:
             assert out.stats_array["noise_err"][spw].shape == (40, ndlys, 1)
             assert out.window_function_array[spw].shape == (40, ndlys, ndlys, 1)
 
-        # test feed as strings
-        uvp1 = testing.uvpspec_from_data(
-            uvd_zen_even_xx, bls, spw_ranges=[(20, 30)], beam=beam_nf_dipole
-        )
+    def test_feed_as_strings(
+        self, uvp1_no_optionals: uvpspec.UVPSpec, tmp_path: Path
+    ) -> None:
+        """Check that combine_uvpspec accepts a list of HDF5 file paths instead of UVPSpec objects."""
+        uvp1 = uvp1_no_optionals
         uvp2 = copy.deepcopy(uvp1)
         uvp2.polpair_array[0] = 1414
         uvp1.write_hdf5(str(tmp_path / "uvp1.hdf5"), overwrite=True)
@@ -1018,7 +1235,9 @@ class TestCombineUvpspec:
         )
         assert out.Npols == 2
 
-        # test UVPSpec __add__
+    def test_uvpspec_add_operator(self, uvp1_no_optionals: uvpspec.UVPSpec) -> None:
+        """Check that the UVPSpec __add__ operator chains to combine more than two objects."""
+        uvp1 = uvp1_no_optionals
         uvp2 = copy.deepcopy(uvp1)
         uvp3 = copy.deepcopy(uvp1)
         uvp2.polpair_array[0] = 1414
@@ -1026,7 +1245,11 @@ class TestCombineUvpspec:
         out2 = uvp1 + uvp2 + uvp3
         assert out2.Npols == 3
 
-        # Test whether n_dlys != Nfreqs works
+    def test_combine_with_different_n_dlys_per_spw(
+        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+    ) -> None:
+        """Check that combining works when Ndlys differs from Nfreqs per spw (n_dlys != Nfreqs)."""
+        bls = [(37, 38), (38, 39), (52, 53)]
         uvp4 = testing.uvpspec_from_data(
             uvd_zen_even_xx,
             bls,
@@ -1034,18 +1257,13 @@ class TestCombineUvpspec:
             spw_ranges=[(20, 30), (60, 90)],
             n_dlys=[5, 15],
         )
-        print(
-            "test",
-            uvp4.window_function_array[0].shape,
-            uvp4.window_function_array[1].shape,
-        )
         uvp4b = copy.deepcopy(uvp4)
         uvp4b.polpair_array[0] = 1414
-        out = uvpspec.combine_uvpspec([uvp4, uvp4b], verbose=False)
+        uvpspec.combine_uvpspec([uvp4, uvp4b], verbose=False)
 
-        # test history adding
-        uvp_a = copy.deepcopy(uvp1)
-        uvp_b = copy.deepcopy(uvp1)
+    def test_history_merging(self, uvp1_no_optionals: uvpspec.UVPSpec) -> None:
+        uvp_a = copy.deepcopy(uvp1_no_optionals)
+        uvp_b = copy.deepcopy(uvp1_no_optionals)
         uvp_b.polpair_array[0] = 1414
         uvp_a.history = "batwing"
         uvp_b.history = "foobar"
@@ -1060,9 +1278,11 @@ class TestCombineUvpspec:
         )
         assert "batwing" in out.history and "foobar" not in out.history
 
-        # test no cov_array if cov_model is not consistent
-        uvp_a = copy.deepcopy(uvp1)
-        uvp_b = copy.deepcopy(uvp1)
+    def test_no_cov_array_if_cov_model_inconsistent(
+        self, uvp1_no_optionals: uvpspec.UVPSpec
+    ) -> None:
+        uvp_a = copy.deepcopy(uvp1_no_optionals)
+        uvp_b = copy.deepcopy(uvp1_no_optionals)
         uvp_b.cov_model = "foo"
         uvp_b.polpair_array = np.array([1414])
         out = uvpspec.combine_uvpspec([uvp_a, uvp_b], verbose=False)
@@ -1181,35 +1401,86 @@ class TestCombineUvpspec:
         with pytest.raises(ValueError, match="Conflict between weightings"):
             uvpspec.combine_uvpspec([uvp1, uvp5])
 
-    def test_combine_uvpspec_std(
-        self, tmp_path: Path, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
-    ) -> None:
-        uvd_std = copy.deepcopy(uvd_zen_even_xx)
-        bls = [(37, 38), (38, 39), (52, 53)]
-        uvp1 = testing.uvpspec_from_data(
-            uvd_zen_even_xx,
-            bls,
-            data_std=uvd_std,
-            spw_ranges=[(20, 24), (64, 68)],
-            beam=beam_nf_dipole,
-        )
-        # test failure due to overlapping data
-        uvp2 = copy.deepcopy(uvp1)
-        with pytest.raises(AssertionError, match="completely overlapping data"):
-            uvpspec.combine_uvpspec([uvp1, uvp2])
 
-        # test success across pol
+@pytest.fixture
+def uvp1_std(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> uvpspec.UVPSpec:
+    """uvp1 (bls=[(37,38),(38,39),(52,53)], spw_ranges=[(20,24),(64,68)]) with a data_std dataset, for combine_uvpspec_std tests."""
+    uvd_std = copy.deepcopy(uvd_zen_even_xx)
+    return testing.uvpspec_from_data(
+        uvd_zen_even_xx,
+        [(37, 38), (38, 39), (52, 53)],
+        data_std=uvd_std,
+        spw_ranges=[(20, 24), (64, 68)],
+        beam=beam_nf_dipole,
+    )
+
+
+@pytest.fixture
+def uvp1_uvp2_std_blpairts(
+    uvp1_std: uvpspec.UVPSpec, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+) -> tuple[uvpspec.UVPSpec, uvpspec.UVPSpec]:
+    """(uvp1, uvp2): uvp2 extends uvp1_std's baselines with two new (non-overlapping) baselines, both with data_std."""
+    uvd_std = copy.deepcopy(uvd_zen_even_xx)
+    uvp2 = testing.uvpspec_from_data(
+        uvd_zen_even_xx,
+        [(53, 54), (67, 68)],
+        spw_ranges=[(20, 24), (64, 68)],
+        data_std=uvd_std,
+        beam=beam_nf_dipole,
+    )
+    return uvp1_std, uvp2
+
+
+@pytest.fixture
+def uvp1_uvp2_std_strings(
+    uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+) -> tuple[uvpspec.UVPSpec, uvpspec.UVPSpec]:
+    """(uvp1, uvp2) (bls=[(37,38),(38,39),(52,53)], spw_ranges=[(20,30)], with data_std), uvp2 differing only in polpair."""
+    uvd_std = copy.deepcopy(uvd_zen_even_xx)
+    uvp1 = testing.uvpspec_from_data(
+        uvd_zen_even_xx,
+        [(37, 38), (38, 39), (52, 53)],
+        spw_ranges=[(20, 30)],
+        data_std=uvd_std,
+        beam=beam_nf_dipole,
+    )
+    uvp2 = copy.deepcopy(uvp1)
+    uvp2.polpair_array[0] = 1414
+    return uvp1, uvp2
+
+
+class TestCombineUvpspecStd:
+    def test_raises_on_fully_overlapping_data(self, uvp1_std: uvpspec.UVPSpec) -> None:
+        """Check that combining a dataset with itself (with a data_std present) raises on full overlap."""
+        uvp2 = copy.deepcopy(uvp1_std)
+        with pytest.raises(AssertionError, match="completely overlapping data"):
+            uvpspec.combine_uvpspec([uvp1_std, uvp2])
+
+    def test_succeeds_across_pol(self, uvp1_std: uvpspec.UVPSpec) -> None:
+        uvp2 = copy.deepcopy(uvp1_std)
         uvp2.polpair_array[0] = 1414
-        out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
+        out = uvpspec.combine_uvpspec([uvp1_std, uvp2], verbose=False)
         assert out.Npols == 2
         assert len(set(out.polpair_array) ^ set([1515, 1414])) == 0
 
-        # test multiple non-overlapping data axes
+    def test_raises_on_multiple_non_overlapping_axes(
+        self, uvp1_std: uvpspec.UVPSpec
+    ) -> None:
+        """Check that differing on both polpair and freq at once (two non-overlapping axes) raises."""
+        uvp2 = copy.deepcopy(uvp1_std)
+        uvp2.polpair_array[0] = 1414
         uvp2.freq_array[0] = 0.0
         with pytest.raises(AssertionError, match="partial overlap across spw"):
-            uvpspec.combine_uvpspec([uvp1, uvp2])
+            uvpspec.combine_uvpspec([uvp1_std, uvp2])
 
-        # test partial data overlap failure
+    def test_raises_on_partial_baseline_overlap(
+        self,
+        uvp1_std: uvpspec.UVPSpec,
+        uvd_zen_even_xx: UVData,
+        beam_nf_dipole: PSpecBeamUV,
+    ) -> None:
+        """Check that a uvp2 sharing only some baselines with uvp1 raises a partial-overlap error."""
+        uvd_std = copy.deepcopy(uvd_zen_even_xx)
         uvp2 = testing.uvpspec_from_data(
             uvd_zen_even_xx,
             [(37, 38), (38, 39), (53, 54)],
@@ -1218,48 +1489,68 @@ class TestCombineUvpspec:
             beam=beam_nf_dipole,
         )
         with pytest.raises(AssertionError, match="partial overlap"):
-            uvpspec.combine_uvpspec([uvp1, uvp2])
+            uvpspec.combine_uvpspec([uvp1_std, uvp2])
+
+    def test_raises_on_fully_overlapping_data_rebuilt(
+        self,
+        uvp1_std: uvpspec.UVPSpec,
+        uvd_zen_even_xx: UVData,
+        beam_nf_dipole: PSpecBeamUV,
+    ) -> None:
+        """Check that a uvp2 independently rebuilt with identical bls/spw_ranges still raises on full overlap."""
+        uvd_std = copy.deepcopy(uvd_zen_even_xx)
         uvp2 = testing.uvpspec_from_data(
             uvd_zen_even_xx,
-            bls,
+            [(37, 38), (38, 39), (52, 53)],
             spw_ranges=[(20, 24), (64, 68)],
             data_std=uvd_std,
             beam=beam_nf_dipole,
         )
         with pytest.raises(AssertionError, match="completely overlapping data"):
-            uvpspec.combine_uvpspec([uvp1, uvp2])
-        uvp2 = copy.deepcopy(uvp1)
-        uvp2.polpair_array[0] = 1414
-        uvp2 = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
-        with pytest.raises(AssertionError, match="partial overlap"):
-            uvpspec.combine_uvpspec([uvp1, uvp2])
+            uvpspec.combine_uvpspec([uvp1_std, uvp2])
 
-        # test concat across spw
+    def test_raises_on_partial_overlap_with_multi_pol_uvp(
+        self, uvp1_std: uvpspec.UVPSpec
+    ) -> None:
+        """Check that combining uvp1 (single pol) with a pre-merged two-pol uvp2 raises a partial-overlap error."""
+        uvp2 = copy.deepcopy(uvp1_std)
+        uvp2.polpair_array[0] = 1414
+        uvp2 = uvpspec.combine_uvpspec([uvp1_std, uvp2], verbose=False)
+        with pytest.raises(AssertionError, match="partial overlap"):
+            uvpspec.combine_uvpspec([uvp1_std, uvp2])
+
+    def test_concat_across_spw(
+        self,
+        uvp1_std: uvpspec.UVPSpec,
+        uvd_zen_even_xx: UVData,
+        beam_nf_dipole: PSpecBeamUV,
+    ) -> None:
+        uvd_std = copy.deepcopy(uvd_zen_even_xx)
         uvp2 = testing.uvpspec_from_data(
             uvd_zen_even_xx,
-            bls,
+            [(37, 38), (38, 39), (52, 53)],
             spw_ranges=[(85, 91)],
             data_std=uvd_std,
             beam=beam_nf_dipole,
         )
-        out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
+        out = uvpspec.combine_uvpspec([uvp1_std, uvp2], verbose=False)
         assert out.Nspws == 3
         assert out.Nfreqs == 14
         assert out.Nspwdlys == 14
 
-        # test concat across blpairts
-        uvp2 = testing.uvpspec_from_data(
-            uvd_zen_even_xx,
-            [(53, 54), (67, 68)],
-            spw_ranges=[(20, 24), (64, 68)],
-            data_std=uvd_std,
-            beam=beam_nf_dipole,
-        )
+    def test_concat_across_blpairts(
+        self, uvp1_uvp2_std_blpairts: tuple[uvpspec.UVPSpec, uvpspec.UVPSpec]
+    ) -> None:
+        uvp1, uvp2 = uvp1_uvp2_std_blpairts
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         assert out.Nblpairs == 4
         assert out.Nbls == 5
 
-        # test failure due to variable static metadata
+    def test_raises_on_inconsistent_static_metadata(
+        self, uvp1_uvp2_std_blpairts: tuple[uvpspec.UVPSpec, uvpspec.UVPSpec]
+    ) -> None:
+        """Check that mismatched static metadata (weighting, then a missing OmegaP/OmegaPP) raises during combine."""
+        uvp1, uvp2 = uvp1_uvp2_std_blpairts
         uvp2.weighting = "foo"
         with pytest.raises(
             AssertionError, match="not all agree on 'weighting' attribute"
@@ -1271,16 +1562,13 @@ class TestCombineUvpspec:
         with pytest.raises(AssertionError, match="not all agree on 'OmegaP' attribute"):
             uvpspec.combine_uvpspec([uvp1, uvp2])
 
-        # test feed as strings
-        uvp1 = testing.uvpspec_from_data(
-            uvd_zen_even_xx,
-            bls,
-            spw_ranges=[(20, 30)],
-            data_std=uvd_std,
-            beam=beam_nf_dipole,
-        )
-        uvp2 = copy.deepcopy(uvp1)
-        uvp2.polpair_array[0] = 1414
+    def test_feed_as_strings(
+        self,
+        uvp1_uvp2_std_strings: tuple[uvpspec.UVPSpec, uvpspec.UVPSpec],
+        tmp_path: Path,
+    ) -> None:
+        """Check that combine_uvpspec accepts a list of HDF5 file paths instead of UVPSpec objects (with data_std present)."""
+        uvp1, uvp2 = uvp1_uvp2_std_strings
         uvp1.write_hdf5(str(tmp_path / "uvp1.hdf5"), overwrite=True)
         uvp2.write_hdf5(str(tmp_path / "uvp2.hdf5"), overwrite=True)
         out = uvpspec.combine_uvpspec(
@@ -1288,7 +1576,11 @@ class TestCombineUvpspec:
         )
         assert out.Npols == 2
 
-        # test UVPSpec __add__
+    def test_uvpspec_add_operator(
+        self, uvp1_uvp2_std_strings: tuple[uvpspec.UVPSpec, uvpspec.UVPSpec]
+    ) -> None:
+        """Check that the UVPSpec __add__ operator chains to combine more than two objects (with data_std present)."""
+        uvp1, uvp2 = uvp1_uvp2_std_strings
         uvp3 = copy.deepcopy(uvp1)
         uvp3.polpair_array[0] = 1313
         out = uvp1 + uvp2 + uvp3
