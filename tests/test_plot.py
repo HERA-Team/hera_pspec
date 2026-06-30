@@ -22,9 +22,6 @@ from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
 
-# Data files to use in tests
-dfiles = ["zen.all.xx.LST.1.06964.uvA"]
-
 
 def axes_contains(ax: mpl.axes.Axes, obj_list: list[tuple[type, int]]) -> bool:
     """
@@ -55,21 +52,17 @@ def axes_contains(ax: mpl.axes.Axes, obj_list: list[tuple[type, int]]) -> bool:
 
 
 @pytest.fixture
-def uvd() -> UVData:
-    """Load the raw UVData from the test data file."""
-    uvdata = UVData()
-    uvdata.read_miriad(str(DATA_PATH / dfiles[0]))
-    return uvdata
-
-
-@pytest.fixture
-def pspec_ds(uvd: UVData, beam_nf_dipole: PSpecBeamUV) -> PSpecData:
-    """Build a PSpecData object (beam + two time-interleaved halves of uvd)."""
+def pspec_ds(uvd_zen_all_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> PSpecData:
+    """Build a PSpecData object (beam + two time-interleaved halves of uvd_zen_all_xx)."""
     bm = copy.deepcopy(beam_nf_dipole)
     bm.filename = "HERA_NF_dipole_power.beamfits"
     # Slide the time axis by one integration to avoid noise bias
-    uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
-    uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
+    uvd1 = uvd_zen_all_xx.select(
+        times=np.unique(uvd_zen_all_xx.time_array)[:-1:2], inplace=False
+    )
+    uvd2 = uvd_zen_all_xx.select(
+        times=np.unique(uvd_zen_all_xx.time_array)[1::2], inplace=False
+    )
     ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=bm)
     ds.rephase_to_dset(0)
     return ds
@@ -574,7 +567,7 @@ class TestDelayWaterfall:
 
 
 @pytest.mark.parametrize("data", ["data", "flags", "nsamples"])
-def test_uvdata_waterfalls(uvd: UVData, tmp_path: Path, data: str) -> None:
+def test_uvdata_waterfalls(uvd_zen_all_xx: UVData, tmp_path: Path, data: str) -> None:
     """
     Test waterfall plotter
     """
@@ -582,7 +575,7 @@ def test_uvdata_waterfalls(uvd: UVData, tmp_path: Path, data: str) -> None:
     outdir.mkdir()
     basename = str(outdir / "waterfall_{bl}_{pol}")
     plot.plot_uvdata_waterfalls(
-        uvd, basename, vmin=0, vmax=100, data=data, plot_mode="real"
+        uvd_zen_all_xx, basename, vmin=0, vmax=100, data=data, plot_mode="real"
     )
     figfiles = glob.glob(str(outdir / "waterfall_*_*.png"))
     assert len(figfiles) == 15

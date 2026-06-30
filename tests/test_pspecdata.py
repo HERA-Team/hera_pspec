@@ -155,8 +155,8 @@ def d_std(_miriad_raw):
 
 
 @pytest.fixture
-def uvd(_miriad_raw):
-    return copy.deepcopy(_miriad_raw("zen.2458042.17772.xx.HH.uvXA"))
+def uvd(uvd_zen_2458042_xx: UVData) -> UVData:
+    return copy.deepcopy(uvd_zen_2458042_xx)
 
 
 @pytest.fixture
@@ -1636,18 +1636,16 @@ def test_Jy_to_mK(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
     )
 
 
-def test_trim_dset_lsts() -> None:
-    fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
-    uvd1 = UVData()
-    uvd1.read_miriad(fname)
-    uvd2 = copy.deepcopy(uvd1)
+def test_trim_dset_lsts(uvd_zen_2458042_xx: UVData) -> None:
+    uvd2 = copy.deepcopy(uvd_zen_2458042_xx)
     uvd2.lst_array = (
         uvd2.lst_array + 10.0 * np.median(np.diff(np.unique(uvd2.lst_array)))
     ) % (2.0 * np.pi)
 
     # test basic execution
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None]
+        dsets=[copy.deepcopy(uvd_zen_2458042_xx), copy.deepcopy(uvd2)],
+        wgts=[None, None],
     )
     with pytest.warns(
         UserWarning, match="The lst_array is not self-consistent with the time_array"
@@ -1663,7 +1661,8 @@ def test_trim_dset_lsts() -> None:
     # test exception
     uvd2.lst_array += np.linspace(0, 1e-3, uvd2.Nblts)
     ds = pspecdata.PSpecData(
-        dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None]
+        dsets=[copy.deepcopy(uvd_zen_2458042_xx), copy.deepcopy(uvd2)],
+        wgts=[None, None],
     )
     with pytest.raises(
         ValueError, match="Not all datasets in self.dsets are on the same LST grid"
@@ -2759,48 +2758,38 @@ class TestNormalization:
         assert np.isclose(np.real(oqe) / np.real(legacy), 1, atol=0.03, rtol=0.03).all()
 
 
-@pytest.fixture
-def uvd_zen_all_lst(_miriad_raw) -> UVData:
-    """zen.all.xx.LST.1.06964.uvA, for broadcast_dset_flags tests.
-
-    Not deepcopied here: every consumer either deepcopies it before mutating,
-    or (in the one case that mutates it directly) deepcopies it itself.
-    """
-    return _miriad_raw("zen.all.xx.LST.1.06964.uvA")
-
-
 class TestBroadcastDsetFlags:
-    def test_spw_selection_limits_broadcast(self, uvd_zen_all_lst: UVData) -> None:
+    def test_spw_selection_limits_broadcast(self, uvd_zen_all_xx: UVData) -> None:
         ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd_zen_all_lst), copy.deepcopy(uvd_zen_all_lst)],
+            dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
             wgts=[None, None],
         )
         ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.2)
         assert not ds.dsets[0].get_flags(24, 25)[:, 550:650].any()
 
     def test_no_spw_selection_broadcasts_globally(
-        self, uvd_zen_all_lst: UVData
+        self, uvd_zen_all_xx: UVData
     ) -> None:
         ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd_zen_all_lst), copy.deepcopy(uvd_zen_all_lst)],
+            dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
             wgts=[None, None],
         )
         ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2)
         assert ds.dsets[0].get_flags(24, 25)[:, 550:650].any()
 
-    def test_unflag(self, uvd_zen_all_lst: UVData) -> None:
+    def test_unflag(self, uvd_zen_all_xx: UVData) -> None:
         ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd_zen_all_lst), copy.deepcopy(uvd_zen_all_lst)],
+            dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
             wgts=[None, None],
         )
         ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2, unflag=True)
         assert not ds.dsets[0].get_flags(24, 25)[:, :].any()
 
     def test_single_integration_flagged_within_spw(
-        self, uvd_zen_all_lst: UVData
+        self, uvd_zen_all_xx: UVData
     ) -> None:
         ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd_zen_all_lst), copy.deepcopy(uvd_zen_all_lst)],
+            dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
             wgts=[None, None],
         )
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25, ordered=False), 600, 0][
@@ -2811,12 +2800,12 @@ class TestBroadcastDsetFlags:
         assert not ds.dsets[0].get_flags(24, 25)[3, :].all()
 
     def test_pspec_zeroes_weights_for_flagged_integration(
-        self, uvd_zen_all_lst: UVData
+        self, uvd_zen_all_xx: UVData
     ) -> None:
         """Check that broadcast_dset_flags propagates to zero weight/integration in
         the resulting UVPSpec, and that data within the now-zero-weighted region
         doesn't affect the time-averaged result."""
-        uvd = copy.deepcopy(uvd_zen_all_lst)
+        uvd = copy.deepcopy(uvd_zen_all_xx)
         uvd.flag_array[uvd.antpair2ind(24, 25, ordered=False), 400, :][3] = True
         ds = pspecdata.PSpecData(
             dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)], wgts=[None, None]

@@ -20,22 +20,6 @@ ZEN_ALL_XX_PATH = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
 
 
 @pytest.fixture(scope="module")
-def uvd() -> UVData:
-    """zen.2458042.17772.xx.HH.uvXA, read with full data."""
-    uvdata = UVData()
-    uvdata.read_miriad(ZEN_2458042_XX_PATH)
-    return uvdata
-
-
-@pytest.fixture(scope="module")
-def uvd_zen_all_xx() -> UVData:
-    """zen.all.xx.LST.1.06964.uvA, read with full data."""
-    uvdata = UVData()
-    uvdata.read_miriad(ZEN_ALL_XX_PATH)
-    return uvdata
-
-
-@pytest.fixture(scope="module")
 def uvd_zen_all_xx_meta() -> UVData:
     """zen.all.xx.LST.1.06964.uvA, metadata only (read_data=False)."""
     uvdata = UVData()
@@ -84,35 +68,35 @@ class TestCircularAverage:
 
 
 class TestCov:
-    def test_basic_execution(self, uvd: UVData) -> None:
+    def test_basic_execution(self, uvd_zen_2458042_xx: UVData) -> None:
         """Check that cov() returns a complex Nfreq x Nfreq matrix for both auto- and cross-baseline inputs."""
-        d1 = uvd.get_data(24, 25)
-        w1 = (~uvd.get_flags(24, 25)).astype(float)
+        d1 = uvd_zen_2458042_xx.get_data(24, 25)
+        w1 = (~uvd_zen_2458042_xx.get_flags(24, 25)).astype(float)
         cov = utils.cov(d1, w1)
         assert cov.shape == (60, 60)
         assert cov.dtype == complex
 
-        d2 = uvd.get_data(37, 38)
-        w2 = (~uvd.get_flags(37, 38)).astype(float)
+        d2 = uvd_zen_2458042_xx.get_data(37, 38)
+        w2 = (~uvd_zen_2458042_xx.get_flags(37, 38)).astype(float)
         cov = utils.cov(d1, w2, d2=d2, w2=w2)
         assert cov.shape == (60, 60)
         assert cov.dtype == complex
 
-    def test_raises_on_complex_weights(self, uvd: UVData) -> None:
+    def test_raises_on_complex_weights(self, uvd_zen_2458042_xx: UVData) -> None:
         """Check that complex-valued weight matrices raise a TypeError."""
-        d1 = uvd.get_data(24, 25)
-        w1 = (~uvd.get_flags(24, 25)).astype(float)
-        d2 = uvd.get_data(37, 38)
-        w2 = (~uvd.get_flags(37, 38)).astype(float)
+        d1 = uvd_zen_2458042_xx.get_data(24, 25)
+        w1 = (~uvd_zen_2458042_xx.get_flags(24, 25)).astype(float)
+        d2 = uvd_zen_2458042_xx.get_data(37, 38)
+        w2 = (~uvd_zen_2458042_xx.get_flags(37, 38)).astype(float)
         with pytest.raises(TypeError, match="Weight matrices must be real"):
             utils.cov(d1, w1 * 1j)
         with pytest.raises(TypeError, match="Weight matrices must be real"):
             utils.cov(d1, w1, d2=d2, w2=w2 * 1j)
 
-    def test_raises_on_negative_weights(self, uvd: UVData) -> None:
+    def test_raises_on_negative_weights(self, uvd_zen_2458042_xx: UVData) -> None:
         """Check that a negative weight matrix raises a ValueError."""
-        d1 = uvd.get_data(24, 25)
-        w1 = -(~uvd.get_flags(24, 25)).astype(float)
+        d1 = uvd_zen_2458042_xx.get_data(24, 25)
+        w1 = -(~uvd_zen_2458042_xx.get_flags(24, 25)).astype(float)
         with pytest.raises(ValueError, match="Weight matrices must be positive"):
             utils.cov(d1, w1)
 
@@ -161,7 +145,7 @@ class TestSpwRange:
         ):
             func(np.arange(3), **{kwarg: range_value})
 
-    @pytest.mark.parametrize("obj_name", ["uvd", "vanilla_uvp"])
+    @pytest.mark.parametrize("obj_name", ["uvd_zen_2458042_xx", "vanilla_uvp"])
     @pytest.mark.parametrize(
         "func,kwarg,range_value,match",
         [
@@ -249,7 +233,7 @@ class TestSpwRange:
     )
     def test_valid_range_returns_correct_types(
         self,
-        uvd: UVData,
+        uvd_zen_2458042_xx: UVData,
         func: Callable,
         kwarg: str,
         range_value: tuple[float, float],
@@ -258,10 +242,10 @@ class TestSpwRange:
         equiv_value: tuple[float, float],
     ) -> None:
         """Check that tuple vs. list range arguments return the right output types, and bounds_error=False matches the equivalent in-bounds call."""
-        spw1 = func(uvd, **{kwarg: range_value})
-        spw2 = func(uvd, **{kwarg: range_list})
-        spw3 = func(uvd, **{kwarg: bounds_false_value}, bounds_error=False)
-        spw4 = func(uvd, **{kwarg: equiv_value})
+        spw1 = func(uvd_zen_2458042_xx, **{kwarg: range_value})
+        spw2 = func(uvd_zen_2458042_xx, **{kwarg: range_list})
+        spw3 = func(uvd_zen_2458042_xx, **{kwarg: bounds_false_value}, bounds_error=False)
+        spw4 = func(uvd_zen_2458042_xx, **{kwarg: equiv_value})
 
         # Make sure tuple vs. list arguments were handled correctly
         assert isinstance(spw1, tuple)
@@ -572,34 +556,34 @@ class TestConfigPspecBlpairs:
 
 class TestUvdToTsys:
     def test_equivalent_beam_inputs(
-        self, uvd: UVData, beam_nf_dipole: PSpecBeamUV
+        self, uvd_zen_2458042_xx: UVData, beam_nf_dipole: PSpecBeamUV
     ) -> None:
         """Check that PSpecBeamBase, beamfits-path, and UVPSpec-with-beam inputs give equivalent Tsys estimates."""
-        tsys_estimate = utils.uvd_to_Tsys(uvd, beam_nf_dipole)
+        tsys_estimate = utils.uvd_to_Tsys(uvd_zen_2458042_xx, beam_nf_dipole)
         tsys_estimate2 = utils.uvd_to_Tsys(
-            uvd, str(DATA_PATH / "HERA_NF_dipole_power.beamfits")
+            uvd_zen_2458042_xx, str(DATA_PATH / "HERA_NF_dipole_power.beamfits")
         )
         assert np.allclose(tsys_estimate.data_array, tsys_estimate2.data_array)
 
         uvp2, _ = testing.build_vanilla_uvpspec(beam=beam_nf_dipole)
-        tsys_estimate3 = utils.uvd_to_Tsys(uvd, uvp2)
+        tsys_estimate3 = utils.uvd_to_Tsys(uvd_zen_2458042_xx, uvp2)
         assert np.allclose(tsys_estimate.data_array, tsys_estimate3.data_array)
 
     def test_raises_on_uvpspec_without_beam(
-        self, uvd: UVData, vanilla_uvp: UVPSpec
+        self, uvd_zen_2458042_xx: UVData, vanilla_uvp: UVPSpec
     ) -> None:
         """Check that a UVPSpec without OmegaP/OmegaPP raises a ValueError."""
         with pytest.raises(
             ValueError, match="UVPSpec must have OmegaP and OmegaPP to make a beam"
         ):
-            utils.uvd_to_Tsys(uvd, vanilla_uvp)
+            utils.uvd_to_Tsys(uvd_zen_2458042_xx, vanilla_uvp)
 
-    def test_raises_on_invalid_beam_type(self, uvd: UVData) -> None:
+    def test_raises_on_invalid_beam_type(self, uvd_zen_2458042_xx: UVData) -> None:
         """Check that a beam argument of the wrong type raises a ValueError."""
         with pytest.raises(
             ValueError, match="beam must be a string, PSpecBeamBase subclass"
         ):
-            utils.uvd_to_Tsys(uvd, 12.0)
+            utils.uvd_to_Tsys(uvd_zen_2458042_xx, 12.0)
 
 
 class TestLog:
@@ -632,9 +616,9 @@ class TestLog:
 
 
 @pytest.fixture(scope="module")
-def blvec_reds(uvd: UVData) -> list:
+def blvec_reds(uvd_zen_2458042_xx: UVData) -> list:
     """Redundant-baseline groups (by antenna position) for zen.2458042.17772.xx.HH.uvXA."""
-    antpos, ants = uvd.get_enu_data_ants()
+    antpos, ants = uvd_zen_2458042_xx.get_enu_data_ants()
     return redcal.get_pos_reds(dict(zip(ants, antpos)))
 
 

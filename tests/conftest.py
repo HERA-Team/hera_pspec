@@ -120,6 +120,22 @@ def uvd_zen_even_xx() -> UVData:
     return uvd
 
 
+@pytest.fixture(scope="session")
+def uvd_zen_2458042_xx() -> UVData:
+    """Session-cached UVData from zen.2458042.17772.xx.HH.uvXA."""
+    uvd = UVData()
+    uvd.read_miriad(str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA"))
+    return uvd
+
+
+@pytest.fixture(scope="session")
+def uvd_zen_all_xx() -> UVData:
+    """Session-cached UVData from zen.all.xx.LST.1.06964.uvA."""
+    uvd = UVData()
+    uvd.read_miriad(str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA"))
+    return uvd
+
+
 @pytest.fixture
 def mutable_uvp(vanilla_uvp: UVPSpec) -> UVPSpec:
     """Function-scoped deep copy of vanilla_uvp for tests that mutate the object."""

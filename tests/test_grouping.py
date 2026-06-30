@@ -234,12 +234,11 @@ class TestGroupBaselines:
 
 
 @pytest.fixture(scope="session")
-def uvp_with_stats(beam_nf_dipole_wcosmo: PSpecBeamUV) -> tuple[UVPSpec, list]:
+def uvp_with_stats(
+    beam_nf_dipole_wcosmo: PSpecBeamUV, uvd_zen_all_xx: UVData
+) -> tuple[UVPSpec, list]:
     """UVPSpec from zen.all.xx.LST.1.06964.uvA with noise and simple stats."""
-    dfile = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
-    # Load into UVData objects
-    uvd = UVData()
-    uvd.read_miriad(dfile)
+    uvd = copy.deepcopy(uvd_zen_all_xx)
     # find conversion factor from Jy to mK
     Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
     uvd.data_array *= Jy_to_mK[None, :, None]

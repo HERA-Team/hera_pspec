@@ -1,3 +1,4 @@
+import copy
 from pathlib import Path
 
 import numpy as np
@@ -25,8 +26,11 @@ def _load_uvd(path: str) -> pyuvdata.UVData:
 
 
 @pytest.fixture()
-def uvd1() -> pyuvdata.UVData:
-    return _load_uvd(dset1)
+def uvd1(uvd_zen_all_xx: pyuvdata.UVData) -> pyuvdata.UVData:
+    uvd = copy.deepcopy(uvd_zen_all_xx)
+    uvd.vis_units = "Jy"
+    uvd.pol_convention = "avg"
+    return uvd
 
 
 @pytest.fixture()
