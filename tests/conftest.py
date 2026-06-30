@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from pyuvdata import UVData
+from astropy.utils import iers
 
 from hera_pspec import PSpecBeamUV, PSpecData, UVPSpec, conversions, grouping, utils
 from hera_pspec.data import DATA_PATH
@@ -16,6 +17,14 @@ from hera_pspec.testing import build_vanilla_uvpspec
 
 DATA_PATH = Path(DATA_PATH)
 
+# Prevent astropy from trying to download IERS data during tests (CI often blocks outbound traffic)
+iers.conf.auto_download = False
+
+def pytest_configure(config):
+    # Prevent IERS warnings from failing the test run
+    config.addinivalue_line(
+        "filterwarnings", "ignore::astropy.utils.iers.iers.IERSWarning"
+    )
 
 @pytest.fixture(scope="session")
 def cosmo() -> conversions.Cosmo_Conversions:
