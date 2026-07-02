@@ -96,7 +96,9 @@ class TestCosmoConversions:
         result = getattr(cosmo_h25, method)(*args, **kwargs)
         np.testing.assert_almost_equal(result, expected)
 
-    def test_little_h_false_scales_distances_by_h0_ratio(self, cosmo_h25: conversions.Cosmo_Conversions) -> None:
+    def test_little_h_false_scales_distances_by_h0_ratio(
+        self, cosmo_h25: conversions.Cosmo_Conversions
+    ) -> None:
         """Check that little_h=False distances scale by the H0 ratio relative to h=1."""
         result = cosmo_h25.DC(10.0, little_h=False)
         np.testing.assert_almost_equal(result, 6499.708111027144 * 100.0 / 25.12)
