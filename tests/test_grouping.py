@@ -284,40 +284,6 @@ def uvp_with_stats(
     return uvp, blpairs
 
 
-@pytest.fixture(scope="session")
-def uvp_with_exact_wf(
-    beam_nf_dipole_wcosmo: PSpecBeamUV, uvd_zen_2458116: UVData
-) -> tuple[UVPSpec, list]:
-    """UVPSpec from uvd_zen_2458116 with exact window functions."""
-    ds = pspecdata.PSpecData(
-        dsets=[uvd_zen_2458116, uvd_zen_2458116],
-        wgts=[None, None],
-        beam=beam_nf_dipole_wcosmo,
-    )
-    baselines1, baselines2, _ = utils.construct_blpairs(
-        uvd_zen_2458116.get_antpairs()[1:],
-        exclude_permutations=False,
-        exclude_auto_bls=True,
-    )
-    # compute ps
-    uvp = ds.pspec(
-        baselines1,
-        baselines2,
-        dsets=(0, 1),
-        pols=[("xx", "xx")],
-        spw_ranges=(175, 195),
-        taper="bh",
-        verbose=False,
-    )
-    # get exact window functions
-    uvp.get_exact_window_functions(
-        ftbeam=DATA_PATH / "FT_beam_HERA_dipole_test",
-        spw_array=None,
-        inplace=True,
-        verbose=False,
-    )
-    blpair_groups, _, _ = uvp.get_red_blpairs()
-    return uvp, blpair_groups
 
 
 class TestAverageSpectra:
@@ -415,11 +381,9 @@ class TestAverageSpectra:
         ).all()
         assert np.all(~np.isfinite(final_stat[0]))
 
-    def test_exact_wf_time_average(
-        self, uvp_with_exact_wf: tuple[UVPSpec, list]
-    ) -> None:
+    def test_exact_wf_time_average(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that time-averaging with exact window functions collapses Ntpairs to Nblpairs and preserves the WF array shape."""
-        uvp, _ = uvp_with_exact_wf
+        uvp = uvp_exact_wfs
         # time average
         uvp_time_avg = grouping.average_spectra(
             uvp,
@@ -435,11 +399,10 @@ class TestAverageSpectra:
         assert uvp_time_avg.Nbltpairs == uvp_time_avg.Nblpairs
         assert uvp_time_avg.window_function_array[0].shape[0] == uvp_time_avg.Nbltpairs
 
-    def test_exact_wf_redundant_average(
-        self, uvp_with_exact_wf: tuple[UVPSpec, list]
-    ) -> None:
+    def test_exact_wf_redundant_average(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that redundant-baseline averaging with exact window functions gives Nbltpairs == Ntpairs."""
-        uvp, blpair_groups = uvp_with_exact_wf
+        uvp = uvp_exact_wfs
+        blpair_groups, _, _ = uvp.get_red_blpairs()
         # redundant average
         uvp_red_avg = grouping.average_spectra(
             uvp,
@@ -454,12 +417,10 @@ class TestAverageSpectra:
         )
         assert uvp_red_avg.Nbltpairs == uvp_red_avg.Ntpairs
 
-    def test_exact_wf_combined_average(
-        self, uvp_with_exact_wf: tuple[UVPSpec, list]
-    ) -> None:
+    def test_exact_wf_combined_average(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that combined time and redundant averaging with error_field runs without error."""
-        uvp, blpair_groups = uvp_with_exact_wf
-        uvp = copy.deepcopy(uvp)  # don't mutate the shared session fixture
+        uvp = copy.deepcopy(uvp_exact_wfs)
+        blpair_groups, _, _ = uvp.get_red_blpairs()
         # both time+redundant avg + error_weights
         keys = uvp.get_all_keys()
         # Add the analytic noise to stat_array
@@ -963,14 +924,12 @@ class TestSpherical:
             sph.window_function_array[0][:, :, :4, :], sph2.window_function_array[0]
         )
 
-    def test_average_exact_windows(
-        self, uvp_with_exact_wf: tuple[UVPSpec, list]
-    ) -> None:
+    def test_average_exact_windows(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that spherical_average runs for a UVPSpec with exact window functions, with and without blpair_groups."""
-        uvp, blpair_groups = uvp_with_exact_wf
-        grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS)
+        blpair_groups, _, _ = uvp_exact_wfs.get_red_blpairs()
+        grouping.spherical_average(uvp_exact_wfs, self.KBINS, self.BIN_WIDTHS)
         grouping.spherical_average(
-            uvp, self.KBINS, self.BIN_WIDTHS, blpair_groups=blpair_groups
+            uvp_exact_wfs, self.KBINS, self.BIN_WIDTHS, blpair_groups=blpair_groups
         )
 
     def test_wf_shape(self, uvp_exact_wfs: UVPSpec) -> None:

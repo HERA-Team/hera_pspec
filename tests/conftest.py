@@ -114,11 +114,13 @@ def uvp_example_data(uvd_zen_2458116: UVData) -> UVPSpec:
 
 
 @pytest.fixture(scope="session")
-def uvp_exact_wfs(uvp_example_data) -> UVPSpec:
+def uvp_exact_wfs(uvp_example_data, beam_nf_dipole_wcosmo: PSpecBeamUV) -> UVPSpec:
     uvp = copy.deepcopy(uvp_example_data)
     ft_file = DATA_PATH / "FT_beam_HERA_dipole_test"
 
     uvp.get_exact_window_functions(ftbeam=ft_file, inplace=True)
+    uvp.beam_freqs = beam_nf_dipole_wcosmo.beam_freqs
+    uvp.OmegaP, uvp.OmegaPP = beam_nf_dipole_wcosmo.get_Omegas(uvp.polpair_array)
     uvp.check()
     return uvp
 
