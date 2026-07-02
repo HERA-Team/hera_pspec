@@ -325,8 +325,7 @@ class TestUVWindowInit:
     ) -> None:
         ft_beam_full = make_ft_beam_obj()
         with pytest.raises(
-            ValueError,
-            match="Spectral ranges of the two FTBeam objects do not match",
+            ValueError, match="Spectral ranges of the two FTBeam objects do not match"
         ):
             uvwindow.UVWindow(ftbeam_obj=(ft_beam_spw, ft_beam_full))
 
@@ -477,9 +476,7 @@ class TestUVWindowKperp4blFreq:
         make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
     ) -> None:
         ngrid = make_ft_beam_obj().ft_beam.shape[-1]
-        with pytest.raises(
-            ValueError, match="Choose frequency within spectral window"
-        ):
+        with pytest.raises(ValueError, match="Choose frequency within spectral window"):
             uvwindow_obj._kperp4bl_freq(freq=1.35e8, bl_len=lens[12], ngrid=ngrid)
 
     def test_not_in_hz(
@@ -560,8 +557,7 @@ class TestUVWindowGetWfForTau:
 class TestUVWindowGetKperpBins:
     def test_empty_list_error(self, uvwindow_obj: uvwindow.UVWindow) -> None:
         with pytest.raises(
-            ValueError,
-            match="get_kperp_bins\\(\\) requires array of baseline lengths",
+            ValueError, match="get_kperp_bins\\(\\) requires array of baseline lengths"
         ):
             uvwindow_obj.get_kperp_bins(bl_lens=[])
 
@@ -771,9 +767,7 @@ class TestUVWindowCylindricalToSpherical:
     ) -> None:
         bl_len, kperp, kpara, cyl_wf = cyl_wf_result
         ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
-        with pytest.raises(
-            ValueError, match="Blpair weights and lengths do not match"
-        ):
+        with pytest.raises(ValueError, match="Blpair weights and lengths do not match"):
             uvwindow_obj.cylindrical_to_spherical(
                 cyl_wf=cyl_wf,
                 kbins=kbins,
@@ -791,9 +785,7 @@ class TestUVWindowCylindricalToSpherical:
     ) -> None:
         bl_len, kperp, kpara, cyl_wf = cyl_wf_result
         ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
-        with pytest.raises(
-            ValueError, match="bl_lens size must match cyl_wf.shape"
-        ):
+        with pytest.raises(ValueError, match="bl_lens size must match cyl_wf.shape"):
             uvwindow_obj.cylindrical_to_spherical(
                 cyl_wf=cyl_wf[None],
                 kbins=kbins,
