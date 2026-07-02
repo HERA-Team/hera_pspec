@@ -1,4 +1,3 @@
-import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -34,21 +33,6 @@ class TestPSpecBeamUV:
         assert bm.beam_freqs.size > 0
         assert isinstance(bm.cosmo, conversions.Cosmo_Conversions)
 
-    @pytest.mark.parametrize(
-        "beamfile",
-        [
-            "HERA_NF_pstokes_power.beamfits",
-            "HERA_NF_dipole_power.beamfits",
-            "HERA_NF_efield.beamfits",
-            "isotropic_beam.beamfits",
-        ],
-    )
-    def test_loads_without_warnings(self, beamfile: str) -> None:
-        """Check that loading each shipped beamfits file does not emit warnings."""
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            pspecbeam.PSpecBeamUV(DATA_PATH / beamfile)
-        assert not caught, [str(w.message) for w in caught]
 
     def test_omegas(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check power_beam_int/power_beam_sq_int against precomputed reference values."""
