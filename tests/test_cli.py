@@ -105,9 +105,3 @@ class TestFastMergeBaselines:
                 data = pickle.load(fl)
                 assert all(blp in data for blp in vanilla_uvp.get_blpairs())
                 assert len(data) == len(vanilla_uvp.get_blpairs())
-
-
-def test_dummy_command(cli_runner: CliRunner) -> None:
-    """Check that the hello command runs and greets the user."""
-    result = cli_runner.invoke(cli.app, args=["hello"])
-    assert "Hi" in result.stdout
