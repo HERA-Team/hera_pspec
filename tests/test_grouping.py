@@ -50,7 +50,7 @@ def redundant_blpairs(uvd_zen_even_xx: UVData) -> list:
 
 
 @pytest.fixture(scope="session")
-def uvp_from_miriad(
+def uvp_three_red_bls(
     redundant_blpairs: list,
     beam_nf_dipole_wcosmo: PSpecBeamUV,
     cosmo: conversions.Cosmo_Conversions,
@@ -559,10 +559,10 @@ def test_bootstrap_average_blpairs(uvp: UVPSpec) -> None:
 
 
 class TestBootstrapResampledError:
-    def test_basic(self, tmp_path: Path, uvp_from_miriad: UVPSpec) -> None:
+    def test_basic(self, tmp_path: Path, uvp_three_red_bls: UVPSpec) -> None:
         """Check that bootstrap_resampled_error returns the expected number of samples and respects the random seed."""
         # generate a UVPSpec
-        uvp = copy.deepcopy(uvp_from_miriad)
+        uvp = copy.deepcopy(uvp_three_red_bls)
 
         # Lots of this function is already tested by bootstrap_run
         # so only test the stuff not already tested
@@ -644,10 +644,10 @@ class TestBootstrapResampledError:
 
 
 class TestBootstrapRun:
-    def test_run_output(self, tmp_path: Path, uvp_from_miriad: UVPSpec) -> None:
+    def test_run_output(self, tmp_path: Path, uvp_three_red_bls: UVPSpec) -> None:
         """Check that bootstrap_run writes all bootstrap samples, the average, and correct stats arrays to the container."""
         # generate a UVPSpec and container
-        uvp = copy.deepcopy(uvp_from_miriad)
+        uvp = copy.deepcopy(uvp_three_red_bls)
         outfile = tmp_path / "ex.h5"
         psc = container.PSpecContainer(outfile, mode="rw", keep_open=False, swmr=False)
         psc.set_pspec("grp1", "uvp", uvp)
@@ -710,9 +710,9 @@ class TestBootstrapRun:
                 == np.complex128
             )
 
-    def test_exceptions(self, tmp_path: Path, uvp_from_miriad: UVPSpec) -> None:
+    def test_exceptions(self, tmp_path: Path, uvp_three_red_bls: UVPSpec) -> None:
         """Check that bootstrap_run raises appropriate errors for an empty container, bad filename, missing spectra, and SWMR mode."""
-        uvp = copy.deepcopy(uvp_from_miriad)
+        uvp = copy.deepcopy(uvp_three_red_bls)
         outfile = tmp_path / "ex.h5"
         psc = container.PSpecContainer(outfile, mode="rw", keep_open=False, swmr=False)
 
