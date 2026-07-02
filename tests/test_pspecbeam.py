@@ -131,7 +131,9 @@ class TestPSpecBeamUV:
         self, beam_nf_pstokes: pspecbeam.PSpecBeamUV
     ) -> None:
         """Check that a linear-pol string raises ValueError on a Stokes beam."""
-        with pytest.raises(ValueError, match="Do not have the right polarization information"):
+        with pytest.raises(
+            ValueError, match="Do not have the right polarization information"
+        ):
             beam_nf_pstokes.compute_pspec_scalar(
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
             )
@@ -139,7 +141,9 @@ class TestPSpecBeamUV:
     def test_dipole_beam(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that dipole (linear-pol) beams compute a scalar for XX but raise for pI."""
         beam_nf_dipole.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
-        with pytest.raises(ValueError, match="Do not have the right polarization information"):
+        with pytest.raises(
+            ValueError, match="Do not have the right polarization information"
+        ):
             beam_nf_dipole.compute_pspec_scalar(
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
             )
@@ -148,7 +152,9 @@ class TestPSpecBeamUV:
         """Check that efield beams compute a scalar for XX but raise for pI."""
         beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
         beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
-        with pytest.raises(ValueError, match="Do not have the right polarization information"):
+        with pytest.raises(
+            ValueError, match="Do not have the right polarization information"
+        ):
             beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI")
 
     def test_get_omegas_single_polpair(
