@@ -18,12 +18,6 @@ UPPER_FREQ = 128.0 * 10**6
 NUM_FREQS = 20
 
 
-@pytest.fixture(scope="module")
-def pstokes_beam() -> pspecbeam.PSpecBeamUV:
-    """PSpecBeamUV built from the HERA_NF_pstokes_power beamfits file, for testing pStokes-polarization features."""
-    return pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_pstokes_power.beamfits")
-
-
 @pytest.fixture
 def efield_beam() -> pspecbeam.PSpecBeamUV:
     """An efield-type beam with beam_type force-set to 'power' so later validation steps in beam_normalized_response can be reached."""
@@ -56,12 +50,12 @@ class TestPSpecBeamUV:
             pspecbeam.PSpecBeamUV(DATA_PATH / beamfile)
         assert not caught, [str(w.message) for w in caught]
 
-    def test_omegas(self, pstokes_beam: pspecbeam.PSpecBeamUV) -> None:
+    def test_omegas(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check power_beam_int/power_beam_sq_int against precomputed reference values."""
         # Precomputed results were done "by hand" using iPython notebook
         # "Scalar_dev2.ipynb" in tests directory.
-        Om_p = pstokes_beam.power_beam_int()
-        Om_pp = pstokes_beam.power_beam_sq_int()
+        Om_p = beam_nf_pstokes.power_beam_int()
+        Om_pp = beam_nf_pstokes.power_beam_sq_int()
 
         np.testing.assert_almost_equal(Om_p[0], 0.080082680885906782)
         np.testing.assert_almost_equal(Om_p[18], 0.031990943334017245)
@@ -74,19 +68,19 @@ class TestPSpecBeamUV:
         assert Om_p.ndim == 1
         assert Om_pp.ndim == 1
 
-    def test_scalar_pI(self, pstokes_beam: pspecbeam.PSpecBeamUV) -> None:
+    def test_scalar_pI(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar for pI against a precomputed reference value."""
-        scalar = pstokes_beam.compute_pspec_scalar(
+        scalar = beam_nf_pstokes.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / 568847837.72586381 - 1.0) <= 1e-4
 
-    def test_scalar_convergence(self, pstokes_beam: pspecbeam.PSpecBeamUV) -> None:
+    def test_scalar_convergence(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
-        scalar = pstokes_beam.compute_pspec_scalar(
+        scalar = beam_nf_pstokes.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
-        scalar_large_Nsteps = pstokes_beam.compute_pspec_scalar(
+        scalar_large_Nsteps = beam_nf_pstokes.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=10000
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
@@ -101,37 +95,37 @@ class TestPSpecBeamUV:
 
     @pytest.mark.parametrize("pol", ["pQ", "pU", "pV"])
     def test_scalar_other_stokes(
-        self, pstokes_beam: pspecbeam.PSpecBeamUV, pol: str
+        self, beam_nf_pstokes: pspecbeam.PSpecBeamUV, pol: str
     ) -> None:
         """Check that compute_pspec_scalar does not raise for the other Stokes parameters."""
-        pstokes_beam.compute_pspec_scalar(
+        beam_nf_pstokes.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol=pol, num_steps=2000
         )
 
-    def test_taper(self, pstokes_beam: pspecbeam.PSpecBeamUV) -> None:
+    def test_taper(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with a taper against a precomputed reference value."""
-        scalar = pstokes_beam.compute_pspec_scalar(
+        scalar = beam_nf_pstokes.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
         )
         assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
 
-    def test_jy_to_mk(self, pstokes_beam: pspecbeam.PSpecBeamUV) -> None:
+    def test_jy_to_mk(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check Jy_to_mK output shape/value and that non-float-array inputs raise a TypeError."""
-        M = pstokes_beam.Jy_to_mK(np.linspace(100e6, 200e6, 11))
+        M = beam_nf_pstokes.Jy_to_mK(np.linspace(100e6, 200e6, 11))
         assert len(M) == 11
         np.testing.assert_almost_equal(M[0], 40.643366654821904)
-        M = pstokes_beam.Jy_to_mK(150e6)
+        M = beam_nf_pstokes.Jy_to_mK(150e6)
         assert isinstance(M, np.ndarray)
-        pstokes_beam.Jy_to_mK(np.linspace(90, 210e6, 11))
+        beam_nf_pstokes.Jy_to_mK(np.linspace(90, 210e6, 11))
 
         with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
-            pstokes_beam.Jy_to_mK([1])
+            beam_nf_pstokes.Jy_to_mK([1])
         with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
-            pstokes_beam.Jy_to_mK(np.array([1]))
+            beam_nf_pstokes.Jy_to_mK(np.array([1]))
 
-    def test_noise_scalar(self, pstokes_beam: pspecbeam.PSpecBeamUV) -> None:
+    def test_noise_scalar(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with noise_scalar=True against a precomputed reference value."""
-        sclr = pstokes_beam.compute_pspec_scalar(
+        sclr = beam_nf_pstokes.compute_pspec_scalar(
             LOWER_FREQ,
             UPPER_FREQ,
             NUM_FREQS,
@@ -143,14 +137,14 @@ class TestPSpecBeamUV:
 
     @pytest.mark.parametrize("pol", ["pZ", "XX"])
     def test_invalid_pol_raises(
-        self, pstokes_beam: pspecbeam.PSpecBeamUV, pol: str
+        self, beam_nf_pstokes: pspecbeam.PSpecBeamUV, pol: str
     ) -> None:
         """Check that an unrecognized or wrong-basis polarization raises."""
         # No match= because pyuvdata's polstr2num intercepts the invalid pol string
         # before pspecbeam's own validation, and the exception type/message varies
         # across pyuvdata versions (KeyError in older, ValueError in newer).
         with pytest.raises((KeyError, ValueError)):
-            pstokes_beam.compute_pspec_scalar(
+            beam_nf_pstokes.compute_pspec_scalar(
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol=pol
             )
 
