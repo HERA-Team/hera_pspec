@@ -76,7 +76,6 @@ class TestCosmoConversions:
             ("z2f", (10.0,), {}, 129127795.54545455),
             ("E", (10.0,), {}, 20.450997530682947),
             ("DC", (10.0,), {"little_h": True}, 6499.708111027144),
-            ("DC", (10.0,), {"little_h": False}, 6499.708111027144 * 100.0 / 25.12),
             ("DM", (10.0,), {"little_h": True}, 6510.2536925709637),
             ("DA", (10.0,), {"little_h": True}, 591.84124477917851),
             ("dRperp_dtheta", (10.0,), {"little_h": True}, 6510.2536925709637),
@@ -85,7 +84,7 @@ class TestCosmoConversions:
             ("X2Y", (10.0,), {"little_h": True}, 529.26719942209002),
         ],
     )
-    def test_little_h(
+    def test_little_h_true_gives_h0_independent_results(
         self,
         cosmo_h25: conversions.Cosmo_Conversions,
         method: str,
@@ -93,9 +92,14 @@ class TestCosmoConversions:
         kwargs: dict,
         expected: float,
     ) -> None:
-        """Check that little_h=True results are H0-independent, and little_h=False scales by H0 ratio."""
+        """Check that little_h=True results are H0-independent."""
         result = getattr(cosmo_h25, method)(*args, **kwargs)
         np.testing.assert_almost_equal(result, expected)
+
+    def test_little_h_false_scales_distances_by_h0_ratio(self, cosmo_h25: conversions.Cosmo_Conversions) -> None:
+        """Check that little_h=False distances scale by the H0 ratio relative to h=1."""
+        result = cosmo_h25.DC(10.0, little_h=False)
+        np.testing.assert_almost_equal(result, 6499.708111027144 * 100.0 / 25.12)
 
     def test_params(self, cosmo_h100: conversions.Cosmo_Conversions) -> None:
         """Check that get_params returns a dict matching the instance's attributes."""
