@@ -284,8 +284,6 @@ def uvp_with_stats(
     return uvp, blpairs
 
 
-
-
 class TestAverageSpectra:
     def test_uniform_weights_reduce_errors(
         self, uvp_with_stats: tuple[UVPSpec, list]
