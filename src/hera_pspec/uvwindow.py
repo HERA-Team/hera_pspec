@@ -986,7 +986,7 @@ class UVWindow:
         # normalisation of window functions
         sum_per_bin = np.sum(cyl_wf, axis=(1, 2))[:, None, None]
         cyl_wf = np.divide(
-            cyl_wf, sum_per_bin, out=np.zeros_like(cyl_wf), where=sum_per_bin != 0
+            cyl_wf, sum_per_bin, out=cyl_wf, where=sum_per_bin != 0
         )
 
         if (return_bins == "unweighted") or return_bins:
