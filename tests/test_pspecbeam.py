@@ -33,7 +33,6 @@ class TestPSpecBeamUV:
         assert bm.beam_freqs.size > 0
         assert isinstance(bm.cosmo, conversions.Cosmo_Conversions)
 
-
     def test_omegas(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check power_beam_int/power_beam_sq_int against precomputed reference values."""
         # Precomputed results were done "by hand" using iPython notebook
