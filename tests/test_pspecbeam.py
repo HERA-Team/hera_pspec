@@ -118,25 +118,28 @@ class TestPSpecBeamUV:
         )
         np.testing.assert_almost_equal(sclr, 71.105979715733)
 
-    @pytest.mark.parametrize("pol", ["pZ", "XX"])
-    def test_invalid_pol_raises(
-        self, beam_nf_pstokes: pspecbeam.PSpecBeamUV, pol: str
+    def test_unrecognised_pol_raises(
+        self, beam_nf_pstokes: pspecbeam.PSpecBeamUV
     ) -> None:
-        """Check that an unrecognized or wrong-basis polarization raises."""
-        # No match= because pyuvdata's polstr2num intercepts the invalid pol string
-        # before pspecbeam's own validation, and the exception type/message varies
-        # across pyuvdata versions (KeyError in older, ValueError in newer).
-        with pytest.raises((KeyError, ValueError)):
+        """Check that a completely unrecognised pol string raises KeyError from pyuvdata."""
+        with pytest.raises(KeyError):
             beam_nf_pstokes.compute_pspec_scalar(
-                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol=pol
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pZ"
+            )
+
+    def test_wrong_basis_pol_raises(
+        self, beam_nf_pstokes: pspecbeam.PSpecBeamUV
+    ) -> None:
+        """Check that a linear-pol string raises ValueError on a Stokes beam."""
+        with pytest.raises(ValueError, match="Do not have the right polarization information"):
+            beam_nf_pstokes.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
             )
 
     def test_dipole_beam(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that dipole (linear-pol) beams compute a scalar for XX but raise for pI."""
         beam_nf_dipole.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
-        with pytest.raises(
-            (KeyError, ValueError)
-        ):  # see note above re pyuvdata versions
+        with pytest.raises(ValueError, match="Do not have the right polarization information"):
             beam_nf_dipole.compute_pspec_scalar(
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
             )
@@ -145,9 +148,7 @@ class TestPSpecBeamUV:
         """Check that efield beams compute a scalar for XX but raise for pI."""
         beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
         beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
-        with pytest.raises(
-            (KeyError, ValueError)
-        ):  # see note above re pyuvdata versions
+        with pytest.raises(ValueError, match="Do not have the right polarization information"):
             beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI")
 
     def test_get_omegas_single_polpair(
