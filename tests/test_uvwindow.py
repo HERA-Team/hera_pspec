@@ -555,6 +555,93 @@ class Test_UVWindow(unittest.TestCase):
         wf_array1 = np.zeros((kperp_bins.size, test.Nfreqs))
         kpara, cyl_wf = test._get_wf_for_tau(tau, wf_array1, kperp_bins, kpara_bins)
 
+    def test_cylindrical_wf_matches_loop_reference(self):
+        """
+        Check the vectorized cylindrical-binning against a verbatim copy of
+        the historical (loop-based) implementation.
+        """
+        bl_len = self.lens[12]
+        uvw = uvwindow.UVWindow(
+            ftbeam_obj=self.ft_beam_obj_spw,
+            taper=self.taper,
+            cosmo=self.cosmo,
+            little_h=self.little_h,
+        )
+        kperp_bins = np.array(uvw.get_kperp_bins([bl_len]).value)
+        kpara_bins = np.array(uvw.get_kpara_bins(uvw.freq_array).value)
+
+        # --- current implementation
+        cyl_wf = uvw.get_cylindrical_wf(
+            bl_len,
+            kperp_bins=kperp_bins * uvw.kunits,
+            kpara_bins=kpara_bins * uvw.kunits,
+        )
+
+        # --- loop-based reference (pre-vectorization implementation)
+        nbins_kperp = kperp_bins.size
+        dk_perp = np.diff(kperp_bins).mean()
+        kperp_bin_edges = np.arange(
+            kperp_bins.min() - dk_perp / 2, kperp_bins.max() + dk_perp, step=dk_perp
+        )
+        nbins_kpara = kpara_bins.size
+        dk_para = np.diff(kpara_bins).mean()
+        kpara_bin_edges = np.arange(
+            kpara_bins.min() - dk_para / 2, kpara_bins.max() + dk_para, step=dk_para
+        )
+
+        fnu = []
+        for ip in range(len(uvw.pols)):
+            ft_beam = np.copy(uvw.ftbeam_obj_pol[ip].ft_beam)
+            interp_ft_beam, kperp_norm = uvw._interpolate_ft_beam(bl_len, ft_beam)
+            delta_nu = abs(uvw.freq_array[-1] - uvw.freq_array[0]) / uvw.Nfreqs
+            fnu.append(uvw._take_freq_FT(interp_ft_beam, delta_nu))
+
+        wf_array1 = np.zeros((nbins_kperp, uvw.Nfreqs))
+        for i in range(uvw.Nfreqs):
+            for m in range(nbins_kperp):
+                mask = (kperp_bin_edges[m] <= kperp_norm) & (
+                    kperp_norm < kperp_bin_edges[m + 1]
+                )
+                if np.any(mask):
+                    wf_array1[m, i] = np.mean(
+                        np.conj(fnu[1][mask, i]) * fnu[0][mask, i]
+                    ).real
+
+        alpha = uvw.cosmo.dRpara_df(uvw.avg_z, little_h=uvw.little_h, ghz=False)
+        delta_nu = np.median(np.diff(uvw.freq_array))
+        eta = np.fft.fftshift(np.fft.fftfreq(uvw.Nfreqs), axes=-1) / delta_nu
+
+        def ref_wf_for_tau(tau):
+            kpar_norm = np.abs(2.0 * np.pi / alpha * (eta + tau))
+            ref = np.zeros((nbins_kperp, nbins_kpara))
+            for j in range(nbins_kperp):
+                for m in range(nbins_kpara):
+                    mask = (kpara_bin_edges[m] <= kpar_norm) & (
+                        kpar_norm < kpara_bin_edges[m + 1]
+                    )
+                    if np.any(mask):
+                        ref[j, m] = np.mean(wf_array1[j, mask])
+            return ref
+
+        ref_cyl_wf = np.zeros((uvw.Nfreqs, nbins_kperp, nbins_kpara))
+        for it, tau in enumerate(uvw.dly_array[: uvw.Nfreqs // 2 + 1]):
+            ref_cyl_wf[it, :, :] = ref_wf_for_tau(tau)
+        if uvw.Nfreqs % 2 == 0:
+            ref_cyl_wf[uvw.Nfreqs // 2 + 1 :, :, :] = np.flip(ref_cyl_wf, axis=0)[
+                uvw.Nfreqs // 2 : -1
+            ]
+        else:
+            ref_cyl_wf[uvw.Nfreqs // 2 + 1 :, :, :] = np.flip(ref_cyl_wf, axis=0)[
+                uvw.Nfreqs // 2 + 1 :
+            ]
+        ref_cyl_wf[uvw.Nfreqs - uvw.Nfreqs // 4, :, :] = ref_wf_for_tau(
+            -uvw.dly_array[uvw.Nfreqs // 4]
+        )
+        sum_per_bin = np.sum(ref_cyl_wf, axis=(1, 2))[:, None, None]
+        ref_cyl_wf = np.divide(ref_cyl_wf, sum_per_bin, where=sum_per_bin != 0)
+
+        assert np.allclose(cyl_wf, ref_cyl_wf, atol=1e-12)
+
     def test_ftbeam_data_grid_mismatch(self):
         """
         Regression test: an FTBeam defined on a frequency grid with a

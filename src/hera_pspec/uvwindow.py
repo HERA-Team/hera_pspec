@@ -824,17 +824,28 @@ class UVWindow:
         # construct array of |kpara| values for given delay tau
         kpar_norm = np.abs(2.0 * np.pi / alpha * (eta + tau))
 
-        # perform binning along k_parallel
-        cyl_wf = np.zeros((nbins_kperp, nbins_kpara))
-        kpara = np.zeros(nbins_kpara)
-        for j in range(nbins_kperp):
-            for m in range(nbins_kpara):
-                mask = (kpara_bin_edges[m] <= kpar_norm) & (
-                    kpar_norm < kpara_bin_edges[m + 1]
-                )
-                if np.any(mask):  # cannot compute mean if zero elements
-                    cyl_wf[j, m] = np.mean(wf_array1[j, mask])
-                    kpara[m] = np.mean(kpar_norm[mask])
+        # perform binning along k_parallel (vectorized: bin index of each
+        # kpar_norm element such that edges[m] <= kpar_norm < edges[m+1])
+        idx = np.digitize(kpar_norm, kpara_bin_edges) - 1
+        valid = (idx >= 0) & (idx < nbins_kpara)
+        counts = np.bincount(idx[valid], minlength=nbins_kpara)
+
+        # indicator matrix: ind[f, m] = 1 if kpar_norm[f] falls in bin m
+        ind = np.zeros((kpar_norm.size, nbins_kpara))
+        ind[np.nonzero(valid)[0], idx[valid]] = 1.0
+
+        cyl_wf = np.divide(
+            wf_array1 @ ind,
+            counts[None, :],
+            out=np.zeros((nbins_kperp, nbins_kpara)),
+            where=counts[None, :] > 0,
+        )
+        kpara = np.divide(
+            np.bincount(idx[valid], weights=kpar_norm[valid], minlength=nbins_kpara),
+            counts,
+            out=np.zeros(nbins_kpara),
+            where=counts > 0,
+        )
 
         return kpara, cyl_wf
 
@@ -1043,19 +1054,31 @@ class UVWindow:
 
         # cylindrical average
 
-        # on sky plane
-        wf_array1 = np.zeros((nbins_kperp, self.Nfreqs))
-        kperp = np.zeros(nbins_kperp)
-        for i in range(self.Nfreqs):
-            for m in range(nbins_kperp):
-                mask = (kperp_bin_edges[m] <= kperp_norm) & (
-                    kperp_norm < kperp_bin_edges[m + 1]
-                )
-                if np.any(mask):  # cannot compute mean if zero elements
-                    wf_array1[m, i] = np.mean(
-                        np.conj(fnu[1][mask, i]) * fnu[0][mask, i]
-                    ).real
-                    kperp[m] = np.mean(kperp_norm[mask])
+        # on sky plane (vectorized: the binning of the (kperp_x, kperp_y)
+        # grid onto kperp bins is identical for all frequencies)
+        idx = np.digitize(kperp_norm.ravel(), kperp_bin_edges) - 1
+        valid = (idx >= 0) & (idx < nbins_kperp)
+        counts = np.bincount(idx[valid], minlength=nbins_kperp)
+
+        # real part of the cross-pol product, flattened on the sky plane;
+        # real() commutes with the sum performed in the binned average
+        prod = (np.conj(fnu[1]) * fnu[0]).real.reshape(-1, self.Nfreqs)
+        sums = np.zeros((nbins_kperp, self.Nfreqs))
+        np.add.at(sums, idx[valid], prod[valid])
+        wf_array1 = np.divide(
+            sums,
+            counts[:, None],
+            out=np.zeros_like(sums),
+            where=counts[:, None] > 0,
+        )
+        kperp = np.divide(
+            np.bincount(
+                idx[valid], weights=kperp_norm.ravel()[valid], minlength=nbins_kperp
+            ),
+            counts,
+            out=np.zeros(nbins_kperp),
+            where=counts > 0,
+        )
 
         # in frequency direction
         cyl_wf = np.zeros((self.Nfreqs, nbins_kperp, nbins_kpara))
