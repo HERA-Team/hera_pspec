@@ -114,7 +114,7 @@ class FTBeam:
         raise NotImplementedError("Coming soon...")
 
     @classmethod
-    def from_file(cls, ftfile, spw_range=None, **kwargs):
+    def from_file(cls, ftfile, spw_range=None, freq_array=None, **kwargs):
         """
         Read Fourier transform of beam in sky plane from file.
 
@@ -133,11 +133,30 @@ class FTBeam:
             In (start_chan, end_chan). Must be between 0 and 1024 (HERA
             bandwidth).
             If None, whole instrument bandwidth is considered.
+
+            .. deprecated::
+                Use `freq_array` instead: channel indices are ambiguous
+                across FT-beam files, frequencies are not.
+        freq_array : 1D array or list of floats, optional
+            If given, restrict the FTBeam to these frequencies (in Hz)
+            via :meth:`select_freqs`. Only the relevant channel range is
+            read from disk, which considerably reduces the memory
+            footprint for wide-band FT-beam files. Cannot be used
+            together with spw_range.
         """
         # check file path input
         ftfile = Path(ftfile)
         if not (ftfile.exists() and ftfile.is_file() and h5py.is_hdf5(ftfile)):
             raise ValueError("Wrong ftfile input. See docstring.")
+        if spw_range is not None and freq_array is not None:
+            raise ValueError("Cannot feed both spw_range and freq_array.")
+        if spw_range is not None:
+            warnings.warn(
+                "The spw_range parameter of FTBeam.from_file is deprecated; "
+                "use freq_array instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # extract polarisation channel from filename
         pol = str(ftfile).split("_")[-1].split(".")[0]
@@ -146,23 +165,39 @@ class FTBeam:
         with h5py.File(ftfile, "r") as f:
             mapsize = f["mapsize"][0]
             bandwidth = np.array(f["freq"][...])
-            ft_beam = np.array(f["FT_beam"])
 
-        # spectral window
-        if spw_range is not None:
-            # check format
-            if not check_spw_range(spw_range, bandwidth):
-                raise ValueError("Wrong spw range format, see dosctring.")
-            freq_array = bandwidth[spw_range[0] : spw_range[-1]]
-            ft_beam = ft_beam[spw_range[0] : spw_range[1], :, :]
-        else:
-            # if spectral range is not specified, use whole bandwidth
-            spw_range = (0, bandwidth.size)
-            freq_array = bandwidth
+            if freq_array is not None:
+                # read only the contiguous channel range covering the
+                # requested frequencies, rather than the whole bandwidth.
+                # The -2/+2 reach one channel beyond the neighbours that
+                # interpolation requires, as safety margin for targets
+                # within atol of a native channel
+                freq_array = np.asarray(freq_array, dtype=float)
+                i0 = max(np.searchsorted(bandwidth, freq_array.min()) - 2, 0)
+                i1 = min(
+                    np.searchsorted(bandwidth, freq_array.max()) + 2, bandwidth.size
+                )
+                ft_beam = np.array(f["FT_beam"][i0:i1, :, :])
+                read_freqs = bandwidth[i0:i1]
+            elif spw_range is not None:
+                # check format
+                if not check_spw_range(spw_range, bandwidth):
+                    raise ValueError("Wrong spw range format, see dosctring.")
+                read_freqs = bandwidth[spw_range[0] : spw_range[-1]]
+                ft_beam = np.array(f["FT_beam"][spw_range[0] : spw_range[1], :, :])
+            else:
+                # if spectral range is not specified, use whole bandwidth
+                spw_range = (0, bandwidth.size)
+                read_freqs = bandwidth
+                ft_beam = np.array(f["FT_beam"])
 
-        return cls(
-            data=ft_beam, pol=pol, freq_array=freq_array, mapsize=mapsize, **kwargs
+        obj = cls(
+            data=ft_beam, pol=pol, freq_array=read_freqs, mapsize=mapsize, **kwargs
         )
+        if freq_array is not None:
+            # extract (or interpolate onto) the exact requested frequencies
+            obj.select_freqs(freq_array)
+        return obj
 
     @classmethod
     def gaussian(
@@ -267,6 +302,90 @@ class FTBeam:
 
         return bandwidth
 
+    def select_freqs(self, freq_array, atol=None, inplace=True):
+        """
+        Restrict the FTBeam to a given array of frequencies.
+
+        If every requested frequency coincides with a native channel of
+        the FTBeam (within `atol`), the corresponding channels are simply
+        extracted. Otherwise, the FT of the beam is linearly interpolated
+        along the frequency axis onto `freq_array`. Use this to put the
+        FTBeam on the exact frequency channels of the data: the window
+        functions' k_parallel axis is built from this object's
+        `freq_array`, so a channel-width mismatch scales that axis.
+
+        Parameters
+        ----------
+        freq_array : 1D array or list of floats
+            Frequencies (in Hz) to restrict the FTBeam to. Must be
+            within the bandwidth of the FTBeam.
+        atol : float, optional
+            Absolute tolerance (in Hz) used to decide whether a requested
+            frequency coincides with a native channel. Default: 1e-3
+            times the native channel width.
+        inplace : bool, optional
+            If True (default), modify the object in place. Otherwise
+            return a new FTBeam object.
+
+        Returns
+        -------
+        FTBeam object
+            Only if inplace is False.
+        """
+        fq = self if inplace else copy.deepcopy(self)
+
+        freq_array = np.asarray(freq_array, dtype=float)
+        if freq_array.ndim != 1 or freq_array.size < 2:
+            raise ValueError("Must feed 1D array of at least two frequencies.")
+
+        native = np.asarray(fq.freq_array, dtype=float)
+        delta_native = np.median(np.diff(native))
+        if atol is None:
+            atol = 1e-3 * abs(delta_native)
+
+        if (freq_array.min() < native.min() - atol) or (
+            freq_array.max() > native.max() + atol
+        ):
+            raise ValueError(
+                "Requested frequencies ({:.2f}-{:.2f} MHz) extend beyond the "
+                "bandwidth of the FTBeam ({:.2f}-{:.2f} MHz).".format(
+                    freq_array.min() / 1e6,
+                    freq_array.max() / 1e6,
+                    native.min() / 1e6,
+                    native.max() / 1e6,
+                )
+            )
+
+        # nearest native channel for each requested frequency
+        nearest = np.abs(native[:, None] - freq_array[None, :]).argmin(axis=0)
+
+        if np.all(np.abs(native[nearest] - freq_array) <= atol):
+            # exact match: extract channels
+            fq.ft_beam = fq.ft_beam[nearest, :, :]
+        else:
+            # grid mismatch: interpolate the FT of the beam in frequency
+            warnings.warn(
+                "Requested frequencies do not coincide with the FTBeam "
+                "channels (native width: {:.2f} kHz, requested: {:.2f} kHz): "
+                "interpolating the FT of the beam onto the requested "
+                "frequencies. Consider computing the FT beam directly on "
+                "the frequency channels of the data.".format(
+                    delta_native / 1e3, np.median(np.diff(freq_array)) / 1e3
+                )
+            )
+            # linear interpolation along the frequency axis (native is
+            # ascending, and coverage was checked above)
+            idx = np.searchsorted(native, freq_array).clip(1, native.size - 1)
+            w = (freq_array - native[idx - 1]) / (native[idx] - native[idx - 1])
+            fq.ft_beam = (1.0 - w)[:, None, None] * fq.ft_beam[idx - 1] + w[
+                :, None, None
+            ] * fq.ft_beam[idx]
+
+        fq.freq_array = freq_array.copy()
+
+        if not inplace:
+            return fq
+
     def update_spw(self, spw_range):
         """
         Function to extract spectral window from FTBeam defined on whole bandwidth.
@@ -274,12 +393,21 @@ class FTBeam:
         Extract a section of the previously computed Fourier
         transform of the beam.
 
+        .. deprecated::
+            Use :meth:`select_freqs` instead: channel indices are ambiguous
+            across FT-beam files, frequencies are not.
+
         Parameters
         ----------
         spw_range : tuple or 2-element array of ints.
             In (start_chan, end_chan). Must be between 0 and 1024 (HERA
             bandwidth).
         """
+        warnings.warn(
+            "FTBeam.update_spw is deprecated; use FTBeam.select_freqs instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # checks on inputs
         if not check_spw_range(spw_range, self.freq_array):
             raise ValueError("Wrong spw range format, see dosctring.")
@@ -443,15 +571,18 @@ class UVWindow:
         # create FTBeam objects
         ftbeam_obj_pol = []
         for ip, pol in enumerate(polpair):
-            if (ip > 0) and (pol[ip] == pol[0]):
+            if (ip > 0) and (polpair[ip] == polpair[0]):
                 # do not recompute if two polarisations are identical
                 ftbeam_obj_pol.append(ftbeam_obj_pol[0])
             else:
                 if ftbeam is None:
-                    ftbeam_obj_pol.append(
-                        FTBeam.from_beam(
-                            beamfile="tbd", verbose=verbose, x_orientation=x_orientation
-                        )
+                    raise NotImplementedError(
+                        "ftbeam=None (computation from beam simulations) is "
+                        "not implemented in from_uvpspec because the UVPSpec "
+                        "object does not carry the beam simulation file. "
+                        "Construct the FTBeam explicitly with "
+                        "FTBeam.from_beam(beamfile, pol, freq_array) and "
+                        "pass it as the ftbeam argument."
                     )
                 elif isinstance(ftbeam, str | Path):
                     ftbeam_obj_pol.append(
@@ -467,17 +598,13 @@ class UVWindow:
                 else:
                     raise TypeError("Check your ftbeam input.")
 
-        # limit spectral window of FTBeam object to the one of the UVPSpec object
-        # find spectral indices associated with spectral window
-        bandwidth = ftbeam_obj_pol[0].freq_array
-        spw_range = (
-            np.array([0, freq_array.size])
-            + np.where(bandwidth >= freq_array[0] - 1e-9)[0][0]
-        )
+        # restrict the FTBeam objects to the exact frequency channels of
+        # the UVPSpec's spectral window (interpolating, with a warning,
+        # if the FTBeam is not defined on the data's frequency grid)
         for ip in range(2):
-            if (ip > 0) and (pol[ip] == pol[0]):
+            if (ip > 0) and (polpair[ip] == polpair[0]):
                 continue
-            ftbeam_obj_pol[ip].update_spw(spw_range=tuple(spw_range))
+            ftbeam_obj_pol[ip].select_freqs(freq_array)
 
         return cls(
             ftbeam_obj=ftbeam_obj_pol,
