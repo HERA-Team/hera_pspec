@@ -126,11 +126,7 @@ class test_FTBeam(unittest.TestCase):
         # small frequency grid within the beam's coverage
         freq_array = np.linspace(beam_freqs.min(), beam_freqs.max(), 5)
         test = uvwindow.FTBeam.from_beam(
-            beamfile=beamfile,
-            pol="xx",
-            freq_array=freq_array,
-            mapsize=1.0,
-            npix=29,
+            beamfile=beamfile, pol="xx", freq_array=freq_array, mapsize=1.0, npix=29
         )
         assert test.pol == "xx"
         assert np.allclose(test.freq_array, freq_array)
@@ -145,11 +141,7 @@ class test_FTBeam(unittest.TestCase):
 
         # pol fed as int
         test2 = uvwindow.FTBeam.from_beam(
-            beamfile=beamfile,
-            pol=-5,
-            freq_array=freq_array,
-            mapsize=1.0,
-            npix=29,
+            beamfile=beamfile, pol=-5, freq_array=freq_array, mapsize=1.0, npix=29
         )
         assert test2.pol == "xx"
         assert np.allclose(test.ft_beam, test2.ft_beam)
@@ -193,11 +185,7 @@ class test_FTBeam(unittest.TestCase):
         )
         with pytest.warns(UserWarning, match="outside the beam simulation"):
             test3 = uvwindow.FTBeam.from_beam(
-                beamfile=beamfile,
-                pol="xx",
-                freq_array=freqs_over,
-                mapsize=1.0,
-                npix=29,
+                beamfile=beamfile, pol="xx", freq_array=freqs_over, mapsize=1.0, npix=29
             )
         assert np.allclose(test3.freq_array, freqs_over)
         # clamped channel = beam evaluated at the edge frequency
@@ -236,9 +224,7 @@ class test_FTBeam(unittest.TestCase):
             freq_array=np.array([self.bandwidth.max() + 1e6] * 3),
         )
         # need at least two frequencies
-        pytest.raises(
-            AssertionError, test.select_freqs, freq_array=self.bandwidth[:1]
-        )
+        pytest.raises(AssertionError, test.select_freqs, freq_array=self.bandwidth[:1])
 
     def test_from_file_freq_array(self):
 
@@ -268,9 +254,7 @@ class test_FTBeam(unittest.TestCase):
         # padding.
         midpoints = 0.5 * (full.freq_array[0:8] + full.freq_array[1:9])
         with pytest.warns(UserWarning, match="interpolating"):
-            part = uvwindow.FTBeam.from_file(
-                ftfile=self.ft_file, freq_array=midpoints
-            )
+            part = uvwindow.FTBeam.from_file(ftfile=self.ft_file, freq_array=midpoints)
         with pytest.warns(UserWarning, match="interpolating"):
             ref = full.select_freqs(midpoints, inplace=False)
         assert np.allclose(part.freq_array, ref.freq_array)

@@ -240,17 +240,10 @@ class FTBeam:
         if (freq_array.min() < beam_fmin) or (freq_array.max() > beam_fmax):
             n_out = int(np.sum((freq_array < beam_fmin) | (freq_array > beam_fmax)))
             warnings.warn(
-                "{} of the {} requested frequencies lie outside the beam "
-                "simulation coverage ({:.2f}-{:.2f} MHz; requested "
-                "{:.2f}-{:.2f} MHz): for those channels, the beam is "
-                "evaluated at the nearest covered frequency.".format(
-                    n_out,
-                    freq_array.size,
-                    beam_fmin / 1e6,
-                    beam_fmax / 1e6,
-                    freq_array.min() / 1e6,
-                    freq_array.max() / 1e6,
-                )
+                f"{n_out} of the {freq_array.size} requested frequencies lie outside the beam "
+                f"simulation coverage ({beam_fmin / 1e6:.2f}-{beam_fmax / 1e6:.2f} MHz; requested "
+                f"{freq_array.min() / 1e6:.2f}-{freq_array.max() / 1e6:.2f} MHz): for those channels, the beam is "
+                "evaluated at the nearest covered frequency."
             )
             eval_freqs = np.clip(freq_array, beam_fmin, beam_fmax)
 
@@ -557,13 +550,8 @@ class FTBeam:
             freq_array.max() > native.max() + atol
         ):
             raise ValueError(
-                "Requested frequencies ({:.2f}-{:.2f} MHz) extend beyond the "
-                "bandwidth of the FTBeam ({:.2f}-{:.2f} MHz).".format(
-                    freq_array.min() / 1e6,
-                    freq_array.max() / 1e6,
-                    native.min() / 1e6,
-                    native.max() / 1e6,
-                )
+                f"Requested frequencies ({freq_array.min() / 1e6:.2f}-{freq_array.max() / 1e6:.2f} MHz) extend beyond the "
+                f"bandwidth of the FTBeam ({native.min() / 1e6:.2f}-{native.max() / 1e6:.2f} MHz)."
             )
 
         # nearest native channel for each requested frequency
@@ -576,12 +564,10 @@ class FTBeam:
             # grid mismatch: interpolate the FT of the beam in frequency
             warnings.warn(
                 "Requested frequencies do not coincide with the FTBeam "
-                "channels (native width: {:.2f} kHz, requested: {:.2f} kHz): "
+                f"channels (native width: {delta_native / 1e3:.2f} kHz, requested: {np.median(np.diff(freq_array)) / 1e3:.2f} kHz): "
                 "interpolating the FT of the beam onto the requested "
                 "frequencies. Consider computing the FT beam directly on "
-                "the frequency channels of the data.".format(
-                    delta_native / 1e3, np.median(np.diff(freq_array)) / 1e3
-                )
+                "the frequency channels of the data."
             )
             fq.ft_beam = interp1d(
                 native, fq.ft_beam, axis=0, kind="linear", assume_sorted=False
@@ -1289,10 +1275,7 @@ class UVWindow:
         sums = np.zeros((nbins_kperp, self.Nfreqs))
         np.add.at(sums, idx[valid], prod[valid])
         wf_array1 = np.divide(
-            sums,
-            counts[:, None],
-            out=np.zeros_like(sums),
-            where=counts[:, None] > 0,
+            sums, counts[:, None], out=np.zeros_like(sums), where=counts[:, None] > 0
         )
         kperp = np.divide(
             np.bincount(
