@@ -116,7 +116,92 @@ class test_FTBeam(unittest.TestCase):
 
     def test_from_beam(self):
 
-        pytest.raises(NotImplementedError, uvwindow.FTBeam.from_beam, beamfile="test")
+        from pyuvdata import UVBeam
+
+        beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+        beam = UVBeam()
+        beam.read_beamfits(beamfile)
+        beam_freqs = np.unique(beam.freq_array)
+
+        # small frequency grid within the beam's coverage
+        freq_array = np.linspace(beam_freqs.min(), beam_freqs.max(), 5)
+        test = uvwindow.FTBeam.from_beam(
+            beamfile=beamfile,
+            pol="xx",
+            freq_array=freq_array,
+            mapsize=1.0,
+            npix=29,
+        )
+        assert test.pol == "xx"
+        assert np.allclose(test.freq_array, freq_array)
+        assert test.ft_beam.ndim == 3
+        assert test.ft_beam.shape[0] == freq_array.size
+        assert test.ft_beam.shape[1] == test.ft_beam.shape[2]
+        assert np.all(np.isfinite(test.ft_beam))
+        # FT of a positive beam peaks at the zero mode (grid centre)
+        ngrid = test.ft_beam.shape[-1]
+        for i in range(freq_array.size):
+            assert np.argmax(test.ft_beam[i]) == (ngrid**2) // 2
+
+        # pol fed as int
+        test2 = uvwindow.FTBeam.from_beam(
+            beamfile=beamfile,
+            pol=-5,
+            freq_array=freq_array,
+            mapsize=1.0,
+            npix=29,
+        )
+        assert test2.pol == "xx"
+        assert np.allclose(test.ft_beam, test2.ft_beam)
+
+        # raise error for too-few frequencies
+        pytest.raises(
+            AssertionError,
+            uvwindow.FTBeam.from_beam,
+            beamfile=beamfile,
+            pol="xx",
+            freq_array=beam_freqs[:2],
+        )
+
+        # real-beam check of select_freqs interpolation: interpolating a
+        # from_beam FT beam onto frequencies between its channels must
+        # agree with computing the FT beam directly at those frequencies.
+        # The 6.25 MHz source grid used here is far coarser than any
+        # production grid (~122 kHz), so the 2%-of-peak bound is loose.
+        fine = np.linspace(beam_freqs.min(), beam_freqs.max(), 17)
+        target = 0.5 * (fine[:-1] + fine[1:])[::2]
+        ft_fine = uvwindow.FTBeam.from_beam(
+            beamfile=beamfile, pol="xx", freq_array=fine, mapsize=1.0, npix=29
+        )
+        ft_direct = uvwindow.FTBeam.from_beam(
+            beamfile=beamfile, pol="xx", freq_array=target, mapsize=1.0, npix=29
+        )
+        with pytest.warns(UserWarning, match="interpolating"):
+            ft_interp = ft_fine.select_freqs(target, inplace=False)
+        assert np.allclose(
+            ft_interp.ft_beam,
+            ft_direct.ft_beam,
+            atol=0.02 * np.abs(ft_direct.ft_beam).max(),
+        )
+
+        # frequencies slightly outside the simulation coverage: warn, and
+        # evaluate the beam at the nearest covered frequency while keeping
+        # the requested frequencies as the FTBeam coordinates
+        df = np.diff(beam_freqs).mean()
+        freqs_over = np.array(
+            [beam_freqs.min() - df / 2, beam_freqs.min(), beam_freqs.min() + df]
+        )
+        with pytest.warns(UserWarning, match="outside the beam simulation"):
+            test3 = uvwindow.FTBeam.from_beam(
+                beamfile=beamfile,
+                pol="xx",
+                freq_array=freqs_over,
+                mapsize=1.0,
+                npix=29,
+            )
+        assert np.allclose(test3.freq_array, freqs_over)
+        # clamped channel = beam evaluated at the edge frequency
+        assert np.allclose(test3.ft_beam[0], test3.ft_beam[1])
 
     def test_select_freqs(self):
 
@@ -190,6 +275,67 @@ class test_FTBeam(unittest.TestCase):
             ref = full.select_freqs(midpoints, inplace=False)
         assert np.allclose(part.freq_array, ref.freq_array)
         assert np.allclose(part.ft_beam, ref.ft_beam)
+
+    def test_write_hdf5(self):
+
+        import tempfile
+
+        test = uvwindow.FTBeam.from_file(ftfile=self.ft_file, spw_range=self.spw_range)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # note: filename does NOT carry the pol suffix; the round trip
+            # relies on the pol attribute written by write_hdf5
+            fname = os.path.join(tmpdir, "ft_beam_roundtrip.hdf5")
+            test.write_hdf5(fname, extra_attrs={"beam_file": "sim.fits"})
+            back = uvwindow.FTBeam.from_file(ftfile=fname)
+            assert back.pol == test.pol
+            assert back.mapsize == test.mapsize
+            assert np.allclose(back.freq_array, test.freq_array)
+            assert np.allclose(back.ft_beam, test.ft_beam)
+
+            # no overwriting unless asked
+            pytest.raises(FileExistsError, test.write_hdf5, fname)
+            test.write_hdf5(fname, overwrite=True)
+
+    def test_from_file(self):
+
+        test = uvwindow.FTBeam.from_file(
+            ftfile=self.ft_file,
+            spw_range=self.spw_range,
+            verbose=self.verbose,
+            x_orientation=self.x_orientation,
+        )
+        assert test.pol == self.pol
+
+        # tests related to ftfile
+        pytest.raises(TypeError, uvwindow.FTBeam.from_file, ftfile=12.0)
+        # if ft file does not exist, raise assertion error
+        pytest.raises(ValueError, uvwindow.FTBeam.from_file, ftfile="whatever")
+
+        # tests related to spw_range
+        test1 = uvwindow.FTBeam.from_file(ftfile=self.ft_file, spw_range=self.spw_range)
+        assert np.allclose(test1.freq_array, self.freq_array)
+
+        test2 = uvwindow.FTBeam.from_file(ftfile=self.ft_file, spw_range=None)
+        assert np.allclose(test2.freq_array, self.bandwidth)
+
+        pytest.raises(
+            AssertionError,
+            uvwindow.FTBeam.from_file,
+            spw_range=(13),
+            ftfile=self.ft_file,
+        )
+        pytest.raises(
+            AssertionError,
+            uvwindow.FTBeam.from_file,
+            spw_range=(20, 10),
+            ftfile=self.ft_file,
+        )
+        pytest.raises(
+            AssertionError,
+            uvwindow.FTBeam.from_file,
+            spw_range=(1001, 1022),
+            ftfile=self.ft_file,
+        )
 
     def test_gaussian(self):
 

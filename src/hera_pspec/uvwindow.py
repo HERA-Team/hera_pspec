@@ -1,4 +1,5 @@
 import copy
+import logging
 import os
 import sys
 import warnings
@@ -13,6 +14,59 @@ from scipy.interpolate import RegularGridInterpolator, interp1d
 
 from . import conversions, utils
 from . import uvpspec_utils as uvputils
+
+logger = logging.getLogger(__name__)
+
+# Cartesian half-width used for the flat-sky beam projection in
+# FTBeam.from_beam. The Cartesian grid spans rx in [-_MAX_R, +_MAX_R];
+# zenith angle is za = sqrt(x^2 + y^2) in radians, so the corner of the
+# grid sits at za = sqrt(2)*_MAX_R = 1 rad (~57 deg), a sensible outer
+# bound for the beam-relevant sky.
+_MAX_R = 0.7
+
+
+def _cartesian_to_spherical(x, y):
+    """Invert the simple zenith-angle map x = za*cos(az), y = za*sin(az)."""
+    za = np.sqrt(x**2 + y**2)
+    rho = np.divide(x, za, where=za != 0)
+    az = np.arccos(rho)
+    return az, za
+
+
+def _ft_beam_2d(rx, b, npix=500, mapsize=_MAX_R):
+    """
+    Pad/crop the Cartesian beam to a centered grid and take the 2D FFT.
+
+    `mapsize` controls the FT grid extent. Increasing it improves
+    k-resolution at the cost of going beyond the simulation's spatial
+    support.
+    """
+    dr = np.diff(rx).mean()
+    ngrid = int(2.0 * mapsize / dr)
+    if ngrid % 2 == 0:
+        ngrid += 1  # odd, so the FT is centered on zero
+
+    new_map = np.zeros((ngrid, ngrid), dtype=complex)
+    if ngrid < npix:
+        new_map = b[
+            (npix - ngrid) // 2 : -(npix - ngrid) // 2,
+            (npix - ngrid) // 2 : -(npix - ngrid) // 2,
+        ]
+    elif ngrid > npix:
+        new_map[
+            -(npix - ngrid) // 2 : (npix - ngrid) // 2,
+            -(npix - ngrid) // 2 : (npix - ngrid) // 2,
+        ] = b
+    else:
+        new_map = np.copy(b)
+        ngrid = rx.size
+
+    Atilde = np.fft.fftshift(
+        np.fft.fft2(np.fft.fftshift(new_map), norm="ortho")
+        * (2.0 * mapsize / ngrid) ** 1.0
+    )
+    Atilde = np.flip(Atilde).real  # decreasing-order axes
+    return Atilde
 
 
 class FTBeam:
@@ -87,22 +141,50 @@ class FTBeam:
         self.mapsize = float(mapsize)
 
     @classmethod
-    def from_beam(cls, beamfile, verbose=False, x_orientation=None):
+    def from_beam(
+        cls,
+        beamfile,
+        pol,
+        freq_array,
+        mapsize=1.0,
+        npix=301,
+        verbose=False,
+        x_orientation=None,
+    ):
         """
         Compute Fourier transform of beam in sky plane given a file
         containing beam simulations.
 
         Given the path to a beam simulation, obtain the Fourier transform
-        of the instrument beam in the sky plane for all the frequencies
-        in the spectral window.
-        Output is an array of dimensions (kperpx, kperpy, freq).
-        Computations correspond to the Fourier transform performed in equation
-        10 of memo.
+        of the instrument beam in the sky plane for each frequency in
+        `freq_array`. Computations correspond to the Fourier transform
+        performed in equation 10 of HERA Memo #128: the beam is
+        interpolated onto `freq_array`, peak-normalized per frequency,
+        projected onto a Cartesian (flat-sky) plane, and 2D-FFT'd per
+        frequency slice.
+
+        `freq_array` should be the frequency channels of the data whose
+        window functions are being computed (see :meth:`select_freqs`).
 
         Parameters
         ----------
         beamfile : str
-            Path to file containing beam simulation/
+            Path to file containing the beam simulation. Must be readable
+            by :meth:`pyuvdata.UVBeam.read_beamfits`.
+        pol : str or int
+            Polarization, can be pseudo-Stokes or power:
+            in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
+            in number form: 1, 2, 4, 3, -5, -6, -7, -8.
+        freq_array : 1D array or list of floats
+            Frequencies (in Hz) to compute the Fourier transform of the
+            beam on. Should match the frequency channels of the data.
+        mapsize : float, optional
+            Half-width of the flat map the beam is projected onto (in
+            rad). Increase for better k_perp resolution. Default: 1.0.
+        npix : int, optional
+            Number of pixels per side used for the Cartesian projection
+            of the beam. Preferably odd (even values are decremented).
+            Default: 301.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
         x_orientation: str, optional
@@ -110,7 +192,111 @@ class FTBeam:
             Default keeps polarization in X and Y basis.
             Used to convert polstr to polnum and conversely.
         """
-        raise NotImplementedError("Coming soon...")
+        from pyuvdata import UVBeam
+
+        freq_array = np.asarray(freq_array, dtype=float)
+        assert freq_array.ndim == 1 and freq_array.size > 2, (
+            "freq_array must be a 1D array with at least three frequencies."
+        )
+
+        if isinstance(pol, int):
+            polnum = pol
+            pol = uvutils.polnum2str(pol, x_orientation=x_orientation)
+        else:
+            polnum = uvutils.polstr2num(pol, x_orientation=x_orientation)
+
+        logger.info("Reading UVBeam from %s", beamfile)
+        beam = UVBeam()
+        beam.read_beamfits(str(beamfile))
+
+        if beam.beam_type == "efield":
+            if polnum < 0:
+                beam.efield_to_power()
+            else:
+                beam.efield_to_pstokes()
+        beam.select(polarizations=[polnum], inplace=True)
+        beam.peak_normalize()
+
+        # ensure odd number of pixels so the FT is centered on zero
+        npix = int(npix)
+        if npix % 2 == 0:
+            npix -= 1
+            logger.info("Adjusted npix to odd: %d", npix)
+
+        # Cartesian (flat-sky) grid and its sky coordinates
+        rx = np.linspace(-_MAX_R, _MAX_R, npix)
+        xg, yg = np.meshgrid(rx, rx)
+        az, za = _cartesian_to_spherical(xg, yg)
+
+        # frequencies the beam is evaluated at: if a few requested channels
+        # fall (slightly) outside the simulation coverage, evaluate the beam
+        # at the nearest covered frequency for those channels, but keep the
+        # true data frequencies as the frequency coordinates of the FTBeam
+        # (the beam evolves slowly with frequency; this is much preferable
+        # to shifting or resampling the frequency grid itself, which scales
+        # the window functions' k_parallel axis)
+        beam_fmin, beam_fmax = beam.freq_array.min(), beam.freq_array.max()
+        eval_freqs = freq_array
+        if (freq_array.min() < beam_fmin) or (freq_array.max() > beam_fmax):
+            n_out = int(np.sum((freq_array < beam_fmin) | (freq_array > beam_fmax)))
+            warnings.warn(
+                "{} of the {} requested frequencies lie outside the beam "
+                "simulation coverage ({:.2f}-{:.2f} MHz; requested "
+                "{:.2f}-{:.2f} MHz): for those channels, the beam is "
+                "evaluated at the nearest covered frequency.".format(
+                    n_out,
+                    freq_array.size,
+                    beam_fmin / 1e6,
+                    beam_fmax / 1e6,
+                    freq_array.min() / 1e6,
+                    freq_array.max() / 1e6,
+                )
+            )
+            eval_freqs = np.clip(freq_array, beam_fmin, beam_fmax)
+
+        nfreq = freq_array.size
+        logger.info(
+            "Interpolating beam onto a %dx%d Cartesian grid for %d frequency "
+            "channels (%.1f-%.1f MHz)",
+            npix,
+            npix,
+            nfreq,
+            freq_array[0] / 1e6,
+            freq_array[-1] / 1e6,
+        )
+        # interpolate the beam at the (az, za) coordinates of the Cartesian
+        # grid, for each frequency (works for both az_za and healpix beams)
+        interp_data = beam.interp(
+            az_array=az.ravel(),
+            za_array=za.ravel(),
+            freq_array=eval_freqs,
+            return_basis_vector=False,
+        )[0]
+        cart_beam = interp_data[0, 0].real.reshape(nfreq, npix, npix)
+        # peak-normalize per frequency
+        cart_beam /= np.max(cart_beam, axis=(1, 2))[:, None, None]
+
+        # ngrid is determined by mapsize + the rx spacing
+        dr = np.diff(rx).mean()
+        ngrid = int(2.0 * mapsize / dr)
+        if ngrid % 2 == 0:
+            ngrid += 1
+
+        logger.info("Taking 2D FFT per frequency (ngrid=%d)", ngrid)
+        data = np.zeros((nfreq, ngrid, ngrid))
+        for ifreq in range(nfreq):
+            data[ifreq, :, :] = _ft_beam_2d(
+                rx, cart_beam[ifreq, :, :], npix=npix, mapsize=mapsize
+            ).real
+
+        return cls(
+            data=data,
+            pol=pol,
+            freq_array=freq_array,
+            mapsize=mapsize,
+            verbose=verbose,
+            x_orientation=x_orientation,
+        )
 
     @classmethod
     def from_file(cls, ftfile, spw_range=None, freq_array=None, **kwargs):
@@ -146,13 +332,13 @@ class FTBeam:
         if spw_range is not None and freq_array is not None:
             raise ValueError("Cannot feed both spw_range and freq_array.")
 
-        # extract polarisation channel from filename
-        pol = str(ftfile).split("_")[-1].split(".")[0]
-
         # obtain bandwidth in file to define spectral window
         with h5py.File(ftfile, "r") as f:
             mapsize = f["mapsize"][0]
             bandwidth = np.array(f["freq"][...])
+            # polarisation: prefer the attribute written by write_hdf5,
+            # fall back to extracting it from the filename
+            pol = f.attrs.get("pol", None)
 
             if freq_array is not None:
                 # read only the contiguous channel range covering the
@@ -177,6 +363,11 @@ class FTBeam:
                 spw_range = (0, bandwidth.size)
                 read_freqs = bandwidth
                 ft_beam = np.array(f["FT_beam"])
+
+        if pol is None:
+            pol = str(ftfile).split("_")[-1].split(".")[0]
+        else:
+            pol = str(pol)
 
         obj = cls(
             data=ft_beam, pol=pol, freq_array=read_freqs, mapsize=mapsize, **kwargs
@@ -287,6 +478,38 @@ class FTBeam:
         assert bandwidth.size > 1, "Error reading file, empty bandwidth."
 
         return bandwidth
+
+    def write_hdf5(self, filepath, overwrite=False, extra_attrs=None):
+        """
+        Write the FTBeam object to an HDF5 file readable by :meth:`from_file`.
+
+        Parameters
+        ----------
+        filepath : str
+            Path of the output file. For backwards compatibility with
+            :meth:`from_file` on files without a ``pol`` attribute, it is
+            recommended (but not required) that the filename ends in
+            ``_<pol>.hdf5``, e.g. ``FT_beam_HERA_vivaldi_pI.hdf5``.
+        overwrite : bool, optional
+            If True, overwrite an existing file. Default: False.
+        extra_attrs : dict, optional
+            Additional attributes to store in the file (e.g. provenance
+            information). Values must be h5py-compatible scalars/strings.
+        """
+        filepath = Path(filepath)
+        if filepath.exists() and not overwrite:
+            raise FileExistsError(f"{filepath} exists. Use overwrite=True.")
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        with h5py.File(filepath, "w") as f:
+            f.create_dataset("FT_beam", data=self.ft_beam, compression="gzip")
+            f.create_dataset("freq", data=self.freq_array)
+            f.create_dataset("mapsize", data=np.array([self.mapsize]))
+            f.attrs["pol"] = str(self.pol)
+            if extra_attrs is not None:
+                for key, val in extra_attrs.items():
+                    f.attrs[key] = val
+        logger.info("Wrote FTBeam to %s", filepath)
 
     def select_freqs(self, freq_array, atol=None, inplace=True):
         """
