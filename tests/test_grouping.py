@@ -922,14 +922,14 @@ class TestSpherical:
             sph.window_function_array[0][:, :, :4, :], sph2.window_function_array[0]
         )
 
-    def test_average_exact_windows(self, uvp_exact_wfs: UVPSpec) -> None:
+    def test_average_exact_windows(self, uvp_exact_wfs_wbeam: UVPSpec) -> None:
         """Check that spherical_average runs for a UVPSpec with exact window functions, with and without blpair_groups."""
-        blpair_groups, _, _ = uvp_exact_wfs.get_red_blpairs()
+        blpair_groups, _, _ = uvp_exact_wfs_wbeam.get_red_blpairs()
         grouping.spherical_average(
-            uvp_exact_wfs, self.KBINS, self.BIN_WIDTHS, little_h=False
+            uvp_exact_wfs_wbeam.convert_to_deltasq(inplace=False), self.KBINS, self.BIN_WIDTHS, little_h=False
         )
         grouping.spherical_average(
-            uvp_exact_wfs,
+            uvp_exact_wfs_wbeam,
             self.KBINS,
             self.BIN_WIDTHS,
             blpair_groups=blpair_groups,

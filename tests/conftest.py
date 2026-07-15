@@ -126,6 +126,37 @@ def uvp_exact_wfs(uvp_example_data, beam_nf_dipole_wcosmo: PSpecBeamUV) -> UVPSp
 
 
 @pytest.fixture(scope="session")
+def uvp_exact_wfs_wbeam(uvd_zen_2458116: UVData, beam_nf_dipole_wcosmo: PSpecBeamUV) -> UVPSpec:
+    # obtain uvp object
+    uvd = copy.deepcopy(uvd_zen_2458116)
+    # Create a new PSpecData objec
+    ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo,)
+
+    # choose baselines
+    baselines1, baselines2, _ = utils.construct_blpairs(
+        uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
+    )
+    # compute ps
+    uvp = ds.pspec(
+        baselines1,
+        baselines2,
+        dsets=(0, 1),
+        pols=[("xx", "xx")],
+        spw_ranges=(175, 195),
+        taper="bh",
+        verbose=False,
+    )
+    # uvp.cosmo = conversions.Cosmo_Conversions()
+    ft_file = DATA_PATH / "FT_beam_HERA_dipole_test"
+
+    uvp.get_exact_window_functions(ftbeam=ft_file, inplace=True)
+    # uvp.beam_freqs = beam_nf_dipole_wcosmo.beam_freqs
+    # uvp.OmegaP, uvp.OmegaPP = beam_nf_dipole_wcosmo.get_Omegas(uvp.polpair_array)
+    uvp.check()
+    return uvp
+
+
+@pytest.fixture(scope="session")
 def uvd_zen_even_xx() -> UVData:
     """Session-cached UVData from zen.even.xx.LST.1.28828.uvOCRSA."""
     uvd = UVData()
