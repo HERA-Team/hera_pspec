@@ -64,7 +64,7 @@ def red_bl_lens(uvd_zen_2458116: UVData) -> np.ndarray:
 def kbins() -> units.Quantity:
     # kmax, dk = 1.0, 0.128 / 2
     # krange = np.arange(dk * 1.5, kmax, step=dk)
-    krange = np.arange(0.1, 5., step=0.3)
+    krange = np.arange(0.1, 5.0, step=0.3)
     return ((krange[1:] + krange[:-1]) / 2) * units.h / units.Mpc
 
 
@@ -525,7 +525,7 @@ class TestUVWindowInterpolateFtBeam:
             uvwindow_obj._interpolate_ft_beam(bl_len=red_bl_lens[12], ft_beam=sliced)
 
     def test_not_square(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray,
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
     ) -> None:
         ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
         with pytest.raises(ValueError, match="ft_beam must be square in sky plane"):
@@ -811,10 +811,7 @@ class TestUVWindowCylindricalToSpherical:
         ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
         with pytest.raises(ValueError, match="If only one bl_lens is given,"):
             uvwindow_obj.cylindrical_to_spherical(
-                cyl_wf=cyl_wf,
-                kbins=kbins,
-                ktot=ktot,
-                bl_lens=red_bl_lens,
+                cyl_wf=cyl_wf, kbins=kbins, ktot=ktot, bl_lens=red_bl_lens
             )
 
     def test_bl_lens_mismatch(
@@ -869,7 +866,9 @@ class TestUVWindowCylindricalToSpherical:
 
 
 class TestUVWindowGetSphericalWf:
-    @pytest.mark.parametrize("kbins", [np.arange(1., 5., step=0.3), np.arange(0.1, 3., step=0.03)])
+    @pytest.mark.parametrize(
+        "kbins", [np.arange(1.0, 5.0, step=0.3), np.arange(0.1, 3.0, step=0.03)]
+    )
     def test_minmax_k_warning(
         self,
         uvwindow_obj: uvwindow.UVWindow,
@@ -990,8 +989,7 @@ class TestUVWindowGetSphericalWf:
     ) -> None:
         kperp_bins = [0, 1e-12] if type == "wrong_min" else [2e12, 3e12]
         with pytest.warns(
-            UserWarning,
-            match="kperp bin centre not included in binning array",
+            UserWarning, match="kperp bin centre not included in binning array"
         ):
             _ = uvwindow_obj.get_spherical_wf(
                 kbins=kbins,
@@ -1109,7 +1107,11 @@ class TestUVWindowRunAndWrite:
 
     @pytest.mark.parametrize("bad_kwarg", ["kperp_bins", "kpara_bins"])
     def test_kperp_no_units_error(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path, bad_kwarg: str
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        tmp_path: Path,
+        bad_kwarg: str,
     ) -> None:
         kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
         kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
@@ -1117,8 +1119,12 @@ class TestUVWindowRunAndWrite:
             uvwindow_obj.run_and_write(
                 filepath=str(tmp_path / outfile),
                 bl_lens=red_bl_lens[:1],
-                kperp_bins=kperp_bins.value if bad_kwarg == "kperp_bins" else kperp_bins,
-                kpara_bins=kpara_bins.value if bad_kwarg == "kpara_bins" else kpara_bins,
+                kperp_bins=kperp_bins.value
+                if bad_kwarg == "kperp_bins"
+                else kperp_bins,
+                kpara_bins=kpara_bins.value
+                if bad_kwarg == "kpara_bins"
+                else kpara_bins,
                 clobber=True,
             )
 
@@ -1126,7 +1132,9 @@ class TestUVWindowRunAndWrite:
         self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
     ) -> None:
         kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
-        with pytest.raises(ValueError, match="k array units not consistent with little_h"):
+        with pytest.raises(
+            ValueError, match="k array units not consistent with little_h"
+        ):
             uvwindow_obj.run_and_write(
                 filepath=str(tmp_path / outfile),
                 bl_lens=red_bl_lens[:1],
