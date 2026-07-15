@@ -126,11 +126,13 @@ def uvp_exact_wfs(uvp_example_data, beam_nf_dipole_wcosmo: PSpecBeamUV) -> UVPSp
 
 
 @pytest.fixture(scope="session")
-def uvp_exact_wfs_wbeam(uvd_zen_2458116: UVData, beam_nf_dipole_wcosmo: PSpecBeamUV) -> UVPSpec:
+def uvp_exact_wfs_wbeam(
+    uvd_zen_2458116: UVData, beam_nf_dipole_wcosmo: PSpecBeamUV
+) -> UVPSpec:
     # obtain uvp object
     uvd = copy.deepcopy(uvd_zen_2458116)
     # Create a new PSpecData objec
-    ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo,)
+    ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole_wcosmo)
 
     # choose baselines
     baselines1, baselines2, _ = utils.construct_blpairs(

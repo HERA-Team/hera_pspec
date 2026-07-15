@@ -926,7 +926,10 @@ class TestSpherical:
         """Check that spherical_average runs for a UVPSpec with exact window functions, with and without blpair_groups."""
         blpair_groups, _, _ = uvp_exact_wfs_wbeam.get_red_blpairs()
         grouping.spherical_average(
-            uvp_exact_wfs_wbeam.convert_to_deltasq(inplace=False), self.KBINS, self.BIN_WIDTHS, little_h=False
+            uvp_exact_wfs_wbeam.convert_to_deltasq(inplace=False),
+            self.KBINS,
+            self.BIN_WIDTHS,
+            little_h=False,
         )
         grouping.spherical_average(
             uvp_exact_wfs_wbeam,
