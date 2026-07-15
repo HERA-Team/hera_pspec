@@ -62,8 +62,9 @@ def red_bl_lens(uvd_zen_2458116: UVData) -> np.ndarray:
 
 @pytest.fixture()
 def kbins() -> units.Quantity:
-    kmax, dk = 1.0, 0.128 / 2
-    krange = np.arange(dk * 1.5, kmax, step=dk)
+    # kmax, dk = 1.0, 0.128 / 2
+    # krange = np.arange(dk * 1.5, kmax, step=dk)
+    krange = np.arange(0.1, 5., step=0.3)
     return ((krange[1:] + krange[:-1]) / 2) * units.h / units.Mpc
 
 
@@ -318,12 +319,14 @@ class TestUVWindowInit:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw)
         assert test is not None
 
+    @pytest.mark.parametrize("bad_spw", [None, (0, 20)])
     def test_inconsistent_ftbeam_spectral_range(
         self,
+        bad_spw: tuple[int, int] | None,
         make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
         ft_beam_spw: uvwindow.FTBeam,
     ) -> None:
-        ft_beam_full = make_ft_beam_obj()
+        ft_beam_full = make_ft_beam_obj(spw_range=bad_spw)
         with pytest.raises(
             ValueError, match="Spectral ranges of the two FTBeam objects do not match"
         ):
@@ -520,6 +523,15 @@ class TestUVWindowInterpolateFtBeam:
         sliced = ft_beam[0:10, :, :] if bad_slice == "truncated" else ft_beam[:, :, :].T
         with pytest.raises(ValueError, match="ft_beam must have shape"):
             uvwindow_obj._interpolate_ft_beam(bl_len=red_bl_lens[12], ft_beam=sliced)
+
+    def test_not_square(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray,
+    ) -> None:
+        ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
+        with pytest.raises(ValueError, match="ft_beam must be square in sky plane"):
+            uvwindow_obj._interpolate_ft_beam(
+                bl_len=red_bl_lens[12], ft_beam=ft_beam[:, :1, :]
+            )
 
 
 class TestUVWindowTakeFreqFT:
@@ -788,6 +800,23 @@ class TestUVWindowCylindricalToSpherical:
                 bl_weights=[1.0, 2.0],
             )
 
+    def test_single_bl_lens(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        _, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        with pytest.raises(ValueError, match="If only one bl_lens is given,"):
+            uvwindow_obj.cylindrical_to_spherical(
+                cyl_wf=cyl_wf,
+                kbins=kbins,
+                ktot=ktot,
+                bl_lens=red_bl_lens,
+            )
+
     def test_bl_lens_mismatch(
         self,
         uvwindow_obj: uvwindow.UVWindow,
@@ -840,17 +869,18 @@ class TestUVWindowCylindricalToSpherical:
 
 
 class TestUVWindowGetSphericalWf:
-    def test_max_k_warning(
+    @pytest.mark.parametrize("kbins", [np.arange(1., 5., step=0.3), np.arange(0.1, 3., step=0.03)])
+    def test_minmax_k_warning(
         self,
         uvwindow_obj: uvwindow.UVWindow,
         red_bl_lens: np.ndarray,
         kbins: units.Quantity,
     ) -> None:
         with pytest.warns(
-            UserWarning, match="Max spherical k probed is not included in bins"
+            UserWarning, match="spherical k probed is not included in bins"
         ):
             _ = uvwindow_obj.get_spherical_wf(
-                kbins=kbins,
+                kbins=kbins * units.h / units.Mpc,
                 bl_lens=red_bl_lens[:1],
                 bl_weights=[1],
                 kperp_bins=None,
@@ -950,6 +980,26 @@ class TestUVWindowGetSphericalWf:
                 bl_lens=red_bl_lens[:1],
             )
 
+    @pytest.mark.parametrize("type", ["wrong_min", "wrong_max"])
+    def test_wrong_kperp_bins(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+        type: str,
+    ) -> None:
+        kperp_bins = [0, 1e-12] if type == "wrong_min" else [2e12, 3e12]
+        with pytest.warns(
+            UserWarning,
+            match="kperp bin centre not included in binning array",
+        ):
+            _ = uvwindow_obj.get_spherical_wf(
+                kbins=kbins,
+                bl_lens=red_bl_lens[:1],
+                bl_weights=[1],
+                kperp_bins=kperp_bins * uvwindow_obj.kunits,
+            )
+
     @pytest.mark.parametrize(
         "bad_kwarg,error_msg",
         [
@@ -997,6 +1047,23 @@ class TestUVWindowRunAndWrite:
         uvwindow_obj.run_and_write(
             filepath=str(tmp_path / outfile),
             bl_lens=red_bl_lens[:1],
+            bl_weights=[1.0],
+            kperp_bins=kperp_bins,
+            kpara_bins=kpara_bins,
+            clobber=False,
+        )
+
+    def test_no_taper(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        uvw = copy.deepcopy(uvwindow_obj)
+        uvwindow_obj.taper = None
+        kperp_bins = uvw.get_kperp_bins(red_bl_lens[:1])
+        kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
+        uvw.run_and_write(
+            filepath=str(tmp_path / outfile),
+            bl_lens=red_bl_lens[:1],
+            bl_weights=[1.0],
             kperp_bins=kperp_bins,
             kpara_bins=kpara_bins,
             clobber=False,
@@ -1040,26 +1107,29 @@ class TestUVWindowRunAndWrite:
                 clobber=True,
             )
 
+    @pytest.mark.parametrize("bad_kwarg", ["kperp_bins", "kpara_bins"])
     def test_kperp_no_units_error(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path, bad_kwarg: str
     ) -> None:
         kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
-        with pytest.raises(AttributeError, match="Feed k array with units"):
-            uvwindow_obj.run_and_write(
-                filepath=str(tmp_path / outfile),
-                bl_lens=red_bl_lens[:1],
-                kperp_bins=kperp_bins.value,
-                clobber=True,
-            )
-
-    def test_kpara_no_units_error(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
-    ) -> None:
         kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
         with pytest.raises(AttributeError, match="Feed k array with units"):
             uvwindow_obj.run_and_write(
                 filepath=str(tmp_path / outfile),
                 bl_lens=red_bl_lens[:1],
-                kpara_bins=kpara_bins.value,
+                kperp_bins=kperp_bins.value if bad_kwarg == "kperp_bins" else kperp_bins,
+                kpara_bins=kpara_bins.value if bad_kwarg == "kpara_bins" else kpara_bins,
+                clobber=True,
+            )
+
+    def test_k_wrong_units_error(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        with pytest.raises(ValueError, match="k array units not consistent with little_h"):
+            uvwindow_obj.run_and_write(
+                filepath=str(tmp_path / outfile),
+                bl_lens=red_bl_lens[:1],
+                kpara_bins=kpara_bins.value * units.Mpc,
                 clobber=True,
             )

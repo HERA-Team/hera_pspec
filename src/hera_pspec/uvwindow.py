@@ -987,7 +987,7 @@ class UVWindow:
         sum_per_bin = np.sum(cyl_wf, axis=(1, 2))[:, None, None]
         cyl_wf = np.divide(cyl_wf, sum_per_bin, out=cyl_wf, where=sum_per_bin != 0)
 
-        if (return_bins == "unweighted") or return_bins:
+        if (return_bins == "unweighted") or return_bins is True:
             return kperp_bins, kpara_bins, cyl_wf
         elif return_bins == "weighted":
             return kperp, kpara, cyl_wf
