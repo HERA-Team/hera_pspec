@@ -165,11 +165,6 @@ def uvd_std(_miriad_raw):
 
 
 @pytest.fixture
-def w():
-    return [None, None]
-
-
-@pytest.fixture
 def dayenu_r_params() -> dict:
     """Standard dayenu r_params used across tests."""
     return {
@@ -361,12 +356,12 @@ class TestAddData:
 
 class TestSetSymmetricTaper:
     def test_raises_on_truncated_r_matrix(
-        self, d: list[UVData], w: list, dayenu_r_params: dict
+        self, d: list[UVData], dayenu_r_params: dict
     ) -> None:
         """
         Make sure that you can't set a symmtric taper with an truncated R matrix
         """
-        ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
         Nfreq = ds.spw_Nfreqs
         ds.spw_Ndlys = Nfreq - 3
 
@@ -391,10 +386,10 @@ class TestSetSymmetricTaper:
         assert not (ds.symmetric_taper)
 
     def test_matches_independent_calculation(
-        self, d: list[UVData], w: list, dayenu_r_params: dict
+        self, d: list[UVData], dayenu_r_params: dict
     ) -> None:
         """Now directly compare results to expectations."""
-        ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
         Nfreq = ds.spw_Nfreqs
         ds.spw_Ndlys = Nfreq - 3
         key1 = (0, 24, 38)
@@ -424,13 +419,13 @@ class TestSetSymmetricTaper:
         assert not np.all(np.isclose(rmat_symmetric, rmat_a, atol=1e-6))
 
 
-def test_labels(d: list[UVData], w: list) -> None:
+def test_labels(d: list[UVData]) -> None:
     """
     Test that dataset labels work.
     """
     # Check that specifying labels does work
     psd = pspecdata.PSpecData(
-        dsets=[d[0], d[1]], wgts=[w[0], w[1]], labels=["red", "blue"]
+        dsets=[d[0], d[1]], wgts=[None, None], labels=["red", "blue"]
     )
     np.testing.assert_array_equal(psd.x(("red", 24, 38)), psd.x((0, 24, 38)))
 
@@ -767,8 +762,8 @@ class TestGetUnnormedMatrices:
                     else:
                         np.testing.assert_almost_equal(matrix[i, j], 0.5)
 
-    def test_get_unnormed_V(self, d, w) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=w, labels=["red", "blue"])
+    def test_get_unnormed_V(self, d) -> None:
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], labels=["red", "blue"])
         key1 = ("red", (24, 25), "xx")
         key2 = ("blue", (25, 38), "xx")
         ds.spw_Ndlys = 5
@@ -950,7 +945,7 @@ class TestGetMW:
 
 
 @pytest.fixture
-def cov_q_setup(d, d_std, w):
+def cov_q_setup(d, d_std):
     """PSpecData + analytic covariance matrix for test_cov_q tests."""
     ndlys = 13
     dlist = copy.deepcopy(d)
@@ -963,7 +958,7 @@ def cov_q_setup(d, d_std, w):
         _d_std.select(
             times=np.unique(_d_std.time_array)[:10], frequencies=_d_std.freq_array[:16]
         )
-    ds = pspecdata.PSpecData(dsets=dlist, wgts=w, dsets_std=dlist_std)
+    ds = pspecdata.PSpecData(dsets=dlist, wgts=[None, None], dsets_std=dlist_std)
     ds.set_Ndlys(ndlys)
     chan_x, chan_y = np.meshgrid(range(ds.Nfreqs), range(ds.Nfreqs))
     cov_analytic = np.zeros((ds.spw_Ndlys, ds.spw_Ndlys), dtype=np.complex128)
@@ -1038,11 +1033,11 @@ class TestCovQ:
         ):
             ds.cov_q_hat(key1, key2, time_indices="watch out!")
 
-    def test_cov_p_hat(self, d, d_std, w) -> None:
+    def test_cov_p_hat(self, d, d_std) -> None:
         """
         Test cov_p_hat, verify on identity.
         """
-        ds = pspecdata.PSpecData(dsets=d, wgts=w, dsets_std=d_std)
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], dsets_std=d_std)
         cov_p = ds.cov_p_hat(
             np.sqrt(6.0) * np.identity(10), np.array([5.0 * np.identity(10)])
         )
@@ -1054,12 +1049,12 @@ class TestCovQ:
                     assert np.isclose(0.0, cov_p[0, p, q], atol=1e-6)
 
 
-def test_R_truncation(d: list[UVData], w: list, dayenu_r_params: dict) -> None:
+def test_R_truncation(d: list[UVData], dayenu_r_params: dict) -> None:
     """
     Test truncation of R-matrices. These should give a q_hat that is all
     zeros outside of the with f-start and f-end.
     """
-    ds = pspecdata.PSpecData(dsets=d, wgts=w)
+    ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
     Nfreq = ds.spw_Nfreqs
     Ntime = ds.Ntimes
     Ndlys = Nfreq - 3
@@ -1092,7 +1087,7 @@ def test_R_truncation(d: list[UVData], w: list, dayenu_r_params: dict) -> None:
     g = ds1.get_G(key1, key2)
     ds1.get_MW(g, h)
     # make sure identity weighting isn't broken.
-    ds = pspecdata.PSpecData(dsets=d, wgts=w)
+    ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
     ds1 = copy.deepcopy(ds)
     ds1.set_spw((10, Nfreq - 10))
     ds1.set_weighting("identity")
@@ -1105,12 +1100,12 @@ class TestQHat:
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
     def test_shape_conjugate_symmetry_and_key_lists(
-        self, d: list[UVData], w: list, input_data_weight: str, taper: str
+        self, d: list[UVData], input_data_weight: str, taper: str
     ) -> None:
         """Test that q_hat has the right shape, that swapping x1<->x2 yields the
         complex conjugate, and that list-of-duplicate-key inputs scale q_hat
         linearly in each argument."""
-        ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
         Nfreq = ds.Nfreqs
         Ntime = ds.Ntimes
         Ndlys = Nfreq - 3
@@ -1175,10 +1170,10 @@ class TestQHat:
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
     def test_fft_matches_slow_method(
-        self, d: list[UVData], w: list, input_data_weight: str, taper: str
+        self, d: list[UVData], input_data_weight: str, taper: str
     ) -> None:
         """Check that the slow (explicit) method agrees with the FFT method."""
-        ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
         ds.spw_Ndlys = ds.Nfreqs
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
@@ -1204,8 +1199,8 @@ class TestQHat:
         assert np.isclose(np.real(q_hat_a / q_hat_a_slow), 1).all()
         assert np.isclose(np.imag(q_hat_a / q_hat_a_slow), 0, atol=1e-6).all()
 
-    def test_raises_on_fft_with_exact_norm(self, d: list[UVData], w: list) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=w)
+    def test_raises_on_fft_with_exact_norm(self, d: list[UVData]) -> None:
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
         with pytest.raises(
@@ -1218,11 +1213,11 @@ class TestQHat:
 class TestFisherMatrices:
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
-    def test_get_H(self, d, w, input_data_weight: str, taper: str) -> None:
+    def test_get_H(self, d, input_data_weight: str, taper: str) -> None:
         """
         Test Fisher/weight matrix calculation.
         """
-        ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
         Nfreq = ds.Nfreqs
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
@@ -1256,11 +1251,11 @@ class TestFisherMatrices:
 
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
-    def test_get_G(self, d, w, input_data_weight: str, taper: str) -> None:
+    def test_get_G(self, d, input_data_weight: str, taper: str) -> None:
         """
         Test Fisher/weight matrix calculation.
         """
-        ds = pspecdata.PSpecData(dsets=d, wgts=w)
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
         Nfreq = ds.Nfreqs
         multiplicative_tolerance = 1.0
         key1 = (0, 24, 38)
@@ -1402,8 +1397,8 @@ def test_parseval(ds, d, d_std, w, beam_nf_dipole, bm_Q, uvd, uvd_std):
 
 
 class TestScalar:
-    def test_scalar_delay_adjustment(self, d, w, beam_nf_dipole) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=beam_nf_dipole)
+    def test_scalar_delay_adjustment(self, d, beam_nf_dipole) -> None:
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
@@ -1420,13 +1415,13 @@ class TestScalar:
             adjustment = ds.scalar_delay_adjustment(key1, key2, sampling=True)
         assert len(adjustment == ds.spw_Ndlys)
 
-    def test_scalar(self, d, w, beam_nf_dipole) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=w, beam=beam_nf_dipole)
+    def test_scalar(self, d, beam_nf_dipole) -> None:
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
 
         gauss = pspecbeam.PSpecBeamGauss(
             0.8, np.linspace(115e6, 130e6, 50, endpoint=False)
         )
-        ds2 = pspecdata.PSpecData(dsets=d, wgts=w, beam=gauss)
+        ds2 = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=gauss)
 
         # Check normal execution
         scalar = ds.scalar(("xx", "xx"))
