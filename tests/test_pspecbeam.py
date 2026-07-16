@@ -452,12 +452,14 @@ class TestPSpecBeamFromArray:
         build_kwargs: Callable[[np.ndarray, np.ndarray, np.ndarray], dict],
     ) -> None:
         """Check that an unrecognized polarization key in OmegaP/OmegaPP raises."""
-        # No match= since pyuvdata's polstr2num raises before pspecbeam's own
-        # "Unrecognized polarization" check; exception type/message varies by version.
+        # Raised by pyuvdata's polstr2num before pspecbeam's own "Unrecognized
+        # polarization" check is reached. Despite its docstring claiming
+        # ValueError, polstr2num does a bare dict lookup and so actually
+        # raises KeyError; confirmed consistent across pyuvdata 3.0-3.2.
         Om_P = gauss_beam.power_beam_int()
         Om_PP = gauss_beam.power_beam_sq_int()
         kwargs = build_kwargs(Om_P, Om_PP, gauss_beam.beam_freqs)
-        with pytest.raises((KeyError, ValueError)):
+        with pytest.raises(KeyError):
             pspecbeam.PSpecBeamFromArray(**kwargs)
 
     @pytest.mark.parametrize(
@@ -487,13 +489,13 @@ class TestPSpecBeamFromArray:
         call: Callable[[pspecbeam.PSpecBeamFromArray, np.ndarray, np.ndarray], Any],
     ) -> None:
         """Check that invalid polarization strings/codes passed to method calls raise."""
-        # No match= on these: same pyuvdata version sensitivity as the init-arg cases above.
+        # Same polstr2num KeyError as in test_raises_on_unrecognized_pol_in_init above.
         Om_P = gauss_beam.power_beam_int()
         Om_PP = gauss_beam.power_beam_sq_int()
         psbeam = pspecbeam.PSpecBeamFromArray(
             OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=gauss_beam.beam_freqs
         )
-        with pytest.raises((KeyError, ValueError)):
+        with pytest.raises(KeyError):
             call(psbeam, Om_P, Om_PP)
 
 
