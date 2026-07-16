@@ -580,8 +580,8 @@ class TestGetQ:
         Q_matrix is simply an identity matrix with same dimensions as that of vector length.
         It will be very helpful if we can have more elegant solution for this.
         AG: Update 2026/07/15: Previous versions of the test were using empty PSpecData object.
-        This has been changed, thereby avoiding the need for try/except blocks. 
-        The test now checks that the Q matrix has the correct shape and properties, 
+        This has been changed, thereby avoiding the need for try/except blocks.
+        The test now checks that the Q matrix has the correct shape and properties,
         and that it behaves as expected when applied to random vectors.
 
         """
