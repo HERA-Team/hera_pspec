@@ -189,7 +189,7 @@ def pspec_blpairs() -> tuple:
 
 
 @pytest.fixture
-def pspec_ds(beam_nf_dipole, uvd):
+def pspec_ds(beam_nf_dipole, uvd) -> pspecdata.PSpecData:
     """PSpecData with two cross-products of uvd, NF dipole beam, and dataset labels."""
     return pspecdata.PSpecData(
         dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole, labels=["red", "blue"]
