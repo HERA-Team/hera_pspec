@@ -579,9 +579,16 @@ class TestGetQ:
         the actual value of tau/freq/taper etc. we do need datasets! Currently, if there is no dataset,
         Q_matrix is simply an identity matrix with same dimensions as that of vector length.
         It will be very helpful if we can have more elegant solution for this.
+        AG: Update 2026/07/15: Previous versions of the test were using empty PSpecData object.
+        This has been changed, thereby avoiding the need for try/except blocks. 
+        The test now checks that the Q matrix has the correct shape and properties, 
+        and that it behaves as expected when applied to random vectors.
 
         """
-        vect_length = 50
+        # Test if there is a warning if user does not pass the beam
+        ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
+
+        vect_length = ds_t.spw_Ndlys
         x_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
             size=vect_length
         )
@@ -589,22 +596,11 @@ class TestGetQ:
             size=vect_length
         )
 
-        ds = pspecdata.PSpecData()
-        ds.spw_Nfreqs = vect_length
-        # Test if there is a warning if user does not pass the beam
-        key1 = (0, 24, 38)
-        key2 = (1, 24, 38)
-        uvd = copy.deepcopy(uvd)
-        ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
-
         for i in range(vect_length):
-            try:
-                Q_matrix = ds.get_Q(i)
-                # Test that if the number of delay bins hasn't been set
-                # the code defaults to putting that equal to Nfreqs
-                assert ds.spw_Ndlys == ds.spw_Nfreqs
-            except IndexError:
-                Q_matrix = np.ones((vect_length, vect_length))
+            Q_matrix = ds_t.get_Q(i)
+            # Test that if the number of delay bins hasn't been set
+            # the code defaults to putting that equal to Nfreqs
+            assert ds_t.spw_Ndlys == ds_t.spw_Nfreqs
 
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
@@ -620,21 +616,15 @@ class TestGetQ:
             np.testing.assert_almost_equal(np.imag(xQx), 0.0)
 
         x_vect = np.ones(vect_length)
-        try:
-            Q_matrix = ds.get_Q(vect_length / 2)
-        except IndexError:
-            Q_matrix = np.ones((vect_length, vect_length))
+        Q_matrix = ds_t.get_Q(vect_length / 2)
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         np.testing.assert_almost_equal(xQx, np.abs(vect_length**2.0))
 
         # Now do all the same tests from above but for a different number
         # of delay channels
-        ds.set_Ndlys(vect_length - 3)
+        ds_t.set_Ndlys(vect_length - 3)
         for i in range(vect_length - 3):
-            try:
-                Q_matrix = ds.get_Q(i)
-            except IndexError:
-                Q_matrix = np.ones((vect_length, vect_length))
+            Q_matrix = ds_t.get_Q(i)
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
             xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
@@ -649,17 +639,14 @@ class TestGetQ:
             np.testing.assert_almost_equal(np.imag(xQx), 0.0)
 
         x_vect = np.ones(vect_length)
-        try:
-            Q_matrix = ds.get_Q((vect_length - 2) / 2 - 1)
-        except IndexError:
-            Q_matrix = np.ones((vect_length, vect_length))
+        Q_matrix = ds_t.get_Q((vect_length - 2) / 2 - 1)
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         np.testing.assert_almost_equal(xQx, np.abs(vect_length**2.0))
 
         # Make sure that error is raised when asking for a delay mode outside
         # of the range of delay bins
         with pytest.raises(IndexError):
-            ds.get_Q(vect_length - 1)
+            ds_t.get_Q(vect_length - 1)
 
     def test_get_Q_alt_tensor(self, uvd: UVData) -> None:
         uvd1 = copy.deepcopy(uvd)
@@ -692,13 +679,10 @@ def test_get_integral_beam(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
     with pytest.warns(UserWarning, match="The beam response could not be calculated"):
         ds_t.get_integral_beam(pol)
 
-    try:
-        integral_matrix = ds.get_integral_beam(pol)
-        # Test that if the number of delay bins hasn't been set
-        # the code defaults to putting that equal to Nfreqs
-        assert ds.spw_Ndlys == ds.spw_Nfreqs
-    except IndexError:
-        integral_matrix = np.ones((ds.spw_Ndlys, ds.spw_Ndlys))
+    integral_matrix = ds.get_integral_beam(pol)
+    # Test that if the number of delay bins hasn't been set
+    # the code defaults to putting that equal to Nfreqs
+    assert ds.spw_Ndlys == ds.spw_Nfreqs
 
     # Test that integral matrix has the right shape
     assert integral_matrix.shape == (ds.spw_Nfreqs, ds.spw_Nfreqs)
@@ -796,9 +780,7 @@ class TestGetUnnormedMatrices:
         # If this is an issue downstream, should investigate more in the future.
         tol = 1e-10
         frac_non_herm = abs(V.conj().T - V) / abs(V)
-        for i in range(ds.spw_Ndlys):
-            for j in range(ds.spw_Ndlys):
-                assert frac_non_herm[i, j] <= tol
+        assert np.all(frac_non_herm <= tol)
 
 
 def test_cross_covar_model(uvd: UVData) -> None:
