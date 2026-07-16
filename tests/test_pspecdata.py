@@ -32,10 +32,6 @@ from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
 
-# Data files to use in tests
-dfiles = ["zen.2458042.12552.xx.HH.uvXAA", "zen.2458042.12552.xx.HH.uvXAA"]
-dfiles_std = ["zen.2458042.12552.std.xx.HH.uvXAA", "zen.2458042.12552.std.xx.HH.uvXAA"]
-
 # List of tapering function to use in tests
 taper_selection = ["none", "bh7"]
 weight_selection = ["identity", "iC", "dayenu"]
@@ -110,30 +106,27 @@ def diagonal_or_not(mat, places=7):
 
 
 @pytest.fixture(scope="session")
-def _miriad_raw():
-    """Session-cached factory: reads miriad file(s) from DATA_PATH.
-    Pass a list of filenames → returns a list of UVData.
-    Pass a single filename string → returns a single UVData.
-    """
-    _cache = {}
+def uvd_zen_2458042_12552_xx() -> UVData:
+    """Session-cached UVData from zen.2458042.12552.xx.HH.uvXAA."""
+    uvd = UVData()
+    uvd.read_miriad(str(DATA_PATH / "zen.2458042.12552.xx.HH.uvXAA"))
+    return uvd
 
-    def _load(files):
-        key = files if isinstance(files, str) else tuple(files)
-        if key not in _cache:
-            if isinstance(files, str):
-                d = uv.UVData()
-                d.read_miriad(os.path.join(DATA_PATH, files))
-                _cache[key] = d
-            else:
-                result = []
-                for f in files:
-                    _d = uv.UVData()
-                    _d.read_miriad(os.path.join(DATA_PATH, f))
-                    result.append(_d)
-                _cache[key] = result
-        return _cache[key]
 
-    return _load
+@pytest.fixture(scope="session")
+def uvd_zen_2458042_12552_std_xx() -> UVData:
+    """Session-cached UVData from zen.2458042.12552.std.xx.HH.uvXAA."""
+    uvd = UVData()
+    uvd.read_miriad(str(DATA_PATH / "zen.2458042.12552.std.xx.HH.uvXAA"))
+    return uvd
+
+
+@pytest.fixture(scope="session")
+def uvd_zen_2458042_17772_std_xx() -> UVData:
+    """Session-cached UVData from zen.2458042.17772.std.xx.HH.uvXA."""
+    uvd = UVData()
+    uvd.read_miriad(str(DATA_PATH / "zen.2458042.17772.std.xx.HH.uvXA"))
+    return uvd
 
 
 @pytest.fixture(scope="session")
@@ -145,13 +138,19 @@ def bm_Q():
 
 
 @pytest.fixture
-def d(_miriad_raw):
-    return copy.deepcopy(_miriad_raw(dfiles))
+def d(uvd_zen_2458042_12552_xx: UVData) -> list[UVData]:
+    return [
+        copy.deepcopy(uvd_zen_2458042_12552_xx),
+        copy.deepcopy(uvd_zen_2458042_12552_xx),
+    ]
 
 
 @pytest.fixture
-def d_std(_miriad_raw):
-    return copy.deepcopy(_miriad_raw(dfiles_std))
+def d_std(uvd_zen_2458042_12552_std_xx: UVData) -> list[UVData]:
+    return [
+        copy.deepcopy(uvd_zen_2458042_12552_std_xx),
+        copy.deepcopy(uvd_zen_2458042_12552_std_xx),
+    ]
 
 
 @pytest.fixture
@@ -160,8 +159,8 @@ def uvd(uvd_zen_2458042_xx: UVData) -> UVData:
 
 
 @pytest.fixture
-def uvd_std(_miriad_raw):
-    return copy.deepcopy(_miriad_raw("zen.2458042.17772.std.xx.HH.uvXA"))
+def uvd_std(uvd_zen_2458042_17772_std_xx: UVData) -> UVData:
+    return copy.deepcopy(uvd_zen_2458042_17772_std_xx)
 
 
 @pytest.fixture
