@@ -980,15 +980,15 @@ class TestUVWindowGetSphericalWf:
                 bl_lens=red_bl_lens[:1],
             )
 
-    @pytest.mark.parametrize("type", ["wrong_min", "wrong_max"])
+    @pytest.mark.parametrize("ktype", ["wrong_min", "wrong_max"])
     def test_wrong_kperp_bins(
         self,
         uvwindow_obj: uvwindow.UVWindow,
         red_bl_lens: np.ndarray,
         kbins: units.Quantity,
-        type: str,
+        ktype: str,
     ) -> None:
-        kperp_bins = [0, 1e-12] if type == "wrong_min" else [2e12, 3e12]
+        kperp_bins = [0, 1e-12] if ktype == "wrong_min" else [2e12, 3e12]
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
