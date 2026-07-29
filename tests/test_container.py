@@ -1,5 +1,4 @@
-import os
-import unittest
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -7,318 +6,390 @@ import pytest
 from hera_pspec import PSpecContainer, UVPSpec, container, testing
 from hera_pspec.data import DATA_PATH
 
+DATA_PATH = Path(DATA_PATH)
 
-class Test_PSpecContainer(unittest.TestCase):
-    def setUp(self, fill_pspec=True):
-        # create container: first without SWMR to add header
-        self.fname = os.path.join(DATA_PATH, "_test_container.hdf5")
-        self.uvp, self.cosmo = testing.build_vanilla_uvpspec()
+_MODES = pytest.mark.parametrize(
+    "keep_open,swmr", [(True, False), (False, True)], ids=["default", "transactional"]
+)
 
-        # Create empty container without SWMR to fill header
-        if os.path.exists(self.fname):
-            os.remove(self.fname)
-        ps_store = PSpecContainer(self.fname, mode="rw", swmr=False)
-        del ps_store
+_GROUP_NAMES = ["group1", "group2", "group3"]
+_PSPEC_NAMES = ["pspec_dset(0,1)", "pspec_dset(1,0)", "pspec_dset(1,1)"]
 
-    def tearDown(self):
-        # Remove HDF5 file
-        try:
-            os.remove(self.fname)
-        except:
-            print("No HDF5 file to remove.")
 
-    def runTest(self):
-        pass
+def _container_fname(tmp_path: Path) -> Path:
+    return tmp_path / "_test_container.hdf5"
 
-    def fill_container(self):
-        ps_store = PSpecContainer(self.fname, mode="rw", swmr=False)
-        self.group_names = ["group1", "group2", "group3"]
-        self.pspec_names = ["pspec_dset(0,1)", "pspec_dset(1,0)", "pspec_dset(1,1)"]
-        for grp in self.group_names:
-            for psname in self.pspec_names:
-                ps_store.set_pspec(
-                    group=grp, psname=psname, pspec=self.uvp, overwrite=False
-                )
-        del ps_store
 
-    def test_PSpecContainer(self, keep_open=True, swmr=False):
-        """
-        Test that PSpecContainer works properly.
-        """
-        # setup, fill and open container
-        self.fill_container()
-        fname = self.fname
-        group_names, pspec_names = self.group_names, self.pspec_names
-        ps_store = PSpecContainer(self.fname, mode="rw", keep_open=keep_open, swmr=swmr)
+def _fill_container(fname: Path, uvp: UVPSpec) -> None:
+    """Populate a container with _GROUP_NAMES × _PSPEC_NAMES entries."""
+    ps_store = PSpecContainer(fname, mode="rw", swmr=False)
+    for grp in _GROUP_NAMES:
+        for psname in _PSPEC_NAMES:
+            ps_store.set_pspec(group=grp, psname=psname, pspec=uvp, overwrite=False)
 
-        # Make sure that invalid mode arguments are caught
-        pytest.raises(ValueError, PSpecContainer, fname, mode="x")
 
-        # Check that power spectra can be overwritten
-        for psname in pspec_names:
+# ---------------------------------------------------------------------------
+# Constructor
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_mode(tmp_path: Path) -> None:
+    fname = _container_fname(tmp_path)
+    with pytest.raises(ValueError, match="Must set mode to either"):
+        PSpecContainer(fname, mode="x")
+
+
+# ---------------------------------------------------------------------------
+# set_pspec
+# ---------------------------------------------------------------------------
+
+
+class TestSetPSpec:
+    @_MODES
+    def test_overwrite(
+        self, tmp_path: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+    ) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+        for psname in _PSPEC_NAMES:
             ps_store.set_pspec(
-                group=group_names[2], psname=psname, pspec=self.uvp, overwrite=True
+                group=_GROUP_NAMES[2], psname=psname, pspec=vanilla_uvp, overwrite=True
+            )
+        with pytest.raises(AttributeError, match="already exists and overwrite=False"):
+            ps_store.set_pspec(
+                group=_GROUP_NAMES[2],
+                psname=_PSPEC_NAMES[-1],
+                pspec=vanilla_uvp,
+                overwrite=False,
             )
 
-        # Check that overwriting fails if overwrite=False
-        pytest.raises(
-            AttributeError,
-            ps_store.set_pspec,
-            group=group_names[2],
-            psname=psname,
-            pspec=self.uvp,
-            overwrite=False,
+    @_MODES
+    @pytest.mark.parametrize("bad", [np.arange(11), 1, "abc"])
+    def test_invalid_type(
+        self, tmp_path: Path, vanilla_uvp: UVPSpec, bad, keep_open: bool, swmr: bool
+    ) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+        with pytest.raises(TypeError, match="pspec must be a UVPSpec object"):
+            ps_store.set_pspec(
+                group=_GROUP_NAMES[2],
+                psname=_PSPEC_NAMES[-1],
+                pspec=bad,
+                overwrite=True,
+            )
+
+    @_MODES
+    def test_list(
+        self, tmp_path: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+    ) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+        with pytest.raises(ValueError, match="Only one group can be specified"):
+            ps_store.set_pspec(
+                group=_GROUP_NAMES[:2],
+                psname=_PSPEC_NAMES[0],
+                pspec=vanilla_uvp,
+                overwrite=True,
+            )
+        with pytest.raises(ValueError, match="If psname is a list"):
+            ps_store.set_pspec(
+                group=_GROUP_NAMES[0],
+                psname=_PSPEC_NAMES,
+                pspec=vanilla_uvp,
+                overwrite=True,
+            )
+        with pytest.raises(ValueError, match="If pspec is a list"):
+            ps_store.set_pspec(
+                group=_GROUP_NAMES[0],
+                psname=_PSPEC_NAMES[0],
+                pspec=[vanilla_uvp, vanilla_uvp, vanilla_uvp],
+                overwrite=True,
+            )
+        with pytest.raises(
+            TypeError, match="pspec lists must only contain UVPSpec objects"
+        ):
+            ps_store.set_pspec(
+                group=_GROUP_NAMES[0],
+                psname=_PSPEC_NAMES,
+                pspec=[vanilla_uvp, None, vanilla_uvp],
+                overwrite=True,
+            )
+        # valid list write
+        ps_store.set_pspec(
+            group=_GROUP_NAMES[0],
+            psname=_PSPEC_NAMES,
+            pspec=[vanilla_uvp, vanilla_uvp, vanilla_uvp],
+            overwrite=True,
         )
 
-        # Check that wrong pspec types are rejected by the set() method
-        pytest.raises(
-            TypeError,
-            ps_store.set_pspec,
-            group=group_names[2],
-            psname=psname,
-            pspec=np.arange(11),
-            overwrite=True,
-        )
-        pytest.raises(
-            TypeError,
-            ps_store.set_pspec,
-            group=group_names[2],
-            psname=psname,
-            pspec=1,
-            overwrite=True,
-        )
-        pytest.raises(
-            TypeError,
-            ps_store.set_pspec,
-            group=group_names[2],
-            psname=psname,
-            pspec="abc",
-            overwrite=True,
-        )
 
-        # Check that power spectra can be retrieved one by one
-        for i in range(len(group_names)):
-            # Get one pspec from each group
-            ps = ps_store.get_pspec(group_names[i], psname=pspec_names[i])
+# ---------------------------------------------------------------------------
+# get_pspec
+# ---------------------------------------------------------------------------
+
+
+class TestGetPSpec:
+    @_MODES
+    def test_retrieval(
+        self, tmp_path: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+    ) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+        for i in range(len(_GROUP_NAMES)):
+            ps = ps_store.get_pspec(_GROUP_NAMES[i], psname=_PSPEC_NAMES[i])
             assert isinstance(ps, UVPSpec)
-
-        # Check that power spectra can be retrieved from group as a list
-        ps_list = ps_store.get_pspec(group_names[0])
-        assert len(ps_list) == len(pspec_names)
+        ps_list = ps_store.get_pspec(_GROUP_NAMES[0])
+        assert len(ps_list) == len(_PSPEC_NAMES)
         for p in ps_list:
             assert isinstance(p, UVPSpec)
 
-        # Check that asking for an invalid group or pspec raises an error
-        pytest.raises(KeyError, ps_store.get_pspec, "x", pspec_names[0])
-        pytest.raises(KeyError, ps_store.get_pspec, 1, pspec_names[0])
-        pytest.raises(KeyError, ps_store.get_pspec, ["x", "y"], pspec_names[0])
-        pytest.raises(KeyError, ps_store.get_pspec, group_names[0], "x")
-        pytest.raises(KeyError, ps_store.get_pspec, group_names[0], 1)
-        pytest.raises(KeyError, ps_store.get_pspec, group_names[0], ["x", "y"])
+    @_MODES
+    @pytest.mark.parametrize("bad_group", ["x", 1, ["x", "y"]])
+    def test_invalid_group_key(
+        self,
+        tmp_path: Path,
+        vanilla_uvp: UVPSpec,
+        bad_group,
+        keep_open: bool,
+        swmr: bool,
+    ) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+        with pytest.raises(KeyError, match="No group named"):
+            ps_store.get_pspec(bad_group, _PSPEC_NAMES[0])
 
-        # Check that printing functions work
-        print(ps_store)
-        assert len(ps_store.tree()) > 0
+    @_MODES
+    @pytest.mark.parametrize("bad_pspec", ["x", 1, ["x", "y"]])
+    def test_invalid_pspec_key(
+        self,
+        tmp_path: Path,
+        vanilla_uvp: UVPSpec,
+        bad_pspec,
+        keep_open: bool,
+        swmr: bool,
+    ) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+        with pytest.raises(KeyError, match="No pspec named"):
+            ps_store.get_pspec(_GROUP_NAMES[0], bad_pspec)
 
-        # Check that read-only mode is respected
-        ps_readonly = PSpecContainer(fname, mode="r", keep_open=keep_open, swmr=swmr)
-        ps = ps_readonly.get_pspec(group_names[0], pspec_names[0])
-        assert isinstance(ps, UVPSpec)
-        pytest.raises(
-            IOError,
-            ps_readonly.set_pspec,
-            group=group_names[2],
-            psname=pspec_names[2],
-            pspec=self.uvp,
-            overwrite=True,
-        )
-
-        # Check that spectra() and groups() methods return the things we put in
-        print("ps_store:", ps_store.data)
-        grplist = ps_store.groups()
-        pslist = ps_store.spectra(group=group_names[0])
-        assert len(grplist) == len(group_names)
-        assert len(pslist) == len(pspec_names)
-        for g in grplist:
-            assert g in group_names
-
-        # Check that spectra() raises an error if group doesn't exist
-        pytest.raises(KeyError, ps_store.spectra, "x")
-
-        # Check that spectra() and groups() can be iterated over to retrieve ps
-        for g in ps_store.groups():
-            for psname in ps_store.spectra(group=g):
-                ps = ps_store.get_pspec(g, psname=psname)
-                assert isinstance(ps, UVPSpec)
-
-        # check partial IO in get_pspec
-        ps = ps_store.get_pspec(group_names[0], pspec_names[0], just_meta=True)
+    @_MODES
+    def test_partial_io(
+        self, tmp_path: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+    ) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+        ps = ps_store.get_pspec(_GROUP_NAMES[0], _PSPEC_NAMES[0], just_meta=True)
         assert not hasattr(ps, "data_array")
         assert hasattr(ps, "time_avg_array")
         ps = ps_store.get_pspec(
-            group_names[0], pspec_names[0], blpairs=[((1, 2), (1, 2))]
+            _GROUP_NAMES[0], _PSPEC_NAMES[0], blpairs=[((1, 2), (1, 2))]
         )
         assert hasattr(ps, "data_array")
         assert np.all(np.isclose(ps.blpair_array, 101102101102))
 
-        # Check that invalid list arguments raise errors in set_pspec()
-        pytest.raises(
-            ValueError,
-            ps_store.set_pspec,
-            group=group_names[:2],
-            psname=pspec_names[0],
-            pspec=self.uvp,
-            overwrite=True,
-        )
-        pytest.raises(
-            ValueError,
-            ps_store.set_pspec,
-            group=group_names[0],
-            psname=pspec_names,
-            pspec=self.uvp,
-            overwrite=True,
-        )
-        pytest.raises(
-            ValueError,
-            ps_store.set_pspec,
-            group=group_names[0],
-            psname=pspec_names[0],
-            pspec=[self.uvp, self.uvp, self.uvp],
-            overwrite=True,
-        )
-        pytest.raises(
-            TypeError,
-            ps_store.set_pspec,
-            group=group_names[0],
-            psname=pspec_names,
-            pspec=[self.uvp, None, self.uvp],
+
+# ---------------------------------------------------------------------------
+# Misc container interface
+# ---------------------------------------------------------------------------
+
+
+@_MODES
+def test_readonly_mode(
+    tmp_path: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+) -> None:
+    fname = _container_fname(tmp_path)
+    _fill_container(fname, vanilla_uvp)
+    ps_readonly = PSpecContainer(fname, mode="r", keep_open=keep_open, swmr=swmr)
+    ps = ps_readonly.get_pspec(_GROUP_NAMES[0], _PSPEC_NAMES[0])
+    assert isinstance(ps, UVPSpec)
+    with pytest.raises(IOError, match="HDF5 file was opened read-only"):
+        ps_readonly.set_pspec(
+            group=_GROUP_NAMES[2],
+            psname=_PSPEC_NAMES[2],
+            pspec=vanilla_uvp,
             overwrite=True,
         )
 
-        # Check that lists can be used to set pspec
-        ps_store.set_pspec(
-            group=group_names[0],
-            psname=pspec_names,
-            pspec=[self.uvp, self.uvp, self.uvp],
-            overwrite=True,
-        )
 
-        # Check that save() can be called
-        ps_store.save()
+@_MODES
+def test_groups_and_spectra(
+    tmp_path: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+) -> None:
+    fname = _container_fname(tmp_path)
+    _fill_container(fname, vanilla_uvp)
+    ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+    grplist = ps_store.groups()
+    pslist = ps_store.spectra(group=_GROUP_NAMES[0])
+    assert len(grplist) == len(_GROUP_NAMES)
+    assert len(pslist) == len(_PSPEC_NAMES)
+    for g in grplist:
+        assert g in _GROUP_NAMES
+    with pytest.raises(KeyError, match="No group named"):
+        ps_store.spectra("x")
+    for g in ps_store.groups():
+        for psname in ps_store.spectra(group=g):
+            ps = ps_store.get_pspec(g, psname=psname)
+            assert isinstance(ps, UVPSpec)
 
-    def test_PSpecContainer_transactional(self):
-        """
-        Test that PSpecContainer works properly (transactional mode).
-        """
-        self.test_PSpecContainer(keep_open=False, swmr=True)
 
-    def test_container_transactional_mode(self):
-        """
-        Test transactional operations on PSpecContainer objects.
-        """
-        # setup, fill and open container
-        self.fill_container()
-        fname = self.fname
-        group_names, pspec_names = self.group_names, self.pspec_names
+@_MODES
+def test_container_repr(
+    tmp_path: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+) -> None:
+    fname = _container_fname(tmp_path)
+    _fill_container(fname, vanilla_uvp)
+    ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+    print(ps_store)
+    assert len(ps_store.tree()) > 0
 
-        # Test to see whether concurrent read/write works
+
+@_MODES
+def test_save(
+    tmp_path: Path, vanilla_uvp: UVPSpec, keep_open: bool, swmr: bool
+) -> None:
+    fname = _container_fname(tmp_path)
+    _fill_container(fname, vanilla_uvp)
+    ps_store = PSpecContainer(fname, mode="rw", keep_open=keep_open, swmr=swmr)
+    ps_store.save()
+
+
+# ---------------------------------------------------------------------------
+# SWMR / transactional mode
+# ---------------------------------------------------------------------------
+
+
+class TestSWMR:
+    def test_concurrent_access(self, tmp_path: Path, vanilla_uvp: UVPSpec) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
         psc_rw = PSpecContainer(fname, mode="rw", keep_open=False, swmr=True)
-
-        # Try to open container read-only (transactional)
         psc_ro = PSpecContainer(fname, mode="r", keep_open=False, swmr=True)
-        assert len(psc_ro.groups()) == len(group_names)
-
-        # Open container read-only in non-transactional mode
+        assert len(psc_ro.groups()) == len(_GROUP_NAMES)
         psc_ro_noatom = PSpecContainer(fname, mode="r", keep_open=True, swmr=True)
-        assert len(psc_ro_noatom.groups()) == len(group_names)
-
-        # Original RO handle should work fine; RW handle will throw an error
-        assert len(psc_ro.groups()) == len(group_names)
-        pytest.raises(OSError, psc_rw.groups)
-        pytest.raises(OSError, psc_rw.groups)
-
-        # Close the non-transactional file; the RW file should now work
+        assert len(psc_ro_noatom.groups()) == len(_GROUP_NAMES)
+        # transactional RO still works; RW fails while non-transactional reader is open
+        assert len(psc_ro.groups()) == len(_GROUP_NAMES)
+        with pytest.raises(OSError, match="Failed to open HDF5 file"):
+            psc_rw.groups()
+        with pytest.raises(OSError, match="Failed to open HDF5 file"):
+            psc_rw.groups()
+        # once the non-transactional reader closes, the RW handle works again
         psc_ro_noatom._close()
         psc_rw.set_pspec(
-            group=group_names[0], psname=pspec_names[0], pspec=self.uvp, overwrite=True
-        )
-
-        # test that write of new group or dataset with SWMR is blocked
-        pytest.raises(
-            ValueError,
-            psc_rw.set_pspec,
-            group="new_group",
-            psname=pspec_names[0],
-            pspec=self.uvp,
-            overwrite=True,
-        )
-        pytest.raises(
-            ValueError,
-            psc_rw.set_pspec,
-            group=group_names[0],
-            psname="new_psname",
-            pspec=self.uvp,
+            group=_GROUP_NAMES[0],
+            psname=_PSPEC_NAMES[0],
+            pspec=vanilla_uvp,
             overwrite=True,
         )
 
-        # ensure SWMR attr is propagated
-        for m in ["r", "rw"]:
-            psc = PSpecContainer(fname, mode=m, keep_open=True, swmr=True)
-            assert psc.swmr
-            assert psc.data.swmr_mode
-            psc._close()
-            psc = PSpecContainer(fname, mode=m, keep_open=True, swmr=False)
-            assert not psc.swmr
-            assert not psc.data.swmr_mode
-            psc._close()
+    def test_blocks_new_writes(self, tmp_path: Path, vanilla_uvp: UVPSpec) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        psc_rw = PSpecContainer(fname, mode="rw", keep_open=False, swmr=True)
+        with pytest.raises(
+            ValueError, match="Cannot write new group or dataset with SWMR"
+        ):
+            psc_rw.set_pspec(
+                group="new_group",
+                psname=_PSPEC_NAMES[0],
+                pspec=vanilla_uvp,
+                overwrite=True,
+            )
+        with pytest.raises(
+            ValueError, match="Cannot write new group or dataset with SWMR"
+        ):
+            psc_rw.set_pspec(
+                group=_GROUP_NAMES[0],
+                psname="new_psname",
+                pspec=vanilla_uvp,
+                overwrite=True,
+            )
+
+    @pytest.mark.parametrize("mode", ["r", "rw"])
+    def test_attr_propagation(
+        self, tmp_path: Path, vanilla_uvp: UVPSpec, mode: str
+    ) -> None:
+        fname = _container_fname(tmp_path)
+        _fill_container(fname, vanilla_uvp)
+        psc = PSpecContainer(fname, mode=mode, keep_open=True, swmr=True)
+        assert psc.swmr
+        assert psc.data.swmr_mode
+        psc._close()
+        psc = PSpecContainer(fname, mode=mode, keep_open=True, swmr=False)
+        assert not psc.swmr
+        assert not psc.data.swmr_mode
+        psc._close()
 
 
-def test_combine_psc_spectra():
-    fname = os.path.join(DATA_PATH, "zen.2458042.17772.xx.HH.uvXA")
-    uvp1 = testing.uvpspec_from_data(fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
-    uvp2 = testing.uvpspec_from_data(fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
-
-    # test basic execution
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
-    psc = PSpecContainer("ex.h5", mode="rw")
-    psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
-    psc.set_pspec("grp1", "uvp_b", uvp2, overwrite=True)
-    container.combine_psc_spectra(psc, dset_split_str=None, ext_split_str="_")
-    assert psc.spectra("grp1") == ["uvp"]
-
-    # test dset name handling
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
-    psc = PSpecContainer("ex.h5", mode="rw")
-    psc.set_pspec("grp1", "d1_x_d2_a", uvp1, overwrite=True)
-    psc.set_pspec("grp1", "d1_x_d2_b", uvp2, overwrite=True)
-    psc.set_pspec("grp1", "d2_x_d3_a", uvp1, overwrite=True)
-    psc.set_pspec("grp1", "d2_x_d3_b", uvp2, overwrite=True)
-    container.combine_psc_spectra("ex.h5", dset_split_str="_x_", ext_split_str="_")
-    spec_list = psc.spectra("grp1")
-    spec_list.sort()
-    assert spec_list == ["d1_x_d2", "d2_x_d3"]
-
-    # test exceptions
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
-    psc = PSpecContainer("ex.h5", mode="rw")
-    # test no group exception
-    pytest.raises(AssertionError, container.combine_psc_spectra, psc)
-    # test failed combine_uvpspec
-    psc.set_pspec("grp1", "d1_x_d2_a", uvp1, overwrite=True)
-    psc.set_pspec("grp1", "d1_x_d2_b", uvp1, overwrite=True)
-    container.combine_psc_spectra(psc, dset_split_str="_x_", ext_split_str="_")
-    assert psc.spectra("grp1") == ["d1_x_d2_a", "d1_x_d2_b"]
-
-    if os.path.exists("ex.h5"):
-        os.remove("ex.h5")
+# ---------------------------------------------------------------------------
+# combine_psc_spectra
+# ---------------------------------------------------------------------------
 
 
-def test_combine_psc_spectra_argparser():
-    args = container.get_combine_psc_spectra_argparser()
-    a = args.parse_args(["filename", "--dset_split_str", "_x_", "--ext_split_str", "_"])
-    assert a.filename == "filename"
-    assert a.dset_split_str == "_x_"
-    assert a.ext_split_str == "_"
+class TestCombinePscSpectra:
+    def test_basic(self, tmp_path: Path) -> None:
+        fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
+        uvp1 = testing.uvpspec_from_data(
+            fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)]
+        )
+        uvp2 = testing.uvpspec_from_data(
+            fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)]
+        )
+        psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
+        psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
+        psc.set_pspec("grp1", "uvp_b", uvp2, overwrite=True)
+        container.combine_psc_spectra(psc, dset_split_str=None, ext_split_str="_")
+        assert psc.spectra("grp1") == ["uvp"]
+
+    @pytest.mark.parametrize(
+        "name_a,name_b,expected",
+        [("d1_x_d2_a", "d1_x_d2_b", "d1_x_d2"), ("d2_x_d3_a", "d2_x_d3_b", "d2_x_d3")],
+    )
+    def test_dset_names(
+        self, tmp_path: Path, name_a: str, name_b: str, expected: str
+    ) -> None:
+        data_fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
+        uvp1 = testing.uvpspec_from_data(
+            data_fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)]
+        )
+        uvp2 = testing.uvpspec_from_data(
+            data_fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)]
+        )
+        psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
+        psc.set_pspec("grp1", name_a, uvp1, overwrite=True)
+        psc.set_pspec("grp1", name_b, uvp2, overwrite=True)
+        container.combine_psc_spectra(
+            str(tmp_path / "ex.h5"), dset_split_str="_x_", ext_split_str="_"
+        )
+        assert psc.spectra("grp1") == [expected]
+
+    def test_errors(self, tmp_path: Path) -> None:
+        fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
+        uvp1 = testing.uvpspec_from_data(
+            fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)]
+        )
+        psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
+        with pytest.raises(AssertionError, match="no specified groups exist"):
+            container.combine_psc_spectra(psc)
+        # incompatible uvpspecs should leave originals intact
+        psc.set_pspec("grp1", "d1_x_d2_a", uvp1, overwrite=True)
+        psc.set_pspec("grp1", "d1_x_d2_b", uvp1, overwrite=True)
+        container.combine_psc_spectra(psc, dset_split_str="_x_", ext_split_str="_")
+        assert psc.spectra("grp1") == ["d1_x_d2_a", "d1_x_d2_b"]
+
+    def test_argparser(self) -> None:
+        args = container.get_combine_psc_spectra_argparser()
+        a = args.parse_args(
+            ["filename", "--dset_split_str", "_x_", "--ext_split_str", "_"]
+        )
+        assert a.filename == "filename"
+        assert a.dset_split_str == "_x_"
+        assert a.ext_split_str == "_"
