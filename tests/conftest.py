@@ -16,6 +16,9 @@ from hera_pspec.testing import build_vanilla_uvpspec
 
 DATA_PATH = Path(DATA_PATH)
 
+# Disable automatic IERS downloads (works for astropy >=4.x)
+iers.conf.auto_download = False
+
 
 @pytest.fixture(scope="session")
 def beam_nf_dipole() -> PSpecBeamUV:
