@@ -1,7 +1,6 @@
 import copy
 import glob
-import os
-import unittest
+from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -9,14 +8,22 @@ import numpy as np
 import pytest
 from pyuvdata import UVData
 
-from hera_pspec import conversions, grouping, plot, pspecbeam, pspecdata, utils
+from hera_pspec import (
+    PSpecBeamUV,
+    PSpecData,
+    UVPSpec,
+    conversions,
+    grouping,
+    plot,
+    pspecdata,
+    utils,
+)
 from hera_pspec.data import DATA_PATH
 
-# Data files to use in tests
-dfiles = ["zen.all.xx.LST.1.06964.uvA"]
+DATA_PATH = Path(DATA_PATH)
 
 
-def axes_contains(ax, obj_list):
+def axes_contains(ax: mpl.axes.Axes, obj_list: list[tuple[type, int]]) -> bool:
     """
     Check that a matplotlib.Axes instance contains certain elements.
 
@@ -34,13 +41,9 @@ def axes_contains(ax, obj_list):
     elems = ax.get_children()
 
     # Loop over list of objects that should be in the plot
-    contains_all = False
     for obj in obj_list:
         objtype, num_expected = obj
-        num = 0
-        for elem in elems:
-            if isinstance(elem, objtype):
-                num += 1
+        num = sum(1 for elem in elems if isinstance(elem, objtype))
         if num != num_expected:
             return False
 
@@ -48,71 +51,55 @@ def axes_contains(ax, obj_list):
     return True
 
 
-class Test_Plot(unittest.TestCase):
-    def setUp(self):
-        """
-        Load data and calculate power spectra.
-        """
-        # Instantiate empty PSpecData
-        self.ds = pspecdata.PSpecData()
+@pytest.fixture
+def pspec_ds(uvd_zen_all_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> PSpecData:
+    """Build a PSpecData object (beam + two time-interleaved halves of uvd_zen_all_xx)."""
+    bm = copy.deepcopy(beam_nf_dipole)
+    bm.filename = "HERA_NF_dipole_power.beamfits"
+    # Slide the time axis by one integration to avoid noise bias
+    uvd1 = uvd_zen_all_xx.select(
+        times=np.unique(uvd_zen_all_xx.time_array)[:-1:2], inplace=False
+    )
+    uvd2 = uvd_zen_all_xx.select(
+        times=np.unique(uvd_zen_all_xx.time_array)[1::2], inplace=False
+    )
+    ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=bm)
+    ds.rephase_to_dset(0)
+    return ds
 
-        # Load datafiles
-        uvd = UVData()
-        uvd.read_miriad(os.path.join(DATA_PATH, dfiles[0]))
-        self.uvd = uvd
 
-        # Load beam file
-        beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-        self.bm = pspecbeam.PSpecBeamUV(beamfile)
-        self.bm.filename = "HERA_NF_dipole_power.beamfits"
+@pytest.fixture
+def uvp(pspec_ds: PSpecData) -> UVPSpec:
+    """Compute a UVPSpec over two spectral windows from pspec_ds."""
+    bls = [(24, 25), (37, 38), (38, 39)]
+    bls1, bls2, _ = utils.construct_blpairs(
+        bls, exclude_permutations=False, exclude_auto_bls=True
+    )
+    return pspec_ds.pspec(
+        bls1,
+        bls2,
+        (0, 1),
+        ("xx", "xx"),
+        spw_ranges=[(300, 400), (600, 721)],
+        input_data_weight="identity",
+        norm="I",
+        taper="blackman-harris",
+        verbose=False,
+    )
 
-        # We only actually have 1 data file here, so slide the time axis by one
-        # integration to avoid noise bias
-        uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[1::2], inplace=False)
 
-        # Create a new PSpecData object
-        self.ds = pspecdata.PSpecData(
-            dsets=[uvd1, uvd2], wgts=[None, None], beam=self.bm
-        )
-        self.ds.rephase_to_dset(0)  # Phase to the zeroth dataset
-
-        # Construct list of baseline pairs to calculate power spectra for
-        bls = [(24, 25), (37, 38), (38, 39)]
-        self.bls1, self.bls2, blp = utils.construct_blpairs(
-            bls, exclude_permutations=False, exclude_auto_bls=True
-        )
-
-        # Calculate the power spectrum
-        self.uvp = self.ds.pspec(
-            self.bls1,
-            self.bls2,
-            (0, 1),
-            ("xx", "xx"),
-            spw_ranges=[(300, 400), (600, 721)],
-            input_data_weight="identity",
-            norm="I",
-            taper="blackman-harris",
-            verbose=False,
-        )
-
-    def tearDown(self):
-        pass
-
-    def runTest(self):
-        pass
-
-    def test_plot_average(self):
+class TestDelaySpectrum:
+    def test_average(self, uvp: UVPSpec) -> None:
         """
         Test that plotting routine can average over baselines and times.
         """
         # Unpack the list of baseline-pairs into a Python list
-        blpairs = np.unique(self.uvp.blpair_array)
+        blpairs = np.unique(uvp.blpair_array)
         blps = [blp for blp in blpairs]
 
         # Plot the spectra averaged over baseline-pairs and times
         f1 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -125,34 +112,34 @@ class Test_Plot(unittest.TestCase):
 
         # Average over baseline-pairs but keep the time bins intact
         f2 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
             average_blpairs=True,
             average_times=False,
         )
-        elements = [(mpl.lines.Line2D, self.uvp.Ntpairs)]
+        elements = [(mpl.lines.Line2D, uvp.Ntpairs)]
         assert axes_contains(f2.axes[0], elements)
         plt.close(f2)
 
         # Average over times, but keep the baseline-pairs separate
         f3 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
             average_blpairs=False,
             average_times=True,
         )
-        elements = [(mpl.lines.Line2D, self.uvp.Nblpairs)]
+        elements = [(mpl.lines.Line2D, uvp.Nblpairs)]
         assert axes_contains(f3.axes[0], elements)
         plt.close(f3)
 
         # Plot the spectra averaged over baseline-pairs and times, but also
         # fold the delay axis
         f4 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -166,7 +153,7 @@ class Test_Plot(unittest.TestCase):
 
         # Plot imaginary part
         f4 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -174,13 +161,13 @@ class Test_Plot(unittest.TestCase):
             average_times=True,
             component="imag",
         )
-        elements = [(mpl.lines.Line2D, self.uvp.Nblpairs)]
+        elements = [(mpl.lines.Line2D, uvp.Nblpairs)]
         assert axes_contains(f4.axes[0], elements)
         plt.close(f4)
 
         # Plot abs
         f5 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -188,7 +175,7 @@ class Test_Plot(unittest.TestCase):
             average_times=True,
             component="abs",
         )
-        elements = [(mpl.lines.Line2D, self.uvp.Nblpairs)]
+        elements = [(mpl.lines.Line2D, uvp.Nblpairs)]
         assert axes_contains(f4.axes[0], elements)
         plt.close(f5)
 
@@ -196,7 +183,7 @@ class Test_Plot(unittest.TestCase):
 
         # bootstrap resample
         (uvp_avg, _, _) = grouping.bootstrap_resampled_error(
-            self.uvp,
+            uvp,
             time_avg=True,
             Nsamples=100,
             normal_std=True,
@@ -233,18 +220,18 @@ class Test_Plot(unittest.TestCase):
         )
         plt.close(f7)
 
-    def test_plot_cosmo(self):
+    def test_cosmo_units(self, uvp: UVPSpec) -> None:
         """
         Test that cosmological units can be used on plots.
         """
         # Unpack the list of baseline-pairs into a Python list
-        blpairs = np.unique(self.uvp.blpair_array)
+        blpairs = np.unique(uvp.blpair_array)
         blps = [blp for blp in blpairs]
 
         # Set cosmology and plot in non-delay (i.e. cosmological) units
-        self.uvp.set_cosmology(conversions.Cosmo_Conversions())
+        uvp.set_cosmology(conversions.Cosmo_Conversions())
         f1 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -253,12 +240,12 @@ class Test_Plot(unittest.TestCase):
             delay=False,
         )
         elements = [(mpl.lines.Line2D, 1), (mpl.legend.Legend, 0)]
-        self.assertTrue(axes_contains(f1.axes[0], elements))
+        assert axes_contains(f1.axes[0], elements)
         plt.close(f1)
 
         # Plot in Delta^2 units
         f2 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -271,12 +258,12 @@ class Test_Plot(unittest.TestCase):
         )
         # Should contain 1 line and 1 legend
         elements = [(mpl.lines.Line2D, 1), (mpl.legend.Legend, 1)]
-        self.assertTrue(axes_contains(f2.axes[0], elements))
+        assert axes_contains(f2.axes[0], elements)
         plt.close(f2)
 
         # Regression test for folded Delta^2 plotting in cosmological units.
         f3 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -289,23 +276,20 @@ class Test_Plot(unittest.TestCase):
             label_type="blpair",
         )
         elements = [(mpl.lines.Line2D, 1), (mpl.legend.Legend, 1)]
-        self.assertTrue(axes_contains(f3.axes[0], elements))
+        assert axes_contains(f3.axes[0], elements)
         plt.close(f3)
 
-    def test_delay_spectrum_misc(self):
-        # various other tests for plot.delay_spectrum
-
-        # Unpack the list of baseline-pairs into a Python list
-        blpairs = np.unique(self.uvp.blpair_array)
-        blps = [blp for blp in blpairs]
+    def test_misc(self, uvp: UVPSpec) -> None:
+        """Various options: times selection, force_plot override, and bad-argument exceptions."""
+        blpairs = np.unique(uvp.blpair_array)
 
         # times selection, label_type
         f1 = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             blpairs[:1],
             spw=0,
             pol=("xx", "xx"),
-            times=self.uvp.time_avg_array[:1],
+            times=uvp.time_avg_array[:1],
             lines=False,
             markers=True,
             logscale=False,
@@ -315,19 +299,19 @@ class Test_Plot(unittest.TestCase):
         plt.close(f1)
 
         # test force plot exception
-        uvp = copy.deepcopy(self.uvp)
+        large_uvp = copy.deepcopy(uvp)
         for i in range(3):
-            # build-up a large uvpspec object
-            _uvp = copy.deepcopy(uvp)
+            _uvp = copy.deepcopy(large_uvp)
             _uvp.time_avg_array += 0  # don't change avg time to make sure this is ok.
             _uvp.time_1_array += (i + 1) ** 2
             _uvp.time_2_array += (i + 1) ** 2
-            uvp = uvp + _uvp
-        pytest.raises(ValueError, plot.delay_spectrum, uvp, uvp.get_blpairs(), 0, "xx")
+            large_uvp = large_uvp + _uvp
+        with pytest.raises(ValueError, match="Trying to plot > 100 spectra"):
+            plot.delay_spectrum(large_uvp, large_uvp.get_blpairs(), 0, "xx")
 
         f2 = plot.delay_spectrum(
-            uvp,
-            uvp.get_blpairs(),
+            large_uvp,
+            large_uvp.get_blpairs(),
             0,
             ("xx", "xx"),
             force_plot=True,
@@ -339,35 +323,33 @@ class Test_Plot(unittest.TestCase):
         plt.close(f2)
 
         # exceptions
-        pytest.raises(
-            ValueError,
-            plot.delay_spectrum,
-            uvp,
-            uvp.get_blpairs()[:3],
-            0,
-            ("xx", "xx"),
-            label_type="foo",
-        )
-        pytest.raises(
-            KeyError,
-            plot.delay_spectrum,
-            self.uvp,
-            [self.uvp.get_blpairs()[0]],
-            0,
-            ("xx", "xx"),
-            error="not_a_stat",
-        )
+        with pytest.raises(ValueError, match="Couldn't understand label_type foo"):
+            plot.delay_spectrum(
+                large_uvp,
+                large_uvp.get_blpairs()[:3],
+                0,
+                ("xx", "xx"),
+                label_type="foo",
+            )
+        with pytest.raises(KeyError, match="Error variable.*not found in stats_array"):
+            plot.delay_spectrum(
+                large_uvp,
+                [large_uvp.get_blpairs()[0]],
+                0,
+                ("xx", "xx"),
+                error="not_a_stat",
+            )
 
-    def test_delay_spectrum_blpair_input_validation(self):
+    def test_blpair_input_validation(self, uvp: UVPSpec) -> None:
         """Exercise the documented blpair input forms for delay_spectrum."""
-        blpair = self.uvp.get_blpairs()[0]
+        blpair = uvp.get_blpairs()[0]
 
         fig = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blpair],
             0,
             ("xx", "xx"),
-            times=self.uvp.time_avg_array[:1],
+            times=uvp.time_avg_array[:1],
             legend=True,
             lines=False,
             markers=True,
@@ -379,28 +361,28 @@ class Test_Plot(unittest.TestCase):
         plt.close(fig)
 
         with pytest.raises(ValueError, match="blpairs.*baseline-pair tuples"):
-            plot.delay_spectrum(self.uvp, [(24, 25), (37, 38)], 0, ("xx", "xx"))
+            plot.delay_spectrum(uvp, [(24, 25), (37, 38)], 0, ("xx", "xx"))
 
         with pytest.raises(ValueError, match="blpairs.*baseline-pair tuples"):
-            plot.delay_spectrum(self.uvp, [[(24, 25)]], 0, ("xx", "xx"))
+            plot.delay_spectrum(uvp, [[(24, 25)]], 0, ("xx", "xx"))
 
         with pytest.raises(TypeError, match="blpairs must be an iterable"):
-            plot.delay_spectrum(self.uvp, [None], 0, ("xx", "xx"))
+            plot.delay_spectrum(uvp, [None], 0, ("xx", "xx"))
 
         with pytest.raises(TypeError, match="blpairs must be baseline-pair tuples"):
-            plot.delay_spectrum(self.uvp, [[None]], 0, ("xx", "xx"))
+            plot.delay_spectrum(uvp, [[None]], 0, ("xx", "xx"))
 
-    def test_delay_spectrum_auto_title_legend(self):
+    def test_auto_title_legend(self, uvp: UVPSpec) -> None:
         """Smart title/legend should separate static and varying metadata."""
-        blpair = self.uvp.get_blpairs()[0]
+        blpair = uvp.get_blpairs()[0]
 
         fig, ax = plt.subplots()
         plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blpair],
             0,
             ("xx", "xx"),
-            times=self.uvp.time_avg_array[:2],
+            times=uvp.time_avg_array[:2],
             legend=True,
             ax=ax,
             lines=False,
@@ -421,11 +403,11 @@ class Test_Plot(unittest.TestCase):
         plt.close(fig)
 
         fig = plot.delay_spectrum(
-            self.uvp,
-            self.uvp.get_blpairs()[:2],
+            uvp,
+            uvp.get_blpairs()[:2],
             0,
             ("xx", "xx"),
-            times=self.uvp.time_avg_array[:1],
+            times=uvp.time_avg_array[:1],
             legend=True,
             lines=False,
             markers=True,
@@ -444,9 +426,9 @@ class Test_Plot(unittest.TestCase):
 
         # When average_blpairs=True, blpair should not appear in the title
         # even if all series share the same (averaged) blpair group label.
-        all_blpairs = self.uvp.get_blpairs()
+        all_blpairs = uvp.get_blpairs()
         fig = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [all_blpairs],
             0,
             ("xx", "xx"),
@@ -458,16 +440,16 @@ class Test_Plot(unittest.TestCase):
         assert "spw=0" in ax.get_title()
         plt.close(fig)
 
-    def test_delay_spectrum_title_legend_opt_out_and_override(self):
+    def test_title_legend_opt_out_and_override(self, uvp: UVPSpec) -> None:
         """Auto title/legend generation should be suppressible and overridable."""
-        blpair = self.uvp.get_blpairs()[0]
+        blpair = uvp.get_blpairs()[0]
 
         fig = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blpair],
             0,
             ("xx", "xx"),
-            times=self.uvp.time_avg_array[:2],
+            times=uvp.time_avg_array[:2],
             legend=True,
             lines=False,
             markers=True,
@@ -480,11 +462,11 @@ class Test_Plot(unittest.TestCase):
         plt.close(fig)
 
         fig = plot.delay_spectrum(
-            self.uvp,
+            uvp,
             [blpair],
             0,
             ("xx", "xx"),
-            times=self.uvp.time_avg_array[:2],
+            times=uvp.time_avg_array[:2],
             legend=True,
             lines=False,
             markers=True,
@@ -504,24 +486,22 @@ class Test_Plot(unittest.TestCase):
         assert labels == []
         assert show_legend is False
 
-    def test_plot_waterfall(self):
-        """
-        Test that waterfall can be plotted.
-        """
-        # Unpack the list of baseline-pairs into a Python list
-        blpairs = np.unique(self.uvp.blpair_array).tolist()
-        blps = [self.uvp.blpair_to_antnums(blp) for blp in blpairs]
 
-        # Set cosmology and plot in non-delay (i.e. cosmological) units
-        self.uvp.set_cosmology(conversions.Cosmo_Conversions(), overwrite=True)
+class TestDelayWaterfall:
+    def test_cosmo_and_deltasq_units(self, uvp: UVPSpec) -> None:
+        """Plot in non-delay (i.e. cosmological) units, with and without
+        Delta^2."""
+        blpairs = np.unique(uvp.blpair_array).tolist()
+        blps = [uvp.blpair_to_antnums(blp) for blp in blpairs]
+        uvp.set_cosmology(conversions.Cosmo_Conversions(), overwrite=True)
+
         f1 = plot.delay_waterfall(
-            self.uvp, [blps], spw=0, pol=("xx", "xx"), average_blpairs=True, delay=False
+            uvp, [blps], spw=0, pol=("xx", "xx"), average_blpairs=True, delay=False
         )
         plt.close(f1)
 
-        # Plot in Delta^2 units
         f2 = plot.delay_waterfall(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -531,9 +511,15 @@ class Test_Plot(unittest.TestCase):
         )
         plt.close(f2)
 
-        # Try some other arguments
-        f3 = plot.delay_waterfall(
-            self.uvp,
+    @pytest.mark.parametrize("component", ["abs", "imag"])
+    def test_delay_units_with_fold_and_component(
+        self, uvp: UVPSpec, component: str
+    ) -> None:
+        """Plot in delay units with vmin/vmax/cmap/fold, for both the real
+        and imaginary components."""
+        blpairs = np.unique(uvp.blpair_array).tolist()
+        f = plot.delay_waterfall(
+            uvp,
             [blpairs],
             spw=0,
             pol=("xx", "xx"),
@@ -544,99 +530,84 @@ class Test_Plot(unittest.TestCase):
             vmax=3.0,
             cmap="RdBu",
             fold=True,
-            component="abs",
+            component=component,
         )
-        plt.close(f3)
+        plt.close(f)
 
-        # Try with imaginary component
-        f4 = plot.delay_waterfall(
-            self.uvp,
-            [blpairs],
-            spw=0,
-            pol=("xx", "xx"),
-            average_blpairs=False,
-            delay=True,
-            log=False,
-            vmin=-1.0,
-            vmax=3.0,
-            cmap="RdBu",
-            fold=True,
-            component="imag",
-        )
-        plt.close(f4)
-
-        # Try some more arguments
+    def test_multi_axes_and_title_type(self, uvp: UVPSpec) -> None:
+        """Feed one pre-made axes per baseline-pair, with title_type set."""
+        blpairs = np.unique(uvp.blpair_array).tolist()
+        blps = [uvp.blpair_to_antnums(blp) for blp in blpairs]
         fig, axes = plt.subplots(1, len(blps))
         plot.delay_waterfall(
-            self.uvp,
+            uvp,
             [blps],
             spw=0,
             pol=("xx", "xx"),
             lst_in_hrs=False,
-            times=np.unique(self.uvp.time_avg_array)[:10],
+            times=np.unique(uvp.time_avg_array)[:10],
             axes=axes,
             component="abs",
             title_type="blvec",
         )
         plt.close()
 
-        # exceptions
-        uvp = copy.deepcopy(self.uvp)
+    def test_raises_above_blpair_limit_unless_force_plot(self, uvp: UVPSpec) -> None:
+        large_uvp = copy.deepcopy(uvp)
         for i in range(1, 4):
-            _uvp = copy.deepcopy(self.uvp)
+            _uvp = copy.deepcopy(uvp)
             _uvp.blpair_array += i * 20
-            uvp += _uvp
-        pytest.raises(
-            ValueError, plot.delay_waterfall, uvp, uvp.get_blpairs(), 0, ("xx", "xx")
-        )
-        fig = plot.delay_waterfall(
-            uvp, uvp.get_blpairs(), 0, ("xx", "xx"), force_plot=True
+            large_uvp += _uvp
+        with pytest.raises(ValueError, match="Nblps > 20 and force_plot == False"):
+            plot.delay_waterfall(large_uvp, large_uvp.get_blpairs(), 0, ("xx", "xx"))
+        _ = plot.delay_waterfall(
+            large_uvp, large_uvp.get_blpairs(), 0, ("xx", "xx"), force_plot=True
         )
         plt.close()
 
-    def test_uvdata_waterfalls(self):
-        """
-        Test waterfall plotter
-        """
-        uvd = copy.deepcopy(self.uvd)
 
-        basename = "test_waterfall_plots_3423523923_{bl}_{pol}"
+@pytest.mark.parametrize("data", ["data", "flags", "nsamples"])
+def test_uvdata_waterfalls(uvd_zen_all_xx: UVData, tmp_path: Path, data: str) -> None:
+    """
+    Test waterfall plotter
+    """
+    outdir = tmp_path / data
+    outdir.mkdir()
+    basename = str(outdir / "waterfall_{bl}_{pol}")
+    plot.plot_uvdata_waterfalls(
+        uvd_zen_all_xx, basename, vmin=0, vmax=100, data=data, plot_mode="real"
+    )
+    figfiles = glob.glob(str(outdir / "waterfall_*_*.png"))
+    assert len(figfiles) == 15
 
-        for d in ["data", "flags", "nsamples"]:
-            print(f"running on {d}")
-            plot.plot_uvdata_waterfalls(
-                uvd, basename, vmin=0, vmax=100, data=d, plot_mode="real"
-            )
 
-            figfiles = glob.glob("test_waterfall_plots_3423523923_*_*.png")
-            assert len(figfiles) == 15
-            for f in figfiles:
-                os.remove(f)
+@pytest.fixture
+def delay_wedge_uvp(pspec_ds: PSpecData) -> UVPSpec:
+    """UVPSpec built over redundantly-grouped baseline-pairs, for
+    delay_wedge tests."""
+    bls1, bls2, _, _, _ = utils.calc_blpair_reds(
+        pspec_ds.dsets[0],
+        pspec_ds.dsets[1],
+        exclude_auto_bls=False,
+        exclude_permutations=True,
+    )
+    return pspec_ds.pspec(
+        bls1,
+        bls2,
+        (0, 1),
+        ("xx", "xx"),
+        spw_ranges=[(300, 350)],
+        input_data_weight="identity",
+        norm="I",
+        taper="blackman-harris",
+        verbose=False,
+    )
 
-    def test_delay_wedge(self):
-        """Tests for plot.delay_wedge"""
-        # construct new uvp
-        reds, lens, angs = utils.get_reds(self.ds.dsets[0], pick_data_ants=True)
-        bls1, bls2, blps, _, _ = utils.calc_blpair_reds(
-            self.ds.dsets[0],
-            self.ds.dsets[1],
-            exclude_auto_bls=False,
-            exclude_permutations=True,
-        )
-        uvp = self.ds.pspec(
-            bls1,
-            bls2,
-            (0, 1),
-            ("xx", "xx"),
-            spw_ranges=[(300, 350)],
-            input_data_weight="identity",
-            norm="I",
-            taper="blackman-harris",
-            verbose=False,
-        )
 
-        # test basic delay_wedge call
-        f1 = plot.delay_wedge(
+class TestDelayWedge:
+    def test_basic_call(self, delay_wedge_uvp: UVPSpec) -> None:
+        uvp = delay_wedge_uvp
+        _ = plot.delay_wedge(
             uvp,
             0,
             ("xx", "xx"),
@@ -667,8 +638,11 @@ class Test_Plot(unittest.TestCase):
         )
         plt.close()
 
-        # specify blpairs and times
-        f2 = plot.delay_wedge(
+    def test_with_blpairs_and_times_imag_component(
+        self, delay_wedge_uvp: UVPSpec
+    ) -> None:
+        uvp = delay_wedge_uvp
+        _ = plot.delay_wedge(
             uvp,
             0,
             ("xx", "xx"),
@@ -699,8 +673,9 @@ class Test_Plot(unittest.TestCase):
         )
         plt.close()
 
-        # fold, deltasq, cosmo and log10, loglog
-        f3 = plot.delay_wedge(
+    def test_fold_deltasq_cosmo_log(self, delay_wedge_uvp: UVPSpec) -> None:
+        uvp = delay_wedge_uvp
+        _ = plot.delay_wedge(
             uvp,
             0,
             ("xx", "xx"),
@@ -731,8 +706,9 @@ class Test_Plot(unittest.TestCase):
         )
         plt.close()
 
-        # colorbar, vranges, flip_axes, edgecolors, lines
-        f4 = plot.delay_wedge(
+    def test_colorbar_vrange_flip_edgecolor(self, delay_wedge_uvp: UVPSpec) -> None:
+        uvp = delay_wedge_uvp
+        _ = plot.delay_wedge(
             uvp,
             0,
             ("xx", "xx"),
@@ -764,7 +740,8 @@ class Test_Plot(unittest.TestCase):
         )
         plt.close()
 
-        # feed axes, red_tol
+    def test_feed_axes_and_red_tol(self, delay_wedge_uvp: UVPSpec) -> None:
+        uvp = delay_wedge_uvp
         fig, ax = plt.subplots()
         cbax = fig.add_axes([0.85, 0.1, 0.05, 0.9])
         cbax.axis("off")
@@ -799,7 +776,8 @@ class Test_Plot(unittest.TestCase):
         )
         plt.close()
 
-        # test exceptions
+    def test_raises_with_fewer_than_two_blpairs(self, delay_wedge_uvp: UVPSpec) -> None:
+        uvp = delay_wedge_uvp
         with pytest.raises(ValueError, match="at least two baseline pairs"):
             plot.delay_wedge(
                 uvp,
@@ -809,11 +787,7 @@ class Test_Plot(unittest.TestCase):
                 times=uvp.time_avg_array[:1],
             )
 
-        pytest.raises(
-            ValueError, plot.delay_wedge, uvp, 0, ("xx", "xx"), component="foo"
-        )
+    def test_raises_on_unknown_component(self, delay_wedge_uvp: UVPSpec) -> None:
+        with pytest.raises(ValueError, match="Did not understand component foo"):
+            plot.delay_wedge(delay_wedge_uvp, 0, ("xx", "xx"), component="foo")
         plt.close()
-
-
-if __name__ == "__main__":
-    unittest.main()

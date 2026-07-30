@@ -1,14 +1,18 @@
 import copy
-import os
-import unittest
+import warnings
+from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 import pytest
 from astropy import units
 from pyuvdata import UVData
+from pyuvdata import utils as uvutils
 
-from hera_pspec import PSpecData, conversions, pspecbeam, utils, uvwindow
+from hera_pspec import PSpecData, UVPSpec, conversions, utils, uvwindow
 from hera_pspec.data import DATA_PATH
+
+DATA_PATH = Path(DATA_PATH)
 
 # Data files to use in tests
 dfile = "zen.2458116.31939.HH.uvh5"
@@ -17,876 +21,1141 @@ basename = "FT_beam_HERA_dipole_test"
 outfile = "test.hdf5"
 
 
-class test_FTBeam(unittest.TestCase):
-    def setUp(self):
+@pytest.fixture()
+def make_ft_beam_obj() -> Callable[[tuple[int, int] | None], uvwindow.FTBeam]:
+    def _factory(spw_range: tuple[int, int] | None = None) -> uvwindow.FTBeam:
+        return uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=spw_range)
 
-        # parameters
-        self.ft_file = os.path.join(DATA_PATH, ftfile)
-        self.pol = "xx"
-        self.spw_range = (5, 25)
-        self.verbose = False
-        self.x_orientation = "east"
+    return _factory
 
-        self.ftbeam_obj = uvwindow.FTBeam.from_file(
-            ftfile=self.ft_file, spw_range=self.spw_range
+
+@pytest.fixture()
+def ft_beam_spw(
+    make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+) -> uvwindow.FTBeam:
+    """FTBeam loaded with spw_range=(5, 25)."""
+    return make_ft_beam_obj(spw_range=(5, 25))
+
+
+@pytest.fixture()
+def ft_bandwidth() -> np.ndarray:
+    return uvwindow.FTBeam.get_bandwidth(DATA_PATH / ftfile)
+
+
+@pytest.fixture()
+def uvwindow_obj(
+    ft_beam_spw: uvwindow.FTBeam, cosmo: conversions.Cosmo_Conversions
+) -> uvwindow.UVWindow:
+    return uvwindow.UVWindow(
+        ftbeam_obj=ft_beam_spw,
+        taper="blackman-harris",
+        cosmo=cosmo,
+        little_h=True,
+        verbose=False,
+    )
+
+
+@pytest.fixture(scope="module")
+def red_bl_lens(uvd_zen_2458116: UVData) -> np.ndarray:
+    """Redundant baseline lengths for zen.2458116.31939.HH.uvh5."""
+    return utils.get_reds(uvd_zen_2458116, bl_error_tol=1.0, pick_data_ants=False)[1]
+
+
+@pytest.fixture()
+def kbins() -> units.Quantity:
+    # kmax, dk = 1.0, 0.128 / 2
+    # krange = np.arange(dk * 1.5, kmax, step=dk)
+    krange = np.arange(0.1, 5.0, step=0.3)
+    return ((krange[1:] + krange[:-1]) / 2) * units.h / units.Mpc
+
+
+@pytest.fixture()
+def cyl_wf_result(
+    uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+) -> tuple[float, np.ndarray, np.ndarray, np.ndarray]:
+    """Cylindrical window function, k-bins, and baseline length for red_bl_lens[12]."""
+    bl_len = red_bl_lens[12]
+    kperp, kpara, cyl_wf = uvwindow_obj.get_cylindrical_wf(
+        bl_len, kperp_bins=None, kpara_bins=None, return_bins="unweighted"
+    )
+    return bl_len, kperp, kpara, cyl_wf
+
+
+@pytest.fixture(scope="session")
+def uvp_for_uvwindow(
+    beam_nf_dipole, uvd_zen_2458116: UVData
+) -> tuple[UVPSpec, UVPSpec, UVPSpec]:
+    """UVPSpec objects (uvp, uvp_nocosmo, uvp_crosspol) for UVWindow.from_uvpspec tests."""
+    uvd = copy.deepcopy(uvd_zen_2458116)
+    uvd.data_array *= beam_nf_dipole.Jy_to_mK(np.unique(uvd.freq_array), pol="xx")[
+        None, :, None
+    ]
+    ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
+    ds_nocosmo = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+    baselines1, baselines2, _ = utils.construct_blpairs(
+        uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
+    )
+    taper = "blackman-harris"
+    uvp = ds.pspec(
+        baselines1,
+        baselines2,
+        dsets=(0, 1),
+        pols=[("xx", "xx")],
+        spw_ranges=(175, 195),
+        taper=taper,
+        verbose=False,
+    )
+    uvp_nocosmo = ds_nocosmo.pspec(
+        baselines1,
+        baselines2,
+        dsets=(0, 1),
+        pols=[("xx", "xx")],
+        spw_ranges=(5, 25),
+        taper=taper,
+        verbose=False,
+    )
+    uvp_crosspol = ds.pspec(
+        baselines1,
+        baselines2,
+        dsets=(0, 1),
+        pols=["xx", "yy"],
+        spw_ranges=(175, 195),
+        taper=taper,
+        verbose=False,
+    )
+    return uvp, uvp_nocosmo, uvp_crosspol
+
+
+class TestFTBeamInit:
+    def test_from_array(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        data, freq_array, mapsize = (
+            ft_beam_spw.ft_beam,
+            ft_beam_spw.freq_array,
+            ft_beam_spw.mapsize,
         )
-        self.data = self.ftbeam_obj.ft_beam
-        self.mapsize = self.ftbeam_obj.mapsize
-        self.freq_array = self.ftbeam_obj.freq_array
-        self.bandwidth = uvwindow.FTBeam.get_bandwidth(self.ft_file)
-
-    def tearDown(self):
-        pass
-
-    def runTest(self):
-        pass
-
-    def test_init(self):
-
-        # initialise directly with array
         test = uvwindow.FTBeam(
-            data=self.data,
-            pol=self.pol,
-            freq_array=self.freq_array,
-            mapsize=self.mapsize,
-            verbose=self.verbose,
-            x_orientation=self.x_orientation,
+            data=data,
+            pol="xx",
+            freq_array=freq_array,
+            mapsize=mapsize,
+            verbose=False,
+            x_orientation="east",
         )
-        assert self.pol == test.pol
-        assert np.allclose(self.data, test.ft_beam)
+        assert test.pol == "xx"
+        assert np.allclose(data, test.ft_beam)
 
-        # raise assertion error if data is not dim 3
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam,
-            data=self.data[:, :, 0],
-            pol=self.pol,
-            freq_array=self.freq_array,
-            mapsize=self.mapsize,
+    @pytest.mark.parametrize("bad_data", ["2d", "wrong_shape"])
+    def test_invalid_data_shape(
+        self, ft_beam_spw: uvwindow.FTBeam, bad_data: str
+    ) -> None:
+        data, freq_array, mapsize = (
+            ft_beam_spw.ft_beam,
+            ft_beam_spw.freq_array,
+            ft_beam_spw.mapsize,
         )
-
-        # raise assertion error if data has wrong shape
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam,
-            data=self.data[:, :, :-1],
-            pol=self.pol,
-            freq_array=self.freq_array,
-            mapsize=self.mapsize,
-        )
-
-        # raise assertion error if freq_array and data not compatible
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam,
-            data=self.data[:12, :, :],
-            pol=self.pol,
-            freq_array=self.freq_array,
-            mapsize=self.mapsize,
-        )
-
-        # tests related to pol
-        test = uvwindow.FTBeam(
-            data=self.data, pol=-5, freq_array=self.freq_array, mapsize=self.mapsize
-        )
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam,
-            pol="test",
-            data=self.data,
-            freq_array=self.freq_array,
-            mapsize=self.mapsize,
-        )
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam,
-            pol=12,
-            data=self.data,
-            freq_array=self.freq_array,
-            mapsize=self.mapsize,
-        )
-        pytest.raises(
-            TypeError,
-            uvwindow.FTBeam,
-            pol=3.4,
-            data=self.data,
-            freq_array=self.freq_array,
-            mapsize=self.mapsize,
-        )
-
-    def test_from_beam(self):
-
-        pytest.raises(NotImplementedError, uvwindow.FTBeam.from_beam, beamfile="test")
-
-    def test_from_file(self):
-
-        test = uvwindow.FTBeam.from_file(
-            ftfile=self.ft_file,
-            spw_range=self.spw_range,
-            verbose=self.verbose,
-            x_orientation=self.x_orientation,
-        )
-        assert test.pol == self.pol
-
-        # tests related to ftfile
-        pytest.raises(TypeError, uvwindow.FTBeam.from_file, ftfile=12.0)
-        # if ft file does not exist, raise assertion error
-        pytest.raises(ValueError, uvwindow.FTBeam.from_file, ftfile="whatever")
-
-        # tests related to spw_range
-        test1 = uvwindow.FTBeam.from_file(ftfile=self.ft_file, spw_range=self.spw_range)
-        assert np.allclose(test1.freq_array, self.freq_array)
-
-        test2 = uvwindow.FTBeam.from_file(ftfile=self.ft_file, spw_range=None)
-        assert np.allclose(test2.freq_array, self.bandwidth)
-
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam.from_file,
-            spw_range=(13),
-            ftfile=self.ft_file,
-        )
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam.from_file,
-            spw_range=(20, 10),
-            ftfile=self.ft_file,
-        )
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam.from_file,
-            spw_range=(1001, 1022),
-            ftfile=self.ft_file,
-        )
-
-    def test_gaussian(self):
-
-        # fiducial use
-        widths = -0.0343 * self.freq_array / 1e6 + 11.30
-        test = uvwindow.FTBeam.gaussian(
-            freq_array=self.freq_array, widths=widths, pol=self.pol
-        )
-        # if widths given as unique number, this value is used for all freqs
-        test2 = uvwindow.FTBeam.gaussian(
-            freq_array=self.freq_array, widths=np.mean(widths), pol=self.pol
-        )
-
-        # tests on freq_array consistency
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam.gaussian,
-            freq_array=self.freq_array[:2],
-            pol=self.pol,
-            widths=np.mean(widths),
-        )
-        pytest.raises(
-            AssertionError,
-            uvwindow.FTBeam.gaussian,
-            freq_array=self.freq_array,
-            pol=self.pol,
-            widths=widths[:10],
-        )
-
-        # make sure widths are given in degrees (raises warning)
-        with pytest.warns(UserWarning, match="Small widths"):
-            test = uvwindow.FTBeam.gaussian(
-                freq_array=self.freq_array, pol=self.pol, widths=0.10
+        sliced = data[:, :, 0] if bad_data == "2d" else data[:, :, :-1]
+        with pytest.raises(ValueError, match="Wrong dimensions for data input"):
+            uvwindow.FTBeam(
+                data=sliced, pol="xx", freq_array=freq_array, mapsize=mapsize
             )
 
-    def test_get_bandwidth(self):
-
-        test_bandwidth = uvwindow.FTBeam.get_bandwidth(self.ft_file)
-        assert np.all(test_bandwidth == self.bandwidth)
-        # raise error is ft_file does not exist
-        pytest.raises(ValueError, uvwindow.FTBeam.get_bandwidth, ftfile="whatever")
-
-    def test_update_spw(self):
-
-        # proper usage
-        test = uvwindow.FTBeam.from_file(ftfile=self.ft_file, spw_range=None)
-        test.update_spw(self.spw_range)
-
-        # tests related to spw_range
-        test = uvwindow.FTBeam.from_file(ftfile=self.ft_file, spw_range=None)
-        pytest.raises(AssertionError, test.update_spw, spw_range=(13))
-        pytest.raises(AssertionError, test.update_spw, spw_range=(20, 10))
-        pytest.raises(AssertionError, test.update_spw, spw_range=(1001, 1022))
-
-
-class Test_UVWindow(unittest.TestCase):
-    def setUp(self):
-
-        # Instantiate UVWindow()
-        self.ft_file = os.path.join(DATA_PATH, ftfile)
-        self.pol = "xx"
-        self.polpair = (self.pol, self.pol)
-        self.spw_range = (5, 25)
-        self.taper = "blackman-harris"
-        self.verbose = False
-        self.little_h = True
-        self.cosmo = conversions.Cosmo_Conversions()
-
-        self.ft_beam_obj_spw = uvwindow.FTBeam.from_file(
-            ftfile=self.ft_file, spw_range=self.spw_range
+    def test_freq_mismatch(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        data, freq_array, mapsize = (
+            ft_beam_spw.ft_beam,
+            ft_beam_spw.freq_array,
+            ft_beam_spw.mapsize,
         )
-        self.ft_beam_obj = uvwindow.FTBeam.from_file(ftfile=self.ft_file)
+        with pytest.raises(ValueError, match="data must have shape"):
+            uvwindow.FTBeam(
+                data=data[:12, :, :], pol="xx", freq_array=freq_array, mapsize=mapsize
+            )
 
-        self.uvw = uvwindow.UVWindow(
-            ftbeam_obj=self.ft_beam_obj_spw,
-            taper=self.taper,
-            cosmo=self.cosmo,
-            little_h=self.little_h,
-            verbose=self.verbose,
+    def test_int_pol(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        data, freq_array, mapsize = (
+            ft_beam_spw.ft_beam,
+            ft_beam_spw.freq_array,
+            ft_beam_spw.mapsize,
+        )
+        test = uvwindow.FTBeam(
+            data=data, pol=-5, freq_array=freq_array, mapsize=mapsize
+        )
+        assert test.pol == uvutils.polnum2str(-5)
+
+    @pytest.mark.parametrize("bad_pol", ["test", 12])
+    def test_invalid_pol(
+        self, ft_beam_spw: uvwindow.FTBeam, bad_pol: str | int
+    ) -> None:
+        data, freq_array, mapsize = (
+            ft_beam_spw.ft_beam,
+            ft_beam_spw.freq_array,
+            ft_beam_spw.mapsize,
+        )
+        with pytest.raises(ValueError, match="Wrong polarisation"):
+            uvwindow.FTBeam(
+                pol=bad_pol, data=data, freq_array=freq_array, mapsize=mapsize
+            )
+
+    def test_float_pol_raises_typeerror(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        data, freq_array, mapsize = (
+            ft_beam_spw.ft_beam,
+            ft_beam_spw.freq_array,
+            ft_beam_spw.mapsize,
+        )
+        with pytest.raises(TypeError, match="Must feed pol as str or int"):
+            uvwindow.FTBeam(pol=3.4, data=data, freq_array=freq_array, mapsize=mapsize)
+
+
+class TestFTBeamFromBeam:
+    def test_not_implemented(self) -> None:
+        with pytest.raises(NotImplementedError, match="Coming soon"):
+            uvwindow.FTBeam.from_beam(beamfile="test")
+
+
+class TestFTBeamFromFile:
+    def test_happy_path(self) -> None:
+        test = uvwindow.FTBeam.from_file(
+            ftfile=DATA_PATH / ftfile,
+            spw_range=(5, 25),
+            verbose=False,
+            x_orientation="east",
+        )
+        assert test.pol == "xx"
+
+    def test_invalid_ftfile_type(self) -> None:
+        with pytest.raises(
+            TypeError,
+            match=r"expected str, bytes or os\.PathLike object, not float"
+            r"|argument should be a str or an os\.PathLike object where __fspath__ returns a str, not 'float'",
+        ):
+            uvwindow.FTBeam.from_file(ftfile=12.0)
+
+    def test_invalid_ftfile_path(self) -> None:
+        with pytest.raises(ValueError, match="Wrong ftfile input"):
+            uvwindow.FTBeam.from_file(ftfile="whatever")
+
+    def test_spw_range_matches_fixture(
+        self, make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam]
+    ) -> None:
+        ft_file = DATA_PATH / ftfile
+        spw_range = (5, 25)
+        test = uvwindow.FTBeam.from_file(ftfile=ft_file, spw_range=spw_range)
+        assert np.allclose(
+            test.freq_array, make_ft_beam_obj(spw_range=spw_range).freq_array
         )
 
-        # set parameters
-        self.freq_array = self.uvw.freq_array
-        self.ngrid = self.ft_beam_obj.ft_beam.shape[-1]
-        # HERA bandwidth
-        self.HERA_bw = np.linspace(1, 2, 1024, endpoint=False) * 1e8
+    def test_no_spw_range_uses_full_bandwidth(self, ft_bandwidth: np.ndarray) -> None:
+        test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
+        assert np.allclose(test.freq_array, ft_bandwidth)
 
-        # define spherical kbins
-        kmax, dk = 1.0, 0.128 / 2
-        krange = np.arange(dk * 1.5, kmax, step=dk)
-        nbinsk = krange.size - 1
-        kbins = (krange[1:] + krange[:-1]) / 2
-        self.kbins = kbins * units.h / units.Mpc
+    @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
+    def test_invalid_spw_range(self, bad_spw: tuple[int, ...]) -> None:
+        with pytest.raises(ValueError, match="Wrong spw range format"):
+            uvwindow.FTBeam.from_file(spw_range=bad_spw, ftfile=DATA_PATH / ftfile)
 
-        # Load datafile
-        uvd = UVData()
-        uvd.read(os.path.join(DATA_PATH, dfile), read_data=False)
-        self.reds, self.lens, _ = utils.get_reds(
-            uvd, bl_error_tol=1.0, pick_data_ants=False
+
+class TestFTBeamGaussian:
+    def test_array_widths(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        freq_array = ft_beam_spw.freq_array
+        widths = -0.0343 * freq_array / 1e6 + 11.30
+        test = uvwindow.FTBeam.gaussian(freq_array=freq_array, widths=widths, pol="xx")
+        assert test.freq_array.shape == freq_array.shape
+
+    def test_scalar_width(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        freq_array = ft_beam_spw.freq_array
+        widths = -0.0343 * freq_array / 1e6 + 11.30
+        test = uvwindow.FTBeam.gaussian(
+            freq_array=freq_array, widths=np.mean(widths), pol="xx"
         )
+        assert test.freq_array.shape == freq_array.shape
 
-    def tearDown(self):
-        pass
+    def test_too_few_frequencies(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        freq_array = ft_beam_spw.freq_array
+        widths = -0.0343 * freq_array / 1e6 + 11.30
+        with pytest.raises(ValueError, match="Must use at least three frequencies"):
+            uvwindow.FTBeam.gaussian(
+                freq_array=freq_array[:2], pol="xx", widths=np.mean(widths)
+            )
 
-    def runTest(self):
-        pass
+    def test_widths_length_mismatch(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        freq_array = ft_beam_spw.freq_array
+        widths = -0.0343 * freq_array / 1e6 + 11.30
+        with pytest.raises(
+            ValueError, match="There must be as many frequencies as widths"
+        ):
+            uvwindow.FTBeam.gaussian(
+                freq_array=freq_array, pol="xx", widths=widths[:10]
+            )
 
-    def test_init(self):
+    def test_small_widths_warns(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        with pytest.warns(UserWarning, match="Small widths"):
+            uvwindow.FTBeam.gaussian(
+                freq_array=ft_beam_spw.freq_array, pol="xx", widths=0.10
+            )
 
-        # fiducial usage
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
 
-        # raise error if two ftbeam_obj are not consistent
-        pytest.raises(
-            AssertionError,
-            uvwindow.UVWindow,
-            ftbeam_obj=(self.ft_beam_obj_spw, self.ft_beam_obj),
-        )
-        ftbeam_test = copy.deepcopy(self.ft_beam_obj_spw)
+class TestFTBeamGetBandwidth:
+    def test_matches_fixture(self, ft_bandwidth: np.ndarray) -> None:
+        result = uvwindow.FTBeam.get_bandwidth(DATA_PATH / ftfile)
+        assert np.all(result == ft_bandwidth)
+
+    def test_invalid_file(self) -> None:
+        with pytest.raises(ValueError, match="Wrong ftfile input"):
+            uvwindow.FTBeam.get_bandwidth(ftfile="whatever")
+
+
+class TestFTBeamUpdateSpw:
+    def test_happy_path(self) -> None:
+        test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
+        test.update_spw((5, 25))
+
+    @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
+    def test_invalid_range(self, bad_spw: tuple[int, ...]) -> None:
+        test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
+        with pytest.raises(ValueError, match="Wrong spw range format"):
+            test.update_spw(spw_range=bad_spw)
+
+
+class TestUVWindowInit:
+    def test_happy_path(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw)
+        assert test is not None
+
+    @pytest.mark.parametrize("bad_spw", [None, (0, 20)])
+    def test_inconsistent_ftbeam_spectral_range(
+        self,
+        bad_spw: tuple[int, int] | None,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+        ft_beam_spw: uvwindow.FTBeam,
+    ) -> None:
+        ft_beam_full = make_ft_beam_obj(spw_range=bad_spw)
+        with pytest.raises(
+            ValueError, match="Spectral ranges of the two FTBeam objects do not match"
+        ):
+            uvwindow.UVWindow(ftbeam_obj=(ft_beam_spw, ft_beam_full))
+
+    def test_inconsistent_ftbeam_physical(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        ftbeam_test = copy.deepcopy(ft_beam_spw)
         ftbeam_test.mapsize = 2.0
-        pytest.raises(
-            AssertionError,
-            uvwindow.UVWindow,
-            ftbeam_obj=(self.ft_beam_obj_spw, ftbeam_test),
-        )
-        # raise error if ftbeam_obj is wrong input
-        pytest.raises(AssertionError, uvwindow.UVWindow, ftbeam_obj="test")
+        with pytest.raises(
+            ValueError,
+            match="Physical properties of the two FTBeam objects do not match",
+        ):
+            uvwindow.UVWindow(ftbeam_obj=(ft_beam_spw, ftbeam_test))
 
-        # test taper options
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw, taper=self.taper)
-        assert test.taper == self.taper
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw, taper=None)
-        assert test.taper is None
-        pytest.raises(
-            ValueError, uvwindow.UVWindow, taper="test", ftbeam_obj=self.ft_beam_obj_spw
-        )
+    def test_wrong_ftbeam_type(self) -> None:
+        with pytest.raises(ValueError, match="Wrong input given in ftbeam_obj"):
+            uvwindow.UVWindow(ftbeam_obj="test")
 
-        # test on cosmo
-        cosmo = conversions.Cosmo_Conversions()
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw, cosmo=cosmo)
-        pytest.raises(
-            AssertionError,
-            uvwindow.UVWindow,
-            cosmo=None,
-            ftbeam_obj=self.ft_beam_obj_spw,
-        )
+    @pytest.mark.parametrize("taper", ["blackman-harris", None])
+    def test_taper(self, ft_beam_spw: uvwindow.FTBeam, taper: str | None) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, taper=taper)
+        assert test.taper == taper
 
-        # test on verbose
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw, verbose=True)
+    def test_invalid_taper(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        with pytest.raises(ValueError, match="Wrong taper"):
+            uvwindow.UVWindow(taper="test", ftbeam_obj=ft_beam_spw)
+
+    def test_cosmo(
+        self, ft_beam_spw: uvwindow.FTBeam, cosmo: conversions.Cosmo_Conversions
+    ) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, cosmo=cosmo)
+        assert test.cosmo is not None
+
+    def test_cosmo_none_raises(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        with pytest.raises(ValueError, match="If no preferred cosmology"):
+            uvwindow.UVWindow(cosmo=None, ftbeam_obj=ft_beam_spw)
+
+    def test_verbose(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, verbose=True)
         assert test.verbose
 
-        # test on little_h
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw, verbose=True)
+    def test_little_h_true(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=True)
         assert test.kunits.is_equivalent(units.h / units.Mpc)
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw, little_h=False)
+
+    def test_little_h_false(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
         assert test.kunits.is_equivalent(units.Mpc ** (-1))
 
-    def test_from_uvpspec(self):
 
-        # obtain uvp object
-        datafile = os.path.join(DATA_PATH, dfile)
-        uvd = UVData()
-        uvd.read_uvh5(datafile)
-        # beam
-        beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
-        uvb = pspecbeam.PSpecBeamUV(beamfile, cosmo=None)
-        Jy_to_mK = uvb.Jy_to_mK(np.unique(uvd.freq_array), pol=self.pol)
-        # reshape to appropriately match a UVData.data_array object and multiply in!
-        uvd.data_array *= Jy_to_mK[None, :, None]
-        # Create a new PSpecData object, and don't forget to feed the beam object
-        ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=uvb)
-        ds_nocosmo = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
-        # choose baselines
-        baselines1, baselines2, blpairs = utils.construct_blpairs(
-            uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
-        )
-        # compute ps
-        uvp = ds.pspec(
-            baselines1,
-            baselines2,
-            dsets=(0, 1),
-            pols=[self.polpair],
-            spw_ranges=(175, 195),
-            taper=self.taper,
-            verbose=self.verbose,
-        )
-        uvp_nocosmo = ds_nocosmo.pspec(
-            baselines1,
-            baselines2,
-            dsets=(0, 1),
-            pols=[self.polpair],
-            spw_ranges=self.spw_range,
-            taper=self.taper,
-            verbose=self.verbose,
-        )
-        uvp_crosspol = ds.pspec(
-            baselines1,
-            baselines2,
-            dsets=(0, 1),
-            pols=["xx", "yy"],
-            spw_ranges=(175, 195),
-            taper=self.taper,
-            verbose=self.verbose,
+class TestUVWindowFromUvpspec:
+    def test_happy_path(
+        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
+    ) -> None:
+        uvp, _, _ = uvp_for_uvwindow
+        _ = uvwindow.UVWindow.from_uvpspec(
+            uvp, ipol=0, spw=0, verbose=True, ftbeam=DATA_PATH / basename
         )
 
-        # proper usage
-        # initialise with ftfile (read pre-computed FT of the beam in file)
-        uvw_ps = uvwindow.UVWindow.from_uvpspec(
-            uvp, ipol=0, spw=0, verbose=True, ftbeam=os.path.join(DATA_PATH, basename)
+    def test_crosspol(self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]) -> None:
+        _, _, uvp_crosspol = uvp_for_uvwindow
+        _ = uvwindow.UVWindow.from_uvpspec(
+            uvp_crosspol, ipol=0, spw=0, ftbeam=DATA_PATH / basename
         )
-        # if cross polarisation
-        test = uvwindow.UVWindow.from_uvpspec(
-            uvp_crosspol, ipol=0, spw=0, ftbeam=os.path.join(DATA_PATH, basename)
-        )
-        # if no cosmo, use default
+
+    def test_no_cosmo_warns(
+        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
+    ) -> None:
+        _, uvp_nocosmo, _ = uvp_for_uvwindow
         with pytest.warns(UserWarning, match="uvp has no cosmo attribute"):
-            uvw_ps = uvwindow.UVWindow.from_uvpspec(
-                uvp_nocosmo,
-                ipol=0,
-                spw=0,
-                verbose=True,
-                ftbeam=os.path.join(DATA_PATH, basename),
+            _ = uvwindow.UVWindow.from_uvpspec(
+                uvp_nocosmo, ipol=0, spw=0, verbose=True, ftbeam=DATA_PATH / basename
             )
 
-        # raise error if no ftbeam as option is not implemented yet
-        pytest.raises(
-            NotImplementedError,
-            uvwindow.UVWindow.from_uvpspec,
-            uvp=uvp,
-            ipol=0,
-            spw=0,
-            ftbeam=None,
-            verbose=False,
-        )
-        # raise error if wrong type for ftbeam
-        pytest.raises(
-            TypeError,
-            uvwindow.UVWindow.from_uvpspec,
-            uvp=uvp,
-            ipol=0,
-            spw=0,
-            ftbeam=np.zeros(12),
-            verbose=False,
-        )
-        # raise error if spw not within uvp.Nspws
-        with pytest.warns(UserWarning, match="uvp has no cosmo attribute"):
-            pytest.raises(
-                AssertionError,
-                uvwindow.UVWindow.from_uvpspec,
-                uvp=uvp_nocosmo,
-                ipol=0,
-                spw=2,
-                ftbeam=os.path.join(DATA_PATH, basename),
+    def test_no_ftbeam_not_implemented(
+        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
+    ) -> None:
+        uvp, _, _ = uvp_for_uvwindow
+        with pytest.raises(NotImplementedError, match="Coming soon"):
+            uvwindow.UVWindow.from_uvpspec(
+                uvp=uvp, ipol=0, spw=0, ftbeam=None, verbose=False
             )
 
-        # use FTBeam object directly as input
-        widths = -0.0343 * self.freq_array / 1e6 + 11.30
+    def test_wrong_ftbeam_type(
+        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
+    ) -> None:
+        uvp, _, _ = uvp_for_uvwindow
+        with pytest.raises(TypeError, match="Check your ftbeam input"):
+            uvwindow.UVWindow.from_uvpspec(
+                uvp=uvp, ipol=0, spw=0, ftbeam=np.zeros(12), verbose=False
+            )
+
+    def test_spw_out_of_range(
+        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
+    ) -> None:
+        uvp, _, _ = uvp_for_uvwindow
+        with pytest.raises(ValueError, match="Input spw must be smaller or equal"):
+            uvwindow.UVWindow.from_uvpspec(
+                uvp=uvp, ipol=0, spw=2, ftbeam=DATA_PATH / basename
+            )
+
+    def test_ftbeam_object(
+        self,
+        uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec],
+        ft_beam_spw: uvwindow.FTBeam,
+    ) -> None:
+        uvp, _, _ = uvp_for_uvwindow
+        freq_array = ft_beam_spw.freq_array
+        widths = -0.0343 * freq_array / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=self.freq_array, widths=widths, pol=self.pol
+            freq_array=freq_array, widths=widths, pol="xx"
         )
-        uvw_ps = uvwindow.UVWindow.from_uvpspec(
+        _ = uvwindow.UVWindow.from_uvpspec(
             uvp, ipol=0, spw=0, verbose=True, ftbeam=gaussian_beam
         )
 
-    def test_get_kgrid(self):
 
-        bl_len = self.lens[12]
+class TestUVWindowGetKgrid:
+    def test_happy_path(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        _ = uvwindow_obj._get_kgrid(red_bl_lens[12])
 
-        # initialise object
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        kgrid, kperp_norm = test._get_kgrid(bl_len)
-        pytest.raises(AssertionError, test._get_kgrid, bl_len=bl_len, width=0.0004)
+    def test_too_narrow_width(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        with pytest.raises(
+            ValueError, match="Change width to resolve full window function"
+        ):
+            uvwindow_obj._get_kgrid(bl_len=red_bl_lens[12], width=0.0004)
 
-    def test_kperp4bl_freq(self):
 
-        bl_len = self.lens[12]
-
-        # initialise object
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        # test for correct input parameters
-        k = test._kperp4bl_freq(
-            freq=test.freq_array[12], bl_len=bl_len, ngrid=self.ngrid
-        )
-        # test for frequency outside of spectral window
-        pytest.raises(
-            AssertionError,
-            test._kperp4bl_freq,
-            freq=1.35 * 1e8,
-            bl_len=bl_len,
-            ngrid=self.ngrid,
-        )
-        # test for frequency in Hhz
-        pytest.raises(
-            AssertionError,
-            test._kperp4bl_freq,
-            freq=test.freq_array[12] / 1e6,
-            bl_len=bl_len,
-            ngrid=self.ngrid,
+class TestUVWindowKperp4blFreq:
+    def test_happy_path(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+    ) -> None:
+        bl_len = red_bl_lens[12]
+        ngrid = make_ft_beam_obj().ft_beam.shape[-1]
+        _ = uvwindow_obj._kperp4bl_freq(
+            freq=uvwindow_obj.freq_array[12], bl_len=bl_len, ngrid=ngrid
         )
 
-    def test_interpolate_ft_beam(self):
+    def test_outside_spectral_window(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+    ) -> None:
+        ngrid = make_ft_beam_obj().ft_beam.shape[-1]
+        with pytest.raises(ValueError, match="Choose frequency within spectral window"):
+            uvwindow_obj._kperp4bl_freq(
+                freq=1.35e8, bl_len=red_bl_lens[12], ngrid=ngrid
+            )
 
-        bl_len = self.lens[12]
+    def test_not_in_hz(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+    ) -> None:
+        ngrid = make_ft_beam_obj().ft_beam.shape[-1]
+        with pytest.raises(ValueError, match="Frequency must be given in Hz"):
+            uvwindow_obj._kperp4bl_freq(
+                freq=uvwindow_obj.freq_array[12] / 1e6,
+                bl_len=red_bl_lens[12],
+                ngrid=ngrid,
+            )
 
-        # initialise object
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        ft_beam = np.copy(test.ftbeam_obj_pol[0].ft_beam)
-        interp_ft_beam, kperp_norm = test._interpolate_ft_beam(bl_len, ft_beam)
 
-        # test for ft_beam of wrong dimensions
-        pytest.raises(
-            AssertionError,
-            test._interpolate_ft_beam,
-            bl_len=bl_len,
-            ft_beam=ft_beam[0, :, :],
+class TestUVWindowInterpolateFtBeam:
+    def test_happy_path(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
+        _ = uvwindow_obj._interpolate_ft_beam(red_bl_lens[12], ft_beam)
+
+    def test_not_3d(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
+        with pytest.raises(ValueError, match="ft_beam must be dimension 3"):
+            uvwindow_obj._interpolate_ft_beam(
+                bl_len=red_bl_lens[12], ft_beam=ft_beam[0, :, :]
+            )
+
+    @pytest.mark.parametrize("bad_slice", ["truncated", "transposed"])
+    def test_wrong_shape(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, bad_slice: str
+    ) -> None:
+        ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
+        sliced = ft_beam[0:10, :, :] if bad_slice == "truncated" else ft_beam[:, :, :].T
+        with pytest.raises(ValueError, match="ft_beam must have shape"):
+            uvwindow_obj._interpolate_ft_beam(bl_len=red_bl_lens[12], ft_beam=sliced)
+
+    def test_not_square(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
+        with pytest.raises(ValueError, match="ft_beam must be square in sky plane"):
+            uvwindow_obj._interpolate_ft_beam(
+                bl_len=red_bl_lens[12], ft_beam=ft_beam[:, :1, :]
+            )
+
+
+class TestUVWindowTakeFreqFT:
+    def test_happy_path(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
+        interp_ft_beam, _ = uvwindow_obj._interpolate_ft_beam(red_bl_lens[12], ft_beam)
+        delta_nu = np.median(np.diff(uvwindow_obj.freq_array))
+        _ = uvwindow_obj._take_freq_FT(interp_ft_beam, delta_nu)
+
+    def test_not_3d(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
+        interp_ft_beam, _ = uvwindow_obj._interpolate_ft_beam(red_bl_lens[12], ft_beam)
+        delta_nu = np.median(np.diff(uvwindow_obj.freq_array))
+        with pytest.raises(ValueError, match="interp_ft_beam must be dimension 3"):
+            uvwindow_obj._take_freq_FT(interp_ft_beam[0, :, :], delta_nu)
+
+    def test_wrong_shape(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        ft_beam = np.copy(uvwindow_obj.ftbeam_obj_pol[0].ft_beam)
+        interp_ft_beam, _ = uvwindow_obj._interpolate_ft_beam(red_bl_lens[12], ft_beam)
+        delta_nu = np.median(np.diff(uvwindow_obj.freq_array))
+        with pytest.raises(ValueError, match="interp_ft_beam must have shape"):
+            uvwindow_obj._take_freq_FT(interp_ft_beam[:, :, :].T, delta_nu)
+
+
+class TestUVWindowGetWfForTau:
+    def test_happy_path(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        bl_len = red_bl_lens[12]
+        tau = uvwindow_obj.dly_array[12]
+        kperp_bins = np.array(uvwindow_obj.get_kperp_bins([bl_len]).value)
+        kpara_bins = np.array(
+            uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array).value
         )
-        pytest.raises(
-            AssertionError,
-            test._interpolate_ft_beam,
-            bl_len=bl_len,
-            ft_beam=ft_beam[0:10, :, :],
-        )
-        pytest.raises(
-            AssertionError,
-            test._interpolate_ft_beam,
-            bl_len=bl_len,
-            ft_beam=ft_beam[:, :, :].T,
-        )
+        wf_array = np.zeros((kperp_bins.size, uvwindow_obj.Nfreqs))
+        _ = uvwindow_obj._get_wf_for_tau(tau, wf_array, kperp_bins, kpara_bins)
 
-    def test_take_freq_FT(self):
 
-        bl_len = self.lens[12]
+class TestUVWindowGetKperpBins:
+    def test_empty_list_error(self, uvwindow_obj: uvwindow.UVWindow) -> None:
+        with pytest.raises(
+            ValueError, match="get_kperp_bins\\(\\) requires array of baseline lengths"
+        ):
+            uvwindow_obj.get_kperp_bins(bl_lens=[])
 
-        # initialise object
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        ft_beam = np.copy(test.ftbeam_obj_pol[0].ft_beam)
-        interp_ft_beam, kperp_norm = test._interpolate_ft_beam(bl_len, ft_beam)
-        # frequency resolution
-        delta_nu = np.median(np.diff(test.freq_array))
-        fnu = test._take_freq_FT(interp_ft_beam, delta_nu)
-        # test for ft_beam of wrong dimensions
-        pytest.raises(
-            AssertionError, test._take_freq_FT, interp_ft_beam[0, :, :], delta_nu
-        )
-        pytest.raises(
-            AssertionError, test._take_freq_FT, interp_ft_beam[:, :, :].T, delta_nu
-        )
+    def test_scalar_returns_units(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        kperps = uvwindow_obj.get_kperp_bins(red_bl_lens[12])
+        assert uvwindow_obj.kunits.is_equivalent(kperps.unit)
 
-    def test_get_wf_for_tau(self):
+    def test_array(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        _ = uvwindow_obj.get_kperp_bins(red_bl_lens)
 
-        bl_len = self.lens[12]
-
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        tau = test.dly_array[12]
-        kperp_bins = test.get_kperp_bins([bl_len])
-        kperp_bins = np.array(kperp_bins.value)
-        kpara_bins = test.get_kpara_bins(test.freq_array)
-        kpara_bins = np.array(kpara_bins.value)
-
-        wf_array1 = np.zeros((kperp_bins.size, test.Nfreqs))
-        kpara, cyl_wf = test._get_wf_for_tau(tau, wf_array1, kperp_bins, kpara_bins)
-
-    def test_get_kperp_bins(self):
-
-        # initialise object
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        # raise error if empty baseline array
-        pytest.raises(AssertionError, test.get_kperp_bins, bl_lens=[])
-        # test for unique baseline length
-        kperps = test.get_kperp_bins(self.lens[12])
-        assert test.kunits.is_equivalent(kperps.unit)
-        # test for array of baseline lengths
-        _ = test.get_kperp_bins(self.lens)
-        # test for warning if large number of bins (> 200)
+    def test_large_array_warns(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
         with pytest.warns(UserWarning, match="Large number of kperp/kpara bins"):
-            _ = test.get_kperp_bins(np.r_[1.0, self.lens])
+            _ = uvwindow_obj.get_kperp_bins(np.r_[1.0, red_bl_lens])
 
-    def test_get_kpara_bins(self):
 
-        # initialise object
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        # raise error if empty freq array or length 1
-        pytest.raises(
-            AssertionError, test.get_kpara_bins, freq_array=self.freq_array[2]
-        )
-        # test for correct input
-        _ = test.get_kpara_bins(self.freq_array)
-        # test for warning if large number of bins (> 200)
+class TestUVWindowGetKparaBins:
+    def test_scalar_error(self, uvwindow_obj: uvwindow.UVWindow) -> None:
+        with pytest.raises(ValueError, match="Must feed list of frequencies"):
+            uvwindow_obj.get_kpara_bins(freq_array=uvwindow_obj.freq_array[2])
+
+    def test_happy_path(self, uvwindow_obj: uvwindow.UVWindow) -> None:
+        _ = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+
+    def test_returns_units(self, uvwindow_obj: uvwindow.UVWindow) -> None:
+        kparas = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        assert uvwindow_obj.kunits.is_equivalent(kparas.unit)
+
+    def test_large_bandwidth_warns(self, uvwindow_obj: uvwindow.UVWindow) -> None:
+        HERA_bw = np.linspace(1, 2, 1024, endpoint=False) * 1e8
         with pytest.warns(UserWarning, match="Large number of kperp/kpara bins"):
-            _ = test.get_kpara_bins(self.HERA_bw)
-        # test if cosmo is signature
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        kparas = test.get_kpara_bins(self.freq_array)
-        assert test.kunits.is_equivalent(kparas.unit)
+            _ = uvwindow_obj.get_kpara_bins(HERA_bw)
 
-    def test_get_cylindrical_wf(self):
 
-        bl_len = self.lens[12]
-
-        # initialise object
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-
-        _, _, cyl_wf = test.get_cylindrical_wf(
-            bl_len, kperp_bins=None, kpara_bins=None, return_bins="weighted"
+class TestUVWindowGetCylindricalWf:
+    def test_return_bins_weighted(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        _, _, cyl_wf = uvwindow_obj.get_cylindrical_wf(
+            red_bl_lens[12], kperp_bins=None, kpara_bins=None, return_bins="weighted"
         )
-        cyl_wf = test.get_cylindrical_wf(
-            bl_len, kperp_bins=None, kpara_bins=None, return_bins=None
+        assert cyl_wf is not None
+
+    def test_return_bins_none(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        result = uvwindow_obj.get_cylindrical_wf(
+            red_bl_lens[12], kperp_bins=None, kpara_bins=None, return_bins=None
         )
-        kperp, kpara, cyl_wf = test.get_cylindrical_wf(
-            bl_len, kperp_bins=None, kpara_bins=None, return_bins="unweighted"
-        )
-        # check normalisation
+        assert result is not None
+
+    def test_normalisation(
+        self, cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray]
+    ) -> None:
+        _, _, _, cyl_wf = cyl_wf_result
         assert np.allclose(np.sum(cyl_wf, axis=(1, 2)), 1.0, atol=1e-3)
+
+    def test_output_shapes(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
         assert kperp.size == cyl_wf.shape[1]
         assert kpara.size == cyl_wf.shape[2]
-        assert test.Nfreqs == cyl_wf.shape[0]
-        # test the bins are recovered by get_kperp_bins and get_kpara_bins
-        assert np.allclose(kperp, test.get_kperp_bins(bl_len).value)
-        assert np.allclose(kpara, test.get_kpara_bins(test.freq_array).value)
+        assert uvwindow_obj.Nfreqs == cyl_wf.shape[0]
 
-        # test different key words
+    def test_bins_consistent_with_getters(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, _ = cyl_wf_result
+        assert np.allclose(kperp, uvwindow_obj.get_kperp_bins(bl_len).value)
+        assert np.allclose(
+            kpara, uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array).value
+        )
 
-        # kperp bins
-        kperp2, _, cyl_wf2 = test.get_cylindrical_wf(
+    def test_custom_kperp_bins(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, _, cyl_wf = cyl_wf_result
+        kperp2, _, cyl_wf2 = uvwindow_obj.get_cylindrical_wf(
             bl_len,
-            kperp_bins=kperp * test.kunits,
+            kperp_bins=kperp * uvwindow_obj.kunits,
             kpara_bins=None,
             return_bins="unweighted",
         )
         assert np.allclose(cyl_wf2, cyl_wf)
-        assert np.allclose(kperp2, kperp)  # unweighted option to return_bins
-        # ValueError raised if kperp_bins not linearly spaced
-        kperp_log = np.logspace(-2, 0, 100)
-        pytest.raises(
-            ValueError,
-            test.get_cylindrical_wf,
-            bl_len,
-            kperp_bins=kperp_log * test.kunits,
-            kpara_bins=None,
-            return_bins="unweighted",
-        )
+        assert np.allclose(kperp2, kperp)
 
-        # kpara bins
-        _, kpara3, cyl_wf3 = test.get_cylindrical_wf(
+    def test_custom_kpara_bins(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        _, kpara3, cyl_wf3 = uvwindow_obj.get_cylindrical_wf(
             bl_len,
             kperp_bins=None,
-            kpara_bins=kpara * test.kunits,
+            kpara_bins=kpara * uvwindow_obj.kunits,
             return_bins="unweighted",
         )
         assert np.allclose(cyl_wf3, cyl_wf)
         assert np.allclose(kpara, kpara3)
-        # ValueError raised if kpara_bins not linearly spaced
-        kpara_log = np.logspace(-1, 1, 100)
-        pytest.raises(
-            ValueError,
-            test.get_cylindrical_wf,
-            bl_len,
-            kperp_bins=None,
-            kpara_bins=kpara_log * test.kunits,
-            return_bins="unweighted",
-        )
 
-        # test filling array by delay symmetry for odd number of delays
-        ft_beam_test = uvwindow.FTBeam.from_file(
-            ftfile=self.ft_file, spw_range=(self.spw_range[0], self.spw_range[1] - 1)
-        )
-        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_test)
-        kperp, kpara, cyl_wf = test.get_cylindrical_wf(bl_len, return_bins="unweighted")
-
-    def test_cylindrical_to_spherical(self):
-
-        bl_len = self.lens[12]
-
-        # initialise object from keywords
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        kperp, kpara, cyl_wf = test.get_cylindrical_wf(
-            bl_len, kperp_bins=None, kpara_bins=None, return_bins="unweighted"
-        )
-        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
-
-        # proper usage
-        sph_wf, weighted_k = test.cylindrical_to_spherical(
-            cyl_wf=cyl_wf, kbins=self.kbins, ktot=ktot, bl_lens=bl_len, bl_weights=[2.0]
-        )
-        sph_wf, weighted_k = test.cylindrical_to_spherical(
-            cyl_wf=cyl_wf[None],
-            kbins=self.kbins,
-            ktot=ktot,
-            bl_lens=bl_len,
-            bl_weights=None,
-        )
-
-        # ktot has shape different from cyl_wf
-        pytest.raises(
-            AssertionError,
-            test.cylindrical_to_spherical,
-            cyl_wf=cyl_wf,
-            kbins=self.kbins,
-            ktot=np.sqrt(kperp[:-2, None] ** 2 + kpara**2),
-            bl_lens=bl_len,
-        )
-        # only one k-bin
-        pytest.raises(
-            AssertionError,
-            test.cylindrical_to_spherical,
-            cyl_wf=cyl_wf,
-            kbins=self.kbins[:1],
-            ktot=ktot,
-            bl_lens=bl_len,
-        )
-        # weights have shape different from bl_lens
-        pytest.raises(
-            AssertionError,
-            test.cylindrical_to_spherical,
-            cyl_wf=cyl_wf,
-            kbins=self.kbins,
-            ktot=ktot,
-            bl_lens=bl_len,
-            bl_weights=[1.0, 2.0],
-        )
-        # bl_lens has different size to cyl_wf.shape[0]
-        pytest.raises(
-            AssertionError,
-            test.cylindrical_to_spherical,
-            cyl_wf=cyl_wf[None],
-            kbins=self.kbins,
-            ktot=ktot,
-            bl_lens=self.lens[:2],
-            bl_weights=[1.0, 2.0],
-        )
-        # raise warning if empty bins
-        kbins_test = np.arange(2, 5, step=0.5) * test.kunits
-        test.verbose = True
-        with pytest.warns(UserWarning, match="Some spherical bins are empty"):
-            sph_wf, weighted_k = test.cylindrical_to_spherical(
-                cyl_wf=cyl_wf, kbins=kbins_test, ktot=ktot, bl_lens=bl_len
+    def test_nonlinear_kperp_error(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        with pytest.raises(
+            ValueError, match="get_cylindrical_wf: kperp_bins must be linearly spaced"
+        ):
+            uvwindow_obj.get_cylindrical_wf(
+                red_bl_lens[12],
+                kperp_bins=np.logspace(-2, 0, 100) * uvwindow_obj.kunits,
+                kpara_bins=None,
+                return_bins="unweighted",
             )
 
-        # raise ValueError if kbins not linearly spaced
-        kbins_log = np.logspace(-2, 2, 20)
-        pytest.raises(
-            ValueError,
-            test.cylindrical_to_spherical,
-            cyl_wf=cyl_wf,
-            kbins=kbins_log * test.kunits,
-            ktot=ktot,
-            bl_lens=bl_len,
+    def test_nonlinear_kpara_error(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        with pytest.raises(
+            ValueError, match="get_cylindrical_wf: kpara_bins must be linearly spaced"
+        ):
+            uvwindow_obj.get_cylindrical_wf(
+                red_bl_lens[12],
+                kperp_bins=None,
+                kpara_bins=np.logspace(-1, 1, 100) * uvwindow_obj.kunits,
+                return_bins="unweighted",
+            )
+
+    def test_odd_number_of_delays(self, red_bl_lens: np.ndarray) -> None:
+        ft_beam_test = uvwindow.FTBeam.from_file(
+            ftfile=DATA_PATH / ftfile, spw_range=(5, 24)
+        )
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_test)
+        kperp, kpara, cyl_wf = test.get_cylindrical_wf(
+            red_bl_lens[12], return_bins="unweighted"
+        )
+        assert cyl_wf is not None
+
+
+class TestUVWindowCylindricalToSpherical:
+    def test_with_weights(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        _ = uvwindow_obj.cylindrical_to_spherical(
+            cyl_wf=cyl_wf, kbins=kbins, ktot=ktot, bl_lens=bl_len, bl_weights=[2.0]
         )
 
-    def test_get_spherical_wf(self):
+    def test_no_weights(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        _ = uvwindow_obj.cylindrical_to_spherical(
+            cyl_wf=cyl_wf[None], kbins=kbins, ktot=ktot, bl_lens=bl_len, bl_weights=None
+        )
 
-        bl_len = self.lens[12]
+    def test_ktot_shape_mismatch(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        with pytest.raises(ValueError, match="k magnitude grid does not match"):
+            uvwindow_obj.cylindrical_to_spherical(
+                cyl_wf=cyl_wf,
+                kbins=kbins,
+                ktot=np.sqrt(kperp[:-2, None] ** 2 + kpara**2),
+                bl_lens=bl_len,
+            )
 
-        # initialise object from keywords
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
+    def test_single_kbin_error(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        with pytest.raises(ValueError, match="must feed array of k bins"):
+            uvwindow_obj.cylindrical_to_spherical(
+                cyl_wf=cyl_wf, kbins=kbins[:1], ktot=ktot, bl_lens=bl_len
+            )
 
-        with pytest.warns(
-            UserWarning, match="Max spherical k probed is not included in bins"
+    def test_weights_mismatch(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        with pytest.raises(ValueError, match="Blpair weights and lengths do not match"):
+            uvwindow_obj.cylindrical_to_spherical(
+                cyl_wf=cyl_wf,
+                kbins=kbins,
+                ktot=ktot,
+                bl_lens=bl_len,
+                bl_weights=[1.0, 2.0],
+            )
+
+    def test_single_bl_lens(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        _, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        with pytest.raises(ValueError, match="If only one bl_lens is given,"):
+            uvwindow_obj.cylindrical_to_spherical(
+                cyl_wf=cyl_wf, kbins=kbins, ktot=ktot, bl_lens=red_bl_lens
+            )
+
+    def test_bl_lens_mismatch(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        with pytest.raises(ValueError, match="bl_lens size must match cyl_wf.shape"):
+            uvwindow_obj.cylindrical_to_spherical(
+                cyl_wf=cyl_wf[None],
+                kbins=kbins,
+                ktot=ktot,
+                bl_lens=red_bl_lens[:2],
+                bl_weights=[1.0, 2.0],
+            )
+
+    def test_empty_bins_warns(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        kbins_test = np.arange(2, 5, step=0.5) * uvwindow_obj.kunits
+        uvwindow_obj.verbose = True
+        with pytest.warns(UserWarning, match="Some spherical bins are empty"):
+            _ = uvwindow_obj.cylindrical_to_spherical(
+                cyl_wf=cyl_wf, kbins=kbins_test, ktot=ktot, bl_lens=bl_len
+            )
+        uvwindow_obj.verbose = False
+
+    def test_nonlinear_kbins_error(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        with pytest.raises(
+            ValueError, match="cylindrical_to_spherical: kbins must be linearly spaced"
         ):
-            WF, weighted_k = test.get_spherical_wf(
-                kbins=self.kbins,
-                bl_lens=self.lens[:1],
+            uvwindow_obj.cylindrical_to_spherical(
+                cyl_wf=cyl_wf,
+                kbins=np.logspace(-2, 2, 20) * uvwindow_obj.kunits,
+                ktot=ktot,
+                bl_lens=bl_len,
+            )
+
+
+class TestUVWindowGetSphericalWf:
+    @pytest.mark.parametrize(
+        "kbins", [np.arange(1.0, 5.0, step=0.3), np.arange(0.1, 3.0, step=0.03)]
+    )
+    def test_minmax_k_warning(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+    ) -> None:
+        with pytest.warns(
+            UserWarning, match="spherical k probed is not included in bins"
+        ):
+            _ = uvwindow_obj.get_spherical_wf(
+                kbins=kbins * units.h / units.Mpc,
+                bl_lens=red_bl_lens[:1],
                 bl_weights=[1],
                 kperp_bins=None,
                 kpara_bins=None,
                 return_weighted_k=True,
                 verbose=True,
             )
-        kperp_bins = test.get_kperp_bins(self.lens[:1])
-        kpara_bins = test.get_kpara_bins(test.freq_array)
-        dk = np.diff(self.kbins.value).mean()
+
+    def test_happy_path(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+    ) -> None:
+        kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
+        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        dk = np.diff(kbins.value).mean()
         ktot_max = np.sqrt(kperp_bins.value[:, None] ** 2 + kpara_bins.value**2).max()
         full_kbins = (
-            np.arange(self.kbins.value.min(), ktot_max + dk, step=dk) * test.kunits
+            np.arange(kbins.value.min(), ktot_max + dk, step=dk) * uvwindow_obj.kunits
         )
-
-        WF = test.get_spherical_wf(
+        _ = uvwindow_obj.get_spherical_wf(
             kbins=full_kbins,
             kperp_bins=kperp_bins,
             kpara_bins=kpara_bins,
-            bl_lens=self.lens[:1],
+            bl_lens=red_bl_lens[:1],
             bl_weights=None,
             return_weighted_k=False,
             verbose=None,
         )
 
-        # check inputs
-        pytest.raises(
-            AttributeError,
-            test.get_spherical_wf,
-            kbins=self.kbins.value,
-            bl_lens=self.lens[:2],
-        )
-        pytest.raises(
-            AssertionError,
-            test.get_spherical_wf,
-            kbins=self.kbins,
-            bl_lens=self.lens[:2],
-            bl_weights=[1.0],
-        )
-        pytest.raises(
-            AssertionError,
-            test.get_spherical_wf,
-            kbins=self.kbins.value[2] * test.kunits,
-            bl_lens=self.lens[:1],
-        )
+    def test_kbins_no_units_error(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+    ) -> None:
+        with pytest.raises(AttributeError, match="Feed k array with units"):
+            uvwindow_obj.get_spherical_wf(kbins=kbins.value, bl_lens=red_bl_lens[:2])
 
-        # test kpara bins not outside of spectral window
-        # will print warning
+    def test_weights_mismatch_error(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+    ) -> None:
+        with pytest.raises(
+            ValueError, match="bl_weights and bl_lens must have same length"
+        ):
+            uvwindow_obj.get_spherical_wf(
+                kbins=kbins, bl_lens=red_bl_lens[:2], bl_weights=[1.0]
+            )
+
+    def test_single_kbin_error(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+    ) -> None:
+        with pytest.raises(ValueError, match="must feed array of k bins"):
+            uvwindow_obj.get_spherical_wf(
+                kbins=kbins.value[2] * uvwindow_obj.kunits, bl_lens=red_bl_lens[:1]
+            )
+
+    def test_kpara_outside_window_warns(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+    ) -> None:
+        kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
         kpara_centre = (
-            test.cosmo.tau_to_kpara(test.avg_z, little_h=test.little_h)
-            * abs(test.dly_array).max()
+            uvwindow_obj.cosmo.tau_to_kpara(
+                uvwindow_obj.avg_z, little_h=uvwindow_obj.little_h
+            )
+            * abs(uvwindow_obj.dly_array).max()
         )
         bad_kpara_bins = (
             np.arange(2.0 * kpara_centre, 10 * kpara_centre, step=kpara_centre)
-            * test.kunits
+            * uvwindow_obj.kunits
         )
+        dk = np.diff(kbins.value).mean()
         bad_kmax = np.sqrt(
             kperp_bins.value[:, None] ** 2 + bad_kpara_bins.value**2
         ).max()
         bad_full_kbins = (
-            np.arange(self.kbins.value.min(), bad_kmax + dk, step=dk) * test.kunits
+            np.arange(kbins.value.min(), bad_kmax + dk, step=dk) * uvwindow_obj.kunits
         )
         with pytest.warns(
             UserWarning,
             match="The bin centre is not included in the array of kpara bins",
         ):
-            WF = test.get_spherical_wf(
+            _ = uvwindow_obj.get_spherical_wf(
                 kbins=bad_full_kbins,
                 kperp_bins=kperp_bins,
                 kpara_bins=bad_kpara_bins,
-                bl_lens=self.lens[:1],
+                bl_lens=red_bl_lens[:1],
             )
-        # ValueError raised if kbins not linearly spaced
-        kperp_log = np.logspace(-2, 0, 100)
-        pytest.raises(
-            ValueError,
-            test.get_spherical_wf,
-            kbins=self.kbins,
-            kperp_bins=kperp_log * test.kunits,
-            bl_lens=self.lens[:1],
-        )
-        kpara_log = np.logspace(-1, 1, 100)
-        pytest.raises(
-            ValueError,
-            test.get_spherical_wf,
-            kbins=self.kbins,
-            kpara_bins=kpara_log * test.kunits,
-            bl_lens=self.lens[:1],
-        )
-        kbins_log = np.logspace(-2, 2, 20)
-        pytest.raises(
-            ValueError,
-            test.get_spherical_wf,
-            kbins=kbins_log * test.kunits,
-            bl_lens=self.lens[:1],
-        )
 
-    def test_check_kunits(self):
+    @pytest.mark.parametrize("ktype", ["wrong_min", "wrong_max"])
+    def test_wrong_kperp_bins(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+        ktype: str,
+    ) -> None:
+        kperp_bins = [0, 1e-12] if ktype == "wrong_min" else [2e12, 3e12]
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Max spherical k probed is not included in bins.",
+                category=UserWarning,
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message="get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.",
+                category=UserWarning,
+            )
+            with pytest.warns(
+                UserWarning, match="kperp bin centre not included in binning array"
+            ):
+                _ = uvwindow_obj.get_spherical_wf(
+                    kbins=kbins,
+                    bl_lens=red_bl_lens[:1],
+                    bl_weights=[1],
+                    kperp_bins=kperp_bins * uvwindow_obj.kunits,
+                )
 
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        test.check_kunits(self.kbins)
-        pytest.raises(AttributeError, test.check_kunits, self.kbins.value)
+    @pytest.mark.parametrize(
+        "bad_kwarg,error_msg",
+        [
+            ("kperp_bins", "get_spherical_wf: kperp_bins must be linearly spaced"),
+            ("kpara_bins", "get_spherical_wf: kpara_bins must be linearly spaced"),
+            ("kbins", "get_spherical_wf: kbins must be linearly spaced"),
+        ],
+    )
+    def test_nonlinear_bins_error(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        kbins: units.Quantity,
+        bad_kwarg: str,
+        error_msg: str,
+    ) -> None:
+        bad_bins = np.logspace(-2, 2, 20) * uvwindow_obj.kunits
+        if bad_kwarg == "kbins":
+            call_kw = {"kbins": bad_bins, "bl_lens": red_bl_lens[:1]}
+        else:
+            call_kw = {"kbins": kbins, bad_kwarg: bad_bins, "bl_lens": red_bl_lens[:1]}
+        with pytest.raises(ValueError, match=error_msg):
+            uvwindow_obj.get_spherical_wf(**call_kw)
 
-    def test_run_and_write(self):
 
-        filepath = os.path.join(DATA_PATH, outfile)
+class TestUVWindowCheckKunits:
+    def test_with_units(
+        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
+    ) -> None:
+        uvwindow_obj.check_kunits(kbins)
 
-        # initialise object from keywords
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        test = uvwindow.UVWindow(ftbeam_obj=self.ft_beam_obj_spw)
-        kperp_bins = test.get_kperp_bins(self.lens[:1])
-        kpara_bins = test.get_kpara_bins(test.freq_array)
-        # proper usage
-        test.run_and_write(
-            filepath=filepath,
-            bl_lens=self.lens[:1],
+    def test_without_units_raises(
+        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
+    ) -> None:
+        with pytest.raises(AttributeError, match="Feed k array with units"):
+            uvwindow_obj.check_kunits(kbins.value)
+
+
+class TestUVWindowRunAndWrite:
+    def test_happy_path(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
+        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        uvwindow_obj.run_and_write(
+            filepath=str(tmp_path / outfile),
+            bl_lens=red_bl_lens[:1],
+            bl_weights=[1.0],
             kperp_bins=kperp_bins,
             kpara_bins=kpara_bins,
             clobber=False,
         )
 
-        # raise error if file already exists and clobber is False
-        pytest.raises(
-            IOError,
-            test.run_and_write,
-            filepath=filepath,
-            bl_lens=self.lens[:1],
+    def test_no_taper(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        uvw = copy.deepcopy(uvwindow_obj)
+        uvwindow_obj.taper = None
+        kperp_bins = uvw.get_kperp_bins(red_bl_lens[:1])
+        kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
+        uvw.run_and_write(
+            filepath=str(tmp_path / outfile),
+            bl_lens=red_bl_lens[:1],
+            bl_weights=[1.0],
+            kperp_bins=kperp_bins,
+            kpara_bins=kpara_bins,
             clobber=False,
         )
-        # does not if clobber is True
-        test.run_and_write(
-            filepath=filepath,
-            bl_lens=[self.lens[:1]],
+
+    def test_clobber_false_raises(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        uvwindow_obj.run_and_write(
+            filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=True
+        )
+        with pytest.raises(IOError, match="exists, not overwriting"):
+            uvwindow_obj.run_and_write(
+                filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=False
+            )
+
+    def test_clobber_true_overwrites(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        uvwindow_obj.run_and_write(
+            filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=True
+        )
+        uvwindow_obj.run_and_write(
+            filepath=str(tmp_path / outfile),
+            bl_lens=[red_bl_lens[:1]],
             kperp_bins=None,
             kpara_bins=None,
             clobber=True,
         )
 
-        # check inputs
-        pytest.raises(
-            AssertionError,
-            test.run_and_write,
-            filepath=filepath,
-            bl_lens=self.lens[:1],
-            bl_weights=[1.0, 1.0],
-            clobber=True,
-        )
-        pytest.raises(
-            AttributeError,
-            test.run_and_write,
-            filepath=filepath,
-            bl_lens=self.lens[:1],
-            kperp_bins=kperp_bins.value,
-            clobber=True,
-        )
-        pytest.raises(
-            AttributeError,
-            test.run_and_write,
-            filepath=filepath,
-            bl_lens=self.lens[:1],
-            kpara_bins=kpara_bins.value,
-            clobber=True,
-        )
+    def test_weights_mismatch_error(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        with pytest.raises(
+            ValueError, match="bl_weights and bl_lens must have same length"
+        ):
+            uvwindow_obj.run_and_write(
+                filepath=str(tmp_path / outfile),
+                bl_lens=red_bl_lens[:1],
+                bl_weights=[1.0, 1.0],
+                clobber=True,
+            )
 
-        if os.path.exists(filepath):
-            os.remove(filepath)
+    @pytest.mark.parametrize("bad_kwarg", ["kperp_bins", "kpara_bins"])
+    def test_kperp_no_units_error(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        tmp_path: Path,
+        bad_kwarg: str,
+    ) -> None:
+        kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
+        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="get_cylindrical_wf: The bin centre is not included in the array of kperp bins given as input.",
+                category=UserWarning,
+            )
+            with pytest.raises(AttributeError, match="Feed k array with units"):
+                uvwindow_obj.run_and_write(
+                    filepath=str(tmp_path / outfile),
+                    bl_lens=red_bl_lens[:1],
+                    kperp_bins=kperp_bins.value
+                    if bad_kwarg == "kperp_bins"
+                    else kperp_bins,
+                    kpara_bins=kpara_bins.value
+                    if bad_kwarg == "kpara_bins"
+                    else kpara_bins,
+                    clobber=True,
+                )
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_k_wrong_units_error(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        with pytest.raises(
+            ValueError, match="k array units not consistent with little_h"
+        ):
+            uvwindow_obj.run_and_write(
+                filepath=str(tmp_path / outfile),
+                bl_lens=red_bl_lens[:1],
+                kpara_bins=kpara_bins.value * units.Mpc,
+                clobber=True,
+            )

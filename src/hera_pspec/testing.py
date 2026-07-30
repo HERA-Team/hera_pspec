@@ -288,7 +288,8 @@ def uvpspec_from_data(
     # load beam
     if isinstance(beam, str):
         beam = pspecbeam.PSpecBeamUV(beam, cosmo=cosmo)
-    if beam is not None and cosmo is not None:
+    elif beam is not None and cosmo is not None:
+        beam = copy.copy(beam)
         beam.cosmo = cosmo
 
     # instantiate pspecdata
