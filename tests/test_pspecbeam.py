@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 import pytest
 from pyuvdata import UVBeam
+from pyuvdata.analytic_beam import AiryBeam, GaussianBeam
 
 from hera_pspec import conversions, pspecbeam
 from hera_pspec.data import DATA_PATH
@@ -304,6 +305,80 @@ class TestPSpecBeamGauss:
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
         )
         assert abs(scalar / 22123832163.072491 - 1.0) <= 1e-8
+
+    def test_from_gaussian_beam_object(
+        self, gauss_beam: pspecbeam.PSpecBeamGauss
+    ) -> None:
+        """Check that wrapping a GaussianBeam gives the same fwhm/Omegas as the from-fwhm constructor."""
+        fwhm = 0.8
+        analytic = GaussianBeam(
+            sigma=fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0))), sigma_type="power"
+        )
+        bgauss = pspecbeam.PSpecBeamGauss(analytic, gauss_beam.beam_freqs)
+        assert bgauss.analytic_beam is analytic
+        assert isinstance(gauss_beam.analytic_beam, GaussianBeam)
+        np.testing.assert_allclose(bgauss.fwhm, gauss_beam.fwhm)
+        np.testing.assert_allclose(bgauss.power_beam_int(), gauss_beam.power_beam_int())
+        np.testing.assert_allclose(
+            bgauss.power_beam_sq_int(), gauss_beam.power_beam_sq_int()
+        )
+
+    def test_sigma_type_equivalence(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
+        """Check that power- and efield-specified GaussianBeams of matching width wrap identically."""
+        sigma_power = 0.8 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+        from_power = pspecbeam.PSpecBeamGauss(
+            GaussianBeam(sigma=sigma_power, sigma_type="power"), gauss_beam.beam_freqs
+        )
+        from_efield = pspecbeam.PSpecBeamGauss(
+            GaussianBeam(sigma=np.sqrt(2.0) * sigma_power, sigma_type="efield"),
+            gauss_beam.beam_freqs,
+        )
+        np.testing.assert_allclose(from_power.fwhm, from_efield.fwhm)
+        np.testing.assert_allclose(
+            from_power.power_beam_int(), from_efield.power_beam_int()
+        )
+        np.testing.assert_allclose(
+            from_power.power_beam_sq_int(), from_efield.power_beam_sq_int()
+        )
+
+    def test_raises_on_unsupported_analytic_beams(
+        self, gauss_beam: pspecbeam.PSpecBeamGauss
+    ) -> None:
+        """Check clear errors for diameter-specified, chromatic, and non-Gaussian analytic beams."""
+        with pytest.raises(ValueError, match="Diameter-specified"):
+            pspecbeam.PSpecBeamGauss(GaussianBeam(diameter=14.0), gauss_beam.beam_freqs)
+        with pytest.raises(NotImplementedError, match="Chromatic"):
+            pspecbeam.PSpecBeamGauss(
+                GaussianBeam(sigma=0.1, spectral_index=-1.0, reference_frequency=150e6),
+                gauss_beam.beam_freqs,
+            )
+        with pytest.raises(TypeError, match="must be a float fwhm"):
+            pspecbeam.PSpecBeamGauss(AiryBeam(diameter=14.0), gauss_beam.beam_freqs)
+
+    def test_omegas_match_numerical_integration(self) -> None:
+        """Check the closed-form Omegas against healpix-integrated areas of the wrapped GaussianBeam.
+
+        The closed forms are flat-sky results, so agreement is only expected
+        to ~0.5% for a narrow beam; they remain the authoritative values.
+        """
+        fwhm = 0.1
+        beam_freqs = np.array([150e6])
+        bgauss = pspecbeam.PSpecBeamGauss(fwhm, beam_freqs)
+        nside = 128
+        uvb = bgauss.analytic_beam.to_uvbeam(
+            freq_array=beam_freqs,
+            beam_type="power",
+            pixel_coordinate_system="healpix",
+            nside=nside,
+        )
+        pixel_area = 4.0 * np.pi / (12 * nside**2)
+        beam_map = uvb.data_array[0, 0, 0]
+        np.testing.assert_allclose(
+            beam_map.sum() * pixel_area, bgauss.power_beam_int()[0], rtol=1e-2
+        )
+        np.testing.assert_allclose(
+            (beam_map**2).sum() * pixel_area, bgauss.power_beam_sq_int()[0], rtol=1e-2
+        )
 
 
 class TestPSpecBeamFromArray:
