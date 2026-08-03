@@ -5,6 +5,7 @@ import scipy.integrate as integrate
 import uvtools.dspec as dspec
 from pyuvdata import UVBeam
 from pyuvdata import utils as uvutils
+from pyuvdata.analytic_beam import AnalyticBeam, GaussianBeam
 from scipy.interpolate import interp1d
 
 from . import conversions
@@ -349,15 +350,24 @@ class PSpecBeamBase:
 
 
 class PSpecBeamGauss(PSpecBeamBase):
-    def __init__(self, fwhm, beam_freqs, cosmo=None):
+    def __init__(self, beam, beam_freqs, cosmo=None):
         """
         Object to store a simple (frequency independent) Gaussian beam in a
         PspecBeamBase object.
 
+        The beam is backed by a ``pyuvdata.analytic_beam.GaussianBeam``,
+        exposed as ``self.analytic_beam``. Note that ``self.fwhm`` is the full
+        width half max of the *power* beam, while ``GaussianBeam`` widths
+        default to the E-field convention (``sigma_type="efield"``), whose
+        power beam is sqrt(2) narrower; the conversion is handled internally.
+
         Parameters
         ----------
-        fwhm: float
-            Full width half max of the beam, in radians.
+        beam: float or pyuvdata.analytic_beam.GaussianBeam
+            Either the full width half max of the power beam, in radians, or
+            a ready-made achromatic, sigma-specified GaussianBeam object.
+            Diameter-specified or chromatic (``spectral_index != 0``)
+            GaussianBeams are not supported.
 
         beam_freqs: float, array-like
             Frequencies over which this Gaussian beam is to be created. Units
@@ -367,7 +377,32 @@ class PSpecBeamGauss(PSpecBeamBase):
             Cosmology object. Uses the default cosmology object if not
             specified. Default: None.
         """
-        self.fwhm = fwhm
+        if isinstance(beam, AnalyticBeam):
+            if not isinstance(beam, GaussianBeam):
+                raise TypeError(
+                    "beam must be a float fwhm in radians or a pyuvdata "
+                    f"GaussianBeam, got {type(beam).__name__}"
+                )
+            if beam.diameter is not None:
+                raise ValueError(
+                    "Diameter-specified GaussianBeams are chromatic and not "
+                    "supported; use a sigma-specified GaussianBeam instead."
+                )
+            if beam.spectral_index != 0.0:
+                raise NotImplementedError(
+                    "Chromatic GaussianBeams (spectral_index != 0) are not "
+                    "supported; PSpecBeamGauss is frequency independent."
+                )
+            self.analytic_beam = beam
+            # GaussianBeam.sigma always holds the E-field beam width after
+            # construction (a sigma_type="power" input is multiplied by
+            # sqrt(2) on init); the power beam is sqrt(2) narrower.
+            self.fwhm = 2.0 * np.sqrt(2.0 * np.log(2.0)) * beam.sigma / np.sqrt(2.0)
+        else:
+            self.fwhm = beam
+            self.analytic_beam = GaussianBeam(
+                sigma=self.fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0))), sigma_type="power"
+            )
         self.beam_freqs = beam_freqs
         if cosmo is not None:
             self.cosmo = cosmo
