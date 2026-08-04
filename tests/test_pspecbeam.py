@@ -314,7 +314,9 @@ class TestPSpecBeamGauss:
         analytic = GaussianBeam(
             sigma=fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0))), sigma_type="power"
         )
-        bgauss = pspecbeam.PSpecBeamGauss(analytic, gauss_beam.beam_freqs)
+        bgauss = pspecbeam.PSpecBeamGauss(
+            beam=analytic, beam_freqs=gauss_beam.beam_freqs
+        )
         assert bgauss.analytic_beam is analytic
         assert isinstance(gauss_beam.analytic_beam, GaussianBeam)
         np.testing.assert_allclose(bgauss.fwhm, gauss_beam.fwhm)
@@ -327,11 +329,12 @@ class TestPSpecBeamGauss:
         """Check that power- and efield-specified GaussianBeams of matching width wrap identically."""
         sigma_power = 0.8 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
         from_power = pspecbeam.PSpecBeamGauss(
-            GaussianBeam(sigma=sigma_power, sigma_type="power"), gauss_beam.beam_freqs
+            beam=GaussianBeam(sigma=sigma_power, sigma_type="power"),
+            beam_freqs=gauss_beam.beam_freqs,
         )
         from_efield = pspecbeam.PSpecBeamGauss(
-            GaussianBeam(sigma=np.sqrt(2.0) * sigma_power, sigma_type="efield"),
-            gauss_beam.beam_freqs,
+            beam=GaussianBeam(sigma=np.sqrt(2.0) * sigma_power, sigma_type="efield"),
+            beam_freqs=gauss_beam.beam_freqs,
         )
         np.testing.assert_allclose(from_power.fwhm, from_efield.fwhm)
         np.testing.assert_allclose(
@@ -346,14 +349,36 @@ class TestPSpecBeamGauss:
     ) -> None:
         """Check clear errors for diameter-specified, chromatic, and non-Gaussian analytic beams."""
         with pytest.raises(ValueError, match="Diameter-specified"):
-            pspecbeam.PSpecBeamGauss(GaussianBeam(diameter=14.0), gauss_beam.beam_freqs)
+            pspecbeam.PSpecBeamGauss(
+                beam=GaussianBeam(diameter=14.0), beam_freqs=gauss_beam.beam_freqs
+            )
         with pytest.raises(NotImplementedError, match="Chromatic"):
             pspecbeam.PSpecBeamGauss(
-                GaussianBeam(sigma=0.1, spectral_index=-1.0, reference_frequency=150e6),
-                gauss_beam.beam_freqs,
+                beam=GaussianBeam(
+                    sigma=0.1, spectral_index=-1.0, reference_frequency=150e6
+                ),
+                beam_freqs=gauss_beam.beam_freqs,
             )
-        with pytest.raises(TypeError, match="must be a float fwhm"):
-            pspecbeam.PSpecBeamGauss(AiryBeam(diameter=14.0), gauss_beam.beam_freqs)
+        with pytest.raises(TypeError, match="must be a pyuvdata GaussianBeam"):
+            pspecbeam.PSpecBeamGauss(
+                beam=AiryBeam(diameter=14.0), beam_freqs=gauss_beam.beam_freqs
+            )
+
+    def test_raises_on_bad_argument_combinations(
+        self, gauss_beam: pspecbeam.PSpecBeamGauss
+    ) -> None:
+        """Check that fwhm and beam are mutually exclusive and beam_freqs is required."""
+        analytic = GaussianBeam(sigma=0.1)
+        with pytest.raises(ValueError, match="Exactly one of fwhm or beam"):
+            pspecbeam.PSpecBeamGauss(
+                fwhm=0.8, beam=analytic, beam_freqs=gauss_beam.beam_freqs
+            )
+        with pytest.raises(ValueError, match="Exactly one of fwhm or beam"):
+            pspecbeam.PSpecBeamGauss(beam_freqs=gauss_beam.beam_freqs)
+        with pytest.raises(ValueError, match="beam_freqs must be specified"):
+            pspecbeam.PSpecBeamGauss(fwhm=0.8)
+        with pytest.raises(TypeError, match="pass analytic beams via the beam keyword"):
+            pspecbeam.PSpecBeamGauss(analytic, gauss_beam.beam_freqs)
 
     def test_omegas_match_numerical_integration(self) -> None:
         """Check the closed-form Omegas against healpix-integrated areas of the wrapped GaussianBeam.
