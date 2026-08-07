@@ -699,31 +699,6 @@ class TestBootstrapRun:
         with pytest.raises(AssertionError, match="should not be in SWMR mode"):
             grouping.bootstrap_run(psc, spectra=["grp1/foo"])
 
-    def test_argparser(self) -> None:
-        """Check that the bootstrap_run argparser correctly parses spectra, blpair_groups, and cintervals arguments."""
-        args = grouping.get_bootstrap_run_argparser()
-        a = args.parse_args(
-            [
-                "fname",
-                "--spectra",
-                "grp1/uvp1",
-                "grp1/uvp2",
-                "grp2/uvp1",
-                "--blpair_groups",
-                "101102103104 101102102103, 102103104105",
-                "--time_avg",
-                "True",
-                "--Nsamples",
-                "100",
-                "--cintervals",
-                "16",
-                "84",
-            ]
-        )
-        assert a.spectra == ["grp1/uvp1", "grp1/uvp2", "grp2/uvp1"]
-        assert a.blpair_groups == [[101102103104, 101102102103], [102103104105]]
-        assert a.cintervals == [16.0, 84.0]
-
 
 @pytest.fixture(scope="session")
 def uvp_spherical(
