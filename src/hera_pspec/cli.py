@@ -475,9 +475,7 @@ def compute_ft_beam(
     mapsize: float = 1.0,
     npix: int = 301,
     label: str = "HERA",
-    search_dirs: Annotated[
-        list[Path] | None, Parameter(consume_multiple=True)
-    ] = None,
+    search_dirs: Annotated[list[Path] | None, Parameter(consume_multiple=True)] = None,
     force_recompute: bool = False,
     verbose: bool = False,
 ) -> None:
@@ -535,8 +533,7 @@ def compute_ft_beam(
     uvp = _load_uvp(pspec_file, group, name)
     freq_array = np.unique(uvp.freq_array)
     logger.info(
-        "Using the %d frequency channels of %s (%.2f-%.2f MHz, "
-        "channel width %.2f kHz)",
+        "Using the %d frequency channels of %s (%.2f-%.2f MHz, channel width %.2f kHz)",
         freq_array.size,
         pspec_file,
         freq_array.min() / 1e6,
@@ -554,11 +551,7 @@ def compute_ft_beam(
             return
 
     ftbeam = FTBeam.from_beam(
-        beamfile=beam_file,
-        pol=pol,
-        freq_array=freq_array,
-        mapsize=mapsize,
-        npix=npix,
+        beamfile=beam_file, pol=pol, freq_array=freq_array, mapsize=mapsize, npix=npix
     )
     out_path = Path(out_dir) / fname
     ftbeam.write_hdf5(
@@ -566,7 +559,7 @@ def compute_ft_beam(
         overwrite=True,
         extra_attrs={
             "beam_file": str(beam_file),
-            "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "created_utc": datetime.datetime.now(datetime.UTC).isoformat(),
             "producer": "pspec compute-ft-beam",
         },
     )
@@ -629,9 +622,7 @@ def _compute_one_wf(
         f.attrs["spw_freq_max_hz"] = float(spw_freqs.max())
         f.attrs["pspec_file"] = str(pspec_file)
         f.attrs["ft_beam_file"] = str(ft_beam_file)
-        f.attrs["created_utc"] = datetime.datetime.now(
-            datetime.timezone.utc
-        ).isoformat()
+        f.attrs["created_utc"] = datetime.datetime.now(datetime.UTC).isoformat()
         f.attrs["producer"] = "pspec compute-window-functions"
     logger.info("Wrote %s", out_path)
     return str(out_path.absolute())
