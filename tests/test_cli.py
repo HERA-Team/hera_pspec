@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import h5py
+import numpy as np
 import pytest
 
 from hera_pspec import cli, container, testing
 from hera_pspec.container import PSpecContainer
 from hera_pspec.data import DATA_PATH
 from hera_pspec.uvpspec import UVPSpec
+from hera_pspec.uvwindow import FTBeam
 
 
 @dataclass
@@ -500,3 +502,157 @@ def test_generate_pstokes_keep_vispols(monkeypatch):
     assert calls["deepcopy"] == 1
     assert calls["construct"] == 1  # one missing pol constructed in the loop
     assert calls["write"] == ("in.uvh5", True)
+
+
+@pytest.fixture(scope="module")
+def wf_pspec_file(tmp_path_factory, vanilla_uvp: UVPSpec) -> Path:
+    """A container with a single group/spectrum, so group/name inference applies."""
+    fname = tmp_path_factory.mktemp("wf-cli") / "vanilla.pspec.h5"
+    psc = PSpecContainer(fname, "rw", keep_open=False)
+    psc.set_pspec("testgroup", "testps", vanilla_uvp)
+    return fname
+
+
+WF_BEAMFILE = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
+
+
+class TestComputeFtBeam:
+    def test_help(self):
+        result = invoke(["compute-ft-beam", "--help"])
+        assert result.exit_code == 0, result.output
+        assert "compute-ft-beam" in result.output.lower()
+
+    @pytest.fixture(scope="class")
+    def ft_beam_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
+        out_dir = tmp_path_factory.mktemp("ftcache")
+        result = invoke(
+            [
+                "compute-ft-beam",
+                str(WF_BEAMFILE),
+                "xx",
+                str(wf_pspec_file),
+                "--out-dir",
+                str(out_dir),
+                "--npix",
+                "29",
+            ]
+        )
+        return result, out_dir
+
+    @staticmethod
+    def _output_path(result: Result) -> Path:
+        return Path(result.output.split("FT_BEAM_PATH=")[1].splitlines()[0])
+
+    def test_writes_file_and_prints_path(self, ft_beam_run: tuple[Result, Path]):
+        result, out_dir = ft_beam_run
+        assert result.exit_code == 0
+        assert "FT_BEAM_PATH=" in result.output
+        path = self._output_path(result)
+        assert path.is_file()
+        assert path.parent == out_dir
+
+    def test_grid_is_taken_from_the_data(
+        self, ft_beam_run: tuple[Result, Path], vanilla_uvp: UVPSpec
+    ):
+        ftb = FTBeam.from_file(self._output_path(ft_beam_run[0]))
+        assert np.allclose(ftb.freq_array, np.unique(vanilla_uvp.freq_array))
+        assert ftb.pol == "xx"
+
+    def test_second_call_reuses_cache(
+        self, ft_beam_run: tuple[Result, Path], wf_pspec_file: Path
+    ):
+        result, out_dir = ft_beam_run
+        path = self._output_path(result)
+        mtime = path.stat().st_mtime
+        result2 = invoke(
+            [
+                "compute-ft-beam",
+                str(WF_BEAMFILE),
+                "xx",
+                str(wf_pspec_file),
+                "--out-dir",
+                str(out_dir),
+                "--npix",
+                "29",
+            ]
+        )
+        assert result2.exit_code == 0
+        assert self._output_path(result2) == path
+        assert path.stat().st_mtime == mtime  # not recomputed
+
+
+class TestComputeWindowFunctions:
+    def test_help(self):
+        result = invoke(["compute-window-functions", "--help"])
+        assert result.exit_code == 0, result.output
+        assert "compute-window-functions" in result.output.lower()
+
+    @pytest.fixture(scope="class")
+    def wf_run(
+        self, wf_pspec_file: Path, tmp_path_factory
+    ) -> tuple[Result, Path]:
+        ft_dir = tmp_path_factory.mktemp("ftcache-wf")
+        ft_result = invoke(
+            [
+                "compute-ft-beam",
+                str(WF_BEAMFILE),
+                "xx",
+                str(wf_pspec_file),
+                "--out-dir",
+                str(ft_dir),
+                "--npix",
+                "29",
+            ]
+        )
+        ft_path = ft_result.output.split("FT_BEAM_PATH=")[1].splitlines()[0]
+        out_dir = tmp_path_factory.mktemp("wfout")
+        result = invoke(
+            [
+                "compute-window-functions",
+                str(wf_pspec_file),
+                ft_path,
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        return result, out_dir
+
+    def test_writes_file_and_prints_path(self, wf_run: tuple[Result, Path]):
+        result, out_dir = wf_run
+        assert result.exit_code == 0
+        assert "WF_PATH=" in result.output
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        assert path.is_file()
+        assert path.name == "wf_exact_xx_clitest_spw00.hdf5"
+
+    def test_file_contents(self, wf_run: tuple[Result, Path]):
+        result, _ = wf_run
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        with h5py.File(path, "r") as f:
+            assert {"wf", "kperp", "kpara"} <= set(f.keys())
+            assert f["wf"].ndim == 5  # (Nblpairs, Ndlys, Nkperp, Nkpara, Npol)
+            assert f.attrs["dataset_label"] == "clitest"
+            assert f.attrs["polpair"] == "xx"
+            assert f.attrs["spw_index"] == 0
+
+    def test_second_call_reuses_file(
+        self, wf_run: tuple[Result, Path], wf_pspec_file: Path
+    ):
+        result, out_dir = wf_run
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        mtime = path.stat().st_mtime
+        result2 = invoke(
+            [
+                "compute-window-functions",
+                str(wf_pspec_file),
+                str(path),  # reuse hit happens before the FT beam is touched
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        assert result2.exit_code == 0
+        assert path.stat().st_mtime == mtime  # not recomputed
