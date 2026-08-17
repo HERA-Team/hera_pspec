@@ -214,13 +214,11 @@ class TestFTBeamInit:
             uvwindow.FTBeam(pol=3.4, data=data, freq_array=freq_array, mapsize=mapsize)
 
 
-@pytest.fixture(scope="module")
-def nf_dipole_beamfits() -> Path:
-    return DATA_PATH / "HERA_NF_dipole_power.beamfits"
+nf_dipole_beamfits = DATA_PATH / "HERA_NF_dipole_power.beamfits"
 
 
 @pytest.fixture(scope="module")
-def nf_dipole_beam_freqs(nf_dipole_beamfits: Path) -> np.ndarray:
+def nf_dipole_beam_freqs() -> np.ndarray:
     beam = UVBeam()
     beam.read_beamfits(str(nf_dipole_beamfits))
     return np.unique(beam.freq_array)
@@ -229,7 +227,7 @@ def nf_dipole_beam_freqs(nf_dipole_beamfits: Path) -> np.ndarray:
 class TestFTBeamFromBeam:
     @pytest.fixture(scope="class")
     def small_ft_beam(
-        self, nf_dipole_beamfits: Path, nf_dipole_beam_freqs: np.ndarray
+        self, nf_dipole_beam_freqs: np.ndarray
     ) -> uvwindow.FTBeam:
         freq_array = np.linspace(
             nf_dipole_beam_freqs.min(), nf_dipole_beam_freqs.max(), 5
@@ -256,7 +254,7 @@ class TestFTBeamFromBeam:
             assert np.argmax(small_ft_beam.ft_beam[i]) == (ngrid**2) // 2
 
     def test_pol_as_int(
-        self, nf_dipole_beamfits: Path, small_ft_beam: uvwindow.FTBeam
+        self, small_ft_beam: uvwindow.FTBeam
     ) -> None:
         test = uvwindow.FTBeam.from_beam(
             beamfile=nf_dipole_beamfits,
@@ -269,7 +267,7 @@ class TestFTBeamFromBeam:
         assert np.allclose(test.ft_beam, small_ft_beam.ft_beam)
 
     def test_too_few_frequencies(
-        self, nf_dipole_beamfits: Path, nf_dipole_beam_freqs: np.ndarray
+        self, nf_dipole_beam_freqs: np.ndarray
     ) -> None:
         with pytest.raises(ValueError, match="at least three frequencies"):
             uvwindow.FTBeam.from_beam(
@@ -279,7 +277,7 @@ class TestFTBeamFromBeam:
             )
 
     def test_out_of_coverage_uses_edge_beam(
-        self, nf_dipole_beamfits: Path, nf_dipole_beam_freqs: np.ndarray
+        self, nf_dipole_beam_freqs: np.ndarray
     ) -> None:
         # frequencies slightly outside the simulation coverage: warn, and
         # evaluate the beam at the nearest covered frequency while keeping
@@ -300,7 +298,7 @@ class TestFTBeamFromBeam:
         assert np.allclose(test.ft_beam[0], test.ft_beam[1])
 
     def test_select_freqs_matches_direct_computation(
-        self, nf_dipole_beamfits: Path, nf_dipole_beam_freqs: np.ndarray
+        self, nf_dipole_beam_freqs: np.ndarray
     ) -> None:
         # interpolating a from_beam FT beam onto frequencies between its
         # channels must agree with computing the FT beam directly at those
@@ -365,6 +363,14 @@ class TestFTBeamFromFile:
     def test_no_spw_range_uses_full_bandwidth(self, ft_bandwidth: np.ndarray) -> None:
         test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
         assert np.allclose(test.freq_array, ft_bandwidth)
+
+    @pytest.mark.parametrize(
+        "bad_freqs",
+        [np.array([250e6, 251e6]), np.array([100e6])],  # out of coverage; single
+    )
+    def test_invalid_freq_array(self, bad_freqs: np.ndarray) -> None:
+        with pytest.raises(ValueError):
+            uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=bad_freqs)
 
     @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
     def test_invalid_spw_range(self, bad_spw: tuple[int, ...]) -> None:
@@ -1364,10 +1370,7 @@ class TestFTBeamWriteHdf5:
         fname = tmp_path / "ft_beam_roundtrip.hdf5"
         ft_beam_spw.write_hdf5(fname, extra_attrs={"beam_file": "sim.fits"})
         back = uvwindow.FTBeam.from_file(ftfile=fname)
-        assert back.pol == ft_beam_spw.pol
-        assert back.mapsize == ft_beam_spw.mapsize
-        assert np.allclose(back.freq_array, ft_beam_spw.freq_array)
-        assert np.allclose(back.ft_beam, ft_beam_spw.ft_beam)
+        assert back == ft_beam_spw
 
     def test_no_overwrite_by_default(
         self, ft_beam_spw: uvwindow.FTBeam, tmp_path: Path
