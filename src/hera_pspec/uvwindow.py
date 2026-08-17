@@ -144,6 +144,17 @@ class FTBeam:
 
         self.mapsize = float(mapsize)
 
+    def __eq__(self, other):
+        """Check two FTBeam objects hold the same beam transform."""
+        if not isinstance(other, FTBeam):
+            return NotImplemented
+        return (
+            self.pol == other.pol
+            and self.mapsize == other.mapsize
+            and np.array_equal(self.freq_array, other.freq_array)
+            and np.array_equal(self.ft_beam, other.ft_beam)
+        )
+
     @classmethod
     def from_beam(
         cls,
