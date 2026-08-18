@@ -769,6 +769,15 @@ class TestSpherical:
         assert np.isclose(sph.get_blpair_seps(), 0).all()
         assert "err" in sph.stats_array
 
+    def test_average_without_window_function_array(
+        self, uvp_spherical: UVPSpec
+    ) -> None:
+        """Check that spherical_average runs on a UVPSpec with no window_function_array."""
+        uvp = copy.deepcopy(uvp_spherical)
+        del uvp.window_function_array
+        sph = grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS)
+        assert not hasattr(sph, "window_function_array")
+
     def test_average_kbins_and_normalization(self, uvp_spherical: UVPSpec) -> None:
         """Check kbin values, WF normalization, data smell test, errorbar reduction, and array-shape bug checks."""
         Nk = len(self.KBINS)
