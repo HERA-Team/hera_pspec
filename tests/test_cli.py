@@ -654,3 +654,81 @@ class TestComputeWindowFunctions:
         )
         assert result2.exit_code == 0
         assert path.stat().st_mtime == mtime  # not recomputed
+
+    def test_parallel_workers(
+        self, wf_run: tuple[Result, Path], wf_pspec_file: Path
+    ):
+        result, out_dir = wf_run
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        result2 = invoke(
+            [
+                "compute-window-functions",
+                str(wf_pspec_file),
+                str(path),
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(out_dir),
+                "--workers",
+                "2",
+            ]
+        )
+        assert result2.exit_code == 0, result2.output
+        assert "WF_PATH=" in result2.output
+
+    def test_out_of_range_spws(self, wf_run: tuple[Result, Path], wf_pspec_file: Path):
+        result, out_dir = wf_run
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        result2 = invoke(
+            [
+                "compute-window-functions",
+                str(wf_pspec_file),
+                str(path),
+                "--spws",
+                "99",
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        assert isinstance(result2.exception, ValueError)
+        assert "out of range" in str(result2.exception)
+
+    def test_ambiguous_group(self, vanilla_uvp: UVPSpec, tmp_path: Path):
+        fname = tmp_path / "twogroups.pspec.h5"
+        psc = PSpecContainer(fname, "rw", keep_open=False)
+        psc.set_pspec("g1", "testps", vanilla_uvp)
+        psc.set_pspec("g2", "testps", vanilla_uvp)
+        result = invoke(
+            [
+                "compute-window-functions",
+                str(fname),
+                "unused.hdf5",
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(tmp_path),
+            ]
+        )
+        assert isinstance(result.exception, ValueError)
+        assert "--group" in str(result.exception)
+
+    def test_ambiguous_name(self, vanilla_uvp: UVPSpec, tmp_path: Path):
+        fname = tmp_path / "twospectra.pspec.h5"
+        psc = PSpecContainer(fname, "rw", keep_open=False)
+        psc.set_pspec("g1", "ps1", vanilla_uvp)
+        psc.set_pspec("g1", "ps2", vanilla_uvp)
+        result = invoke(
+            [
+                "compute-window-functions",
+                str(fname),
+                "unused.hdf5",
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(tmp_path),
+            ]
+        )
+        assert isinstance(result.exception, ValueError)
+        assert "--name" in str(result.exception)
