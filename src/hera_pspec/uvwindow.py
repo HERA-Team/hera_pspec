@@ -31,8 +31,10 @@ _MAX_R = 0.7
 def _cartesian_to_spherical(x, y):
     """Invert the simple zenith-angle map x = za*cos(az), y = za*sin(az)."""
     za = np.sqrt(x**2 + y**2)
-    rho = np.divide(x, za, where=za != 0)
-    az = np.arccos(rho)
+    # out= initialises the za == 0 entries (az is arbitrary at zenith);
+    # the clip guards arccos against x / za rounding just past +-1
+    rho = np.divide(x, za, out=np.zeros_like(za), where=za != 0)
+    az = np.arccos(np.clip(rho, -1.0, 1.0))
     return az, za
 
 
