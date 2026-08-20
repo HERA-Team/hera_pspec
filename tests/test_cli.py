@@ -655,9 +655,7 @@ class TestComputeWindowFunctions:
         assert result2.exit_code == 0
         assert path.stat().st_mtime == mtime  # not recomputed
 
-    def test_parallel_workers(
-        self, wf_run: tuple[Result, Path], wf_pspec_file: Path
-    ):
+    def test_parallel_workers(self, wf_run: tuple[Result, Path], wf_pspec_file: Path):
         result, out_dir = wf_run
         path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
         result2 = invoke(
