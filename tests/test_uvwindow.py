@@ -215,6 +215,7 @@ class TestFTBeamInit:
 
 
 nf_dipole_beamfits = DATA_PATH / "HERA_NF_dipole_power.beamfits"
+nf_efield_beamfits = DATA_PATH / "HERA_NF_efield.beamfits"
 
 
 @pytest.fixture(scope="module")
@@ -290,6 +291,46 @@ class TestFTBeamFromBeam:
         assert np.allclose(test.freq_array, freqs_over)
         # clamped channel = beam evaluated at the edge frequency
         assert np.allclose(test.ft_beam[0], test.ft_beam[1])
+
+    def test_even_npix_adjusted_to_odd(self, small_ft_beam: uvwindow.FTBeam) -> None:
+        # npix=30 is adjusted down to 29, reproducing small_ft_beam exactly
+        test = uvwindow.FTBeam.from_beam(
+            beamfile=nf_dipole_beamfits,
+            pol="xx",
+            freq_array=small_ft_beam.freq_array,
+            mapsize=1.0,
+            npix=30,
+        )
+        assert test == small_ft_beam
+
+    @pytest.mark.parametrize("mapsize", [0.35, uvwindow._MAX_R])
+    def test_mapsize_within_beam_coverage(
+        self, small_ft_beam: uvwindow.FTBeam, mapsize: float
+    ) -> None:
+        # mapsize < _MAX_R crops the beam map; mapsize = _MAX_R uses it as is
+        test = uvwindow.FTBeam.from_beam(
+            beamfile=nf_dipole_beamfits,
+            pol="xx",
+            freq_array=small_ft_beam.freq_array,
+            mapsize=mapsize,
+            npix=29,
+        )
+        assert test.ft_beam.shape[-1] <= 29
+        assert test.ft_beam.shape[-1] % 2 == 1
+        assert np.all(np.isfinite(test.ft_beam))
+
+    @pytest.mark.parametrize("pol", ["xx", "pI"])
+    def test_efield_beam_is_converted(self, pol: str) -> None:
+        # efield beams are converted to power (xx) or pseudo-Stokes (pI)
+        test = uvwindow.FTBeam.from_beam(
+            beamfile=nf_efield_beamfits,
+            pol=pol,
+            freq_array=np.linspace(120e6, 180e6, 3),
+            mapsize=1.0,
+            npix=29,
+        )
+        assert test.pol == pol
+        assert np.all(np.isfinite(test.ft_beam))
 
     def test_select_freqs_matches_direct_computation(
         self, nf_dipole_beam_freqs: np.ndarray
@@ -1365,6 +1406,7 @@ class TestFTBeamWriteHdf5:
         ft_beam_spw.write_hdf5(fname, extra_attrs={"beam_file": "sim.fits"})
         back = uvwindow.FTBeam.from_file(ftfile=fname)
         assert back == ft_beam_spw
+        assert back != 1  # non-FTBeam comparison falls through NotImplemented
 
     def test_no_overwrite_by_default(
         self, ft_beam_spw: uvwindow.FTBeam, tmp_path: Path
