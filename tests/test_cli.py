@@ -588,9 +588,7 @@ class TestComputeWindowFunctions:
         assert "compute-window-functions" in result.output.lower()
 
     @pytest.fixture(scope="class")
-    def wf_run(
-        self, wf_pspec_file: Path, tmp_path_factory
-    ) -> tuple[Result, Path]:
+    def wf_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
         ft_dir = tmp_path_factory.mktemp("ftcache-wf")
         ft_result = invoke(
             [
