@@ -226,9 +226,7 @@ def nf_dipole_beam_freqs() -> np.ndarray:
 
 class TestFTBeamFromBeam:
     @pytest.fixture(scope="class")
-    def small_ft_beam(
-        self, nf_dipole_beam_freqs: np.ndarray
-    ) -> uvwindow.FTBeam:
+    def small_ft_beam(self, nf_dipole_beam_freqs: np.ndarray) -> uvwindow.FTBeam:
         freq_array = np.linspace(
             nf_dipole_beam_freqs.min(), nf_dipole_beam_freqs.max(), 5
         )
@@ -253,9 +251,7 @@ class TestFTBeamFromBeam:
         for i in range(small_ft_beam.freq_array.size):
             assert np.argmax(small_ft_beam.ft_beam[i]) == (ngrid**2) // 2
 
-    def test_pol_as_int(
-        self, small_ft_beam: uvwindow.FTBeam
-    ) -> None:
+    def test_pol_as_int(self, small_ft_beam: uvwindow.FTBeam) -> None:
         test = uvwindow.FTBeam.from_beam(
             beamfile=nf_dipole_beamfits,
             pol=-5,
@@ -266,9 +262,7 @@ class TestFTBeamFromBeam:
         assert test.pol == "xx"
         assert np.allclose(test.ft_beam, small_ft_beam.ft_beam)
 
-    def test_too_few_frequencies(
-        self, nf_dipole_beam_freqs: np.ndarray
-    ) -> None:
+    def test_too_few_frequencies(self, nf_dipole_beam_freqs: np.ndarray) -> None:
         with pytest.raises(ValueError, match="at least three frequencies"):
             uvwindow.FTBeam.from_beam(
                 beamfile=nf_dipole_beamfits,
