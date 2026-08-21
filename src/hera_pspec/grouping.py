@@ -925,9 +925,7 @@ def spherical_average(
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
         # design matrix for window functions
         if store_window:
-            Aw = np.zeros(
-                (uvp.Ntimes, Nfreqs, Nk_theory, uvp.Npols), dtype=np.float64
-            )
+            Aw = np.zeros((uvp.Ntimes, Nfreqs, Nk_theory, uvp.Npols), dtype=np.float64)
         # setup weighting matrix: block diagonal for each Ndly x Ndly
         # we can represent the Ndlyblps x Ndlyblps block diagonal matrix as Ndlyblps x Ndlys
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
@@ -1036,9 +1034,7 @@ def spherical_average(
             if store_window:
                 # get k_sph -> k_cyl mapping for window function
                 # get k magnitude of data: (Ndlys,)
-                kmags_per_freq = np.sqrt(
-                    kperps[blpt_inds][0] ** 2 + kparas_per_freq**2
-                )
+                kmags_per_freq = np.sqrt(kperps[blpt_inds][0] ** 2 + kparas_per_freq**2)
                 for i, kmag in enumerate(kmags_per_freq):
                     kind = (kbin_left_theory < kmag) & (kbin_right_theory >= kmag)
                     if np.any(kind):
