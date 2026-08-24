@@ -924,7 +924,8 @@ def spherical_average(
         # setup the design matrix: P_cyl = A P_sph
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
         # design matrix for window functions
-        Aw = np.zeros((uvp.Ntimes, Nfreqs, Nk_theory, uvp.Npols), dtype=np.float64)
+        if store_window:
+            Aw = np.zeros((uvp.Ntimes, Nfreqs, Nk_theory, uvp.Npols), dtype=np.float64)
         # setup weighting matrix: block diagonal for each Ndly x Ndly
         # we can represent the Ndlyblps x Ndlyblps block diagonal matrix as Ndlyblps x Ndlys
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
@@ -1030,17 +1031,18 @@ def spherical_average(
                 # populate A matrix
                 A[spw][:, i + Ndlys * b, kind, :] = 1.0
 
-            # get k_sph -> k_cyl mapping for window function
-            # get k magnitude of data: (Ndlys,)
-            kmags_per_freq = np.sqrt(kperps[blpt_inds][0] ** 2 + kparas_per_freq**2)
-            for i, kmag in enumerate(kmags_per_freq):
-                kind = (kbin_left_theory < kmag) & (kbin_right_theory >= kmag)
-                if np.any(kind):
-                    # skip if not in any kbins
-                    # convert kind into an integer for indexing
-                    kind = np.where(kind)[0][0]
-                # populate Aw matrix
-                Aw[:, i, kind, :] = 1.0
+            if store_window:
+                # get k_sph -> k_cyl mapping for window function
+                # get k magnitude of data: (Ndlys,)
+                kmags_per_freq = np.sqrt(kperps[blpt_inds][0] ** 2 + kparas_per_freq**2)
+                for i, kmag in enumerate(kmags_per_freq):
+                    kind = (kbin_left_theory < kmag) & (kbin_right_theory >= kmag)
+                    if np.any(kind):
+                        # skip if not in any kbins
+                        # convert kind into an integer for indexing
+                        kind = np.where(kind)[0][0]
+                    # populate Aw matrix
+                    Aw[:, i, kind, :] = 1.0
 
         # normalize metadata sums
         wgt_array[spw] /= np.max(wgt_array[spw], axis=(2, 3), keepdims=True).clip(
