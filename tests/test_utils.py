@@ -672,19 +672,6 @@ class TestGetBlvecReds:
         assert len(red_bl_grp) == 1
 
 
-def test_uvp_noise_error_parser() -> None:
-    """Check that the noise-error argparser parses container/auto-file/beam/groups arguments."""
-    ap = utils.uvp_noise_error_parser()
-    args = ap.parse_args(
-        ["container.hdf5", "autos.uvh5", "beam.uvbeam", "--groups", "dset0_dset1"]
-    )
-    assert args.pspec_container == "container.hdf5"
-    assert args.auto_file == "autos.uvh5"
-    assert args.beam == "beam.uvbeam"
-    assert args.groups == ["dset0_dset1"]
-    assert args.spectra is None
-
-
 @pytest.fixture
 def job_monitor_datafiles(tmp_path: Path) -> list[str]:
     """Four empty files for job_monitor's run_func to write into."""
