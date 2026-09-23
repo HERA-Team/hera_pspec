@@ -75,5 +75,17 @@ For example, to specify a Gaussian beam with a constant FWHM of 0.1 radians, def
   # Create a new Gaussian beam object with full-width at half-max. of 0.1 radians
   beam_gauss = hp.PSpecBeamGauss(fwhm=0.1, beam_freqs=beam_freqs)
 
+The beam is backed by a ``pyuvdata.analytic_beam.GaussianBeam``, exposed as the ``analytic_beam`` attribute. You can also construct a ``PSpecBeamGauss`` directly from an achromatic ``GaussianBeam``:
+
+.. code-block:: python
+
+  from pyuvdata.analytic_beam import GaussianBeam
+
+  # Note that PSpecBeamGauss FWHMs refer to the power beam, while GaussianBeam
+  # widths default to the E-field convention (sigma_type="efield"), whose power
+  # beam is sqrt(2) narrower; the conversion is handled internally.
+  analytic = GaussianBeam(sigma=0.0425, sigma_type="power")
+  beam_gauss = hp.PSpecBeamGauss(beam=analytic, beam_freqs=beam_freqs)
+
 .. autoclass:: hera_pspec.pspecbeam.PSpecBeamGauss
   :members: __init__, power_beam_int, power_beam_sq_int
