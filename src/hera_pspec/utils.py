@@ -1,4 +1,3 @@
-import argparse
 import copy
 import glob
 import inspect
@@ -1727,57 +1726,6 @@ def uvp_noise_error(
         if precomp_P_N is None:
             precomp_P_N = "P_N"
         apply_P_SN_correction(uvp, P_SN="P_SN", P_N=precomp_P_N)
-
-
-def uvp_noise_error_parser():
-    """
-    Get argparser to generate noise error bars using autos
-
-    Args:
-        N/A
-    Returns:
-        a: argparser object with arguments used in auto_noise_run.py.
-    """
-    a = argparse.ArgumentParser(
-        description="argument parser for computing "
-        "thermal noise error bars from "
-        "autocorrelations"
-    )
-    a.add_argument(
-        "pspec_container",
-        type=str,
-        help="Filename of HDF5 container (PSpecContainer) containing "
-        "input power spectra.",
-    )
-    a.add_argument(
-        "auto_file",
-        type=str,
-        help="Filename of UVData object containing only autocorr baselines to use"
-        "in thermal noise error bar estimation.",
-    )
-    a.add_argument("beam", type=str, help="Filename for UVBeam storing primary beam.")
-    a.add_argument(
-        "--groups",
-        type=str,
-        help="Name of power-spectrum group to compute noise for.",
-        default=None,
-        nargs="+",
-    )
-    a.add_argument(
-        "--spectra",
-        default=None,
-        type=str,
-        nargs="+",
-        help="List of power spectra names (with group prefix) to calculate noise for.",
-    )
-    a.add_argument(
-        "--err_type",
-        default="P_N",
-        type=str,
-        nargs="+",
-        help="Which components of noise errorto compute, 'P_N' or 'P_SN'",
-    )
-    return a
 
 
 def apply_P_SN_correction(uvp, P_SN="P_SN", P_N="P_N"):
