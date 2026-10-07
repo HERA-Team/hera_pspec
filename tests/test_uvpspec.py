@@ -1,6 +1,7 @@
 import copy
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pytest
 from hera_cal import redcal
@@ -688,6 +689,80 @@ def test_write_read_hdf5(uvp: uvpspec.UVPSpec, tmp_path: Path) -> None:
     uvp.read_hdf5(out, blpairs=uvp.blpair_array[:1])
     assert uvp.Nblpairs == 1
     assert uvp.data_array[0].shape == (uvp.Nbltpairs, uvp.get_dlys(0).size, uvp.Npols)
+
+
+class TestSymmetricTaper:
+    @pytest.mark.parametrize("symmetric_taper", [True, False])
+    def test_round_trips_through_hdf5(
+        self, mutable_uvp: uvpspec.UVPSpec, tmp_path: Path, symmetric_taper: bool
+    ) -> None:
+        mutable_uvp.symmetric_taper = symmetric_taper
+        out = tmp_path / "ex.hdf5"
+        mutable_uvp.write_hdf5(out)
+
+        with h5py.File(out, "r") as f:
+            assert f.attrs["symmetric_taper"] == symmetric_taper
+
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5(out)
+        assert uvp2.symmetric_taper == symmetric_taper
+        assert uvp2 == mutable_uvp
+
+    def test_pspec_output_round_trips_through_hdf5(
+        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, tmp_path: Path
+    ) -> None:
+        uvp = testing.uvpspec_from_data(
+            uvd_zen_even_xx,
+            [(37, 38), (38, 39)],
+            spw_ranges=[(20, 30)],
+            beam=beam_nf_dipole,
+            symmetric_taper=False,
+        )
+        assert uvp.symmetric_taper is False
+
+        out = tmp_path / "ex.hdf5"
+        uvp.write_hdf5(out)
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5(out)
+        assert uvp2.symmetric_taper == False  # noqa: E712 (h5py returns np.bool_)
+
+    def test_legacy_file_without_attr_defaults_to_true(
+        self, mutable_uvp: uvpspec.UVPSpec, tmp_path: Path
+    ) -> None:
+        mutable_uvp.symmetric_taper = False
+        out = tmp_path / "ex.hdf5"
+        mutable_uvp.write_hdf5(out)
+        with h5py.File(out, "a") as f:
+            del f.attrs["symmetric_taper"]
+
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5(out)
+        assert uvp2.symmetric_taper is True
+        uvp2.check()
+
+    def test_check_requires_symmetric_taper(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        del mutable_uvp.symmetric_taper
+        with pytest.raises(
+            AssertionError, match="required parameter symmetric_taper doesn't exist"
+        ):
+            mutable_uvp.check()
+
+    def test_check_casts_to_bool(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp.symmetric_taper = np.bool_(False)
+        mutable_uvp.check()
+        assert mutable_uvp.symmetric_taper is False
+
+    def test_eq_detects_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        uvp2 = copy.deepcopy(mutable_uvp)
+        uvp2.symmetric_taper = not mutable_uvp.symmetric_taper
+        assert mutable_uvp != uvp2
+
+    def test_combine_rejects_mismatch(self, uvp1_no_optionals: uvpspec.UVPSpec) -> None:
+        uvp2 = copy.deepcopy(uvp1_no_optionals)
+        uvp2.polpair_array[0] = 1414
+        uvp2.symmetric_taper = not uvp1_no_optionals.symmetric_taper
+        with pytest.raises(AssertionError, match="'symmetric_taper' attribute"):
+            uvpspec.combine_uvpspec([uvp1_no_optionals, uvp2], verbose=False)
 
 
 class TestSense:
