@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from astropy import units
-from pyuvdata import UVData
+from pyuvdata import UVBeam, UVData
 from pyuvdata import utils as uvutils
 
 from hera_pspec import PSpecData, UVPSpec, conversions, utils, uvwindow
@@ -24,7 +24,13 @@ outfile = "test.hdf5"
 @pytest.fixture()
 def make_ft_beam_obj() -> Callable[[tuple[int, int] | None], uvwindow.FTBeam]:
     def _factory(spw_range: tuple[int, int] | None = None) -> uvwindow.FTBeam:
-        return uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=spw_range)
+        # channel spans are expressed via freq_array (spw_range is deprecated)
+        if spw_range is None:
+            return uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        bandwidth = uvwindow.FTBeam.get_bandwidth(DATA_PATH / ftfile)
+        return uvwindow.FTBeam.from_file(
+            ftfile=DATA_PATH / ftfile, freq_array=bandwidth[spw_range[0] : spw_range[1]]
+        )
 
     return _factory
 
@@ -110,7 +116,10 @@ def uvp_for_uvwindow(
         baselines2,
         dsets=(0, 1),
         pols=[("xx", "xx")],
-        spw_ranges=(5, 25),
+        # NB: must be covered by the test FT-beam file (data channels
+        # 170-199): from_uvpspec checks that the data frequencies are
+        # within the FTBeam bandwidth
+        spw_ranges=(175, 195),
         taper=taper,
         verbose=False,
     )
@@ -205,17 +214,158 @@ class TestFTBeamInit:
             uvwindow.FTBeam(pol=3.4, data=data, freq_array=freq_array, mapsize=mapsize)
 
 
+nf_dipole_beamfits = DATA_PATH / "HERA_NF_dipole_power.beamfits"
+nf_efield_beamfits = DATA_PATH / "HERA_NF_efield.beamfits"
+
+
+@pytest.fixture(scope="module")
+def nf_dipole_beam_freqs() -> np.ndarray:
+    beam = UVBeam()
+    beam.read_beamfits(str(nf_dipole_beamfits))
+    return np.unique(beam.freq_array)
+
+
 class TestFTBeamFromBeam:
-    def test_not_implemented(self) -> None:
-        with pytest.raises(NotImplementedError, match="Coming soon"):
-            uvwindow.FTBeam.from_beam(beamfile="test")
+    @pytest.fixture(scope="class")
+    def small_ft_beam(self, nf_dipole_beam_freqs: np.ndarray) -> uvwindow.FTBeam:
+        freq_array = np.linspace(
+            nf_dipole_beam_freqs.min(), nf_dipole_beam_freqs.max(), 5
+        )
+        return uvwindow.FTBeam.from_beam(
+            beamfile=nf_dipole_beamfits,
+            pol="xx",
+            freq_array=freq_array,
+            mapsize=1.0,
+            npix=29,
+        )
+
+    def test_attributes(self, small_ft_beam: uvwindow.FTBeam) -> None:
+        assert small_ft_beam.pol == "xx"
+        assert small_ft_beam.ft_beam.ndim == 3
+        assert small_ft_beam.ft_beam.shape[0] == small_ft_beam.freq_array.size == 5
+        assert small_ft_beam.ft_beam.shape[1] == small_ft_beam.ft_beam.shape[2]
+        assert np.all(np.isfinite(small_ft_beam.ft_beam))
+
+    def test_ft_peaks_at_zero_mode(self, small_ft_beam: uvwindow.FTBeam) -> None:
+        # the FT of a positive beam peaks at the zero mode (grid centre)
+        ngrid = small_ft_beam.ft_beam.shape[-1]
+        for i in range(small_ft_beam.freq_array.size):
+            assert np.argmax(small_ft_beam.ft_beam[i]) == (ngrid**2) // 2
+
+    def test_pol_as_int(self, small_ft_beam: uvwindow.FTBeam) -> None:
+        test = uvwindow.FTBeam.from_beam(
+            beamfile=nf_dipole_beamfits,
+            pol=-5,
+            freq_array=small_ft_beam.freq_array,
+            mapsize=1.0,
+            npix=29,
+        )
+        assert test.pol == "xx"
+        assert np.allclose(test.ft_beam, small_ft_beam.ft_beam)
+
+    def test_too_few_frequencies(self, nf_dipole_beam_freqs: np.ndarray) -> None:
+        with pytest.raises(ValueError, match="at least three frequencies"):
+            uvwindow.FTBeam.from_beam(
+                beamfile=nf_dipole_beamfits,
+                pol="xx",
+                freq_array=nf_dipole_beam_freqs[:2],
+            )
+
+    def test_out_of_coverage_uses_edge_beam(
+        self, nf_dipole_beam_freqs: np.ndarray
+    ) -> None:
+        # frequencies slightly outside the simulation coverage: warn, and
+        # evaluate the beam at the nearest covered frequency while keeping
+        # the requested frequencies as the FTBeam coordinates
+        df = np.diff(nf_dipole_beam_freqs).mean()
+        fmin = nf_dipole_beam_freqs.min()
+        freqs_over = np.array([fmin - df / 2, fmin, fmin + df])
+        with pytest.warns(UserWarning, match="outside the beam simulation"):
+            test = uvwindow.FTBeam.from_beam(
+                beamfile=nf_dipole_beamfits,
+                pol="xx",
+                freq_array=freqs_over,
+                mapsize=1.0,
+                npix=29,
+            )
+        assert np.allclose(test.freq_array, freqs_over)
+        # clamped channel = beam evaluated at the edge frequency
+        assert np.allclose(test.ft_beam[0], test.ft_beam[1])
+
+    def test_even_npix_adjusted_to_odd(self, small_ft_beam: uvwindow.FTBeam) -> None:
+        # npix=30 is adjusted down to 29, reproducing small_ft_beam exactly
+        test = uvwindow.FTBeam.from_beam(
+            beamfile=nf_dipole_beamfits,
+            pol="xx",
+            freq_array=small_ft_beam.freq_array,
+            mapsize=1.0,
+            npix=30,
+        )
+        assert test == small_ft_beam
+
+    @pytest.mark.parametrize("mapsize", [0.35, uvwindow._MAX_R])
+    def test_mapsize_within_beam_coverage(
+        self, small_ft_beam: uvwindow.FTBeam, mapsize: float
+    ) -> None:
+        # mapsize < _MAX_R crops the beam map; mapsize = _MAX_R uses it as is
+        test = uvwindow.FTBeam.from_beam(
+            beamfile=nf_dipole_beamfits,
+            pol="xx",
+            freq_array=small_ft_beam.freq_array,
+            mapsize=mapsize,
+            npix=29,
+        )
+        assert test.ft_beam.shape[-1] <= 29
+        assert test.ft_beam.shape[-1] % 2 == 1
+        assert np.all(np.isfinite(test.ft_beam))
+
+    @pytest.mark.parametrize("pol", ["xx", "pI"])
+    def test_efield_beam_is_converted(self, pol: str) -> None:
+        # efield beams are converted to power (xx) or pseudo-Stokes (pI)
+        test = uvwindow.FTBeam.from_beam(
+            beamfile=nf_efield_beamfits,
+            pol=pol,
+            freq_array=np.linspace(120e6, 180e6, 3),
+            mapsize=1.0,
+            npix=29,
+        )
+        assert test.pol == pol
+        assert np.all(np.isfinite(test.ft_beam))
+
+    def test_select_freqs_matches_direct_computation(
+        self, nf_dipole_beam_freqs: np.ndarray
+    ) -> None:
+        # interpolating a from_beam FT beam onto frequencies between its
+        # channels must agree with computing the FT beam directly at those
+        # frequencies. The 6.25 MHz source grid used here is far coarser
+        # than any production grid (~122 kHz), so the 2%-of-peak bound is
+        # loose.
+        fine = np.linspace(nf_dipole_beam_freqs.min(), nf_dipole_beam_freqs.max(), 17)
+        target = 0.5 * (fine[:-1] + fine[1:])[::2]
+        ft_fine = uvwindow.FTBeam.from_beam(
+            beamfile=nf_dipole_beamfits, pol="xx", freq_array=fine, mapsize=1.0, npix=29
+        )
+        ft_direct = uvwindow.FTBeam.from_beam(
+            beamfile=nf_dipole_beamfits,
+            pol="xx",
+            freq_array=target,
+            mapsize=1.0,
+            npix=29,
+        )
+        with pytest.warns(UserWarning, match="interpolating"):
+            ft_interp = ft_fine.select_freqs(target, inplace=False)
+        assert np.allclose(
+            ft_interp.ft_beam,
+            ft_direct.ft_beam,
+            atol=0.02 * np.abs(ft_direct.ft_beam).max(),
+        )
 
 
 class TestFTBeamFromFile:
-    def test_happy_path(self) -> None:
+    def test_happy_path(self, ft_bandwidth: np.ndarray) -> None:
         test = uvwindow.FTBeam.from_file(
             ftfile=DATA_PATH / ftfile,
-            spw_range=(5, 25),
+            freq_array=ft_bandwidth[5:25],
             verbose=False,
             x_orientation="east",
         )
@@ -236,9 +386,11 @@ class TestFTBeamFromFile:
     def test_spw_range_matches_fixture(
         self, make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam]
     ) -> None:
+        # deprecated channel-index selection agrees with freq_array selection
         ft_file = DATA_PATH / ftfile
         spw_range = (5, 25)
-        test = uvwindow.FTBeam.from_file(ftfile=ft_file, spw_range=spw_range)
+        with pytest.warns(DeprecationWarning, match="spw_range"):
+            test = uvwindow.FTBeam.from_file(ftfile=ft_file, spw_range=spw_range)
         assert np.allclose(
             test.freq_array, make_ft_beam_obj(spw_range=spw_range).freq_array
         )
@@ -247,9 +399,20 @@ class TestFTBeamFromFile:
         test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
         assert np.allclose(test.freq_array, ft_bandwidth)
 
+    @pytest.mark.parametrize(
+        "bad_freqs",
+        [np.array([250e6, 251e6]), np.array([100e6])],  # out of coverage; single
+    )
+    def test_invalid_freq_array(self, bad_freqs: np.ndarray) -> None:
+        with pytest.raises(ValueError):
+            uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=bad_freqs)
+
     @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
     def test_invalid_spw_range(self, bad_spw: tuple[int, ...]) -> None:
-        with pytest.raises(ValueError, match="Wrong spw range format"):
+        with (
+            pytest.warns(DeprecationWarning, match="spw_range"),
+            pytest.raises(ValueError, match="Wrong spw range format"),
+        ):
             uvwindow.FTBeam.from_file(spw_range=bad_spw, ftfile=DATA_PATH / ftfile)
 
 
@@ -306,12 +469,16 @@ class TestFTBeamGetBandwidth:
 class TestFTBeamUpdateSpw:
     def test_happy_path(self) -> None:
         test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
-        test.update_spw((5, 25))
+        with pytest.warns(DeprecationWarning, match="select_freqs"):
+            test.update_spw((5, 25))
 
     @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
     def test_invalid_range(self, bad_spw: tuple[int, ...]) -> None:
         test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
-        with pytest.raises(ValueError, match="Wrong spw range format"):
+        with (
+            pytest.warns(DeprecationWarning, match="select_freqs"),
+            pytest.raises(ValueError, match="Wrong spw range format"),
+        ):
             test.update_spw(spw_range=bad_spw)
 
 
@@ -406,7 +573,7 @@ class TestUVWindowFromUvpspec:
         self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
     ) -> None:
         uvp, _, _ = uvp_for_uvwindow
-        with pytest.raises(NotImplementedError, match="Coming soon"):
+        with pytest.raises(NotImplementedError, match="Construct the FTBeam"):
             uvwindow.UVWindow.from_uvpspec(
                 uvp=uvp, ipol=0, spw=0, ftbeam=None, verbose=False
             )
@@ -720,9 +887,11 @@ class TestUVWindowGetCylindricalWf:
                 return_bins="unweighted",
             )
 
-    def test_odd_number_of_delays(self, red_bl_lens: np.ndarray) -> None:
+    def test_odd_number_of_delays(
+        self, red_bl_lens: np.ndarray, ft_bandwidth: np.ndarray
+    ) -> None:
         ft_beam_test = uvwindow.FTBeam.from_file(
-            ftfile=DATA_PATH / ftfile, spw_range=(5, 24)
+            ftfile=DATA_PATH / ftfile, freq_array=ft_bandwidth[5:24]
         )
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_test)
         kperp, kpara, cyl_wf = test.get_cylindrical_wf(
@@ -1159,3 +1328,194 @@ class TestUVWindowRunAndWrite:
                 kpara_bins=kpara_bins.value * units.Mpc,
                 clobber=True,
             )
+
+
+class TestFTBeamSelectFreqs:
+    def test_exact_match_extracts_channels(self, ft_bandwidth: np.ndarray) -> None:
+        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        sub = full.select_freqs(ft_bandwidth[3:10], inplace=False)
+        assert np.allclose(sub.freq_array, ft_bandwidth[3:10])
+        assert np.array_equal(sub.ft_beam, full.ft_beam[3:10])
+        # with inplace=False the original is untouched
+        assert full.freq_array.size == ft_bandwidth.size
+
+    def test_mismatched_grid_interpolates_with_warning(
+        self, ft_bandwidth: np.ndarray
+    ) -> None:
+        # midpoints of a linear grid: linear interpolation is exactly the
+        # average of the neighbouring channels
+        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        midpoints = 0.5 * (ft_bandwidth[3:10] + ft_bandwidth[4:11])
+        with pytest.warns(UserWarning, match="interpolating"):
+            interp = full.select_freqs(midpoints, inplace=False)
+        assert np.allclose(interp.freq_array, midpoints)
+        assert np.allclose(
+            interp.ft_beam, 0.5 * (full.ft_beam[3:10] + full.ft_beam[4:11])
+        )
+
+    def test_out_of_coverage_raises(self, ft_bandwidth: np.ndarray) -> None:
+        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        with pytest.raises(ValueError, match="beyond the bandwidth"):
+            full.select_freqs(np.array([ft_bandwidth.max() + 1e6] * 3))
+
+    def test_single_frequency_raises(self, ft_bandwidth: np.ndarray) -> None:
+        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        with pytest.raises(ValueError, match="at least two frequencies"):
+            full.select_freqs(ft_bandwidth[:1])
+
+
+class TestFTBeamFromFileFreqArray:
+    def test_partial_read_matches_full_read(self, ft_bandwidth: np.ndarray) -> None:
+        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        target = ft_bandwidth[5:25]
+        test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=target)
+        assert np.allclose(test.freq_array, target)
+        assert np.array_equal(test.ft_beam, full.ft_beam[5:25])
+
+    def test_both_selections_raise(self, ft_bandwidth: np.ndarray) -> None:
+        with pytest.raises(ValueError, match="both spw_range and freq_array"):
+            uvwindow.FTBeam.from_file(
+                ftfile=DATA_PATH / ftfile,
+                spw_range=(5, 25),
+                freq_array=ft_bandwidth[5:25],
+            )
+
+    def test_interpolation_through_partial_read(self, ft_bandwidth: np.ndarray) -> None:
+        # requested frequencies fall between the file's channels, so
+        # select_freqs interpolates using only the padded channel range
+        # read from disk; must equal loading the whole file and
+        # interpolating. Starts at the first channel pair to stress the
+        # edge padding.
+        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        midpoints = 0.5 * (ft_bandwidth[0:8] + ft_bandwidth[1:9])
+        with pytest.warns(UserWarning, match="interpolating"):
+            part = uvwindow.FTBeam.from_file(
+                ftfile=DATA_PATH / ftfile, freq_array=midpoints
+            )
+        with pytest.warns(UserWarning, match="interpolating"):
+            ref = full.select_freqs(midpoints, inplace=False)
+        assert np.allclose(part.freq_array, ref.freq_array)
+        assert np.allclose(part.ft_beam, ref.ft_beam)
+
+
+class TestFTBeamWriteHdf5:
+    def test_roundtrip(self, ft_beam_spw: uvwindow.FTBeam, tmp_path: Path) -> None:
+        # the filename carries no pol suffix: the round trip relies on the
+        # pol attribute written by write_hdf5
+        fname = tmp_path / "ft_beam_roundtrip.hdf5"
+        ft_beam_spw.write_hdf5(fname, extra_attrs={"beam_file": "sim.fits"})
+        back = uvwindow.FTBeam.from_file(ftfile=fname)
+        assert back == ft_beam_spw
+        assert back != 1  # non-FTBeam comparison falls through NotImplemented
+
+    def test_no_overwrite_by_default(
+        self, ft_beam_spw: uvwindow.FTBeam, tmp_path: Path
+    ) -> None:
+        fname = tmp_path / "ft_beam.hdf5"
+        ft_beam_spw.write_hdf5(fname)
+        with pytest.raises(FileExistsError, match="overwrite"):
+            ft_beam_spw.write_hdf5(fname)
+        ft_beam_spw.write_hdf5(fname, overwrite=True)
+
+
+class TestFTBeamDataGridMismatch:
+    """Regression tests: an FTBeam on a frequency grid with a different
+    channel width than the data must yield the same window functions as an
+    FTBeam defined directly on the data channels (historically, the window
+    functions' k_parallel axis silently came out scaled by the ratio of
+    the two channel widths)."""
+
+    # "data" channels: 500 kHz; FT beam computed on 400 kHz channels
+    freqs_data = np.linspace(155e6, 165e6, 20, endpoint=False)
+    freqs_beam = np.arange(150e6, 170e6, 0.4e6)
+
+    @staticmethod
+    def _gaussian(freqs: np.ndarray) -> uvwindow.FTBeam:
+        widths = -0.0343 * freqs / 1e6 + 11.30
+        return uvwindow.FTBeam.gaussian(freqs, widths, pol="xx", npix=101)
+
+    def test_delay_grid_matches_data_channel_width(self) -> None:
+        with pytest.warns(UserWarning, match="interpolating"):
+            ftb = self._gaussian(self.freqs_beam).select_freqs(
+                self.freqs_data, inplace=False
+            )
+        uvw = uvwindow.UVWindow(ftbeam_obj=ftb, taper="blackman-harris")
+        assert np.allclose(uvw.freq_array, self.freqs_data)
+        assert np.isclose(np.median(np.diff(uvw.dly_array)), 1.0 / (20 * 0.5e6))
+
+    def test_cylindrical_wf_matches_direct_grid(self) -> None:
+        bl_len = 15.0
+        with pytest.warns(UserWarning, match="interpolating"):
+            ftb_interp = self._gaussian(self.freqs_beam).select_freqs(
+                self.freqs_data, inplace=False
+            )
+        uvw = uvwindow.UVWindow(ftbeam_obj=ftb_interp, taper="blackman-harris")
+        uvw_direct = uvwindow.UVWindow(
+            ftbeam_obj=self._gaussian(self.freqs_data), taper="blackman-harris"
+        )
+        kperp_bins = uvw_direct.get_kperp_bins([bl_len])
+        kpara_bins = uvw_direct.get_kpara_bins(self.freqs_data)
+        wf_interp = uvw.get_cylindrical_wf(
+            bl_len, kperp_bins=kperp_bins, kpara_bins=kpara_bins
+        )
+        wf_direct = uvw_direct.get_cylindrical_wf(
+            bl_len, kperp_bins=kperp_bins, kpara_bins=kpara_bins
+        )
+        # up to interpolation accuracy of the slowly-varying gaussian beam
+        assert np.allclose(wf_interp, wf_direct, atol=1e-4)
+
+
+class TestGetWfForTauKnownExamples:
+    """Check the k_parallel binning at its two granularity extremes.
+
+    At the coarsest extreme (one bin wide enough to hold the whole band)
+    binning must reduce to a plain mean over frequency; at the finest
+    (one bin per k_parallel value) it must return the input unchanged.
+    Together these pin the bin assignment, the averaging and the
+    empty-bin behavior with answers that can be checked by hand.
+    """
+
+    @staticmethod
+    def _kpar_norm(uvw: uvwindow.UVWindow, tau: float) -> np.ndarray:
+        alpha = uvw.cosmo.dRpara_df(uvw.avg_z, little_h=uvw.little_h, ghz=False)
+        delta_nu = np.median(np.diff(uvw.freq_array))
+        eta = np.fft.fftshift(np.fft.fftfreq(uvw.Nfreqs)) / delta_nu
+        return np.abs(2.0 * np.pi / alpha * (eta + tau))
+
+    def test_single_bin_gets_row_means(self, uvwindow_obj: uvwindow.UVWindow) -> None:
+        # coarsest extreme: one bin holds every kpar value (flanked by
+        # empty bins), so its column must be the plain frequency-mean of
+        # each row of wf_array1, and the empty bins must stay zero
+        uvw = uvwindow_obj
+        # any tau works here; 2/delta_nu keeps kpar_norm strictly positive
+        tau = 2.0 / np.median(np.diff(uvw.freq_array))
+        kpar = self._kpar_norm(uvw, tau)
+        dk = (kpar.max() - kpar.min()) + 1.0
+        kpara_bins = np.array([kpar.mean() - dk, kpar.mean(), kpar.mean() + dk])
+        kperp_bins = np.arange(1.0, 6.0)
+        rng = np.random.default_rng(0)
+        wf1 = rng.random((kperp_bins.size, uvw.Nfreqs))
+
+        kpara_out, cyl = uvw._get_wf_for_tau(tau, wf1, kperp_bins, kpara_bins)
+        assert np.allclose(cyl[:, 1], wf1.mean(axis=1))
+        assert np.allclose(cyl[:, [0, 2]], 0.0)
+        assert np.isclose(kpara_out[1], kpar.mean())
+        assert np.allclose(kpara_out[[0, 2]], 0.0)
+
+    def test_resolved_bins_are_identity(self, uvwindow_obj: uvwindow.UVWindow) -> None:
+        # finest extreme: bins centred on each kpar value, so binning
+        # must be the identity. tau = 2/delta_nu exceeds max|eta| =
+        # 1/(2 delta_nu), keeping eta + tau positive so kpar_norm
+        # inherits eta's equal spacing (each value lands in its own bin)
+        uvw = uvwindow_obj
+        tau = 2.0 / np.median(np.diff(uvw.freq_array))
+        kpar = self._kpar_norm(uvw, tau)
+        assert np.all(np.diff(kpar) > 0)  # monotonic by construction
+        kpara_bins = kpar  # equally spaced since eta is
+        kperp_bins = np.arange(1.0, 6.0)
+        rng = np.random.default_rng(1)
+        wf1 = rng.random((kperp_bins.size, uvw.Nfreqs))
+
+        kpara_out, cyl = uvw._get_wf_for_tau(tau, wf1, kperp_bins, kpara_bins)
+        assert np.allclose(cyl, wf1)
+        assert np.allclose(kpara_out, kpar)
