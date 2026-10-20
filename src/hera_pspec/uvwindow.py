@@ -28,6 +28,38 @@ logger = logging.getLogger(__name__)
 # smaller kperp.
 _MAX_R = 0.7
 
+# Versions of the HDF5 files written by FTBeam.write_hdf5 ("ftbeam_version")
+# and UVWindow.run_and_write ("uvwindow_version"). Files without the attribute
+# are version 1 (hera_pspec v0.x); version 2 adds "unit" attributes.
+FTBEAM_HDF5_VERSION = "2"
+UVWINDOW_HDF5_VERSION = "2"
+
+# Units FTBeam files are read into: frequencies in Hz, and mapsize in radians
+# (the flat-sky coordinates of FTBeam.from_beam are zenith angles in radians,
+# and UVWindow divides 2 pi / (2 mapsize) by dRperp_dtheta in Mpc / rad).
+_FTBEAM_FREQ_UNIT = units.Hz
+_FTBEAM_MAPSIZE_UNIT = units.rad
+
+
+def _check_ftbeam_version(f, ftfile):
+    """Raise if an FTBeam file has a format version this code cannot read."""
+    version = f.attrs.get("ftbeam_version", None)
+    if isinstance(version, bytes):
+        version = version.decode()
+    if version is not None and version != FTBEAM_HDF5_VERSION:
+        raise ValueError(
+            f"{ftfile} has FTBeam format version {version!r}; this version of "
+            f"hera_pspec reads versions 1 and {FTBEAM_HDF5_VERSION}."
+        )
+
+
+def _read_ftbeam_freqs(f):
+    """Read the frequency array of an open FTBeam file, in Hz."""
+    dset = f["freq"]
+    return uvputils.convert_from_stored_unit(
+        np.array(dset[...]), dset.attrs.get("unit", None), _FTBEAM_FREQ_UNIT, "freq"
+    )
+
 
 def _cartesian_to_spherical(x, y):
     """Invert the simple zenith-angle map x = za*cos(az), y = za*sin(az)."""
@@ -91,7 +123,7 @@ class FTBeam:
             - pol contains the polarisation of the beam used.
             - freq_array gives the frequency coordinates of data.
             - mapsize is the size of the flat map the beam was projected
-                onto (in deg).
+                onto (in rad).
 
         Parameters
         ----------
@@ -108,7 +140,7 @@ class FTBeam:
             Array or list of the frequencies over which the Fourier
             transform of the beam has been computed (in Hz).
         mapsize : float
-            Size of the flat map the beam was projected onto (in deg).
+            Size of the flat map the beam was projected onto (in rad).
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
         x_orientation: str, optional
@@ -359,8 +391,14 @@ class FTBeam:
 
         # obtain bandwidth in file to define spectral window
         with h5py.File(ftfile, "r") as f:
-            mapsize = f["mapsize"][0]
-            bandwidth = np.array(f["freq"][...])
+            _check_ftbeam_version(f, ftfile)
+            mapsize = uvputils.convert_from_stored_unit(
+                f["mapsize"][0],
+                f["mapsize"].attrs.get("unit", None),
+                _FTBEAM_MAPSIZE_UNIT,
+                "mapsize",
+            )
+            bandwidth = _read_ftbeam_freqs(f)
             # polarisation: prefer the attribute written by write_hdf5,
             # fall back to extracting it from the filename
             pol = f.attrs.get("pol", None)
@@ -499,7 +537,8 @@ class FTBeam:
             raise ValueError("Wrong ftfile input. See docstring.")
 
         with h5py.File(ftfile, "r") as f:
-            bandwidth = np.array(f["freq"][...])
+            _check_ftbeam_version(f, ftfile)
+            bandwidth = _read_ftbeam_freqs(f)
 
         if bandwidth.size <= 1:
             raise ValueError("Error reading file, empty bandwidth.")
@@ -522,6 +561,13 @@ class FTBeam:
         extra_attrs : dict, optional
             Additional attributes to store in the file (e.g. provenance
             information). Values must be h5py-compatible scalars/strings.
+
+        Notes
+        -----
+        The file has datasets ``FT_beam``, ``freq`` (with attribute
+        ``unit = "Hz"``) and ``mapsize`` (``unit = "rad"``), and attributes
+        ``pol`` and ``ftbeam_version = "2"``. :meth:`from_file` also reads
+        version 1 files, which have no version or unit attributes.
         """
         filepath = Path(filepath)
         if filepath.exists() and not overwrite:
@@ -530,12 +576,15 @@ class FTBeam:
 
         with h5py.File(filepath, "w") as f:
             f.create_dataset("FT_beam", data=self.ft_beam, compression="gzip")
-            f.create_dataset("freq", data=self.freq_array)
-            f.create_dataset("mapsize", data=np.array([self.mapsize]))
+            dset = f.create_dataset("freq", data=self.freq_array)
+            dset.attrs["unit"] = _FTBEAM_FREQ_UNIT.to_string()
+            dset = f.create_dataset("mapsize", data=np.array([self.mapsize]))
+            dset.attrs["unit"] = _FTBEAM_MAPSIZE_UNIT.to_string()
             f.attrs["pol"] = str(self.pol)
             if extra_attrs is not None:
                 for key, val in extra_attrs.items():
                     f.attrs[key] = val
+            f.attrs["ftbeam_version"] = FTBEAM_HDF5_VERSION
         logger.info("Wrote FTBeam to %s", filepath)
 
     def select_freqs(self, freq_array, atol=None, inplace=True):
@@ -1712,6 +1761,16 @@ class UVWindow:
             Used for cylindrical binning.
         clobber : bool, optional
             Whether to overwrite output file if it exists. Default: False.
+
+        Notes
+        -----
+        The file has attributes ``uvwindow_version = "2"``, ``avg_nu`` (with
+        ``avg_nu_unit = "Hz"``), ``avg_z``, ``nfreqs``, ``little_h``,
+        ``polpair`` and ``taper``, and datasets ``kperp_bins`` and
+        ``kpara_bins`` (``unit`` attribute: :attr:`kunits`, i.e.
+        ``"littleh / Mpc"`` or ``"1 / Mpc"``), ``bl_lens`` (``unit = "m"``),
+        ``bl_weights``, ``dly_array`` (``unit = "s"``) and ``cyl_wf``. Version
+        1 files (hera_pspec v0.x) have no version or unit attributes.
         """
         # Check output
         filepath = Path(filepath)
@@ -1766,8 +1825,10 @@ class UVWindow:
 
         # Write file
         with h5py.File(filepath, "w") as f:
+            f.attrs["uvwindow_version"] = UVWINDOW_HDF5_VERSION
             # parameters
             f.attrs["avg_nu"] = self.avg_nu
+            f.attrs["avg_nu_unit"] = units.Hz.to_string()
             f.attrs["avg_z"] = self.avg_z
             f.attrs["nfreqs"] = self.Nfreqs
             f.attrs["little_h"] = self.little_h
@@ -1778,17 +1839,22 @@ class UVWindow:
             else:
                 f.attrs["taper"] = self.taper
             # arrays
-            f.create_dataset(
+            kunits = uvputils.unit_to_string(self.kunits)
+            dset = f.create_dataset(
                 "kperp_bins", shape=(nbins_kperp,), data=kperp_bins, dtype=float
             )
-            f.create_dataset(
+            dset.attrs["unit"] = kunits
+            dset = f.create_dataset(
                 "kpara_bins", shape=(nbins_kpara,), data=kpara_bins, dtype=float
             )
-            f.create_dataset("bl_lens", shape=(nbls,), data=bl_lens, dtype=float)
+            dset.attrs["unit"] = kunits
+            dset = f.create_dataset("bl_lens", shape=(nbls,), data=bl_lens, dtype=float)
+            dset.attrs["unit"] = units.m.to_string()
             f.create_dataset("bl_weights", shape=(nbls,), data=bl_weights, dtype=float)
-            f.create_dataset(
+            dset = f.create_dataset(
                 "dly_array", shape=(self.Nfreqs,), data=self.dly_array, dtype=float
             )
+            dset.attrs["unit"] = units.s.to_string()
             f.create_dataset(
                 "cyl_wf",
                 shape=(nbls, self.Nfreqs, nbins_kperp, nbins_kpara),

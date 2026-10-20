@@ -1,6 +1,7 @@
 import ast
 import copy
 import fnmatch
+import functools
 import os
 import warnings
 from typing import Self
@@ -9,12 +10,43 @@ import astropy.cosmology.units as cu
 import h5py
 import numpy as np
 from astropy import units
+from astropy.cosmology import Cosmology
 from pyuvdata import utils as uvutils
 
 from . import __version__, conversions, grouping, noise, pspecbeam
 from . import uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
+
+# Version of the UVPSpec HDF5 layout, stored as the "uvpspec_version" group
+# attribute. Files without it are version 1 (hera_pspec v0.x). Version 2 adds
+# unit attributes ("unit" on datasets, "<name>_unit" next to group attributes)
+# for parameters with a declared unit, and the cosmology as astropy YAML in
+# "cosmo_yaml" next to the v0.x dict string in "cosmo".
+UVPSPEC_HDF5_VERSION = "2"
+_KNOWN_UVPSPEC_HDF5_VERSIONS = (UVPSPEC_HDF5_VERSION,)
+
+# Largest difference allowed between the "cosmo" dict and "cosmo_yaml"
+# parameters of a file.
+_COSMO_ATTR_TOL = 1e-12
+
+
+@functools.lru_cache(maxsize=32)
+def _cosmology_from_yaml(cosmo_yaml):
+    """
+    Parse an astropy cosmology from YAML.
+
+    Cached, since files repeat the same string and astropy cosmologies are
+    immutable; parsing costs several milliseconds per read otherwise.
+    """
+    return Cosmology.from_format(cosmo_yaml, format="yaml")
+
+
+def _value_in_unit(value, unit):
+    """Return a plain value in ``unit``: Quantities are converted, others kept."""
+    if isinstance(value, units.Quantity):
+        return value.to_value(unit)
+    return value
 
 
 def _normalize_nested_sequence(value, arg_name, group_description):
@@ -1818,6 +1850,22 @@ class UVPSpec:
         only_pairs_in_bls : bool, optional
             If True, keep only baseline-pairs whose first _and_ second baseline
             are found in the 'bls' list. Default: False.
+
+        Raises
+        ------
+        ValueError
+            If the group has an unknown ``uvpspec_version``, a stored unit that
+            is not equivalent to a parameter's declared unit, or ``cosmo`` and
+            ``cosmo_yaml`` attributes that disagree.
+
+        Notes
+        -----
+        Groups without a ``uvpspec_version`` attribute (written by hera_pspec
+        v0.x) are read as before. In version 2 groups, values stored with a
+        unit equivalent to, but different from, the declared unit (e.g. "ns"
+        for ``dly_array``) are converted to the declared unit, and the
+        cosmology is read from ``cosmo_yaml`` when present. See
+        :meth:`write_to_group` for the layout.
         """
         # Make sure the group is a UVPSpec object
         assert "pspec_type" in grp.attrs, "This object is not a UVPSpec object"
@@ -1825,19 +1873,46 @@ class UVPSpec:
         pstype = pstype.decode() if isinstance(pstype, bytes) else pstype
         assert pstype == "UVPSpec", "This object is not a UVPSpec object"
 
+        # Format version: missing means a v0.x (version 1) file
+        version = grp.attrs.get("uvpspec_version", None)
+        if isinstance(version, bytes):
+            version = version.decode()
+        if version is not None and version not in _KNOWN_UVPSPEC_HDF5_VERSIONS:
+            raise ValueError(
+                f"UVPSpec HDF5 format version {version!r} is not supported by "
+                f"this version of hera_pspec ({__version__}), which reads "
+                f"versions 1 and {', '.join(_KNOWN_UVPSPEC_HDF5_VERSIONS)}. "
+                "Upgrade hera_pspec to read this file."
+            )
+
         # Clear all data in the current object
         self._clear()
 
-        # Load-in meta data including deprecated.
+        # Load-in meta data including deprecated. Parameters with a declared
+        # unit are converted from the unit stored in the file, if any.
         for k in grp.attrs:
             if k in self._meta_attrs or k in self._meta_deprecated:
                 val = grp.attrs[k]
                 if isinstance(val, bytes):
                     val = val.decode()  # bytes -> str
+                if version is not None and k in self._meta_attrs:
+                    unit = getattr(self, "_" + k).unit
+                    if unit is not None:
+                        val = uvputils.convert_from_stored_unit(
+                            val, grp.attrs.get(f"{k}_unit", None), unit, k
+                        )
                 setattr(self, k, val)
         for k in grp:
             if k in self._meta_dsets or k in self._meta_dsets_deprecated:
-                setattr(self, k, grp[k][:])
+                dset = grp[k]
+                val = dset[:]
+                if version is not None and k in self._meta_dsets:
+                    unit = getattr(self, "_" + k).unit
+                    if unit is not None:
+                        val = uvputils.convert_from_stored_unit(
+                            val, dset.attrs.get("unit", None), unit, k
+                        )
+                setattr(self, k, val)
 
         # Backwards compatibility: pol_array exists (not polpair_array)
         if "pol_array" in grp.attrs:
@@ -1887,8 +1962,14 @@ class UVPSpec:
                 h5file=grp,
             )
 
-        # handle cosmo
-        if hasattr(self, "cosmo"):
+        # handle cosmo: prefer the astropy YAML of version 2 files, and check
+        # it against the v0.x dict string kept next to it
+        cosmo_yaml = grp.attrs.get("cosmo_yaml", None)
+        if cosmo_yaml is not None:
+            self.cosmo = self._cosmo_from_hdf5_attrs(
+                cosmo_yaml, getattr(self, "cosmo", None)
+            )
+        elif hasattr(self, "cosmo"):
             self.cosmo = conversions.Cosmo_Conversions(**ast.literal_eval(self.cosmo))
 
         # BACKWARDS COMPATIBILITY for files with Nblpairts.
@@ -1923,6 +2004,53 @@ class UVPSpec:
             self.channel_width = np.atleast_1d(self.channel_width)
 
         self.check(just_meta=just_meta)
+
+    @staticmethod
+    def _cosmo_from_hdf5_attrs(cosmo_yaml, cosmo_params=None):
+        """
+        Build the cosmology of a version 2 file from its HDF5 attributes.
+
+        Parameters
+        ----------
+        cosmo_yaml : str or bytes
+            The ``cosmo_yaml`` attribute: an astropy cosmology in YAML.
+        cosmo_params : str, optional
+            The ``cosmo`` attribute: the ``str()`` of
+            ``Cosmo_Conversions.get_params()``. If given, its parameters must
+            agree with the YAML ones to 1e-12.
+
+        Returns
+        -------
+        cosmo : conversions.Cosmo_Conversions
+
+        Raises
+        ------
+        ValueError
+            If the two attributes describe different cosmologies.
+        """
+        if isinstance(cosmo_yaml, bytes):
+            cosmo_yaml = cosmo_yaml.decode()
+        cosmo = conversions.Cosmo_Conversions.from_astropy(
+            _cosmology_from_yaml(cosmo_yaml)
+        )
+        if cosmo_params is not None:
+            params = ast.literal_eval(cosmo_params)
+            from_yaml = cosmo.get_params()
+            differ = sorted(
+                key
+                for key, value in params.items()
+                if key not in from_yaml
+                or not np.isclose(
+                    from_yaml[key], value, rtol=_COSMO_ATTR_TOL, atol=_COSMO_ATTR_TOL
+                )
+            )
+            if differ:
+                raise ValueError(
+                    "The cosmo and cosmo_yaml attributes of this UVPSpec group "
+                    f"disagree on {', '.join(differ)}: cosmo = {params}, "
+                    f"cosmo_yaml gives {from_yaml}."
+                )
+        return cosmo
 
     def read_hdf5(
         self,
@@ -2005,6 +2133,23 @@ class UVPSpec:
         run_check : bool, optional
             Whether to run a validity check on the UVPSpec object before
             writing it to the HDF5 group. Default: True.
+
+        Notes
+        -----
+        Writes format version 2 (group attribute ``uvpspec_version = "2"``).
+        Metadata in ``_meta_attrs`` are group attributes and those in
+        ``_meta_dsets`` are datasets; per-spectral-window arrays are datasets
+        such as ``data_spw0``. Parameters with a declared unit (see
+        :meth:`get_param_unit`) are stored as plain values in that unit, with
+        the unit string in a ``unit`` attribute on datasets (including
+        ``integration_spw*`` and ``window_function_kperp/kpara_spw*``) or a
+        ``<name>_unit`` attribute next to group attributes. Quantity values
+        are converted to the declared unit first. The cosmology is stored
+        twice: ``cosmo`` holds the ``str()`` of
+        ``Cosmo_Conversions.get_params()``, as in v0.x (which can still read
+        these files), and ``cosmo_yaml`` the equivalent astropy cosmology in
+        YAML (omitted when astropy cannot represent it, e.g. an inconsistent
+        ``Om_k``).
         """
 
         # Run check
@@ -2014,14 +2159,26 @@ class UVPSpec:
         # Check whether the group already contains info
         # TODO
 
-        # Write meta data
+        # Write meta data. Parameters with a declared unit are written as plain
+        # values in that unit, with the unit string in a "<name>_unit" attr.
         for k in self._meta_attrs:
             if hasattr(self, k):
-                # handle cosmo
+                # handle cosmo: the v0.x dict string (read by every version)
+                # and, when astropy can represent it, the astropy YAML
                 if k == "cosmo":
-                    group.attrs["cosmo"] = str(getattr(self, k).get_params())
+                    group.attrs["cosmo"] = str(self.cosmo.get_params())
+                    # None when astropy cannot represent it (e.g. an Om_k
+                    # inconsistent with Om_L and Om_M): then only the dict
+                    cosmology = self.cosmo._astropy_for_writing()
+                    if cosmology is not None:
+                        group.attrs["cosmo_yaml"] = cosmology.to_format("yaml")
                     continue
                 this_attr = getattr(self, k)
+
+                unit = getattr(self, "_" + k).unit
+                if unit is not None:
+                    this_attr = _value_in_unit(this_attr, unit)
+                    group.attrs[f"{k}_unit"] = uvputils.unit_to_string(unit)
 
                 # Do Unicode/string conversions, as HDF5 struggles with them
                 if k == "labels":
@@ -2032,7 +2189,18 @@ class UVPSpec:
 
         for k in self._meta_dsets:
             if hasattr(self, k):
-                group.create_dataset(k, data=getattr(self, k))
+                unit = getattr(self, "_" + k).unit
+                if unit is None:
+                    group.create_dataset(k, data=getattr(self, k))
+                else:
+                    dset = group.create_dataset(
+                        k, data=_value_in_unit(getattr(self, k), unit)
+                    )
+                    dset.attrs["unit"] = uvputils.unit_to_string(unit)
+
+        integration_unit = uvputils.unit_to_string(self._integration_array.unit)
+        kperp_unit = self._window_function_kperp.unit
+        kpara_unit = self._window_function_kpara.unit
 
         # Iterate over spectral windows and create datasets
         for i in np.unique(self.spw_array):
@@ -2042,9 +2210,14 @@ class UVPSpec:
             group.create_dataset(
                 f"wgt_spw{i}", data=self.wgt_array[i], dtype=np.float64
             )
-            group.create_dataset(
-                f"integration_spw{i}", data=self.integration_array[i], dtype=np.float64
+            dset = group.create_dataset(
+                f"integration_spw{i}",
+                data=_value_in_unit(
+                    self.integration_array[i], self._integration_array.unit
+                ),
+                dtype=np.float64,
             )
+            dset.attrs["unit"] = integration_unit
             group.create_dataset(
                 f"nsample_spw{i}", data=self.nsample_array[i], dtype=float
             )
@@ -2055,16 +2228,18 @@ class UVPSpec:
                     dtype=np.float64,
                 )
                 if self.exact_windows:
-                    group.create_dataset(
+                    dset = group.create_dataset(
                         f"window_function_kperp_spw{i}",
-                        data=self.window_function_kperp[i],
+                        data=_value_in_unit(self.window_function_kperp[i], kperp_unit),
                         dtype=np.float64,
                     )
-                    group.create_dataset(
+                    dset.attrs["unit"] = uvputils.unit_to_string(kperp_unit)
+                    dset = group.create_dataset(
                         f"window_function_kpara_spw{i}",
-                        data=self.window_function_kpara[i],
+                        data=_value_in_unit(self.window_function_kpara[i], kpara_unit),
                         dtype=np.float64,
                     )
+                    dset.attrs["unit"] = uvputils.unit_to_string(kpara_unit)
             if hasattr(self, "cov_array_real"):
                 group.create_dataset(
                     f"cov_real_spw{i}", data=self.cov_array_real[i], dtype=np.float64
@@ -2082,7 +2257,8 @@ class UVPSpec:
                         f"stats_{s}_{i}", data=data[i], dtype=data[i].dtype
                     )
 
-        # denote as a uvpspec object
+        # denote as a uvpspec object, and record the format version
+        group.attrs["uvpspec_version"] = UVPSPEC_HDF5_VERSION
         group.attrs["pspec_type"] = self.__class__.__name__
 
     def write_hdf5(self, filepath, overwrite=False, run_check=True):

@@ -77,6 +77,57 @@ open (Ok0 = 1 - Om0 - Ode0 = 0.00207). This is not ``Planck18``.
 
 _LITTLEH_LENGTH = u.Mpc / cu.littleh
 
+# Largest |Om_k - (1 - Om_L - Om_M)| treated as consistent.
+_OM_K_ATOL = 1e-12
+
+
+def cosmology_from_params(params):
+    """
+    Build an astropy ``LambdaCDM`` from a hera_pspec cosmology dictionary.
+
+    The dictionary has the keys of ``Cosmo_Conversions.get_params()``, as
+    stored in the ``cosmo`` attribute of HDF5 files: ``H0``, ``Om_L``,
+    ``Om_M``, ``Om_b``, ``Om_c`` and ``Om_k``. The result has ``H0``,
+    ``Om0 = Om_M``, ``Ode0 = Om_L``, ``Ob0 = Om_b`` and ``Tcmb0 = 0`` (no
+    radiation). ``Om_M`` defaults to ``Om_b + Om_c`` when missing or None.
+    ``Om_k`` is only checked, since astropy derives the curvature as
+    ``1 - Om0 - Ode0``; when missing or None it is not checked.
+
+    Parameters
+    ----------
+    params : dict
+        Cosmological parameters, e.g. ``Cosmo_Conversions().get_params()``.
+
+    Returns
+    -------
+    cosmo : astropy.cosmology.LambdaCDM
+
+    Raises
+    ------
+    ValueError
+        If ``Om_k`` differs from ``1 - Om_L - Om_M`` (by more than 1e-12), or
+        ``Om_b`` is not between 0 and ``Om_M``; astropy cannot represent
+        either case.
+    """
+    Om_L = params["Om_L"]
+    Om_b = params["Om_b"]
+    Om_M = params.get("Om_M")
+    if Om_M is None:
+        Om_M = Om_b + params["Om_c"]
+    Om_k = params.get("Om_k")
+    if Om_k is not None and not np.abs(Om_k - (1 - Om_L - Om_M)) <= _OM_K_ATOL:
+        raise ValueError(
+            f"Om_k={Om_k} differs from 1 - Om_L - Om_M = "
+            f"{1 - Om_L - Om_M}; astropy derives the curvature "
+            "from Om0 and Ode0, so this cosmology cannot be converted."
+        )
+    if not 0 <= Om_b <= Om_M:
+        raise ValueError(
+            f"Om_b={Om_b} must be between 0 and Om_M={Om_M} "
+            "to convert to an astropy cosmology."
+        )
+    return LambdaCDM(H0=params["H0"], Om0=Om_M, Ode0=Om_L, Ob0=Om_b)
+
 
 def _to_length_unit(quantity, unit, cosmo):
     """Convert a Quantity to ``unit``, resolving littleh with ``cosmo.H0``."""
@@ -288,7 +339,7 @@ class Cosmo_Conversions:
     """
 
     # Largest |Om_k - (1 - Om_L - Om_M)| treated as consistent.
-    _om_k_atol = 1e-12
+    _om_k_atol = _OM_K_ATOL
 
     def __init__(
         self,
@@ -379,18 +430,29 @@ class Cosmo_Conversions:
             If ``Om_k`` differs from ``1 - Om_L - Om_M``, or ``Om_b`` is not
             between 0 and ``Om_M``; astropy cannot represent either case.
         """
-        if not self._om_k_is_consistent():
-            raise ValueError(
-                f"Om_k={self.Om_k} differs from 1 - Om_L - Om_M = "
-                f"{1 - self.Om_L - self.Om_M}; astropy derives the curvature "
-                "from Om0 and Ode0, so this cosmology cannot be converted."
-            )
-        if not 0 <= self.Om_b <= self.Om_M:
-            raise ValueError(
-                f"Om_b={self.Om_b} must be between 0 and Om_M={self.Om_M} "
-                "to convert to an astropy cosmology."
-            )
-        return self._build_lcdm()
+        return cosmology_from_params(self.get_params())
+
+    def _astropy_for_writing(self):
+        """
+        Return the astropy cosmology to store in files, or None.
+
+        Gives the same cosmology as :meth:`to_astropy`, or None where that
+        raises. It reuses ``self.lcdm`` when that still matches the
+        parameters, instead of building a new ``LambdaCDM``: building one
+        leaves a reference cycle that holds the calling frames (and so any
+        open HDF5 objects in them) alive until the garbage collector runs.
+        """
+        if not self._om_k_is_consistent() or not 0 <= self.Om_b <= self.Om_M:
+            return None
+        lcdm = self.lcdm
+        if (
+            lcdm.H0.value == self.H0
+            and lcdm.Om0 == self.Om_M
+            and lcdm.Ode0 == self.Om_L
+            and lcdm.Ob0 == self.Om_b
+        ):
+            return lcdm
+        return self.to_astropy()
 
     @classmethod
     def from_astropy(cls, cosmo):
