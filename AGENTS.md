@@ -71,4 +71,3 @@ There are two parallel entry-point styles:
 - Tests live under `tests/` (not inside the package). New `UVPSpec`-based fixtures should be added to `tests/conftest.py` and built via `testing.build_vanilla_uvpspec` when possible.
 - The warnings-tests job is enforcing — when adding code that calls into `pyuvdata`, `numpy`, or `scipy`, suppress or fix any new warnings before merging.
 - Commit messages use **conventional commits** (`type: description`, e.g. `fix:`, `feat:`, `chore:`, `docs:`, `test:`, `refactor:`).
-- Do **not** add `Co-Authored-By: Claude` (or any AI) trailers to commits or PRs.
