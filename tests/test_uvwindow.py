@@ -1819,10 +1819,11 @@ class TestUVWindowPhysics:
 
     @pytest.mark.xfail(
         strict=True,
+        raises=AssertionError,
         reason=(
             "UVWindow._interpolate_ft_beam evaluates the FT beam only along the "
             "diagonal of the k_perp grid, so the window function peaks at "
-            "~0.77 of the baseline's k_perp"
+            "~0.77 of the baseline's k_perp, see #571"
         ),
     )
     def test_kperp_peak(self, window_7deg) -> None:
@@ -1835,10 +1836,11 @@ class TestUVWindowPhysics:
 
     @pytest.mark.xfail(
         strict=True,
+        raises=AssertionError,
         reason=(
             "UVWindow._interpolate_ft_beam evaluates the FT beam only along the "
             "diagonal of the k_perp grid, so the k_perp spread does not depend "
-            "on the beam width"
+            "on the beam width, see #571"
         ),
     )
     def test_kperp_spread_scales_with_inverse_beam_width(self, window_7deg) -> None:
