@@ -1724,7 +1724,7 @@ def test_delays(uvd: UVData) -> None:
     ds.add([uvd, uvd], [None, None])
     d = ds.delays()
     assert len(d) == ds.dsets[0].Nfreqs
-    # delays [ns] are FFT-ordered, spaced by 1 / bandwidth
+    # delays [ns] are fftshift-ordered (zero in the middle), spaced by 1 / bandwidth
     bandwidth = ds.Nfreqs * np.median(np.diff(ds.freqs))
     np.testing.assert_allclose(np.diff(d), 1e9 / bandwidth)
     assert d[ds.Nfreqs // 2] == 0.0
