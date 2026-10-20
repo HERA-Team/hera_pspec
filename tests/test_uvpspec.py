@@ -1938,13 +1938,13 @@ def test_set_cosmology_same_cosmology(
         )
 
 
-@pytest.mark.parametrize("norm", ["I", "H^-1"])
+@pytest.mark.parametrize("norm", ["I", "H^-1", "V^-1/2"])
 def test_set_cosmology_with_taper(
     uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, norm: str
 ) -> None:
     """set_cosmology recomputes the scalar that pspec applied: the tapered one
-    for norm I, the untapered one for norm H^-1 (whose normalisation already
-    accounts for the taper)."""
+    for norm I, the untapered one for norms H^-1 and V^-1/2 (whose
+    normalisation already accounts for the taper)."""
     uvp = testing.uvpspec_from_data(
         uvd_zen_even_xx,
         [(37, 38), (38, 39)],

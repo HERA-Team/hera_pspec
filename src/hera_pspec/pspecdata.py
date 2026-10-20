@@ -3904,9 +3904,9 @@ class PSpecData:
             For ``norm="I"``, ``Ndlys = Nfreqs`` and identity weighting
             without flags, one-step equals two-step times ``s_disc / s``, the
             scalar's integral evaluated as a sum over channels divided by the
-            integral (typically a few 0.01% above 1). With a taper and
-            ``norm="V^-1/2"``, or with ``Ndlys < Nfreqs``, the two-step
-            normalisation is biased and the one-step one is not.
+            integral (typically a few 0.01% above 1). With
+            ``Ndlys < Nfreqs`` the two-step normalisation is biased and the
+            one-step one is not.
 
         response : DelayResponse or object, optional
             Response ``dC/dp`` for ``normalization="one-step"``; see
@@ -4262,9 +4262,9 @@ class PSpecData:
                             num_steps=uvpspec.ONE_STEP_SCALAR_NUM_STEPS,
                             length_unit=length_unit,
                         ).to_value(scalar_unit)
-                    elif norm == "H^-1":
-                        # If using decorrelation, the H^-1 normalization
-                        # already deals with the taper, so we need to override
+                    elif norm in ("H^-1", "V^-1/2"):
+                        # The H^-1 and V^-1/2 normalizations already deal with
+                        # the taper (H contains it), so we need to override
                         # the taper when computing the scalar
                         scalar = self.scalar(
                             p,
