@@ -1,9 +1,12 @@
 import copy
+import re
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import h5py
 import numpy as np
 import pytest
+from astropy import units
 from hera_cal import redcal
 from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
@@ -763,6 +766,105 @@ class TestSymmetricTaper:
         uvp2.symmetric_taper = not uvp1_no_optionals.symmetric_taper
         with pytest.raises(AssertionError, match="'symmetric_taper' attribute"):
             uvpspec.combine_uvpspec([uvp1_no_optionals, uvp2], verbose=False)
+
+
+EXPECTED_PARAM_UNITS = {
+    "freq_array": units.Hz,
+    "dly_array": units.s,
+    "lst_1_array": units.rad,
+    "lst_2_array": units.rad,
+    "lst_avg_array": units.rad,
+    "time_1_array": units.day,
+    "time_2_array": units.day,
+    "time_avg_array": units.day,
+    "integration_array": units.s,
+    "channel_width": units.Hz,
+    "telescope_location": units.m,
+    "bl_vecs": units.m,
+    "beam_freqs": units.Hz,
+    "OmegaP": units.sr,
+    "OmegaPP": units.sr,
+    "window_function_kperp": cu.littleh / units.Mpc,
+    "window_function_kpara": cu.littleh / units.Mpc,
+}
+
+# Parameters whose description contains a bracketed phrase that is not the
+# unit of the stored value.
+BRACKETS_NOT_UNITS = {"cov_model", "norm_units", "wgt_array"}
+
+
+class TestParamUnits:
+    def test_declared_units(self) -> None:
+        uvp = uvpspec.UVPSpec()
+        for name in uvp._all_params:
+            assert uvp.get_param_unit(name) == EXPECTED_PARAM_UNITS.get(name), name
+
+    def test_unknown_param_raises(self) -> None:
+        uvp = uvpspec.UVPSpec()
+        with pytest.raises(KeyError, match="not_a_param"):
+            uvp.get_param_unit("not_a_param")
+
+    def test_descriptions_match_declared_units(self) -> None:
+        # Every description with a bracketed unit declares that unit, and
+        # every declared unit is written in its description.
+        uvp = uvpspec.UVPSpec()
+        for name in uvp._all_params:
+            if name in BRACKETS_NOT_UNITS:
+                continue
+            description = getattr(uvp, f"_{name}").description
+            has_bracket = re.search(r"\[[^\]]+\]", description) is not None
+            has_unit = uvp.get_param_unit(name) is not None
+            assert has_bracket == has_unit, name
+
+    def test_check_passes(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        vanilla_uvp.check()
+
+    def test_check_accepts_matching_quantity(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        freqs = mutable_uvp.freq_array * units.Hz
+        mutable_uvp.freq_array = freqs
+        mutable_uvp.check()
+        assert isinstance(mutable_uvp.freq_array, units.Quantity)
+        assert mutable_uvp.freq_array.unit == units.Hz
+        assert np.array_equal(mutable_uvp.freq_array, freqs)
+
+    def test_check_accepts_equivalent_quantity(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.dly_array = mutable_uvp.dly_array * units.ns
+        mutable_uvp.check()
+        assert mutable_uvp.dly_array.unit == units.ns
+
+    def test_check_rejects_wrong_unit(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp.freq_array = mutable_uvp.freq_array * units.m
+        with pytest.raises(
+            ValueError, match="freq_array has unit 'm'.*declared unit 'Hz'"
+        ):
+            mutable_uvp.check()
+
+    def test_check_rejects_quantity_without_declared_unit(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.scalar_array = mutable_uvp.scalar_array * units.mK**2
+        with pytest.raises(
+            ValueError, match="scalar_array is a Quantity.*does not declare a unit"
+        ):
+            mutable_uvp.check()
+
+    def test_check_rejects_wrong_unit_in_dict(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.integration_array = {
+            spw: ints * units.Hz for spw, ints in mutable_uvp.integration_array.items()
+        }
+        with pytest.raises(ValueError, match="integration_array has unit 'Hz'"):
+            mutable_uvp.check()
+
+    def test_check_rejects_littleh_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp.window_function_kperp = {0: np.ones((2, 2)) / units.Mpc}
+        with pytest.raises(ValueError, match="window_function_kperp has unit"):
+            mutable_uvp.check()
 
 
 class TestTimeArrays:

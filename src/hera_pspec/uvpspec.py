@@ -5,8 +5,10 @@ import os
 import warnings
 from typing import Self
 
+import astropy.cosmology.units as cu
 import h5py
 import numpy as np
+from astropy import units
 from pyuvdata import utils as uvutils
 
 from . import __version__, conversions, grouping, noise, pspecbeam
@@ -118,6 +120,12 @@ class UVPSpec:
         )
         self._r_params = PSpecParam("r_params", description=desc, expected_type=str)
         # Data attributes
+        # Parameters that carry a physical unit declare it with ``unit=``; the
+        # stored value is a plain array in that unit. data_array,
+        # cov_array_real/imag, stats_array and scalar_array leave unit=None
+        # because their unit is set by vis_units and norm_units. Unitless
+        # quantities (weights, nsamples, window functions, indices and counts)
+        # also leave unit=None.
         desc = "A string indicating the covariance model of cov_array. Options are ['dsets', 'empirical']. See PSpecData.pspec() for details."
         self._cov_model = PSpecParam("cov_model", description=desc, expected_type=str)
         desc = "A boolean indicating if the window functions stored in window_function_array are exact or not."
@@ -151,19 +159,21 @@ class UVPSpec:
             expected_type=np.float64,
             form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
         )
-        desc = "Dictionary of bandpowers given the kperp grid used to compute the window functions."
+        desc = "Dictionary of bandpowers given the kperp grid used to compute the window functions [h Mpc^-1]."
         self._window_function_kperp = PSpecParam(
             "window_function_kperp",
             description=desc,
             expected_type=np.float64,
             form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
+            unit=cu.littleh / units.Mpc,
         )
-        desc = "Dictionary of bandpowers given the kparallel grid used to compute the window functions."
+        desc = "Dictionary of bandpowers given the kparallel grid used to compute the window functions [h Mpc^-1]."
         self._window_function_kpara = PSpecParam(
             "window_function_kpara",
             description=desc,
             expected_type=np.float64,
             form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
+            unit=cu.littleh / units.Mpc,
         )
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam(
@@ -182,6 +192,7 @@ class UVPSpec:
             description=desc,
             expected_type=np.float64,
             form="(Nbltpairs, Npols)",
+            unit=units.s,
         )
         desc = (
             "Nsample dictionary, if the pspectra have been incoherently averaged (i.e. averaged after squaring), this is "
@@ -223,15 +234,17 @@ class UVPSpec:
         )
         self._freq_array = PSpecParam(
             "freq_array",
-            description="Frequency array of the original data in Hz.",
+            description="Frequency array of the original data [Hz].",
             form="(Nfreqs,)",
             expected_type=np.float64,
+            unit=units.Hz,
         )
         self._dly_array = PSpecParam(
             "dly_array",
-            description="Delay array in seconds.",
+            description="Delay array [seconds].",
             form="(Nspwdlys,)",
             expected_type=np.float64,
+            unit=units.s,
         )
         desc = "Polarization pair integer, made up of two polarization integers concatenated in a standardized way."
         self._polpair_array = PSpecParam(
@@ -242,36 +255,42 @@ class UVPSpec:
             description="LST array of the first bl in the bl-pair [radians].",
             form="(Nbltpairs,)",
             expected_type=np.float64,
+            unit=units.rad,
         )
         self._lst_2_array = PSpecParam(
             "lst_2_array",
             description="LST array of the second bl in the bl-pair [radians].",
             form="(Nbltpairs,)",
             expected_type=np.float64,
+            unit=units.rad,
         )
         self._lst_avg_array = PSpecParam(
             "lst_avg_array",
             description="Average of the lst_1_array and lst_2_array [radians].",
             form="(Nbltpairs,)",
             expected_type=np.float64,
+            unit=units.rad,
         )
         self._time_1_array = PSpecParam(
             "time_1_array",
             description="Time array of the first bl in the bl-pair [Julian Date].",
             form="(Nbltpairs,)",
             expected_type=np.float64,
+            unit=units.day,
         )
         self._time_2_array = PSpecParam(
             "time_2_array",
             description="Time array of the second bl in the bl-pair [Julian Date].",
             form="(Nbltpairs,)",
             expected_type=np.float64,
+            unit=units.day,
         )
         self._time_avg_array = PSpecParam(
             "time_avg_array",
             description="Average of the time_1_array and time_2_array [Julian Date].",
             form="(Nbltpairs,)",
             expected_type=np.float64,
+            unit=units.day,
         )
         self._blpair_array = PSpecParam(
             "blpair_array",
@@ -295,6 +314,7 @@ class UVPSpec:
             description="ndarray of baseline separation vectors in the ITRF frame [meters]. To get it in ENU frame see self.get_ENU_bl_vecs().",
             expected_type=np.float64,
             form="(Nbls,)",
+            unit=units.m,
         )
         self._bl_array = PSpecParam(
             "bl_array",
@@ -306,14 +326,16 @@ class UVPSpec:
         # Misc Attributes
         self._channel_width = PSpecParam(
             "channel_width",
-            description="width of visibility frequency channels in Hz.",
+            description="width of visibility frequency channels [Hz].",
             form="(Nspwfreqs,)",
             expected_type=np.float64,
+            unit=units.Hz,
         )
         self._telescope_location = PSpecParam(
             "telescope_location",
             description="telescope location in ECEF frame [meters]. To get it in Lat/Lon/Alt see pyuvdata.utils.LatLonAlt_from_XYZ().",
             expected_type=np.float64,
+            unit=units.m,
         )
         self._weighting = PSpecParam(
             "weighting",
@@ -375,18 +397,21 @@ class UVPSpec:
             description="Integral of unitless beam power over the sky [steradians].",
             form="(Nbeam_freqs, Npols)",
             expected_type=np.float64,
+            unit=units.sr,
         )
         self._OmegaPP = PSpecParam(
             "OmegaPP",
             description="Integral of unitless beam power squared over the sky [steradians].",
             form="(Nbeam_freqs, Npols)",
             expected_type=np.float64,
+            unit=units.sr,
         )
         self._beam_freqs = PSpecParam(
             "beam_freqs",
             description="Frequency bins of the OmegaP and OmegaPP beam-integral arrays [Hz].",
             form="(Nbeam_freqs,)",
             expected_type=np.float64,
+            unit=units.Hz,
         )
         self._cosmo = PSpecParam(
             "cosmo",
@@ -2369,6 +2394,15 @@ class UVPSpec:
             # if attribute exists, check its type
             if hasattr(self, p):
                 a = getattr(self, "_" + p)
+                # Quantity subclasses ndarray, so check its unit before the
+                # type checks below would accept it
+                value = getattr(self, p)
+                if isinstance(value, units.Quantity):
+                    self._check_quantity_unit(p, value, a.unit)
+                elif p in self._dicts and isinstance(value, dict):
+                    for item in value.values():
+                        if isinstance(item, units.Quantity):
+                            self._check_quantity_unit(p, item, a.unit)
                 if hasattr(a, "expected_type"):
                     err_msg = f"attribute {p} does not have expected data type {a.expected_type}"
 
@@ -2433,6 +2467,61 @@ class UVPSpec:
             ), (
                 "Error with window functions: object has exact_windows=True but no related arrays stored."
             )
+
+    @staticmethod
+    def _check_quantity_unit(name, value, declared_unit):
+        """
+        Check that a Quantity stored on a parameter has a compatible unit.
+
+        Parameters
+        ----------
+        name : str
+            Name of the parameter.
+        value : astropy.units.Quantity
+            The stored value.
+        declared_unit : astropy.units.UnitBase or None
+            The unit declared on the parameter's PSpecParam.
+
+        Raises
+        ------
+        ValueError
+            If the parameter declares no unit, or if the Quantity's unit is
+            not equivalent to the declared unit. No littleh equivalency is
+            enabled, so e.g. 1/Mpc is not equivalent to littleh/Mpc.
+        """
+        if declared_unit is None:
+            raise ValueError(
+                f"attribute {name} is a Quantity with unit '{value.unit}', "
+                "but the parameter does not declare a unit"
+            )
+        if not value.unit.is_equivalent(declared_unit):
+            raise ValueError(
+                f"attribute {name} has unit '{value.unit}', which is not "
+                f"equivalent to its declared unit '{declared_unit}'"
+            )
+
+    def get_param_unit(self, name):
+        """
+        Return the unit declared for a UVPSpec parameter.
+
+        Parameters
+        ----------
+        name : str
+            Name of the parameter, e.g. ``"freq_array"``.
+
+        Returns
+        -------
+        unit : astropy.units.UnitBase or None
+            The declared unit, or None if the parameter has no fixed unit.
+
+        Raises
+        ------
+        KeyError
+            If ``name`` is not a UVPSpec parameter.
+        """
+        if name not in self._all_params:
+            raise KeyError(f"{name} is not a UVPSpec parameter")
+        return getattr(self, "_" + name).unit
 
     def _clear(self):
         """
