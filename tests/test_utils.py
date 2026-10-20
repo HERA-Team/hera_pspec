@@ -150,9 +150,10 @@ class TestUvdTimeDifference:
 
     @pytest.mark.xfail(
         strict=True,
+        raises=AssertionError,
         reason=(
             "time_diff is documented in seconds but divided by the integration "
-            "spacing in days, so every time_diff selects the same two pairs"
+            "spacing in days, so every time_diff selects the same two pairs, see #572"
         ),
     )
     def test_time_diff_sets_the_pair_spacing(self, synthetic_uvd) -> None:

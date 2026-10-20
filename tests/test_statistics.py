@@ -92,21 +92,25 @@ def assert_within_errors(mean, expected, error, k=K_SIGMA):
 
 
 XFAIL_I_FEWER_DELAYS = pytest.mark.xfail(
-    strict=True, reason="amplitude scales with n_dlys/Nfreqs, see #548"
+    strict=True,
+    raises=AssertionError,
+    reason="amplitude scales with n_dlys/Nfreqs, see #548",
 )
 XFAIL_H_FEWER_DELAYS_TAPER = pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason=(
         "With n_dlys < Nfreqs the delay modes repeat every n_dlys channels, so "
         "white noise is not a flat band power of the model; with a taper the "
-        "H^-1 and V^-1/2 white-noise power is ~2x too high (bh)"
+        "H^-1 and V^-1/2 white-noise power is ~2x too high (bh), see #548"
     ),
 )
 XFAIL_H_FEWER_DELAYS_SAMPLING = pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason=(
         "With n_dlys < Nfreqs and sampling=False the H^-1 and V^-1/2 "
-        "white-noise power is ~1.3x too high"
+        "white-noise power is ~1.3x too high, see #548"
     ),
 )
 
