@@ -61,38 +61,72 @@ class TestCircularAverage:
         assert np.isclose(result_2d[2], 3.25, atol=1e-10)
 
 
+@pytest.fixture
+def cov_data() -> tuple[np.ndarray, np.ndarray]:
+    """Two seeded random complex (Nfreq=20, Ntimes=60) data arrays."""
+    rng = np.random.default_rng(42)
+    shape = (20, 60)
+    d1 = rng.normal(size=shape) + 1j * rng.normal(size=shape)
+    d2 = rng.normal(size=shape) + 1j * rng.normal(size=shape)
+    return d1, d2
+
+
 class TestCov:
-    def test_basic_execution(self, uvd_zen_2458042_xx: UVData) -> None:
-        """Check that cov() returns a complex Nfreq x Nfreq matrix for both auto- and cross-baseline inputs."""
-        d1 = uvd_zen_2458042_xx.get_data(24, 25)
-        w1 = (~uvd_zen_2458042_xx.get_flags(24, 25)).astype(float)
-        cov = utils.cov(d1, w1)
-        assert cov.shape == (60, 60)
+    def test_unit_weights_match_numpy(self, cov_data) -> None:
+        """With unit weights, cov() is the biased (1/N) sample covariance over the second axis."""
+        d1, d2 = cov_data
+        w = np.ones(d1.shape)
+        cov = utils.cov(d1, w)
+        assert cov.shape == (20, 20)
         assert cov.dtype == complex
+        np.testing.assert_allclose(cov, np.cov(d1, bias=True), rtol=1e-12)
 
-        d2 = uvd_zen_2458042_xx.get_data(37, 38)
-        w2 = (~uvd_zen_2458042_xx.get_flags(37, 38)).astype(float)
-        cov = utils.cov(d1, w2, d2=d2, w2=w2)
-        assert cov.shape == (60, 60)
-        assert cov.dtype == complex
+        # cross-covariance <d1 d2^dagger> - <d1><d2>^dagger
+        cross = utils.cov(d1, w, d2=d2, w2=w)
+        expected = np.cov(d1, d2, bias=True)[:20, 20:]
+        np.testing.assert_allclose(cross, expected, rtol=1e-12)
 
-    def test_raises_on_complex_weights(self, uvd_zen_2458042_xx: UVData) -> None:
+        # the conj_1/conj_2 options choose which copies are conjugated
+        np.testing.assert_allclose(
+            utils.cov(d1, w, d2=d2, w2=w, conj_1=True, conj_2=False), expected.conj()
+        )
+
+    def test_weighted(self, cov_data) -> None:
+        """Weighted cov() against the weighted mean / weighted product-mean formula."""
+        d1, d2 = cov_data
+        rng = np.random.default_rng(1)
+        w1 = rng.uniform(0, 2, size=d1.shape)
+        w2 = rng.uniform(0, 2, size=d2.shape)
+        # a fully flagged sample must not contribute
+        w1[:, 0] = 0.0
+        d1[:, 0] = 1e6
+
+        x1 = (w1 * d1).sum(axis=1) / w1.sum(axis=1)
+        x2 = (w2 * d2).sum(axis=1) / w2.sum(axis=1)
+        expected = np.empty((20, 20), dtype=complex)
+        for i in range(20):
+            for j in range(20):
+                ww = w1[i] * w2[j]
+                expected[i, j] = (ww * d1[i] * d2[j].conj()).sum() / ww.sum()
+        expected -= np.outer(x1, x2.conj())
+
+        cov = utils.cov(d1, w1, d2=d2, w2=w2)
+        np.testing.assert_allclose(cov, expected, rtol=1e-12)
+
+    def test_raises_on_complex_weights(self, cov_data) -> None:
         """Check that complex-valued weight matrices raise a TypeError."""
-        d1 = uvd_zen_2458042_xx.get_data(24, 25)
-        w1 = (~uvd_zen_2458042_xx.get_flags(24, 25)).astype(float)
-        d2 = uvd_zen_2458042_xx.get_data(37, 38)
-        w2 = (~uvd_zen_2458042_xx.get_flags(37, 38)).astype(float)
+        d1, d2 = cov_data
+        w = np.ones(d1.shape)
         with pytest.raises(TypeError, match="Weight matrices must be real"):
-            utils.cov(d1, w1 * 1j)
+            utils.cov(d1, w * 1j)
         with pytest.raises(TypeError, match="Weight matrices must be real"):
-            utils.cov(d1, w1, d2=d2, w2=w2 * 1j)
+            utils.cov(d1, w, d2=d2, w2=w * 1j)
 
-    def test_raises_on_negative_weights(self, uvd_zen_2458042_xx: UVData) -> None:
+    def test_raises_on_negative_weights(self, cov_data) -> None:
         """Check that a negative weight matrix raises a ValueError."""
-        d1 = uvd_zen_2458042_xx.get_data(24, 25)
-        w1 = -(~uvd_zen_2458042_xx.get_flags(24, 25)).astype(float)
+        d1, _ = cov_data
         with pytest.raises(ValueError, match="Weight matrices must be positive"):
-            utils.cov(d1, w1)
+            utils.cov(d1, -np.ones(d1.shape))
 
 
 class TestLoadConfig:
