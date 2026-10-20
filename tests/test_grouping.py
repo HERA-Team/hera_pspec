@@ -1309,3 +1309,59 @@ class TestAverageInDelayBins:
         newshape[1] = len(new.get_dlys(0))
 
         assert new.window_function_array[0].shape == tuple(newshape)
+
+
+class TestFoldSpectra:
+    def test_folded_identity_window_functions_sum_to_one(
+        self, vanilla_uvp: UVPSpec
+    ) -> None:
+        """Folding identity window functions gives identity window functions.
+
+        The folded spectrum at delay tau is the mean of the spectra at +tau and
+        -tau, so if each of those only responds to its own delay, the folded
+        one responds with unit weight to |tau|.
+        """
+        uvp = copy.deepcopy(vanilla_uvp)
+        Ndlys = uvp.Ndlys
+        assert np.all(uvp.window_function_array[0][..., 0] == np.eye(Ndlys))
+        grouping.fold_spectra(uvp)
+        wf = uvp.window_function_array[0][:, Ndlys // 2 + 1 :, :, 0]
+        np.testing.assert_array_equal(wf.sum(axis=-1), 1.0)
+
+    @pytest.mark.parametrize("nfreq", [16, 15])
+    @pytest.mark.parametrize("taper", ["none", "bh"])
+    def test_folded_window_functions_stay_normalised(
+        self, synthetic_uvd, nfreq: int, taper: str
+    ) -> None:
+        """Folded window functions keep unit row sums, up to the Nyquist column.
+
+        Each row of the unfolded window functions sums to one. After folding,
+        the row for |tau| is the mean of the rows for +tau and -tau, mapped
+        onto non-negative delays. The only weight that is lost is the leakage
+        of those two rows into the Nyquist column (present for an even number
+        of delays), which has no positive-delay counterpart.
+        """
+        uvd = synthetic_uvd(nfreq=nfreq, ntimes=2, antpairs=[(0, 1)])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        uvp = ds.pspec(
+            [(0, 1)],
+            [(0, 1)],
+            dsets=(0, 1),
+            pols=[("xx", "xx")],
+            taper=taper,
+            verbose=False,
+        )
+        wf = uvp.window_function_array[0][..., 0].copy()
+        np.testing.assert_allclose(wf.sum(axis=-1), 1.0, rtol=1e-10)
+
+        grouping.fold_spectra(uvp)
+        mid = nfreq // 2  # index of zero delay
+        pos = np.arange(mid + 1, nfreq)  # positive delays ...
+        neg = 2 * mid - pos  # ... and their negative counterparts
+        # the zero-delay column of the folded rows keeps the +tau weight,
+        # which is the mean of the +tau and -tau weights for these symmetric
+        # window functions
+        np.testing.assert_allclose(wf[:, pos, mid], wf[:, neg, mid], rtol=0, atol=1e-12)
+        lost = 0.0 if nfreq % 2 else 0.5 * (wf[:, pos, 0] + wf[:, neg, 0])
+        folded = uvp.window_function_array[0][..., 0][:, pos]
+        np.testing.assert_allclose(folded.sum(axis=-1), 1.0 - lost, rtol=1e-10)

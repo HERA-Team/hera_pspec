@@ -1481,7 +1481,7 @@ def fold_spectra(uvp):
                     ]
                     uvp.window_function_array[spw][
                         :, Ndlys // 2 + 1 :, Nkpar // 2 + 1 :, :
-                    ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                    ] = 0.5 * (leftleft + leftright + rightleft + rightright)
                     uvp.window_function_array[spw][:, :, : Nkpar // 2, :] = 0.0
                 uvp.window_function_array[spw][:, : Ndlys // 2, ...] = 0.0
             # fold covariance array if it exists.
@@ -1565,7 +1565,7 @@ def fold_spectra(uvp):
                     ]
                     uvp.window_function_array[spw][
                         :, Ndlys // 2 + 1 :, Nkpar // 2 + 1 :, :
-                    ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                    ] = 0.5 * (leftleft + leftright + rightleft + rightright)
                     uvp.window_function_array[spw][:, :, : Nkpar // 2, :] = 0.0
                 uvp.window_function_array[spw][:, : Ndlys // 2, ...] = 0.0
 
