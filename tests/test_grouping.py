@@ -502,6 +502,29 @@ class TestAverageSpectra:
             rtol=1e-12,
         )
 
+    @pytest.mark.parametrize("time_avg", [False, True])
+    @pytest.mark.parametrize("group_blpairs", [False, True])
+    def test_exact_window_functions_stay_normalised(
+        self, delay_bins_exact_wf_uvp: UVPSpec, time_avg: bool, group_blpairs: bool
+    ) -> None:
+        """Averaged exact window functions are the weighted mean of the inputs.
+
+        Exact window functions are normalised to unit sum over (k_perp, k_para)
+        for every delay, and averaging spectra must preserve that.
+        """
+        uvp = delay_bins_exact_wf_uvp
+        assert uvp.exact_windows
+        np.testing.assert_allclose(
+            uvp.window_function_array[0].sum(axis=(2, 3)), 1.0, rtol=1e-10
+        )
+        blpair_groups = [list(np.unique(uvp.blpair_array))] if group_blpairs else None
+        avg = grouping.average_spectra(
+            uvp, blpair_groups=blpair_groups, time_avg=time_avg, inplace=False
+        )
+        np.testing.assert_allclose(
+            avg.window_function_array[0].sum(axis=(2, 3)), 1.0, rtol=1e-10
+        )
+
     def test_negative_blpair_weights_raise(self, vanilla_uvp: UVPSpec) -> None:
         with pytest.raises(ValueError, match="must not be negative"):
             grouping.average_spectra(
