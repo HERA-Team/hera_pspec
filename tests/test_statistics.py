@@ -15,10 +15,13 @@ deterministic; each statistical test was also run with several other seeds to
 make sure that the tolerances are not tuned to a lucky draw.
 """
 
+import copy
+
 import numpy as np
 import pytest
 
-from hera_pspec import PSpecBeamGauss, PSpecData, UVPSpec, utils
+from hera_pspec import PSpecBeamGauss, PSpecData, UVPSpec, grouping, testing, utils
+from hera_pspec.uvpspec import combine_uvpspec
 
 # Number of standard errors allowed between a sample mean and its expectation.
 # For a Gaussian sample mean, a 5-sigma deviation has a probability of ~6e-7.
@@ -372,3 +375,238 @@ class TestPspecSymmetries:
         P = self.cross_pspec(uvd1, uvd1, (0, 1), (0, 1), "I", taper="none")
         assert np.all(P.real > 0)
         assert np.all(np.abs(P.imag) < 1e-10 * P.real)
+
+
+class TestAveragingStatistics:
+    """average_spectra must return the weighted mean of the spectra, with the
+    errors and covariances of that weighted mean.
+
+    For spectra P_i with weights w_i (per delay), the average is
+    sum_i w_i P_i / sum_i w_i. If the P_i are independent with covariances C_i,
+    the covariance of the average is sum_i w_i w_i^T C_i / (sum_i w_i)^2. With
+    inverse-variance weights w_i = 1 / sigma_i^2 the error on the average is
+    (sum_i sigma_i^-2)^-1/2, the smallest possible. By default the weights are
+    w_i = t_int^2 * nsamples (the inverse square of the noise power).
+    """
+
+    BLPAIRS = [101102101102, 102103102103, 101103101103]
+
+    @pytest.fixture
+    def uvp(self) -> UVPSpec:
+        """Three baseline pairs of random spectra, with random errors,
+        covariances, integration times and nsamples."""
+        uvp, _ = testing.build_vanilla_uvpspec(data="random", seed=5)
+        rng = np.random.default_rng(6)
+        shape = uvp.data_array[0].shape
+        uvp.stats_array = {"err": {0: (0.5 + rng.random(shape)).astype(complex)}}
+        # random positive definite covariances
+        A = rng.standard_normal((shape[0], shape[1], shape[1], 1))
+        uvp.cov_array_real[0] = np.einsum("tikp,tjkp->tijp", A, A) / shape[1]
+        uvp.integration_array[0] = 5 + 10 * rng.random(uvp.integration_array[0].shape)
+        uvp.nsample_array[0] = rng.integers(1, 4, uvp.nsample_array[0].shape).astype(
+            float
+        )
+        return uvp
+
+    @staticmethod
+    def stack(uvp, getter, *args):
+        """Stack a per-blpair quantity over the three baseline pairs."""
+        return np.array(
+            [
+                getattr(uvp, getter)(*args, (0, blp, ("xx", "xx")))
+                for blp in TestAveragingStatistics.BLPAIRS
+            ]
+        )
+
+    def average(self, uvp, time_avg, **kwargs):
+        return grouping.average_spectra(
+            uvp,
+            blpair_groups=[self.BLPAIRS],
+            time_avg=time_avg,
+            error_field="err",
+            inplace=False,
+            **kwargs,
+        )
+
+    @staticmethod
+    def expected_average(weights, data, cov, time_avg):
+        """Weighted mean of data (Nblpairs, Ntimes, Ndlys) and its covariance."""
+        axes = (0, 1) if time_avg else (0,)
+        wsum = weights.sum(axis=axes)
+        mean = (weights * data).sum(axis=axes) / wsum
+        wcov = weights[..., :, None] * weights[..., None, :] * cov
+        mean_cov = wcov.sum(axis=axes) / (wsum[..., :, None] * wsum[..., None, :])
+        return mean, mean_cov
+
+    def check_average(self, avg, weights, uvp, time_avg):
+        data = self.stack(uvp, "get_data")
+        cov = self.stack(uvp, "get_cov")
+        err = self.stack(uvp, "get_stats", "err").real
+        mean, mean_cov = self.expected_average(weights, data, cov, time_avg)
+        # errors are propagated like the diagonal of a diagonal covariance
+        _, err_cov = self.expected_average(
+            weights, data, err[..., :, None] ** 2 * np.eye(uvp.Ndlys), time_avg
+        )
+        key = (0, self.BLPAIRS[0], ("xx", "xx"))
+        shape = avg.get_data(key).shape
+        np.testing.assert_allclose(avg.get_data(key), mean.reshape(shape), rtol=1e-10)
+        np.testing.assert_allclose(
+            avg.get_cov(key), mean_cov.reshape(avg.get_cov(key).shape), rtol=1e-10
+        )
+        np.testing.assert_allclose(
+            avg.get_stats("err", key).real,
+            np.sqrt(np.diagonal(err_cov, axis1=-2, axis2=-1)).reshape(shape),
+            rtol=1e-10,
+        )
+
+    @pytest.mark.parametrize("time_avg", [False, True])
+    def test_uniform_weights_give_the_mean(self, time_avg: bool) -> None:
+        """With equal integration times and nsamples, the average is the plain
+        mean over baseline pairs (and times)."""
+        uvp, _ = testing.build_vanilla_uvpspec(data="random", seed=5)
+        avg = grouping.average_spectra(
+            uvp, blpair_groups=[self.BLPAIRS], time_avg=time_avg, inplace=False
+        )
+        data = self.stack(uvp, "get_data")
+        mean = data.mean(axis=(0, 1) if time_avg else 0)
+        np.testing.assert_allclose(
+            avg.get_data((0, self.BLPAIRS[0], ("xx", "xx"))),
+            mean.reshape(-1, uvp.Ndlys),
+            rtol=1e-12,
+        )
+
+    @pytest.mark.parametrize("time_avg", [False, True])
+    def test_integration_weights(self, uvp, time_avg: bool) -> None:
+        """By default spectra are weighted by t_int^2 * nsamples, and the
+        covariances and errors are those of the weighted mean."""
+        ints = self.stack(uvp, "get_integrations")
+        nsmp = self.stack(uvp, "get_nsamples")
+        weights = np.repeat((ints**2 * nsmp)[..., None], uvp.Ndlys, axis=-1)
+        avg = self.average(uvp, time_avg)
+        self.check_average(avg, weights, uvp, time_avg)
+
+    @pytest.mark.parametrize("time_avg", [False, True])
+    def test_inverse_variance_weights(self, uvp, time_avg: bool) -> None:
+        """With error_weights, each delay of each spectrum is weighted by
+        1 / sigma^2, giving the inverse-variance weighted mean with error
+        (sum sigma^-2)^-1/2."""
+        err = self.stack(uvp, "get_stats", "err").real
+        weights = 1 / err**2
+        avg = self.average(uvp, time_avg, error_weights="err")
+        self.check_average(avg, weights, uvp, time_avg)
+        # the error on the inverse-variance weighted mean
+        key = (0, self.BLPAIRS[0], ("xx", "xx"))
+        axes = (0, 1) if time_avg else (0,)
+        np.testing.assert_allclose(
+            avg.get_stats("err", key).real,
+            (weights.sum(axis=axes) ** -0.5).reshape(-1, uvp.Ndlys),
+            rtol=1e-10,
+        )
+
+    @pytest.mark.parametrize(
+        "time_avg,group_blpairs", [(True, False), (False, True), (True, True)]
+    )
+    def test_variance_reduction(self, time_avg: bool, group_blpairs: bool) -> None:
+        """Averaging N independent spectra of unit variance gives a variance of
+        1/N, both as propagated into the covariance and empirically.
+
+        The empirical variance of the average is measured over 100
+        realisations x 50 delays (x blpairs), so its relative standard error
+        is at most sqrt(2 / 5000) = 2%.
+        """
+        uvp, _ = testing.build_vanilla_uvpspec(data="random", seed=0)
+        # the vanilla covariances are the identity: real and imaginary parts
+        # of the random data have unit variance and are independent
+        assert np.all(uvp.cov_array_real[0][..., 0] == np.eye(uvp.Ndlys))
+        blpair_groups = [self.BLPAIRS] if group_blpairs else None
+        n_avg = (uvp.Ntimes if time_avg else 1) * (3 if group_blpairs else 1)
+        rng = np.random.default_rng(7)
+        averages = []
+        for _ in range(100):
+            uvp.data_array[0] = rng.standard_normal(
+                uvp.data_array[0].shape
+            ) + 1j * rng.standard_normal(uvp.data_array[0].shape)
+            avg = grouping.average_spectra(
+                uvp, blpair_groups=blpair_groups, time_avg=time_avg, inplace=False
+            )
+            averages.append(avg.data_array[0])
+        averages = np.array(averages)
+
+        for component in ["real", "imag"]:
+            cov = getattr(avg, f"cov_array_{component}")[0][..., 0]
+            np.testing.assert_allclose(
+                cov,
+                np.broadcast_to(np.eye(uvp.Ndlys) / n_avg, cov.shape),
+                rtol=1e-12,
+                atol=1e-15,
+            )
+            values = getattr(averages, component)
+            variance = np.mean(values**2)
+            error = np.sqrt(2 / values.size) / n_avg
+            assert_within_errors(variance, 1 / n_avg, error)
+
+    @pytest.fixture(scope="class")
+    def pspec_uvp(self, synthetic_uvd) -> UVPSpec:
+        """Power spectra with (tapered) window functions that are not diagonal."""
+        antpairs = [(0, 1), (1, 2), (0, 2)]
+        kwargs = dict(nfreq=NFREQ, ntimes=10, antpairs=antpairs)
+        ds = PSpecData(
+            dsets=[synthetic_uvd(seed=1, **kwargs), synthetic_uvd(seed=2, **kwargs)],
+            wgts=[None, None],
+        )
+        uvp = ds.pspec(
+            antpairs,
+            antpairs,
+            dsets=(0, 1),
+            pols=[("xx", "xx")],
+            taper="bh",
+            verbose=False,
+        )
+        rng = np.random.default_rng(8)
+        shape = uvp.data_array[0].shape
+        uvp.stats_array = {"err": {0: (0.5 + rng.random(shape)).astype(complex)}}
+        uvp.integration_array[0] = 5 + 10 * rng.random(uvp.integration_array[0].shape)
+        return uvp
+
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            lambda uvp: grouping.average_spectra(
+                uvp,
+                blpair_groups=[list(np.unique(uvp.blpair_array))],
+                time_avg=True,
+                inplace=False,
+            ),
+            lambda uvp: grouping.average_spectra(
+                uvp,
+                blpair_groups=[list(np.unique(uvp.blpair_array))],
+                blpair_weights=[[0.5, 2.0, 1.0]],
+                error_weights="err",
+                inplace=False,
+            ),
+            lambda uvp: grouping.average_in_delay_bins(uvp, kernel=np.ones(3)),
+            lambda uvp: combine_uvpspec(
+                [
+                    uvp.select(
+                        blpairs=list(np.unique(uvp.blpair_array))[:1], inplace=False
+                    ),
+                    uvp.select(
+                        blpairs=list(np.unique(uvp.blpair_array))[1:], inplace=False
+                    ),
+                ],
+                verbose=False,
+            ),
+        ],
+        ids=["time_and_blpair_average", "weighted_average", "delay_bins", "combine"],
+    )
+    def test_window_functions_stay_normalised(self, pspec_uvp, operation) -> None:
+        """Every delay of a power spectrum is a weighted mean of band powers,
+        so each row of its window function sums to one. Averaging and
+        combining spectra must preserve that."""
+        wf = pspec_uvp.window_function_array[0]
+        assert not np.allclose(wf[..., 0], np.eye(NFREQ))
+        np.testing.assert_allclose(wf.sum(axis=2), 1.0, rtol=1e-10)
+        new = operation(copy.deepcopy(pspec_uvp))
+        np.testing.assert_allclose(
+            new.window_function_array[0].sum(axis=2), 1.0, rtol=1e-10
+        )
