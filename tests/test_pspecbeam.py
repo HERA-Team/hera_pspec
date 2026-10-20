@@ -1,4 +1,3 @@
-import copy
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -19,16 +18,52 @@ UPPER_FREQ = 128.0 * 10**6
 NUM_FREQS = 20
 
 
-@pytest.fixture
-def efield_beam(beam_nf_efield: pspecbeam.PSpecBeamUV) -> pspecbeam.PSpecBeamUV:
-    """An efield-type beam with beam_type force-set to 'power' so later validation steps in beam_normalized_response can be reached."""
-    beam = copy.deepcopy(beam_nf_efield)
-    beam.primary_beam.beam_type = "power"
+# Small analytic beams from pyuvdata. For the default sigma_type="efield",
+# GaussianBeam's power response is exp(-theta^2 / sigma^2), so its power beam
+# integral is close to the flat-sky value pi * sigma^2.
+ANALYTIC_BEAM_FREQS = np.linspace(100e6, 200e6, 11)
+ANALYTIC_BEAM_SIGMA = 0.3
+
+
+def analytic_uvbeam(
+    beam_type: str = "efield", pixel_coordinate_system: str = "healpix"
+) -> UVBeam:
+    """Analytic Gaussian UVBeam on an NSIDE=16 HEALPix map or a coarse az/za grid."""
+    if pixel_coordinate_system == "healpix":
+        grid = dict(nside=16)
+    else:
+        grid = dict(
+            axis1_array=np.linspace(0, 2 * np.pi, 24, endpoint=False),
+            axis2_array=np.linspace(0, np.pi / 2, 10),
+        )
+    return GaussianBeam(sigma=ANALYTIC_BEAM_SIGMA).to_uvbeam(
+        freq_array=ANALYTIC_BEAM_FREQS,
+        beam_type=beam_type,
+        pixel_coordinate_system=pixel_coordinate_system,
+        **grid,
+    )
+
+
+@pytest.fixture(scope="module")
+def analytic_efield_beam() -> pspecbeam.PSpecBeamUV:
+    """PSpecBeamUV built from an analytic efield beam (converted to power on init)."""
+    return pspecbeam.PSpecBeamUV(analytic_uvbeam("efield"))
+
+
+def _efield_primary_beam(request: pytest.FixtureRequest) -> pspecbeam.PSpecBeamUV:
+    # PSpecBeamUV converts efield beams to power beams on init, so an efield
+    # primary beam can only appear if it is assigned after construction.
+    beam = pspecbeam.PSpecBeamUV(analytic_uvbeam("efield"))
+    beam.primary_beam = analytic_uvbeam("efield")
     return beam
 
 
-def _leave_unchanged(primary_beam: UVBeam) -> None:
-    pass
+def _vector_power_beam(request: pytest.FixtureRequest) -> pspecbeam.PSpecBeamUV:
+    # A power beam that keeps the basis-vector axis (Naxes_vec = 2).
+    uvb = analytic_uvbeam("efield")
+    uvb.efield_to_power(keep_basis_vector=True)
+    uvb.peak_normalize()
+    return pspecbeam.PSpecBeamUV(uvb)
 
 
 class TestPSpecBeamUV:
@@ -123,7 +158,7 @@ class TestPSpecBeamUV:
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
             )
 
-    @pytest.mark.parametrize("beam_name", ["beam_nf_dipole", "beam_nf_efield"])
+    @pytest.mark.parametrize("beam_name", ["beam_nf_dipole", "analytic_efield_beam"])
     def test_linear_pol_beam(
         self, beam_name: str, request: pytest.FixtureRequest
     ) -> None:
@@ -183,39 +218,37 @@ class TestPSpecBeamUV:
         assert np.shape(beam_res[0]) == (len(freq), (12 * nside**2))
 
     @pytest.mark.parametrize(
-        "beam_name,mutate,pol,match",
+        "make_beam,pol,match",
         [
             pytest.param(
-                "beam_nf_dipole",
-                _leave_unchanged,
+                lambda request: request.getfixturevalue("beam_nf_dipole"),
                 "ll",
                 "Do not have the right polarization",
                 id="unavailable_pol",
             ),
             pytest.param(
-                "efield_beam",
-                lambda pb: setattr(pb, "beam_type", "voltage"),
+                _efield_primary_beam,
                 "xx",
                 "beam_type must be power",
                 id="non_power_beam",
             ),
             pytest.param(
-                "efield_beam",
-                lambda pb: setattr(pb, "Naxes_vec", 2),
+                _vector_power_beam,
                 "xx",
                 "Expect scalar for power beam",
                 id="vector_power_beam",
             ),
             pytest.param(
-                "efield_beam",
-                lambda pb: setattr(pb._data_normalization, "value", "area"),
+                # analytic power beams are normalized to physical units
+                lambda request: pspecbeam.PSpecBeamUV(analytic_uvbeam("power")),
                 "xx",
                 "beam must be peak normalized",
                 id="non_peak_normalized",
             ),
             pytest.param(
-                "efield_beam",
-                lambda pb: setattr(pb, "pixel_coordinate_system", "cartesian"),
+                lambda request: pspecbeam.PSpecBeamUV(
+                    analytic_uvbeam("efield", pixel_coordinate_system="az_za")
+                ),
                 "xx",
                 "only healpix format supported",
                 id="non_healpix_coords",
@@ -224,18 +257,55 @@ class TestPSpecBeamUV:
     )
     def test_beam_normalized_response_raises(
         self,
-        beam_name: str,
-        mutate: Callable[[UVBeam], None],
+        make_beam: Callable[[pytest.FixtureRequest], pspecbeam.PSpecBeamUV],
         pol: str,
         match: str,
         request: pytest.FixtureRequest,
     ) -> None:
         """Check that beams beam_normalized_response cannot handle raise a ValueError."""
-        beam = request.getfixturevalue(beam_name)
-        mutate(beam.primary_beam)
+        beam = make_beam(request)
         freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
         with pytest.raises(ValueError, match=match):
             pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol=pol, freq=freq)
+
+    def test_efield_beam_converted_to_power(
+        self, analytic_efield_beam: pspecbeam.PSpecBeamUV
+    ) -> None:
+        """An efield beam gives the same beam integrals and scalar as the
+        equivalent peak-normalized power beam."""
+        assert analytic_efield_beam.primary_beam.beam_type == "power"
+        assert analytic_efield_beam.primary_beam.data_normalization == "peak"
+
+        power_uvb = analytic_uvbeam("power")
+        power_uvb.peak_normalize()
+        power_beam = pspecbeam.PSpecBeamUV(power_uvb)
+        for pol in ["xx", "yy"]:
+            np.testing.assert_allclose(
+                analytic_efield_beam.power_beam_int(pol),
+                power_beam.power_beam_int(pol),
+                rtol=1e-10,
+            )
+            np.testing.assert_allclose(
+                analytic_efield_beam.power_beam_sq_int(pol),
+                power_beam.power_beam_sq_int(pol),
+                rtol=1e-10,
+            )
+        np.testing.assert_allclose(
+            analytic_efield_beam.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="xx"
+            ),
+            power_beam.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="xx"
+            ),
+            rtol=1e-10,
+        )
+        # The beam area is close to the flat-sky value; the difference is
+        # due to sky curvature and the coarse HEALPix map.
+        np.testing.assert_allclose(
+            analytic_efield_beam.power_beam_int("xx"),
+            np.pi * ANALYTIC_BEAM_SIGMA**2,
+            rtol=2e-2,
+        )
 
 
 @pytest.fixture(scope="module")

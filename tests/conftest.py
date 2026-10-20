@@ -54,12 +54,6 @@ def beam_nf_pstokes() -> PSpecBeamUV:
 
 
 @pytest.fixture(scope="session")
-def beam_nf_efield() -> PSpecBeamUV:
-    """PSpecBeamUV for the HERA NF efield beam. Tests that modify it must deepcopy it."""
-    return PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
-
-
-@pytest.fixture(scope="session")
 def synthetic_uvd() -> Callable[..., UVData]:
     """Factory for small, seeded synthetic UVData objects filled with Gaussian noise.
 
