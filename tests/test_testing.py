@@ -7,7 +7,14 @@ import pytest
 from hera_cal import redcal
 from pyuvdata import UVData
 
-from hera_pspec import PSpecBeamUV, conversions, testing, uvpspec
+from hera_pspec import (
+    PSpecBeamFromArray,
+    PSpecBeamGauss,
+    PSpecBeamUV,
+    conversions,
+    testing,
+    uvpspec,
+)
 from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
@@ -45,6 +52,171 @@ class TestBuildVanillaUvpspec:
         uvp, _ = testing.build_vanilla_uvpspec(beam=beam_nf_dipole)
         beam_OP = beam_nf_dipole.get_Omegas(uvp.polpair_array[0])[0]
         assert beam_OP.tolist() == uvp.OmegaP.tolist()
+
+    @pytest.mark.parametrize("beam_type", ["gauss", "from_array"])
+    def test_with_analytic_beam(self, beam_type: str) -> None:
+        """Beams that are not backed by a UVBeam can be attached too."""
+        beam_freqs = np.linspace(95e6, 110e6, 16)
+        beam = PSpecBeamGauss(fwhm=0.2, beam_freqs=beam_freqs)
+        if beam_type == "from_array":
+            beam = PSpecBeamFromArray(
+                OmegaP={"xx": beam.power_beam_int()},
+                OmegaPP={"xx": beam.power_beam_sq_int()},
+                beam_freqs=beam_freqs,
+            )
+        uvp, _ = testing.build_vanilla_uvpspec(beam=beam)
+        OmegaP, OmegaPP = beam.get_Omegas([("xx", "xx")])
+        np.testing.assert_array_equal(uvp.OmegaP, OmegaP)
+        np.testing.assert_array_equal(uvp.OmegaPP, OmegaPP)
+        np.testing.assert_array_equal(uvp.beam_freqs, beam_freqs)
+
+    def test_random_data(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """data="random" gives seeded complex Gaussian spectra and leaves all
+        other attributes as in the default object."""
+        uvp, _ = testing.build_vanilla_uvpspec(data="random", seed=3)
+        data = uvp.data_array[0]
+        assert data.shape == vanilla_uvp.data_array[0].shape
+        assert np.iscomplexobj(data)
+        # independent standard-normal real and imaginary parts
+        assert np.unique(data).size == data.size
+        assert abs(np.mean(data.real)) < 0.2 and abs(np.mean(data.imag)) < 0.2
+        assert 0.8 < np.std(data.real) < 1.2 and 0.8 < np.std(data.imag) < 1.2
+
+        uvp_same, _ = testing.build_vanilla_uvpspec(data="random", seed=3)
+        np.testing.assert_array_equal(uvp_same.data_array[0], data)
+        uvp_other, _ = testing.build_vanilla_uvpspec(data="random", seed=4)
+        assert not np.any(uvp_other.data_array[0] == data)
+
+        uvp.data_array = vanilla_uvp.data_array
+        assert uvp == vanilla_uvp
+
+    def test_array_data(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """An array is used as the data of the spectral window."""
+        shape = vanilla_uvp.data_array[0].shape
+        data = np.arange(np.prod(shape)).reshape(shape) * (1 + 2j)
+        uvp, _ = testing.build_vanilla_uvpspec(data=data)
+        np.testing.assert_array_equal(uvp.data_array[0], data)
+
+    @pytest.mark.parametrize(
+        "data,match",
+        [("gaussian", "data must be 'constant', 'random'"), (np.ones(3), "expected")],
+        ids=["unknown_string", "wrong_shape"],
+    )
+    def test_bad_data_raises(self, data: str | np.ndarray, match: str) -> None:
+        with pytest.raises(ValueError, match=match):
+            testing.build_vanilla_uvpspec(data=data)
+
+
+class TestSyntheticUvdata:
+    def test_metadata(self) -> None:
+        """Shapes, frequencies, times, units and the default east-west layout."""
+        antpairs = [(0, 1), (1, 2), (0, 2)]
+        uvd = testing.synthetic_uvdata(
+            nfreq=8,
+            ntimes=5,
+            antpairs=antpairs,
+            pols=("xx", "yy"),
+            freq_start=120e6,
+            channel_width=50e3,
+            integration_time=8.0,
+            vis_units="K str",
+        )
+        assert (uvd.Nfreqs, uvd.Ntimes, uvd.Nbls, uvd.Npols) == (8, 5, 3, 2)
+        assert sorted(uvd.get_antpairs()) == sorted(antpairs)
+        np.testing.assert_array_equal(uvd.polarization_array, [-5, -6])
+        np.testing.assert_allclose(uvd.freq_array, 120e6 + np.arange(8) * 50e3)
+        np.testing.assert_allclose(uvd.channel_width, 50e3)
+        np.testing.assert_allclose(
+            np.diff(np.unique(uvd.time_array)) * 86400, 8.0, rtol=1e-6
+        )
+        assert uvd.vis_units == "K str"
+        assert not uvd.flag_array.any()
+        np.testing.assert_array_equal(uvd.nsample_array, 1.0)
+        assert uvd.phase_center_catalog[0]["cat_type"] == "unprojected"
+        antpos, ants = uvd.get_enu_data_ants()
+        np.testing.assert_allclose(
+            antpos[np.argsort(ants)],
+            [[0.0, 0.0, 0.0], [14.6, 0.0, 0.0], [29.2, 0.0, 0.0]],
+            atol=1e-6,
+        )
+
+    def test_antenna_positions(self) -> None:
+        antenna_positions = {3: [0.0, 0.0, 0.0], 7: [10.0, 20.0, 0.0]}
+        uvd = testing.synthetic_uvdata(
+            antpairs=[(3, 7)], antenna_positions=antenna_positions
+        )
+        antpos, ants = uvd.get_enu_data_ants()
+        for ant, pos in zip(ants, antpos, strict=True):
+            np.testing.assert_allclose(pos, antenna_positions[ant], atol=1e-6)
+        with pytest.raises(ValueError, match="missing antennas \\[8\\]"):
+            testing.synthetic_uvdata(
+                antpairs=[(3, 8)], antenna_positions=antenna_positions
+            )
+
+    def test_seed(self) -> None:
+        uvd1 = testing.synthetic_uvdata(seed=1)
+        np.testing.assert_array_equal(
+            uvd1.data_array, testing.synthetic_uvdata(seed=1).data_array
+        )
+        assert not np.any(
+            uvd1.data_array == testing.synthetic_uvdata(seed=2).data_array
+        )
+
+    def test_white_noise_statistics(self) -> None:
+        """E|x|^2 = sigma^2, split equally between real and imaginary parts,
+        with no correlation between channels."""
+        sigma = 3.0
+        uvd = testing.synthetic_uvdata(
+            nfreq=8, ntimes=4000, antpairs=[(0, 1)], sigma=sigma, seed=5
+        )
+        x = uvd.data_array[:, :, 0]
+        n = x.size
+        # 5-sigma tolerances on the sample variances
+        np.testing.assert_allclose(
+            np.mean(np.abs(x) ** 2), sigma**2, rtol=5 / np.sqrt(n)
+        )
+        np.testing.assert_allclose(
+            np.mean(x.real**2), sigma**2 / 2, rtol=5 * np.sqrt(2 / n)
+        )
+        np.testing.assert_allclose(
+            np.mean(x.imag**2), sigma**2 / 2, rtol=5 * np.sqrt(2 / n)
+        )
+        cov = x.T @ x.conj() / x.shape[0]
+        np.testing.assert_allclose(
+            cov, sigma**2 * np.eye(8), atol=5 * sigma**2 / np.sqrt(x.shape[0])
+        )
+
+    def test_freq_cov(self) -> None:
+        """The noise has the requested frequency-frequency covariance."""
+        nfreq, ntimes = 8, 4000
+        chans = np.arange(nfreq)
+        freq_cov = np.exp(-((chans[:, None] - chans[None, :]) ** 2) / 8.0)
+        uvd = testing.synthetic_uvdata(
+            nfreq=nfreq,
+            ntimes=ntimes,
+            antpairs=[(0, 1)],
+            sigma=2.0,
+            freq_cov=freq_cov,
+            seed=6,
+        )
+        x = uvd.data_array[:, :, 0]
+        cov = x.T @ x.conj() / ntimes
+        np.testing.assert_allclose(cov, 4.0 * freq_cov, atol=4.0 * 5 / np.sqrt(ntimes))
+        with pytest.raises(ValueError, match="freq_cov must have shape"):
+            testing.synthetic_uvdata(nfreq=nfreq, freq_cov=np.eye(nfreq + 1))
+
+    def test_autos_and_flags(self) -> None:
+        uvd = testing.synthetic_uvdata(
+            antpairs=[(0, 0), (0, 1)], pols=("xx", "yy"), flag_chans=[2, 5]
+        )
+        auto = uvd.get_data(0, 0, "xx")
+        np.testing.assert_array_equal(auto.imag, 0.0)
+        assert np.all(auto.real > 0)
+        assert np.any(uvd.get_data(0, 1, "xx").imag != 0)
+        np.testing.assert_array_equal(
+            np.where(uvd.flag_array.any(axis=(0, 2)))[0], [2, 5]
+        )
+        assert uvd.flag_array[:, [2, 5]].all()
 
 
 class TestUvpspecFromData:

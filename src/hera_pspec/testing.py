@@ -1,18 +1,170 @@
 #!/usr/bin/env python2
 import copy
+from collections.abc import Sequence
 
 import numpy as np
+from astropy.coordinates import EarthLocation
 from hera_cal.utils import JD2LST
-from pyuvdata import UVData
+from pyuvdata import Telescope, UVData
+from pyuvdata import utils as uvutils
 from scipy import interpolate, stats
 
 from . import conversions, pspecbeam, pspecdata, utils, uvpspec
+
+# HERA site, used as the location of the synthetic array in synthetic_uvdata.
+HERA_LOCATION = EarthLocation.from_geodetic(
+    lon=21.4283038269, lat=-30.7215261207, height=1051.69
+)
+
+
+def synthetic_uvdata(
+    nfreq: int = 32,
+    ntimes: int = 10,
+    antpairs: Sequence[tuple[int, int]] = ((0, 1), (0, 2), (1, 2)),
+    antenna_positions: dict[int, Sequence[float]] | None = None,
+    pols: Sequence[str | int] = ("xx",),
+    freq_start: float = 150e6,
+    channel_width: float = 100e3,
+    start_time: float = 2458042.1,
+    integration_time: float = 10.0,
+    sigma: float = 1.0,
+    freq_cov: np.ndarray | None = None,
+    flag_chans: Sequence[int] | None = None,
+    vis_units: str = "Jy",
+    seed: int | None = 0,
+) -> UVData:
+    """
+    Build a small UVData object filled with seeded complex Gaussian noise.
+
+    This is meant for tests that need *some* valid visibilities with a known
+    statistical model rather than real HERA data. The array sits at the HERA
+    site and every baseline is unprojected (drift scan).
+
+    Each cross-correlation visibility is drawn independently for every
+    baseline, time and polarization as
+
+        x = sigma * A z,   z ~ CN(0, I),
+
+    where z has unit complex variance (E|z|^2 = 1, i.e. real and imaginary
+    parts each have variance 1/2), and A A^H = ``freq_cov`` (A = I if
+    ``freq_cov`` is None). Hence E[x x^H] = sigma^2 * freq_cov across frequency.
+    Auto-correlations (ant1 == ant2) are filled with |x| so that they are real
+    and positive, as pyuvdata expects.
+
+    Parameters
+    ----------
+    nfreq : int
+        Number of frequency channels.
+    ntimes : int
+        Number of integrations. Consecutive integrations are separated by
+        ``integration_time``.
+    antpairs : sequence of (int, int)
+        Antenna pairs (baselines) to include.
+    antenna_positions : dict, optional
+        Antenna positions in local East-North-Up coordinates (meters), keyed
+        by antenna number. It must contain every antenna in ``antpairs``.
+        Default: the antennas in ``antpairs`` placed in increasing number
+        order on an east-west line, 14.6 m apart.
+    pols : sequence of str or int
+        Polarizations, e.g. ("xx",) or ("xx", "yy", "xy", "yx").
+    freq_start : float
+        Frequency of the first channel, in Hz.
+    channel_width : float
+        Channel width (and spacing), in Hz.
+    start_time : float
+        Julian date of the first integration.
+    integration_time : float
+        Integration time in seconds.
+    sigma : float
+        Standard deviation of the complex noise, i.e. E|x|^2 = sigma^2 for
+        ``freq_cov`` with unit diagonal.
+    freq_cov : array_like, optional
+        Hermitian positive semi-definite (nfreq, nfreq) frequency-frequency
+        covariance of the noise, before scaling by sigma^2.
+    flag_chans : sequence of int, optional
+        Channel indices to flag on every baseline, time and polarization.
+        The data in flagged channels are left as drawn.
+    vis_units : str
+        Units of the visibilities: "Jy", "K str" or "uncalib".
+    seed : int, optional
+        Seed for ``np.random.default_rng``.
+
+    Returns
+    -------
+    uvd : UVData
+        The synthetic visibilities, with all nsamples equal to 1.
+    """
+    rng = np.random.default_rng(seed)
+    antpairs = [tuple(int(a) for a in ap) for ap in antpairs]
+    ants = sorted({a for ap in antpairs for a in ap})
+    if antenna_positions is None:
+        antenna_positions = {a: [14.6 * i, 0.0, 0.0] for i, a in enumerate(ants)}
+    missing = set(ants) - set(antenna_positions)
+    if missing:
+        raise ValueError(f"antenna_positions is missing antennas {sorted(missing)}")
+
+    # pyuvdata wants positions in ECEF relative to the telescope location
+    enu = np.array([antenna_positions[a] for a in antenna_positions], dtype=float)
+    ecef = uvutils.ECEF_from_ENU(enu, center_loc=HERA_LOCATION)
+    ecef -= np.array(
+        [HERA_LOCATION.x.value, HERA_LOCATION.y.value, HERA_LOCATION.z.value]
+    )
+    telescope = Telescope.new(
+        name="synthetic",
+        instrument="synthetic",
+        location=HERA_LOCATION,
+        antenna_positions=dict(zip(antenna_positions, ecef)),
+        feed_array=["x", "y"],
+        feed_angle=[np.pi / 2, 0.0],
+        mount_type="fixed",
+    )
+
+    freqs = freq_start + np.arange(nfreq) * channel_width
+    pols = [
+        uvutils.polstr2num(p, x_orientation="east") if isinstance(p, str) else int(p)
+        for p in pols
+    ]
+    uvd = UVData.new(
+        freq_array=freqs,
+        polarization_array=pols,
+        telescope=telescope,
+        times=start_time + np.arange(ntimes) * integration_time / 86400.0,
+        antpairs=antpairs,
+        do_blt_outer=True,
+        integration_time=integration_time,
+        channel_width=channel_width,
+        empty=True,
+    )
+
+    # (Nblts, Npols, Nfreqs) so that the frequency covariance can act on the last axis
+    shape = (uvd.Nblts, uvd.Npols, nfreq)
+    z = (rng.standard_normal(shape) + 1j * rng.standard_normal(shape)) / np.sqrt(2)
+    if freq_cov is not None:
+        freq_cov = np.asarray(freq_cov)
+        if freq_cov.shape != (nfreq, nfreq):
+            raise ValueError(f"freq_cov must have shape ({nfreq}, {nfreq})")
+        # A = V sqrt(lambda) satisfies A A^H = freq_cov, also for singular matrices
+        evals, evecs = np.linalg.eigh(freq_cov)
+        z = z @ (evecs * np.sqrt(np.clip(evals, 0, None))).T
+    data = sigma * np.moveaxis(z, 1, 2)
+    autos = uvd.ant_1_array == uvd.ant_2_array
+    data[autos] = np.abs(data[autos])
+    uvd.data_array = data
+
+    if flag_chans is not None:
+        uvd.flag_array[:, flag_chans, :] = True
+    uvd.vis_units = vis_units
+    uvd.history = "Synthetic noise from hera_pspec.testing.synthetic_uvdata."
+    uvd.check()
+    return uvd
 
 
 def build_vanilla_uvpspec(
     beam: pspecbeam.PSpecBeamBase | None = None,
     Ndlys: int | None = None,
     equal_time_arrays: bool = True,
+    data: str | np.ndarray = "constant",
+    seed: int | None = 0,
 ) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
     """
     Build an example vanilla UVPSpec object from scratch, with all necessary
@@ -21,13 +173,28 @@ def build_vanilla_uvpspec(
     Parameters
     ----------
     beam : PSpecBeamBase subclass
-        A beam to use for the UVPSpec object. If None, no beam is used.
+        A beam to use for the UVPSpec object (any of PSpecBeamUV,
+        PSpecBeamGauss or PSpecBeamFromArray). Its OmegaP and OmegaPP for the
+        ('xx', 'xx') polarization pair are stored on the UVPSpec. If None, no
+        beam is used.
     Ndlys : int, optional
         Number of delay bins to use. If None, uses as many delay bins as
         frequency channels. Default is None, which uses the number of frequency channels.
     equal_time_arrays
         If True, the time_1_array and time_2_array will be equal. If False,
         they will be different. Default is True.
+    data : str or array_like, optional
+        How to fill the data_array of the (single) spectral window:
+
+        - "constant" (default): each spectrum is blpair / 1e9, the same at
+          every delay and time.
+        - "random": complex Gaussian values drawn with
+          ``np.random.default_rng(seed)``, with independent standard-normal
+          real and imaginary parts.
+        - an array of shape (Nbltpairs, Ndlys, Npols) = (30, Ndlys, 1), used
+          as given (cast to complex).
+    seed : int, optional
+        Seed used when ``data="random"``.
 
     Returns
     -------
@@ -116,8 +283,7 @@ def build_vanilla_uvpspec(
     uvp.label_1_array = np.ones((uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int) * 0
     uvp.label_2_array = np.ones((uvp.Nspws, uvp.Nbltpairs, uvp.Npols), int) * 1
     if beam is not None:
-        pol = beam.primary_beam.polarization_array[0]
-        uvp.OmegaP, uvp.OmegaPP = beam.get_Omegas((pol, pol))
+        uvp.OmegaP, uvp.OmegaPP = beam.get_Omegas(list(uvp.polpair_array))
         uvp.beam_freqs = beam.beam_freqs
 
     # HERA coordinates in Karoo Desert, SA
@@ -128,15 +294,30 @@ def build_vanilla_uvpspec(
     uvp.store_cov = True
     cosmo = conversions.Cosmo_Conversions()
 
+    data_shape = (uvp.Nbltpairs, uvp.Ndlys, uvp.Npols)
+    if isinstance(data, str) and data == "constant":
+        spw_data = (
+            np.ones(data_shape, dtype=complex) * uvp.blpair_array[:, None, None] / 1e9
+        )
+    elif isinstance(data, str) and data == "random":
+        rng = np.random.default_rng(seed)
+        spw_data = rng.standard_normal(data_shape) + 1j * rng.standard_normal(
+            data_shape
+        )
+    elif isinstance(data, str):
+        raise ValueError(f"data must be 'constant', 'random' or an array, not {data!r}")
+    else:
+        spw_data = np.asarray(data, dtype=complex)
+        if spw_data.shape != data_shape:
+            raise ValueError(
+                f"data array has shape {spw_data.shape}, expected {data_shape}"
+            )
+
     data_array, wgt_array = {}, {}
     integration_array, nsample_array, cov_array_real, cov_array_imag = {}, {}, {}, {}
     window_function_array = {}
     for s in uvp.spw_array:
-        data_array[s] = (
-            np.ones((uvp.Nbltpairs, uvp.Ndlys, uvp.Npols), dtype=complex)
-            * uvp.blpair_array[:, None, None]
-            / 1e9
-        )
+        data_array[s] = spw_data.copy()
         wgt_array[s] = np.ones((uvp.Nbltpairs, uvp.Nfreqs, 2, uvp.Npols), dtype=float)
         # NB: The wgt_array has dimensions Nfreqs rather than Ndlys; it has the
         # dimensions of the input visibilities, not the output delay spectra
