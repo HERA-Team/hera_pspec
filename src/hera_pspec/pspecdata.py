@@ -3459,7 +3459,7 @@ class PSpecData:
                 end * units.Hz,
                 len(freqs),
                 pol=pol,
-                taper=self.taper,
+                taper=taper,
                 length_unit=length_unit,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
@@ -3470,7 +3470,7 @@ class PSpecData:
                 end * units.Hz,
                 len(freqs),
                 pol=pol,
-                taper=self.taper,
+                taper=taper,
                 length_unit=length_unit,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
@@ -3905,8 +3905,8 @@ class PSpecData:
             without flags, one-step equals two-step times ``s_disc / s``, the
             scalar's integral evaluated as a sum over channels divided by the
             integral (typically a few 0.01% above 1). With a taper and
-            ``norm="H^-1"`` / ``"V^-1/2"``, or with ``Ndlys < Nfreqs``, the
-            two-step normalisation is biased and the one-step one is not.
+            ``norm="V^-1/2"``, or with ``Ndlys < Nfreqs``, the two-step
+            normalisation is biased and the one-step one is not.
 
         response : DelayResponse or object, optional
             Response ``dC/dp`` for ``normalization="one-step"``; see
@@ -4254,9 +4254,9 @@ class PSpecData:
                     if one_step:
                         # reference scalar, kept so set_cosmology can rescale
                         # one-step spectra between cosmologies: computed
-                        # as the two-step path does (scalar() ignores the
-                        # H^-1 taper override), stored in scalar_array but
-                        # never multiplied into p or cov
+                        # with the data taper whatever the norm (as
+                        # UVPSpec.compute_scalar recomputes it), stored in
+                        # scalar_array but never multiplied into p or cov
                         scalar = self.scalar(
                             p,
                             num_steps=uvpspec.ONE_STEP_SCALAR_NUM_STEPS,
