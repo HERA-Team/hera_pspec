@@ -9,7 +9,7 @@ import pytest
 from pyuvdata import UVData
 
 from hera_pspec import (
-    PSpecBeamUV,
+    PSpecBeamGauss,
     PSpecData,
     UVPSpec,
     conversions,
@@ -18,9 +18,6 @@ from hera_pspec import (
     pspecdata,
     utils,
 )
-from hera_pspec.data import DATA_PATH
-
-DATA_PATH = Path(DATA_PATH)
 
 
 def axes_contains(ax: mpl.axes.Axes, obj_list: list[tuple[type, int]]) -> bool:
@@ -51,20 +48,43 @@ def axes_contains(ax: mpl.axes.Axes, obj_list: list[tuple[type, int]]) -> bool:
     return True
 
 
+# A small synthetic array: antennas 0-3 sit on an east-west line 14.6 m apart and
+# antenna 4 sits north of the 0-1 baseline, so the array has three redundant 14.6 m
+# east-west baselines plus several groups of other lengths and orientations.
+PLOT_ANTPOS = {
+    0: [0.0, 0.0, 0.0],
+    1: [14.6, 0.0, 0.0],
+    2: [29.2, 0.0, 0.0],
+    3: [43.8, 0.0, 0.0],
+    4: [7.3, 12.64, 0.0],
+}
+# Every baseline including the autos.
+PLOT_ANTPAIRS = [(i, j) for i in PLOT_ANTPOS for j in PLOT_ANTPOS if i <= j]
+
+
+@pytest.fixture(scope="module")
+def plot_uvd(synthetic_uvd) -> UVData:
+    """Synthetic noise visibilities (48 channels, 8 times) on PLOT_ANTPOS."""
+    return synthetic_uvd(
+        nfreq=48,
+        ntimes=8,
+        antpairs=PLOT_ANTPAIRS,
+        antenna_positions=PLOT_ANTPOS,
+        vis_units="Jy",
+        seed=1,
+    )
+
+
 # The fixtures below are module-scoped because each one runs a full pspec(); tests
 # that modify the resulting UVPSpec in place must work on a deepcopy.
 @pytest.fixture(scope="module")
-def pspec_ds(uvd_zen_all_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> PSpecData:
-    """Build a PSpecData object (beam + two time-interleaved halves of uvd_zen_all_xx)."""
-    bm = copy.deepcopy(beam_nf_dipole)
-    bm.filename = "HERA_NF_dipole_power.beamfits"
-    # Slide the time axis by one integration to avoid noise bias
-    uvd1 = uvd_zen_all_xx.select(
-        times=np.unique(uvd_zen_all_xx.time_array)[:-1:2], inplace=False
-    )
-    uvd2 = uvd_zen_all_xx.select(
-        times=np.unique(uvd_zen_all_xx.time_array)[1::2], inplace=False
-    )
+def pspec_ds(plot_uvd: UVData) -> PSpecData:
+    """Build a PSpecData object (Gaussian beam + two time-interleaved halves of plot_uvd)."""
+    bm = PSpecBeamGauss(fwhm=0.2, beam_freqs=np.linspace(140e6, 170e6, 31))
+    # Use alternate integrations in the two datasets to avoid noise bias
+    times = np.unique(plot_uvd.time_array)
+    uvd1 = plot_uvd.select(times=times[::2], inplace=False)
+    uvd2 = plot_uvd.select(times=times[1::2], inplace=False)
     ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None], beam=bm)
     ds.rephase_to_dset(0)
     return ds
@@ -73,7 +93,7 @@ def pspec_ds(uvd_zen_all_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> PSpecData:
 @pytest.fixture(scope="module")
 def uvp(pspec_ds: PSpecData) -> UVPSpec:
     """Compute a UVPSpec over two spectral windows from pspec_ds."""
-    bls = [(24, 25), (37, 38), (38, 39)]
+    bls = [(0, 1), (1, 2), (2, 3)]
     bls1, bls2, _ = utils.construct_blpairs(
         bls, exclude_permutations=False, exclude_auto_bls=True
     )
@@ -82,7 +102,7 @@ def uvp(pspec_ds: PSpecData) -> UVPSpec:
         bls2,
         (0, 1),
         ("xx", "xx"),
-        spw_ranges=[(300, 324), (600, 621)],
+        spw_ranges=[(0, 24), (24, 45)],
         input_data_weight="identity",
         norm="I",
         taper="blackman-harris",
@@ -365,10 +385,10 @@ class TestDelaySpectrum:
         plt.close(fig)
 
         with pytest.raises(ValueError, match="blpairs.*baseline-pair tuples"):
-            plot.delay_spectrum(uvp, [(24, 25), (37, 38)], 0, ("xx", "xx"))
+            plot.delay_spectrum(uvp, [(0, 1), (1, 2)], 0, ("xx", "xx"))
 
         with pytest.raises(ValueError, match="blpairs.*baseline-pair tuples"):
-            plot.delay_spectrum(uvp, [[(24, 25)]], 0, ("xx", "xx"))
+            plot.delay_spectrum(uvp, [[(0, 1)]], 0, ("xx", "xx"))
 
         with pytest.raises(TypeError, match="blpairs must be an iterable"):
             plot.delay_spectrum(uvp, [None], 0, ("xx", "xx"))
@@ -572,18 +592,18 @@ class TestDelayWaterfall:
 
 
 @pytest.mark.parametrize("data", ["data", "flags", "nsamples"])
-def test_uvdata_waterfalls(uvd_zen_all_xx: UVData, tmp_path: Path, data: str) -> None:
+def test_uvdata_waterfalls(plot_uvd: UVData, tmp_path: Path, data: str) -> None:
     """
-    Test waterfall plotter
+    Test waterfall plotter: one figure per baseline and polarization.
     """
     outdir = tmp_path / data
     outdir.mkdir()
     basename = str(outdir / "waterfall_{bl}_{pol}")
     plot.plot_uvdata_waterfalls(
-        uvd_zen_all_xx, basename, vmin=0, vmax=100, data=data, plot_mode="real"
+        plot_uvd, basename, vmin=0, vmax=100, data=data, plot_mode="real"
     )
     figfiles = glob.glob(str(outdir / "waterfall_*_*.png"))
-    assert len(figfiles) == 15
+    assert len(figfiles) == plot_uvd.Nbls * plot_uvd.Npols == 15
 
 
 @pytest.fixture(scope="module")
@@ -601,7 +621,7 @@ def delay_wedge_uvp(pspec_ds: PSpecData) -> UVPSpec:
         bls2,
         (0, 1),
         ("xx", "xx"),
-        spw_ranges=[(300, 324)],
+        spw_ranges=[(0, 24)],
         input_data_weight="identity",
         norm="I",
         taper="blackman-harris",
