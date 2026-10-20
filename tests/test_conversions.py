@@ -54,6 +54,22 @@ class TestCosmoConversions:
         C = conversions.Cosmo_Conversions(H0=25.5)
         np.testing.assert_almost_equal(C.H0, 25.5)
 
+    def test_om_m_sets_baryon_and_cdm_fractions(self) -> None:
+        """A custom Om_M is split into Om_b and Om_c that add up to it."""
+        default = conversions.Cosmo_Conversions()
+        assert default.Om_M == default.Om_b + default.Om_c
+        # an Om_M consistent with the default Om_b and Om_c leaves them unchanged
+        C = conversions.Cosmo_Conversions(Om_M=default.Om_M)
+        assert (C.Om_b, C.Om_c) == (default.Om_b, default.Om_c)
+
+        C = conversions.Cosmo_Conversions(Om_M=0.5)
+        assert C.Om_M == 0.5
+        np.testing.assert_allclose(C.Om_b + C.Om_c, 0.5, rtol=1e-5)
+        # the baryon fraction of matter is that of the default cosmology
+        np.testing.assert_allclose(
+            C.Om_b / C.Om_M, default.Om_b / default.Om_M, rtol=1e-5
+        )
+
     @pytest.mark.parametrize("cosmo_name", ["cosmo_h100", "cosmo_h25"])
     @pytest.mark.parametrize(
         "method,args,kwargs,expected",
