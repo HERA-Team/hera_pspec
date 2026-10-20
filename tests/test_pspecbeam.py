@@ -657,6 +657,7 @@ class TestAllBeamTypes:
             # the same beam as gauss_beam_legacy, given as arrays of beam integrals
             ("fromarray_beam_legacy", 22123832163.072491),
         ],
+        ids=["uv", "gauss", "from_array"],
     )
     def test_taper(
         self, beam_name: str, expected: float, request: pytest.FixtureRequest
