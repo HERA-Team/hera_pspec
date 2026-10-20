@@ -2679,10 +2679,13 @@ class TestPspec:
             )
         assert uvp_w.exact_windows
 
-        # Gaussian beam object
-        widths = -0.0343 * uvd1.freq_array.flatten() / 1e6 + 11.30
+        # Gaussian beam object. Only build it over the spectral window's channels:
+        # building it over the full 1024-channel band is slow and those extra
+        # channels are discarded anyway.
+        spw_freqs = uvd1.freq_array.flatten()[175:195]
+        widths = -0.0343 * spw_freqs / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=uvd1.freq_array.flatten(), widths=widths, pol="xx"
+            freq_array=spw_freqs, widths=widths, pol="xx"
         )
         with pytest.warns(
             UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."
