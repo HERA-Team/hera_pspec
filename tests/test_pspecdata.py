@@ -14,6 +14,7 @@ from astropy.time import Time
 from hera_cal import redcal
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
+from pyuvdata.analytic_beam import UniformBeam
 from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
 from scipy.signal import windows
@@ -129,11 +130,16 @@ def uvd_zen_2458042_17772_std_xx() -> UVData:
 
 
 @pytest.fixture(scope="session")
-def bm_Q():
-    beamfile_Q = os.path.join(DATA_PATH, "isotropic_beam.beamfits")
-    bm_Q = pspecbeam.PSpecBeamUV(beamfile_Q)
-    bm_Q.filename = "isotropic_beam.beamfits"
-    return bm_Q
+def bm_Q() -> PSpecBeamUV:
+    """An isotropic (all-sky, unit response) HEALPix power beam over 100-200 MHz."""
+    uvb = UniformBeam().to_uvbeam(
+        freq_array=np.linspace(100e6, 200e6, 26),
+        beam_type="power",
+        pixel_coordinate_system="healpix",
+        nside=8,
+    )
+    uvb.peak_normalize()
+    return pspecbeam.PSpecBeamUV(uvb)
 
 
 @pytest.fixture
