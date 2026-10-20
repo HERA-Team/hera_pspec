@@ -549,34 +549,21 @@ class TestBootstrapResampledError:
         assert uw[1][0][:5] == [2.0, 2.0, 1.0, 1.0, 2.0]
         assert uw[1][1][:5] == [1.0, 0.0, 1.0, 1.0, 4.0]
 
-    def test_gaussian_noise(self, uvd_zen_even_xx: UVData) -> None:
+    def test_gaussian_noise(self, synthetic_uvd) -> None:
         """Check that bootstrapped error bars on Gaussian noise power spectra yield z-scores with standard deviation converging to 1."""
-        # get simulated noise in K-str (on copies of zen.even.xx.LST.1.28828.uvOCRSA)
-        Tsys = 300.0  # Kelvin
+        # two independent white-noise datasets on all 45 cross-baselines of a
+        # 10-antenna array
+        ants = range(10)
+        antpairs = [(i, j) for i in ants for j in ants if i < j]
+        kwargs = dict(nfreq=50, ntimes=10, antpairs=antpairs)
+        uvd1 = synthetic_uvd(seed=4, **kwargs)
+        uvd2 = synthetic_uvd(seed=5, **kwargs)
 
-        # generate complex gaussian noise
-        seed = 4
-        uvd1 = testing.noise_sim(
-            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
-        )
-        seed = 5
-        uvd2 = testing.noise_sim(
-            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
-        )
-
-        # form (auto) baseline-pairs from only 14.6m bls
-        reds, _, _ = utils.get_reds(
-            uvd1, pick_data_ants=True, bl_len_range=(10, 50), bl_deg_range=(0, 180)
-        )
-        bls1, bls2 = utils.flatten(reds), utils.flatten(reds)
-
-        # setup PSpecData and form power psectra
-        ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd1), copy.deepcopy(uvd2)], wgts=[None, None]
-        )
+        # setup PSpecData and form (cross-dataset) power spectra on every baseline
+        ds = pspecdata.PSpecData(dsets=[uvd1, uvd2], wgts=[None, None])
         uvp = ds.pspec(
-            bls1,
-            bls2,
+            antpairs,
+            antpairs,
             (0, 1),
             [("xx", "xx")],
             input_data_weight="identity",
