@@ -81,10 +81,16 @@ class TestPSpecBeamUV:
     def test_scalar_other_stokes(
         self, beam_nf_pstokes: pspecbeam.PSpecBeamUV, pol: str
     ) -> None:
-        """Check that compute_pspec_scalar does not raise for the other Stokes parameters."""
-        beam_nf_pstokes.compute_pspec_scalar(
+        """Check compute_pspec_scalar for the other Stokes parameters."""
+        scalar = beam_nf_pstokes.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol=pol, num_steps=2000
         )
+        scalar_pI = beam_nf_pstokes.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+        )
+        # a positive scalar that uses the requested polarization's beam
+        assert np.isfinite(scalar) and scalar > 0
+        assert not np.isclose(scalar, scalar_pI, rtol=1e-3)
 
     def test_taper(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with a taper against a precomputed reference value."""
@@ -149,7 +155,14 @@ class TestPSpecBeamUV:
 
     def test_dipole_beam(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that dipole (linear-pol) beams compute a scalar for XX but raise for pI."""
-        beam_nf_dipole.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
+        scalar = beam_nf_dipole.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
+        )
+        assert np.isfinite(scalar) and scalar > 0
+        # pol strings are case-insensitive
+        assert scalar == beam_nf_dipole.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="xx"
+        )
         with pytest.raises(
             ValueError, match="Do not have the right polarization information"
         ):
