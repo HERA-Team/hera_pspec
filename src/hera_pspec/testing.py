@@ -634,9 +634,6 @@ def noise_sim(
             for p in data.polarization_array
         ]
         K_to_Jy = np.array(K_to_Jy).T[None, :, :]
-        K_to_Jy /= np.array(
-            [np.sqrt(2) if p in [1, 2, 3, 4] else 1.0 for p in data.polarization_array]
-        )
         rms = K_to_Jy * Trms
     else:
         rms = Trms
