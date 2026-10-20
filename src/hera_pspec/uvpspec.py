@@ -3760,13 +3760,12 @@ class UVPSpec:
         # compute scalar
         OP = self.OmegaP[:, self.polpair_to_indices(polpair)].squeeze()
         OPP = self.OmegaPP[:, self.polpair_to_indices(polpair)].squeeze()
-        # as in PSpecData.pspec: the two-step H^-1 normalization already
-        # accounts for the taper, so its scalar is the untapered one
+        # as in PSpecData.pspec: the two-step H^-1 and V^-1/2 normalizations
+        # already account for the taper, so their scalar is the untapered one
         taper = self.taper
-        if (
-            getattr(self, "normalization", "two-step") != "one-step"
-            and getattr(self, "norm", None) == "H^-1"
-        ):
+        if getattr(self, "normalization", "two-step") != "one-step" and getattr(
+            self, "norm", None
+        ) in ("H^-1", "V^-1/2"):
             taper = "none"
         scalar = pspecbeam._compute_pspec_scalar(
             conversions.as_astropy_cosmology(self.cosmo),

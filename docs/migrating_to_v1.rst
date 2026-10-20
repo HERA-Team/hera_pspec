@@ -479,11 +479,10 @@ What to expect against two-step:
 * With ``Ndlys < Nfreqs`` the difference is large (+64% with no taper and
   +3% to +4% with a Blackman-Harris taper at ``Ndlys = Nfreqs / 2``) because
   the two-step result is biased low there.
-* With a taper and ``norm="V^-1/2"``, two-step comes out too high by about
-  1/⟨T²⟩ (about 4 for Blackman-Harris), because the taper is counted twice.
-  One-step does not have this problem. Before v1.0 two-step ``norm="H^-1"``
-  had the same problem, because ``scalar()`` ignored its ``taper_override``;
-  this is fixed.
+* Before v1.0, two-step with a taper and ``norm="H^-1"`` or ``"V^-1/2"``
+  came out too high by about 1/⟨T²⟩ (about 4 for Blackman-Harris), because
+  the taper was counted twice. This is fixed: both now use the untapered
+  scalar, as their normalisation matrix already accounts for the taper.
 
 ``uvp.scalar_array`` means different things for each ``uvp.normalization``:
 
