@@ -5,6 +5,7 @@ import sys
 import warnings
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import h5py
 import numpy as np
 import uvtools.dspec as dspec
@@ -676,7 +677,10 @@ class UVWindow:
             Type of data tapering applied along bandwidth.
             See :func:`uvtools.dspec.gen_window` for options.
         little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
+                Whether to have cosmological length units be h^-1 Mpc or Mpc.
+                With little_h, k units (:attr:`kunits`) are
+                ``astropy.cosmology.units.littleh / astropy.units.Mpc``;
+                otherwise they are ``astropy.units.Mpc ** -1``.
                 Default: True (h^-1 Mpc).
         cosmo : conversions.Cosmo_Conversions object, optional
             Cosmology object. Uses the default cosmology object if not
@@ -695,7 +699,7 @@ class UVWindow:
         # units
         self.little_h = bool(little_h)
         if self.little_h:
-            self.kunits = units.h / units.Mpc
+            self.kunits = cu.littleh / units.Mpc
         else:
             self.kunits = units.Mpc ** (-1)
 
@@ -1211,15 +1215,18 @@ class UVWindow:
         bl_len : float
             Length of the baseline considered, in meters.
         kperp_bins : array_like of astropy quantity, with units.
-            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
-            Used for cylindrical binning,
-            Make sure the values are consistent with :attr:`little_h`.
+            1D float array of ascending k_perp bin centers, in littleh / Mpc
+            (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
+            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
+            Used for cylindrical binning.
+            Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is deprecated; the values are read as littleh / Mpc.
             If computing for different baselines, make sure to input identical
             arrays.
         kpara_bins : array_like of astropy.quantity, with units.
-            1D float array of ascending k_parallel bin centers.
+            1D float array of ascending k_parallel bin centers, in the
+            same units as kperp_bins (see :attr:`kunits`).
             Used for cylindrical binning.
-            Make sure the values are consistent with :attr:`little_h`.
         return_bins : str
             If 'weighted', return bins weighted by the actual modes inside
             of bin.
@@ -1256,7 +1263,7 @@ class UVWindow:
         if kperp_bins is None:
             kperp_bins = self.get_kperp_bins([bl_len])
         else:
-            self.check_kunits(kperp_bins)
+            kperp_bins = self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
         if not np.allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]):
             raise ValueError("get_cylindrical_wf: kperp_bins must be linearly spaced.")
@@ -1279,7 +1286,7 @@ class UVWindow:
         if kpara_bins is None:
             kpara_bins = self.get_kpara_bins(self.freq_array)
         else:
-            self.check_kunits(kpara_bins)
+            kpara_bins = self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
         if not np.allclose(np.diff(kpara_bins), np.diff(kpara_bins)[0]):
             raise ValueError("get_cylindrical_wf: kpara_bins must be linearly spaced.")
@@ -1383,7 +1390,8 @@ class UVWindow:
             Axis 3 is kparallel.
             If only one bl_lens is given, then axis 0 can be omitted.
         kbins : array-like astropy.quantity with units
-            1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
+            1D float array of ascending |k| bin centers, in littleh / Mpc if
+            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
             Used for spherical binning. Must be linearly spaced.
         ktot : array_like
             2-dimensional array giving the magnitude of k corresponding to
@@ -1436,7 +1444,7 @@ class UVWindow:
         # k-bins for spherical binning
         if len(kbins) <= 1:
             raise ValueError("must feed array of k bins for spherical average")
-        self.check_kunits(kbins)  # check k units
+        kbins = self.check_kunits(kbins)  # check k units
         kbins = np.array(kbins.value)
         if not np.allclose(np.diff(kbins), np.diff(kbins)[0]):
             raise ValueError("cylindrical_to_spherical: kbins must be linearly spaced.")
@@ -1502,9 +1510,12 @@ class UVWindow:
         Parameters
         ----------
         kbins : array-like astropy.quantity with units
-            1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
-            Using for spherical binning.
-            Make sure the values are consistent with :attr:`little_h`.
+            1D float array of ascending |k| bin centers, in littleh / Mpc
+            (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
+            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
+            Used for spherical binning.
+            Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is deprecated; the values are read as littleh / Mpc.
         bl_lens : list.
             List of lengths corresponding to each group
             (can be redundant groups from utils.get_reds).
@@ -1514,13 +1525,16 @@ class UVWindow:
             If None, a weight of 1 is attributed to
             each bl_len.
         kperp_bins : array-like astropy.quantity with units, optional.
-            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
-            Used for cylindrical binning,
-            Make sure the values are consistent with :attr:`little_h`.
-        kpara_bins : array-like astropy.quantity with units, optional.
-            1D float array of ascending k_parallel bin centers.
+            1D float array of ascending k_perp bin centers, in littleh / Mpc
+            (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
+            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
             Used for cylindrical binning.
-            Make sure the values are consistent with :attr:`little_h`.
+            Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is deprecated; the values are read as littleh / Mpc.
+        kpara_bins : array-like astropy.quantity with units, optional.
+            1D float array of ascending k_parallel bin centers, in the
+            same units as kperp_bins (see :attr:`kunits`).
+            Used for cylindrical binning.
         return_weighted_k : bool, optional
             Return the weighted k-mode corresponding to each bin.
             Default is False.
@@ -1560,7 +1574,7 @@ class UVWindow:
             # bl_lens are included and there is no over-sampling
             kperp_bins = self.get_kperp_bins(bl_lens)
         else:
-            self.check_kunits(kperp_bins)
+            kperp_bins = self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
         if not np.allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]):
             raise ValueError("get_spherical_wf: kperp_bins must be linearly spaced.")
@@ -1591,7 +1605,7 @@ class UVWindow:
             # array are included and there is no over-sampling
             kpara_bins = self.get_kpara_bins(self.freq_array)
         else:
-            self.check_kunits(kpara_bins)
+            kpara_bins = self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
         if not np.allclose(np.diff(kpara_bins), np.diff(kpara_bins)[0]):
             raise ValueError("get_spherical_wf: kpara_bins must be linearly spaced.")
@@ -1618,7 +1632,7 @@ class UVWindow:
         ktot = np.sqrt(kperp_bins[:, None] ** 2 + kpara_bins**2)
 
         # k-bins for spherical binning
-        self.check_kunits(kbins)  # check k units
+        kbins = self.check_kunits(kbins)  # check k units
         if kbins.value.size <= 1:
             raise ValueError("must feed array of k bins for spherical average")
         nbinsk = kbins.value.size
@@ -1686,13 +1700,16 @@ class UVWindow:
             If None, a weight of 1 is attributed to
             each bl_len.
         kperp_bins : array-like astropy.quantity with unit, optional.
-            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
-            Used for cylindrical binning,
-            Make sure the values are consistent with :attr:`little_h`.
-        kpara_bins : array-like astropy.quantity with units, optional.
-            1D float array of ascending k_parallel bin centers.
+            1D float array of ascending k_perp bin centers, in littleh / Mpc
+            (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
+            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
             Used for cylindrical binning.
-            Make sure the values are consistent with :attr:`little_h`.
+            Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is deprecated; the values are read as littleh / Mpc.
+        kpara_bins : array-like astropy.quantity with units, optional.
+            1D float array of ascending k_parallel bin centers, in the
+            same units as kperp_bins (see :attr:`kunits`).
+            Used for cylindrical binning.
         clobber : bool, optional
             Whether to overwrite output file if it exists. Default: False.
         """
@@ -1721,7 +1738,7 @@ class UVWindow:
             # bl_lens are included and there is no over-sampling
             kperp_bins = self.get_kperp_bins(bl_lens)
         else:
-            self.check_kunits(kperp_bins)
+            kperp_bins = self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
         nbins_kperp = kperp_bins.size
 
@@ -1730,7 +1747,7 @@ class UVWindow:
             # array are included and there is no over-sampling
             kpara_bins = self.get_kpara_bins(self.freq_array)
         else:
-            self.check_kunits(kpara_bins)
+            kpara_bins = self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
         nbins_kpara = kpara_bins.size
 
@@ -1785,15 +1802,36 @@ class UVWindow:
 
         Parameters
         ----------
-        karray : array-like
-            Array of Fourier modes.
+        karray : array-like astropy.quantity with units
+            Array of Fourier modes. Units must be equivalent to
+            :attr:`kunits`: ``astropy.cosmology.units.littleh / astropy.units.Mpc``
+            if :attr:`little_h` is True, ``astropy.units.Mpc ** -1`` otherwise.
+            For little_h=True, hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is still accepted with a DeprecationWarning and its values are
+            read as littleh / Mpc.
+
+        Returns
+        -------
+        karray : astropy.quantity
+            The input array expressed in :attr:`kunits`.
         """
         try:
-            karray.unit
+            karray_unit = karray.unit
         except AttributeError:
             raise AttributeError("Feed k array with units (astropy.units).")
-        if not self.kunits.is_equivalent(karray.unit):
+        hour_kunits = units.h / units.Mpc
+        if self.little_h and karray_unit.is_equivalent(hour_kunits):
+            warnings.warn(
+                "k arrays in hour / Mpc (astropy.units.h / astropy.units.Mpc) "
+                "are deprecated; use astropy.cosmology.units.littleh / "
+                "astropy.units.Mpc instead. The values are read as littleh / Mpc.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            return karray.to_value(hour_kunits) * self.kunits
+        if not self.kunits.is_equivalent(karray_unit):
             raise ValueError("k array units not consistent with little_h")
+        return karray.to(self.kunits)
 
 
 def check_spw_range(spw_range, bandwidth=None):

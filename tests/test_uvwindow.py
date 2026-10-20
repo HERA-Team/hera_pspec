@@ -3,6 +3,8 @@ import warnings
 from collections.abc import Callable
 from pathlib import Path
 
+import astropy.cosmology.units as cu
+import h5py
 import numpy as np
 import pytest
 from astropy import units
@@ -72,7 +74,7 @@ def kbins() -> units.Quantity:
     # kmax, dk = 1.0, 0.128 / 2
     # krange = np.arange(dk * 1.5, kmax, step=dk)
     krange = np.arange(0.1, 5.0, step=0.3)
-    return ((krange[1:] + krange[:-1]) / 2) * units.h / units.Mpc
+    return ((krange[1:] + krange[:-1]) / 2) * cu.littleh / units.Mpc
 
 
 @pytest.fixture()
@@ -538,11 +540,13 @@ class TestUVWindowInit:
 
     def test_little_h_true(self, ft_beam_spw: uvwindow.FTBeam) -> None:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=True)
-        assert test.kunits.is_equivalent(units.h / units.Mpc)
+        assert test.kunits == cu.littleh / units.Mpc
+        # astropy's units.h is the hour, not little h
+        assert not test.kunits.is_equivalent(units.h / units.Mpc)
 
     def test_little_h_false(self, ft_beam_spw: uvwindow.FTBeam) -> None:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
-        assert test.kunits.is_equivalent(units.Mpc ** (-1))
+        assert test.kunits == units.Mpc ** (-1)
 
 
 class TestUVWindowFromUvpspec:
@@ -1049,7 +1053,7 @@ class TestUVWindowGetSphericalWf:
             UserWarning, match="spherical k probed is not included in bins"
         ):
             _ = uvwindow_obj.get_spherical_wf(
-                kbins=kbins * units.h / units.Mpc,
+                kbins=kbins * cu.littleh / units.Mpc,
                 bl_lens=red_bl_lens[:1],
                 bl_weights=[1],
                 kperp_bins=None,
@@ -1215,6 +1219,125 @@ class TestUVWindowCheckKunits:
     ) -> None:
         with pytest.raises(AttributeError, match="Feed k array with units"):
             uvwindow_obj.check_kunits(kbins.value)
+
+    def test_returns_kunits(
+        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
+    ) -> None:
+        checked = uvwindow_obj.check_kunits(kbins)
+        assert checked.unit == uvwindow_obj.kunits
+        np.testing.assert_array_equal(checked.value, kbins.value)
+
+    def test_inverse_mpc_with_little_h_raises(
+        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
+    ) -> None:
+        with pytest.raises(ValueError, match="not consistent with little_h"):
+            uvwindow_obj.check_kunits(kbins.value / units.Mpc)
+
+    def test_littleh_without_little_h_raises(
+        self, ft_beam_spw: uvwindow.FTBeam, kbins: units.Quantity
+    ) -> None:
+        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
+        with pytest.raises(ValueError, match="not consistent with little_h"):
+            uvw.check_kunits(kbins)
+
+    def test_dimensionless_raises(
+        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
+    ) -> None:
+        with pytest.raises(ValueError, match="not consistent with little_h"):
+            uvwindow_obj.check_kunits(kbins.value * units.dimensionless_unscaled)
+
+    def test_hour_per_mpc_deprecated(
+        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
+    ) -> None:
+        with pytest.warns(DeprecationWarning, match="cosmology.units.littleh"):
+            checked = uvwindow_obj.check_kunits(kbins.value * units.h / units.Mpc)
+        assert checked.unit == cu.littleh / units.Mpc
+        np.testing.assert_array_equal(checked.value, kbins.value)
+
+    def test_hour_per_mpc_without_little_h_raises(
+        self, ft_beam_spw: uvwindow.FTBeam, kbins: units.Quantity
+    ) -> None:
+        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
+        with pytest.raises(ValueError, match="not consistent with little_h"):
+            uvw.check_kunits(kbins.value * units.h / units.Mpc)
+
+
+class TestUVWindowHourPerMpcDeprecation:
+    """hour / Mpc k bins still work, with a warning, and match littleh / Mpc."""
+
+    def test_spherical_wf_matches_littleh(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        bl_lens = red_bl_lens[:2]
+        kperp_bins = uvwindow_obj.get_kperp_bins(bl_lens)
+        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        ktot = np.sqrt(kperp_bins.value[:, None] ** 2 + kpara_bins.value**2)
+        dk = 0.05
+        kbins = np.arange(ktot.min(), ktot.max() + dk, step=dk)
+
+        wf_littleh, k_littleh = uvwindow_obj.get_spherical_wf(
+            kbins=kbins * cu.littleh / units.Mpc,
+            bl_lens=bl_lens,
+            kperp_bins=kperp_bins.value * cu.littleh / units.Mpc,
+            kpara_bins=kpara_bins.value * cu.littleh / units.Mpc,
+            return_weighted_k=True,
+        )
+        hour_kunits = units.h / units.Mpc
+        with pytest.warns(DeprecationWarning, match="hour / Mpc") as record:
+            wf_hour, k_hour = uvwindow_obj.get_spherical_wf(
+                kbins=kbins * hour_kunits,
+                bl_lens=bl_lens,
+                kperp_bins=kperp_bins.value * hour_kunits,
+                kpara_bins=kpara_bins.value * hour_kunits,
+                return_weighted_k=True,
+            )
+        # one warning per k array passed in (kbins, kperp_bins, kpara_bins)
+        assert sum(r.category is DeprecationWarning for r in record) == 3
+        np.testing.assert_array_equal(wf_hour, wf_littleh)
+        np.testing.assert_array_equal(k_hour, k_littleh)
+
+    def test_cylindrical_wf_matches_littleh(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    ) -> None:
+        kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
+        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        cyl_littleh = uvwindow_obj.get_cylindrical_wf(
+            red_bl_lens[0], kperp_bins=kperp_bins, kpara_bins=kpara_bins
+        )
+        hour_kunits = units.h / units.Mpc
+        with pytest.warns(DeprecationWarning, match="hour / Mpc"):
+            cyl_hour = uvwindow_obj.get_cylindrical_wf(
+                red_bl_lens[0],
+                kperp_bins=kperp_bins.value * hour_kunits,
+                kpara_bins=kpara_bins.value * hour_kunits,
+            )
+        np.testing.assert_array_equal(cyl_hour, cyl_littleh)
+
+    def test_run_and_write_matches_littleh(
+        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    ) -> None:
+        kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
+        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        uvwindow_obj.run_and_write(
+            tmp_path / "littleh.h5",
+            bl_lens=red_bl_lens[:1],
+            kperp_bins=kperp_bins,
+            kpara_bins=kpara_bins,
+        )
+        hour_kunits = units.h / units.Mpc
+        with pytest.warns(DeprecationWarning, match="hour / Mpc"):
+            uvwindow_obj.run_and_write(
+                tmp_path / "hour.h5",
+                bl_lens=red_bl_lens[:1],
+                kperp_bins=kperp_bins.value * hour_kunits,
+                kpara_bins=kpara_bins.value * hour_kunits,
+            )
+        with (
+            h5py.File(tmp_path / "littleh.h5", "r") as f_littleh,
+            h5py.File(tmp_path / "hour.h5", "r") as f_hour,
+        ):
+            for key in ("kperp_bins", "kpara_bins", "cyl_wf"):
+                np.testing.assert_array_equal(f_hour[key][()], f_littleh[key][()])
 
 
 class TestUVWindowRunAndWrite:
