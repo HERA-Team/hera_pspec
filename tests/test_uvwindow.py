@@ -1780,3 +1780,84 @@ class TestGetWfForTauKnownExamples:
         kpara_out, cyl = uvw._get_wf_for_tau(tau, wf1, kperp_bins, kpara_bins)
         assert np.allclose(cyl, wf1)
         assert np.allclose(kpara_out, kpar)
+
+
+class TestUVWindowPhysics:
+    """The exact window function of the delay spectrum of a baseline b at delay
+    tau must be centred on the (k_perp, k_para) that the baseline and delay
+    probe, k_perp = bl_to_kperp(z) |b| and k_para = tau_to_kpara(z) |tau|, with
+    a k_perp spread set by the beam: the beam's Fourier transform has a width
+    inversely proportional to the width of the beam on the sky."""
+
+    BL_LEN = 29.2  # m
+
+    @staticmethod
+    def window(width: float) -> tuple[uvwindow.UVWindow, tuple]:
+        # A map half-width of 1.5 rad gives a fine enough k_perp grid to
+        # resolve the window function of beams a few degrees wide.
+        ftbeam = uvwindow.FTBeam.gaussian(
+            freq_array=FT_FREQS, widths=width, pol="xx", mapsize=1.5, npix=301
+        )
+        uvw = uvwindow.UVWindow(
+            ftbeam_obj=ftbeam, taper="blackman-harris", little_h=True, verbose=False
+        )
+        return uvw, uvw.get_cylindrical_wf(
+            TestUVWindowPhysics.BL_LEN, return_bins="unweighted"
+        )
+
+    @pytest.fixture(scope="class")
+    def window_7deg(self):
+        return self.window(7.0)
+
+    def test_kpara_peak(self, window_7deg) -> None:
+        """For every delay the window function peaks at k_para = tau_to_kpara |tau|
+        (to within one k_para bin)."""
+        uvw, (_, kpara, cyl_wf) = window_7deg
+        expected = uvw.cosmo.tau_to_kpara(uvw.avg_z) * np.abs(uvw.dly_array)
+        peak = kpara[np.argmax(cyl_wf.sum(axis=1), axis=1)]
+        assert np.all(np.abs(peak - expected) <= np.diff(kpara).mean() * (1 + 1e-6))
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "UVWindow._interpolate_ft_beam evaluates the FT beam only along the "
+            "diagonal of the k_perp grid, so the window function peaks at "
+            "~0.77 of the baseline's k_perp"
+        ),
+    )
+    def test_kperp_peak(self, window_7deg) -> None:
+        """The window function peaks at the k_perp of the baseline, within one
+        k_perp bin."""
+        uvw, (kperp, _, cyl_wf) = window_7deg
+        expected = uvw.cosmo.bl_to_kperp(uvw.avg_z) * self.BL_LEN
+        peak = kperp[np.argmax(cyl_wf.sum(axis=2), axis=1)]
+        assert np.all(np.abs(peak - expected) <= np.diff(kperp).mean())
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "UVWindow._interpolate_ft_beam evaluates the FT beam only along the "
+            "diagonal of the k_perp grid, so the k_perp spread does not depend "
+            "on the beam width"
+        ),
+    )
+    def test_kperp_spread_scales_with_inverse_beam_width(self, window_7deg) -> None:
+        """The k_perp spread of the window function is inversely proportional
+        to the width of the beam on the sky: doubling the width halves it.
+
+        FTBeam.gaussian(widths=w) is the beam exp(-theta^2 / w^2), whose Fourier
+        transform has a width 1 / (pi w) in u. The window function goes as the
+        square of the transform, so its spread in u is 1 / (2 pi w), i.e.
+        1 / (w DM) in k_perp = 2 pi u / DM, with DM the transverse comoving
+        distance. The tolerance allows for the binning in k_perp and the
+        evolution of DM across the band."""
+        for width, (uvw, (kperp, _, cyl_wf)) in [
+            (7.0, window_7deg),
+            (14.0, self.window(14.0)),
+        ]:
+            profile = cyl_wf.sum(axis=2)
+            profile /= profile.sum(axis=1, keepdims=True)
+            mean = (profile * kperp).sum(axis=1)
+            spread = np.sqrt((profile * kperp**2).sum(axis=1) - mean**2)
+            expected = 1 / (np.radians(width) * uvw.cosmo.DM(uvw.avg_z, little_h=True))
+            np.testing.assert_allclose(spread, expected, rtol=0.1)
