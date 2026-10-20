@@ -1423,7 +1423,9 @@ def fold_spectra(uvp):
     """
     Average bandpowers from matching positive and negative delay bins onto a
     purely positive delay axis. Negative delay bins are still populated, but
-    are filled with zero power. This is an in-place operation.
+    are filled with zero power (and zero window functions and covariance),
+    while any stats_array entries there are set to infinity, i.e. zero weight.
+    This is an in-place operation.
 
     Will only work if uvp.folded == False, i.e. data is currently unfolded
     across negative and positive delay. Because this averages the data, the
@@ -1530,7 +1532,8 @@ def fold_spectra(uvp):
                     uvp.stats_array[stat][spw][:, Ndlys // 2 + 1 :, :] = (
                         np.sum([1.0 / left**2.0, 1.0 / right**2.0], axis=0)
                     ) ** (-0.5)
-                    uvp.data_array[spw][:, : Ndlys // 2, :] = np.nan
+                    # negative delays carry no information after folding
+                    uvp.stats_array[stat][spw][:, : Ndlys // 2, :] = np.inf
 
         else:
             # odd number of dlys
@@ -1615,7 +1618,8 @@ def fold_spectra(uvp):
                     uvp.stats_array[stat][spw][:, Ndlys // 2 + 1 :, :] = (
                         np.sum([1.0 / left**2.0, 1.0 / right**2.0], axis=0)
                     ) ** (-0.5)
-                    uvp.data_array[spw][:, : Ndlys // 2, :] = np.nan
+                    # negative delays carry no information after folding
+                    uvp.stats_array[stat][spw][:, : Ndlys // 2, :] = np.inf
 
     uvp.folded = True
 

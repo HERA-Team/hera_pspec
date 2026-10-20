@@ -1365,3 +1365,27 @@ class TestFoldSpectra:
         lost = 0.0 if nfreq % 2 else 0.5 * (wf[:, pos, 0] + wf[:, neg, 0])
         folded = uvp.window_function_array[0][..., 0][:, pos]
         np.testing.assert_allclose(folded.sum(axis=-1), 1.0 - lost, rtol=1e-10)
+
+    @pytest.mark.parametrize("with_stats", [False, True])
+    @pytest.mark.parametrize("Ndlys", [50, 49])
+    def test_negative_delays_are_emptied(self, with_stats: bool, Ndlys: int) -> None:
+        """After folding, negative delays hold zero power and zero-weight stats.
+
+        Whether or not a stats_array is present, the negative-delay power must
+        be zero (not NaN), and every stat there must be infinite, i.e. carry
+        no weight in error-weighted averages.
+        """
+        uvp, _ = testing.build_vanilla_uvpspec(Ndlys=Ndlys, data="random", seed=1)
+        if with_stats:
+            uvp.stats_array = {"err": {0: np.ones_like(uvp.data_array[0])}}
+        original = uvp.data_array[0].copy()
+        grouping.fold_spectra(uvp)
+        mid = Ndlys // 2
+        assert np.all(uvp.data_array[0][:, :mid] == 0)
+        np.testing.assert_array_equal(uvp.data_array[0][:, mid], original[:, mid])
+        assert np.all(np.isfinite(uvp.data_array[0]))
+        if with_stats:
+            assert np.all(np.isinf(uvp.stats_array["err"][0][:, :mid]))
+            np.testing.assert_allclose(
+                uvp.stats_array["err"][0][:, mid + 1 :], 1 / np.sqrt(2)
+            )
