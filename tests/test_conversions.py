@@ -625,3 +625,67 @@ class TestRedshiftCache:
                 [conversions.tau_to_kpara(6.0), conversions.tau_to_kpara(10.0)]
             ).value,
         )
+
+
+# Explicit astropy cosmologies: the default (Planck18, flat, with radiation),
+# an open (Om_k > 0) and a closed (Om_k < 0) one, with H0 away from 100 so
+# that h^-1 Mpc and Mpc differ.
+CURVATURE_COSMOLOGIES = {
+    "planck18_flat": Planck18,
+    "open": LambdaCDM(H0=70.0, Om0=0.31353, Ode0=0.5, Ob0=0.04911),
+    "closed": LambdaCDM(H0=60.0, Om0=0.31353, Ode0=0.9, Ob0=0.04911),
+}
+
+
+class TestCosmoPhysics:
+    """Check the conversion helpers against definitions that do not share
+    their formulas: the derivative of astropy's comoving distance and the
+    Hubble law at small redshift."""
+
+    @pytest.mark.parametrize(
+        "length_unit", [u.Mpc, LITTLEH_MPC], ids=["Mpc", "littleh"]
+    )
+    @pytest.mark.parametrize("z", [1.0, 8.0])
+    @pytest.mark.parametrize("name", list(CURVATURE_COSMOLOGIES))
+    def test_dRpara_df_is_comoving_distance_derivative(
+        self, name: str, z: float, length_unit: u.UnitBase
+    ) -> None:
+        """dRpara_df is the derivative of the comoving distance with respect
+        to the observed 21 cm frequency (which decreases as distance grows),
+        here a central finite difference of astropy's comoving_distance."""
+        cosmo = CURVATURE_COSMOLOGIES[name]
+        freq = conversions.z2f(z)
+        dfreq = 1e3 * u.Hz
+        distance = [
+            cosmo.comoving_distance(conversions.f2z(freq + step)).to(
+                length_unit, cu.with_H0(cosmo.H0)
+            )
+            for step in (-dfreq, dfreq)
+        ]
+        derivative = (distance[0] - distance[1]) / (2 * dfreq)
+        result = conversions.dRpara_df(z, cosmo, length_unit)
+        assert result.unit == length_unit / u.Hz
+        np.testing.assert_allclose(
+            result.value, derivative.to_value(length_unit / u.Hz), rtol=1e-6
+        )
+
+    @pytest.mark.parametrize("name", list(CURVATURE_COSMOLOGIES))
+    def test_small_redshift_limit(self, name: str) -> None:
+        """At small z the transverse comoving distance follows the Hubble law,
+        D = c z / H0, and dRpara_df tends to c / (H0 f21), with corrections of
+        order z. In h^-1 Mpc, H0 is replaced by 100 km/s/Mpc."""
+        cosmo = CURVATURE_COSMOLOGIES[name]
+        z = 1e-4
+        hundred = 100 * u.km / u.s / u.Mpc
+        for length_unit, hubble in [(u.Mpc, cosmo.H0), (LITTLEH_MPC, hundred)]:
+            hubble_distance = (constants.c / hubble).to(u.Mpc).value
+            np.testing.assert_allclose(
+                conversions.dRperp_dtheta(z, cosmo, length_unit).value,
+                hubble_distance * z,
+                rtol=1e-3,
+            )
+            np.testing.assert_allclose(
+                conversions.dRpara_df(z, cosmo, length_unit).value,
+                hubble_distance / conversions.units.f21,
+                rtol=1e-3,
+            )
