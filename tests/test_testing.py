@@ -187,6 +187,14 @@ class TestNoiseSim:
         )
         assert uvn.vis_units == "Jy"
 
+    def test_file_path_input(self, uvd_zen_even_xx: UVData) -> None:
+        """Check that a miriad file path gives the same noise as the equivalent UVData."""
+        uvn = testing.noise_sim(FNAME, 300.0, seed=0, whiten=True, inplace=False)
+        uvn2 = testing.noise_sim(
+            uvd_zen_even_xx, 300.0, seed=0, whiten=True, inplace=False
+        )
+        assert uvn == uvn2
+
     def test_tsys_scaling(self, uvd_dual_pol: UVData) -> None:
         """Check that doubling Tsys doubles the simulated noise amplitude."""
         uvn3 = testing.noise_sim(
