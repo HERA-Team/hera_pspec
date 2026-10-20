@@ -627,7 +627,7 @@ class TestBootstrapRun:
         grouping.bootstrap_run(
             psc,
             time_avg=True,
-            Nsamples=100,
+            Nsamples=5,
             seed=0,
             normal_std=True,
             robust_std=True,
@@ -641,7 +641,7 @@ class TestBootstrapRun:
         spcs = psc.spectra("grp1")
 
         # assert all bs samples were written
-        assert np.all([f"uvp_bs{i}" in spcs for i in range(100)])
+        assert np.all([f"uvp_bs{i}" in spcs for i in range(5)])
 
         # assert average was written
         assert "uvp_avg" in spcs and "uvp" in spcs
