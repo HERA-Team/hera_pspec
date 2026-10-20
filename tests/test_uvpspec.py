@@ -84,7 +84,12 @@ def uvp_with_covariance(
 
 
 def _add_optionals(uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
-    """Add dummy optional cov_array and stats_array to uvp."""
+    """Add dummy optional cov_array and stats_array to uvp.
+
+    The covariances are identity matrices and the stats are all one (the
+    values must be set: uninitialised memory can hold NaNs that make later
+    arithmetic on these arrays warn).
+    """
     uvp.cov_array_real = {}
     uvp.cov_array_imag = {}
     uvp.cov_model = "empirical"
@@ -92,13 +97,12 @@ def _add_optionals(uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
     uvp.stats_array = {stat: {}}
     for spw in uvp.spw_array:
         ndlys = uvp.get_spw_ranges(spw)[0][-1]
-        uvp.cov_array_real[spw] = np.empty(
-            (uvp.Nbltpairs, ndlys, ndlys, uvp.Npols), np.float64
+        cov = np.broadcast_to(
+            np.eye(ndlys)[None, :, :, None], (uvp.Nbltpairs, ndlys, ndlys, uvp.Npols)
         )
-        uvp.cov_array_imag[spw] = np.empty(
-            (uvp.Nbltpairs, ndlys, ndlys, uvp.Npols), np.float64
-        )
-        uvp.stats_array[stat][spw] = np.empty(
+        uvp.cov_array_real[spw] = cov.copy()
+        uvp.cov_array_imag[spw] = cov.copy()
+        uvp.stats_array[stat][spw] = np.ones(
             (uvp.Nbltpairs, ndlys, uvp.Npols), np.complex128
         )
     return uvp
