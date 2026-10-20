@@ -46,7 +46,7 @@ def mean_white_noise_power(uvd, beam, norm, taper):
 
 
 class TestWhiteNoiseCalibration:
-    @pytest.mark.parametrize("norm", ["I", "H^-1"])
+    @pytest.mark.parametrize("norm", ["I", "H^-1", "V^-1/2"])
     def test_taper_does_not_change_white_noise_power(
         self, white_noise_uvd, gauss_beam, norm
     ) -> None:
