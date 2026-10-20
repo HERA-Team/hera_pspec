@@ -203,10 +203,14 @@ def average_spectra(
         If True, average power spectra across the time axis. Default: False.
 
     blpair_weights : list of weights (float or int), optional
-        Relative weight of each baseline-pair when performing the average. This
-        is useful for bootstrapping. This should have the same shape as
-        blpair_groups if specified. The weights are automatically normalized
-        within each baseline-pair group. Default: None (all baseline pairs have
+        Relative non-negative weight of each baseline-pair when performing the
+        average. This is useful for bootstrapping. This should have the same
+        shape as blpair_groups if specified. The weights are automatically
+        normalized within each baseline-pair group (see normalize_weights).
+        A baseline-pair with weight m is treated as m copies of itself: its
+        data, stats, covariance and window functions enter the weighted sums
+        (multiplied by any integration/error weights) m times, and its
+        nsamples are multiplied by m. Default: None (all baseline pairs have
         unity weights).
 
     error_field: string or list, optional
@@ -403,6 +407,11 @@ def average_spectra(
                         raise ValueError(
                             "Sum of baseline-pair weights in group %d is <= 0." % j
                         )
+                    if np.any(blpg_wgts < 0):
+                        raise ValueError(
+                            "Baseline-pair weights in group %d must not be negative."
+                            % j
+                        )
                     blpg_wgts = (
                         blpg_wgts * float(blpg_wgts.size) / norm
                     )  # Apply normalization
@@ -513,34 +522,37 @@ def average_spectra(
                         # Above we use the clip method for zero weights. A tolerance
                         # as low as 1e-40 works when using inverse square of noise power
                         # as weights.
-                    # Add multiple copies of data for each baseline according
-                    # to the weighting/multiplicity;
-                    # while multiple copies are only added when bootstrap resampling
-                    for m in range(int(blpg_wgts[k])):
-                        bpg_data.append(data * w)
-                        bpg_wgts.append(wgts * w[:, :1, None])
-                        bpg_ints.append(ints * w)
-                        bpg_nsmp.append(nsmp)
-                        for stat in stat_l:
-                            # clip errws for same reason above
-                            bpg_stats[stat].append(errws[stat].clip(0, 1e40) * w**2)
-                        if store_window:
-                            if uvp.exact_windows:
-                                bpg_window_function.append(
-                                    window_function * w[:, :, None, None]
-                                )
-                            else:
-                                bpg_window_function.append(
-                                    window_function * w[:, :, None]
-                                )
-                        if store_cov:
-                            bpg_cov_real.append(
-                                cov_real * w[:, :, None] * w[:, None, :]
+                    # Each baseline-pair counts as blpg_wgts[k] copies of
+                    # itself (e.g. the number of times it was drawn when
+                    # bootstrap resampling), so scale all of its weighted
+                    # contributions, including nsamples, by that multiplicity.
+                    mult = blpg_wgts[k]
+                    if mult == 0:
+                        continue
+                    bpg_data.append(data * w * mult)
+                    bpg_wgts.append(wgts * w[:, :1, None] * mult)
+                    bpg_ints.append(ints * w * mult)
+                    bpg_nsmp.append(nsmp * mult)
+                    for stat in stat_l:
+                        # clip errws for same reason above
+                        bpg_stats[stat].append(errws[stat].clip(0, 1e40) * w**2 * mult)
+                    if store_window:
+                        if uvp.exact_windows:
+                            bpg_window_function.append(
+                                window_function * w[:, :, None, None] * mult
                             )
-                            bpg_cov_imag.append(
-                                cov_imag * w[:, :, None] * w[:, None, :]
+                        else:
+                            bpg_window_function.append(
+                                window_function * w[:, :, None] * mult
                             )
-                        w_list.append(w)
+                    if store_cov:
+                        bpg_cov_real.append(
+                            cov_real * w[:, :, None] * w[:, None, :] * mult
+                        )
+                        bpg_cov_imag.append(
+                            cov_imag * w[:, :, None] * w[:, None, :] * mult
+                        )
+                    w_list.append(w * mult)
 
                 # normalize sum: clip to deal with w_list_sum == 0
                 w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
