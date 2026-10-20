@@ -765,6 +765,38 @@ class TestSymmetricTaper:
             uvpspec.combine_uvpspec([uvp1_no_optionals, uvp2], verbose=False)
 
 
+class TestTimeArrays:
+    @pytest.mark.parametrize("name", ["time_1_array", "time_2_array"])
+    def test_declared_as_param(self, name: str) -> None:
+        uvp = uvpspec.UVPSpec()
+        param = getattr(uvp, f"_{name}")
+        assert isinstance(param, parameter.PSpecParam)
+        assert param.name == name
+        assert name in uvp._all_params
+        assert name in uvp._req_params
+        assert name in uvp._ndarrays
+        assert name in uvp._meta_dsets
+        assert name not in uvp._meta_attrs
+
+    def test_check_requires_time_2_array(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        del mutable_uvp.time_2_array
+        with pytest.raises(
+            AssertionError, match="required parameter time_2_array doesn't exist"
+        ):
+            mutable_uvp.check()
+
+    def test_eq_detects_time_2_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        uvp2 = copy.deepcopy(mutable_uvp)
+        # __eq__ uses np.isclose with its default rtol, which on Julian Dates
+        # (~2.46e6) tolerates ~25 days, so the offset has to be large.
+        uvp2.time_2_array = uvp2.time_2_array + 100.0
+        assert mutable_uvp != uvp2
+
+    def test_clear_removes_time_2_array(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp._clear()
+        assert not hasattr(mutable_uvp, "time_2_array")
+
+
 class TestSense:
     BASE_TSYS = 500
     POLPAIR = ("xx", "xx")

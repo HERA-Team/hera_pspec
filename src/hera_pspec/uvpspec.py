@@ -261,7 +261,7 @@ class UVPSpec:
             form="(Nbltpairs,)",
             expected_type=np.float64,
         )
-        self._time_1_array = PSpecParam(
+        self._time_2_array = PSpecParam(
             "time_2_array",
             description="Time array of the second bl in the bl-pair [Julian Date].",
             form="(Nbltpairs,)",
@@ -377,7 +377,7 @@ class UVPSpec:
             expected_type=np.float64,
         )
         self._OmegaPP = PSpecParam(
-            "OmegaP",
+            "OmegaPP",
             description="Integral of unitless beam power squared over the sky [steradians].",
             form="(Nbeam_freqs, Npols)",
             expected_type=np.float64,
