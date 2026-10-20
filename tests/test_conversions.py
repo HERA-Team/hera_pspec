@@ -79,7 +79,9 @@ class TestCosmoConversions:
         np.testing.assert_almost_equal(result, expected)
 
     @pytest.mark.parametrize(
-        "cosmo_name,H0", [("cosmo_h100", 100.0), ("cosmo_h25", 25.12)]
+        "cosmo_name,H0",
+        [("cosmo_h100", 100.0), ("cosmo_h25", 25.12)],
+        ids=["cosmo_h100", "cosmo_h25"],
     )
     def test_little_h_false_scales_distances_by_h0_ratio(
         self, cosmo_name: str, H0: float, request: pytest.FixtureRequest
