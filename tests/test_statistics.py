@@ -249,3 +249,126 @@ class TestColouredSpectrumIsUnbiased:
         mean, error = mean_and_error(power, axis=0)
         assert_within_errors(mean, window @ band_powers, error)
         assert uvp.get_dlys(0)[np.argmax(mean)] > 0
+
+
+class TestEstimatorIdentities:
+    """Exact algebraic identities of the quadratic estimator, which hold to
+    numerical precision for any data."""
+
+    @pytest.fixture(scope="class")
+    def uvd(self, synthetic_uvd):
+        return synthetic_uvd(nfreq=NFREQ, ntimes=5, antpairs=[(0, 1)], seed=1)
+
+    @pytest.mark.parametrize("allow_fft", [False, True])
+    def test_parseval(self, uvd, allow_fft: bool) -> None:
+        """With identity weighting, no taper and one delay per channel, the
+        unnormalized band powers add up to the total power of the data,
+        sum_a q_a = N/2 sum_i |x_i|^2 (Parseval's theorem with the factor 1/2
+        of the q_hat definition). This pins the overall normalization of q_hat.
+        """
+        ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        key = (0, (0, 1), "xx")
+        q = ds.q_hat(key, key, allow_fft=allow_fft)
+        x = ds.x(key)
+        np.testing.assert_allclose(
+            q.sum(axis=0), 0.5 * NFREQ * np.sum(np.abs(x) ** 2, axis=0), rtol=1e-10
+        )
+
+    @pytest.mark.parametrize("allow_fft", [False, True])
+    @pytest.mark.parametrize("nfreq", [15, 16])
+    def test_delay_modes_are_complete(self, nfreq: int, allow_fft: bool) -> None:
+        """With one delay per channel, the Q_alt matrices add up to N times the
+        identity: the delay modes form a complete orthogonal basis, so a flat
+        band power is white noise."""
+        total = sum(
+            utils.get_Q_alt(b, nfreq, nfreq, allow_fft=allow_fft) for b in range(nfreq)
+        )
+        np.testing.assert_allclose(total, nfreq * np.eye(nfreq), atol=1e-10)
+
+    @pytest.mark.parametrize("taper", ["none", "bh"])
+    def test_fisher_matrix_is_trace_of_e_and_q(self, uvd, taper: str) -> None:
+        """G_ab = Tr[E_a Q_b], with E_a = R_1^dagger Q_a R_2 / 2 from
+        get_unnormed_E, so that E[q_a] = sum_b G_ab p_b for C = sum_b p_b Q_b.
+
+        The two datasets have different flags, so R_1 != R_2 and a transposed or
+        misplaced R would break the identity.
+        """
+        uvd2 = uvd.copy()
+        uvd2.flag_array[:, [2, 9], :] = True
+        ds = PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
+        ds.set_taper(taper)
+        key1, key2 = (0, (0, 1), "xx"), (1, (0, 1), "xx")
+        G = ds.get_G(key1, key2)
+        E = ds.get_unnormed_E(key1, key2)
+        Q = np.array([ds.get_Q_alt(b) for b in range(NFREQ)])
+        trace = np.einsum("aij,bji->ab", E, Q)
+        np.testing.assert_allclose(G, trace, rtol=0, atol=1e-10 * np.abs(G).max())
+
+
+class TestPspecSymmetries:
+    """Symmetries of the power spectrum under exchange and rescaling of the
+    inputs. P = x_1^dagger E x_2 is linear in x_2 and antilinear in x_1, and
+    exchanging x_1 and x_2 conjugates it. These catch conjugation and ordering
+    mistakes in the handling of baseline pairs and datasets in pspec()."""
+
+    @pytest.fixture(scope="class")
+    def uvds(self, synthetic_uvd):
+        kwargs = dict(nfreq=NFREQ, ntimes=20, antpairs=[(0, 1), (1, 2)])
+        return synthetic_uvd(seed=1, **kwargs), synthetic_uvd(seed=2, **kwargs)
+
+    @staticmethod
+    def cross_pspec(uvd1, uvd2, bl1, bl2, norm, taper="bh") -> np.ndarray:
+        ds = PSpecData(dsets=[uvd1, uvd2], wgts=[None, None])
+        uvp = ds.pspec(
+            [bl1],
+            [bl2],
+            dsets=(0, 1),
+            pols=[("xx", "xx")],
+            norm=norm,
+            taper=taper,
+            verbose=False,
+        )
+        return uvp.data_array[0][:, :, 0]
+
+    @pytest.mark.parametrize("norm", ["I", "H^-1"])
+    def test_swapping_inputs_conjugates(self, uvds, norm: str) -> None:
+        """Exchanging the baselines and the datasets conjugates the cross
+        spectrum."""
+        uvd1, uvd2 = uvds
+        P12 = self.cross_pspec(uvd1, uvd2, (0, 1), (1, 2), norm)
+        P21 = self.cross_pspec(uvd2, uvd1, (1, 2), (0, 1), norm)
+        np.testing.assert_allclose(
+            P21, P12.conj(), rtol=0, atol=1e-12 * np.abs(P12).max()
+        )
+
+    @pytest.mark.parametrize("norm", ["I", "H^-1"])
+    def test_scaling_inputs(self, uvds, norm: str) -> None:
+        """Scaling the first dataset by a complex factor a multiplies P by
+        conj(a); scaling both multiplies it by |a|^2."""
+        uvd1, uvd2 = uvds
+        a = 2.0 - 1.0j
+        scaled1, scaled2 = uvd1.copy(), uvd2.copy()
+        scaled1.data_array *= a
+        scaled2.data_array *= a
+        P = self.cross_pspec(uvd1, uvd2, (0, 1), (1, 2), norm)
+        atol = 1e-12 * np.abs(P).max() * abs(a) ** 2
+        np.testing.assert_allclose(
+            self.cross_pspec(scaled1, uvd2, (0, 1), (1, 2), norm),
+            np.conj(a) * P,
+            rtol=0,
+            atol=atol,
+        )
+        np.testing.assert_allclose(
+            self.cross_pspec(scaled1, scaled2, (0, 1), (1, 2), norm),
+            abs(a) ** 2 * P,
+            rtol=0,
+            atol=atol,
+        )
+
+    def test_auto_spectra_are_real_and_positive(self, uvds) -> None:
+        """The power spectrum of a baseline with itself is |x~|^2 per delay
+        (identity weighting, no taper): real and non-negative."""
+        uvd1, _ = uvds
+        P = self.cross_pspec(uvd1, uvd1, (0, 1), (0, 1), "I", taper="none")
+        assert np.all(P.real > 0)
+        assert np.all(np.abs(P.imag) < 1e-10 * P.real)
