@@ -2212,6 +2212,27 @@ class TestPspec:
         uvp = ds.pspec(*args, verbose=False)
         assert uvp.beamfile == "my_beam.beamfits"
 
+    def test_pspec_blackman_taper_does_not_warn(self, synthetic_uvd) -> None:
+        """Tapers whose end samples round to tiny negative values are handled.
+
+        The Blackman window is zero at its ends, but evaluates to about -1e-17
+        there; the square root taken to build R must not produce a warning
+        or NaN.
+        """
+        uvd = synthetic_uvd(nfreq=32, ntimes=2, antpairs=[(0, 1)])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            uvp = ds.pspec(
+                [(0, 1)],
+                [(0, 1)],
+                (0, 1),
+                [("xx", "xx")],
+                taper="blackman",
+                verbose=False,
+            )
+        assert np.all(np.isfinite(uvp.data_array[0]))
+
     def test_pspec_baseline_formats(self, pspec_ds) -> None:
         """Test pspec() with redundant baseline groups from redcal and with mixed
         grouped/ungrouped baseline list formats."""

@@ -1108,9 +1108,10 @@ class PSpecData:
             if self.taper == "none":
                 sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
-                sqrtT = np.sqrt(dspec.gen_window(self.taper, self.spw_Nfreqs)).reshape(
-                    1, -1
-                )
+                # some tapers (e.g. blackman) evaluate to tiny negative values
+                # at their ends; clip them to zero before taking the sqrt
+                window = dspec.gen_window(self.taper, self.spw_Nfreqs)
+                sqrtT = np.sqrt(np.clip(window, 0, None)).reshape(1, -1)
 
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
