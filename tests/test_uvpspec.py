@@ -1857,6 +1857,22 @@ def test_backwards_compatibility_read() -> None:
     uvp.check()
 
 
+def test_read_keeps_channel_width_param(tmp_path: Path) -> None:
+    """Reading must not replace the channel_width PSpecParam with an array."""
+    uvp = uvpspec.UVPSpec()
+    uvp.read_hdf5(DATA_PATH / "test_uvp.h5")
+    assert isinstance(uvp._channel_width, parameter.PSpecParam)
+    assert uvp.get_param_unit("channel_width") == units.Hz
+    # the 2019 file stores a scalar channel_width
+    np.testing.assert_array_equal(uvp.channel_width, [1562500.0])
+    # a read object can be written and read back
+    out = tmp_path / "rewritten.h5"
+    uvp.write_hdf5(out)
+    uvp2 = uvpspec.UVPSpec()
+    uvp2.read_hdf5(out)
+    assert uvp == uvp2
+
+
 def test_add_approximate_cov() -> None:
     uvp = uvpspec.UVPSpec()
     uvp.read_hdf5(DATA_PATH / "test_uvp.h5")

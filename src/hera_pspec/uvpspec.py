@@ -1918,17 +1918,9 @@ class UVPSpec:
                 delattr(self, dattr)
 
         # If we are reading an UVPSpec object created before
-        # UVData switched to future_array_shapes
-        try:
-            cw = getattr(self, "_channel_width").value
-        except AttributeError:
-            pass
-        else:
-            setattr(
-                self,
-                "_channel_width",
-                np.atleast_1d(getattr(self, "_channel_width").value),
-            )
+        # UVData switched to future_array_shapes, channel_width is a scalar
+        if hasattr(self, "channel_width"):
+            self.channel_width = np.atleast_1d(self.channel_width)
 
         self.check(just_meta=just_meta)
 
