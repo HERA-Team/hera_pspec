@@ -1270,7 +1270,7 @@ def spherical_wf_from_uvp(
     # if window functions have been computed without little h
     # it is not possible to re adjust so kbins need to be in Mpc-1
     # and reciprocally
-    if little_h != ("h^-3" in uvp_in.norm_units):
+    if little_h != uvputils.is_littleh(uvp_in.norm_units):
         warnings.warn(
             "Changed little_h units to make kbins consistent "
             "with uvp.window_function_array. Might be inconsistent "
@@ -1285,7 +1285,7 @@ def spherical_wf_from_uvp(
             kbin_edges /= uvp_in.cosmo.h
             kbin_edges_theory /= uvp_in.cosmo.h
         # final little_h matches the units of uvp_in
-        little_h = "h^-3" in uvp_in.norm_units
+        little_h = uvputils.is_littleh(uvp_in.norm_units)
 
     # ensure bins don't overlap
     assert np.all(np.diff(kbin_edges) > 0), "kbins must not overlap"

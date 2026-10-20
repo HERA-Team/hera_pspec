@@ -1662,12 +1662,16 @@ def test_units(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
     ds.add(uvd, None)
     # test basic execution
     vis_u, norm_u = ds.units(little_h=False)
+    assert norm_u == "Hz sr"
     vis_u, norm_u = ds.units()
-    assert vis_u == "UNCALIB"
-    assert norm_u == "Hz str [beam normalization not specified]"
+    assert vis_u == "uncalib"
+    assert norm_u == "Hz sr"
     ds_b = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
     vis_u, norm_u = ds_b.units(little_h=False)
-    assert norm_u == "Mpc^3"
+    assert vis_u == "uncalib"
+    assert norm_u == "Mpc3"
+    vis_u, norm_u = ds_b.units()
+    assert norm_u == "Mpc3 / littleh3"
 
 
 def test_delays(uvd: UVData) -> None:

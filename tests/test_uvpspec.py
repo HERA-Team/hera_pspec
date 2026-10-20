@@ -385,7 +385,13 @@ def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -
             dsq.cov_array_real[spw][0, :, :, 0].diagonal(),
             uvp.cov_array_real[spw][0, :, :, 0].diagonal() * coeff[0, :, 0] ** 2,
         ).all()
-    assert dsq.norm_units == uvp.norm_units + " k^3 / (2pi^2)"
+    # P(k) in mK^2 Mpc^3 / littleh^3 becomes Delta^2 in mK^2
+    assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
+    assert dsq.norm_units == uvp.norm_units
+    assert dsq.norm_unit == units.dimensionless_unscaled
+    assert dsq.units == uvp.vis_unit**2
+    assert dsq.deltasq is True
+    assert uvp.deltasq is False
 
 
 def test_blpair_conversions(vanilla_uvp: uvpspec.UVPSpec) -> None:
@@ -1268,7 +1274,8 @@ def test_set_cosmology(
     # test setting cosmology
     uvp.set_cosmology(new_cosmo, overwrite=True)
     assert uvp.cosmo == new_cosmo
-    assert uvp.norm_units == "h^-3 Mpc^3"
+    assert uvp.norm_units == "Mpc3 / littleh3"
+    assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
     assert (uvp.scalar_array > 1.0).all()
     assert (uvp.data_array[0] > 1e5).all()
 

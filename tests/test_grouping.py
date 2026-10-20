@@ -19,6 +19,7 @@ from hera_pspec import (
     uvpspec,
     uvwindow,
 )
+from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
@@ -931,7 +932,7 @@ class TestSpherical:
         wf_array = grouping.spherical_wf_from_uvp(
             uvp_exact_wfs,
             kbin_edges=kbin_edges,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
+            little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
         )
         assert wf_array[0].shape == (uvp_exact_wfs.Ntimes, Nk, Nk, uvp_exact_wfs.Npols)
 
@@ -946,7 +947,7 @@ class TestSpherical:
             uvp_exact_wfs,
             kbin_edges=kbin_edges,
             kbin_edges_theory=kbin_edges_theory,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
+            little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
         )
         assert wf_array2[0].shape == (
             uvp_exact_wfs.Ntimes,
@@ -974,7 +975,7 @@ class TestSpherical:
             uvp_exact_wfs,
             kbin_edges,
             spw_array=0,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
+            little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
         )
         with pytest.raises(
             AssertionError, match="input spw is not in UVPSpec.spw_array"
@@ -983,7 +984,7 @@ class TestSpherical:
                 uvp_exact_wfs,
                 kbin_edges,
                 spw_array=2,
-                little_h="h^-3" in uvp_exact_wfs.norm_units,
+                little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
             )
 
     def test_wf_blpair_groups(self, uvp_exact_wfs: UVPSpec) -> None:
@@ -996,14 +997,14 @@ class TestSpherical:
             kbin_edges,
             blpair_groups=blpair_groups,
             blpair_lens=blpair_lens,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
+            little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
         )
         with pytest.raises(TypeError, match="blpair_groups must be a sequence"):
             grouping.spherical_wf_from_uvp(
                 uvp_exact_wfs,
                 kbin_edges=kbin_edges,
                 blpair_groups=blpair_groups[0],
-                little_h="h^-3" in uvp_exact_wfs.norm_units,
+                little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
             )
 
     def test_wf_inconsistent_blpair_lens(self, uvp_exact_wfs: UVPSpec) -> None:
@@ -1020,7 +1021,7 @@ class TestSpherical:
                 kbin_edges,
                 blpair_groups=None,
                 blpair_lens=blpair_lens,
-                little_h="h^-3" in uvp_exact_wfs.norm_units,
+                little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
             )
         # blpair_groups given without blpair_lens → no error
         grouping.spherical_wf_from_uvp(
@@ -1028,7 +1029,7 @@ class TestSpherical:
             kbin_edges,
             blpair_groups=blpair_groups,
             blpair_lens=None,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
+            little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
         )
         # inconsistent blpair_lens → error
         with pytest.raises(
@@ -1040,7 +1041,7 @@ class TestSpherical:
                 kbin_edges,
                 blpair_groups=blpair_groups,
                 blpair_lens=[blpair_lens[0], blpair_lens[0]],
-                little_h="h^-3" in uvp_exact_wfs.norm_units,
+                little_h=uvputils.is_littleh(uvp_exact_wfs.norm_units),
             )
 
     def test_wf_overlapping_kbins(self, uvp_exact_wfs: UVPSpec) -> None:
@@ -1061,7 +1062,7 @@ class TestSpherical:
             AssertionError, match="Need to compute exact window functions first"
         ):
             grouping.spherical_wf_from_uvp(
-                uvp, kbin_edges, little_h="h^-3" in uvp.norm_units
+                uvp, kbin_edges, little_h=uvputils.is_littleh(uvp.norm_units)
             )
 
 

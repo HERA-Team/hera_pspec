@@ -8,9 +8,11 @@ import time
 import warnings
 from functools import lru_cache
 
+import astropy.cosmology.units as cu
 import hera_cal as hc
 import numpy as np
 import uvtools.dspec as dspec
+from astropy import units
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
@@ -2953,8 +2955,21 @@ class PSpecData:
 
         Returns
         -------
-        pspec_units : str
-            Units of the power spectrum that is returned by pspec().
+        vis_units : str
+            Unit of the visibilities of the first dataset, as a canonical
+            astropy unit string (see ``uvpspec_utils.parse_pspec_unit``):
+            e.g. ``"mK"``, ``"Jy"``, ``"K sr"`` or ``"uncalib"``.
+        norm_units : str
+            Unit of the power spectrum normalisation, as a canonical astropy
+            unit string: ``"Mpc3 / littleh3"`` (``little_h=True``) or
+            ``"Mpc3"`` when a beam is set, else ``"Hz sr"`` (no beam
+            normalisation is applied). The power spectrum returned by
+            pspec() is in ``vis_units**2 * norm_units``.
+
+        Raises
+        ------
+        ValueError
+            If the visibility unit of the first dataset is not understood.
         """
         # Work out the power spectrum units
         if len(self.dsets) == 0:
@@ -2964,17 +2979,16 @@ class PSpecData:
             )
 
         # get visibility units
-        vis_units = self.dsets[0].vis_units
+        vis_units = uvputils.canonical_unit_string(self.dsets[0].vis_units)
 
         # set pspec norm units
         if self.primary_beam is None:
-            norm_units = "Hz str [beam normalization not specified]"
+            norm_unit = units.Hz * units.sr
+        elif little_h:
+            norm_unit = (units.Mpc / cu.littleh) ** 3
         else:
-            if little_h:
-                h_unit = "h^-3 "
-            else:
-                h_unit = ""
-            norm_units = f"{h_unit}Mpc^3"
+            norm_unit = units.Mpc**3
+        norm_units = uvputils.unit_to_string(norm_unit)
 
         return vis_units, norm_units
 

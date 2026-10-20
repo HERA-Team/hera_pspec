@@ -96,8 +96,8 @@ def build_vanilla_uvpspec(
     uvp.polpair_array = np.array([1515])  # corresponds to ('xx','xx')
     uvp.Npols = len(uvp.polpair_array)
 
-    uvp.vis_units = "unknown"
-    uvp.norm_units = "Hz str"
+    uvp.vis_units = "uncalib"
+    uvp.norm_units = "Hz sr"
     uvp.weighting = "identity"
     uvp.channel_width = np.ones(uvp.Nfreqs) * np.median(np.diff(uvp.freq_array))
     uvp.history = "example"

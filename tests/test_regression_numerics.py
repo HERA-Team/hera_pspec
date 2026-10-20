@@ -8,9 +8,12 @@ units migration can be checked against them. The inputs are built in
 regenerating them.
 """
 
+import astropy.cosmology.units as cu
 import numpy as np
 import pytest
+from astropy import units
 
+from hera_pspec import uvpspec_utils as uvputils
 from tests.regression_cases import CASES, compute_case, read_legacy_uvp
 
 
@@ -61,11 +64,18 @@ def test_regression_case(case_name: str) -> None:
 
 
 def test_legacy_uvp_file_metadata() -> None:
-    """The 2019 UVPSpec file keeps its unit strings and cosmology on read."""
+    """The 2019 UVPSpec file keeps its units and cosmology on read.
+
+    Its legacy unit strings ("h^-3 Mpc^3", "UNCALIB") are read into the
+    canonical astropy forms.
+    """
     uvp = read_legacy_uvp()
-    assert uvp.norm_units == "h^-3 Mpc^3"
-    assert uvp.vis_units == "UNCALIB"
-    assert uvp.units == "(UNCALIB)^2 h^-3 Mpc^3"
+    assert uvp.norm_units == "Mpc3 / littleh3"
+    assert uvp.vis_units == "uncalib"
+    assert uvp.deltasq is False
+    assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
+    assert uvp.vis_unit == uvputils.uncalib
+    assert uvp.units == uvputils.uncalib**2 * units.Mpc**3 / cu.littleh**3
     params = uvp.cosmo.get_params()
     assert sorted(params) == ["H0", "Om_L", "Om_M", "Om_b", "Om_c", "Om_k"]
     np.testing.assert_allclose(

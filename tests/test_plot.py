@@ -673,6 +673,30 @@ class TestDelayWedge:
         )
         plt.close()
 
+    @pytest.mark.parametrize("deltasq", [False, True])
+    def test_colorbar_units_label(
+        self, delay_wedge_uvp: UVPSpec, deltasq: bool
+    ) -> None:
+        """The colourbar label is the astropy LaTeX form of uvp.units."""
+        fig = plot.delay_wedge(
+            delay_wedge_uvp,
+            0,
+            ("xx", "xx"),
+            delay=False,
+            deltasq=deltasq,
+            colorbar=True,
+        )
+        label = fig.axes[-1].get_ylabel()
+        if deltasq:
+            # the littleh and Mpc of P(k) cancel against those of k^3
+            assert "Mpc" not in label
+            assert r"\Delta^2" in label
+        else:
+            assert r"\mathrm{Mpc^{3}" in label
+            assert "h_{100}^{-3}" in label
+        fig.canvas.draw()
+        plt.close(fig)
+
     def test_fold_deltasq_cosmo_log(self, delay_wedge_uvp: UVPSpec) -> None:
         uvp = delay_wedge_uvp
         _ = plot.delay_wedge(

@@ -31,6 +31,7 @@ from hera_pspec import (
     utils,
     uvwindow,
 )
+from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
@@ -635,7 +636,7 @@ def _legacy_test_uvp_h5() -> dict[str, np.ndarray]:
     out["data_array_0"] = uvp.data_array[0][:12]
     out["get_kperps_h_0"] = out["get_kperps_h_0"][:12]
     out["get_kperps_noh_0"] = out["get_kperps_noh_0"][:12]
-    out["units"] = np.array(uvp.units)
+    out["units"] = np.array(uvputils.unit_to_string(uvp.units))
     out["cosmo_params"] = np.array(
         [uvp.cosmo.get_params()[key] for key in sorted(uvp.cosmo.get_params())]
     )

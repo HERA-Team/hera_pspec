@@ -1,10 +1,33 @@
 import copy
 
+import astropy.units as u
 import numpy as np
 import uvtools
 from pyuvdata import UVData
 
 from . import conversions, utils, uvpspec
+from . import uvpspec_utils as uvputils
+
+
+def _units_latex(unit):
+    r"""
+    Return a unit as LaTeX for use inside an existing ``$...$`` label.
+
+    Parameters
+    ----------
+    unit : astropy.units.UnitBase
+        Unit, e.g. ``UVPSpec.units``.
+
+    Returns
+    -------
+    str
+        astropy's ``latex_inline`` form without the enclosing ``$``, e.g.
+        ``\mathrm{Mpc^{3}\,mK^{2}\,h_{100}^{-3}}`` (astropy writes littleh
+        as ``h_{100}``). Empty for a dimensionless unit.
+    """
+    if unit == u.dimensionless_unscaled:
+        return ""
+    return unit.to_string("latex_inline").strip("$")
 
 
 def _is_antpair_tuple(value):
@@ -526,16 +549,8 @@ def delay_spectrum(
         else:
             ax.set_xlabel(r"$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
     if ax.get_ylabel() == "" and plot_stats is None:
-        # Sanitize power spectrum units
-        psunits = uvp_plt.units
-        if "h^-1" in psunits:
-            psunits = psunits.replace(r"h^-1", "h^{-1}")
-        if "h^-3" in psunits:
-            psunits = psunits.replace(r"h^-3", "h^{-3}")
-        if "Mpc" in psunits and "\\rm" not in psunits:
-            psunits = psunits.replace("Mpc", r"{\rm Mpc}")
-        if "pi" in psunits and "\\pi" not in psunits:
-            psunits = psunits.replace("pi", r"\pi")
+        # Power spectrum units in LaTeX
+        psunits = _units_latex(uvp_plt.units)
 
         # Power spectrum type
         if deltasq:
@@ -790,22 +805,8 @@ def delay_waterfall(
         )
     )
 
-    # Sanitize power spectrum units
-    psunits = uvp_plt.units
-    if "h^-1" in psunits:
-        psunits = psunits.replace("h^-1", "h^{-1}")
-    if "h^-3" in psunits:
-        psunits = psunits.replace("h^-3", "h^{-3}")
-    if "Hz" in psunits:
-        psunits = psunits.replace("Hz", r"{\rm Hz}")
-    if "str" in psunits:
-        psunits = psunits.replace("str", r"\,{\rm str}")
-    if "Mpc" in psunits and "\\rm" not in psunits:
-        psunits = psunits.replace("Mpc", r"{\rm Mpc}")
-    if "pi" in psunits and "\\pi" not in psunits:
-        psunits = psunits.replace("pi", r"\pi")
-    if "beam normalization not specified" in psunits:
-        psunits = psunits.replace("beam normalization not specified", r"{\rm unnormed}")
+    # Power spectrum units in LaTeX
+    psunits = _units_latex(uvp_plt.units)
 
     # Iterate over waterfall keys
     keys = list(waterfall.keys())
@@ -1064,7 +1065,7 @@ def delay_wedge(
     fix_negval = component in ["real", "imag"] and log10
 
     # check pspec units for little h
-    little_h = "h^-3" in uvp.norm_units
+    little_h = uvputils.is_littleh(uvp.norm_units)
 
     # Create new ax if none specified
     new_plot = False
@@ -1117,22 +1118,8 @@ def delay_wedge(
         y_axis = x_axis
         x_axis = _x_axis
 
-    # Conigure Units
-    psunits = rf"({uvp.vis_units})^2\ {uvp.norm_units}"
-    if "h^-1" in psunits:
-        psunits = psunits.replace("h^-1", r"h^{-1}\ ")
-    if "h^-3" in psunits:
-        psunits = psunits.replace(r"h^-3", r"h^{-3}\ ")
-    if "Hz" in psunits:
-        psunits = psunits.replace("Hz", r"{\rm Hz}\ ")
-    if "str" in psunits:
-        psunits = psunits.replace("str", r"\,{\rm str}\ ")
-    if "Mpc" in psunits and "\\rm" not in psunits:
-        psunits = psunits.replace("Mpc", r"{\rm Mpc}")
-    if "pi" in psunits and "\\pi" not in psunits:
-        psunits = psunits.replace("pi", r"\pi")
-    if "beam normalization not specified" in psunits:
-        psunits = psunits.replace("beam normalization not specified", r"{\rm unnormed}")
+    # Configure units
+    psunits = _units_latex(uvp.units)
 
     # get data with shape (Nblpairs, Ndlys)
     data = [uvp.get_data((spw, blp, pol)).squeeze() for blp in blpairs]

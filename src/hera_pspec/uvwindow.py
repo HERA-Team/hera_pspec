@@ -839,7 +839,7 @@ class UVWindow:
             cosmo = uvp.cosmo
 
         # units
-        little_h = "h^-3" in uvp.norm_units
+        little_h = uvputils.is_littleh(uvp.norm_units)
 
         # spectral window
         if spw >= uvp.Nspws:

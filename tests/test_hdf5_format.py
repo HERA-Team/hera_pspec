@@ -77,7 +77,8 @@ class TestWriteVersion2:
             assert f["integration_spw0"].attrs["unit"] == "s"
             # parameters without a declared unit get no unit attribute
             assert "unit" not in f["blpair_array"].attrs
-            assert "unit" not in f["data_spw0"].attrs
+            # power spectra carry the unit set by vis_units and norm_units
+            assert f["data_spw0"].attrs["unit"] == "uncalib2 Hz sr"
             assert "scalar_array_unit" not in f.attrs
             assert "norm_units_unit" not in f.attrs
 
