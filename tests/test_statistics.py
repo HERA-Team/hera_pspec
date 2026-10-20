@@ -610,3 +610,109 @@ class TestAveragingStatistics:
         np.testing.assert_allclose(
             new.window_function_array[0].sum(axis=2), 1.0, rtol=1e-10
         )
+
+
+class TestNoiseCrossSpectra:
+    """Cross-spectra of two independent noise realisations (e.g. interleaved
+    integrations, or different nights) have zero mean, so they carry no noise
+    bias. Their real and imaginary parts scatter equally, by the thermal noise
+    power P_N of noise.calc_P_N, and the analytic covariance computed from the
+    noise level of the visibilities (cov_model="dsets") must predict that
+    scatter, so that error bars are calibrated.
+    """
+
+    # The noise level of the visibilities corresponds to a system temperature
+    # TSYS (in K) for the 100 kHz channels and 10 s integrations of the
+    # synthetic data: sigma = TSYS / sqrt(channel width * integration time).
+    TSYS = 300.0
+    SIGMA = TSYS * 1e3 / np.sqrt(100e3 * 10.0)  # mK
+    ANTPAIRS = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3), (0, 4), (1, 4)]
+
+    @pytest.fixture(scope="class")
+    def noise_dsets(self, synthetic_uvd):
+        """Two independent noise realisations, and their noise levels."""
+        kwargs = dict(nfreq=NFREQ, ntimes=500, antpairs=self.ANTPAIRS, sigma=self.SIGMA)
+        dsets = [synthetic_uvd(seed=NOISE_SEED + i, **kwargs) for i in range(2)]
+        dsets_std = [uvd.copy() for uvd in dsets]
+        for uvd in dsets_std:
+            uvd.data_array[:] = self.SIGMA
+        return dsets, dsets_std
+
+    @pytest.fixture(
+        scope="class",
+        params=[("I", "none"), ("I", "bh"), ("H^-1", "bh")],
+        ids=lambda p: "-".join(p),
+    )
+    def cross_uvp(self, request, noise_dsets, gauss_beam) -> UVPSpec:
+        """Cross-dataset power spectra of every baseline, with the analytic
+        covariance of each spectrum."""
+        norm, taper = request.param
+        dsets, dsets_std = noise_dsets
+        ds = PSpecData(
+            dsets=dsets, wgts=[None, None], dsets_std=dsets_std, beam=gauss_beam
+        )
+        return ds.pspec(
+            self.ANTPAIRS,
+            self.ANTPAIRS,
+            dsets=(0, 1),
+            pols=[("xx", "xx")],
+            norm=norm,
+            taper=taper,
+            store_cov=True,
+            cov_model="dsets",
+            verbose=False,
+        )
+
+    @staticmethod
+    def by_time(values: np.ndarray, uvp: UVPSpec) -> np.ndarray:
+        """Reshape (Nbltpairs, ...) values to (Ntimes, Nblpairs, ...): spectra of
+        different integrations are independent."""
+        order = np.lexsort((uvp.blpair_array, uvp.time_avg_array))
+        return values[order].reshape(uvp.Ntimes, uvp.Nblpairs, *values.shape[1:])
+
+    def test_zero_mean(self, cross_uvp) -> None:
+        """The cross-power of independent noise has zero mean (real and
+        imaginary parts) at every delay."""
+        power = cross_uvp.data_array[0][:, :, 0]
+        for component in [power.real, power.imag]:
+            mean, error = mean_and_error(component, axis=0)
+            assert_within_errors(mean, 0.0, error)
+
+    @pytest.mark.parametrize(
+        "cross_uvp", [("I", "none"), ("I", "bh")], indirect=True, ids=["I-none", "I-bh"]
+    )
+    def test_noise_power_matches_p_n(self, cross_uvp) -> None:
+        """The rms of the real and of the imaginary parts both equal the noise
+        power P_N of generate_noise_spectra(component="real").
+
+        P_N assumes that each delay mode is estimated independently of the
+        others, which is the case for norm I with or without a taper. The H^-1
+        normalization undoes the correlations introduced by a taper, which
+        increases the noise (the covariance test below checks that).
+        """
+        P_N = cross_uvp.generate_noise_spectra(
+            0, ("xx", "xx"), self.TSYS, component="real"
+        )
+        P_N = np.unique(np.concatenate(list(P_N.values())))
+        assert len(P_N) == 1
+        power = self.by_time(cross_uvp.data_array[0][:, :, 0], cross_uvp)
+        for component in [power.real, power.imag]:
+            mean_square, error = mean_and_error(component**2)
+            assert_within_errors(mean_square, P_N[0] ** 2, error)
+
+    def test_covariance_matches_scatter(self, cross_uvp) -> None:
+        """The diagonal of the analytic covariance equals the variance of the
+        real (cov_array_real) and imaginary (cov_array_imag) parts across
+        realisations, at every delay; so z-scores P / sigma have unit
+        variance."""
+        power = cross_uvp.data_array[0][:, :, 0]
+        for component, cov in [
+            (power.real, cross_uvp.cov_array_real[0]),
+            (power.imag, cross_uvp.cov_array_imag[0]),
+        ]:
+            variance = np.diagonal(cov[..., 0], axis1=1, axis2=2)
+            z_squared = component**2 / variance
+            mean, error = mean_and_error(z_squared, axis=0)
+            assert_within_errors(mean, 1.0, error)
+            mean, error = mean_and_error(self.by_time(z_squared, cross_uvp))
+            assert_within_errors(mean, 1.0, error)

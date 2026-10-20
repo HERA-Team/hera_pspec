@@ -78,18 +78,21 @@ class TestSensitivity:
         assert Dsq[1] < P_N
 
 
-def test_noise_validation(beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData) -> None:
-    """Check that the analytic noise 1-sigma amplitude matches the RMS of a noise simulation realization."""
-    # get simulated noise in Jy (on a copy of zen.even.xx.LST.1.28828.uvOCRSA)
-    Tsys = 300.0  # Kelvin
+# System temperature of the simulated noise in test_noise_validation, in K
+NOISE_VALIDATION_TSYS = 300.0
 
-    # generate noise
-    seed = 0
+
+@pytest.fixture(scope="module")
+def noise_validation_ds(
+    beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData
+) -> tuple[pspecdata.PSpecData, list, list]:
+    """PSpecData of simulated noise (in mK) on the zen.even.xx baselines, and
+    the baseline pairs of one redundant group."""
     uvd = testing.noise_sim(
         uvd_zen_even_xx,
-        Tsys,
+        NOISE_VALIDATION_TSYS,
         beam_nf_dipole,
-        seed=seed,
+        seed=0,
         whiten=True,
         inplace=False,
         Nextend=9,
@@ -103,15 +106,31 @@ def test_noise_validation(beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData) 
         reds[0], exclude_auto_bls=True, exclude_permutations=True
     )
 
-    # setup PSpecData
     ds = pspecdata.PSpecData(
         dsets=[copy.deepcopy(uvd), copy.deepcopy(uvd)],
         wgts=[None, None],
         beam=beam_nf_dipole,
     )
     ds.Jy_to_mK()
+    return ds, bls1, bls2
 
-    # get pspec
+
+@pytest.mark.parametrize("taper", ["none", "bh"])
+@pytest.mark.parametrize("spw", [(0, 20), (100, 150)], ids=["spw_0_20", "spw_100_150"])
+def test_noise_validation(
+    noise_validation_ds: tuple[pspecdata.PSpecData, list, list],
+    spw: tuple[int, int],
+    taper: str,
+) -> None:
+    """Check that the analytic noise power P_N matches the RMS of power spectra
+    of simulated noise, through a real beam model and Jy -> mK conversion.
+
+    The noise of different baselines is independent, so the cross-baseline
+    spectra are pure noise, and the rms of both their real and imaginary parts
+    must equal P_N (component="real"), independently of the spectral window
+    and of the taper.
+    """
+    ds, bls1, bls2 = noise_validation_ds
     uvp = ds.pspec(
         bls1,
         bls2,
@@ -119,10 +138,10 @@ def test_noise_validation(beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData) 
         [("xx", "xx")],
         input_data_weight="identity",
         norm="I",
-        taper="none",
+        taper=taper,
         sampling=False,
         little_h=True,
-        spw_ranges=[(0, 50)],
+        spw_ranges=[spw],
         verbose=False,
     )
 
@@ -131,23 +150,24 @@ def test_noise_validation(beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData) 
         uvp.generate_noise_spectra(
             0,
             ("xx", "xx"),
-            Tsys,
+            NOISE_VALIDATION_TSYS,
             blpairs=uvp.get_blpairs()[:1],
             num_steps=2000,
             component="real",
         ).values()
     )[0][0, 0]
 
-    # get P_rms of real spectra for each baseline across time axis
-    Pspec = np.array(
-        [uvp.get_data((0, bl, ("xx", "xx"))).real for bl in uvp.get_blpairs()]
-    )
-    P_rms = np.sqrt(np.mean(np.abs(Pspec) ** 2))
-
-    # assert close to P_N: 2%
-    # This should be updated to be within standard error on P_rms
-    # when the spw_range-variable pspec amplitude bug is resolved
-    assert np.abs(P_rms - P_N) / P_N < 0.02
+    # power spectra of every blpair, shape (Nblpairs, Ntimes, Ndlys)
+    Pspec = np.array([uvp.get_data((0, bl, ("xx", "xx"))) for bl in uvp.get_blpairs()])
+    for component in [Pspec.real, Pspec.imag]:
+        # Mean square power per integration: integrations are independent
+        # noise realisations, while blpairs sharing a baseline and (with a
+        # taper) neighbouring delays are correlated.
+        mean_square = np.mean(component**2, axis=(0, 2))
+        P_rms = np.sqrt(mean_square.mean())
+        # relative standard error of P_rms
+        error = mean_square.std(ddof=1) / np.sqrt(len(mean_square)) / (2 * P_rms**2)
+        assert np.abs(P_rms / P_N - 1) < 4 * error
 
 
 @pytest.fixture(
