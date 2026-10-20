@@ -129,6 +129,85 @@ class TestCov:
             utils.cov(d1, -np.ones(d1.shape))
 
 
+class TestUvdTimeDifference:
+    def test_removes_static_sky_and_keeps_noise_level(self, synthetic_uvd) -> None:
+        """Differencing consecutive integrations removes a sky that does not
+        change between them, and the 1/sqrt(2) normalization keeps the noise
+        variance sigma^2 of a single integration."""
+        antpairs = [(i, j) for i in range(8) for j in range(i + 1, 8)]
+        uvd = synthetic_uvd(nfreq=32, ntimes=10, antpairs=antpairs, sigma=0.5, seed=4)
+        rng = np.random.default_rng(5)
+        sky = 10 * (
+            rng.standard_normal(uvd.Nfreqs) + 1j * rng.standard_normal(uvd.Nfreqs)
+        )
+        uvd.data_array += sky[None, :, None]
+        diff = utils.uvd_time_difference(uvd, 10.0).data_array
+        n = diff.size
+        # mean and variance within five standard errors
+        assert abs(diff.mean()) < 5 * 0.5 / np.sqrt(n)
+        variance = np.mean(np.abs(diff) ** 2)
+        assert abs(variance - 0.5**2) < 5 * 0.5**2 / np.sqrt(n)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "time_diff is documented in seconds but divided by the integration "
+            "spacing in days, so every time_diff selects the same two pairs"
+        ),
+    )
+    def test_time_diff_sets_the_pair_spacing(self, synthetic_uvd) -> None:
+        """For a time difference of one integration, pairs of consecutive
+        integrations are differenced without reusing an integration, so half
+        as many differences as integrations are returned."""
+        uvd = synthetic_uvd(nfreq=4, ntimes=100, antpairs=[(0, 1)])
+        diff = utils.uvd_time_difference(uvd, uvd.integration_time[0])
+        assert diff.Ntimes == uvd.Ntimes // 2
+
+
+def test_variance_from_auto_correlations(synthetic_uvd) -> None:
+    """The noise variance of a visibility predicted from the autocorrelations
+    of its two antennas (the radiometer equation) is
+    |V_aa V_bb| / (channel width * integration time * nsamples). A channel
+    with zero nsamples (but not flagged) is given the median nsamples of the
+    spectral window."""
+    uvd = synthetic_uvd(nfreq=8, ntimes=3, antpairs=[(0, 0), (1, 1), (0, 1)])
+    rng = np.random.default_rng(1)
+    uvd.nsample_array = rng.uniform(1, 4, uvd.nsample_array.shape)
+    blt = np.arange(uvd.Nblts)[uvd.antpair2ind(0, 1)][1]
+    uvd.nsample_array[blt, 2] = 0
+    autos = np.abs(uvd.get_data(0, 0, "xx")[1] * uvd.get_data(1, 1, "xx")[1])
+    for spw in [(0, 8), (2, 6)]:
+        nsamples = uvd.nsample_array[blt, spw[0] : spw[1], 0].copy()
+        nsamples[nsamples == 0] = np.median(nsamples[nsamples > 0])
+        expected = autos[spw[0] : spw[1]] / (
+            uvd.integration_time[0] * uvd.channel_width[spw[0] : spw[1]] * nsamples
+        )
+        np.testing.assert_allclose(
+            utils.variance_from_auto_correlations(uvd, (0, 1, "xx"), spw, 1),
+            expected,
+            rtol=1e-12,
+        )
+
+
+def test_apply_p_sn_correction() -> None:
+    """P_SN estimated with the data as a proxy for the signal counts the noise
+    twice; the correction of Tan et al. (2021) removes this, so that in the
+    noise-dominated regime, where the uncorrected P_SN is
+    sqrt(1 + 1/sqrt(pi)) P_N, the corrected P_SN is P_N, and in the
+    signal-dominated regime (P_SN >> P_N) it is unchanged."""
+    uvp, _ = testing.build_vanilla_uvpspec()
+    p_n = np.full(uvp.data_array[0].shape, 2.0 + 0j)
+    ratio = np.ones(uvp.data_array[0].shape)
+    ratio[:, : uvp.Ndlys // 2] = np.sqrt(1 + 1 / np.sqrt(np.pi))
+    ratio[:, uvp.Ndlys // 2 :] = 1e8
+    uvp.stats_array = {"P_N": {0: p_n.copy()}, "P_SN": {0: p_n * ratio}}
+    utils.apply_P_SN_correction(uvp)
+    corrected = uvp.stats_array["P_SN"][0]
+    np.testing.assert_allclose(corrected[:, : uvp.Ndlys // 2], 2.0, rtol=1e-12)
+    np.testing.assert_allclose(corrected[:, uvp.Ndlys // 2 :], 2.0 * 1e8, rtol=1e-7)
+    np.testing.assert_array_equal(uvp.stats_array["P_N"][0], p_n)
+
+
 class TestLoadConfig:
     def test_parses_expected_structure(self) -> None:
         """Check that load_config reads keys, bools, lists, Nones, and list-of-lists-as-tuples correctly."""
