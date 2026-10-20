@@ -787,8 +787,9 @@ def sky_noise_sim(
         If True, foreground signal is constant in time
     constant_per_bl : bool
         If True, foreground signal is constant across baselines
-    bl_loop_seed : int
-        random seed to use before starting per-baseline loop
+    bl_loop_seed : int, optional
+        random seed to use before starting per-baseline loop. If None
+        (default), the global random state is left as it is.
     divide_by_nsamp : bool
         If True, divide noise sim by sqrt(Nsample) in data
 
@@ -861,7 +862,8 @@ def sky_noise_sim(
         )
 
     # iterate over cross correlations
-    np.random.seed(bl_loop_seed)
+    if bl_loop_seed is not None:
+        np.random.seed(bl_loop_seed)
     for bl in crossbls:
         # get time and freq dependent Tsys for this baseline
         Tsys_jy = np.sqrt(autos[(bl[0], bl[0], bl[2])] * autos[(bl[1], bl[1], bl[2])])

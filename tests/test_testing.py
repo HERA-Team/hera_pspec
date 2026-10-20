@@ -473,6 +473,19 @@ class TestSkyNoiseSim:
             if bl[0] != bl[1]:
                 assert np.all(~np.isclose(sim2.get_data(bl), uvd2.get_data(bl)))
 
+    def test_respects_global_seed(self, synthetic_uvd, beam_nf_dipole) -> None:
+        """Without bl_loop_seed, sky_noise_sim must not reseed the global RNG.
+
+        A caller who seeds numpy's global random state must get reproducible
+        simulations.
+        """
+        uvd = synthetic_uvd(nfreq=16, ntimes=4, antpairs=[(0, 0), (1, 1), (0, 1)])
+        sims = []
+        for _ in range(2):
+            np.random.seed(5)
+            sims.append(testing.sky_noise_sim(uvd, beam_nf_dipole, bl_loop_seed=None))
+        np.testing.assert_array_equal(sims[0].data_array, sims[1].data_array)
+
     def test_divide_by_nsamp(self, uvd_zen_even_xx: UVData) -> None:
         """Check that divide_by_nsamp zeroes the simulated noise where nsample is zero."""
         sim3 = testing.sky_noise_sim(
