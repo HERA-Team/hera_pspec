@@ -1,11 +1,9 @@
-import copy
 from pathlib import Path
 
 import numpy as np
 import pytest
-from pyuvdata import UVData
 
-from hera_pspec import PSpecContainer, UVPSpec, container, testing
+from hera_pspec import PSpecContainer, UVPSpec, container
 
 _MODES = pytest.mark.parametrize(
     "keep_open,swmr", [(True, False), (False, True)], ids=["default", "transactional"]
@@ -334,12 +332,12 @@ class TestSWMR:
 
 
 @pytest.fixture(scope="module")
-def uvp_pair(uvd_zen_2458042_xx: UVData) -> tuple[UVPSpec, UVPSpec]:
-    """Two compatible UVPSpecs (from zen.2458042.17772.xx.HH.uvXA) with disjoint
-    baseline-pairs, to be combined by combine_psc_spectra."""
-    uvd = copy.deepcopy(uvd_zen_2458042_xx)
-    uvp1 = testing.uvpspec_from_data(uvd, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
-    uvp2 = testing.uvpspec_from_data(uvd, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
+def uvp_pair(vanilla_uvp: UVPSpec) -> tuple[UVPSpec, UVPSpec]:
+    """Two compatible UVPSpecs with disjoint baseline-pairs (split from
+    vanilla_uvp), to be combined by combine_psc_spectra."""
+    blpairs = vanilla_uvp.get_blpairs()
+    uvp1 = vanilla_uvp.select(blpairs=blpairs[:1], inplace=False)
+    uvp2 = vanilla_uvp.select(blpairs=blpairs[1:], inplace=False)
     return uvp1, uvp2
 
 
