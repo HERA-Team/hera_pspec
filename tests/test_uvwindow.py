@@ -1,6 +1,7 @@
 import copy
 import warnings
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 
 import h5py
@@ -22,6 +23,10 @@ dfile = "zen.2458116.31939.HH.uvh5"
 ftfile = "FT_beam_HERA_dipole_test_xx.hdf5"
 basename = "FT_beam_HERA_dipole_test"
 outfile = "test.hdf5"
+
+# Spectral window ranges that FTBeam must reject: wrong length, reversed, and
+# outside the band
+BAD_SPWS = [(13,), (20, 10), (1001, 1022)]
 
 
 # Reading the FT beam file is slow, so the fixtures below that read it are
@@ -429,7 +434,7 @@ class TestFTBeamFromFile:
         with pytest.raises(ValueError, match=match):
             uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=bad_freqs)
 
-    @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
+    @pytest.mark.parametrize("bad_spw", BAD_SPWS)
     def test_invalid_spw_range(self, bad_spw: tuple[int, ...]) -> None:
         with (
             pytest.warns(DeprecationWarning, match="spw_range"),
@@ -439,17 +444,19 @@ class TestFTBeamFromFile:
 
 
 class TestFTBeamGaussian:
-    def test_array_widths(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        freq_array = ft_beam_spw.freq_array
-        widths = -0.0343 * freq_array / 1e6 + 11.30
-        test = uvwindow.FTBeam.gaussian(freq_array=freq_array, widths=widths, pol="xx")
-        assert test.freq_array.shape == freq_array.shape
-
-    def test_scalar_width(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+    @pytest.mark.parametrize(
+        "reduce_widths", [lambda w: w, np.mean], ids=["array_widths", "scalar_width"]
+    )
+    def test_widths(
+        self,
+        ft_beam_spw: uvwindow.FTBeam,
+        reduce_widths: Callable[[np.ndarray], np.ndarray | float],
+    ) -> None:
+        """Check that widths can be given per frequency or as a single value."""
         freq_array = ft_beam_spw.freq_array
         widths = -0.0343 * freq_array / 1e6 + 11.30
         test = uvwindow.FTBeam.gaussian(
-            freq_array=freq_array, widths=np.mean(widths), pol="xx"
+            freq_array=freq_array, widths=reduce_widths(widths), pol="xx"
         )
         assert test.freq_array.shape == freq_array.shape
 
@@ -500,7 +507,7 @@ class TestFTBeamUpdateSpw:
         np.testing.assert_array_equal(test.freq_array, full_freqs[5:25])
         np.testing.assert_array_equal(test.ft_beam, full_ft_beam[5:25])
 
-    @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
+    @pytest.mark.parametrize("bad_spw", BAD_SPWS)
     def test_invalid_range(
         self,
         make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
@@ -577,13 +584,16 @@ class TestUVWindowInit:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, verbose=True)
         assert test.verbose
 
-    def test_little_h_true(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=True)
-        assert test.kunits.is_equivalent(units.h / units.Mpc)
-
-    def test_little_h_false(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
-        assert test.kunits.is_equivalent(units.Mpc ** (-1))
+    @pytest.mark.parametrize(
+        "little_h,kunits",
+        [(True, units.h / units.Mpc), (False, units.Mpc ** (-1))],
+        ids=["little_h_true", "little_h_false"],
+    )
+    def test_little_h(
+        self, ft_beam_spw: uvwindow.FTBeam, little_h: bool, kunits: units.Unit
+    ) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=little_h)
+        assert test.kunits.is_equivalent(kunits)
 
 
 class TestUVWindowFromUvpspec:
@@ -599,22 +609,17 @@ class TestUVWindowFromUvpspec:
             uvp.polpair_array[ipol], pol_strings=True
         )
 
-    def test_happy_path(
-        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
+    # uvp_for_uvwindow holds (uvp, uvp without cosmology, cross-pol uvp)
+    @pytest.mark.parametrize("iuvp", [0, 2], ids=["happy_path", "crosspol"])
+    def test_matches_uvp(
+        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec], iuvp: int
     ) -> None:
-        uvp, _, _ = uvp_for_uvwindow
+        uvp = uvp_for_uvwindow[iuvp]
         uvw = uvwindow.UVWindow.from_uvpspec(
             uvp, ipol=0, spw=0, verbose=True, ftbeam=DATA_PATH / basename
         )
         self._assert_matches_uvp(uvw, uvp, ipol=0)
         assert uvw.cosmo == uvp.cosmo
-
-    def test_crosspol(self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]) -> None:
-        _, _, uvp_crosspol = uvp_for_uvwindow
-        uvw = uvwindow.UVWindow.from_uvpspec(
-            uvp_crosspol, ipol=0, spw=0, ftbeam=DATA_PATH / basename
-        )
-        self._assert_matches_uvp(uvw, uvp_crosspol, ipol=0)
 
     def test_no_cosmo_warns(
         self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
@@ -857,21 +862,26 @@ class TestUVWindowGetKperpBins:
         ):
             uvwindow_obj.get_kperp_bins(bl_lens=[])
 
-    def test_scalar_returns_units(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    @pytest.mark.parametrize(
+        "select_bl_lens",
+        [lambda bl_lens: bl_lens[12], lambda bl_lens: bl_lens],
+        ids=["scalar", "array"],
+    )
+    def test_linear_bins_with_units(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        select_bl_lens: Callable[[np.ndarray], np.ndarray | float],
     ) -> None:
-        kperps = uvwindow_obj.get_kperp_bins(red_bl_lens[12])
+        bl_lens = select_bl_lens(red_bl_lens)
+        kperps = uvwindow_obj.get_kperp_bins(bl_lens)
         assert uvwindow_obj.kunits.is_equivalent(kperps.unit)
-
-    def test_array(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
-    ) -> None:
-        kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens).value
+        kperp_bins = kperps.value
         # linearly spaced bins covering the longest baseline
         np.testing.assert_allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0])
         kperp_max = uvwindow_obj.cosmo.bl_to_kperp(
             uvwindow_obj.avg_z, little_h=True
-        ) * np.max(red_bl_lens)
+        ) * np.max(bl_lens)
         assert kperp_bins.max() > kperp_max
 
     def test_large_array_warns(
@@ -887,7 +897,9 @@ class TestUVWindowGetKparaBins:
             uvwindow_obj.get_kpara_bins(freq_array=uvwindow_obj.freq_array[2])
 
     def test_happy_path(self, uvwindow_obj: uvwindow.UVWindow) -> None:
-        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array).value
+        kparas = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        assert uvwindow_obj.kunits.is_equivalent(kparas.unit)
+        kpara_bins = kparas.value
         # linearly spaced bins, one per delay step, covering the largest delay
         kpara_per_tau = uvwindow_obj.cosmo.tau_to_kpara(
             uvwindow_obj.avg_z, little_h=True
@@ -897,10 +909,6 @@ class TestUVWindowGetKparaBins:
             np.diff(kpara_bins), kpara_per_tau * np.diff(dly_array)[0]
         )
         assert kpara_bins.max() > kpara_per_tau * np.abs(dly_array).max()
-
-    def test_returns_units(self, uvwindow_obj: uvwindow.UVWindow) -> None:
-        kparas = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
-        assert uvwindow_obj.kunits.is_equivalent(kparas.unit)
 
     def test_large_bandwidth_warns(self, uvwindow_obj: uvwindow.UVWindow) -> None:
         HERA_bw = np.linspace(1, 2, 1024, endpoint=False) * 1e8
@@ -957,60 +965,48 @@ class TestUVWindowGetCylindricalWf:
             kpara, uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array).value
         )
 
-    def test_custom_kperp_bins(
+    @pytest.mark.parametrize("axis", ["kperp", "kpara"])
+    def test_custom_bins(
         self,
         uvwindow_obj: uvwindow.UVWindow,
         cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+        axis: str,
     ) -> None:
-        bl_len, kperp, _, cyl_wf = cyl_wf_result
-        kperp2, _, cyl_wf2 = uvwindow_obj.get_cylindrical_wf(
-            bl_len,
-            kperp_bins=kperp * uvwindow_obj.kunits,
-            kpara_bins=None,
-            return_bins="unweighted",
+        """Check that passing the default bins explicitly reproduces the default result."""
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        bins = {"kperp_bins": None, "kpara_bins": None}
+        bins[f"{axis}_bins"] = {"kperp": kperp, "kpara": kpara}[
+            axis
+        ] * uvwindow_obj.kunits
+        kperp2, kpara2, cyl_wf2 = uvwindow_obj.get_cylindrical_wf(
+            bl_len, **bins, return_bins="unweighted"
         )
         assert np.allclose(cyl_wf2, cyl_wf)
         assert np.allclose(kperp2, kperp)
+        assert np.allclose(kpara2, kpara)
 
-    def test_custom_kpara_bins(
+    @pytest.mark.parametrize(
+        "bad_kwarg,bad_bins",
+        [
+            ("kperp_bins", np.logspace(-2, 0, 100)),
+            ("kpara_bins", np.logspace(-1, 1, 100)),
+        ],
+        ids=["kperp", "kpara"],
+    )
+    def test_nonlinear_bins_error(
         self,
         uvwindow_obj: uvwindow.UVWindow,
-        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+        red_bl_lens: np.ndarray,
+        bad_kwarg: str,
+        bad_bins: np.ndarray,
     ) -> None:
-        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
-        _, kpara3, cyl_wf3 = uvwindow_obj.get_cylindrical_wf(
-            bl_len,
-            kperp_bins=None,
-            kpara_bins=kpara * uvwindow_obj.kunits,
-            return_bins="unweighted",
-        )
-        assert np.allclose(cyl_wf3, cyl_wf)
-        assert np.allclose(kpara, kpara3)
-
-    def test_nonlinear_kperp_error(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
-    ) -> None:
+        bins = {"kperp_bins": None, "kpara_bins": None}
+        bins[bad_kwarg] = bad_bins * uvwindow_obj.kunits
         with pytest.raises(
-            ValueError, match="get_cylindrical_wf: kperp_bins must be linearly spaced"
+            ValueError, match=f"get_cylindrical_wf: {bad_kwarg} must be linearly spaced"
         ):
             uvwindow_obj.get_cylindrical_wf(
-                red_bl_lens[12],
-                kperp_bins=np.logspace(-2, 0, 100) * uvwindow_obj.kunits,
-                kpara_bins=None,
-                return_bins="unweighted",
-            )
-
-    def test_nonlinear_kpara_error(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
-    ) -> None:
-        with pytest.raises(
-            ValueError, match="get_cylindrical_wf: kpara_bins must be linearly spaced"
-        ):
-            uvwindow_obj.get_cylindrical_wf(
-                red_bl_lens[12],
-                kperp_bins=None,
-                kpara_bins=np.logspace(-1, 1, 100) * uvwindow_obj.kunits,
-                return_bins="unweighted",
+                red_bl_lens[12], **bins, return_bins="unweighted"
             )
 
     def test_odd_number_of_delays(
@@ -1427,30 +1423,34 @@ class TestUVWindowRunAndWrite:
         assert np.allclose(np.sum(cyl_wf_none, axis=(1, 2)), 1.0, atol=1e-3)
         assert not np.allclose(cyl_wf_none, cyl_wf_taper)
 
-    def test_clobber_false_raises(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    @pytest.mark.parametrize(
+        "clobber,second_write",
+        [
+            (False, pytest.raises(IOError, match="exists, not overwriting")),
+            (True, nullcontext()),
+        ],
+        ids=["clobber_false_raises", "clobber_true_overwrites"],
+    )
+    def test_clobber(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        tmp_path: Path,
+        clobber: bool,
+        second_write,
     ) -> None:
+        """Check that writing to an existing file needs clobber=True."""
         uvwindow_obj.run_and_write(
             filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=True
         )
-        with pytest.raises(IOError, match="exists, not overwriting"):
+        with second_write:
             uvwindow_obj.run_and_write(
-                filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=False
+                filepath=str(tmp_path / outfile),
+                bl_lens=[red_bl_lens[:1]],
+                kperp_bins=None,
+                kpara_bins=None,
+                clobber=clobber,
             )
-
-    def test_clobber_true_overwrites(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
-    ) -> None:
-        uvwindow_obj.run_and_write(
-            filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=True
-        )
-        uvwindow_obj.run_and_write(
-            filepath=str(tmp_path / outfile),
-            bl_lens=[red_bl_lens[:1]],
-            kperp_bins=None,
-            kpara_bins=None,
-            clobber=True,
-        )
 
     def test_weights_mismatch_error(
         self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
