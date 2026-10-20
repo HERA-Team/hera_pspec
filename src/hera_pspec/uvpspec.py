@@ -42,6 +42,43 @@ def _cosmology_from_yaml(cosmo_yaml):
     return Cosmology.from_format(cosmo_yaml, format="yaml")
 
 
+# YAML of the astropy cosmology written next to each cosmology parameter dict.
+# The YAML depends only on the parameters (Cosmo_Conversions builds its
+# LambdaCDM from them), and dumping it costs ~0.25 ms per write.
+_COSMO_YAML_CACHE = {}
+_COSMO_YAML_CACHE_SIZE = 32
+
+
+def _cosmo_yaml_for_writing(cosmo, params):
+    """
+    Return the astropy YAML of a cosmology for writing, cached by parameters.
+
+    Parameters
+    ----------
+    cosmo : conversions.Cosmo_Conversions
+        The cosmology.
+    params : dict
+        ``cosmo.get_params()``.
+
+    Returns
+    -------
+    str or None
+        ``cosmo._astropy_for_writing().to_format("yaml")``, or None when
+        astropy cannot represent the cosmology.
+    """
+    key = tuple(sorted(params.items()))
+    try:
+        return _COSMO_YAML_CACHE[key]
+    except KeyError:
+        pass
+    cosmology = cosmo._astropy_for_writing()
+    cosmo_yaml = None if cosmology is None else cosmology.to_format("yaml")
+    if len(_COSMO_YAML_CACHE) >= _COSMO_YAML_CACHE_SIZE:
+        _COSMO_YAML_CACHE.clear()
+    _COSMO_YAML_CACHE[key] = cosmo_yaml
+    return cosmo_yaml
+
+
 def _value_in_unit(value, unit):
     """Return a plain value in ``unit``: Quantities are converted, others kept."""
     if isinstance(value, units.Quantity):
@@ -2309,6 +2346,10 @@ class UVPSpec:
         # Check whether the group already contains info
         # TODO
 
+        # Fetch the attribute manager once: h5py's File.attrs re-opens the
+        # root group on every access
+        attrs = group.attrs
+
         # Write meta data. Parameters with a declared unit are written as plain
         # values in that unit, with the unit string in a "<name>_unit" attr.
         for k in self._meta_attrs:
@@ -2316,26 +2357,27 @@ class UVPSpec:
                 # handle cosmo: the v0.x dict string (read by every version)
                 # and, when astropy can represent it, the astropy YAML
                 if k == "cosmo":
-                    group.attrs["cosmo"] = str(self.cosmo.get_params())
+                    params = self.cosmo.get_params()
+                    attrs["cosmo"] = str(params)
                     # None when astropy cannot represent it (e.g. an Om_k
                     # inconsistent with Om_L and Om_M): then only the dict
-                    cosmology = self.cosmo._astropy_for_writing()
-                    if cosmology is not None:
-                        group.attrs["cosmo_yaml"] = cosmology.to_format("yaml")
+                    cosmo_yaml = _cosmo_yaml_for_writing(self.cosmo, params)
+                    if cosmo_yaml is not None:
+                        attrs["cosmo_yaml"] = cosmo_yaml
                     continue
                 this_attr = getattr(self, k)
 
                 unit = getattr(self, "_" + k).unit
                 if unit is not None:
                     this_attr = _value_in_unit(this_attr, unit)
-                    group.attrs[f"{k}_unit"] = uvputils.unit_to_string(unit)
+                    attrs[f"{k}_unit"] = uvputils.unit_to_string(unit)
 
                 # Do Unicode/string conversions, as HDF5 struggles with them
                 if k == "labels":
                     this_attr = [np.bytes_(lbl) for lbl in this_attr]
 
                 # Store attribute in group
-                group.attrs[k] = this_attr
+                attrs[k] = this_attr
 
         for k in self._meta_dsets:
             if hasattr(self, k):
@@ -2420,8 +2462,8 @@ class UVPSpec:
                     dset.attrs["unit"] = data_unit
 
         # denote as a uvpspec object, and record the format version
-        group.attrs["uvpspec_version"] = UVPSPEC_HDF5_VERSION
-        group.attrs["pspec_type"] = self.__class__.__name__
+        attrs["uvpspec_version"] = UVPSPEC_HDF5_VERSION
+        attrs["pspec_type"] = self.__class__.__name__
 
     def write_hdf5(self, filepath, overwrite=False, run_check=True):
         """
