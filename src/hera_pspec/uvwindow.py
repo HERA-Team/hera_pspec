@@ -408,14 +408,7 @@ class FTBeam:
 
     @classmethod
     def gaussian(
-        cls,
-        freq_array,
-        widths,
-        pol,
-        mapsize=1.0,
-        npix=301,
-        cosmo=conversions.Cosmo_Conversions(),
-        **kwargs,
+        cls, freq_array, widths, pol, mapsize=1.0, npix=301, cosmo=None, **kwargs
     ):
         """
         Initiliase a Gaussian beam on a range of frequencies,
@@ -440,9 +433,17 @@ class FTBeam:
             Number of pixels to grid sky plane, along one direction.
             Preferably an odd number.
         cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified.
+            Deprecated and unused: the Fourier transform of the beam does not
+            depend on cosmology. Passing a value emits a DeprecationWarning;
+            the argument will be removed in a future version.
         """
+        if cosmo is not None:
+            warnings.warn(
+                "The cosmo argument of FTBeam.gaussian is unused and will be "
+                "removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Frequency-related parameters
         freq_array = np.array(freq_array)
