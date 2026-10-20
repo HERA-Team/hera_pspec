@@ -189,6 +189,7 @@ class TestDelaySpectrum:
             normal_std=True,
             robust_std=False,
             verbose=False,
+            seed=0,
         )
 
         f6 = plot.delay_spectrum(

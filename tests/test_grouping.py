@@ -514,16 +514,15 @@ def test_bootstrap_average_blpairs(uvp: UVPSpec) -> None:
     # Test that different bootstrap-sampled averages have the same value as
     # the normal average (since the data for all blpairs has been set to
     # the same values for uvp3)
-    np.random.seed(10)
     uvp_avg = uvp3.average_spectra(
         blpair_groups=[_blpairs], time_avg=True, inplace=False
     )
     blpair = uvp_avg.blpair_array[0]
-    for _ in range(5):
+    for seed in range(5):
         # Generate multiple samples and make sure that they are all equal
         # to the regular average (for the cloned data in uvp3)
         uvp4, wgts = grouping.bootstrap_average_blpairs(
-            [uvp3], blpair_groups=[_blpairs], time_avg=True
+            [uvp3], blpair_groups=[_blpairs], time_avg=True, seed=seed
         )
         try:
             ps_avg = uvp_avg.get_data((0, blpair, ("xx", "xx")))

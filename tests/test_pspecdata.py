@@ -42,46 +42,54 @@ pspec_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
 #                   'kaiser3', 'hamming', 'hanning', 'parzen']
 
 
-def generate_pos_def(n):
+def generate_pos_def(n, rng):
     """
-    Generate a random positive definite Hermitian matrix.
+    Generate a random, well-conditioned positive definite Hermitian matrix.
 
     Parameters
     ----------
     n : integer
         Size of desired matrix
+    rng : numpy.random.Generator
+        Random number generator to draw the matrix from.
 
     Returns
     -------
     A : array_like
         Positive definite matrix
     """
-    A = np.random.normal(size=(n, n)) + 1j * np.random.normal(size=(n, n))
+    A = rng.normal(size=(n, n)) + 1j * rng.normal(size=(n, n))
     A += np.conjugate(A).T
-    # Add just enough of an identity matrix to make all eigenvalues positive
-    A += -1.01 * np.min(np.linalg.eigvalsh(A)) * np.identity(n)
+    # Shift the eigenvalues so that the smallest is 1, which keeps the matrix
+    # positive definite and well-conditioned.
+    A += (1.0 - np.min(np.linalg.eigvalsh(A))) * np.identity(n)
     return A
 
 
-def generate_pos_def_all_pos(n):
+def generate_pos_def_all_pos(n, rng):
     """
-    Generate a random positive definite symmetric matrix, with all entries
-    positive.
+    Generate a random, well-conditioned positive definite symmetric matrix,
+    with all entries positive.
 
     Parameters
     ----------
     n : integer
         Size of desired matrix
+    rng : numpy.random.Generator
+        Random number generator to draw the matrix from.
 
     Returns
     -------
     A : array_like
         Positive definite matrix
     """
-    A = np.random.uniform(size=(n, n))
+    A = rng.uniform(size=(n, n))
     A += A.T
-    # Add just enough of an identity matrix to make all eigenvalues positive
-    A += -1.01 * np.min(np.linalg.eigvalsh(A)) * np.identity(n)
+    # Shift the eigenvalues so that the smallest is 1, which keeps the matrix
+    # positive definite and well-conditioned. The smallest eigenvalue is at
+    # most the smallest diagonal entry, so the diagonal stays >= 1 and all
+    # entries stay positive.
+    A += (1.0 - np.min(np.linalg.eigvalsh(A))) * np.identity(n)
     return A
 
 
@@ -491,12 +499,9 @@ class TestGetQ:
         Test the Q = dC/dp function.
         """
         vect_length = 50
-        x_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
-            size=vect_length
-        )
-        y_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
-            size=vect_length
-        )
+        rng = np.random.default_rng(0)
+        x_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
+        y_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
 
         ds = pspecdata.PSpecData()
         ds.spw_Nfreqs = vect_length
@@ -595,12 +600,9 @@ class TestGetQ:
         ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
 
         vect_length = ds_t.spw_Ndlys
-        x_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
-            size=vect_length
-        )
-        y_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
-            size=vect_length
-        )
+        rng = np.random.default_rng(0)
+        x_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
+        y_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
 
         for i in range(vect_length):
             Q_matrix = ds_t.get_Q(i)
@@ -723,8 +725,9 @@ class TestGetUnnormedMatrices:
             ds.get_unnormed_E("placeholder", "placeholder")
 
         # Test that if R1 = R2, then the result is Hermitian
+        rng = np.random.default_rng(0)
         ds.spw_Ndlys = 7
-        random_R = generate_pos_def_all_pos(ds.spw_Nfreqs)
+        random_R = generate_pos_def_all_pos(ds.spw_Nfreqs, rng)
         wgt_matrix_dict = {}  # The keys here have no significance except they are formatted right
         wgt_matrix_dict[("red", (24, 25))] = random_R
         wgt_matrix_dict[("blue", (24, 25))] = random_R
@@ -743,7 +746,7 @@ class TestGetUnnormedMatrices:
             beam=beam_nf_dipole,
         )
         ds_c.spw_Ndlys = 10
-        random_R = generate_pos_def_all_pos(ds_c.spw_Nfreqs)
+        random_R = generate_pos_def_all_pos(ds_c.spw_Nfreqs, rng)
         wgt_matrix_dict = {}
         wgt_matrix_dict[("red", (24, 25))] = random_R
         wgt_matrix_dict[("blue", (24, 25))] = random_R
@@ -754,7 +757,7 @@ class TestGetUnnormedMatrices:
         assert E_matrices.shape == (ds_c.spw_Ndlys, ds_c.spw_Nfreqs, ds_c.spw_Nfreqs)
 
         # Test that if R1 != R2, then i) E^{12,dagger} = E^{21}
-        random_R2 = generate_pos_def_all_pos(ds.spw_Nfreqs)
+        random_R2 = generate_pos_def_all_pos(ds.spw_Nfreqs, rng)
         wgt_matrix_dict = {}
         wgt_matrix_dict[("red", (24, 25))] = random_R
         wgt_matrix_dict[("blue", (24, 25))] = random_R2
@@ -855,17 +858,17 @@ MW_TEST_N = 17
 
 @pytest.fixture
 def random_G() -> np.ndarray:
-    return generate_pos_def_all_pos(MW_TEST_N)
+    return generate_pos_def_all_pos(MW_TEST_N, np.random.default_rng(1))
 
 
 @pytest.fixture
 def random_H() -> np.ndarray:
-    return generate_pos_def_all_pos(MW_TEST_N)
+    return generate_pos_def_all_pos(MW_TEST_N, np.random.default_rng(2))
 
 
 @pytest.fixture
 def random_V() -> np.ndarray:
-    return generate_pos_def_all_pos(MW_TEST_N)
+    return generate_pos_def_all_pos(MW_TEST_N, np.random.default_rng(3))
 
 
 class TestGetMW:
