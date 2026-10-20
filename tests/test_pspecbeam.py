@@ -27,6 +27,10 @@ def efield_beam(beam_nf_efield: pspecbeam.PSpecBeamUV) -> pspecbeam.PSpecBeamUV:
     return beam
 
 
+def _leave_unchanged(primary_beam: UVBeam) -> None:
+    pass
+
+
 class TestPSpecBeamUV:
     def test_init(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that PSpecBeamUV loads a beamfits file and sets primary_beam/beam_freqs/cosmo."""
@@ -59,22 +63,6 @@ class TestPSpecBeamUV:
         )
         assert abs(scalar / 568847837.72586381 - 1.0) <= 1e-4
 
-    def test_scalar_convergence(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
-        """Check that compute_pspec_scalar converges as num_steps increases."""
-        scalar = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
-        )
-        scalar_large_Nsteps = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
-        )
-        assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
-
-    def test_custom_cosmology(
-        self, beam_nf_dipole_wcosmo: pspecbeam.PSpecBeamUV
-    ) -> None:
-        """Check that a user-defined cosmology can be passed to the constructor."""
-        assert isinstance(beam_nf_dipole_wcosmo.cosmo, conversions.Cosmo_Conversions)
-
     @pytest.mark.parametrize("pol", ["pQ", "pU", "pV"])
     def test_scalar_other_stokes(
         self, beam_nf_pstokes: pspecbeam.PSpecBeamUV, pol: str
@@ -89,13 +77,6 @@ class TestPSpecBeamUV:
         # a positive scalar that uses the requested polarization's beam
         assert np.isfinite(scalar) and scalar > 0
         assert not np.isclose(scalar, scalar_pI, rtol=1e-3)
-
-    def test_taper(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
-        """Check compute_pspec_scalar with a taper against a precomputed reference value."""
-        scalar = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
-        )
-        assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
 
     def test_jy_to_mk(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check Jy_to_mK output, extrapolation warnings and that non-float-array inputs raise a TypeError."""
@@ -142,48 +123,35 @@ class TestPSpecBeamUV:
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
             )
 
-    def test_dipole_beam(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
-        """Check that dipole (linear-pol) beams compute a scalar for XX but raise for pI."""
-        scalar = beam_nf_dipole.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
-        )
+    @pytest.mark.parametrize("beam_name", ["beam_nf_dipole", "beam_nf_efield"])
+    def test_linear_pol_beam(
+        self, beam_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        """Check that linear-pol (dipole power and efield) beams compute a scalar for XX but raise for pI."""
+        beam = request.getfixturevalue(beam_name)
+        scalar = beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
         assert np.isfinite(scalar) and scalar > 0
         # pol strings are case-insensitive
-        assert scalar == beam_nf_dipole.compute_pspec_scalar(
+        assert scalar == beam.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="xx"
         )
         with pytest.raises(
             ValueError, match="Do not have the right polarization information"
         ):
-            beam_nf_dipole.compute_pspec_scalar(
-                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
-            )
+            beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI")
 
-    def test_efield_beam(self, beam_nf_efield: pspecbeam.PSpecBeamUV) -> None:
-        """Check that efield beams compute a scalar for XX but raise for pI."""
-        beam_nf_efield.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
-        with pytest.raises(
-            ValueError, match="Do not have the right polarization information"
-        ):
-            beam_nf_efield.compute_pspec_scalar(
-                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
-            )
-
-    def test_get_omegas_single_polpair(
-        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
+    @pytest.mark.parametrize(
+        "polpairs,ncols",
+        [(("xx", "xx"), 1), ([(-5, -5), (-6, -6)], 2)],
+        ids=["single_polpair_tuple", "list_of_polpair_codes"],
+    )
+    def test_get_omegas(
+        self, beam_nf_dipole: pspecbeam.PSpecBeamUV, polpairs, ncols: int
     ) -> None:
-        """Check the OmegaP/OmegaPP shape for a single polarization-pair tuple."""
-        OP, OPP = beam_nf_dipole.get_Omegas(("xx", "xx"))
-        assert OP.shape == (26, 1)
-        assert OPP.shape == (26, 1)
-
-    def test_get_omegas_multiple_polpairs(
-        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
-    ) -> None:
-        """Check the OmegaP/OmegaPP shape for a list of polarization-pair codes."""
-        OP, OPP = beam_nf_dipole.get_Omegas([(-5, -5), (-6, -6)])
-        assert OP.shape == (26, 2)
-        assert OPP.shape == (26, 2)
+        """Check the OmegaP/OmegaPP shape (Nbeam_freqs, Npolpairs) from get_Omegas."""
+        OP, OPP = beam_nf_dipole.get_Omegas(polpairs)
+        assert OP.shape == (26, ncols)
+        assert OPP.shape == (26, ncols)
 
     def test_get_omegas_raises_on_non_list_input(
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV
@@ -214,64 +182,78 @@ class TestPSpecBeamUV:
         assert beam_res[0].ndim == 2
         assert np.shape(beam_res[0]) == (len(freq), (12 * nside**2))
 
-    def test_beam_normalized_response_raises_on_wrong_pol(
-        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
+    @pytest.mark.parametrize(
+        "beam_name,mutate,pol,match",
+        [
+            pytest.param(
+                "beam_nf_dipole",
+                _leave_unchanged,
+                "ll",
+                "Do not have the right polarization",
+                id="unavailable_pol",
+            ),
+            pytest.param(
+                "efield_beam",
+                lambda pb: setattr(pb, "beam_type", "voltage"),
+                "xx",
+                "beam_type must be power",
+                id="non_power_beam",
+            ),
+            pytest.param(
+                "efield_beam",
+                lambda pb: setattr(pb, "Naxes_vec", 2),
+                "xx",
+                "Expect scalar for power beam",
+                id="vector_power_beam",
+            ),
+            pytest.param(
+                "efield_beam",
+                lambda pb: setattr(pb._data_normalization, "value", "area"),
+                "xx",
+                "beam must be peak normalized",
+                id="non_peak_normalized",
+            ),
+            pytest.param(
+                "efield_beam",
+                lambda pb: setattr(pb, "pixel_coordinate_system", "cartesian"),
+                "xx",
+                "only healpix format supported",
+                id="non_healpix_coords",
+            ),
+        ],
+    )
+    def test_beam_normalized_response_raises(
+        self,
+        beam_name: str,
+        mutate: Callable[[UVBeam], None],
+        pol: str,
+        match: str,
+        request: pytest.FixtureRequest,
     ) -> None:
-        """Check that an unavailable polarization raises a ValueError."""
+        """Check that beams beam_normalized_response cannot handle raise a ValueError."""
+        beam = request.getfixturevalue(beam_name)
+        mutate(beam.primary_beam)
         freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
-        with pytest.raises(ValueError, match="Do not have the right polarization"):
-            pspecbeam.PSpecBeamUV.beam_normalized_response(
-                beam_nf_dipole, pol="ll", freq=freq
-            )
-
-    def test_beam_normalized_response_raises_on_non_power_beam(
-        self, beam_nf_efield: pspecbeam.PSpecBeamUV
-    ) -> None:
-        """Check that a non-power beam_type raises a ValueError."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
-        beam = copy.deepcopy(beam_nf_efield)
-        beam.primary_beam.beam_type = "voltage"
-        with pytest.raises(ValueError, match="beam_type must be power"):
-            pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol="xx", freq=freq)
-
-    def test_beam_normalized_response_raises_on_wrong_axes(
-        self, efield_beam: pspecbeam.PSpecBeamUV
-    ) -> None:
-        """Check that Naxes_vec > 1 raises a ValueError for a power beam."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
-        efield_beam.primary_beam.Naxes_vec = 2
-        with pytest.raises(ValueError, match="Expect scalar for power beam"):
-            pspecbeam.PSpecBeamUV.beam_normalized_response(
-                efield_beam, pol="xx", freq=freq
-            )
-
-    def test_beam_normalized_response_raises_on_non_peak_normalization(
-        self, efield_beam: pspecbeam.PSpecBeamUV
-    ) -> None:
-        """Check that a non-peak-normalized beam raises a ValueError."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
-        efield_beam.primary_beam._data_normalization.value = "area"
-        with pytest.raises(ValueError, match="beam must be peak normalized"):
-            pspecbeam.PSpecBeamUV.beam_normalized_response(
-                efield_beam, pol="xx", freq=freq
-            )
-
-    def test_beam_normalized_response_raises_on_non_healpix_coords(
-        self, efield_beam: pspecbeam.PSpecBeamUV
-    ) -> None:
-        """Check that a non-healpix pixel coordinate system raises a ValueError."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
-        efield_beam.primary_beam.pixel_coordinate_system = "cartesian"
-        with pytest.raises(ValueError, match="only healpix format supported"):
-            pspecbeam.PSpecBeamUV.beam_normalized_response(
-                efield_beam, pol="xx", freq=freq
-            )
+        with pytest.raises(ValueError, match=match):
+            pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol=pol, freq=freq)
 
 
 @pytest.fixture(scope="module")
 def gauss_beam() -> pspecbeam.PSpecBeamGauss:
     """A Gaussian primary beam (FWHM=0.8), used both as its own test subject and as a reference for PSpecBeamFromArray."""
     return pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))
+
+
+@pytest.fixture(scope="module")
+def fromarray_beam(
+    gauss_beam: pspecbeam.PSpecBeamGauss,
+) -> pspecbeam.PSpecBeamFromArray:
+    """A PSpecBeamFromArray built from gauss_beam's beam integrals."""
+    return pspecbeam.PSpecBeamFromArray(
+        OmegaP=gauss_beam.power_beam_int(),
+        OmegaPP=gauss_beam.power_beam_sq_int(),
+        beam_freqs=gauss_beam.beam_freqs,
+    )
 
 
 class TestPSpecBeamGauss:
@@ -292,32 +274,6 @@ class TestPSpecBeamGauss:
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / 6392750120.8657961 - 1.0) <= 1e-4
-
-    def test_custom_cosmology(self) -> None:
-        """Check that a user-defined cosmology can be passed to the constructor."""
-        bgauss = pspecbeam.PSpecBeamGauss(
-            0.8,
-            np.linspace(115e6, 130e6, 50, endpoint=False),
-            cosmo=conversions.Cosmo_Conversions(),
-        )
-        assert isinstance(bgauss.cosmo, conversions.Cosmo_Conversions)
-
-    def test_scalar_convergence(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
-        """Check that compute_pspec_scalar converges as num_steps increases."""
-        scalar = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
-        )
-        scalar_large_Nsteps = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=2000
-        )
-        assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
-
-    def test_taper(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
-        """Check compute_pspec_scalar with a taper against a precomputed reference value."""
-        scalar = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
-        )
-        assert abs(scalar / 22123832163.072491 - 1.0) <= 1e-8
 
     def test_from_gaussian_beam_object(
         self, gauss_beam: pspecbeam.PSpecBeamGauss
@@ -439,42 +395,19 @@ class TestPSpecBeamFromArray:
         )
         assert abs(scalar / 6392750120.8657961 - 1.0) <= 1e-4
 
-    def test_custom_cosmology(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
-        """Check that a user-defined cosmology can be passed to the constructor."""
-        bm2 = pspecbeam.PSpecBeamFromArray(
-            OmegaP=gauss_beam.power_beam_int(),
-            OmegaPP=gauss_beam.power_beam_sq_int(),
-            beam_freqs=gauss_beam.beam_freqs,
-            cosmo=conversions.Cosmo_Conversions(),
-        )
-        assert isinstance(bm2.cosmo, conversions.Cosmo_Conversions)
-
-    def test_matches_gauss(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
+    def test_matches_gauss(
+        self,
+        gauss_beam: pspecbeam.PSpecBeamGauss,
+        fromarray_beam: pspecbeam.PSpecBeamFromArray,
+    ) -> None:
         """Check that compute_pspec_scalar matches the equivalent Gaussian beam's result."""
-        psbeam = pspecbeam.PSpecBeamFromArray(
-            OmegaP=gauss_beam.power_beam_int(),
-            OmegaPP=gauss_beam.power_beam_sq_int(),
-            beam_freqs=gauss_beam.beam_freqs,
-        )
-        scalar = psbeam.compute_pspec_scalar(
+        scalar = fromarray_beam.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         g_scalar = gauss_beam.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         np.testing.assert_array_almost_equal(scalar, g_scalar)
-
-    def test_taper(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
-        """Check that compute_pspec_scalar with a taper matches the equivalent Gaussian-beam result."""
-        psbeam = pspecbeam.PSpecBeamFromArray(
-            OmegaP=gauss_beam.power_beam_int(),
-            OmegaPP=gauss_beam.power_beam_sq_int(),
-            beam_freqs=gauss_beam.beam_freqs,
-        )
-        scalar = psbeam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
-        )
-        assert abs(scalar / 22123832163.072491 - 1.0) <= 1e-8
 
     @pytest.mark.parametrize(
         "build_kwargs,exc_type,match",
@@ -604,7 +537,67 @@ class TestPSpecBeamBase:
         bm1 = pspecbeam.PSpecBeamBase()
         assert isinstance(bm1.cosmo, conversions.Cosmo_Conversions)
 
-    def test_custom_cosmology(self) -> None:
+
+class TestAllBeamTypes:
+    @pytest.mark.parametrize(
+        "build_beam",
+        [
+            lambda request, cosmo: request.getfixturevalue("beam_nf_dipole_wcosmo"),
+            lambda request, cosmo: pspecbeam.PSpecBeamGauss(
+                0.8, np.linspace(115e6, 130e6, 50, endpoint=False), cosmo=cosmo
+            ),
+            lambda request, cosmo: pspecbeam.PSpecBeamFromArray(
+                OmegaP=request.getfixturevalue("gauss_beam").power_beam_int(),
+                OmegaPP=request.getfixturevalue("gauss_beam").power_beam_sq_int(),
+                beam_freqs=request.getfixturevalue("gauss_beam").beam_freqs,
+                cosmo=cosmo,
+            ),
+            lambda request, cosmo: pspecbeam.PSpecBeamBase(cosmo=cosmo),
+        ],
+        ids=["uv", "gauss", "from_array", "base"],
+    )
+    def test_custom_cosmology(
+        self,
+        build_beam: Callable[
+            [pytest.FixtureRequest, conversions.Cosmo_Conversions],
+            pspecbeam.PSpecBeamBase,
+        ],
+        request: pytest.FixtureRequest,
+    ) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
-        bm2 = pspecbeam.PSpecBeamBase(cosmo=conversions.Cosmo_Conversions())
-        assert isinstance(bm2.cosmo, conversions.Cosmo_Conversions)
+        # the UV beam comes from a session fixture built with Cosmo_Conversions()
+        beam = build_beam(request, conversions.Cosmo_Conversions())
+        assert isinstance(beam.cosmo, conversions.Cosmo_Conversions)
+
+    @pytest.mark.parametrize("beam_name", ["beam_nf_pstokes", "gauss_beam"])
+    def test_scalar_convergence(
+        self, beam_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        """Check that compute_pspec_scalar converges as num_steps increases."""
+        beam = request.getfixturevalue(beam_name)
+        scalar = beam.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
+        )
+        scalar_large_Nsteps = beam.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+        )
+        assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
+
+    @pytest.mark.parametrize(
+        "beam_name,expected",
+        [
+            ("beam_nf_pstokes", 1989353792.1765163),
+            ("gauss_beam", 22123832163.072491),
+            # the same beam as gauss_beam, given as arrays of beam integrals
+            ("fromarray_beam", 22123832163.072491),
+        ],
+    )
+    def test_taper(
+        self, beam_name: str, expected: float, request: pytest.FixtureRequest
+    ) -> None:
+        """Check compute_pspec_scalar with a taper against a precomputed reference value."""
+        beam = request.getfixturevalue(beam_name)
+        scalar = beam.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
+        )
+        assert abs(scalar / expected - 1.0) <= 1e-8
