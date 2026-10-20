@@ -1202,6 +1202,26 @@ class TestUVWindowCylindricalToSpherical:
                 cyl_wf=cyl_wf, kbins=kbins_test, ktot=ktot, bl_lens=bl_len
             )
 
+    def test_fractional_weights_do_not_empty_bins(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        """Bins populated by baselines with fractional weights are not reported empty."""
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        kbins = kbins[:6]  # all populated by this baseline
+        uvw = copy.deepcopy(uvwindow_obj)
+        uvw.verbose = True
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            wf, weighted_k = uvw.cylindrical_to_spherical(
+                cyl_wf=cyl_wf, kbins=kbins, ktot=ktot, bl_lens=bl_len, bl_weights=[0.1]
+            )
+        assert np.all(weighted_k > 0)
+        np.testing.assert_allclose(wf.sum(axis=1), 1.0)
+
     def test_nonlinear_kbins_error(
         self,
         uvwindow_obj: uvwindow.UVWindow,

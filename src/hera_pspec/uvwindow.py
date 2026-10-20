@@ -1458,7 +1458,7 @@ class UVWindow:
 
         # take average
         wf_spherical = np.zeros((nbinsk, nbinsk))
-        kweights, weighted_k = np.zeros(nbinsk, dtype=int), np.zeros(nbinsk)
+        kweights, weighted_k = np.zeros(nbinsk), np.zeros(nbinsk)
         for m1 in range(nbinsk):
             mask2 = (kbin_edges[m1] <= kmags) & (kmags < kbin_edges[m1 + 1])
             if np.any(mask2):
