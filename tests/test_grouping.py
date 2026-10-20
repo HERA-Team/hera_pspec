@@ -446,6 +446,71 @@ class TestAverageSpectra:
                 rtol=1e-10,
             )
 
+    @pytest.mark.parametrize(
+        "weights", [[1, 1], [3, 1], [1, 2], [0.4, 0.6], [2, 0]], ids=str
+    )
+    def test_blpair_weights(self, weights: list) -> None:
+        """Baseline-pair weights act as (possibly fractional) multiplicities.
+
+        After normalisation to sum to the number of baseline pairs N, a pair
+        with weight m counts as m copies of itself: the average is the
+        m-weighted mean, nsamples add up with weights m, and squared errors
+        and covariances add up as sum(m * sigma^2) / N^2 (all pairs here have
+        the same integration time, so no other weights enter).
+        """
+        uvp, _ = testing.build_vanilla_uvpspec(data="random", seed=2)
+        rng = np.random.default_rng(3)
+        uvp.stats_array = {
+            "err": {0: (1 + rng.random(uvp.data_array[0].shape)).astype(complex)}
+        }
+        uvp.cov_array_real[0] = rng.random(uvp.cov_array_real[0].shape)
+        assert np.unique(uvp.integration_array[0]).size == 1
+        blps = [101102101102, 102103102103]
+        keys = [(0, blp, ("xx", "xx")) for blp in blps]
+        m = np.array(weights, dtype=float)
+        m *= len(m) / m.sum()
+
+        avg = grouping.average_spectra(
+            uvp,
+            blpair_groups=[blps],
+            blpair_weights=[weights],
+            error_field="err",
+            inplace=False,
+        )
+        key = (0, blps[0], ("xx", "xx"))
+        np.testing.assert_allclose(
+            avg.get_data(key),
+            sum(mi * uvp.get_data(k) for mi, k in zip(m, keys)) / m.sum(),
+            rtol=1e-12,
+        )
+        np.testing.assert_allclose(
+            avg.get_nsamples(key),
+            sum(mi * uvp.get_nsamples(k) for mi, k in zip(m, keys)),
+            rtol=1e-12,
+        )
+        np.testing.assert_allclose(
+            avg.get_stats("err", key).real,
+            np.sqrt(
+                sum(mi * uvp.get_stats("err", k).real ** 2 for mi, k in zip(m, keys))
+            )
+            / m.sum(),
+            rtol=1e-12,
+        )
+        np.testing.assert_allclose(
+            avg.get_cov(key),
+            sum(mi * uvp.get_cov(k) for mi, k in zip(m, keys)) / m.sum() ** 2,
+            rtol=1e-12,
+        )
+
+    def test_negative_blpair_weights_raise(self, vanilla_uvp: UVPSpec) -> None:
+        with pytest.raises(ValueError, match="must not be negative"):
+            grouping.average_spectra(
+                vanilla_uvp,
+                blpair_groups=[[101102101102, 102103102103]],
+                blpair_weights=[[-1.0, 2.0]],
+                inplace=False,
+            )
+
 
 class TestSampleBaselines:
     @pytest.mark.parametrize("n", [1, 2, 4, 5, 13, 521])
