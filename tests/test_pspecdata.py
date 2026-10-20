@@ -2184,6 +2184,18 @@ class TestPspec:
         # beam the exact one is systematically a few percent (~4%) higher.
         assert abs(diff) <= 0.05
 
+    def test_pspec_records_beam_filename(self, synthetic_uvd) -> None:
+        """A beam's filename, if it has one, is stored as the UVPSpec beamfile."""
+        uvd = synthetic_uvd(nfreq=16, ntimes=2, antpairs=[(0, 1)])
+        beam = pspecbeam.PSpecBeamGauss(0.2, np.linspace(140e6, 160e6, 11))
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam)
+        args = ([(0, 1)], [(0, 1)], (0, 1), [("xx", "xx")])
+        uvp = ds.pspec(*args, verbose=False)
+        assert getattr(uvp, "beamfile", None) is None
+        beam.filename = "my_beam.beamfits"
+        uvp = ds.pspec(*args, verbose=False)
+        assert uvp.beamfile == "my_beam.beamfits"
+
     def test_pspec_baseline_formats(self, pspec_ds) -> None:
         """Test pspec() with redundant baseline groups from redcal and with mixed
         grouped/ungrouped baseline list formats."""
