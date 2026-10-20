@@ -28,19 +28,22 @@ def uvd_zen_all_xx_meta() -> UVData:
 
 
 class TestCircularAverage:
-    def test_handles_wrap_near_2pi(self) -> None:
-        """Check that wrapping near 2*pi averages near 0/2*pi rather than pi."""
-        angles_wrap = np.array([6.2, 0.1])
-        result = utils.circular_average(angles_wrap)
-        # 6.2 is 6.2 - 2pi below zero, so the mean is halfway between that and 0.1
-        assert np.isclose(result, (6.2 - 2 * np.pi + 0.1) / 2, rtol=1e-10)
-
-    def test_matches_arithmetic_mean_without_wrap(self) -> None:
-        """Check that circular and arithmetic means agree when there's no wrap."""
-        angles_no_wrap = np.array([1.0, 1.5, 2.0])
-        circular_result = utils.circular_average(angles_no_wrap)
-        arithmetic_result = np.mean(angles_no_wrap)
-        assert np.isclose(circular_result, arithmetic_result, atol=1e-10)
+    @pytest.mark.parametrize(
+        "angles,expected",
+        [
+            # 6.2 is 6.2 - 2pi below zero, so the mean is halfway between that
+            # and 0.1, near 0/2*pi rather than pi
+            ([6.2, 0.1], (6.2 - 2 * np.pi + 0.1) / 2),
+            # without a wrap, the circular and arithmetic means agree
+            ([1.0, 1.5, 2.0], np.mean([1.0, 1.5, 2.0])),
+            ([1.5], 1.5),
+        ],
+        ids=["wrap_near_2pi", "no_wrap", "single_value"],
+    )
+    def test_average(self, angles: list[float], expected: float) -> None:
+        """Check circular_average against known means."""
+        result = utils.circular_average(np.array(angles))
+        assert np.isclose(result, expected, rtol=1e-10, atol=1e-10)
 
     def test_handles_multiple_wrapping_values(self) -> None:
         """Check that multiple angles spanning the wrap point still average near 0/2*pi."""
@@ -56,12 +59,6 @@ class TestCircularAverage:
         assert (result_2d[0] < 0.5) or (result_2d[0] > 5.5)
         assert np.isclose(result_2d[1], 1.25, atol=1e-10)
         assert np.isclose(result_2d[2], 3.25, atol=1e-10)
-
-    def test_single_value_returns_itself(self) -> None:
-        """Check that averaging a single angle returns that angle unchanged."""
-        single_angle = np.array([1.5])
-        result_single = utils.circular_average(single_angle)
-        assert np.isclose(result_single, 1.5, atol=1e-10)
 
 
 class TestCov:
@@ -416,11 +413,43 @@ def test_get_delays(n_dlys: int | None) -> None:
     assert np.isclose(delays[0], -2.450e-07, atol=1e-10)
 
 
+def _no_extra_check(r: list, l: list, a: list) -> None:
+    pass
+
+
+def _assert_autos_group_first(r: list, l: list, a: list) -> None:
+    """The first group is the zero-length, zero-angle auto-correlation group."""
+    np.testing.assert_almost_equal(l[0], 0)
+    np.testing.assert_almost_equal(a[0], 0)
+
+
+def _assert_only_autos(r: list, l: list, a: list) -> None:
+    """The only group contains just auto-correlation baselines."""
+    assert len(r) == 1
+    for bl in r[0]:
+        assert bl[0] == bl[1]
+
+
 class TestGetReds:
-    def test_basic_execution(self) -> None:
-        """Check that excluded antennas are absent from every redundant group, and group counts match."""
+    @pytest.mark.parametrize(
+        "kwargs,n_groups,extra_check",
+        [
+            ({}, 104, _no_extra_check),
+            ({"add_autos": True}, 105, _assert_autos_group_first),
+            ({"autos_only": True, "add_autos": True}, 1, _assert_only_autos),
+        ],
+        ids=["basic_execution", "add_autos", "autos_only"],
+    )
+    def test_groups(
+        self,
+        kwargs: dict,
+        n_groups: int,
+        extra_check: Callable[[list, list, list], None],
+    ) -> None:
+        """Check that excluded antennas are absent from every redundant group, that
+        group counts match, and the effect of add_autos/autos_only."""
         xants = [0, 1, 2]
-        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants)
+        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants, **kwargs)
         assert np.all(
             [
                 np.all([bl[0] not in xants and bl[1] not in xants for bl in _r])
@@ -428,7 +457,8 @@ class TestGetReds:
             ]
         )
         assert len(r) == len(a) == len(l)
-        assert len(r) == 104
+        assert len(r) == n_groups
+        extra_check(r, l, a)
 
     @pytest.mark.parametrize("input_type", ["uvdata", "antpos_dict"])
     def test_input_types_are_equivalent(
@@ -466,28 +496,10 @@ class TestGetReds:
         assert len(l) == len(a) == 1
         assert np.isclose(a[0] % 180, 0, atol=1)
 
-    def test_add_autos(self) -> None:
-        """Check that add_autos prepends a zero-length, zero-angle auto-correlation group."""
-        xants = [0, 1, 2]
-        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants, add_autos=True)
-        np.testing.assert_almost_equal(l[0], 0)
-        np.testing.assert_almost_equal(a[0], 0)
-        assert len(r) == 105
-
     def test_raises_on_invalid_uvd_type(self) -> None:
         """Check that a non-UVData, non-path, non-dict input raises a TypeError."""
         with pytest.raises(TypeError, match="uvd must be a UVData object"):
             utils.get_reds([1.0, 2.0])
-
-    def test_autos_only(self) -> None:
-        """Check that autos_only restricts every returned group to auto-correlation baselines."""
-        xants = [0, 1, 2]
-        r, l, a = utils.get_reds(
-            ZEN_ALL_XX_PATH, xants=xants, autos_only=True, add_autos=True
-        )
-        assert len(r) == 1
-        for bl in r[0]:
-            assert bl[0] == bl[1]
 
 
 class TestConfigPspecBlpairs:
