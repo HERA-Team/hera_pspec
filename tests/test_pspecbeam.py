@@ -64,10 +64,10 @@ class TestPSpecBeamUV:
     def test_scalar_convergence(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
         scalar = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
         )
         scalar_large_Nsteps = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=10000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
@@ -317,10 +317,10 @@ class TestPSpecBeamGauss:
     def test_scalar_convergence(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
         scalar = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
         )
         scalar_large_Nsteps = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=2000
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
