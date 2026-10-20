@@ -482,6 +482,19 @@ class TestFTBeamGaussian:
                 freq_array=ft_beam_spw.freq_array * units.Hz, pol="xx", widths=0.10
             )
 
+    def test_cosmo_deprecated(self, ft_beam_spw: uvwindow.FTBeam, cosmo: FLRW) -> None:
+        """The cosmo argument is unused, so passing it warns and changes nothing."""
+        kwargs = dict(
+            freq_array=ft_beam_spw.freq_array * units.Hz,
+            pol="xx",
+            widths=7.0 * units.deg,
+        )
+        with pytest.warns(DeprecationWarning, match="cosmo argument.*is unused"):
+            test = uvwindow.FTBeam.gaussian(cosmo=cosmo, **kwargs)
+        np.testing.assert_array_equal(
+            test.ft_beam, uvwindow.FTBeam.gaussian(**kwargs).ft_beam
+        )
+
 
 class TestFTBeamGetBandwidth:
     def test_matches_fixture(self, ft_bandwidth: np.ndarray) -> None:

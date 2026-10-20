@@ -501,9 +501,18 @@ class FTBeam:
             Number of pixels to grid sky plane, along one direction.
             Preferably an odd number.
         cosmo : astropy.cosmology.FLRW, optional
-            Not used: the Fourier-space beam does not depend on the cosmology.
-            Kept for backwards compatibility. Default: None.
+            Deprecated and unused: the Fourier transform of the beam does not
+            depend on the cosmology. Passing a value emits a
+            DeprecationWarning; the argument will be removed in a future
+            version. Default: None.
         """
+        if cosmo is not None:
+            warnings.warn(
+                "The cosmo argument of FTBeam.gaussian is unused and will be "
+                "removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Frequency-related parameters
         freq_array = np.array(
