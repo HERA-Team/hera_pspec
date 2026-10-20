@@ -66,9 +66,12 @@ def delay_bins_uvp_nocov(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
     return uvp
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def delay_bins_exact_wf_uvp(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
-    """Copy of vanilla_uvp_with_beam with exact window functions."""
+    """Copy of vanilla_uvp_with_beam with exact window functions.
+
+    Module-scoped because computing exact window functions is slow; tests must
+    not modify it in place."""
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
     gaussian_beam = uvwindow.FTBeam.gaussian(
         freq_array=uvp.freq_array, widths=8.0, pol=1
