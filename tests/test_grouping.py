@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 from hera_cal import redcal
-from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -24,22 +23,14 @@ from hera_pspec.data import DATA_PATH
 DATA_PATH = Path(DATA_PATH)
 
 
-def case_vanilla_uvp(vanilla_uvp: UVPSpec) -> UVPSpec:
-    return vanilla_uvp
-
-
-def case_vanilla_uvp_with_beam(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
-    return vanilla_uvp_with_beam
-
-
-def case_vanilla_uvp_alternating_times(
-    vanilla_uvp_alternating_times: UVPSpec,
-) -> UVPSpec:
-    return vanilla_uvp_alternating_times
-
-
-# def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):
-#     return uvp_exact_wfs
+# Session-scoped UVPSpec fixtures (from conftest.py) that tests are parametrized
+# over; they are fetched by name with request.getfixturevalue.
+ALL_UVPS = [
+    "vanilla_uvp",
+    "vanilla_uvp_with_beam",
+    "vanilla_uvp_alternating_times",
+    # "uvp_exact_wfs",
+]
 
 
 @pytest.fixture(scope="session")
@@ -473,9 +464,12 @@ class TestSampleBaselines:
         assert len(g1) == len(samp)
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_bootstrap_average_blpairs(uvp: UVPSpec) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_bootstrap_average_blpairs(
+    uvp_name: str, request: pytest.FixtureRequest
+) -> None:
     """Check that bootstrap_average_blpairs correctly resamples blpairs and produces consistent averages for identical data."""
+    uvp = request.getfixturevalue(uvp_name)
     # Check that basic bootstrap averaging works
     blpair_groups = [list(np.unique(uvp.blpair_array))]
     uvp1, wgts = grouping.bootstrap_average_blpairs(
