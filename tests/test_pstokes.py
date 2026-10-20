@@ -255,6 +255,43 @@ class TestConstructPstokes:
             uvdS.data_array[..., 0], stokes[pstokes_str], rtol=1e-12
         )
 
+    @pytest.mark.parametrize("pstokes_str", ["pQ", "pU", "pV"])
+    def test_unpolarized_sky(self, stokes_vis, pstokes_str: str) -> None:
+        """An unpolarized sky (XX = YY = I, XY = YX = 0) has no polarized
+        pseudo-Stokes power."""
+        uvd = stokes_vis[0].copy()
+        stokes_i = stokes_vis[1]["pI"]
+        uvd.data_array = np.stack(
+            [stokes_i, stokes_i, 0 * stokes_i, 0 * stokes_i], axis=-1
+        )
+        uvdS = pstokes.construct_pstokes(dset1=uvd, dset2=uvd, pstokes=pstokes_str)
+        np.testing.assert_array_equal(uvdS.data_array, 0.0)
+
+    @pytest.mark.parametrize("pstokes_str", ["pI", "pQ"])
+    def test_nsamples_describe_the_noise(self, synthetic_uvd, pstokes_str: str) -> None:
+        """The combined nsamples n of pseudo-Stokes visibilities describe their
+        noise: if XX and YY have independent noise of variance sigma^2 / n_xx
+        and sigma^2 / n_yy, pI = (XX + YY) / 2 has variance sigma^2 / n.
+
+        The variance is estimated from 16 x 1000 independent visibilities, so
+        its relative standard error is 1/sqrt(16000) ~ 0.8%; we allow five
+        standard errors.
+        """
+        uvd = synthetic_uvd(
+            nfreq=16, ntimes=1000, antpairs=[(0, 1)], pols=("xx", "yy"), seed=3
+        )
+        # unit-variance noise, scaled to the variance of n_xx and n_yy samples
+        nsamples = np.array([1.0, 3.0])
+        uvd.nsample_array[:] = nsamples
+        uvd.data_array /= np.sqrt(nsamples)
+        uvd.pol_convention = "avg"
+        uvdS = pstokes.construct_pstokes(dset1=uvd, dset2=uvd, pstokes=pstokes_str)
+        n_eff = np.unique(uvdS.nsample_array)
+        assert len(n_eff) == 1
+        variance = np.mean(np.abs(uvdS.data_array) ** 2)
+        error = variance / np.sqrt(uvdS.data_array.size)
+        assert abs(variance - 1 / n_eff[0]) < 5 * error
+
     def test_raises_on_invalid_dset2_type(self, uvd1: pyuvdata.UVData) -> None:
         """Check that a non-UVData, non-string dset2 raises an AssertionError."""
         with pytest.raises(
