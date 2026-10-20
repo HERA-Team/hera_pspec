@@ -14,7 +14,7 @@ import uvtools.dspec as dspec
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
-from . import __version__, container, pspecbeam, utils, uvpspec
+from . import __version__, container, conversions, pspecbeam, utils, uvpspec
 from . import uvpspec_utils as uvputils
 
 logger = logging.getLogger(__name__)
@@ -4690,9 +4690,10 @@ def pspec_run(
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
         to a beamfits healpix map (see UVBeam)
 
-    cosmo : conversions.Cosmo_Conversions object
+    cosmo : conversions.Cosmo_Conversions object, optional
         A Cosmo_Conversions object to use as the cosmology when normalizing
-        the power spectra. Default is a Planck cosmology.
+        the power spectra. Default is None, which keeps the beam's own
+        cosmology (Cosmo_Conversions() defaults unless the beam sets one).
         See conversions.Cosmo_Conversions for details.
 
     interleave_times : bool
@@ -4851,6 +4852,15 @@ def pspec_run(
     assert isinstance(dsets, (list, tuple, np.ndarray)), (
         "dsets must be fed as a list of dataset string paths or UVData objects."
     )
+
+    # cosmology check (extend accepted_cosmo_types to allow other cosmologies)
+    accepted_cosmo_types = (conversions.Cosmo_Conversions,)
+    if cosmo is not None and not isinstance(cosmo, accepted_cosmo_types):
+        accepted_names = ", ".join(t.__name__ for t in accepted_cosmo_types)
+        raise TypeError(
+            f"cosmo must be one of ({accepted_names}) or None, "
+            f"got {type(cosmo).__name__}."
+        )
 
     # parse psname
     if psname_ext is not None:

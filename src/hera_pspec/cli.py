@@ -25,7 +25,7 @@ app = App(name="pspec", version_flags=[], help_flags=["--help"])
 import pyuvdata  # noqa: E402
 from pyuvdata import UVData  # noqa: E402
 
-from . import container, grouping, pspecdata, pstokes, utils  # noqa: E402
+from . import container, conversions, grouping, pspecdata, pstokes, utils  # noqa: E402
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
@@ -158,6 +158,18 @@ def fast_merge_baselines(
         cns.print(f"Wrote {fname}")
 
 
+COSMO_PARAM_ORDER = "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]"
+
+
+def _validate_cosmo_values(type_, value) -> None:
+    """Reject more values than conversions.Cosmo_Conversions takes positionally."""
+    if value is not None and not 1 <= len(value) <= 6:
+        raise ValueError(
+            f"--cosmo takes 1 to 6 values in the order {COSMO_PARAM_ORDER}; "
+            f"got {len(value)}."
+        )
+
+
 # `run` and `bootstrap` are thin wrappers: their parameters deliberately use the
 # wrapped library function's names so cyclopts maps each option's --help text from
 # the reused __doc__ (assigned just after each definition). Annotated
@@ -181,7 +193,20 @@ def run(
     norm: Literal["I", "H^-1", "V^-1/2"] = "I",
     taper: str = "none",
     beam: Path | None = None,
-    cosmo: list[float] | None = None,
+    cosmo: Annotated[
+        list[float] | None,
+        Parameter(
+            help=(
+                "Cosmological parameters, in the order "
+                f"{COSMO_PARAM_ORDER}, passed to conversions.Cosmo_Conversions. "
+                "Up to 6 values; omitted trailing values keep their defaults. "
+                "Default is the beam's own cosmology."
+            ),
+            validator=_validate_cosmo_values,
+            consume_multiple=True,
+            negative=(),
+        ),
+    ] = None,
     rephase_to_dset: int | None = None,
     trim_dset_lsts: bool = False,
     broadcast_dset_flags: bool = False,
@@ -232,7 +257,7 @@ def run(
         norm=norm,
         taper=taper,
         beam=str(beam) if beam is not None else None,
-        cosmo=cosmo,
+        cosmo=conversions.Cosmo_Conversions(*cosmo) if cosmo is not None else None,
         rephase_to_dset=rephase_to_dset,
         trim_dset_lsts=trim_dset_lsts,
         broadcast_dset_flags=broadcast_dset_flags,

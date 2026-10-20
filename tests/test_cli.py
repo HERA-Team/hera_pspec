@@ -9,7 +9,7 @@ import h5py
 import numpy as np
 import pytest
 
-from hera_pspec import cli, container, testing
+from hera_pspec import cli, container, conversions, testing
 from hera_pspec.container import PSpecContainer
 from hera_pspec.data import DATA_PATH
 from hera_pspec.uvpspec import UVPSpec
@@ -295,6 +295,78 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert captured["blpairs"] == [((1, 2), (3, 4)), ((5, 6), (7, 8))]
+
+
+def test_run_cosmo_builds_cosmo_conversions(monkeypatch, tmp_path):
+    """--cosmo values must reach pspec_run as a Cosmo_Conversions, not a list."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    beamfile = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
+    result = invoke(
+        [
+            "run",
+            "a.uvh5",
+            "--output",
+            str(tmp_path / "o.h5"),
+            "--cosmo",
+            "0.7",
+            "0.05",
+            "0.25",
+            "70",
+            "--beam",
+            str(beamfile),
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert isinstance(cosmo, conversions.Cosmo_Conversions)
+    assert cosmo.Om_L == pytest.approx(0.7)
+    assert cosmo.Om_b == pytest.approx(0.05)
+    assert cosmo.Om_c == pytest.approx(0.25)
+    assert cosmo.H0 == pytest.approx(70.0)
+    assert captured["beam"] == str(beamfile)
+
+
+def test_run_cosmo_default_is_none(monkeypatch, tmp_path):
+    """Without --cosmo, pspec_run gets cosmo=None so the beam's cosmology is kept."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5")])
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"] is None
+
+
+def test_run_cosmo_too_many_values(monkeypatch, tmp_path):
+    """More than 6 --cosmo values must fail before pspec_run is called."""
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo"]
+        + ["1", "2", "3", "4", "5", "6", "7"]
+    )
+    assert result.exit_code != 0
+    assert not called
+    message = str(result.exception)
+    assert "1 to 6 values" in message
+    assert cli.COSMO_PARAM_ORDER in message
+
+
+def test_run_help_shows_cosmo_order(monkeypatch):
+    # wide terminal so rich does not wrap the parameter order across lines
+    monkeypatch.setenv("COLUMNS", "300")
+    result = invoke(["run", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]" in result.output
 
 
 def test_bootstrap_help():

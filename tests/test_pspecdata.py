@@ -3068,6 +3068,16 @@ class TestPspecRun:
         assert psc.spectra(psc.groups()[0]) == ["dset0_x_dset1_0"]
         assert os.path.exists(str(tmp_path / "out.h5"))
 
+    def test_cosmo_wrong_type_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(TypeError, match="got list"):
+            pspecdata.pspec_run(
+                PSPEC_RUN_FNAMES,
+                str(tmp_path / "out.h5"),
+                verbose=False,
+                cosmo=[1.0, 2.0],
+            )
+        assert not (tmp_path / "out.h5").exists()
+
     def test_jy2mk_blpairs_cosmo_cov_array_spw_ranges_dset_labeling(
         self, tmp_path: Path, beam_nf_dipole: PSpecBeamUV
     ) -> None:
