@@ -591,6 +591,27 @@ def test_bootstrap_average_blpairs(
         np.testing.assert_array_almost_equal(ps_avg, ps_boot)
 
 
+def test_bootstrap_average_blpairs_multiple_uvps() -> None:
+    """Bootstrap draws are made across the baseline pairs of several UVPSpecs.
+
+    Each UVPSpec is averaged over its own drawn baseline pairs, weighted by the
+    number of times each was drawn.
+    """
+    uvp, _ = testing.build_vanilla_uvpspec(data="random")
+    uvp1 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
+    uvp2 = uvp.select(blpairs=[101103101103], inplace=False)
+    group = [101102101102, 102103102103, 101103101103]
+    # with this seed, both UVPSpec objects get draws
+    avgs, wgts = grouping.bootstrap_average_blpairs([uvp1, uvp2], [group], seed=4)
+    assert wgts == [[[0.0, 1.0]], [[2.0]]]
+    key = (0, 101102101102, ("xx", "xx"))
+    np.testing.assert_allclose(
+        avgs[0].get_data(key), uvp.get_data((0, 102103102103, ("xx", "xx")))
+    )
+    key = (0, 101103101103, ("xx", "xx"))
+    np.testing.assert_allclose(avgs[1].get_data(key), uvp.get_data(key))
+
+
 class TestBootstrapResampledError:
     def test_basic(self, tmp_path: Path, uvp_three_red_bls: UVPSpec) -> None:
         """Check that bootstrap_resampled_error returns the expected number of samples and respects the random seed."""
