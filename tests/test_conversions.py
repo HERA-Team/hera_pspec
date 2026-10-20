@@ -92,6 +92,26 @@ class TestCosmoConversions:
         C = _cosmo_conversions(H0=25.5)
         np.testing.assert_almost_equal(C.H0, 25.5)
 
+    def test_om_m_sets_baryon_and_cdm_fractions(self) -> None:
+        """A custom Om_M is split into Om_b and Om_c that add up to it."""
+        default = _cosmo_conversions()
+        assert default.Om_M == default.Om_b + default.Om_c
+        # an Om_M consistent with the default Om_b and Om_c leaves them unchanged
+        C = _cosmo_conversions(Om_M=default.Om_M)
+        assert (C.Om_b, C.Om_c) == (default.Om_b, default.Om_c)
+
+        C = _cosmo_conversions(Om_M=0.5)
+        assert C.Om_M == 0.5
+        np.testing.assert_allclose(C.Om_b + C.Om_c, 0.5, rtol=1e-5)
+        # the baryon fraction of matter is that of the default cosmology
+        np.testing.assert_allclose(
+            C.Om_b / C.Om_M, default.Om_b / default.Om_M, rtol=1e-5
+        )
+        # so the parameters are those of the equivalent astropy cosmology
+        params = conversions.params_from_cosmology(C.to_astropy())
+        for key, value in C.get_params().items():
+            np.testing.assert_allclose(params[key], value, rtol=1e-5, err_msg=key)
+
     @pytest.mark.parametrize("cosmo_name", ["cosmo_h100", "cosmo_h25"])
     @pytest.mark.parametrize(
         "method,args,kwargs,expected",
@@ -367,7 +387,10 @@ class TestAstropyBackend:
 
     def test_to_astropy_rejects_large_om_b(self) -> None:
         """Check Om_b > Om_M cannot be converted."""
-        cosmo = _cosmo_conversions(Om_M=0.03)
+        # a negative Om_c is the only way to get Om_b > Om_M from the
+        # constructor: a custom Om_M is split into Om_b and Om_c
+        cosmo = _cosmo_conversions(Om_b=0.05, Om_c=-0.02)
+        assert cosmo.Om_M == pytest.approx(0.03)
         with pytest.raises(ValueError, match="Om_b"):
             cosmo.to_astropy()
 
