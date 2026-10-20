@@ -1318,6 +1318,22 @@ class TestScalar:
         with pytest.raises(NotImplementedError, match="Polarizations don't match"):
             ds.scalar(("xx", "yy"))
 
+    def test_scalar_taper_override(self, synth_d, beam_nf_dipole) -> None:
+        """taper_override replaces self.taper in the scalar, without changing it."""
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=beam_nf_dipole)
+        untapered = ds.scalar(("xx", "xx"))
+
+        ds.set_taper("bh")
+        tapered = ds.scalar(("xx", "xx"))
+        # a Blackman-Harris taper keeps ~1/4 of the noise-equivalent bandwidth,
+        # so the scalar grows by ~4
+        assert 3.5 < tapered / untapered < 4.5
+        assert ds.scalar(("xx", "xx"), taper_override="none") == untapered
+        assert ds.taper == "bh"
+
+        ds.set_taper("none")
+        assert ds.scalar(("xx", "xx"), taper_override="bh") == tapered
+
         # Precomputed results in the following test were done "by hand"
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         # FIXME: Uncomment when pyuvdata support for this is ready
