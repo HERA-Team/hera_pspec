@@ -8,6 +8,7 @@ from hera_cal import redcal
 from pyuvdata import UVData
 
 from hera_pspec import (
+    PSpecBeamGauss,
     PSpecBeamUV,
     UVPSpec,
     container,
@@ -1079,6 +1080,37 @@ class TestSpherical:
         """Check that bin_widths larger than the kbin spacing raises an AssertionError."""
         with pytest.raises(AssertionError, match="kbins must not overlap"):
             grouping.spherical_average(uvp_spherical, self.KBINS, 1.0)
+
+    def test_average_recovers_power_law(self) -> None:
+        """The spherical average of a power spectrum P(k) = A k^n, set from the
+        k_perp and k_para of each baseline pair and delay, is the mean of P over
+        the |k| of the (baseline pair, delay) cells in each bin, and so lies
+        between the power law at the two edges of the bin."""
+        beam = PSpecBeamGauss(0.2, np.linspace(90e6, 115e6, 30))
+        uvp, _ = testing.build_vanilla_uvpspec(beam=beam)
+        kpara, kperp = uvp.get_kparas(0), uvp.get_kperps(0)
+        kmag = np.sqrt(kperp[:, None] ** 2 + kpara[None, :] ** 2)
+        amplitude, slope = 1e6, -2.7
+        uvp.data_array[0] = (amplitude * kmag**slope)[:, :, None].astype(complex)
+
+        dk = 0.25
+        kbins = np.arange(dk / 2, np.abs(kpara).max(), dk)
+        sph = grouping.spherical_average(uvp, kbins, dk)
+        power = sph.data_array[0][:, :, 0]
+        assert np.all(power == power[:1])  # the same at every time
+        power = power[0].real
+
+        # the mean over the cells of one time (all times are the same)
+        t0 = uvp.time_avg_array == uvp.time_avg_array[0]
+        for i, k in enumerate(kbins):
+            in_bin = (kmag[t0] >= k - dk / 2) & (kmag[t0] < k + dk / 2)
+            np.testing.assert_allclose(
+                power[i], np.mean(amplitude * kmag[t0][in_bin] ** slope), rtol=1e-10
+            )
+        # skip the bin containing k = 0, where the power law diverges
+        k = kbins[1:]
+        assert np.all(power[1:] <= amplitude * (k - dk / 2) ** slope)
+        assert np.all(power[1:] >= amplitude * (k + dk / 2) ** slope)
 
     def test_average_kbins_theory(self, uvp_spherical: UVPSpec) -> None:
         """Check that kbins_theory subsets the window function array to the given theory bins."""
