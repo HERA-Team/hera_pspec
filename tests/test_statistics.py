@@ -18,7 +18,7 @@ make sure that the tolerances are not tuned to a lucky draw.
 import numpy as np
 import pytest
 
-from hera_pspec import PSpecBeamGauss, PSpecData, UVPSpec
+from hera_pspec import PSpecBeamGauss, PSpecData, UVPSpec, utils
 
 # Number of standard errors allowed between a sample mean and its expectation.
 # For a Gaussian sample mean, a 5-sigma deviation has a probability of ~6e-7.
@@ -194,3 +194,58 @@ class TestWhiteNoiseCalibration:
         power = uvp.data_array[0][:, :, 0].real / untapered_scalar
         mean, error = mean_and_error(power)
         assert_within_errors(mean, 1 / NFREQ, error)
+
+
+class TestColouredSpectrumIsUnbiased:
+    """For a band power spectrum p, the estimator is unbiased in the sense that
+    E[P] = scalar(taper='none') * W p, where W is the window function it
+    reports. This is the defining property of the quadratic estimator.
+
+    The visibilities are drawn with covariance C = sum_b p_b Q_b, where Q_b is
+    the response of the covariance to the band power at delay b
+    (utils.get_Q_alt). The spectrum peaks at a positive delay, so the test also
+    pins the sign convention of the delay axis: a fringe exp(+2 pi i nu tau)
+    appears at delay +tau, and a flipped delay axis would fail.
+    """
+
+    @pytest.fixture(scope="class")
+    def band_powers(self) -> np.ndarray:
+        dly_index = np.arange(NFREQ) - NFREQ // 2
+        return 0.05 + np.exp(-0.5 * ((dly_index - 3) / 1.5) ** 2)
+
+    @pytest.fixture(scope="class")
+    def coloured_uvd(self, synthetic_uvd, band_powers):
+        freq_cov = sum(
+            p * utils.get_Q_alt(b, NFREQ, NFREQ) for b, p in enumerate(band_powers)
+        )
+        uvd = synthetic_uvd(
+            nfreq=NFREQ,
+            ntimes=NTIMES,
+            antpairs=[(0, 1)],
+            freq_cov=freq_cov,
+            seed=NOISE_SEED,
+        )
+        # The covariance is that of fringes exp(+2 pi i nu tau) with power p(tau)
+        # at the delays of the power spectrum.
+        freqs = uvd.freq_array
+        fringes = np.exp(2j * np.pi * np.outer(freqs, utils.get_delays(freqs)))
+        np.testing.assert_allclose(
+            freq_cov, (fringes * band_powers) @ fringes.conj().T, atol=1e-10
+        )
+        return uvd
+
+    @pytest.mark.parametrize("taper", ["none", "bh"])
+    @pytest.mark.parametrize("norm", ["I", "H^-1"])
+    def test_mean_power_is_window_function_times_band_powers(
+        self, coloured_uvd, gauss_beam, untapered_scalar, band_powers, norm, taper
+    ) -> None:
+        """The mean power at every delay equals W p within the statistical
+        errors, and the peak is at a positive delay."""
+        uvp = auto_pspec(
+            coloured_uvd, gauss_beam, norm=norm, taper=taper, sampling=True
+        )
+        power = uvp.data_array[0][:, :, 0].real / untapered_scalar
+        window = uvp.window_function_array[0][0, :, :, 0]
+        mean, error = mean_and_error(power, axis=0)
+        assert_within_errors(mean, window @ band_powers, error)
+        assert uvp.get_dlys(0)[np.argmax(mean)] > 0
