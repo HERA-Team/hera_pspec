@@ -97,7 +97,8 @@ class TestPSpecBeamUV:
         """Check Jy_to_mK output shape/value and that non-float-array inputs raise a TypeError."""
         M = beam_nf_pstokes.Jy_to_mK(np.linspace(100e6, 200e6, 11))
         assert len(M) == 11
-        np.testing.assert_almost_equal(M[0], 40.643366654821904)
+        # k_B from astropy.constants (CODATA 2018); CODATA 2014 gave 40.643366654821904
+        np.testing.assert_almost_equal(M[0], 40.643352524643994)
         M = beam_nf_pstokes.Jy_to_mK(150e6)
         assert isinstance(M, np.ndarray)
         beam_nf_pstokes.Jy_to_mK(np.linspace(90, 210e6, 11))

@@ -17,35 +17,49 @@ from astropy.cosmology import LambdaCDM
 class units:
     """
     Fundamental constants and conversion constants
-    in ** SI ** units.
+    in ** SI ** units, as plain floats.
+
+    The physical constants come from ``astropy.constants`` (CODATA 2018 in
+    astropy >= 4); ``f21`` and ``w21`` are hera_pspec's own 21cm constants.
 
     c : speed of light m s-1
     ckm : speed of light in km s-1
-    kb : boltzmann constant 2 kg s-2 K-1
+    G : Newton constant m3 kg-1 s-2
+    kb : boltzmann constant m2 kg s-2 K-1
     hp : planck constant m2 kg s-1
     sb : stefan-boltzmann constant W m-2 K-4
     f21 : 21cm frequency in Hz
     w21 : 21cm wavelength in meters
+    H0_to_SI : conversion factor from km s-1 Mpc-1 to s-1
     """
 
-    c = 2.99792458e8  # speed of light in m s-1
-    ckm = c / 1e3  # speed of light in km s-1
-    G = 6.67408e-11  # Newton constant m3 kg-1 s-2
-    kb = 1.38064852e-23  # boltzmann constant m2 kg s-2 K-1
-    hp = 6.62607004e-34  # planck constant m2 kg s-1
-    sb = 5.670367e-8  # stefan boltzmann constant W m-2 K-4
+    c = float(constants.c.value)  # speed of light in m s-1
+    ckm = float(constants.c.to_value(u.km / u.s))  # speed of light in km s-1
+    G = float(constants.G.value)  # Newton constant m3 kg-1 s-2
+    kb = float(constants.k_B.value)  # boltzmann constant m2 kg s-2 K-1
+    hp = float(constants.h.value)  # planck constant m2 kg s-1
+    sb = float(constants.sigma_sb.value)  # stefan boltzmann constant W m-2 K-4
     f21 = 1.420405751e9  # frequency of 21cm transition in Hz
     w21 = 0.211061140542  # 21cm wavelength in meters
-    H0_to_SI = 3.24078e-20  # km s-1 Mpc-1 to s-1
+    H0_to_SI = float((1 * u.km / u.s / u.Mpc).to_value(1 / u.s))  # km s-1 Mpc-1 to s-1
 
 
 class cgs_units:
     """
-    fundamental constants in ** CGS ** units
+    Fundamental constants in ** CGS ** units, as plain floats.
+
+    Values come from ``astropy.constants`` (CODATA 2018 in astropy >= 4).
+
+    c : speed of light cm s-1
+    kb : boltzmann constant erg K-1
     """
 
-    c = 2.99792458e10  # cm s-1
-    kb = 1.38064852e-16  # erg K-1
+    c = float(constants.c.cgs.value)  # cm s-1
+    kb = float(constants.k_B.cgs.value)  # erg K-1
+
+
+F21 = units.f21 * u.Hz
+"""Rest frequency of the 21cm line, as an ``astropy.units.Quantity`` in Hz."""
 
 
 DEFAULT_COSMOLOGY = LambdaCDM(

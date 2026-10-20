@@ -3,6 +3,7 @@ import astropy.units as u
 import numpy as np
 import pytest
 import scipy.integrate as integrate
+from astropy import constants
 from astropy.cosmology import FlatLambdaCDM, LambdaCDM, wCDM
 
 from hera_pspec import conversions
@@ -30,6 +31,27 @@ def test_units() -> None:
     cgs = conversions.cgs_units()
     np.testing.assert_almost_equal(si.c, 2.99792458e8)
     np.testing.assert_almost_equal(cgs.c, 2.99792458e10)
+
+
+def test_units_match_astropy_constants() -> None:
+    """Check that the float constants are the astropy.constants values."""
+    si = conversions.units
+    cgs = conversions.cgs_units
+    assert si.c == constants.c.value
+    assert si.ckm == constants.c.to_value(u.km / u.s)
+    assert si.G == constants.G.value
+    assert si.kb == constants.k_B.value
+    assert si.hp == constants.h.value
+    assert si.sb == constants.sigma_sb.value
+    assert si.H0_to_SI == (1 * u.km / u.s / u.Mpc).to_value(1 / u.s)
+    assert cgs.c == constants.c.cgs.value
+    assert cgs.kb == constants.k_B.cgs.value
+    for value in (si.c, si.ckm, si.G, si.kb, si.hp, si.sb, si.H0_to_SI, cgs.c, cgs.kb):
+        assert type(value) is float
+    # hera_pspec's own 21cm constants are unchanged
+    assert si.f21 == 1.420405751e9
+    assert si.w21 == 0.211061140542
+    assert conversions.F21 == si.f21 * u.Hz
 
 
 class TestCosmoConversions:
