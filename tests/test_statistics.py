@@ -716,3 +716,108 @@ class TestNoiseCrossSpectra:
             assert_within_errors(mean, 1.0, error)
             mean, error = mean_and_error(self.by_time(z_squared, cross_uvp))
             assert_within_errors(mean, 1.0, error)
+
+
+class TestBootstrap:
+    """Bootstrap resampling of baseline pairs estimates the error on their
+    average. For N independent spectra resampled with replacement, the
+    bootstrap standard deviation of the mean of a sample with (biased) standard
+    deviation s is s / sqrt(N); for spectra with standard deviation sigma this
+    is sigma / sqrt(N) * sqrt((N - 1) / N) on average."""
+
+    NSAMPLES = 100
+    SIGMA = 2.0
+
+    @pytest.fixture(scope="class")
+    def iid_uvp(self, synthetic_uvd) -> UVPSpec:
+        """A UVPSpec of 28 baseline pairs whose spectra are replaced by
+        independent complex Gaussian values (sigma = SIGMA for the real and
+        imaginary parts)."""
+        antpairs = [(i, j) for i in range(8) for j in range(i + 1, 8)]
+        uvd = synthetic_uvd(nfreq=8, ntimes=10, antpairs=antpairs)
+        ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        uvp = ds.pspec(
+            antpairs, antpairs, dsets=(0, 1), pols=[("xx", "xx")], verbose=False
+        )
+        rng = np.random.default_rng(NOISE_SEED)
+        shape = uvp.data_array[0].shape
+        uvp.data_array[0] = self.SIGMA * (
+            rng.standard_normal(shape) + 1j * rng.standard_normal(shape)
+        )
+        return uvp
+
+    @staticmethod
+    def sample_error(uvp: UVPSpec, blpairs) -> np.ndarray:
+        """The exact bootstrap error of the mean real power of blpairs."""
+        data = np.array([uvp.get_data((0, blp, ("xx", "xx"))) for blp in blpairs])
+        return data.real.std(axis=0) / np.sqrt(len(blpairs))
+
+    def test_bootstrap_error(self, iid_uvp) -> None:
+        """bootstrap_resampled_error's bs_std is the bootstrap error of the
+        mean of every (time, delay) cell, within the Monte Carlo error
+        1/sqrt(2 Nsamples) of a standard deviation estimated from Nsamples
+        draws (five times that is allowed), and on average it is
+        sigma / sqrt(N) * sqrt((N - 1) / N)."""
+        blpairs = list(np.unique(iid_uvp.blpair_array))
+        n_blpairs = len(blpairs)
+        avg, _, _ = grouping.bootstrap_resampled_error(
+            iid_uvp,
+            blpair_groups=[blpairs],
+            Nsamples=self.NSAMPLES,
+            seed=NOISE_SEED,
+            normal_std=True,
+        )
+        bs_std = avg.get_stats("bs_std", (0, blpairs[0], ("xx", "xx"))).real
+        # np.std over the bootstrap samples is biased by sqrt((Nsamples - 1) / Nsamples)
+        ratio = bs_std / self.sample_error(iid_uvp, blpairs)
+        ratio *= np.sqrt(self.NSAMPLES / (self.NSAMPLES - 1))
+        assert np.all(np.abs(ratio - 1) < K_SIGMA / np.sqrt(2 * self.NSAMPLES))
+
+        expected = (
+            self.SIGMA / np.sqrt(n_blpairs) * np.sqrt((n_blpairs - 1) / n_blpairs)
+        )
+        mean, error = mean_and_error(bs_std.ravel())
+        assert_within_errors(mean, expected, error)
+
+    def test_bootstrap_across_uvpspecs(self, iid_uvp) -> None:
+        """With the baseline pairs split between two UVPSpec objects, the draws
+        are made from all of them together: each sample draws N baseline pairs
+        in total, the number drawn from each object varies binomially, and the
+        draw-weighted mean of the two averages has the bootstrap error of the
+        pooled baseline pairs.
+
+        With 14 baseline pairs in each object, the chance that a sample draws
+        none from one of them (which raises, see #570) is ~1e-8, and with these
+        seeds every object is drawn in every sample.
+        """
+        blpairs = list(np.unique(iid_uvp.blpair_array))
+        n_blpairs = len(blpairs)
+        half = n_blpairs // 2
+        uvps = [
+            iid_uvp.select(blpairs=blpairs[:half], inplace=False),
+            iid_uvp.select(blpairs=blpairs[half:], inplace=False),
+        ]
+        means, n_drawn = [], []
+        for i in range(self.NSAMPLES):
+            avgs, weights = grouping.bootstrap_average_blpairs(
+                uvps, [blpairs], seed=NOISE_SEED * self.NSAMPLES + i
+            )
+            n_drawn.append([np.sum(w[0]) for w in weights])
+            means.append(
+                sum(
+                    n * avg.get_data((0, avg.blpair_array[0], ("xx", "xx")))
+                    for n, avg in zip(n_drawn[-1], avgs)
+                )
+                / n_blpairs
+            )
+        n_drawn = np.array(n_drawn)
+        assert np.all(n_drawn.sum(axis=1) == n_blpairs)
+        # binomial variance of the number of draws from the first object
+        p = half / n_blpairs
+        np.testing.assert_allclose(
+            n_drawn[:, 0].var(), n_blpairs * p * (1 - p), rtol=0.75
+        )
+        ratio = np.std(np.real(means), axis=0, ddof=1) / self.sample_error(
+            iid_uvp, blpairs
+        )
+        assert np.all(np.abs(ratio - 1) < K_SIGMA / np.sqrt(2 * self.NSAMPLES))
