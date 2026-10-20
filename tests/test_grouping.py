@@ -553,20 +553,19 @@ class TestBootstrapResampledError:
         assert uw[1][0][:5] == [2.0, 2.0, 1.0, 1.0, 2.0]
         assert uw[1][1][:5] == [1.0, 0.0, 1.0, 1.0, 4.0]
 
-    def test_gaussian_noise(self) -> None:
+    def test_gaussian_noise(self, uvd_zen_even_xx: UVData) -> None:
         """Check that bootstrapped error bars on Gaussian noise power spectra yield z-scores with standard deviation converging to 1."""
-        # get simulated noise in K-str
-        uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
+        # get simulated noise in K-str (on copies of zen.even.xx.LST.1.28828.uvOCRSA)
         Tsys = 300.0  # Kelvin
 
         # generate complex gaussian noise
         seed = 4
         uvd1 = testing.noise_sim(
-            uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
+            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
         )
         seed = 5
         uvd2 = testing.noise_sim(
-            uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
+            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
         )
 
         # form (auto) baseline-pairs from only 14.6m bls
