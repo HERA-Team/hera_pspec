@@ -81,8 +81,6 @@ def red_bl_lens(uvd_zen_2458116: UVData) -> np.ndarray:
 
 @pytest.fixture()
 def kbins() -> units.Quantity:
-    # kmax, dk = 1.0, 0.128 / 2
-    # krange = np.arange(dk * 1.5, kmax, step=dk)
     krange = np.arange(0.1, 5.0, step=0.3)
     return ((krange[1:] + krange[:-1]) / 2) * units.h / units.Mpc
 

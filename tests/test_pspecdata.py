@@ -38,8 +38,6 @@ weight_selection = ["identity", "iC", "dayenu"]
 
 # Baseline list shared by the pspec tests
 pspec_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
-# taper_selection = ['blackman', 'blackman-harris', 'gaussian0.4', 'kaiser2',
-#                   'kaiser3', 'hamming', 'hanning', 'parzen']
 
 
 def generate_pos_def(n, rng):
@@ -2984,29 +2982,9 @@ class TestRFIFlagPropagation:
             np.real(qe_flagged_mod), np.real(qe_flagged), atol=0.001, rtol=0.001
         ).all()
 
-        # Test below commented out because this sort of aggressive symmetrization is not yet implemented.
-        # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2)
-        # # is equivalent to flagging for both x1 and x2.
-        # test_wgts_flagged = copy.deepcopy(test_wgts)
-        # test_wgts_flagged.data_array[:,:,40:60] = 0. # Flag 20 channels
-        # ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[test_wgts_flagged, test_wgts_flagged], beam=beam_nf_dipole)
-        # print "mode alpha"
-        # uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
-        #                         little_h=True, verbose=False)
-        # ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, test_wgts_flagged], beam=beam_nf_dipole)
-        # print "mode beta"
-        # uvp_flagged_asymm = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
-        #                         little_h=True, verbose=False)
-
-        # qe_flagged_asymm = uvp_flagged_asymm .get_data(0, ((24, 25), (37, 38)), 'xx')[0]
-        # qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
-
-        # #print np.real(qe_flagged_asymm)/np.real(qe_flagged)
-
-        # # assert answers are same to within 3%
-        # assert np.isclose(np.real(qe_flagged_asymm)/np.real(qe_flagged), 1, atol=0.03, rtol=0.03).all()
-
-        # print(uvd.data_array.shape)
+        # Flagging a channel in only one of the two datasets is not tested:
+        # pspec does not symmetrise the flags, so it is not (yet) equivalent
+        # to flagging that channel in both datasets.
 
 
 def test_validate_blpairs(uvd: UVData, capsys: pytest.CaptureFixture) -> None:

@@ -25,12 +25,7 @@ DATA_PATH = Path(DATA_PATH)
 
 # Session-scoped UVPSpec fixtures (from conftest.py) that tests are parametrized
 # over; they are fetched by name with request.getfixturevalue.
-ALL_UVPS = [
-    "vanilla_uvp",
-    "vanilla_uvp_with_beam",
-    "vanilla_uvp_alternating_times",
-    # "uvp_exact_wfs",
-]
+ALL_UVPS = ["vanilla_uvp", "vanilla_uvp_with_beam", "vanilla_uvp_alternating_times"]
 
 
 @pytest.fixture(scope="session")
