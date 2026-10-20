@@ -1730,7 +1730,14 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False, seed=None
     # Homogenise input UVPSpec objects in terms of available polarizations
     # and spectral windows
     if len(uvp_list) > 1:
-        uvp_list = uvputils.select_common(uvp_list, spws=True, pols=True, inplace=False)
+        uvp_list = uvputils.select_common(
+            uvp_list,
+            spws=True,
+            polpairs=True,
+            blpairs=False,
+            times=False,
+            inplace=False,
+        )
 
     # Loop over UVPSpec objects, looking for available blpairs in each
     avail_blpairs = [_ordered_unique(uvp.blpair_array) for uvp in uvp_list]
