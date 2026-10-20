@@ -291,6 +291,38 @@ class TestSubtractUvp:
         # check stats_array is np.sqrt(2)
         assert np.isclose(uvs.stats_array["mystat"][0], np.sqrt(2)).all()
 
+    @pytest.mark.parametrize("with_stats", [False, True])
+    def test_covariances_add(self, vanilla_uvp: UVPSpec, with_stats: bool) -> None:
+        """The covariance of a difference of independent spectra is C1 + C2.
+
+        This must hold whether or not the objects carry a stats_array, and the
+        (possibly negative) off-diagonal covariances must keep their sign.
+        """
+        rng = np.random.default_rng(1)
+        n = vanilla_uvp.Ndlys
+        uvps, covs = [], []
+        for _ in range(2):
+            a = rng.normal(size=(n, n))
+            cov = a @ a.T / n  # a random covariance matrix
+            uvp = copy.deepcopy(vanilla_uvp)
+            uvp.cov_array_real[0][:] = cov[None, :, :, None]
+            uvp.cov_array_imag[0][:] = 2 * cov[None, :, :, None]
+            if with_stats:
+                for k in uvp.get_all_keys():
+                    uvp.set_stats("err", k, np.ones_like(uvp.get_data(k)))
+            uvps.append(uvp)
+            covs.append(cov)
+        assert (covs[0] + covs[1]).min() < 0
+
+        diff = uvputils.subtract_uvp(*uvps, run_check=False)
+        expected = np.broadcast_to(
+            (covs[0] + covs[1])[None, :, :, None], diff.cov_array_real[0].shape
+        )
+        np.testing.assert_allclose(diff.cov_array_real[0], expected, rtol=1e-12)
+        np.testing.assert_allclose(diff.cov_array_imag[0], 2 * expected, rtol=1e-12)
+        if with_stats:
+            np.testing.assert_allclose(diff.stats_array["err"][0], np.sqrt(2))
+
     def test_delay_averaged(self, uvp_with_stats: UVPSpec) -> None:
         """Check that subtract_uvp works on delay-averaged spectra, but not when only one side is delay-averaged."""
         uvp = uvp_with_stats
