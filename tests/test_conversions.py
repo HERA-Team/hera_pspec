@@ -118,3 +118,105 @@ class TestCosmoConversions:
         tau2kpara = cosmo_h100.tau_to_kpara(10.0, little_h=True)
         np.testing.assert_almost_equal(bl2kperp, 0.00041570092391078579)
         np.testing.assert_almost_equal(tau2kpara, 503153.74952115043)
+
+
+# Flat, open (Om_k > 0) and closed (Om_k < 0) cosmologies, with H0 away from
+# 100 so that h^-1 Mpc and Mpc differ. (The default cosmology is very slightly
+# open, Om_k = 0.002.)
+CURVATURE_COSMOLOGIES = {
+    "flat": dict(Om_L=1 - 0.04911 - 0.26442, Om_k=0.0),
+    "open": dict(Om_L=0.5, H0=70.0),
+    "closed": dict(Om_L=0.9, H0=60.0),
+}
+
+
+@pytest.fixture(params=list(CURVATURE_COSMOLOGIES), scope="module")
+def curved_cosmo(request) -> conversions.Cosmo_Conversions:
+    cosmo = conversions.Cosmo_Conversions(**CURVATURE_COSMOLOGIES[request.param])
+    sign = {"flat": 0, "open": 1, "closed": -1}[request.param]
+    assert np.sign(cosmo.Om_k) == sign
+    return cosmo
+
+
+class TestCosmoPhysics:
+    """Check the cosmological distances against astropy and analytic limits,
+    and the delay/baseline to k conversions against their definitions."""
+
+    @pytest.mark.parametrize("z", [0.01, 1.0, 6.0, 10.0])
+    def test_distances_match_astropy(
+        self, curved_cosmo: conversions.Cosmo_Conversions, z: float
+    ) -> None:
+        """E(z) and the comoving, transverse comoving and angular diameter
+        distances agree with astropy's LambdaCDM (in Mpc for little_h=False,
+        and h^-1 Mpc = h * Mpc otherwise), including the sinh/sin branches of
+        the transverse distance for open and closed cosmologies."""
+        C = curved_cosmo
+        lcdm = C.lcdm
+        np.testing.assert_allclose(C.E(z), lcdm.efunc(z), rtol=1e-12)
+        for method, astropy_method in [
+            ("DC", lcdm.comoving_distance),
+            ("DM", lcdm.comoving_transverse_distance),
+            ("DA", lcdm.angular_diameter_distance),
+        ]:
+            expected = astropy_method(z).to("Mpc").value
+            np.testing.assert_allclose(
+                getattr(C, method)(z, little_h=False), expected, rtol=1e-8
+            )
+            np.testing.assert_allclose(
+                getattr(C, method)(z, little_h=True), expected * C.h, rtol=1e-8
+            )
+
+    def test_small_redshift_limit(
+        self, curved_cosmo: conversions.Cosmo_Conversions
+    ) -> None:
+        """At small z the comoving distance is the Hubble law, D = c z / H0,
+        with corrections of order z."""
+        z = 1e-4
+        c_km = conversions.units.ckm
+        np.testing.assert_allclose(
+            curved_cosmo.DC(z, little_h=False), c_km * z / curved_cosmo.H0, rtol=1e-3
+        )
+        np.testing.assert_allclose(
+            curved_cosmo.DC(z, little_h=True), c_km * z / 100.0, rtol=1e-3
+        )
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    @pytest.mark.parametrize("z", [1.0, 8.0])
+    def test_conversion_factors(
+        self, curved_cosmo: conversions.Cosmo_Conversions, z: float, little_h: bool
+    ) -> None:
+        """The conversions from frequency, angle, delay and baseline length to
+        comoving distances and wavenumbers follow from the distances:
+
+        - dRpara_df is the derivative of the comoving distance with respect to
+          the observed 21 cm frequency;
+        - X2Y = DM^2 * dRpara_df converts sr Hz to comoving volume;
+        - a delay tau is the Fourier dual of frequency, so
+          k_para = 2 pi tau / dRpara_df;
+        - a baseline of length b measures angular wavenumber 2 pi b / lambda,
+          so k_perp = 2 pi b / (lambda DM).
+        """
+        C = curved_cosmo
+        freq = C.z2f(z)
+        np.testing.assert_allclose(C.f2z(freq), z, rtol=1e-12)
+        dfreq = 1e3  # Hz
+        dDC_df = (
+            C.DC(C.f2z(freq - dfreq), little_h=little_h)
+            - C.DC(C.f2z(freq + dfreq), little_h=little_h)
+        ) / (2 * dfreq)
+        dRpara_df = C.dRpara_df(z, little_h=little_h)
+        np.testing.assert_allclose(dRpara_df, dDC_df, rtol=1e-6)
+        DM = C.DM(z, little_h=little_h)
+        np.testing.assert_allclose(C.dRperp_dtheta(z, little_h=little_h), DM)
+        np.testing.assert_allclose(
+            C.X2Y(z, little_h=little_h), DM**2 * dRpara_df, rtol=1e-12
+        )
+        np.testing.assert_allclose(
+            C.tau_to_kpara(z, little_h=little_h) * dRpara_df, 2 * np.pi, rtol=1e-12
+        )
+        wavelength = conversions.units.c / freq
+        np.testing.assert_allclose(
+            C.bl_to_kperp(z, little_h=little_h),
+            2 * np.pi / (wavelength * DM),
+            rtol=1e-12,
+        )
