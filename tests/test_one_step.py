@@ -488,9 +488,9 @@ class TestUserResponseAndErrors:
 
 class TestExpectedDifferences:
     """Closed forms of the two-step / one-step ratio for a flat P(k),
-    with a user response of constant w = B / X2Y so they are exact. F1 and
-    F2 are pre-existing two-step biases that the one-step path does not
-    have."""
+    with a user response of constant w = B / X2Y so they are exact. F2 is a
+    pre-existing two-step bias that the one-step path does not have; F1 was
+    one before v1.0 (the taper counted twice for norm H^-1)."""
 
     W0 = 1e-6
 
@@ -519,7 +519,8 @@ class TestExpectedDifferences:
             ("I", "none", NFREQS, 1.0),
             # F2: the N_f sinc in get_H with N_d = N_f / 2
             ("I", "none", NFREQS // 2, 1.0 / (1.0 + np.sinc(0.5))),
-            # F1: H^-1 with a taper, multiplied by s(T) / s(none) below
+            # F1: H^-1 with a taper, unbiased now that pspec() uses the
+            # untapered scalar for it (it was 1 / <T^2> too high before v1.0)
             ("H^-1", "blackman-harris", NFREQS, 1.0),
         ],
     )
@@ -530,20 +531,17 @@ class TestExpectedDifferences:
         G = ds.get_G(KEY1, KEY2)
         H = ds.get_H(KEY1, KEY2, sampling=False)
         M, _ = ds.get_MW(G, H, mode=norm)
-        # the two-step scalar as pspec() computes it: the H^-1 taper
-        # override is ignored by scalar(), so it is the tapered scalar
-        s_taper = self.scalar(ds, taper)
-        p2 = s_taper * (M @ q_mean)
+        # the two-step scalar as pspec() computes it: untapered for H^-1,
+        # whose M already accounts for the taper
+        override = {"taper_override": "none"} if norm == "H^-1" else {}
+        s_two_step = self.scalar(ds, taper, **override)
+        p2 = s_two_step * (M @ q_mean)
         if norm == "I":
             p2 = p2 * ds.scalar_delay_adjustment(Gv=G, Hv=H)
         s_none = self.scalar(ds, "none")
         s_disc_none = NFREQS * dnu / self.W0  # eq. (2) with T = 1, w = W0
-        expected = bias * (s_taper / s_none) * (s_none / s_disc_none)
+        expected = bias * (s_two_step / s_none) * (s_none / s_disc_none)
         assert_close(p2 / p1, np.full(ndlys, expected), rtol=IDENTITY_RTOL)
-        if norm == "H^-1":
-            # F1 is 1 / <T^2> to within the scalar's taper interpolation
-            mean_t2 = np.mean(taper_values(taper, NFREQS) ** 2)
-            assert abs(s_taper / s_none * mean_t2 - 1) < 2e-2
 
     @pytest.mark.parametrize("taper", TAPERS)
     def test_two_step_exact(self, ds, taper) -> None:
@@ -698,7 +696,8 @@ class TestWhiteNoiseMonteCarlo:
     TestFlatSpectrumExpectation). Every one-step
     estimator has expectation 1, so the mean power must agree for norm I and
     H^-1, no taper and Blackman-Harris, Ndlys = Nfreqs and Nfreqs / 2 (the
-    configurations where the two-step path is biased: F1, F2).
+    configurations where the two-step path is, or was before v1.0, biased:
+    F2, F1).
 
     The noise is drawn independently for every (baseline, time) and both
     datasets hold the same realisation, so each baseline-pair x time gives an
@@ -762,5 +761,6 @@ class TestWhiteNoiseMonteCarlo:
         assert power.size == 45 * 10 * self.N_REALISATIONS
         standard_error = power.std(ddof=1) / np.sqrt(power.size)
         assert abs(power.mean() - 1.0) < 5.0 * standard_error
-        # the test resolves the two-step biases (x3.98, x0.61) many times over
+        # the test resolves the two-step biases (x0.61, and x3.98 for H^-1
+        # with a taper before v1.0) many times over
         assert standard_error < 0.02

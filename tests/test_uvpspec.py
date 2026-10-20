@@ -1920,6 +1920,28 @@ def test_set_cosmology_same_cosmology(
         )
 
 
+@pytest.mark.parametrize("norm", ["I", "H^-1"])
+def test_set_cosmology_with_taper(
+    uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, norm: str
+) -> None:
+    """set_cosmology recomputes the scalar that pspec applied: the tapered one
+    for norm I, the untapered one for norm H^-1 (whose normalisation already
+    accounts for the taper)."""
+    uvp = testing.uvpspec_from_data(
+        uvd_zen_even_xx,
+        [(37, 38), (38, 39)],
+        spw_ranges=[(20, 50)],
+        beam=beam_nf_dipole,
+        taper="blackman-harris",
+        norm=norm,
+    )
+    old = copy.deepcopy(uvp)
+    uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY, overwrite=True, verbose=False)
+    # only the scalar's integration grid differs from pspec's (num_steps)
+    np.testing.assert_allclose(uvp.scalar_array, old.scalar_array, rtol=5e-3)
+    np.testing.assert_allclose(uvp.data_array[0], old.data_array[0], rtol=5e-3)
+
+
 def test_set_cosmology_new_cosmology(
     set_cosmology_uvps: dict[str, uvpspec.UVPSpec],
 ) -> None:
