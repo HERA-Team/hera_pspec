@@ -7,9 +7,12 @@ import astropy.cosmology.units as cu
 import astropy.units as u
 import numpy as np
 import pytest
+from astropy import constants
 from astropy.cosmology import FLRW, LambdaCDM
 from pyuvdata import UVBeam
 from pyuvdata.analytic_beam import AiryBeam, GaussianBeam
+from scipy import integrate
+from uvtools import dspec
 
 from hera_pspec import conversions, pspecbeam
 from hera_pspec.data import DATA_PATH
@@ -825,3 +828,132 @@ class TestScalarLengthUnit:
         with pytest.warns(DeprecationWarning, match="little_h"):
             old = pspecbeam._compute_pspec_scalar(*args, little_h=False)
         assert old == pspecbeam._compute_pspec_scalar(*args, length_unit=u.Mpc)
+
+
+class TestBeamPhysics:
+    """Check beam integrals, unit conversions and the power spectrum scalar
+    against their analytic definitions."""
+
+    FWHM = 0.3  # FWHM of the Gaussian power beam, in radians
+    FREQS = np.linspace(140e6, 170e6, 31)
+
+    @pytest.fixture(scope="class")
+    def beam(self) -> pspecbeam.PSpecBeamGauss:
+        return pspecbeam.PSpecBeamGauss(self.FWHM * u.rad, self.FREQS * u.Hz)
+
+    def test_gaussian_beam_integrals(self, beam: pspecbeam.PSpecBeamGauss) -> None:
+        """PSpecBeamGauss describes a power beam B = exp(-theta^2 / 2 sigma^2)
+        whose FWHM is fwhm, i.e. sigma = fwhm / sqrt(8 ln 2), and this is the
+        power response of the pyuvdata GaussianBeam it holds. Its integrals over
+        the (flat) sky are Omega_p = 2 pi sigma^2 and Omega_pp = pi sigma^2."""
+        sigma = self.FWHM / np.sqrt(8 * np.log(2))
+
+        def power_beam(theta):
+            return np.exp(-(theta**2) / (2 * sigma**2))
+
+        np.testing.assert_allclose(power_beam(self.FWHM / 2), 0.5)
+        theta = np.linspace(0, 3 * self.FWHM, 7)
+        analytic = beam.analytic_beam.power_eval(
+            az_array=np.zeros_like(theta), za_array=theta, freq_array=self.FREQS[:1]
+        )
+        # (axis, polarization, frequency, direction); xx
+        np.testing.assert_allclose(analytic[0, 0, 0].real, power_beam(theta))
+        omega_p = integrate.quad(lambda t: 2 * np.pi * t * power_beam(t), 0, np.inf)
+        omega_pp = integrate.quad(
+            lambda t: 2 * np.pi * t * power_beam(t) ** 2, 0, np.inf
+        )
+        np.testing.assert_allclose(beam.power_beam_int(), omega_p[0], rtol=1e-10)
+        np.testing.assert_allclose(beam.power_beam_sq_int(), omega_pp[0], rtol=1e-10)
+
+    def test_healpix_gaussian_beam_matches_analytic(self) -> None:
+        """A HEALPix map of a Gaussian beam gives the beam integrals, and so the
+        pspec scalar, of the analytic Gaussian beam.
+
+        pyuvdata's GaussianBeam(sigma) has an efield response
+        exp(-theta^2 / 2 sigma^2) by default, so its power beam is
+        exp(-theta^2 / sigma^2), with a FWHM of sqrt(8 ln 2) sigma / sqrt(2). The
+        same GaussianBeam, mapped onto HEALPix and wrapped in PSpecBeamUV or
+        wrapped directly in PSpecBeamGauss, gives the same beam integrals to
+        ~1%, the accuracy of the NSIDE=64 map and of the flat-sky approximation.
+        """
+        sigma = 0.15
+        freqs = np.linspace(100e6, 200e6, 3)
+        analytic = GaussianBeam(sigma=sigma)
+        uvb = analytic.to_uvbeam(
+            freq_array=freqs,
+            beam_type="efield",
+            pixel_coordinate_system="healpix",
+            nside=64,
+        )
+        healpix_beam = pspecbeam.PSpecBeamUV(uvb)
+        gauss = pspecbeam.PSpecBeamGauss(beam=analytic, beam_freqs=freqs * u.Hz)
+        np.testing.assert_allclose(
+            gauss.fwhm, np.sqrt(8 * np.log(2)) * sigma / np.sqrt(2), rtol=1e-12
+        )
+        np.testing.assert_allclose(
+            healpix_beam.power_beam_int("xx"), gauss.power_beam_int(), rtol=1.5e-2
+        )
+        np.testing.assert_allclose(
+            healpix_beam.power_beam_sq_int("xx"), gauss.power_beam_sq_int(), rtol=1.5e-2
+        )
+        band = (150e6 * u.Hz, 152e6 * u.Hz, 20)
+        kwargs = dict(pol="xx", num_steps=200)
+        np.testing.assert_allclose(
+            healpix_beam.compute_pspec_scalar(*band, **kwargs),
+            gauss.compute_pspec_scalar(*band, **kwargs),
+            rtol=1.5e-2,
+        )
+
+    def test_jy_to_mk_is_rayleigh_jeans(self, beam: pspecbeam.PSpecBeamGauss) -> None:
+        """Jy_to_mK converts a flux density spread over the beam into a
+        Rayleigh-Jeans brightness temperature, T = S c^2 / (2 k_B nu^2 Omega_p),
+        which scales as nu^-2 for a frequency-independent beam."""
+        freqs = np.linspace(145e6, 165e6, 5) * u.Hz
+        expected = (
+            (
+                1
+                * u.Jy
+                * constants.c**2
+                / (2 * constants.k_B * freqs**2 * beam.power_beam_int()[0])
+            )
+            .to(u.mK)
+            .value
+        )
+        np.testing.assert_allclose(beam.Jy_to_mK(freqs), expected, rtol=1e-12)
+
+    @pytest.mark.parametrize(
+        "length_unit", [u.Mpc / cu.littleh, u.Mpc], ids=["littleh", "Mpc"]
+    )
+    def test_scalar_is_cosmological_volume_over_beam(
+        self, beam: pspecbeam.PSpecBeamGauss, length_unit: u.UnitBase
+    ) -> None:
+        """Without a taper, the scalar is X2Y(z) * B * Omega_p^2 / Omega_pp for a
+        narrow band, where X2Y converts sr Hz to comoving volume and B is the
+        bandwidth. The bandwidth is N * channel width (the band edges), not the
+        (N - 1) channel widths between the first and last channel centres."""
+        nfreqs, df, f0 = 20, 100e3 * u.Hz, 150e6 * u.Hz
+        scalar = beam.compute_pspec_scalar(
+            f0, f0 + nfreqs * df, nfreqs, num_steps=2000, length_unit=length_unit
+        )
+        z = conversions.f2z(f0 + nfreqs * df / 2)
+        x2y = conversions.X2Y(z, beam.cosmo, length_unit)
+        omega_p, omega_pp = beam.power_beam_int()[0], beam.power_beam_sq_int()[0]
+        expected = x2y * nfreqs * df * omega_p**2 / omega_pp * u.sr
+        np.testing.assert_allclose(scalar, expected.to_value(length_unit**3), rtol=1e-3)
+
+    @pytest.mark.parametrize("taper", ["bh", "blackman", "hann"])
+    def test_scalar_taper_factor(
+        self, beam: pspecbeam.PSpecBeamGauss, taper: str
+    ) -> None:
+        """A taper w reduces the effective bandwidth B_pp / B by mean(w^2), so the
+        scalar increases by 1 / mean(w^2). The taper is interpolated onto the
+        integration grid by nearest neighbour, hence the tolerance."""
+        nfreqs = 20
+        band = (150e6 * u.Hz, 152e6 * u.Hz, nfreqs)
+        kwargs = dict(num_steps=2000)
+        tapered = beam.compute_pspec_scalar(*band, taper=taper, **kwargs)
+        untapered = beam.compute_pspec_scalar(*band, **kwargs)
+        window = dspec.gen_window(taper, nfreqs)
+        np.testing.assert_allclose(
+            tapered / untapered, 1 / np.mean(window**2), rtol=2e-3
+        )
