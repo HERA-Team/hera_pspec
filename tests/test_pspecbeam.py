@@ -94,13 +94,21 @@ class TestPSpecBeamUV:
         assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
 
     def test_jy_to_mk(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
-        """Check Jy_to_mK output shape/value and that non-float-array inputs raise a TypeError."""
+        """Check Jy_to_mK output, extrapolation warnings and that non-float-array inputs raise a TypeError."""
         M = beam_nf_pstokes.Jy_to_mK(np.linspace(100e6, 200e6, 11))
         assert len(M) == 11
         np.testing.assert_almost_equal(M[0], 40.643366654821904)
         M = beam_nf_pstokes.Jy_to_mK(150e6)
         assert isinstance(M, np.ndarray)
-        beam_nf_pstokes.Jy_to_mK(np.linspace(90, 210e6, 11))
+
+        # Frequencies outside the beam's frequency range are extrapolated, with
+        # a warning for each side.
+        with (
+            pytest.warns(UserWarning, match="min freq .* extrapolating"),
+            pytest.warns(UserWarning, match="max freq .* extrapolating"),
+        ):
+            M = beam_nf_pstokes.Jy_to_mK(np.linspace(90e6, 210e6, 13))
+        assert np.all(np.isfinite(M))
 
         with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
             beam_nf_pstokes.Jy_to_mK([1])
