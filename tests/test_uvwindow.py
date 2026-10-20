@@ -393,11 +393,9 @@ class TestFTBeamFromFile:
         np.testing.assert_array_equal(test.freq_array, ft_bandwidth[5:25])
 
     def test_invalid_ftfile_type(self) -> None:
-        with pytest.raises(
-            TypeError,
-            match=r"expected str, bytes or os\.PathLike object, not float"
-            r"|argument should be a str or an os\.PathLike object where __fspath__ returns a str, not 'float'",
-        ):
+        # The TypeError comes from pathlib; its wording varies between Python
+        # versions, so only the exception type is checked.
+        with pytest.raises(TypeError):
             uvwindow.FTBeam.from_file(ftfile=12.0)
 
     def test_invalid_ftfile_path(self) -> None:
