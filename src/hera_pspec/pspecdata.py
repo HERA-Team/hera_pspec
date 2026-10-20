@@ -3763,9 +3763,9 @@ class PSpecData:
 
                     # using zero'th indexed polarization, as cross-polarized
                     # beams are not yet implemented
-                    if norm == "H^-1":
-                        # If using decorrelation, the H^-1 normalization
-                        # already deals with the taper, so we need to override
+                    if norm in ("H^-1", "V^-1/2"):
+                        # The H^-1 and V^-1/2 normalizations already deal with
+                        # the taper (H contains it), so we need to override
                         # the taper when computing the scalar
                         scalar = self.scalar(
                             p,
