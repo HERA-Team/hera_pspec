@@ -18,7 +18,14 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     integration_arrays and wgt_arrays are inversely added in quadrature.
     If these arrays are identical in the two objects, this is equivalent
     to multiplying (dividing) the stats (nsamp, int & wgt) arrays(s) by
-    sqrt(2).
+    sqrt(2). Covariances (if both objects have them, with the same
+    cov_model) are added, as for the difference of two independent spectra.
+
+    The window functions of a difference of spectra are not well defined:
+    the expected difference is (W1 - W2) p for window functions W1, W2 and
+    true power spectrum p, and its window functions need not sum to one.
+    The stored window functions are sqrt(W1**2 + W2**2), kept for backwards
+    compatibility; do not use them to interpret the difference.
 
     Parameters
     ----------
@@ -107,22 +114,16 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                             stat1.real**2 + stat2.real**2
                         ) + 1j * np.sqrt(stat1.imag**2 + stat2.imag**2)
 
-                    # add cov in quadrature: real and imag separately
-                    if hasattr(uvp1, "cov_array_real") and hasattr(
-                        uvp2, "cov_array_real"
-                    ):
-                        if uvp1.cov_model == uvp2.cov_model:
-                            cov1r = uvp1.get_cov(key1, component="real")
-                            cov2r = uvp2.get_cov(key2, component="real")
-                            uvp1.cov_array_real[i][blp1_inds, :, :, j] = np.sqrt(
-                                cov1r**2 + cov2r**2
-                            )
-
-                            cov1i = uvp1.get_cov(key1, component="imag")
-                            cov2i = uvp2.get_cov(key2, component="imag")
-                            uvp1.cov_array_imag[i][blp1_inds, :, :, j] = np.sqrt(
-                                cov1i**2 + cov2i**2
-                            )
+                # add covariances: the covariance of a difference of
+                # independent spectra is the sum of their covariances
+                if hasattr(uvp1, "cov_array_real") and hasattr(uvp2, "cov_array_real"):
+                    if uvp1.cov_model == uvp2.cov_model:
+                        uvp1.cov_array_real[i][blp1_inds, :, :, j] = uvp1.get_cov(
+                            key1, component="real"
+                        ) + uvp2.get_cov(key2, component="real")
+                        uvp1.cov_array_imag[i][blp1_inds, :, :, j] = uvp1.get_cov(
+                            key1, component="imag"
+                        ) + uvp2.get_cov(key2, component="imag")
 
                 # same for window function
                 if hasattr(uvp1, "window_function_array") and hasattr(
