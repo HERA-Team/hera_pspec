@@ -1,5 +1,5 @@
 import copy
-import datetime
+import datetime as dt
 import glob
 import itertools
 import json
@@ -4223,7 +4223,7 @@ class PSpecData:
             "dataset1: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n"
             "dataset2: filename: {}, label: {}, cal: {}, history:\n{}\n{}\n"
             "".format(
-                datetime.datetime.now(datetime.UTC),
+                dt.datetime.now(dt.UTC),
                 __version__,
                 "-" * 20,
                 filename1,
