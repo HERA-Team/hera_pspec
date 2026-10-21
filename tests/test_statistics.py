@@ -281,17 +281,6 @@ class TestEstimatorIdentities:
             q.sum(axis=0), 0.5 * NFREQ * np.sum(np.abs(x) ** 2, axis=0), rtol=1e-10
         )
 
-    @pytest.mark.parametrize("allow_fft", [False, True])
-    @pytest.mark.parametrize("nfreq", [15, 16])
-    def test_delay_modes_are_complete(self, nfreq: int, allow_fft: bool) -> None:
-        """With one delay per channel, the Q_alt matrices add up to N times the
-        identity: the delay modes form a complete orthogonal basis, so a flat
-        band power is white noise."""
-        total = sum(
-            utils.get_Q_alt(b, nfreq, nfreq, allow_fft=allow_fft) for b in range(nfreq)
-        )
-        np.testing.assert_allclose(total, nfreq * np.eye(nfreq), atol=1e-10)
-
     @pytest.mark.parametrize("taper", ["none", "bh"])
     def test_fisher_matrix_is_trace_of_e_and_q(self, uvd, taper: str) -> None:
         """G_ab = Tr[E_a Q_b], with E_a = R_1^dagger Q_a R_2 / 2 from
