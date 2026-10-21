@@ -422,6 +422,9 @@ class TestLegacyFiles:
         # pspec() records the time of the run in history
         params = [p for p in expected._all_params if p != "history"]
         assert uvp.__eq__(expected, params=params)
+        # the v0.x cosmology dict is read as an astropy cosmology
+        assert isinstance(uvp.cosmo, FLRW)
+        assert uvp.cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
 
     def test_container_rewritten_as_v2(self, tmp_path: Path) -> None:
         psc = PSpecContainer(str(lf.CONTAINER_FILE), mode="r", keep_open=False)
