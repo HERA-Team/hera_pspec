@@ -33,9 +33,11 @@ from pathlib import Path
 from typing import Any
 
 import astropy
+import astropy.cosmology.units as cu
 import numpy as np
 import pyuvdata
 import scipy
+from astropy import units as u
 from pyuvdata import UVData
 
 import hera_pspec
@@ -62,9 +64,9 @@ FT_BEAM_FILE = "FT_beam_HERA_dipole_test_xx.hdf5"
 PSPEC_SPW_RANGES = [(20, 60), (90, 130)]
 PSPEC_TAPER = "blackman-harris"
 
-# |k| bins for spherical_average, in h Mpc^-1 (little_h is the default).
-SPH_KBINS = np.arange(0.05, 2.0, 0.05)
-SPH_BIN_WIDTH = 0.05
+# |k| bins for spherical_average, in h Mpc^-1.
+SPH_KBINS = np.arange(0.05, 2.0, 0.05) * cu.littleh / u.Mpc
+SPH_BIN_WIDTH = 0.05 * cu.littleh / u.Mpc
 
 # Baseline lengths (m) for the UVWindow spherical window functions. Many
 # lengths, as for a full set of HERA redundant groups.

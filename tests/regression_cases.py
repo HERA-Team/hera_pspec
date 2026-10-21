@@ -481,8 +481,9 @@ def _uvwindow_no_littleh() -> dict[str, np.ndarray]:
 # grouping.spherical_average and grouping.spherical_wf_from_uvp
 # --------------------------------------------------------------------------
 
-SPH_KBINS = np.arange(0.05, 2.0, 0.1)
-SPH_BIN_WIDTHS = 0.1
+SPH_K_UNIT = cu.littleh / units.Mpc
+SPH_KBINS = np.arange(0.05, 2.0, 0.1) * SPH_K_UNIT
+SPH_BIN_WIDTHS = 0.1 * SPH_K_UNIT
 
 
 @regression_case("spherical_average", rtol_overrides={"weighted_cov": LINALG_RTOL})
@@ -507,9 +508,11 @@ def _spherical_average() -> dict[str, np.ndarray]:
     for spw in sph.spw_array:
         out[f"uniform_A_{spw}"] = design[spw]
 
-    # little_h=False with the bins converted to Mpc^-1 must give the same grid
+    # the same bins given in Mpc^-1 must give the same grid
     sph_noh = grouping.spherical_average(
-        uvp, SPH_KBINS * uvp.cosmo.h, SPH_BIN_WIDTHS * uvp.cosmo.h, little_h=False
+        uvp,
+        SPH_KBINS.value * uvp.cosmo.h / units.Mpc,
+        SPH_BIN_WIDTHS.value * uvp.cosmo.h / units.Mpc,
     )
     out.update(uvpspec_outputs(sph_noh, prefix="noh_"))
 
@@ -520,23 +523,20 @@ def _spherical_average() -> dict[str, np.ndarray]:
     return out
 
 
-SPH_WF_KBIN_EDGES = np.arange(0.075, 2.9, 0.25)
+SPH_WF_KBIN_EDGES = np.arange(0.075, 2.9, 0.25) * SPH_K_UNIT
 
 
 @regression_case("spherical_exact_windows", rtol=LINALG_RTOL)
 def _spherical_exact_windows() -> dict[str, np.ndarray]:
     uvp = run_exact_windows_pspec()
     out = {}
-    wf = grouping.spherical_wf_from_uvp(
-        uvp, kbin_edges=SPH_WF_KBIN_EDGES, little_h=True
-    )
+    wf = grouping.spherical_wf_from_uvp(uvp, kbin_edges=SPH_WF_KBIN_EDGES)
     for spw, arr in wf.items():
         out[f"wf_from_uvp_{spw}"] = arr
     wf_theory = grouping.spherical_wf_from_uvp(
         uvp,
         kbin_edges=SPH_WF_KBIN_EDGES,
-        kbin_edges_theory=np.arange(0.075, 2.9, 0.125),
-        little_h=True,
+        kbin_edges_theory=np.arange(0.075, 2.9, 0.125) * SPH_K_UNIT,
     )
     for spw, arr in wf_theory.items():
         out[f"wf_from_uvp_theory_{spw}"] = arr
