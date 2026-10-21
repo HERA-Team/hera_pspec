@@ -2,6 +2,7 @@
 import copy
 
 import numpy as np
+from astropy import units
 from astropy.cosmology import FLRW
 from hera_cal.utils import JD2LST
 from pyuvdata import UVData
@@ -451,7 +452,7 @@ def noise_sim(
     if beam is not None:
         freqs = np.unique(data.freq_array)[None, :, None]
         K_to_Jy = [
-            1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p))
+            1e3 / (beam.Jy_to_mK(freqs.squeeze() << units.Hz, pol=p))
             for p in data.polarization_array
         ]
         K_to_Jy = np.array(K_to_Jy).T[None, :, :]

@@ -377,7 +377,9 @@ JY_TO_MK_FREQS = np.linspace(110e6, 190e6, 9)
 
 
 def gauss_beam() -> PSpecBeamGauss:
-    return PSpecBeamGauss(fwhm=0.25, beam_freqs=np.linspace(100e6, 200e6, 51))
+    return PSpecBeamGauss(
+        fwhm=0.25 * units.rad, beam_freqs=np.linspace(100e6, 200e6, 51) * units.Hz
+    )
 
 
 def from_array_beam() -> PSpecBeamFromArray:
@@ -385,7 +387,11 @@ def from_array_beam() -> PSpecBeamFromArray:
     beam_freqs = np.linspace(100e6, 200e6, 51)
     omega_p = 0.05 * (150e6 / beam_freqs) ** 2
     omega_pp = 0.025 * (150e6 / beam_freqs) ** 2
-    return PSpecBeamFromArray(OmegaP=omega_p, OmegaPP=omega_pp, beam_freqs=beam_freqs)
+    return PSpecBeamFromArray(
+        OmegaP=omega_p * units.sr,
+        OmegaPP=omega_pp * units.sr,
+        beam_freqs=beam_freqs * units.Hz,
+    )
 
 
 def beam_outputs(beam, pol: str) -> dict[str, np.ndarray]:
@@ -399,8 +405,8 @@ def beam_outputs(beam, pol: str) -> dict[str, np.ndarray]:
                         f"_exact{int(exact_norm)}"
                     )
                     out[key] = beam.compute_pspec_scalar(
-                        SCALAR_LOWER_FREQ,
-                        SCALAR_UPPER_FREQ,
+                        SCALAR_LOWER_FREQ * units.Hz,
+                        SCALAR_UPPER_FREQ * units.Hz,
                         SCALAR_NUM_FREQS,
                         num_steps=2000,
                         pol=pol,
@@ -409,7 +415,7 @@ def beam_outputs(beam, pol: str) -> dict[str, np.ndarray]:
                         noise_scalar=noise_scalar,
                         exact_norm=exact_norm,
                     )
-    out["Jy_to_mK"] = beam.Jy_to_mK(JY_TO_MK_FREQS, pol=pol)
+    out["Jy_to_mK"] = beam.Jy_to_mK(JY_TO_MK_FREQS * units.Hz, pol=pol)
     out["power_beam_int"] = beam.power_beam_int(pol=pol)
     out["power_beam_sq_int"] = beam.power_beam_sq_int(pol=pol)
     return out
@@ -445,7 +451,9 @@ WINDOW_BL_WEIGHTS = [2.0, 1.0]
 
 def make_uvwindow(little_h: bool) -> uvwindow.UVWindow:
     bandwidth = uvwindow.FTBeam.get_bandwidth(FT_BEAM_FILE)
-    ftbeam = uvwindow.FTBeam.from_file(ftfile=FT_BEAM_FILE, freq_array=bandwidth[5:25])
+    ftbeam = uvwindow.FTBeam.from_file(
+        ftfile=FT_BEAM_FILE, freq_array=bandwidth[5:25] * units.Hz
+    )
     kunits = cu.littleh / units.Mpc if little_h else 1 / units.Mpc
     return uvwindow.UVWindow(
         ftbeam_obj=ftbeam, taper="blackman-harris", kunits=kunits, verbose=False
@@ -456,22 +464,25 @@ def window_outputs(little_h: bool) -> dict[str, np.ndarray]:
     uvw = make_uvwindow(little_h)
     out = {}
     kperp, kpara, cyl_wf = uvw.get_cylindrical_wf(
-        WINDOW_BL_LENS[0], kperp_bins=None, kpara_bins=None, return_bins="unweighted"
+        WINDOW_BL_LENS[0] * units.m,
+        kperp_bins=None,
+        kpara_bins=None,
+        return_bins="unweighted",
     )
     out["cyl_kperp"] = kperp
     out["cyl_kpara"] = kpara
     out["cyl_wf"] = cyl_wf
 
     # spherical bins that cover every |k| probed, so no "not included" warning
-    kperp_bins = uvw.get_kperp_bins(WINDOW_BL_LENS)
-    kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
+    kperp_bins = uvw.get_kperp_bins(WINDOW_BL_LENS * units.m)
+    kpara_bins = uvw.get_kpara_bins(uvw.freq_array * units.Hz)
     ktot_max = np.sqrt(kperp_bins.value[:, None] ** 2 + kpara_bins.value**2).max()
     ktot_min = np.sqrt(kperp_bins.value[:, None] ** 2 + kpara_bins.value**2).min()
     dk = 0.1 if little_h else 0.1 * uvw.cosmo.h
     kbins = np.arange(ktot_min, ktot_max + dk, step=dk) * uvw.kunits
     sph_wf, weighted_k = uvw.get_spherical_wf(
         kbins=kbins,
-        bl_lens=WINDOW_BL_LENS,
+        bl_lens=WINDOW_BL_LENS * units.m,
         bl_weights=WINDOW_BL_WEIGHTS,
         kperp_bins=kperp_bins,
         kpara_bins=kpara_bins,
@@ -569,8 +580,8 @@ def _spherical_exact_windows() -> dict[str, np.ndarray]:
 # noise: calc_P_N, Sensitivity, utils.uvp_noise_error
 # --------------------------------------------------------------------------
 
-NOISE_TSYS = 300.0
-NOISE_T_INT = 10.7
+NOISE_TSYS = 300.0 * units.K
+NOISE_T_INT = 10.7 * units.s
 NOISE_K = np.linspace(0.05, 2.0, 8)
 
 
@@ -609,7 +620,7 @@ def _noise_sensitivity() -> dict[str, np.ndarray]:
         tag = "h" if little_h else "noh"
         sense = noise.Sensitivity(beam=pstokes_beam())
         sense.calc_scalar(
-            freqs,
+            freqs * units.Hz,
             "pI",
             num_steps=2000,
             length_unit=conversions.length_unit_from_little_h(little_h),

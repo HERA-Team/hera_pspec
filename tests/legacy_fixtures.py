@@ -12,6 +12,7 @@ import copy
 from pathlib import Path
 
 import numpy as np
+from astropy import units
 
 from hera_pspec import PSpecContainer, PSpecData, UVPSpec, testing, utils, uvwindow
 from tests.regression_cases import FT_BEAM_FILE, FT_BEAM_ROOT, _read_uvh5, dipole_beam
@@ -75,7 +76,7 @@ def build_ftbeam() -> uvwindow.FTBeam:
     """FT_beam_HERA_dipole_test_xx.hdf5 cut to three channels and 61 x 61 pixels."""
     bandwidth = uvwindow.FTBeam.get_bandwidth(FT_BEAM_FILE)
     full = uvwindow.FTBeam.from_file(
-        ftfile=FT_BEAM_FILE, freq_array=bandwidth[FTBEAM_CHANNELS]
+        ftfile=FT_BEAM_FILE, freq_array=bandwidth[FTBEAM_CHANNELS] * units.Hz
     )
     npix = full.ft_beam.shape[-1]
     start = (npix - FTBEAM_NPIX) // 2
@@ -83,8 +84,8 @@ def build_ftbeam() -> uvwindow.FTBeam:
     return uvwindow.FTBeam(
         data=full.ft_beam[:, crop, crop],
         pol=full.pol,
-        freq_array=full.freq_array,
-        mapsize=full.mapsize,
+        freq_array=full.freq_array * units.Hz,
+        mapsize=full.mapsize * units.rad,
     )
 
 
@@ -92,7 +93,7 @@ def build_uvwindow() -> uvwindow.UVWindow:
     """UVWindow (default k unit, littleh / Mpc) on ten channels of the test FT beam."""
     bandwidth = uvwindow.FTBeam.get_bandwidth(FT_BEAM_FILE)
     ftbeam = uvwindow.FTBeam.from_file(
-        ftfile=FT_BEAM_FILE, freq_array=bandwidth[UVWINDOW_CHANNELS]
+        ftfile=FT_BEAM_FILE, freq_array=bandwidth[UVWINDOW_CHANNELS] * units.Hz
     )
     # no k unit argument, so v0.x code (little_h=True default) builds the same
     return uvwindow.UVWindow(ftbeam_obj=ftbeam, taper="blackman-harris", verbose=False)
@@ -106,7 +107,7 @@ def write_container(path: Path = CONTAINER_FILE) -> None:
 
 def write_uvwindow(path: Path = UVWINDOW_FILE) -> None:
     build_uvwindow().run_and_write(
-        path, bl_lens=UVWINDOW_BL_LENS, bl_weights=UVWINDOW_BL_WEIGHTS
+        path, bl_lens=UVWINDOW_BL_LENS * units.m, bl_weights=UVWINDOW_BL_WEIGHTS
     )
 
 

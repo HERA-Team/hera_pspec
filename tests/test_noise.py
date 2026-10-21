@@ -79,18 +79,22 @@ class TestSensitivity:
     def test_scalar(self, sense: noise.Sensitivity) -> None:
         """Check that calc_scalar records the input subband and polarization."""
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        sense.calc_scalar(freqs, "pI", num_steps=5000, length_unit=u.Mpc / cu.littleh)
+        sense.calc_scalar(
+            freqs * u.Hz, "pI", num_steps=5000, length_unit=u.Mpc / cu.littleh
+        )
         assert np.isclose(freqs, sense.subband).all()
         assert sense.pol == "pI"
 
     def test_calc_p_n(self, sense: noise.Sensitivity) -> None:
         """Check that calc_P_N returns a scalar P_N in Pk form and a properly shaped, smaller DelSq array."""
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        sense.calc_scalar(freqs, "pI", num_steps=5000, length_unit=u.Mpc / cu.littleh)
+        sense.calc_scalar(
+            freqs * u.Hz, "pI", num_steps=5000, length_unit=u.Mpc / cu.littleh
+        )
 
         k = np.linspace(0, 3, 10)
-        Tsys = 500.0
-        t_int = 10.7
+        Tsys = 500.0 * u.K
+        t_int = 10.7 * u.s
         P_N = sense.calc_P_N(Tsys, t_int, Ncoherent=1, Nincoherent=1, form="Pk")
         assert isinstance(P_N, float)
         assert np.isclose(P_N, 642386932892.2921)
@@ -101,25 +105,29 @@ class TestSensitivity:
     def test_scalar_length_unit(self, sense: noise.Sensitivity) -> None:
         """Check calc_scalar's length_unit: littleh by default, Mpc = littleh / h^3, strings accepted."""
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        sense.calc_scalar(freqs, "pI", num_steps=2000)
+        sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000)
         default_scalar = sense.scalar
         assert isinstance(default_scalar, float)
         assert sense.length_unit == u.Mpc / cu.littleh
-        sense.calc_scalar(freqs, "pI", num_steps=2000, length_unit=u.Mpc / cu.littleh)
+        sense.calc_scalar(
+            freqs * u.Hz, "pI", num_steps=2000, length_unit=u.Mpc / cu.littleh
+        )
         assert sense.scalar == default_scalar
-        sense.calc_scalar(freqs, "pI", num_steps=2000, length_unit=u.Mpc)
+        sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000, length_unit=u.Mpc)
         assert sense.length_unit == u.Mpc
         h = sense.cosmo.h
         np.testing.assert_allclose(sense.scalar, default_scalar / h**3, rtol=1e-12)
         mpc_scalar = sense.scalar
-        sense.calc_scalar(freqs, "pI", num_steps=2000, length_unit="Mpc")
+        sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000, length_unit="Mpc")
         assert sense.scalar == mpc_scalar
-        sense.calc_scalar(freqs, "pI", num_steps=2000, length_unit="Mpc / littleh")
+        sense.calc_scalar(
+            freqs * u.Hz, "pI", num_steps=2000, length_unit="Mpc / littleh"
+        )
         assert sense.scalar == default_scalar
         # P_N follows the scalar's length unit: mK^2 L^3
-        Pk_mpc = noise.calc_P_N(mpc_scalar, 300.0, 10.7)
-        sense.calc_scalar(freqs, "pI", num_steps=2000, length_unit=u.Mpc)
-        assert sense.calc_P_N(300.0, 10.7) == Pk_mpc
+        Pk_mpc = noise.calc_P_N(mpc_scalar, 300.0 * u.K, 10.7 * u.s)
+        sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000, length_unit=u.Mpc)
+        assert sense.calc_P_N(300.0 * u.K, 10.7 * u.s) == Pk_mpc
 
     @pytest.mark.parametrize("little_h", [True, False])
     def test_scalar_little_h_deprecated(
@@ -128,12 +136,12 @@ class TestSensitivity:
         """Check that little_h warns at the caller's line, keeps its positional slot and matches length_unit."""
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
         length_unit = conversions.length_unit_from_little_h(little_h)
-        sense.calc_scalar(freqs, "pI", num_steps=2000, length_unit=length_unit)
+        sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000, length_unit=length_unit)
         expected = sense.scalar
         with pytest.warns(
             DeprecationWarning, match="little_h argument is deprecated"
         ) as record:
-            sense.calc_scalar(freqs, "pI", 2000, little_h)
+            sense.calc_scalar(freqs * u.Hz, "pI", 2000, little_h)
         assert len(record) == 1
         assert record[0].filename == __file__
         assert sense.scalar == expected
@@ -141,7 +149,7 @@ class TestSensitivity:
         # agreeing pair is accepted
         with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
             sense.calc_scalar(
-                freqs, "pI", 2000, little_h=little_h, length_unit=length_unit
+                freqs * u.Hz, "pI", 2000, little_h=little_h, length_unit=length_unit
             )
         assert sense.scalar == expected
 
@@ -152,9 +160,9 @@ class TestSensitivity:
             pytest.warns(DeprecationWarning),
             pytest.raises(ValueError, match="disagrees"),
         ):
-            sense.calc_scalar(freqs, "pI", little_h=True, length_unit=u.Mpc)
+            sense.calc_scalar(freqs * u.Hz, "pI", little_h=True, length_unit=u.Mpc)
         with pytest.raises(ValueError, match="length_unit must be a length"):
-            sense.calc_scalar(freqs, "pI", length_unit=u.s)
+            sense.calc_scalar(freqs * u.Hz, "pI", length_unit=u.s)
 
 
 def test_noise_validation(beam_nf_dipole: PSpecBeamUV) -> None:
@@ -205,7 +213,7 @@ def test_noise_validation(beam_nf_dipole: PSpecBeamUV) -> None:
         uvp.generate_noise_spectra(
             0,
             ("xx", "xx"),
-            Tsys,
+            Tsys * u.K,
             blpairs=uvp.get_blpairs()[:1],
             num_steps=2000,
             component="real",

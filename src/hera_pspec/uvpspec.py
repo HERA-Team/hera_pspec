@@ -13,7 +13,7 @@ from astropy import units
 from astropy.cosmology import FLRW, Cosmology
 from pyuvdata import utils as uvutils
 
-from . import __version__, conversions, grouping, noise, pspecbeam
+from . import __version__, conversions, grouping, noise, pspecbeam, utils
 from . import uvpspec_utils as uvputils
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
@@ -3037,8 +3037,8 @@ class UVPSpec:
                 )
                 # extract kperp bins the window functions corresponding to the baseline
                 # lengths given as input
-                kperp_bins = uvw.get_kperp_bins(blpair_lens)
-                kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
+                kperp_bins = uvw.get_kperp_bins(blpair_lens * units.m)
+                kpara_bins = uvw.get_kpara_bins(uvw.freq_array * units.Hz)
                 pol_window_function = np.zeros(
                     (
                         self.Nbltpairs,
@@ -3057,7 +3057,9 @@ class UVPSpec:
 
                     # window functions identical for all times
                     window_function_blg = uvw.get_cylindrical_wf(
-                        blpair_lens[j], kperp_bins=kperp_bins, kpara_bins=kpara_bins
+                        blpair_lens[j] * units.m,
+                        kperp_bins=kperp_bins,
+                        kpara_bins=kpara_bins,
                     )
                     if np.isnan(window_function_blg).any():
                         warnings.warn(
@@ -3449,9 +3451,11 @@ class UVPSpec:
             polpair int. Strings are expanded into polarization pairs, e.g.
             'XX' becomes ('XX,'XX').
 
-        Tsys : dictionary, float or array
-            System temperature in Kelvin for each blpair. Key is blpair-integer,
-            value is Tsys float or ndarray. If fed as an ndarray, shape=(Ntpairs,)
+        Tsys : dictionary, astropy.units.Quantity, float or array
+            System temperature for each blpair, a Quantity in any temperature
+            unit (e.g. ``300 * u.K``). Key is blpair-integer, value is a scalar
+            or an array of shape (Ntpairs,). Plain numbers are read as K
+            (deprecated).
 
         blpairs : list
             List of unique blair tuples or i12 integers to calculate noise
@@ -3544,7 +3548,23 @@ class UVPSpec:
         # Get delays
         dlys = self.get_dlys(spw)
 
-        # handle Tsys
+        # handle Tsys: Quantities are converted to plain values in K
+        if isinstance(Tsys, dict):
+            Tsys_in_K = {}
+            plain_Tsys = False
+            for key, value in Tsys.items():
+                if utils._contains_quantity(value):
+                    Tsys_in_K[key] = utils.to_value_in(value, units.K, "Tsys")
+                else:
+                    plain_Tsys = True
+                    Tsys_in_K[key] = value
+            Tsys = Tsys_in_K
+        else:
+            plain_Tsys = not utils._contains_quantity(Tsys)
+            if not plain_Tsys:
+                Tsys = utils.to_value_in(Tsys, units.K, "Tsys")
+        if plain_Tsys:
+            utils.warn_plain_number("Tsys", units.K, example="300 * u.K", stacklevel=3)
         if not isinstance(Tsys, dict):
             if not isinstance(Tsys, np.ndarray):
                 Tsys = np.ones(self.Ntpairs) * Tsys
@@ -3574,7 +3594,7 @@ class UVPSpec:
                     k = None
 
                 # Get noise power spectrum
-                pn = noise.calc_P_N(
+                pn = noise._calc_P_N(
                     scalar,
                     Tsys[blp][j],
                     t_int,

@@ -500,7 +500,7 @@ class TestDelayResponseKernel:
         from hera_pspec import PSpecBeamGauss
 
         freqs = np.linspace(140e6, 150e6, 20, endpoint=False)
-        gauss = PSpecBeamGauss(0.2, np.linspace(100e6, 200e6, 50))
+        gauss = PSpecBeamGauss(0.2 * u.rad, np.linspace(100e6, 200e6, 50) * u.Hz)
         delays = utils.get_delays(freqs)
         with pytest.raises(ValueError, match="HEALPix"):
             DelayResponse(beam="healpix").kernel(

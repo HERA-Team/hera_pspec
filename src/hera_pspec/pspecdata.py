@@ -3446,8 +3446,8 @@ class PSpecData:
         # calculate scalar
         if beam is None:
             scalar = self.primary_beam.compute_pspec_scalar(
-                start,
-                end,
+                start * units.Hz,
+                end * units.Hz,
                 len(freqs),
                 pol=pol,
                 taper=self.taper,
@@ -3457,8 +3457,8 @@ class PSpecData:
             )
         else:
             scalar = beam.compute_pspec_scalar(
-                start,
-                end,
+                start * units.Hz,
+                end * units.Hz,
                 len(freqs),
                 pol=pol,
                 taper=self.taper,
@@ -4988,7 +4988,7 @@ class PSpecData:
         # iterate over all pols and get conversion factors
         factors = {}
         for p in pols:
-            factors[p] = beam.Jy_to_mK(self.freqs, pol=p)
+            factors[p] = beam.Jy_to_mK(self.freqs << units.Hz, pol=p)
 
         # iterate over datasets and apply factor
         for i, dset in enumerate(self.dsets):

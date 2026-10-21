@@ -84,7 +84,7 @@ def delay_bins_exact_wf_uvp(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
     """Copy of vanilla_uvp_with_beam with exact window functions."""
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
     gaussian_beam = uvwindow.FTBeam.gaussian(
-        freq_array=uvp.freq_array, widths=8.0, pol=1
+        freq_array=uvp.freq_array * u.Hz, widths=8.0 * u.deg, pol=1
     )
     del uvp.window_function_array
     uvp.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
@@ -242,7 +242,9 @@ def uvp_with_stats(
     """UVPSpec from zen.all.xx.LST.1.06964.uvA with noise and simple stats."""
     uvd = copy.deepcopy(uvd_zen_all_xx)
     # find conversion factor from Jy to mK
-    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
+    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(
+        np.unique(uvd.freq_array) * u.Hz, pol="XX"
+    )
     uvd.data_array *= Jy_to_mK[None, :, None]
     # slide the time axis of uvd by one integration
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
@@ -275,7 +277,7 @@ def uvp_with_stats(
     )
     keys = uvp.get_all_keys()
     # Add the analytic noise to stat_array
-    Pn = uvp.generate_noise_spectra(0, "xx", 220)
+    Pn = uvp.generate_noise_spectra(0, "xx", 220 * u.K)
     for key in keys:
         blp = uvp.antnums_to_blpair(key[1])
         uvp.set_stats("noise", key, Pn[blp])
@@ -424,7 +426,7 @@ class TestAverageSpectra:
         # both time+redundant avg + error_weights
         keys = uvp.get_all_keys()
         # Add the analytic noise to stat_array
-        Pn = uvp.generate_noise_spectra(0, "xx", 220)
+        Pn = uvp.generate_noise_spectra(0, "xx", 220 * u.K)
         for key in keys:
             blp = uvp.antnums_to_blpair(key[1])
             # this object is not cosmologically normalised (Hz sr), so the

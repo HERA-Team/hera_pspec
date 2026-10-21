@@ -81,7 +81,9 @@ def healpix_integral_beam(beam, pol, freqs_hz):
     integral_beam : ndarray
         Real ``(Nfreqs, Nfreqs)`` array.
     """
-    beam_res, beam_omega, nside = beam.beam_normalized_response(pol, freqs_hz)
+    beam_res, beam_omega, nside = beam.beam_normalized_response(
+        pol, np.asarray(freqs_hz) << units.Hz
+    )
     prod = 1.0 / beam_omega
     beam_prod = beam_res * prod[:, np.newaxis]
     # the nside term is dtheta^2, the HEALPix pixel area

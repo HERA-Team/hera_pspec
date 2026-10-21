@@ -70,7 +70,7 @@ SPH_BIN_WIDTH = 0.05 * cu.littleh / u.Mpc
 
 # Baseline lengths (m) for the UVWindow spherical window functions. Many
 # lengths, as for a full set of HERA redundant groups.
-UVWINDOW_BL_LENS = np.linspace(14.6, 140.0, 120)
+UVWINDOW_BL_LENS = np.linspace(14.6, 140.0, 120) * u.m
 UVWINDOW_DK = 0.05
 
 # The HDF5 workflows use a pspec output over the same blpairs with three spws
@@ -275,11 +275,11 @@ SPHERICAL_AVERAGE = Workflow(
 def _uvwindow_setup() -> dict[str, Any]:
     ft_file = DATA_PATH / FT_BEAM_FILE
     bandwidth = uvwindow.FTBeam.get_bandwidth(ft_file)
-    ftbeam = uvwindow.FTBeam.from_file(ftfile=ft_file, freq_array=bandwidth)
+    ftbeam = uvwindow.FTBeam.from_file(ftfile=ft_file, freq_array=bandwidth * u.Hz)
     # default k unit: littleh / Mpc
     uvw = uvwindow.UVWindow(ftbeam_obj=ftbeam, taper=PSPEC_TAPER, verbose=False)
     kperp_bins = uvw.get_kperp_bins(UVWINDOW_BL_LENS)
-    kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
+    kpara_bins = uvw.get_kpara_bins(uvw.freq_array * u.Hz)
     ktot = np.sqrt(kperp_bins.value[:, None] ** 2 + kpara_bins.value**2)
     # bins that cover every |k| probed, so nothing falls outside the grid
     kbins = (

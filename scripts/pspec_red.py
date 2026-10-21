@@ -8,6 +8,7 @@ import os
 import sys
 import time
 
+import astropy.units as u
 import pyuvdata as uv
 from hera_cal import redcal
 
@@ -87,7 +88,7 @@ if "convert_jy_to_mk" in data_cfg.keys():
     if data_cfg["convert_jy_to_mk"]:
         for i in range(len(dsets)):
             freqs = dsets[i].freq_array.flatten()
-            dsets[i].data_array *= beam.Jy_to_mK(freqs)[None, None, :, None]
+            dsets[i].data_array *= beam.Jy_to_mK(freqs * u.Hz)[None, None, :, None]
             dsets[i].vis_units = "mK"
 
 # -------------------------------------------------------------------------------

@@ -584,7 +584,7 @@ class TestUVWindowFiles:
             kunits=kunit,
         )
         path = tmp_path / "uvwindow.h5"
-        uvw.run_and_write(path, bl_lens=lf.UVWINDOW_BL_LENS[:1])
+        uvw.run_and_write(path, bl_lens=lf.UVWINDOW_BL_LENS[:1] * units.m)
         with h5py.File(path, "r") as f:
             assert f.attrs["uvwindow_version"] == "2"
             # kept for v0.x readers, derived from kunits

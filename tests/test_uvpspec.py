@@ -67,7 +67,9 @@ def uvp_with_covariance(
     """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA with covariance computed (store_cov=True)."""
     uvd = copy.deepcopy(uvd_zen_even_xx)
 
-    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
+    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(
+        np.unique(uvd.freq_array) * units.Hz, pol="XX"
+    )
     uvd.data_array *= Jy_to_mK[None, :, None]
 
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[: uvd.Ntimes // 2], inplace=False)
@@ -79,7 +81,7 @@ def uvp_with_covariance(
     ds.rephase_to_dset(0)
 
     spws = utils.spw_range_from_freqs(
-        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
+        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)] * units.Hz, bounds_error=True
     )
     antpos, ants = uvd.get_enu_data_ants()
     red_bls = redcal.get_pos_reds(dict(zip(ants, antpos)), bl_error_tol=1.0)
@@ -1210,7 +1212,7 @@ class TestTimeArrays:
 
 
 class TestSense:
-    BASE_TSYS = 500
+    BASE_TSYS = 500 * units.K
     POLPAIR = ("xx", "xx")
 
     def test_basic_execution(self, mutable_uvp_with_beam: uvpspec.UVPSpec) -> None:
@@ -1229,7 +1231,7 @@ class TestSense:
             0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="real"
         )
         P_N2 = mutable_uvp_with_beam.generate_noise_spectra(
-            0, self.POLPAIR, self.BASE_TSYS - 100, form="Pk", component="real"
+            0, self.POLPAIR, self.BASE_TSYS - 100 * units.K, form="Pk", component="real"
         )
         assert (P_N[101102101102] > P_N2[101102101102]).all()
 
@@ -1469,7 +1471,7 @@ class TestGetExactWindowFunctions:
         uvp = copy.deepcopy(uvp_exact_wfs)
         widths = -0.0343 * uvp.freq_array / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=uvp.freq_array, widths=widths, pol="xx"
+            freq_array=uvp.freq_array * units.Hz, widths=widths * units.deg, pol="xx"
         )
         with pytest.warns(
             UserWarning, match="Exact window functions already computed, overwriting"
@@ -1593,16 +1595,18 @@ class TestScalarAndNoiseUnits:
     def test_noise_spectra_units(self, vanilla_uvp_with_beam: UVPSpec) -> None:
         uvp = vanilla_uvp_with_beam
         h = uvp.cosmo.h
-        pk = uvp.generate_noise_spectra(0, self.POLPAIR, 500)[self.BLP]
+        pk = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K)[self.BLP]
         pk_mpc = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500, length_unit=units.Mpc
+            0, self.POLPAIR, 500 * units.K, length_unit=units.Mpc
         )[self.BLP]
         assert pk.unit == units.mK**2 * units.Mpc**3 / cu.littleh**3
         assert pk_mpc.unit == units.mK**2 * units.Mpc**3
         np.testing.assert_allclose(pk_mpc.value, pk.value / h**3, rtol=1e-12)
-        dsq = uvp.generate_noise_spectra(0, self.POLPAIR, 500, form="DelSq")[self.BLP]
+        dsq = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K, form="DelSq")[
+            self.BLP
+        ]
         dsq_mpc = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500, form="DelSq", length_unit=units.Mpc
+            0, self.POLPAIR, 500 * units.K, form="DelSq", length_unit=units.Mpc
         )[self.BLP]
         assert dsq.unit == units.mK**2 and dsq_mpc.unit == units.mK**2
         # Delta^2 does not depend on the length unit
@@ -1613,12 +1617,12 @@ class TestScalarAndNoiseUnits:
     ) -> None:
         uvp = vanilla_uvp_with_beam
         scalar = uvp.compute_scalar(0, self.POLPAIR, num_steps=2000, noise_scalar=True)
-        computed = uvp.generate_noise_spectra(0, self.POLPAIR, 500)[self.BLP]
-        from_quantity = uvp.generate_noise_spectra(0, self.POLPAIR, 500, scalar=scalar)[
-            self.BLP
-        ]
+        computed = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K)[self.BLP]
+        from_quantity = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, scalar=scalar
+        )[self.BLP]
         from_float = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500, scalar=scalar.value
+            0, self.POLPAIR, 500 * units.K, scalar=scalar.value
         )[self.BLP]
         np.testing.assert_array_equal(from_quantity.value, computed.value)
         np.testing.assert_array_equal(from_float.value, computed.value)
@@ -1627,23 +1631,27 @@ class TestScalarAndNoiseUnits:
             units.Mpc**3 / (units.Hz * units.sr), equivalencies=cu.with_H0(uvp.cosmo.H0)
         )
         from_mpc = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500, scalar=mpc_scalar, length_unit=units.Mpc
+            0, self.POLPAIR, 500 * units.K, scalar=mpc_scalar, length_unit=units.Mpc
         )[self.BLP]
         np.testing.assert_allclose(
             from_mpc.value * uvp.cosmo.h**3, computed.value, rtol=1e-12
         )
         with pytest.raises(units.UnitConversionError):
-            uvp.generate_noise_spectra(0, self.POLPAIR, 500, scalar=scalar * units.s)
+            uvp.generate_noise_spectra(
+                0, self.POLPAIR, 500 * units.K, scalar=scalar * units.s
+            )
 
     def test_noise_spectra_little_h_deprecated(
         self, vanilla_uvp_with_beam: UVPSpec
     ) -> None:
         uvp = vanilla_uvp_with_beam
         expected = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500, length_unit=units.Mpc
+            0, self.POLPAIR, 500 * units.K, length_unit=units.Mpc
         )
         with pytest.warns(DeprecationWarning, match="little_h") as record:
-            old = uvp.generate_noise_spectra(0, self.POLPAIR, 500, little_h=False)
+            old = uvp.generate_noise_spectra(
+                0, self.POLPAIR, 500 * units.K, little_h=False
+            )
         # one warning, pointing at the caller
         assert len(record) == 1
         assert record[0].filename == __file__

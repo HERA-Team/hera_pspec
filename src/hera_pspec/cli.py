@@ -12,6 +12,7 @@ from typing import Annotated, Literal
 
 import h5py
 import numpy as np
+from astropy import units
 from cyclopts import App, Parameter
 from rich.console import Console
 from rich.logging import RichHandler
@@ -604,7 +605,11 @@ def compute_ft_beam(
             return
 
     ftbeam = FTBeam.from_beam(
-        beamfile=beam_file, pol=pol, freq_array=freq_array, mapsize=mapsize, npix=npix
+        beamfile=beam_file,
+        pol=pol,
+        freq_array=freq_array * units.Hz,
+        mapsize=mapsize * units.rad,
+        npix=npix,
     )
     out_path = Path(out_dir) / fname
     ftbeam.write_hdf5(
@@ -654,7 +659,7 @@ def _compute_one_wf(
     # load the FT beam on the exact frequency channels of the spectral
     # window (reads only the relevant channel range from disk)
     spw_freqs = np.unique(sub.freq_array)
-    ftbeam = FTBeam.from_file(ft_beam_file, freq_array=spw_freqs)
+    ftbeam = FTBeam.from_file(ft_beam_file, freq_array=spw_freqs * units.Hz)
 
     kperp, kpara, wf = sub.get_exact_window_functions(ftbeam=ftbeam, inplace=False)
     # after select, the only spectral window is index 0

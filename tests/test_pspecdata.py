@@ -1500,7 +1500,7 @@ class TestScalar:
         ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
 
         gauss = pspecbeam.PSpecBeamGauss(
-            0.8, np.linspace(115e6, 130e6, 50, endpoint=False)
+            0.8 * u.rad, np.linspace(115e6, 130e6, 50, endpoint=False) * u.Hz
         )
         ds2 = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=gauss)
 
@@ -1536,8 +1536,8 @@ class TestScalar:
             else length_unit
         )
         expected = beam_nf_dipole.compute_pspec_scalar(
-            freqs[0],
-            freqs[0] + np.median(np.diff(freqs)) * len(freqs),
+            freqs[0] * u.Hz,
+            (freqs[0] + np.median(np.diff(freqs)) * len(freqs)) * u.Hz,
             len(freqs),
             pol="xx",
             taper=ds.taper,
@@ -1911,7 +1911,9 @@ def c_model_setup(
         beam=beam_nf_dipole_wcosmo,
     )
     spws = utils.spw_range_from_freqs(
-        uvd_zen_even_xx, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
+        uvd_zen_even_xx,
+        freq_range=[(160e6, 165e6), (160e6, 165e6)] * u.Hz,
+        bounds_error=True,
     )
     antpos, ants = uvd_zen_even_xx.get_enu_data_ants()
     antpos = dict(zip(ants, antpos))
@@ -2907,7 +2909,7 @@ class TestPspec:
         # Gaussian beam object
         widths = -0.0343 * uvd1.freq_array.flatten() / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=uvd1.freq_array.flatten(), widths=widths, pol="xx"
+            freq_array=uvd1.freq_array.flatten() * u.Hz, widths=widths * u.deg, pol="xx"
         )
         with pytest.warns(
             UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."
@@ -2946,8 +2948,8 @@ def normalization_setup(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> tuple:
     cosmo = conversions.DEFAULT_COSMOLOGY
 
     # Set to mK scale
-    d1.data_array *= beam.Jy_to_mK(freqs, pol="XX")[None, :, None]
-    d2.data_array *= beam.Jy_to_mK(freqs, pol="XX")[None, :, None]
+    d1.data_array *= beam.Jy_to_mK(freqs * u.Hz, pol="XX")[None, :, None]
+    d2.data_array *= beam.Jy_to_mK(freqs * u.Hz, pol="XX")[None, :, None]
 
     OmegaP = beam.power_beam_int(pol="XX")
     OmegaPP = beam.power_beam_sq_int(pol="XX")
