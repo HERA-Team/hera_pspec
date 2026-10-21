@@ -209,10 +209,42 @@ class TestFastMergeBaselines:
         assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
 
 
-def test_run_help():
-    result = invoke(["run", "--help"])
+@pytest.mark.parametrize(
+    "subcommand,option",
+    [
+        ("run", "--dset-pairs"),
+        ("bootstrap", "--nsamples"),
+        ("auto-noise", "--err-type"),
+        ("generate-pstokes", "--pstokes"),
+        ("compute-ft-beam", "--npix"),
+        ("compute-window-functions", "--workers"),
+    ],
+    ids=[
+        "run",
+        "bootstrap",
+        "auto-noise",
+        "generate-pstokes",
+        "compute-ft-beam",
+        "compute-window-functions",
+    ],
+)
+def test_help(subcommand: str, option: str):
+    """Check that each subcommand's --help exits cleanly and lists its options."""
+    result = invoke([subcommand, "--help"])
     assert result.exit_code == 0, result.output
-    assert "--dset-pairs" in result.output
+    assert option in result.output
+
+
+@pytest.fixture
+def pspec_run_kwargs(monkeypatch) -> dict:
+    """Replace pspecdata.pspec_run with a fake; returns the keyword arguments it receives."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    return captured
 
 
 def test_run_end_to_end(tmp_path):
@@ -261,30 +293,18 @@ def test_run_end_to_end(tmp_path):
     assert np.all((bl_degs >= 50) & (bl_degs <= 70))
 
 
-def test_run_symmetric_taper_flag_passes_bool(monkeypatch, tmp_path):
+def test_run_symmetric_taper_flag_passes_bool(pspec_run_kwargs: dict, tmp_path):
     """Regression: --no-symmetric-taper must forward Python False (not a truthy str)."""
-    captured = {}
-
-    def fake_pspec_run(dsets, filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--no-symmetric-taper"]
     )
     assert result.exit_code == 0, result.output
-    assert captured["symmetric_taper"] is False
-    assert captured["include_crosscorrs"] is True
+    assert pspec_run_kwargs["symmetric_taper"] is False
+    assert pspec_run_kwargs["include_crosscorrs"] is True
 
 
-def test_run_blpair_reshaped(monkeypatch, tmp_path):
+def test_run_blpair_reshaped(pspec_run_kwargs: dict, tmp_path):
     """--blpairs 1 2 3 4 must reshape to ((1, 2), (3, 4))."""
-    captured = {}
-
-    def fake_pspec_run(dsets, filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
     result = invoke(
         [
             "run",
@@ -304,17 +324,13 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
         ]
     )
     assert result.exit_code == 0, result.output
-    assert captured["blpairs"] == [((1, 2), (3, 4)), ((5, 6), (7, 8))]
+    assert pspec_run_kwargs["blpairs"] == [((1, 2), (3, 4)), ((5, 6), (7, 8))]
 
 
-def test_bootstrap_help():
-    result = invoke(["bootstrap", "--help"])
-    assert result.exit_code == 0, result.output
-    assert "--nsamples" in result.output
-
-
-def test_bootstrap_bool_flags_round_trip(monkeypatch):
-    """Regression: time_avg/normal_std/robust_std are real bool flags, not type=bool."""
+@pytest.fixture
+def bootstrap_run_args(monkeypatch) -> dict:
+    """Replace grouping.bootstrap_run with a fake; returns the filename and
+    keyword arguments it receives."""
     captured = {}
 
     def fake_bootstrap_run(filename, **kwargs):
@@ -322,40 +338,38 @@ def test_bootstrap_bool_flags_round_trip(monkeypatch):
         captured.update(kwargs)
 
     monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
+    return captured
+
+
+def test_bootstrap_bool_flags_round_trip(bootstrap_run_args: dict):
+    """Regression: time_avg/normal_std/robust_std are real bool flags, not type=bool."""
     result = invoke(
         ["bootstrap", "x.h5", "--time-avg", "--no-normal-std", "--nsamples", "5"]
     )
     assert result.exit_code == 0, result.output
-    assert captured["filename"] == "x.h5"
-    assert captured["time_avg"] is True
-    assert captured["normal_std"] is False
-    assert captured["robust_std"] is False  # argparser default
-    assert captured["Nsamples"] == 5
-    assert captured["seed"] == 0
+    assert bootstrap_run_args["filename"] == "x.h5"
+    assert bootstrap_run_args["time_avg"] is True
+    assert bootstrap_run_args["normal_std"] is False
+    assert bootstrap_run_args["robust_std"] is False  # argparser default
+    assert bootstrap_run_args["Nsamples"] == 5
+    assert bootstrap_run_args["seed"] == 0
 
 
-def test_bootstrap_blpair_group_parsed(monkeypatch):
+def test_bootstrap_blpair_group_parsed(bootstrap_run_args: dict):
     """--blpair-group tokens parse to list[list[int]]."""
-    captured = {}
-
-    def fake_bootstrap_run(filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
     result = invoke(
         ["bootstrap", "x.h5", "--blpair-group", "101 102", "--blpair-group", "103"]
     )
     assert result.exit_code == 0, result.output
-    assert captured["blpair_groups"] == [[101, 102], [103]]
+    assert bootstrap_run_args["blpair_groups"] == [[101, 102], [103]]
 
 
-def test_auto_noise_help():
-    result = invoke(["auto-noise", "--help"])
-    assert result.exit_code == 0, result.output
-    assert "--err-type" in result.output
+@pytest.fixture
+def auto_noise_calls(monkeypatch) -> dict:
+    """Replace the file I/O and noise calls of auto-noise with fakes; returns
+    a record of the calls they receive."""
+    calls = {"noise": [], "set": [], "saved": False}
 
-
-def _auto_noise_fakes(monkeypatch, calls):
     class FakeUVData:
         def read(self, fname):
             calls["read"] = fname
@@ -387,23 +401,20 @@ def _auto_noise_fakes(monkeypatch, calls):
         lambda uvp, tsys, err_type: calls["noise"].append((uvp, tsys, tuple(err_type))),
     )
     monkeypatch.setattr(cli.container, "PSpecContainer", FakeContainer)
+    return calls
 
 
-def test_auto_noise_default_spectra(monkeypatch):
-    calls = {"noise": [], "set": [], "saved": False}
-    _auto_noise_fakes(monkeypatch, calls)
+def test_auto_noise_default_spectra(auto_noise_calls: dict):
     result = invoke(["auto-noise", "cont.h5", "autos.uvh5", "beam.fits"])
     assert result.exit_code == 0, result.output
-    assert calls["read"] == "autos.uvh5"
-    assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N",))]
-    assert calls["set"] == [("grp1", "auto_spec", True)]
-    assert calls["saved"] is True
+    assert auto_noise_calls["read"] == "autos.uvh5"
+    assert auto_noise_calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N",))]
+    assert auto_noise_calls["set"] == [("grp1", "auto_spec", True)]
+    assert auto_noise_calls["saved"] is True
 
 
-def test_auto_noise_explicit_spectra_does_not_raise(monkeypatch):
+def test_auto_noise_explicit_spectra_does_not_raise(auto_noise_calls: dict):
     """Regression: passing --spectra used to leave `spectra` unbound -> NameError."""
-    calls = {"noise": [], "set": [], "saved": False}
-    _auto_noise_fakes(monkeypatch, calls)
     result = invoke(
         [
             "auto-noise",
@@ -417,13 +428,11 @@ def test_auto_noise_explicit_spectra_does_not_raise(monkeypatch):
         ]
     )
     assert result.exit_code == 0, result.output
-    assert calls["set"] == [("grp1", "s1", True), ("grp1", "s2", True)]
+    assert auto_noise_calls["set"] == [("grp1", "s1", True), ("grp1", "s2", True)]
 
 
-def test_auto_noise_multiple_err_types(monkeypatch):
+def test_auto_noise_multiple_err_types(auto_noise_calls: dict):
     """--err-type is repeatable and the full list reaches uvp_noise_error."""
-    calls = {"noise": [], "set": [], "saved": False}
-    _auto_noise_fakes(monkeypatch, calls)
     result = invoke(
         [
             "auto-noise",
@@ -437,13 +446,7 @@ def test_auto_noise_multiple_err_types(monkeypatch):
         ]
     )
     assert result.exit_code == 0, result.output
-    assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N", "P_SN"))]
-
-
-def test_generate_pstokes_help():
-    result = invoke(["generate-pstokes", "--help"])
-    assert result.exit_code == 0, result.output
-    assert "--pstokes" in result.output
+    assert auto_noise_calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N", "P_SN"))]
 
 
 def test_generate_pstokes_default_pstokes_is_list(monkeypatch):
@@ -527,11 +530,6 @@ WF_BEAMFILE = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
 
 
 class TestComputeFtBeam:
-    def test_help(self):
-        result = invoke(["compute-ft-beam", "--help"])
-        assert result.exit_code == 0, result.output
-        assert "--npix" in result.output
-
     @pytest.fixture(scope="class")
     def ft_beam_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
         out_dir = tmp_path_factory.mktemp("ftcache")
@@ -592,11 +590,6 @@ class TestComputeFtBeam:
 
 
 class TestComputeWindowFunctions:
-    def test_help(self):
-        result = invoke(["compute-window-functions", "--help"])
-        assert result.exit_code == 0, result.output
-        assert "--workers" in result.output
-
     @pytest.fixture(scope="class")
     def wf_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
         ft_dir = tmp_path_factory.mktemp("ftcache-wf")
@@ -723,11 +716,27 @@ class TestComputeWindowFunctions:
         assert isinstance(result2.exception, ValueError)
         assert "out of range" in str(result2.exception)
 
-    def test_ambiguous_group(self, vanilla_uvp: UVPSpec, tmp_path: Path):
-        fname = tmp_path / "twogroups.pspec.h5"
+    @pytest.mark.parametrize(
+        "spectra,flag",
+        [
+            ([("g1", "testps"), ("g2", "testps")], "--group"),
+            ([("g1", "ps1"), ("g1", "ps2")], "--name"),
+        ],
+        ids=["ambiguous_group", "ambiguous_name"],
+    )
+    def test_ambiguous_spectrum(
+        self,
+        vanilla_uvp: UVPSpec,
+        tmp_path: Path,
+        spectra: list[tuple[str, str]],
+        flag: str,
+    ):
+        """Check that a container with several groups (or several spectra in
+        its group) must be disambiguated with --group (or --name)."""
+        fname = tmp_path / "ambiguous.pspec.h5"
         psc = PSpecContainer(fname, "rw", keep_open=False)
-        psc.set_pspec("g1", "testps", vanilla_uvp)
-        psc.set_pspec("g2", "testps", vanilla_uvp)
+        for group, name in spectra:
+            psc.set_pspec(group, name, vanilla_uvp)
         result = invoke(
             [
                 "compute-window-functions",
@@ -740,23 +749,4 @@ class TestComputeWindowFunctions:
             ]
         )
         assert isinstance(result.exception, ValueError)
-        assert "--group" in str(result.exception)
-
-    def test_ambiguous_name(self, vanilla_uvp: UVPSpec, tmp_path: Path):
-        fname = tmp_path / "twospectra.pspec.h5"
-        psc = PSpecContainer(fname, "rw", keep_open=False)
-        psc.set_pspec("g1", "ps1", vanilla_uvp)
-        psc.set_pspec("g1", "ps2", vanilla_uvp)
-        result = invoke(
-            [
-                "compute-window-functions",
-                str(fname),
-                "unused.hdf5",
-                "--dataset-label",
-                "clitest",
-                "--out-dir",
-                str(tmp_path),
-            ]
-        )
-        assert isinstance(result.exception, ValueError)
-        assert "--name" in str(result.exception)
+        assert flag in str(result.exception)
