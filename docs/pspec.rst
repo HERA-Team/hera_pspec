@@ -53,7 +53,7 @@ To get power spectra from the ``UVPSpec`` object that was returned by ``pspec``:
   blpair =((24, 25), (37, 38))
   key = (spw, blpair, polpair)
 
-  # Get delay bins and power spectrum
+  # Get delay bins (an astropy Quantity in s) and power spectrum
   dlys = uvp.get_dlys(spw)
   ps = uvp.get_data(key)
 
@@ -92,7 +92,7 @@ The ``PSpecData`` class
 The most frequently-used methods from ``PSpecData`` are listed below. See :any:`pspecdata` for a full listing of all methods provided by ``PSpecData``.
 
 .. autoclass:: hera_pspec.PSpecData
-  :members: __init__, add, pspec, rephase_to_dset, scalar, delays, units
+  :members: __init__, add, pspec, rephase_to_dset, scalar, delays, units, get_response
   :noindex:
 
 
@@ -111,7 +111,7 @@ To access the power spectra, use the :meth:`~hera_pspec.UVPSpec.get_data` method
   blpair =((24, 25), (37, 38))
   key = (spw, blpair, polpair)
 
-  # Get delay bins and power spectrum
+  # Get delay bins (an astropy Quantity in s) and power spectrum
   dlys = uvp.get_dlys(spw)
   ps = uvp.get_data(key)
 
@@ -124,6 +124,10 @@ A number of methods are provided for returning useful metadata:
  * :meth:`~hera_pspec.UVPSpec.get_dlys`: Get the delay for each bin of the delay power spectra (in seconds).
 
  * :meth:`~hera_pspec.UVPSpec.get_blpair_seps`: Get the average baseline separation for a baseline pair, in the ENU frame, in meters.
+
+ * :attr:`~hera_pspec.UVPSpec.units`: The unit of the power spectra, as an ``astropy`` unit.
+
+These getters return ``astropy`` Quantities (see :doc:`conversions`).
 
 Dimensions and indexing of the ``UVPSpec`` data array
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -167,5 +171,5 @@ The ``UVPSpec`` class
 The most relevant methods from ``UVPSpec`` are listed below. See :any:`uvpspec` for a full listing of all methods provided by ``UVPSpec``.
 
 .. autoclass:: hera_pspec.UVPSpec
-  :members: __init__, get_data, get_wgts, get_integrations, get_nsamples, get_dlys, get_kperps, get_kparas, get_blpair_seps, select, read_hdf5, write_hdf5, generate_noise_spectra, average_spectra, fold_spectra, get_blpair_groups_from_bl_groups
+  :members: __init__, get_data, get_wgts, get_integrations, get_nsamples, get_dlys, get_kperps, get_kparas, get_blpair_seps, units, norm_unit, vis_unit, get_param_unit, window_k_unit, get_window_function_kgrid, select, read_hdf5, write_hdf5, generate_noise_spectra, average_spectra, fold_spectra, get_blpair_groups_from_bl_groups
   :noindex:

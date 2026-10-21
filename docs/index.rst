@@ -26,6 +26,8 @@ Contents
    pspecdata
    uvpspec
    container
+   conversions
+   response
    plot
    tutorials
 

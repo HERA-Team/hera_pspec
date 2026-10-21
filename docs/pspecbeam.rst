@@ -21,12 +21,14 @@ units using the :meth:`~hera_pspec.pspecbeam.PSpecBeamBase.Jy_to_mK` method, e.g
   # Apply unit conversion factor to UVData
   uvd = UVData()
   uvd.read_miriad(datafile) # Load data (assumed to be in Jy units)
-  uvd.data_array *= beam.Jy_to_mK(np.unique(uvd.freq_array))[None, None, :, None]
+  freqs = np.unique(uvd.freq_array) * u.Hz  # astropy.units imported as u
+  uvd.data_array *= beam.Jy_to_mK(freqs)[None, :, None]
+  uvd.vis_units = "mK"
   # (The brackets [] are needed to match the shape of uvd.data_array)
 
-Note that ``PSpecBeam`` objects have a cosmology attached to them. If you don't specify
-a cosmology (with the ``cosmo`` keyword argument), they will be instantiated with the
-default cosmology from ``hera_pspec.conversions``.
+Note that ``PSpecBeam`` objects have a cosmology attached to them, an
+``astropy.cosmology`` object. If you don't specify a cosmology (with the ``cosmo``
+keyword argument), they use ``hera_pspec.conversions.DEFAULT_COSMOLOGY``.
 
 There are several different types of ``PSpecBeam`` object:
 
@@ -70,10 +72,10 @@ For example, to specify a Gaussian beam with a constant FWHM of 0.1 radians, def
 .. code-block:: python
 
   # Each beam is defined over a frequency interval:
-  beam_freqs = np.linspace(100e6, 200e6, 200) # in Hz
+  beam_freqs = np.linspace(100, 200, 200) * u.MHz
 
   # Create a new Gaussian beam object with full-width at half-max. of 0.1 radians
-  beam_gauss = hp.PSpecBeamGauss(fwhm=0.1, beam_freqs=beam_freqs)
+  beam_gauss = hp.PSpecBeamGauss(fwhm=0.1 * u.rad, beam_freqs=beam_freqs)
 
 The beam is backed by a ``pyuvdata.analytic_beam.GaussianBeam``, exposed as the ``analytic_beam`` attribute. You can also construct a ``PSpecBeamGauss`` directly from an achromatic ``GaussianBeam``:
 
