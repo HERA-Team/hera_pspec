@@ -1460,11 +1460,31 @@ class UVPSpec:
         key : tuple
             A spw-blpair-polpair key parseable by UVPSpec.key_to_indices.
 
-        statistic : ndarray
-            2D ndarray with statistics to set. Must conform to shape of the
-            slice of data_array produced by the specified key.
+        statistic : ndarray or astropy.units.Quantity
+            2D array with statistics to set. Must conform to shape of the
+            slice of data_array produced by the specified key. A Quantity is
+            converted to the power spectrum unit :attr:`units` before it is
+            stored; a plain array is stored as given and taken to be in
+            :attr:`units` already.
+
+        Raises
+        ------
+        ValueError
+            If ``statistic`` is a Quantity whose unit cannot be converted to
+            :attr:`units`, or if its shape does not match the data.
         """
         spw, blpairts, polpair = self.key_to_indices(key)
+        if isinstance(statistic, units.Quantity):
+            pspec_unit = self.units
+            try:
+                statistic = statistic.to_value(pspec_unit)
+            except units.UnitConversionError as err:
+                raise ValueError(
+                    f"statistic has unit '{statistic.unit}', which cannot be "
+                    f"converted to the power spectrum unit '{pspec_unit}' of "
+                    "this object; pass a Quantity in a compatible unit or a "
+                    "plain array already in that unit."
+                ) from err
         statistic = np.asarray(statistic)
         data_shape = self.data_array[spw][blpairts, :, polpair].shape
 

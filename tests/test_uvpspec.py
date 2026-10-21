@@ -357,6 +357,63 @@ class TestStatsArray:
             1,
         ).all()
 
+    @staticmethod
+    def _mk_littleh_uvp(uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
+        uvp = copy.deepcopy(uvp)
+        uvp.vis_units = "mK"
+        uvp.norm_units = "Mpc3 / littleh3"
+        assert uvp.units == units.mK**2 * units.Mpc**3 / cu.littleh**3
+        return uvp
+
+    def test_set_stats_quantity_in_pspec_unit(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ) -> None:
+        """A Quantity in uvp.units is stored as its values; a plain array as given."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.arange(uvp.Ntimes * uvp.Ndlys, dtype=float).reshape(
+            uvp.Ntimes, uvp.Ndlys
+        )
+        uvp.set_stats("err", key, values * uvp.units)
+        stored = uvp.get_stats("err", key)
+        assert not isinstance(stored, units.Quantity)
+        np.testing.assert_array_equal(stored, values)
+        uvp.set_stats("plain", key, values)
+        np.testing.assert_array_equal(uvp.get_stats("plain", key), values)
+        # the uncalibrated, not cosmologically normalised vanilla object
+        uvp = copy.deepcopy(vanilla_uvp)
+        uvp.set_stats("err", key, values * uvp.units)
+        np.testing.assert_array_equal(uvp.get_stats("err", key), values)
+
+    def test_set_stats_quantity_converted(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """A Quantity in an equivalent unit is converted to uvp.units."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.full((uvp.Ntimes, uvp.Ndlys), 2.5)
+        uvp.set_stats("err", key, values * units.K**2 * units.Mpc**3 / cu.littleh**3)
+        np.testing.assert_allclose(uvp.get_stats("err", key), values * 1e6, rtol=1e-15)
+
+    @pytest.mark.parametrize(
+        "bad_unit",
+        [
+            units.mK**2 * units.Mpc**3,  # no littleh: needs a cosmology, not converted
+            units.mK**2,
+            units.dimensionless_unscaled,
+        ],
+    )
+    def test_set_stats_quantity_wrong_unit(
+        self, vanilla_uvp: uvpspec.UVPSpec, bad_unit: units.UnitBase
+    ) -> None:
+        """A Quantity whose unit cannot be converted to uvp.units raises ValueError."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.ones((uvp.Ntimes, uvp.Ndlys))
+        with pytest.raises(
+            ValueError, match="cannot be converted to the power spectrum"
+        ):
+            uvp.set_stats("err", key, values * bad_unit)
+        assert not hasattr(uvp, "stats_array") or "err" not in uvp.stats_array
+
 
 def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> None:
     uvd_std = copy.deepcopy(uvd_zen_even_xx)  # dummy uvd_std

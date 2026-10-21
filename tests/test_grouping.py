@@ -427,7 +427,10 @@ class TestAverageSpectra:
         Pn = uvp.generate_noise_spectra(0, "xx", 220)
         for key in keys:
             blp = uvp.antnums_to_blpair(key[1])
-            error = Pn[blp]
+            # this object is not cosmologically normalised (Hz sr), so the
+            # noise Quantity cannot be converted to its units; store the
+            # plain values, only their relative size matters here
+            error = Pn[blp].value
             uvp.set_stats("noise", key, error)
         _ = grouping.average_spectra(
             uvp,
