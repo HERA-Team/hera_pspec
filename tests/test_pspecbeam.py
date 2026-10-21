@@ -313,41 +313,75 @@ class TestPSpecBeamGauss:
             from_power.power_beam_sq_int(), from_efield.power_beam_sq_int()
         )
 
-    def test_raises_on_unsupported_analytic_beams(
-        self, gauss_beam: pspecbeam.PSpecBeamGauss
-    ) -> None:
-        """Check clear errors for diameter-specified, chromatic, and non-Gaussian analytic beams."""
-        with pytest.raises(ValueError, match="Diameter-specified"):
-            pspecbeam.PSpecBeamGauss(
-                beam=GaussianBeam(diameter=14.0), beam_freqs=gauss_beam.beam_freqs
-            )
-        with pytest.raises(NotImplementedError, match="Chromatic"):
-            pspecbeam.PSpecBeamGauss(
-                beam=GaussianBeam(
-                    sigma=0.1, spectral_index=-1.0, reference_frequency=150e6
+    @pytest.mark.parametrize(
+        "build_beam,exc_type,match",
+        [
+            pytest.param(
+                lambda freqs: pspecbeam.PSpecBeamGauss(
+                    beam=GaussianBeam(diameter=14.0), beam_freqs=freqs
                 ),
-                beam_freqs=gauss_beam.beam_freqs,
-            )
-        with pytest.raises(TypeError, match="must be a pyuvdata GaussianBeam"):
-            pspecbeam.PSpecBeamGauss(
-                beam=AiryBeam(diameter=14.0), beam_freqs=gauss_beam.beam_freqs
-            )
-
-    def test_raises_on_bad_argument_combinations(
-        self, gauss_beam: pspecbeam.PSpecBeamGauss
+                ValueError,
+                "Diameter-specified",
+                id="diameter_specified_beam",
+            ),
+            pytest.param(
+                lambda freqs: pspecbeam.PSpecBeamGauss(
+                    beam=GaussianBeam(
+                        sigma=0.1, spectral_index=-1.0, reference_frequency=150e6
+                    ),
+                    beam_freqs=freqs,
+                ),
+                NotImplementedError,
+                "Chromatic",
+                id="chromatic_beam",
+            ),
+            pytest.param(
+                lambda freqs: pspecbeam.PSpecBeamGauss(
+                    beam=AiryBeam(diameter=14.0), beam_freqs=freqs
+                ),
+                TypeError,
+                "must be a pyuvdata GaussianBeam",
+                id="non_gaussian_beam",
+            ),
+            pytest.param(
+                lambda freqs: pspecbeam.PSpecBeamGauss(
+                    fwhm=0.8, beam=GaussianBeam(sigma=0.1), beam_freqs=freqs
+                ),
+                ValueError,
+                "Exactly one of fwhm or beam",
+                id="fwhm_and_beam",
+            ),
+            pytest.param(
+                lambda freqs: pspecbeam.PSpecBeamGauss(beam_freqs=freqs),
+                ValueError,
+                "Exactly one of fwhm or beam",
+                id="neither_fwhm_nor_beam",
+            ),
+            pytest.param(
+                lambda freqs: pspecbeam.PSpecBeamGauss(fwhm=0.8),
+                ValueError,
+                "beam_freqs must be specified",
+                id="no_beam_freqs",
+            ),
+            pytest.param(
+                lambda freqs: pspecbeam.PSpecBeamGauss(GaussianBeam(sigma=0.1), freqs),
+                TypeError,
+                "pass analytic beams via the beam keyword",
+                id="analytic_beam_as_fwhm",
+            ),
+        ],
+    )
+    def test_raises_on_invalid_init_args(
+        self,
+        gauss_beam: pspecbeam.PSpecBeamGauss,
+        build_beam: Callable[[np.ndarray], pspecbeam.PSpecBeamGauss],
+        exc_type: type[Exception],
+        match: str,
     ) -> None:
-        """Check that fwhm and beam are mutually exclusive and beam_freqs is required."""
-        analytic = GaussianBeam(sigma=0.1)
-        with pytest.raises(ValueError, match="Exactly one of fwhm or beam"):
-            pspecbeam.PSpecBeamGauss(
-                fwhm=0.8, beam=analytic, beam_freqs=gauss_beam.beam_freqs
-            )
-        with pytest.raises(ValueError, match="Exactly one of fwhm or beam"):
-            pspecbeam.PSpecBeamGauss(beam_freqs=gauss_beam.beam_freqs)
-        with pytest.raises(ValueError, match="beam_freqs must be specified"):
-            pspecbeam.PSpecBeamGauss(fwhm=0.8)
-        with pytest.raises(TypeError, match="pass analytic beams via the beam keyword"):
-            pspecbeam.PSpecBeamGauss(analytic, gauss_beam.beam_freqs)
+        """Check clear errors for unsupported analytic beams and for invalid
+        fwhm/beam/beam_freqs combinations."""
+        with pytest.raises(exc_type, match=match):
+            build_beam(gauss_beam.beam_freqs)
 
     def test_omegas_match_numerical_integration(self) -> None:
         """Check the closed-form Omegas against healpix-integrated areas of the wrapped GaussianBeam.
