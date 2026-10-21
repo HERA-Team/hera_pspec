@@ -153,6 +153,8 @@ def test_noise_validation(beam_nf_dipole: PSpecBeamUV) -> None:
             component="real",
         ).values()
     )[0][0, 0]
+    assert P_N.unit == u.mK**2 * u.Mpc**3 / cu.littleh**3
+    P_N = P_N.value
 
     # get P_rms of real spectra for each baseline across time axis
     Pspec = np.array(

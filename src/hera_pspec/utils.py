@@ -1564,7 +1564,10 @@ def uvp_noise_error(
         lst_indices = np.unique(auto_Tsys.lst_array, return_index=True)[1]
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
         freqs = np.squeeze(auto_Tsys.freq_array)
-    # calculate scalars for spws and polpairs.
+    # calculate scalars for spws and polpairs (floats in scalar_unit).
+    length_unit = conversions.length_unit_from_little_h(little_h)
+    scalar_unit = length_unit**3 / (u.Hz * u.sr)
+    P_N_unit = u.mK**2 * length_unit**3
     scalar = {}
     for spw in uvp.spw_array:
         for polpair in uvp.polpair_array:
@@ -1572,9 +1575,9 @@ def uvp_noise_error(
                 spw,
                 polpair,
                 num_steps=num_steps_scalar,
-                little_h=little_h,
                 noise_scalar=True,
-            )
+                length_unit=length_unit,
+            ).to_value(scalar_unit)
     # iterate over spectral window
     for spw in uvp.spw_array:
         # get spw properties
@@ -1703,7 +1706,8 @@ def uvp_noise_error(
                         form="Pk",
                         component="real",
                         scalar=scalar[(spw, polpair)],
-                    )[blp_int]
+                        length_unit=length_unit,
+                    )[blp_int].to_value(P_N_unit)
 
                 else:
                     P_N = uvp.get_stats(precomp_P_N, key)

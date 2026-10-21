@@ -2706,8 +2706,12 @@ class UVPSpec:
         for spw in range(self.Nspws):
             for j, polpair in enumerate(self.polpair_array):
                 scalar = self.compute_scalar(
-                    spw, polpair, num_steps=1000, little_h=True, noise_scalar=False
-                )
+                    spw,
+                    polpair,
+                    num_steps=1000,
+                    length_unit=_LITTLEH_LENGTH,
+                    noise_scalar=False,
+                ).to_value(_LITTLEH_LENGTH**3 / (units.Hz * units.sr))
 
                 # renormalize power spectra with new scalar
                 self.data_array[spw][:, :, j] *= scalar / self.scalar_array[spw, j]
@@ -3172,11 +3176,12 @@ class UVPSpec:
         polpair,
         Tsys,
         blpairs=None,
-        little_h=True,
+        little_h=None,
         form="Pk",
         num_steps=2000,
         component="real",
         scalar=None,
+        length_unit=None,
     ):
         """
         Generate the expected RMS noise power spectrum given a selection of
@@ -3184,7 +3189,7 @@ class UVPSpec:
         constructed as:
 
         P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
-              [mK^2 h^-3 Mpc^3]
+              [mK^2 length_unit^3]
 
         where scalar is the cosmological and beam scalar (i.e. X2Y * Omega_eff)
         calculated from pspecbeam with noise_scalar = True, integration_time is
@@ -3204,8 +3209,9 @@ class UVPSpec:
         For more details, see hera_pspec.noise.Sensitivity.calc_P_N, and
         Cheng et al. 2018.
 
-        The default units of P_N are mK^2 h^-3 Mpc^3 (if little_h=True and
-        form='Pk'), but is different if those kwargs are altered.
+        P_N is in mK^2 length_unit^3 for form='Pk' (mK^2 Mpc^3 / littleh^3
+        for the default length unit of a littleh object), and in mK^2 for
+        form='DelSq'.
 
         Parameters
         ----------
@@ -3226,8 +3232,8 @@ class UVPSpec:
             spectrum for default is to calculate for baseline pairs.
 
         little_h : bool, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Deprecated, use ``length_unit``. True means
+            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
 
         form : str, optional
             Form of power spectra, whetehr P(k) or Delta^2(k). Valid options
@@ -3241,18 +3247,32 @@ class UVPSpec:
             Options=['real', 'imag', 'abs'].
             If component is real or imag, divide by an extra factor of sqrt(2).
 
-        scalar : float
+        scalar : float or astropy.units.Quantity, optional
             Optional noise scalar used to convert from Tsys to cosmological units
             output from pspecbeam.compute_pspec_scalar(...,noise_scalar=True)
-            Default is None. If None provided, will calculate scalar in function.
+            or ``compute_scalar(..., noise_scalar=True)``. A float is taken to
+            be in ``length_unit**3 / (u.Hz * u.sr)``. Default is None. If None
+            provided, will calculate scalar in function.
+
+        length_unit : astropy.units.Unit or str, optional
+            Cosmological length unit of P_N (and of k for form='DelSq').
+            Default: None, the length unit of this object's normalisation
+            (see :meth:`get_kperps`).
 
         Returns
         -------
         P_N : dict
-            Dictionary containing blpair integers as keys and float ndarrays
-            of noise power spectra as values, with ndarrays having shape
-            (Ntimes, Ndlys).
+            Dictionary containing blpair integers as keys and astropy
+            Quantities of noise power spectra as values, with shape
+            (Ntimes, Ndlys), in ``u.mK**2 * length_unit**3`` for form='Pk'
+            and ``u.mK**2`` for form='DelSq'.
+
+        Notes
+        -----
+        Changed in v1.0: the values were float ndarrays before.
         """
+        length_unit = self._resolve_length_unit(length_unit, little_h)
+        scalar_unit = length_unit**3 / (units.Hz * units.sr)
         # Check for str polpair and convert to integer
         if isinstance(polpair, str):
             polpair = uvputils.polpair_tuple2int((polpair, polpair))
@@ -3264,15 +3284,20 @@ class UVPSpec:
         # Get polarization index
         polpair_ind = self.polpair_to_indices(polpair)
 
-        # Calculate scalar
+        # Calculate scalar (a float in scalar_unit)
         if scalar is None:
             scalar = self.compute_scalar(
-                spw, polpair, num_steps=num_steps, little_h=little_h, noise_scalar=True
-            )
+                spw,
+                polpair,
+                num_steps=num_steps,
+                length_unit=length_unit,
+                noise_scalar=True,
+            ).to_value(scalar_unit)
+        else:
+            scalar = _value_in_unit(scalar, scalar_unit)
 
         # Get k vectors
         if form == "DelSq":
-            length_unit = conversions.length_unit_from_little_h(little_h)
             k_perp = self.get_kperps(spw, length_unit=length_unit).to_value(
                 1 / length_unit
             )
@@ -3280,6 +3305,9 @@ class UVPSpec:
                 1 / length_unit
             )
             k_mag = np.sqrt(k_perp[:, None] ** 2 + k_para[None, :] ** 2)
+            P_N_unit = units.mK**2
+        else:
+            P_N_unit = units.mK**2 * length_unit**3
 
         # get blpairs
         if blpairs is None:
@@ -3337,7 +3365,7 @@ class UVPSpec:
                 # append to P_blp
                 P_blp.append(pn)
 
-            P_N[blp] = np.array(P_blp)
+            P_N[blp] = np.array(P_blp) << P_N_unit
 
         return P_N
 
@@ -3510,7 +3538,13 @@ class UVPSpec:
         )
 
     def compute_scalar(
-        self, spw, polpair, num_steps=1000, little_h=True, noise_scalar=False
+        self,
+        spw,
+        polpair,
+        num_steps=1000,
+        little_h=None,
+        noise_scalar=False,
+        length_unit=None,
     ):
         """
         Compute power spectrum normalization scalar given an adopted cosmology
@@ -3530,18 +3564,30 @@ class UVPSpec:
             Default: 1000.
 
         little_h : bool, optional
-            Whether to use h^-1 units or not. Default: True.
+            Deprecated, use ``length_unit``. True means
+            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
 
         noise_scalar : bool, optional
             If True calculate noise pspec scalar, else calculate normal pspec
             scalar. See pspecbeam.py for difference between normal scalar and
             noise scalar. Default: False.
 
+        length_unit : astropy.units.Unit or str, optional
+            Cosmological length unit of the scalar. Default: None, the length
+            unit of this object's normalisation (see :meth:`get_kperps`).
+
         Returns
         -------
-        scalar : float
-            Power spectrum normalization scalar.
+        scalar : astropy.units.Quantity
+            Power spectrum normalization scalar, in
+            ``length_unit**3 / (u.Hz * u.sr)``.
+
+        Notes
+        -----
+        Changed in v1.0: this returned a float in h^-3 Mpc^3 / (Hz sr) by
+        default before, whatever the object's normalisation.
         """
+        length_unit = self._resolve_length_unit(length_unit, little_h)
         # make assertions
         assert hasattr(self, "cosmo"), (
             "self.cosmo object must exist to compute scalar. See self.set_cosmology()"
@@ -3566,9 +3612,9 @@ class UVPSpec:
             num_steps=num_steps,
             taper=self.taper,
             noise_scalar=noise_scalar,
-            length_unit=conversions.length_unit_from_little_h(little_h),
+            length_unit=length_unit,
         )
-        return scalar
+        return scalar * (length_unit**3 / (units.Hz * units.sr))
 
     def add_approximate_covariance(
         self,

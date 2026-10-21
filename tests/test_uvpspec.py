@@ -1145,7 +1145,9 @@ class TestSense:
             0, self.POLPAIR, self.BASE_TSYS, form="DelSq", component="real"
         )
         assert Dsq[101102101102].shape == (mutable_uvp_with_beam.Ntimes, Ndlys)
-        assert Dsq[101102101102][0, 1] < P_N[101102101102][0, 1]
+        assert Dsq[101102101102].unit == units.mK**2
+        assert P_N[101102101102].unit == units.mK**2 * LITTLEH_LENGTH**3
+        assert Dsq[101102101102][0, 1].value < P_N[101102101102][0, 1].value
 
     def test_blpair_selection_and_int_polpair(
         self, mutable_uvp_with_beam: uvpspec.UVPSpec
@@ -1434,13 +1436,119 @@ def test_str(vanilla_uvp: uvpspec.UVPSpec) -> None:
     assert str(vanilla_uvp) != ""
 
 
+class TestScalarAndNoiseUnits:
+    POLPAIR = ("xx", "xx")
+    BLP = 101102101102
+
+    def test_compute_scalar_length_unit(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+        uvp = vanilla_uvp_with_beam
+        h = uvp.cosmo.h
+        default = uvp.compute_scalar(0, self.POLPAIR)
+        littleh = uvp.compute_scalar(0, self.POLPAIR, length_unit=LITTLEH_LENGTH)
+        mpc = uvp.compute_scalar(0, self.POLPAIR, length_unit="Mpc")
+        assert default.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+        assert mpc.unit == units.Mpc**3 / (units.Hz * units.sr)
+        assert littleh == default
+        np.testing.assert_allclose(mpc.value, default.value / h**3, rtol=1e-12)
+        # the same physical quantity
+        np.testing.assert_allclose(
+            mpc.to_value(default.unit, equivalencies=cu.with_H0(uvp.cosmo.H0)),
+            default.value,
+            rtol=1e-12,
+        )
+        # an Mpc3 object gives an Mpc scalar by default
+        mpc_uvp = _with_norm_units(uvp, "Mpc3")
+        assert mpc_uvp.compute_scalar(0, self.POLPAIR) == mpc
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    def test_compute_scalar_little_h_deprecated(
+        self, vanilla_uvp_with_beam: UVPSpec, little_h: bool
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        expected = uvp.compute_scalar(0, self.POLPAIR, length_unit=length_unit)
+        with pytest.warns(DeprecationWarning, match="little_h") as record:
+            old = uvp.compute_scalar(0, self.POLPAIR, little_h=little_h)
+        assert record[0].filename == __file__
+        assert old == expected
+        with pytest.warns(DeprecationWarning, match="little_h"):
+            with pytest.raises(ValueError, match="disagrees"):
+                uvp.compute_scalar(
+                    0,
+                    self.POLPAIR,
+                    little_h=little_h,
+                    length_unit=conversions.length_unit_from_little_h(not little_h),
+                )
+
+    def test_noise_spectra_units(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+        uvp = vanilla_uvp_with_beam
+        h = uvp.cosmo.h
+        pk = uvp.generate_noise_spectra(0, self.POLPAIR, 500)[self.BLP]
+        pk_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500, length_unit=units.Mpc
+        )[self.BLP]
+        assert pk.unit == units.mK**2 * units.Mpc**3 / cu.littleh**3
+        assert pk_mpc.unit == units.mK**2 * units.Mpc**3
+        np.testing.assert_allclose(pk_mpc.value, pk.value / h**3, rtol=1e-12)
+        dsq = uvp.generate_noise_spectra(0, self.POLPAIR, 500, form="DelSq")[self.BLP]
+        dsq_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500, form="DelSq", length_unit=units.Mpc
+        )[self.BLP]
+        assert dsq.unit == units.mK**2 and dsq_mpc.unit == units.mK**2
+        # Delta^2 does not depend on the length unit
+        np.testing.assert_allclose(dsq_mpc.value, dsq.value, rtol=1e-12)
+
+    def test_noise_spectra_scalar_argument(
+        self, vanilla_uvp_with_beam: UVPSpec
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        scalar = uvp.compute_scalar(0, self.POLPAIR, num_steps=2000, noise_scalar=True)
+        computed = uvp.generate_noise_spectra(0, self.POLPAIR, 500)[self.BLP]
+        from_quantity = uvp.generate_noise_spectra(0, self.POLPAIR, 500, scalar=scalar)[
+            self.BLP
+        ]
+        from_float = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500, scalar=scalar.value
+        )[self.BLP]
+        np.testing.assert_array_equal(from_quantity.value, computed.value)
+        np.testing.assert_array_equal(from_float.value, computed.value)
+        # a Quantity scalar is converted to the requested length unit's scalar unit
+        mpc_scalar = scalar.to(
+            units.Mpc**3 / (units.Hz * units.sr), equivalencies=cu.with_H0(uvp.cosmo.H0)
+        )
+        from_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500, scalar=mpc_scalar, length_unit=units.Mpc
+        )[self.BLP]
+        np.testing.assert_allclose(
+            from_mpc.value * uvp.cosmo.h**3, computed.value, rtol=1e-12
+        )
+        with pytest.raises(units.UnitConversionError):
+            uvp.generate_noise_spectra(0, self.POLPAIR, 500, scalar=scalar * units.s)
+
+    def test_noise_spectra_little_h_deprecated(
+        self, vanilla_uvp_with_beam: UVPSpec
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        expected = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500, length_unit=units.Mpc
+        )
+        with pytest.warns(DeprecationWarning, match="little_h") as record:
+            old = uvp.generate_noise_spectra(0, self.POLPAIR, 500, little_h=False)
+        # one warning, pointing at the caller
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert old[self.BLP].unit == expected[self.BLP].unit
+        np.testing.assert_array_equal(old[self.BLP].value, expected[self.BLP].value)
+
+
 def test_compute_scalar(
     vanilla_uvp: uvpspec.UVPSpec, vanilla_uvp_with_beam: uvpspec.UVPSpec
 ) -> None:
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
     # test basic execution
     s = uvp.compute_scalar(0, ("xx", "xx"), num_steps=1000, noise_scalar=False)
-    np.testing.assert_almost_equal(s / 553995277.90425551, 1.0, decimal=5)
+    assert s.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+    np.testing.assert_almost_equal(s.value / 553995277.90425551, 1.0, decimal=5)
 
     # test no cosmo
     uvp_no_cosmo = copy.deepcopy(vanilla_uvp_with_beam)
