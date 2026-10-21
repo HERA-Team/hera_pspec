@@ -19,7 +19,7 @@ The project uses **uv** for environment and lockfile management (matching CI). P
   - To bypass coverage while iterating: `uv run pytest --no-cov tests/test_pspecdata.py::test_name`.
 - Warnings job (matches `warnings-tests.yml`, fails on any warning): `MPLBACKEND=agg uv run pytest -Werror`. New code must not emit warnings under this run.
 - Build docs locally: `uv run --group docs sphinx-build docs docs/_build/html` (RTD config at `.readthedocs.yaml`). Requires `pandoc` on your `PATH` (e.g. `brew install pandoc`) for `nbsphinx` to convert the example notebooks; the Read the Docs image already ships it.
-- CLI entrypoint installed as `pspec` (defined at `src/hera_pspec/cli.py`, `app = cyclopts.App()`); the legacy `scripts/pspec_red.py` shim is also installed via `tool.setuptools.script-files`.
+- CLI entrypoint installed as `pspec` (defined at `src/hera_pspec/cli.py`, `app = cyclopts.App()`).
 
 ## Linting
 
@@ -64,7 +64,7 @@ The library is organized around three persistent object types and a computation 
 There are two parallel entry-point styles:
 
 - The `pspec` cyclopts app (`src/hera_pspec/cli.py`, `app = cyclopts.App()`) — currently exposes `fast-merge-baselines`, `run`, `bootstrap`, `auto-noise`, `generate-pstokes` and `compute-ft-beam`. Add new subcommands here.
-- The historical `scripts/*.py` — installed via `script-files` and built around `argparse` parsers returned from inside the package. The `pspec_run.py`, `bootstrap_run.py`, `auto_noise_run.py`, and `generate_pstokes_run.py` scripts have been **removed** and replaced by the corresponding `pspec` subcommands (`run`, `bootstrap`, `auto-noise`, `generate-pstokes`) — a breaking change to their CLI syntax (profiling via `hera_cal._cli_tools` was dropped pending typer support in hera-cli-utils). Only `scripts/pspec_red.py` is still shipped via `script-files`; `scripts/psc_merge_spectra.py` remains on disk but is not installed. New commands should be added under `cli.py` rather than as fresh scripts.
+- The historical `scripts/*.py` — formerly installed via `script-files` and built around `argparse` parsers returned from inside the package. None are installed now. The `pspec_run.py`, `bootstrap_run.py`, `auto_noise_run.py`, and `generate_pstokes_run.py` scripts have been **removed** and replaced by the corresponding `pspec` subcommands (`run`, `bootstrap`, `auto-noise`, `generate-pstokes`) — a breaking change to their CLI syntax (profiling via `hera_cal._cli_tools` was dropped pending typer support in hera-cli-utils). `scripts/pspec_red.py`, which had been broken since `pspec()` changed in 2018, was removed as well; `scripts/psc_merge_spectra.py` remains on disk but is not installed. New commands should be added under `cli.py` rather than as fresh scripts.
 
 ## Conventions to respect
 
